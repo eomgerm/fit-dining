@@ -1,0 +1,825 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
+<title>온라인 모각코 플랫폼</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+/* 레이아웃: 홈(그룹 카드 격자) → 그룹(탭: 세션 방 · 일정·출석 · 알림). 세션 방은 왼쪽 방 장면 + 내 패널, 오른쪽 뽀모도로 + 채팅·활동. 900px 아래 1열 */
+:root{
+  --bg:#F2F4F7; --surface:#FFFFFF; --line:#DCE1E9; --fg:#1B2230; --muted:#5D6779;
+  --accent:#2C59CF; --accent-weak:#E5EBFA; --accent-fg:#FFFFFF;
+  --ok:#1D8657; --ok-weak:#E2F2EA; --warn:#A86E12; --warn-weak:#FAEFD9; --bad:#BF433B; --bad-weak:#F9E5E3; --info:#2C6FB5;
+  --dot:#D3D9E3; --shadow:0 8px 30px rgba(20,30,60,.12);
+  /* 방 장면은 두 테마에서 같은 저녁 방으로 고정 */
+  --wall-top:#2E3760; --wall-bot:#46457A; --floor:#5B4A6E; --floor-line:#6C5A80; --win:#1B2244; --win-frame:#E9D9B8; --star:#FFF4CF; --bulb:#FFD98A; --plate:#FFFDF7; --plate-fg:#2A2433;
+  /* 공유 화면 속 편집기도 두 테마에서 같은 어두운 화면으로 고정 */
+  --ed-bg:#1C2030; --ed-bar:#151827; --ed-cur:#262C42; --ed-fg:#D6DBEA; --ed-mut:#5F6884; --ed-kw:#C792EA; --ed-st:#C3E88D; --ed-nu:#F78C6C; --ed-cm:#737D99; --ed-ty:#FFCB6B; --ed-an:#89DDFF; --live:#E5484D;
+  --f-body:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#11151C; --surface:#191E27; --line:#2A313D; --fg:#E5E8EE; --muted:#98A1B1;
+  --accent:#7D9DF2; --accent-weak:#1E2944; --accent-fg:#0E1424;
+  --ok:#4DBE89; --ok-weak:#152D24; --warn:#E2AA4B; --warn-weak:#32281A; --bad:#EE7C73; --bad-weak:#3A1F1E; --info:#78AEE8;
+  --dot:#1E242E; --shadow:0 8px 30px rgba(0,0,0,.45); color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --bg:#11151C; --surface:#191E27; --line:#2A313D; --fg:#E5E8EE; --muted:#98A1B1;
+  --accent:#7D9DF2; --accent-weak:#1E2944; --accent-fg:#0E1424;
+  --ok:#4DBE89; --ok-weak:#152D24; --warn:#E2AA4B; --warn-weak:#32281A; --bad:#EE7C73; --bad-weak:#3A1F1E; --info:#78AEE8;
+  --dot:#1E242E; --shadow:0 8px 30px rgba(0,0,0,.45); color-scheme:dark;}
+
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:14px;line-height:1.55;
+  background-image:radial-gradient(var(--dot) 1px,transparent 1px);background-size:22px 22px}
+.app{min-height:100%;display:flex;flex-direction:column}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.muted{color:var(--muted)} .small{font-size:12.5px}
+.kicker{font-family:var(--f-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:10;background:var(--surface);border-bottom:1px solid var(--line)}
+.top-in{max-width:1120px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;background:none;border:0;padding:0;text-align:left}
+.brand svg{width:30px;height:30px;flex:none}
+.brand b{font-size:17px;letter-spacing:-.01em;display:block;line-height:1.2}
+.brand small{display:block;font-family:var(--f-mono);font-size:10.5px;color:var(--muted);letter-spacing:.05em;line-height:1.2}
+.top-in .now{margin-left:auto;font-family:var(--f-mono);font-size:12.5px;color:var(--muted)}
+.ghead{max-width:1120px;margin:0 auto;padding:0 16px;display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;border-top:1px solid var(--line)}
+.ghead .gt{padding:10px 0 0;min-width:0}
+.ghead .gt .back{background:none;border:0;padding:0;color:var(--accent);font-weight:600;font-size:12.5px}
+.ghead .gt h1{margin:0;font-size:18px;letter-spacing:-.01em;text-wrap:balance}
+nav.tabs{display:flex;gap:2px;overflow-x:auto;margin-left:auto}
+nav.tabs button{background:none;border:0;padding:10px 14px;border-bottom:2px solid transparent;color:var(--muted);font-weight:600;white-space:nowrap;display:flex;align-items:center;gap:6px}
+nav.tabs button[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--accent)}
+@media (max-width:640px){nav.tabs{margin-left:0;width:100%}}
+.live-dot{width:7px;height:7px;border-radius:50%;background:var(--bad);flex:none}
+
+main{flex:1;width:100%;max-width:1120px;margin:0 auto;padding:20px 16px 28px;box-sizing:border-box}
+.grid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}
+.col{display:flex;flex-direction:column;gap:16px;min-width:0}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:0}
+.panel h2{font-size:15px;margin:0 0 12px;display:flex;align-items:center;gap:8px;text-wrap:balance}
+.panel h2 .sp{margin-left:auto;font-weight:400}
+
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 12px;font-weight:600}
+.btn:hover{border-color:var(--muted)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.btn.ghost{border-color:transparent;background:none;color:var(--accent);padding:6px 8px}
+.btn.danger{color:var(--bad)}
+.btn.sm{padding:4px 9px;font-size:12.5px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.on{background:var(--accent-weak);border-color:var(--accent);color:var(--accent)}
+.field{display:flex;flex-direction:column;gap:5px}
+.field>label{font-size:12.5px;color:var(--muted);font-weight:600}
+input[type=text],input[type=date],input[type=time],input[type=number],input[type=url],select.in{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:8px 10px;width:100%;box-sizing:border-box;min-width:0}
+.st-ok{color:var(--ok)} .st-warn{color:var(--warn)} .st-bad{color:var(--bad)} .st-acc{color:var(--accent)} .st-mut{color:var(--muted)} .st-info{color:var(--info)}
+.state{font-weight:600}
+
+/* 홈 */
+.home-head{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.home-head h1{margin:2px 0 0;font-size:24px;letter-spacing:-.02em}
+.home-head .acts{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+.gcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+.gcard{text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:0;overflow:hidden;display:flex;flex-direction:column;min-width:0}
+.gcard:hover{border-color:var(--muted)}
+.gcard .strip{height:68px;background:linear-gradient(180deg,var(--wall-top),var(--wall-bot));position:relative;display:flex;align-items:flex-end;padding:0 14px;gap:2px}
+.gcard .strip .win{position:absolute;right:14px;top:12px;width:44px;height:30px;border:3px solid var(--win-frame);border-radius:4px;background:var(--win);background-image:radial-gradient(var(--star) 1px,transparent 1.5px);background-size:11px 9px}
+.gcard .strip svg{width:40px;height:34px;display:block}
+.gcard .strip .empty{color:#C9C6E4;font-size:12px;padding-bottom:10px}
+.gcard .bd{padding:14px;display:flex;flex-direction:column;gap:4px}
+.gcard .gn{font-weight:700;font-size:16px}
+.gcard .gs{display:flex;align-items:center;gap:7px;font-weight:600;margin-top:6px}
+.gcard .gm{font-size:12.5px;color:var(--muted)}
+
+/* 방 장면 */
+.rhead{display:flex;align-items:flex-end;gap:18px;flex-wrap:wrap}
+.rhead .clock{font-family:var(--f-mono);font-size:30px;font-weight:600;line-height:1;letter-spacing:-.02em}
+.rhead .cell .v{font-family:var(--f-mono);font-size:16px;font-weight:600}
+.rhead .cell .l{font-size:12px;color:var(--muted)}
+.rhead .push{margin-left:auto}
+.scene{position:relative;border-radius:14px;overflow:hidden;min-height:330px;
+  background:linear-gradient(180deg,var(--wall-top) 0%,var(--wall-bot) 72%,var(--floor) 72%,var(--floor) 100%);border:1px solid var(--line)}
+.scene::after{content:"";position:absolute;left:0;right:0;top:72%;height:2px;background:var(--floor-line)}
+.scene .window{position:absolute;left:22px;top:22px;width:118px;height:74px;border:5px solid var(--win-frame);border-radius:6px;background:var(--win);
+  background-image:radial-gradient(var(--star) 1px,transparent 1.6px),radial-gradient(var(--star) .8px,transparent 1.2px);background-size:29px 23px,17px 13px;background-position:0 0,8px 6px}
+.scene .window::before{content:"";position:absolute;left:50%;top:0;bottom:0;width:4px;margin-left:-2px;background:var(--win-frame)}
+.scene .window::after{content:"";position:absolute;right:12px;top:10px;width:16px;height:16px;border-radius:50%;box-shadow:-5px 3px 0 0 var(--star)}
+.scene .lights{position:absolute;left:0;right:0;top:0;height:30px;display:flex;justify-content:space-around;padding:0 160px 0 170px}
+.scene .lights i{width:7px;height:9px;border-radius:50% 50% 45% 45%;background:var(--bulb);margin-top:12px;box-shadow:0 0 10px 2px rgba(255,217,138,.45)}
+.scene .lights i:nth-child(even){margin-top:16px}
+.scene .sign{position:absolute;right:20px;top:24px;font-family:var(--f-mono);font-size:11px;letter-spacing:.12em;color:#D9D4F2;border:1px solid rgba(217,212,242,.4);border-radius:6px;padding:4px 8px}
+.seats{position:relative;z-index:1;display:flex;flex-wrap:wrap;justify-content:center;align-items:flex-end;gap:6px 4px;padding:120px 12px 18px}
+.seat{position:relative;width:150px;display:flex;flex-direction:column;align-items:center}
+@media (max-width:520px){.seat{width:46%}.scene .lights{padding:0 40px 0 150px}.scene .sign{display:none}}
+.chbtn{background:none;border:0;padding:0;border-radius:12px;display:block}
+.chbtn svg{width:128px;height:107px;display:block;overflow:visible}
+.plate{margin-top:6px;background:var(--plate);color:var(--plate-fg);border-radius:8px;padding:3px 9px;font-size:12.5px;display:flex;gap:6px;align-items:center;max-width:100%;box-shadow:0 2px 0 rgba(0,0,0,.18)}
+.plate b{white-space:nowrap}
+.plate .ps{font-weight:600;white-space:nowrap}
+.ps.focus{color:#1E7A50}.ps.ask{color:#2563A8}.ps.rest{color:#7A6E86}.ps.stuck{color:#B5650E}.ps.away{color:#8E8899}
+.ptodo{margin-top:4px;font-size:11.5px;color:#E6E2F7;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 4px}
+.empty-room{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:10px;padding:130px 16px 40px;color:#E6E2F7;text-align:center}
+.empty-room .big{font-family:var(--f-mono);font-size:36px;font-weight:600;color:#fff;line-height:1}
+.fxl{position:absolute;left:0;right:0;top:0;height:0;z-index:3;pointer-events:none}
+.fx{position:absolute;left:50%;top:-4px;transform:translateX(-50%);white-space:nowrap;font-weight:700;font-size:12.5px;color:#FFF3C4;animation:floatUp 1.6s ease-out forwards;text-shadow:0 1px 0 rgba(0,0,0,.35)}
+.fx svg{display:block}
+.bubble{position:absolute;left:50%;bottom:100%;transform:translateX(-50%);margin-bottom:-10px;background:#fff;color:#2A2433;border-radius:10px;padding:5px 9px;font-size:12px;max-width:150px;width:max-content;box-shadow:0 2px 0 rgba(0,0,0,.2);z-index:4;animation:pop .2s ease-out;overflow-wrap:anywhere}
+.bubble::after{content:"";position:absolute;left:50%;bottom:-6px;margin-left:-6px;border:6px solid transparent;border-bottom:0;border-top-color:#fff}
+@keyframes floatUp{0%{opacity:0;transform:translate(-50%,8px)}15%{opacity:1}100%{opacity:0;transform:translate(-50%,-38px)}}
+@keyframes pop{from{transform:translateX(-50%) scale(.8);opacity:0}to{transform:translateX(-50%) scale(1);opacity:1}}
+/* 캐릭터 움직임 */
+.ch .bob{animation:bob 3.2s ease-in-out infinite}
+.ch.s-focus .hand{animation:type .32s ease-in-out infinite}
+.ch.s-focus .hand.hr{animation-delay:.16s}
+.ch.s-ask .wave{animation:wave 1.1s ease-in-out infinite;transform-origin:100px 44px}
+.ch.s-ask .qb{animation:qb 1.8s ease-in-out infinite}
+.ch .steam{animation:steam 2s ease-in-out infinite}
+.ch .steam.s2{animation-delay:.7s}
+.ch.s-stuck .spin{animation:spin 2.4s linear infinite;transform-origin:60px 10px}
+.ch .zz{animation:zz 2.6s ease-in-out infinite}
+.ch .zz.z2{animation-delay:1.1s}
+.ch.s-away{opacity:.62}
+.ch.jump .bob{animation:jump .7s ease-out}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}
+@keyframes type{0%,100%{transform:translateY(0)}50%{transform:translateY(-3.5px)}}
+@keyframes wave{0%,100%{transform:rotate(-8deg)}50%{transform:rotate(10deg)}}
+@keyframes qb{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+@keyframes steam{0%{opacity:0;transform:translateY(3px)}40%{opacity:.9}100%{opacity:0;transform:translateY(-7px)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes zz{0%{opacity:0;transform:translate(0,4px)}40%{opacity:1}100%{opacity:0;transform:translate(5px,-8px)}}
+@keyframes jump{0%{transform:translateY(0)}35%{transform:translateY(-16px)}70%{transform:translateY(0)}85%{transform:translateY(-3px)}100%{transform:translateY(0)}}
+
+/* 화면 공유 */
+.stage .sh{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.stage .sh .who{font-weight:700}
+.stage .sh .acts{margin-left:auto;display:flex;gap:6px}
+.livetag{display:inline-flex;align-items:center;gap:5px;background:var(--live);color:#fff;font-family:var(--f-mono);font-size:10.5px;font-weight:600;letter-spacing:.06em;border-radius:4px;padding:1px 6px}
+.sharelist{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.sharelist .who{display:flex;align-items:center;gap:6px;font-weight:600}
+.sharelist .who i{width:10px;height:10px;border-radius:50%;box-shadow:0 0 0 1px rgba(0,0,0,.15) inset}
+.screen{background:var(--ed-bg);color:var(--ed-fg);border-radius:10px;overflow:hidden;border:1px solid var(--ed-bar);max-width:100%}
+.screen .ebar{background:var(--ed-bar);display:flex;align-items:center;gap:10px;padding:6px 10px;font-family:var(--f-mono);font-size:11.5px;color:var(--ed-mut)}
+.screen .etab{color:var(--ed-fg);background:var(--ed-bg);border-radius:5px 5px 0 0;padding:3px 10px;margin-bottom:-6px}
+.screen .ebar .sp{margin-left:auto}
+.screen .ebody{padding:8px 0;font-family:var(--f-mono);font-size:12.5px;line-height:1.65;overflow-x:auto}
+.screen.big .ebody{font-size:14px}
+.screen .ln{display:flex;white-space:pre;padding-right:12px}
+.screen .ln.cur{background:var(--ed-cur)}
+.screen .no{width:38px;flex:none;text-align:right;padding-right:14px;color:var(--ed-mut);user-select:none}
+.screen code{font-family:inherit}
+.screen .kw{color:var(--ed-kw)} .screen .st{color:var(--ed-st)} .screen .nu{color:var(--ed-nu)} .screen .cm{color:var(--ed-cm);font-style:italic} .screen .ty{color:var(--ed-ty)} .screen .an{color:var(--ed-an)}
+.caret{display:inline-block;width:2px;height:1.1em;background:var(--ed-fg);vertical-align:text-bottom;margin-left:1px;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.modal.wide{width:min(960px,100%)}
+.shareopts{display:flex;flex-direction:column;gap:6px}
+.shareopts label{display:flex;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:8px;cursor:pointer;font-weight:600}
+.shareopts label:has(input:checked){border-color:var(--accent);background:var(--accent-weak)}
+.shareopts small{display:block;font-weight:400;color:var(--muted)}
+
+/* 내 패널 */
+.stsel{display:flex;flex-wrap:wrap;gap:6px}
+.stsel button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;font-weight:600;color:var(--muted)}
+.stsel button[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-weak);color:var(--accent)}
+.todos{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.todos li{display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid var(--line)}
+.todos li:first-child{border-top:0}
+.todos input{width:17px;height:17px;accent-color:var(--accent);flex:none;margin:0}
+.todos label{flex:1;min-width:0;overflow-wrap:anywhere}
+.todos li.done label{text-decoration:line-through;color:var(--muted)}
+.addrow{display:flex;gap:6px;margin-top:8px}
+.mesub{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+@media (max-width:640px){.mesub{grid-template-columns:minmax(0,1fr)}}
+.conn{display:flex;align-items:center;gap:7px;font-size:12.5px}
+.conn i{width:7px;height:7px;border-radius:50%;background:var(--ok);flex:none}
+.swatches{display:flex;gap:8px;flex-wrap:wrap}
+.swatches button{width:34px;height:34px;border-radius:50%;border:3px solid transparent;box-shadow:0 0 0 1px var(--line) inset}
+.swatches button[aria-pressed="true"]{border-color:var(--fg)}
+.entry{display:grid;grid-template-columns:auto minmax(0,1fr);gap:18px;align-items:center}
+.entry .pv{width:120px;height:100px;border-radius:12px;background:linear-gradient(180deg,var(--wall-top),var(--wall-bot));display:grid;place-items:end center;padding-bottom:4px}
+.entry .pv svg{width:110px;height:92px}
+@media (max-width:520px){.entry{grid-template-columns:minmax(0,1fr)}}
+.summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:6px}
+.summary div{background:var(--bg);border-radius:8px;padding:10px}
+.summary b{display:block;font-family:var(--f-mono);font-size:18px}
+
+/* 뽀모도로 */
+.pomo .time{font-family:var(--f-mono);font-size:42px;font-weight:600;line-height:1.05;letter-spacing:-.02em}
+.track{height:5px;background:var(--bg);border-radius:3px;margin-top:10px;overflow:hidden}
+.track i{display:block;height:100%;background:var(--accent);transition:width .9s linear}
+.pomo .ctrl{display:flex;gap:6px;margin-top:12px;flex-wrap:wrap}
+
+/* 채팅·활동 */
+.ptabs{display:flex;gap:4px;margin-bottom:10px;border-bottom:1px solid var(--line)}
+.ptabs button{background:none;border:0;padding:6px 10px;border-bottom:2px solid transparent;font-weight:600;color:var(--muted);margin-bottom:-1px}
+.ptabs button[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--accent)}
+.ptabs .cnt{font-family:var(--f-mono);font-size:11px;color:var(--accent);margin-left:3px}
+.list{height:330px;overflow-y:auto;display:flex;flex-direction:column}
+.msg{display:flex;flex-direction:column;gap:2px;padding:6px 0;max-width:88%}
+.msg .who{font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px}
+.msg .who i{width:9px;height:9px;border-radius:50%;flex:none;box-shadow:0 0 0 1px rgba(0,0,0,.15) inset}
+.msg .who .tm{font-family:var(--f-mono);font-size:11px;color:var(--muted);font-weight:400}
+.msg .tx{background:var(--bg);border-radius:4px 12px 12px 12px;padding:7px 10px;overflow-wrap:anywhere}
+.msg.me{align-self:flex-end;align-items:flex-end}
+.msg.me .tx{background:var(--accent);color:var(--accent-fg);border-radius:12px 4px 12px 12px}
+.msg.sys{align-self:center;max-width:100%}
+.msg.sys .tx{background:none;color:var(--muted);font-size:12px;padding:2px 0;text-align:center}
+.chatform{display:flex;gap:6px;margin-top:10px}
+.quick{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.feed .it{display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:8px;padding:8px 0;border-top:1px solid var(--line);font-size:13px;align-items:start}
+.feed .it:first-child{border-top:0}
+.feed .tm{font-family:var(--f-mono);font-size:11.5px;color:var(--muted);padding-top:2px}
+.feed .hash{font-family:var(--f-mono);font-size:12px;color:var(--accent)}
+
+/* 일정·출석 */
+.rule-line{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding-bottom:12px;border-bottom:1px solid var(--line);margin-bottom:4px}
+.rule-line .r{font-size:18px;font-weight:700}
+.rule-line .r .mono{font-weight:600}
+.rule-line .btn{margin-left:auto}
+.sess{display:grid;grid-template-columns:110px minmax(0,1fr) auto;gap:6px 14px;padding:12px 0;border-top:1px solid var(--line);align-items:center}
+.sess:first-of-type{border-top:0}
+.sess .d{font-weight:700} .sess .t{font-size:12.5px;color:var(--muted)}
+.sess.today .d{color:var(--accent)}
+.sess .acts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.sess.off .d,.sess.off .t{opacity:.55}
+.strike{text-decoration:line-through}
+@media (max-width:560px){.sess{grid-template-columns:minmax(0,1fr)}.sess .acts{justify-content:flex-start}}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:var(--surface);padding:5px 10px;font-weight:600;color:var(--muted);border-left:1px solid var(--line);font-size:13px}
+.seg button:first-child{border-left:0}
+.seg button.on[data-v="yes"]{background:var(--ok-weak);color:var(--ok)}
+.seg button.on[data-v="late"]{background:var(--warn-weak);color:var(--warn)}
+.seg button.on[data-v="no"]{background:var(--bad-weak);color:var(--bad)}
+.figs{display:flex;gap:22px;flex-wrap:wrap;margin-bottom:12px}
+.figs b{display:block;font-family:var(--f-mono);font-size:22px;font-weight:600}
+.figs span{font-size:12px;color:var(--muted)}
+.tbl-wrap{overflow-x:auto}
+table.att{border-collapse:collapse;width:100%;min-width:420px;font-size:13px}
+table.att th,table.att td{padding:7px 4px;text-align:center;border-bottom:1px solid var(--line);white-space:nowrap}
+table.att th{font-weight:600;color:var(--muted);font-size:11.5px}
+table.att th:first-child,table.att td:first-child{text-align:left;padding-left:0}
+table.att td.n{font-family:var(--f-mono)}
+.mk{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:6px;font-size:11px;font-weight:700}
+.mk.O{background:var(--ok-weak);color:var(--ok)} .mk.L{background:var(--warn-weak);color:var(--warn)}
+.mk.X{background:var(--bad-weak);color:var(--bad)} .mk.E{background:var(--bg);color:var(--muted)}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:10px}
+.legend span{display:flex;align-items:center;gap:5px}
+
+/* 알림 */
+.tog{display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--line)}
+.tog:first-of-type{border-top:0}
+.tog .tx{flex:1;min-width:0}
+.tog .tx b{display:block;font-weight:600}
+.sw{position:relative;width:38px;height:22px;flex:none}
+.sw input{opacity:0;width:100%;height:100%;margin:0;position:absolute;cursor:pointer;z-index:1}
+.sw span{position:absolute;inset:0;border-radius:11px;background:var(--line);transition:background .15s}
+.sw span::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:var(--surface);transition:transform .15s}
+.sw input:checked+span{background:var(--accent)}
+.sw input:checked+span::after{transform:translateX(16px)}
+.sw input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
+.preview{font-family:var(--f-mono);font-size:12px;background:var(--bg);border-radius:8px;padding:10px 12px;white-space:pre-wrap;overflow-wrap:anywhere}
+.copy{display:flex;gap:6px}
+.copy input{font-family:var(--f-mono);font-size:12px}
+
+/* 모달 · 토스트 · 바닥글 */
+.backdrop{position:fixed;inset:0;background:rgba(10,14,24,.5);display:grid;place-items:center;z-index:50;padding:16px}
+.modal{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);width:min(440px,100%);max-height:calc(100% - 32px);overflow-y:auto;padding:20px;box-sizing:border-box;display:flex;flex-direction:column;gap:14px}
+.modal h3{margin:0;font-size:16px}
+.modal .foot{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.modal .hero{border-radius:12px;background:linear-gradient(180deg,var(--wall-top),var(--wall-bot));display:grid;place-items:end center;height:150px;padding-bottom:6px}
+.modal .hero svg{width:160px;height:134px;overflow:visible}
+.days{display:flex;gap:6px;flex-wrap:wrap}
+.days button{width:38px;height:38px;border-radius:8px;border:1px solid var(--line);background:var(--surface);font-weight:600}
+.days button.on{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.three{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:6px}
+.opts{display:flex;gap:6px}
+.opts label{flex:1;display:flex;gap:8px;align-items:center;padding:9px 10px;border:1px solid var(--line);border-radius:8px;cursor:pointer;font-weight:600}
+.opts label:has(input:checked){border-color:var(--accent);background:var(--accent-weak)}
+.note{font-size:12.5px;color:var(--muted);margin:0}
+.toast{position:fixed;left:50%;bottom:calc(56px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:10px;font-weight:600;z-index:60;box-shadow:var(--shadow);max-width:calc(100% - 32px);box-sizing:border-box;text-align:center}
+footer.foot{border-top:1px solid var(--line);background:var(--surface)}
+footer.foot div{max-width:1120px;margin:0 auto;padding:12px 16px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+@media (prefers-reduced-motion:reduce){*,.ch *{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header class="top">
+    <div class="top-in">
+      <button class="brand" data-go="home" aria-label="내 그룹으로">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14" fill="none" stroke="var(--fg)" stroke-width="2.4"/><line x1="16" y1="16" x2="16" y2="7" stroke="var(--fg)" stroke-width="2.4" stroke-linecap="round"/><line x1="16" y1="16" x2="9" y2="16" stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round"/><circle cx="16" cy="16" r="2" fill="var(--accent)"/></svg>
+        <span><b>온라인 모각코 플랫폼</b><small>CODE TOGETHER, ON TIME</small></span>
+      </button>
+      <span class="now" id="nowClock"></span>
+    </div>
+    <div id="gHead"></div>
+  </header>
+  <main id="main"></main>
+  <footer class="foot"><div><span>온라인 모각코 플랫폼 · 목업 프로토타입</span><span>그룹·멤버·대화·기록은 예시 데이터입니다</span></div></footer>
+</div>
+<div id="modalRoot"></div>
+<div id="toastRoot"></div>
+
+<script>
+/* ---------- 기본 ---------- */
+const DAY=['일','월','화','수','목','금','토'];
+const p2=n=>String(n).padStart(2,'0');
+const ymd=d=>d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate());
+const parse=s=>{const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)};
+const mdw=s=>{const d=parse(s);return p2(d.getMonth()+1)+'.'+p2(d.getDate())+' '+DAY[d.getDay()]};
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const toSec=t=>{const [h,m]=t.split(':').map(Number);return h*3600+m*60};
+const hm=s=>p2(Math.floor(s/3600)%24)+':'+p2(Math.floor(s%3600/60));
+const hms=s=>{s=Math.max(0,s);return p2(Math.floor(s/3600))+':'+p2(Math.floor(s%3600/60))+':'+p2(s%60)};
+const mmss=s=>p2(Math.floor(s/60))+':'+p2(s%60);
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+const hex=()=>Math.random().toString(16).slice(2,9);
+const TODAY=parse('2026-10-06');
+const BASE=toSec('17:48');
+let T=0;                                  // 페이지를 연 뒤 지난 초
+const nowSec=()=>BASE+T;
+const ME='나';
+const OL='#3A2E3A';
+const COLORS=['#F6B4A8','#A8D5BA','#B8C4F2','#F7D488','#D6B6E8','#9ED8E6'];
+const STATES=[['focus','집중'],['ask','질문 받아요'],['rest','쉬는 중'],['stuck','막혔어요'],['away','자리 비움']];
+const SL=Object.fromEntries(STATES);
+
+/* ---------- 캐릭터 ---------- */
+function charSVG(color,state,cls='',share=false){
+  const eyes={
+    focus:`<circle cx="49" cy="50" r="3.4" fill="${OL}"/><circle cx="71" cy="50" r="3.4" fill="${OL}"/>`,
+    ask:`<circle cx="49" cy="47" r="4.2" fill="${OL}"/><circle cx="71" cy="47" r="4.2" fill="${OL}"/><circle cx="50.6" cy="45.4" r="1.4" fill="#fff"/><circle cx="72.6" cy="45.4" r="1.4" fill="#fff"/>`,
+    rest:`<path d="M44 49 Q49 44 54 49 M66 49 Q71 44 76 49" fill="none" stroke="${OL}" stroke-width="2.6" stroke-linecap="round"/>`,
+    stuck:`<path d="M45 44 L52 48 L45 52 M75 44 L68 48 L75 52" fill="none" stroke="${OL}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>`,
+    away:`<path d="M44 49 L54 49 M66 49 L76 49" stroke="${OL}" stroke-width="2.6" stroke-linecap="round"/>`}[state];
+  const mouth={stuck:`<path d="M53 61 Q56.5 58 60 61 Q63.5 64 67 61" fill="none" stroke="${OL}" stroke-width="2.2" stroke-linecap="round"/>`,
+    ask:`<ellipse cx="60" cy="59.5" rx="3.3" ry="2.8" fill="${OL}"/>`,away:`<circle cx="60" cy="60" r="1.7" fill="${OL}"/>`}[state]||`<path d="M55 58.5 Q60 63 65 58.5" fill="none" stroke="${OL}" stroke-width="2.2" stroke-linecap="round"/>`;
+  const head={
+    focus:`<path d="M29 46 Q29 15 60 15 Q91 15 91 46" fill="none" stroke="${OL}" stroke-width="4.5" stroke-linecap="round"/><rect x="21" y="39" width="12" height="19" rx="5.5" fill="#EF7B6C" stroke="${OL}" stroke-width="2.5"/><rect x="87" y="39" width="12" height="19" rx="5.5" fill="#EF7B6C" stroke="${OL}" stroke-width="2.5"/>`,
+    ask:`<g class="qb"><rect x="0" y="2" width="27" height="23" rx="9" fill="#fff" stroke="${OL}" stroke-width="2.5"/><text x="13.5" y="19" text-anchor="middle" font-size="15" font-weight="700" fill="${OL}" font-family="IBM Plex Sans KR,sans-serif">?</text></g>`,
+    stuck:`<path d="M93 28 Q98.5 37 93 41 Q87.5 37 93 28 Z" fill="#8FD3F4" stroke="${OL}" stroke-width="2"/><path class="spin" d="M60 4 a6 6 0 1 1 -6 6 a3.5 3.5 0 1 1 3.5 -3.5" fill="none" stroke="#FFF3C4" stroke-width="2.2" stroke-linecap="round"/>`,
+    away:`<text class="zz" x="92" y="24" font-size="14" font-weight="700" fill="#EDE8FF" font-family="IBM Plex Mono,monospace">z</text><text class="zz z2" x="101" y="13" font-size="10" font-weight="700" fill="#EDE8FF" font-family="IBM Plex Mono,monospace">z</text>`}[state]||'';
+  const mug=state==='rest'?`<rect x="93" y="70" width="13" height="14" rx="3" fill="#fff" stroke="${OL}" stroke-width="2.5"/><path d="M106 74 q5 0 5 4 q0 4 -5 4" fill="none" stroke="${OL}" stroke-width="2.5"/><path class="steam" d="M97 66 q-3 -4 0 -8" fill="none" stroke="#EDE8FF" stroke-width="2" stroke-linecap="round"/><path class="steam s2" d="M102 66 q3 -4 0 -8" fill="none" stroke="#EDE8FF" stroke-width="2" stroke-linecap="round"/>`:'';
+  const handR=state==='ask'?`<g class="wave"><circle cx="101" cy="36" r="7.5" fill="${color}" stroke="${OL}" stroke-width="3"/></g>`
+    :`<circle class="hand hr" cx="${state==='rest'?86:88}" cy="84" r="7" fill="${color}" stroke="${OL}" stroke-width="3"/>`;
+  return `<svg class="ch s-${state} ${cls}" viewBox="0 0 120 100" aria-hidden="true">
+    <g class="bob"><circle cx="37" cy="29" r="9" fill="${color}" stroke="${OL}" stroke-width="3"/><circle cx="83" cy="29" r="9" fill="${color}" stroke="${OL}" stroke-width="3"/>
+    <path d="M60 20 C84 20 92 40 92 62 L92 92 L28 92 L28 62 C28 40 36 20 60 20 Z" fill="${color}" stroke="${OL}" stroke-width="3"/>
+    <ellipse cx="41" cy="57" rx="5" ry="3" fill="#F49AA5" opacity=".6"/><ellipse cx="79" cy="57" rx="5" ry="3" fill="#F49AA5" opacity=".6"/>
+    ${eyes}${mouth}${head}</g>
+    <rect x="4" y="84" width="112" height="9" rx="3" fill="#C49572" stroke="${OL}" stroke-width="2.5"/>
+    <rect x="38" y="65" width="44" height="21" rx="3" fill="#D5DAE4" stroke="${OL}" stroke-width="2.5"/>${share?`<rect x="46" y="70" width="28" height="11" rx="3" fill="#E5484D"/><text x="60" y="78.4" text-anchor="middle" font-size="7.5" font-weight="700" fill="#fff" font-family="IBM Plex Mono,monospace">LIVE</text>`:`<circle cx="60" cy="75.5" r="2.6" fill="#AEB5C4"/>`}
+    ${mug}<circle class="hand hl" cx="32" cy="84" r="7" fill="${color}" stroke="${OL}" stroke-width="3"/>${handR}</svg>`;
+}
+const miniHead=c=>`<svg viewBox="22 16 76 60" aria-hidden="true"><circle cx="37" cy="29" r="9" fill="${c}" stroke="${OL}" stroke-width="3.5"/><circle cx="83" cy="29" r="9" fill="${c}" stroke="${OL}" stroke-width="3.5"/><path d="M60 20 C84 20 92 40 92 62 L92 80 L28 80 L28 62 C28 40 36 20 60 20 Z" fill="${c}" stroke="${OL}" stroke-width="3.5"/><circle cx="49" cy="50" r="3.8" fill="${OL}"/><circle cx="71" cy="50" r="3.8" fill="${OL}"/><path d="M55 59 Q60 63 65 59" fill="none" stroke="${OL}" stroke-width="2.6" stroke-linecap="round"/></svg>`;
+
+/* ---------- 데이터 ---------- */
+const groups=[
+  {id:'cs',name:'CS 스터디 평일반',rule:{days:[1,2,3,4,5],start:'17:30',end:'19:00',min:2,deadline:60},baseNo:41,streak:40,
+   members:{[ME]:'#F6B4A8','서지안':'#A8D5BA','문하람':'#B8C4F2','배주원':'#F7D488','임채윤':'#D6B6E8'},
+   history:{dates:['2026-09-29','2026-09-30','2026-10-01','2026-10-02','2026-10-05'],marks:{[ME]:'OOLOO','서지안':'OOOOO','문하람':'OLOOO','배주원':'OOEOL','임채윤':'LOOXO'}}},
+  {id:'algo',name:'알고리즘 화목반',rule:{days:[2,4],start:'21:00',end:'23:00',min:3,deadline:180},baseNo:34,streak:33,
+   members:{[ME]:'#9ED8E6','김도윤':'#F7D488','박서연':'#D6B6E8','정하준':'#A8D5BA','최지우':'#F6B4A8','한유진':'#B8C4F2'},
+   history:{dates:['2026-09-17','2026-09-22','2026-09-24','2026-09-29','2026-10-01'],marks:{[ME]:'OOOEO','김도윤':'OOOOO','박서연':'OOOOL','정하준':'OLEOL','최지우':'XOOXO','한유진':'EOOOO'}}},
+  {id:'side',name:'사이드 프로젝트 주말반',rule:{days:[6],start:'14:00',end:'18:00',min:2,deadline:360},baseNo:12,streak:11,
+   members:{[ME]:'#D6B6E8','오세린':'#9ED8E6','윤재희':'#F6B4A8','강태오':'#A8D5BA'},
+   history:{dates:['2026-09-12','2026-09-19','2026-09-26','2026-10-03'],marks:{[ME]:'OOLO','오세린':'OOOO','윤재희':'LOEO','강태오':'OXOO'}}}
+];
+const SEED={
+  cs:{start:'17:48',people:[
+    {n:'서지안',st:'focus',todos:[['트랜잭션 격리 수준 예제 코드',1],['MVCC 답변 정리',0]],commits:3,join:0,share:1},
+    {n:'문하람',st:'ask',todos:[['Spring 빈 생명주기 답변 쓰기',0]],commits:1,join:0},
+    {n:'배주원',st:'rest',todos:[['TCP 3-way handshake 정리',1],['HTTP/2 차이 정리',0]],commits:2,join:0},
+    {n:'임채윤',st:'focus',todos:[['프로세스·스레드 예시 코드',0]],commits:0,join:30}],
+   pomo:{run:true,mode:'집중',left:842,by:'서지안',parts:['서지안','문하람']},
+   chat:[['17:31','서지안','오늘은 격리 수준 끝내 봅니다'],['17:36','배주원','커피 타 올게요'],['17:44','문하람','빈 생명주기 질문 받아요. 저도 정리하는 중이라 같이 봐요']]},
+  algo:{start:'21:04',people:[
+    {n:'김도윤',st:'focus',todos:[['백준 1932 정수 삼각형',0],['백준 11053 LIS',0]],commits:2,join:0},
+    {n:'박서연',st:'ask',todos:[['세그먼트 트리 정리',1],['백준 2042 구간 합',0]],commits:1,join:0,share:1},
+    {n:'정하준',st:'focus',todos:[['프로그래머스 Lv.3 한 문제',0]],commits:0,join:20}],
+   pomo:{run:false,mode:'집중',left:1500,by:'',parts:[]},
+   chat:[['21:01','김도윤','오늘 DP 두 문제 갑니다'],['21:03','박서연','세그먼트 트리 질문 받아요']]},
+  side:{start:'14:05',people:[{n:'오세린',st:'focus',todos:[['로그인 API 리뷰 반영',0]],commits:3,join:0},{n:'윤재희',st:'focus',todos:[['배포 스크립트 정리',0]],commits:1,join:0}],
+   pomo:{run:false,mode:'집중',left:1500,by:'',parts:[]},chat:[]}
+};
+const COMMITS={cs:['docs: 격리 수준별 이상 현상 표 추가','test: READ COMMITTED 재현 코드','docs: 빈 생명주기 콜백 순서','feat: 스레드 풀 예제','fix: 데드락 예제 락 순서 수정'],
+  algo:['feat: 1932 정수 삼각형 풀이','fix: 인덱스 범위 수정','test: 반례 추가','refactor: BufferedReader로 입력 변경','feat: 2042 구간 합 풀이'],
+  side:['feat: 로그인 응답 DTO 분리','fix: 토큰 만료 처리','chore: 배포 스크립트 정리']};
+const CHAT={cs:['MVCC 이거 undo 로그로 설명하니까 정리되네요','10분만 쉬었다 할게요','누구 @Transactional 전파 속성 아시는 분?','오 정리 깔끔하다','다들 화이팅','PostConstruct 순서 헷갈렸는데 이제 알겠어요'],
+  algo:['이거 1-based로 바꾸니까 되네요','누구 DP 점화식 봐주실 분','시간 초과 나서 다시 짜는 중','오 축하해요','조금만 쉬고 올게요'],side:['PR 올렸어요','리뷰 부탁해요','배포 한 번 돌려 볼게요']};
+const SNIP={
+  '서지안':{file:'IsolationTest.java',code:['@SpringBootTest','class IsolationTest {','','    @Autowired AccountService service;','','    // READ COMMITTED에서 non-repeatable read 재현','    @Test','    void nonRepeatableRead() throws Exception {','        long first = service.readBalance(1L);','        CompletableFuture.runAsync(() -> service.deposit(1L, 500)).get();','        long second = service.readBalance(1L);','        assertThat(second).isNotEqualTo(first);','    }','','    @Transactional(isolation = Isolation.REPEATABLE_READ)','    void repeatableRead() {','        // MVCC 스냅샷이라 같은 값이 나와야 함','    }','}']},
+  '박서연':{file:'Main.java',code:['public class Main {','    static long[] tree;','    static long[] lazy;','','    static void update(int node, int s, int e, int l, int r, long v) {','        push(node, s, e);','        if (r < s || e < l) return;','        if (l <= s && e <= r) {','            lazy[node] += v;','            push(node, s, e);','            return;','        }','        int mid = (s + e) / 2;','        update(node * 2, s, mid, l, r, v);','        update(node * 2 + 1, mid + 1, e, l, r, v);','        tree[node] = tree[node * 2] + tree[node * 2 + 1];','    }','}']},
+  cs:{file:'ThreadPoolDemo.java',code:['public class ThreadPoolDemo {','    public static void main(String[] args) throws Exception {','        ExecutorService pool = Executors.newFixedThreadPool(4);','        List<Future<Integer>> results = new ArrayList<>();','','        for (int i = 0; i < 8; i++) {','            int id = i;','            results.add(pool.submit(() -> work(id)));','        }','        // 스레드는 4개, 작업은 8개','        for (Future<Integer> f : results) {','            System.out.println(f.get());','        }','        pool.shutdown();','    }','}']},
+  algo:{file:'Main.java',code:['public class Main {','    public static void main(String[] args) throws IOException {','        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));','        int n = Integer.parseInt(br.readLine());','        int[][] dp = new int[n][n];','','        for (int i = 0; i < n; i++) {','            StringTokenizer st = new StringTokenizer(br.readLine());','            for (int j = 0; j <= i; j++) {','                int v = Integer.parseInt(st.nextToken());','                // 위에서 내려오는 두 경로 중 큰 값','                int up = i > 0 ? Math.max(get(dp, i - 1, j - 1), get(dp, i - 1, j)) : 0;','                dp[i][j] = up + v;','            }','        }','    }','}']},
+  side:{file:'AuthController.java',code:['@RestController','@RequestMapping("/api/auth")','public class AuthController {','','    private final AuthService authService;','','    @PostMapping("/login")','    public ResponseEntity<LoginResponse> login(@RequestBody LoginRequest req) {','        LoginResponse res = authService.login(req.email(), req.password());','        return ResponseEntity.ok(res);','    }','}']}
+};
+const KW=new Set(['public','private','static','final','class','void','int','long','return','for','if','new','throws','import','package','true','false','null','this']);
+function hl(line){return line.split(/("(?:[^"\\]|\\.)*"|\/\/.*$|@?\b[A-Za-z_]\w*\b|\b\d+\b)/).map(t=>{if(!t)return '';const e=esc(t);
+  if(t[0]==='"')return `<span class="st">${e}</span>`;if(t.startsWith('//'))return `<span class="cm">${e}</span>`;if(/^\d+$/.test(t))return `<span class="nu">${e}</span>`;
+  if(KW.has(t))return `<span class="kw">${e}</span>`;if(t[0]==='@')return `<span class="an">${e}</span>`;if(/^[A-Z]/.test(t))return `<span class="ty">${e}</span>`;return e}).join('')}
+const snipOf=n=>SNIP[n]||SNIP[G().id]||SNIP.cs;
+function screenHTML(n,cur,big){const s=snipOf(n);const c=cur%s.code.length;
+  return `<div class="screen ${big?'big':''}"><div class="ebar"><span class="etab">${esc(s.file)}</span><span class="sp">${esc(n)} · VS Code</span></div>
+  <div class="ebody">${s.code.map((l,i)=>`<div class="ln ${i===c?'cur':''}"><span class="no">${i+1}</span><code>${hl(l)}${i===c?'<i class="caret"></i>':''}</code></div>`).join('')}</div></div>`}
+const REPLY=['저도 그거 헷갈렸어요. 화면 공유 말고 코드 링크 주시면 봐 드릴게요','그거 순서 문제 같아요','저 지금 질문 받아요 상태라 물어보세요','오 좋네요','저도 같이 볼게요'];
+
+const rooms={};
+function openRoom(g,at){
+  const s=SEED[g.id];
+  rooms[g.id]={live:true,t0:T,simStart:toSec(s.start),
+    people:s.people.map(p=>({n:p.n,c:g.members[p.n],st:p.st,todos:p.todos.map(([t,d])=>({t,done:!!d})),commits:p.commits,join:p.join,in:p.join===0,share:!!p.share})),
+    me:{in:false,c:g.members[ME],st:'focus',todos:[],commits:0,first:null,inAt:0,out:null,share:false},
+    watch:null,cur:4,viewers:{},
+    pomo:{...s.pomo,parts:[...s.pomo.parts],saved:{}},
+    chat:s.chat.map(([t,n,x])=>({t,n,x})),feed:[],unread:0,pane:'chat'};
+  const r=rooms[g.id];
+  r.people.forEach(p=>{if(p.share)r.viewers[p.n]=1});
+  r.feed=[{t:hm(r.simStart-120),h:`제${occ(g,1)[0].no}회 방이 열렸습니다`}];
+  r.people.filter(p=>p.in).forEach(p=>r.feed.unshift({t:hm(r.simStart-60),h:`<b>${esc(p.n)}</b> 입장 · ${esc(p.todos[0]?.t||'')}`}));
+  return r;
+}
+openRoom(groups[0]);
+
+const S={view:'home',g:0,tab:'room',open:{},exc:{},rsvp:{},
+  notif:{d1:true,remind:true,m30:true,open:true,retro:true,push:true,mail:false,discord:true}};
+const G=()=>groups[S.g];
+const R=()=>rooms[G().id];
+const rNow=r=>r.simStart+(T-r.t0);
+
+function occ(g,n){const out=[];const d=new Date(TODAY);let no=g.baseNo,k=0;
+  while(out.length<n&&k++<120){if(g.rule.days.includes(d.getDay()))out.push({date:ymd(d),no:no++});d.setDate(d.getDate()+1)}return out}
+function hashStr(s){let h=0;for(const c of s)h=(h*31+c.charCodeAt(0))>>>0;return h}
+function rsvpFor(g,date){const key=g.id+date;
+  if(!S.rsvp[key]){const o={};const pool=['yes','yes',null,'yes','late','yes','no'];Object.keys(g.members).forEach((m,i)=>o[m]=m===ME?null:pool[(hashStr(key)+i*3)%pool.length]);S.rsvp[key]=o}
+  return S.rsvp[key]}
+const ruleText=r=>{const d=[...r.days].sort();if(d.join()==='1,2,3,4,5')return '평일';return '매주 '+d.map(x=>DAY[x]).join('·')};
+function untilText(g){const o=occ(g,1)[0];const today=o.date===ymd(TODAY);
+  if(today){const w=toSec(g.rule.start)-nowSec();if(w>0)return `오늘 ${g.rule.start} · ${Math.floor(w/3600)?Math.floor(w/3600)+'시간 ':''}${Math.floor(w%3600/60)}분 뒤`}
+  const n=today?occ(g,2)[1]:o;return `${mdw(n.date)} ${g.rule.start}`}
+function rateOf(g){const all=Object.values(g.history.marks).join('').split('').filter(c=>c!=='E');return Math.round(all.filter(c=>c!=='X').length/all.length*100)}
+
+/* ---------- 공통 UI ---------- */
+function toast(msg){const r=document.getElementById('toastRoot');r.innerHTML=`<div class="toast" role="status">${esc(msg)}</div>`;clearTimeout(S.tt);S.tt=setTimeout(()=>r.innerHTML='',2600)}
+function modal(html,onMount){const r=document.getElementById('modalRoot');r.innerHTML=`<div class="backdrop" data-close="1"><div class="modal" role="dialog" aria-modal="true">${html}</div></div>`;const m=r.querySelector('.modal');
+  m.addEventListener('click',e=>{e.stopPropagation();if(e.target.closest('[data-x]'))closeModal()});onMount&&onMount(m);const f=m.querySelector('input:not([type=radio]),select');f&&f.focus()}
+function closeModal(){document.getElementById('modalRoot').innerHTML=''}
+document.getElementById('modalRoot').addEventListener('click',e=>{if(e.target.dataset.close)closeModal()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
+
+function render(){
+  document.getElementById('nowClock').textContent=`${mdw(ymd(TODAY))} ${hm(nowSec())}`;
+  const gh=document.getElementById('gHead');const m=document.getElementById('main');
+  if(S.view==='home'){gh.innerHTML='';m.innerHTML=viewHome();return}
+  const g=G();const live=R()?.live;
+  gh.innerHTML=`<div class="ghead"><div class="gt"><button class="back" data-go="home">‹ 내 그룹</button><h1>${esc(g.name)}</h1></div>
+    <nav class="tabs" role="tablist">${[['room','세션 방'],['plan','일정·출석'],['notif','알림']].map(([k,l])=>`<button role="tab" aria-selected="${S.tab===k}" data-tab="${k}">${l}${k==='room'&&live?'<span class="live-dot" aria-label="진행 중"></span>':''}</button>`).join('')}</nav></div>`;
+  if(S.tab==='room'){m.innerHTML=viewRoom();if(live){paintStage();paintSeats();paintMe();paintPomo();paintPane();paintHead()}}
+  else if(S.tab==='plan')m.innerHTML=viewPlan();
+  else m.innerHTML=viewNotif();
+}
+document.querySelector('header.top').addEventListener('click',e=>{
+  if(e.target.closest('[data-go="home"]')){S.view='home';render();return}
+  const t=e.target.closest('[data-tab]');if(t){S.tab=t.dataset.tab;render()}
+});
+
+/* ---------- 홈 ---------- */
+function viewHome(){
+  return `<div class="home-head"><div><div class="kicker">My groups</div><h1>내 그룹</h1></div>
+    <div class="acts"><button class="btn" data-action="joinGroup">초대 코드로 참여</button><button class="btn pri" data-action="newGroup">새 그룹 만들기</button></div></div>
+  <div class="gcards">${groups.map((g,i)=>{const r=rooms[g.id];const live=r?.live;
+    const here=live?[...(r.me.in&&!r.me.out?[{c:r.me.c}]:[]),...r.people.filter(p=>p.in)]:[];
+    return `<button class="gcard" data-action="openGroup" data-i="${i}">
+      <div class="strip"><span class="win"></span>${live?here.map(p=>miniHead(p.c)).join(''):'<span class="empty">아직 아무도 없어요</span>'}</div>
+      <div class="bd"><div class="gn">${esc(g.name)}</div><div class="gm mono">${ruleText(g.rule)} ${g.rule.start}–${g.rule.end}</div>
+      <div class="gs">${live?`<span class="live-dot"></span><span>지금 ${here.length}명 모각코 중</span>`:`<span class="muted">다음</span><span class="mono">${untilText(g)}</span>`}</div>
+      <div class="gm">멤버 ${Object.keys(g.members).length}명 · 출석률 ${rateOf(g)}% · ${g.streak}회 연속</div></div></button>`}).join('')}</div>`;
+}
+
+/* ---------- 세션 방 ---------- */
+function viewRoom(){
+  const g=G();const r=R();
+  const scene=`<div class="window"></div><div class="lights">${'<i></i>'.repeat(9)}</div><div class="sign">MOGAKCO ROOM</div>`;
+  if(!r?.live){const o=occ(g,1)[0];
+    return `<div class="col"><section class="scene">${scene}<div class="empty-room"><div class="kicker" style="color:#C9C6E4">Next · 제${o.no}회</div><div class="big">${untilText(g).split(' · ')[0]}</div><div>${untilText(g).includes('뒤')?untilText(g).split(' · ')[1]+' 방이 열립니다':'약속 시각에 방이 열립니다'}</div>
+      ${g.id==='algo'||g.id==='side'?'<button class="btn pri" data-action="demoOpen">데모: 약속 시각으로 이동</button>':''}</div></section></div>`}
+  return `<div class="grid"><div class="col">
+    <section class="panel rhead"><div><div class="kicker">Live · 제${occ(g,1)[0].no}회 · ${g.rule.start}–${g.rule.end}</div><div class="clock" id="rClock"></div></div>
+      <div class="cell push"><div class="l">남은 시간</div><div class="v" id="rLeft"></div></div>
+      <div class="cell"><div class="l">오늘 함께 커밋</div><div class="v" id="rCommits"></div></div>
+      <div class="cell"><div class="l">끝낸 할 일</div><div class="v" id="rTodos"></div></div></section>
+    <section class="panel stage" id="stage" hidden></section>
+    <section class="scene" aria-label="모각코 방">${scene}<div class="seats" id="seats"></div></section>
+    <section class="panel" id="mePanel"></section>
+  </div><div class="col">
+    <section class="panel pomo" id="pomoPanel"></section>
+    <section class="panel"><div class="ptabs" role="tablist" id="ptabs"></div><div id="pane"></div>
+      <form class="chatform" id="chatForm"><input type="text" id="chatIn" maxlength="120" placeholder="메시지 보내기" autocomplete="off" aria-label="메시지"><button class="btn pri">보내기</button></form>
+      <div class="quick" id="quick"><button type="button" class="btn sm" data-q="화이팅">화이팅</button><button type="button" class="btn sm" data-q="잠깐 쉬고 올게요">잠깐 쉬고 올게요</button><button type="button" class="btn sm" data-q="질문 있어요!">질문 있어요!</button></div>
+    </section>
+  </div></div>`;
+}
+const present=r=>[...(r.me.in&&!r.me.out?[{n:ME,c:r.me.c,st:r.me.st,todos:r.me.todos,commits:r.me.commits,share:r.me.share,me:1}]:[]),...r.people.filter(p=>p.in)];
+function seatHTML(p,r){
+  const cur=p.todos.find(t=>!t.done)||p.todos[p.todos.length-1];
+  const inPomo=r.pomo.run&&r.pomo.parts.includes(p.n);
+  return `<div class="seat" data-seat="${esc(p.n)}"><div class="fxl"></div>
+    <button class="chbtn" data-action="char" data-name="${esc(p.n)}" aria-label="${esc(p.n)} ${SL[p.st]}${p.share?' 화면 공유 중':''}">${charSVG(p.c,p.st,'',p.share)}</button>
+    <div class="plate"><b>${esc(p.n)}</b><span class="ps ${p.st}">${SL[p.st]}</span></div>
+    <div class="ptodo">${cur?esc(cur.t):''}${inPomo?` · 뽀모 ${mmss(r.pomo.left)}`:''}</div></div>`;
+}
+function paintSeats(){const el=document.getElementById('seats');if(!el)return;const r=R();el.innerHTML=present(r).map(p=>seatHTML(p,r)).join('')}
+function paintSeat(n){const r=R();const el=document.querySelector(`[data-seat="${CSS.escape(n)}"]`);const p=present(r).find(x=>x.n===n);if(!el||!p)return paintSeats();
+  const tmp=document.createElement('div');tmp.innerHTML=seatHTML(p,r);el.replaceWith(tmp.firstElementChild)}
+function seatEl(n){return document.querySelector(`[data-seat="${CSS.escape(n)}"]`)}
+function fx(n,kind,text){
+  const s=seatEl(n);if(!s)return;
+  if(kind==='bubble'){s.querySelector('.bubble')?.remove();const b=document.createElement('div');b.className='bubble';b.textContent=text;s.appendChild(b);setTimeout(()=>b.remove(),5000);return}
+  const l=s.querySelector('.fxl');const d=document.createElement('div');d.className='fx';
+  if(kind==='commit'){d.innerHTML=`<svg width="70" height="22" viewBox="0 0 70 22"><path d="M8 2l2 5 5 1-4 3 1 5-4-3-4 3 1-5-4-3 5-1z" fill="#FFE08A"/><path d="M62 4l1.5 3.5 3.5.5-2.7 2.2.7 3.6-3-2-3 2 .7-3.6L57 8l3.5-.5z" fill="#FFB3C1"/></svg>+1 커밋`;s.querySelector('svg.ch')?.classList.add('jump');setTimeout(()=>s.querySelector('svg.ch')?.classList.remove('jump'),720)}
+  else if(kind==='cheer'){d.innerHTML=`<svg width="54" height="22" viewBox="0 0 54 22"><path d="M10 19 C-2 11 3 2 10 7 C17 2 22 11 10 19Z" fill="#FF8FA3"/><path d="M30 14 C22 9 25 3 30 6.5 C35 3 38 9 30 14Z" fill="#FFB3C1"/><path d="M46 20 C38 15 41 9 46 12.5 C51 9 54 15 46 20Z" fill="#FF8FA3"/></svg>${esc(text||'')}`}
+  else d.textContent=text;
+  l.appendChild(d);setTimeout(()=>d.remove(),1650);
+}
+function paintHead(){
+  const r=R();if(!r||!document.getElementById('rClock'))return;const g=G();const now=rNow(r);
+  document.getElementById('rClock').innerHTML=hm(now)+`<span style="font-size:16px">:${p2(now%60)}</span>`;
+  document.getElementById('rLeft').textContent=hms(toSec(g.rule.end)-now);
+  const ps=present(r);document.getElementById('rCommits').textContent=ps.reduce((a,p)=>a+p.commits,0);
+  const all=ps.flatMap(p=>p.todos);document.getElementById('rTodos').textContent=`${all.filter(t=>t.done).length}/${all.length}`;
+}
+function paintStage(){
+  const el=document.getElementById('stage');if(!el)return;const r=R();const shares=present(r).filter(p=>p.share);
+  if(r.watch&&!shares.find(p=>p.n===r.watch))r.watch=null;
+  if(!shares.length){el.hidden=true;el.innerHTML='';return}
+  el.hidden=false;
+  if(!r.watch){el.innerHTML=`<div class="sharelist"><span class="livetag">LIVE</span><span class="small muted">화면 공유 중</span>${shares.map(p=>`<span class="who"><i style="background:${p.c}"></i>${p.n===ME?'나':esc(p.n)}</span><button class="btn sm" data-action="watch" data-name="${esc(p.n)}">${p.n===ME?'내 화면 보기':'보기'}</button>`).join('')}</div>`;return}
+  const n=r.watch;const v=(r.viewers[n]||0)+(n===ME?0:1);
+  el.innerHTML=`<div class="sh"><span class="livetag">LIVE</span><span class="who">${n===ME?'내 화면':esc(n)+' 님의 화면'}</span><span class="small muted">시청 ${v}명</span>
+    ${shares.filter(p=>p.n!==n).map(p=>`<button class="btn sm ghost" data-action="watch" data-name="${esc(p.n)}">${p.n===ME?'내 화면':esc(p.n)}</button>`).join('')}
+    <div class="acts"><button class="btn sm" data-action="bigScreen">크게 보기</button><button class="btn sm" data-action="unwatch">닫기</button></div></div><div id="screenBody">${screenHTML(n,r.cur)}</div>`;
+}
+function shareModal(){
+  const r=R();
+  modal(`<h3>화면 공유</h3><div class="shareopts" id="shOpts">
+      <label><input type="radio" name="sh" value="VS Code 창" checked><span>VS Code 창<small>편집기 창 하나만 보입니다</small></span></label>
+      <label><input type="radio" name="sh" value="브라우저 탭"><span>브라우저 탭<small>문서나 문제 페이지를 같이 볼 때</small></span></label>
+      <label><input type="radio" name="sh" value="전체 화면"><span>전체 화면<small>알림과 메신저 창도 보일 수 있습니다</small></span></label></div>
+    <p class="note">방에 있는 사람만 볼 수 있고 녹화하지 않습니다. 목업에서는 실제 화면 대신 예시 편집기 화면을 보여 줍니다.</p>
+    <div class="foot"><button class="btn" data-x="1">닫기</button><button class="btn pri" id="shGo">공유 시작</button></div>`,m=>{
+    m.querySelector('#shGo').onclick=()=>{const what=m.querySelector('input[name=sh]:checked').value;closeModal();
+      r.me.share=true;r.viewers[ME]=0;r.watch=ME;paintSeat(ME);paintStage();paintMe();addFeed(`<b>나</b> 화면 공유 시작 · ${esc(what)}`);sysChat('나 님이 화면 공유를 시작했어요');
+      const vs=r.people.filter(p=>p.in).slice(0,2);
+      vs.forEach((p,i)=>setTimeout(()=>{if(R()!==r||!r.me.share)return;r.viewers[ME]++;paintStage();sysChat(`${p.n} 님이 내 화면을 보고 있어요`)},2000+i*2500));
+      if(vs[0])setTimeout(()=>{if(R()===r&&r.me.share)addChat(vs[0].n,'오 화면 보여요. 반복문 범위 한 번 확인해 보세요')},6000)};
+  });
+}
+function paintMe(){
+  const el=document.getElementById('mePanel');if(!el)return;const r=R();const me=r.me;const g=G();
+  if(me.out){const o=me.out;el.innerHTML=`<h2>오늘 기록 <span class="sp small muted mono">${o.outAt} 체크아웃</span></h2>
+    <div><span class="state ${o.mark==='O'?'st-ok':'st-warn'}">${o.mark==='O'?'출석':'지각'}</span> <span class="small muted mono">첫 활동 신호 ${o.first}</span></div>
+    <div class="summary"><div><span class="small muted">머문 시간</span><b>${o.stay}</b></div><div><span class="small muted">커밋</span><b>${o.commits}</b></div><div><span class="small muted">끝낸 할 일</span><b>${o.done}</b></div></div>
+    <p class="small" style="margin:10px 0 0"><span class="muted">회고</span> ${esc(o.retro||'-')}</p>`;return}
+  if(!me.in){el.innerHTML=`<h2>입장하기</h2><div class="entry"><div class="pv" id="pv">${charSVG(me.c,'focus')}</div>
+    <div class="col" style="gap:12px"><div class="field"><label>캐릭터 색</label><div class="swatches" id="sw">${COLORS.map(c=>`<button type="button" data-c="${c}" style="background:${c}" aria-label="색 ${c}" aria-pressed="${c===me.c}"></button>`).join('')}</div></div>
+    <div class="field"><label for="todoIn">오늘 할 일</label><input type="text" id="todoIn" maxlength="60" placeholder="예: 트랜잭션 격리 수준 정리"></div>
+    <div><button class="btn pri" data-action="enter">입장</button></div></div></div>
+    <p class="note" style="margin-top:12px">카메라는 쓰지 않습니다. 편집기 확장이 편집 시각과 커밋 수만 보내고, 코드와 파일 이름은 보내지 않습니다.</p>`;return}
+  el.innerHTML=`<h2>내 상태</h2>
+    <div class="stsel" role="group" aria-label="내 상태">${STATES.map(([k,l])=>`<button data-action="setSt" data-st="${k}" aria-pressed="${me.st===k}">${l}</button>`).join('')}</div>
+    <div class="mesub" style="margin-top:16px"><div><div class="small muted" style="font-weight:600;margin-bottom:4px">오늘 할 일</div>
+      <ul class="todos">${me.todos.map((t,i)=>`<li class="${t.done?'done':''}"><input type="checkbox" id="td${i}" data-todo="${i}" ${t.done?'checked':''}><label for="td${i}">${esc(t.t)}</label></li>`).join('')}</ul>
+      <div class="addrow"><input type="text" id="addTodo" maxlength="60" placeholder="할 일 추가" aria-label="할 일 추가"><button class="btn" data-action="addTodo">추가</button></div></div>
+    <div class="col" style="gap:10px"><div class="conn"><i></i><span>VS Code 확장 연결됨</span></div>
+      <div class="small">${me.first?`<span class="state ${toSec(me.first)-toSec(g.rule.start)<=600?'st-ok':'st-warn'}">${toSec(me.first)-toSec(g.rule.start)<=600?'출석':'지각'}</span> <span class="muted mono">첫 활동 신호 ${me.first}</span>`:'<span class="muted">첫 활동 신호를 기다리는 중</span>'}</div>
+      <div class="small muted">커밋 <span class="mono">${me.commits}</span></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:auto"><button class="btn ${me.share?'on':''}" data-action="share" aria-pressed="${me.share}">${me.share?'화면 공유 중지':'화면 공유'}</button><button class="btn" data-action="myCommit">데모: 커밋 보내기</button><button class="btn" data-action="checkout">체크아웃</button></div></div></div>`;
+}
+function paintPomo(){
+  const el=document.getElementById('pomoPanel');if(!el)return;const r=R();const p=r.pomo;const me=r.me;const total=p.mode==='집중'?1500:300;
+  const mine=p.parts.includes(ME);const canMe=me.in&&!me.out;
+  el.innerHTML=`<h2>함께 뽀모도로 <span class="sp small muted">${p.run?`${esc(p.by)} 님이 시작`:'쉬는 중인 타이머'}</span></h2>
+    <div class="time" id="pTime">${mmss(p.left)}</div><div class="small muted">${p.run?(p.mode==='집중'?'집중 중 · 끝나면 다 같이 5분 휴식':'휴식 중'):'25분 집중 · 5분 휴식'}</div>
+    <div class="track"><i id="pTrack" style="width:${(1-p.left/total)*100}%"></i></div>
+    <div class="small" style="margin-top:10px">${p.parts.length?`참여 ${p.parts.length}명 · ${p.parts.map(esc).join(', ')}`:'<span class="muted">아직 참여한 사람이 없어요</span>'}</div>
+    <div class="ctrl">${!p.run?`<button class="btn pri" data-action="pomoStart" ${canMe?'':'disabled'}>25분 집중 시작</button>`
+      :`<button class="btn ${mine?'on':''}" data-action="pomoJoin" ${canMe?'':'disabled'} aria-pressed="${mine}">${mine?'참여 중':'같이 하기'}</button>${mine?'<button class="btn" data-action="pomoSkip">다음 단계로</button>':''}`}</div>
+    ${canMe?'':'<p class="note" style="margin-top:8px">입장하면 참여할 수 있습니다.</p>'}`;
+}
+function paintPane(){
+  const r=R();const tabs=document.getElementById('ptabs');if(!tabs)return;
+  tabs.innerHTML=`<button role="tab" data-pane="chat" aria-selected="${r.pane==='chat'}">채팅</button><button role="tab" data-pane="feed" aria-selected="${r.pane==='feed'}">활동${r.unread&&r.pane!=='feed'?`<span class="cnt">${r.unread}</span>`:''}</button>`;
+  const pane=document.getElementById('pane');
+  document.getElementById('chatForm').hidden=r.pane!=='chat';document.getElementById('quick').hidden=r.pane!=='chat';
+  if(r.pane==='chat'){const g=G();
+    pane.innerHTML=`<div class="list" id="chatList">${r.chat.map(m=>m.sys?`<div class="msg sys"><div class="tx">${esc(m.x)}</div></div>`:`<div class="msg ${m.n===ME?'me':''}"><div class="who">${m.n===ME?'':`<i style="background:${g.members[m.n]||'#ccc'}"></i>${esc(m.n)}`} <span class="tm">${m.t}</span></div><div class="tx">${esc(m.x)}</div></div>`).join('')}</div>`;
+    const l=document.getElementById('chatList');l.scrollTop=l.scrollHeight}
+  else{r.unread=0;pane.innerHTML=`<div class="list feed">${r.feed.map((f,i)=>`<div class="it"><span class="tm">${f.t}</span><span>${f.h}</span>${f.cheer?`<button class="btn sm ${f.cheered?'on':''}" data-action="cheerFeed" data-i="${i}" ${f.cheered?'disabled':''}>${f.cheered?'응원함':'응원'}</button>`:'<span></span>'}</div>`).join('')}</div>`}
+}
+function addFeed(h,cheer){const r=R();r.feed.unshift({t:hm(rNow(r)),h,cheer});r.feed=r.feed.slice(0,60);if(r.pane!=='feed')r.unread++;paintPane()}
+function addChat(n,x){const r=R();r.chat.push({t:hm(rNow(r)),n,x});r.chat=r.chat.slice(-80);if(r.pane==='chat')paintPane();else paintPane();if(n!==ME||true)fx(n,'bubble',x)}
+function sysChat(x){const r=R();r.chat.push({sys:1,x});if(r.pane==='chat')paintPane()}
+
+/* 다른 멤버 움직임 */
+function simulate(){
+  const r=R();const g=G();const others=r.people.filter(p=>p.in);if(!others.length)return;
+  const p=pick(others);const x=Math.random();const inFocus=r.pomo.run&&r.pomo.mode==='집중'&&r.pomo.parts.includes(p.n);
+  if(x<.32){p.commits++;fx(p.n,'commit');addFeed(`<b>${esc(p.n)}</b> 커밋 <span class="hash">${hex()}</span> ${esc(pick(COMMITS[g.id]))}`,p.n);paintHead()}
+  else if(x<.56){if(inFocus&&Math.random()<.6)return;addChat(p.n,pick(CHAT[g.id]))}
+  else if(x<.72&&!inFocus){const ns=pick(['focus','focus','ask','rest','stuck']);if(ns===p.st)return;p.st=ns;
+    if(ns==='stuck'&&!p.share){p.share=true;r.viewers[p.n]=0;addFeed(`<b>${esc(p.n)}</b> 화면 공유 시작`)}
+    else if(ns!=='stuck'&&p.share&&Math.random()<.4){p.share=false;addFeed(`<b>${esc(p.n)}</b> 화면 공유 종료`)}
+    paintSeat(p.n);paintStage();addFeed(`<b>${esc(p.n)}</b> 상태 · ${SL[ns]}`);
+    if(ns==='stuck'){setTimeout(()=>{if(R()===r&&p.st==='stuck')addChat(p.n,'화면 공유 켰어요. 여기서 막혔는데 잠깐 봐주실 분?')},800)}}
+  else if(x<.88){const t=p.todos.find(t=>!t.done);if(!t)return;t.done=true;fx(p.n,'text','할 일 완료');paintSeat(p.n);addFeed(`<b>${esc(p.n)}</b> 할 일 완료 · ${esc(t.t)}`,p.n);paintHead()}
+  else if(r.me.in&&!r.me.out){fx(ME,'cheer',p.n);addFeed(`<b>${esc(p.n)}</b> 님이 나에게 응원을 보냈어요`)}
+}
+
+/* 1초마다 */
+setInterval(()=>{
+  T++;document.getElementById('nowClock').textContent=`${mdw(ymd(TODAY))} ${hm(nowSec())}`;
+  for(const id in rooms){const r=rooms[id];if(!r.live)continue;const p=r.pomo;
+    if(p.run){p.left--;if(p.left<=0){
+      if(p.mode==='집중'){p.mode='휴식';p.left=300;p.parts.forEach(n=>{const x=n===ME?r.me:r.people.find(q=>q.n===n);if(x){p.saved[n]=x.st;x.st='rest'}});if(R()===r){sysChat('뽀모도로 집중이 끝났어요. 다 같이 5분 쉬어요');addFeed('뽀모도로 집중 25분 완료');paintSeats();paintMe()}}
+      else{p.mode='집중';p.left=1500;p.parts.forEach(n=>{const x=n===ME?r.me:r.people.find(q=>q.n===n);if(x){x.st=p.saved[n]||'focus'}});if(R()===r){sysChat('다시 25분 집중 시작');paintSeats();paintMe()}}
+      if(R()===r)paintPomo()}}
+  }
+  if(S.view!=='group'||S.tab!=='room')return;const r=R();if(!r?.live)return;const el=T-r.t0;
+  r.people.forEach(p=>{if(!p.in&&p.join>0&&el>=p.join){p.in=true;paintSeats();fx(p.n,'text','안녕하세요');addFeed(`<b>${esc(p.n)}</b> 입장 · ${esc(p.todos[0]?.t||'')} <span class="muted">(지각)</span>`);sysChat(`${p.n} 님이 들어왔어요`)}});
+  if(r.me.in&&!r.me.out&&!r.me.first&&T-r.me.inAt>=3){r.me.first=hm(rNow(r));addFeed('<b>나</b>의 첫 활동 신호를 받았어요');paintMe()}
+  if(el>0&&el%6===0)simulate();
+  if(r.watch&&el%2===0){r.cur++;const sb=document.getElementById('screenBody');if(sb)sb.innerHTML=screenHTML(r.watch,r.cur);const bb=document.getElementById('bigScreenBody');if(bb)bb.innerHTML=screenHTML(r.watch,r.cur,true)}
+  paintHead();
+  const pt=document.getElementById('pTime');if(pt){pt.textContent=mmss(r.pomo.left);document.getElementById('pTrack').style.width=(1-r.pomo.left/(r.pomo.mode==='집중'?1500:300))*100+'%'}
+  if(r.pomo.run&&el%5===0)document.querySelectorAll('.seat').forEach(s=>{const n=s.dataset.seat;if(r.pomo.parts.includes(n)){const p=present(r).find(x=>x.n===n);const cur=p.todos.find(t=>!t.done)||p.todos[p.todos.length-1];s.querySelector('.ptodo').textContent=(cur?cur.t:'')+` · 뽀모 ${mmss(r.pomo.left)}`}});
+},1000);
+
+/* ---------- 일정·출석 ---------- */
+function viewPlan(){
+  const g=G();const r=g.rule;const live=rooms[g.id]?.live;
+  const rows=occ(g,5).map(o=>{const ex=S.exc[g.id+o.date];const today=o.date===ymd(TODAY);const rs=rsvpFor(g,o.date);
+    const yes=Object.values(rs).filter(v=>v==='yes'||v==='late').length;const total=Object.keys(g.members).length;
+    let t=`${r.start}–${r.end}`,acts='',cls='',sub=`참석 ${yes}/${total}`;
+    if(ex?.type==='cancel'){cls='off';sub=`<span class="state st-bad">취소</span> · ${esc(ex.reason||'')}`;acts=`<button class="btn ghost" data-action="exc" data-date="${o.date}" data-no="${o.no}">변경</button>`}
+    else{if(ex?.type==='move'){t=`<span class="strike">${r.start}</span> ${ex.start}–${ex.end}`;sub=`<span class="state st-warn">시간 변경</span> · ${esc(ex.reason||'')} · 참석 ${yes}/${total}`}
+      if(today&&live)acts=`<span class="state st-bad">진행 중</span><button class="btn sm pri" data-action="toRoom">방으로</button>`;
+      else{const mine=rs[ME];acts=`<div class="seg" role="group" aria-label="내 참석 응답">${[['yes','참석'],['late','늦참'],['no','불참']].map(([v,l])=>`<button data-action="rsvp" data-date="${o.date}" data-v="${v}" class="${mine===v?'on':''}" aria-pressed="${mine===v}">${l}</button>`).join('')}</div><button class="btn ghost" data-action="exc" data-date="${o.date}" data-no="${o.no}">변경</button>`;
+        if(yes<r.min)sub+=` · <span class="state st-warn">최소 ${r.min}명 미달 시 자동 취소</span>`}}
+    return `<div class="sess ${cls} ${today?'today':''}"><div><div class="d mono">${mdw(o.date)}</div><div class="t mono">${t}</div></div><div class="small muted">제${o.no}회 · ${sub}</div><div class="acts">${acts}</div></div>`}).join('');
+  const h=g.history;const lab={O:'출석',L:'지각',X:'결석',E:'사전 불참'};const sym={O:'●',L:'◐',X:'○',E:'–'};
+  const trs=Object.keys(g.members).map(n=>{const ms=(h.marks[n]||'').split('');const due=ms.filter(c=>c!=='E');const rate=due.length?Math.round(due.filter(c=>c!=='X').length/due.length*100):100;
+    return `<tr><td><b>${esc(n)}</b></td>${ms.map((c,i)=>`<td><span class="mk ${c}" title="${mdw(h.dates[i])} ${lab[c]}" aria-label="${lab[c]}">${sym[c]}</span></td>`).join('')}<td class="n">${rate}%</td></tr>`}).join('');
+  return `<div class="grid"><div class="col"><section class="panel"><h2>일정</h2>
+      <div class="rule-line"><span class="r">${ruleText(r)} <span class="mono">${r.start}–${r.end}</span></span><span class="small muted">최소 ${r.min}명 · 응답 마감 시작 ${r.deadline>=60?r.deadline/60+'시간':r.deadline+'분'} 전</span><button class="btn" data-action="editRule">정기 일정 수정</button></div>
+      ${rows}</section></div>
+    <div class="col"><section class="panel"><h2>출석 <span class="sp small muted">최근 ${h.dates.length}회</span></h2>
+      <div class="figs"><div><b>${g.streak}회</b><span>연속 개최</span></div><div><b>${rateOf(g)}%</b><span>평균 출석률</span></div></div>
+      <div class="tbl-wrap"><table class="att"><thead><tr><th>멤버</th>${h.dates.map(d=>`<th class="mono">${mdw(d).slice(0,5)}</th>`).join('')}<th>출석률</th></tr></thead><tbody>${trs}</tbody></table></div>
+      <div class="legend">${Object.keys(lab).map(k=>`<span><span class="mk ${k}">${sym[k]}</span>${lab[k]}</span>`).join('')}</div>
+      <p class="note" style="margin-top:10px">시작 10분 안에 첫 활동 신호가 오면 출석, 그 뒤면 지각입니다. 응답 마감 전에 불참을 알리면 사전 불참으로 기록됩니다.</p></section></div></div>`;
+}
+
+/* ---------- 알림 ---------- */
+function viewNotif(){
+  const g=G();const n=S.notif;const o=occ(g,1)[0];
+  const tg=(k,t,d)=>`<div class="tog"><div class="tx"><b>${t}</b><span class="small muted">${d}</span></div><label class="sw"><input type="checkbox" id="n_${k}" data-notif="${k}" ${n[k]?'checked':''} aria-label="${t}"><span></span></label></div>`;
+  return `<div class="grid"><div class="col"><section class="panel"><h2>알림 시점</h2>
+      ${tg('d1','하루 전 참석 확인','전날 20:00, 응답 버튼이 붙은 알림')}${tg('remind','미응답자 재알림','응답 마감 1시간 전, 응답하지 않은 사람에게만')}
+      ${tg('m30','30분 전','참석·늦참으로 응답한 사람에게')}${tg('open','방 열림','약속 시각에 그룹 전체에게')}${tg('retro','체크아웃 알림','종료 10분 전, 입장한 사람에게')}</section>
+    <section class="panel"><h2>받는 곳</h2>${tg('push','웹 푸시','이 브라우저')}${tg('mail','이메일','me@example.com')}${tg('discord','디스코드 채널','그룹 채널에 시작·변경 알림을 올림')}
+      <div class="field" style="margin-top:6px"><label for="hook">디스코드 웹훅 주소</label><div class="copy"><input type="url" id="hook" value="https://discord.com/api/webhooks/1290…/•••••"><button class="btn" data-action="hookTest">테스트</button></div></div></section></div>
+    <div class="col"><section class="panel"><h2>디스코드 미리보기</h2><div class="preview">[${esc(g.name)}] 제${o.no}회 모각코가 ${mdw(o.date)} ${g.rule.start}에 시작합니다.
+지금 방에 들어오면 출석으로 기록됩니다.
+mogakco.example/g/${g.id}</div><p class="note" style="margin-top:10px">일정을 바꾸면 예약된 알림도 새 시각으로 다시 잡힙니다.</p></section></div></div>`;
+}
+
+/* ---------- 모달 ---------- */
+function charModal(n){
+  const r=R();const p=present(r).find(x=>x.n===n);if(!p)return;const isMe=n===ME;
+  modal(`<div class="hero">${charSVG(p.c,p.st)}</div>
+    <h3>${esc(n)} <span class="small state" style="margin-left:6px;color:var(--muted)">${SL[p.st]} · 커밋 ${p.commits}</span></h3>
+    <ul class="todos">${p.todos.map(t=>`<li class="${t.done?'done':''}"><span class="mono small" aria-hidden="true">${t.done?'✓':'·'}</span><label>${esc(t.t)}</label></li>`).join('')||'<li class="muted">할 일이 없어요</li>'}</ul>
+    <div class="foot">${isMe?'<button class="btn" data-x="1">닫기</button>':`${p.share?'<button class="btn" id="mWatch">화면 보기</button>':''}${p.st==='ask'||p.st==='stuck'?`<button class="btn" id="mAsk">${p.st==='ask'?'질문하기':'도와주기'}</button>`:''}${p.st==='away'?'<button class="btn" id="mPoke">콕 찌르기</button>':''}<button class="btn pri" id="mCheer">응원 보내기</button>`}</div>`,m=>{
+    const c=m.querySelector('#mCheer');if(c)c.onclick=()=>{closeModal();fx(n,'cheer');addFeed(`<b>나</b>가 ${esc(n)} 님에게 응원을 보냈어요`);setTimeout(()=>{if(R()===r&&r.people.find(x=>x.n===n&&x.in))addChat(n,'고마워요!')},1500)};
+    const k=m.querySelector('#mPoke');if(k)k.onclick=()=>{closeModal();fx(n,'text','콕!');addFeed(`<b>나</b>가 ${esc(n)} 님을 콕 찔렀어요`);setTimeout(()=>{const x=r.people.find(q=>q.n===n);if(x&&R()===r){x.st='focus';paintSeat(n);addChat(n,'돌아왔어요')}},2500)};
+    const w=m.querySelector('#mWatch');if(w)w.onclick=()=>{closeModal();r.watch=n;paintStage();document.getElementById('stage')?.scrollIntoView({behavior:'smooth',block:'nearest'})};
+    const a=m.querySelector('#mAsk');if(a)a.onclick=()=>{closeModal();r.pane='chat';paintPane();const i=document.getElementById('chatIn');i.value=`@${n} `;i.focus()};
+  });
+}
+function editRuleModal(){
+  const g=G();const r=g.rule;let days=[...r.days];
+  modal(`<h3>정기 일정 수정</h3>
+    <div class="field"><label>요일</label><div class="days" id="dayBtns">${[1,2,3,4,5,6,0].map(d=>`<button type="button" data-d="${d}" class="${days.includes(d)?'on':''}" aria-pressed="${days.includes(d)}">${DAY[d]}</button>`).join('')}</div></div>
+    <div class="two"><div class="field"><label for="rs">시작</label><input type="time" id="rs" value="${r.start}"></div><div class="field"><label for="re">종료</label><input type="time" id="re" value="${r.end}"></div></div>
+    <div class="two"><div class="field"><label for="rm">최소 인원</label><input type="number" id="rm" min="1" value="${r.min}"></div>
+    <div class="field"><label for="rd">응답 마감</label><select class="in" id="rd">${[60,180,360].map(m=>`<option value="${m}" ${r.deadline===m?'selected':''}>시작 ${m/60}시간 전</option>`).join('')}</select></div></div>
+    <p class="note">다음 회차부터 적용되고 멤버 전원에게 알림이 갑니다.</p>
+    <div class="foot"><button class="btn" data-x="1">닫기</button><button class="btn pri" id="save">저장</button></div>`,m=>{
+    m.querySelector('#dayBtns').addEventListener('click',e=>{const b=e.target.closest('[data-d]');if(!b)return;const d=+b.dataset.d;days=days.includes(d)?days.filter(x=>x!==d):[...days,d];b.classList.toggle('on');b.setAttribute('aria-pressed',days.includes(d))});
+    m.querySelector('#save').onclick=()=>{const s=m.querySelector('#rs').value,e=m.querySelector('#re').value;
+      if(!days.length)return toast('요일을 하나 이상 고르세요');if(toSec(e)<=toSec(s))return toast('종료 시각이 시작보다 늦어야 합니다');
+      Object.assign(r,{days,start:s,end:e,min:+m.querySelector('#rm').value||1,deadline:+m.querySelector('#rd').value});closeModal();render();toast(`정기 일정을 바꿨어요. 멤버 ${Object.keys(g.members).length}명에게 알렸습니다`)};
+  });
+}
+function excModal(date,no){
+  const g=G();const key=g.id+date;const ex=S.exc[key];const r=g.rule;
+  modal(`<h3>${mdw(date)} 제${no}회만 변경</h3>
+    <div class="opts" id="exOpts"><label><input type="radio" name="ex" value="move" checked> 시간 변경</label><label><input type="radio" name="ex" value="cancel"> 이번 회차 취소</label></div>
+    <div class="two" id="mvRow"><div class="field"><label for="mvS">시작</label><input type="time" id="mvS" value="${ex?.start||r.start}"></div><div class="field"><label for="mvE">종료</label><input type="time" id="mvE" value="${ex?.end||r.end}"></div></div>
+    <div class="field"><label for="exReason">사유</label><input type="text" id="exReason" maxlength="40" placeholder="예: 중간 평가 주간" value="${esc(ex?.reason||'')}"></div>
+    <p class="note">참석으로 응답한 멤버에게 변경 알림이 갑니다. 정기 일정은 그대로입니다.</p>
+    <div class="foot">${ex?'<button class="btn danger" id="exReset" style="margin-right:auto">원래대로</button>':''}<button class="btn" data-x="1">닫기</button><button class="btn pri" id="exSave">적용</button></div>`,m=>{
+    m.querySelector('#exOpts').addEventListener('change',e=>{m.querySelector('#mvRow').hidden=e.target.value!=='move'});
+    const rs=m.querySelector('#exReset');if(rs)rs.onclick=()=>{delete S.exc[key];closeModal();render();toast('원래 일정으로 되돌렸어요')};
+    m.querySelector('#exSave').onclick=()=>{const v=m.querySelector('input[name=ex]:checked').value;const reason=m.querySelector('#exReason').value.trim();
+      if(v==='cancel')S.exc[key]={type:'cancel',reason};
+      else{const s=m.querySelector('#mvS').value,e=m.querySelector('#mvE').value;if(toSec(e)<=toSec(s))return toast('종료 시각이 시작보다 늦어야 합니다');S.exc[key]={type:'move',start:s,end:e,reason}}
+      closeModal();render();toast(`${mdw(date)} 회차를 바꿨어요`)};
+  });
+}
+function newGroupModal(){
+  let days=[2,4];
+  modal(`<h3>새 그룹 만들기</h3><div class="field"><label for="gn">그룹 이름</label><input type="text" id="gn" maxlength="24" placeholder="예: 백엔드 면접 스터디"></div>
+    <div class="field"><label>요일</label><div class="days" id="dayBtns">${[1,2,3,4,5,6,0].map(d=>`<button type="button" data-d="${d}" class="${days.includes(d)?'on':''}" aria-pressed="${days.includes(d)}">${DAY[d]}</button>`).join('')}</div></div>
+    <div class="two"><div class="field"><label for="gs">시작</label><input type="time" id="gs" value="20:00"></div><div class="field"><label for="ge">종료</label><input type="time" id="ge" value="22:00"></div></div>
+    <div class="foot"><button class="btn" data-x="1">닫기</button><button class="btn pri" id="mk">만들기</button></div>`,m=>{
+    m.querySelector('#dayBtns').addEventListener('click',e=>{const b=e.target.closest('[data-d]');if(!b)return;const d=+b.dataset.d;days=days.includes(d)?days.filter(x=>x!==d):[...days,d];b.classList.toggle('on');b.setAttribute('aria-pressed',days.includes(d))});
+    m.querySelector('#mk').onclick=()=>{const name=m.querySelector('#gn').value.trim();const s=m.querySelector('#gs').value,e=m.querySelector('#ge').value;
+      if(!name)return toast('그룹 이름을 적어 주세요');if(!days.length)return toast('요일을 하나 이상 고르세요');if(toSec(e)<=toSec(s))return toast('종료 시각이 시작보다 늦어야 합니다');
+      groups.push({id:'g'+groups.length,name,rule:{days,start:s,end:e,min:2,deadline:60},baseNo:1,streak:0,members:{[ME]:COLORS[0]},history:{dates:[],marks:{[ME]:''}}});
+      closeModal();render();toast(`${name} 그룹을 만들었어요. 초대 링크로 멤버를 부르세요`)};
+  });
+}
+
+/* ---------- 이벤트 ---------- */
+const main=document.getElementById('main');
+main.addEventListener('click',e=>{
+  const sw=e.target.closest('#sw [data-c]');if(sw){const r=R();r.me.c=sw.dataset.c;document.querySelectorAll('#sw [data-c]').forEach(b=>b.setAttribute('aria-pressed',b===sw));document.getElementById('pv').innerHTML=charSVG(r.me.c,'focus');return}
+  const pt=e.target.closest('[data-pane]');if(pt){R().pane=pt.dataset.pane;paintPane();return}
+  const q=e.target.closest('[data-q]');if(q){sendChat(q.dataset.q);return}
+  const b=e.target.closest('[data-action]');if(!b)return;const a=b.dataset.action;const g=G();const r=R();
+  if(a==='openGroup'){S.g=+b.dataset.i;S.view='group';S.tab='room';render();window.scrollTo(0,0);return}
+  if(a==='newGroup')return newGroupModal();
+  if(a==='joinGroup')return modal(`<h3>초대 코드로 참여</h3><div class="field"><label for="code">초대 코드</label><input type="text" id="code" maxlength="12" placeholder="예: 7QK2XP" class="mono"></div><div class="foot"><button class="btn" data-x="1">닫기</button><button class="btn pri" id="go">참여</button></div>`,m=>{m.querySelector('#go').onclick=()=>{closeModal();toast('목업에서는 예시 그룹 세 개만 있어요')}});
+  if(a==='demoOpen'){openRoom(g);render();return}
+  if(a==='enter'){const t=document.getElementById('todoIn').value.trim();if(!t){toast('오늘 할 일을 한 줄 적어 주세요');document.getElementById('todoIn').focus();return}
+    Object.assign(r.me,{in:true,todos:[{t,done:false}],inAt:T,st:'focus'});paintSeats();paintMe();paintPomo();paintHead();fx(ME,'text','안녕하세요');addFeed(`<b>나</b> 입장 · ${esc(t)}`);sysChat('나 님이 들어왔어요');return}
+  if(a==='setSt'){r.me.st=b.dataset.st;paintSeat(ME);paintMe();addFeed(`<b>나</b> 상태 · ${SL[r.me.st]}`);
+    if(r.me.st==='stuck')setTimeout(()=>{const h=r.people.find(p=>p.in&&p.st==='ask')||r.people.find(p=>p.in);if(h&&R()===r){addChat(h.n,'어디서 막혔어요? 코드 링크 주세요');}},2500);return}
+  if(a==='addTodo'){const i=document.getElementById('addTodo');const t=i.value.trim();if(!t)return;r.me.todos.push({t,done:false});paintMe();paintSeat(ME);paintHead();document.getElementById('addTodo').focus();return}
+  if(a==='myCommit'){r.me.commits++;if(!r.me.first)r.me.first=hm(rNow(r));fx(ME,'commit');addFeed(`<b>나</b> 커밋 <span class="hash">${hex()}</span> ${esc(pick(COMMITS[g.id]))}`);paintMe();paintHead();
+    setTimeout(()=>{const p=r.people.find(x=>x.in);if(p&&R()===r&&Math.random()<.7){fx(ME,'cheer',p.n);addFeed(`<b>${esc(p.n)}</b> 님이 나의 커밋을 응원했어요`)}},1800);return}
+  if(a==='char')return charModal(b.dataset.name);
+  if(a==='share'){if(r.me.share){r.me.share=false;if(r.watch===ME)r.watch=null;paintSeat(ME);paintStage();paintMe();addFeed('<b>나</b> 화면 공유 종료');sysChat('나 님이 화면 공유를 멈췄어요')}else shareModal();return}
+  if(a==='watch'){r.watch=b.dataset.name;paintStage();return}
+  if(a==='unwatch'){r.watch=null;paintStage();return}
+  if(a==='bigScreen'){const n=r.watch;if(!n)return;modal(`<div class="sh" style="display:flex;align-items:center;gap:10px"><span class="livetag">LIVE</span><b>${n===ME?'내 화면':esc(n)+' 님의 화면'}</b><button class="btn sm" data-x="1" style="margin-left:auto">닫기</button></div><div id="bigScreenBody">${screenHTML(n,r.cur,true)}</div>`);document.querySelector('#modalRoot .modal').classList.add('wide');return}
+  if(a==='cheerFeed'){const f=r.feed[+b.dataset.i];f.cheered=1;fx(f.cheer,'cheer');paintPane();return}
+  if(a==='pomoStart'){Object.assign(r.pomo,{run:true,mode:'집중',left:1500,by:ME,parts:[ME]});r.me.st='focus';sysChat('나 님이 25분 집중을 시작했어요. 같이 하기를 누르면 타이머가 맞춰집니다');addFeed('<b>나</b> 뽀모도로 시작');paintPomo();paintSeats();paintMe();
+    setTimeout(()=>{const fr=r.people.filter(p=>p.in&&!r.pomo.parts.includes(p.n)).slice(0,2);fr.forEach(p=>{r.pomo.parts.push(p.n);p.st='focus'});if(fr.length&&R()===r){sysChat(`${fr.map(p=>p.n).join(', ')} 님이 같이 해요`);paintPomo();paintSeats()}},2500);return}
+  if(a==='pomoJoin'){const i=r.pomo.parts.indexOf(ME);if(i>=0)r.pomo.parts.splice(i,1);else{r.pomo.parts.push(ME);if(r.pomo.mode==='집중')r.me.st='focus';else{r.pomo.saved[ME]=r.me.st;r.me.st='rest'}sysChat('나 님이 뽀모도로에 참여했어요')}paintPomo();paintSeats();paintMe();return}
+  if(a==='pomoSkip'){r.pomo.left=1;return}
+  if(a==='checkout'){const me=r.me;modal(`<h3>체크아웃</h3><ul class="todos">${me.todos.map(t=>`<li class="${t.done?'done':''}"><span class="mono small">${t.done?'✓':'·'}</span><label>${esc(t.t)}</label></li>`).join('')}</ul>
+      <div class="field"><label for="retro">회고 한 줄</label><input type="text" id="retro" maxlength="80" placeholder="예: 격리 수준 표는 끝, MVCC는 다음 회차"></div>
+      <div class="foot"><button class="btn" data-x="1">닫기</button><button class="btn pri" id="out">체크아웃</button></div>`,m=>{m.querySelector('#out').onclick=()=>{
+      const first=me.first||hm(rNow(r));const mark=toSec(first)-toSec(g.rule.start)<=600?'O':'L';const stay=Math.max(60,T-me.inAt);
+      me.out={mark,first,outAt:hm(rNow(r)),stay:`${Math.floor(stay/3600)}h ${p2(Math.floor(stay%3600/60))}m`,commits:me.commits,done:`${me.todos.filter(t=>t.done).length}/${me.todos.length}`,retro:m.querySelector('#retro').value.trim()};
+      const i=r.pomo.parts.indexOf(ME);if(i>=0)r.pomo.parts.splice(i,1);
+      me.share=false;if(r.watch===ME)r.watch=null;paintStage();
+      const td=ymd(TODAY);if(!g.history.dates.includes(td)){g.history.dates.push(td);Object.keys(g.members).forEach(n=>{let k;if(n===ME)k=mark;else{const p=r.people.find(x=>x.n===n);k=!p?'X':p.in?(p.join>0?'L':'O'):'X'}g.history.marks[n]=(g.history.marks[n]||'')+k});g.streak++}
+      closeModal();fx(ME,'text','다음에 또 봐요');setTimeout(()=>{paintSeats();paintHead()},900);paintMe();paintPomo();addFeed(`<b>나</b> 체크아웃 · 할 일 ${me.out.done}`);sysChat('나 님이 체크아웃했어요');toast('출석부에 오늘 기록을 남겼어요')}});return}
+  if(a==='toRoom'){S.tab='room';render();return}
+  if(a==='rsvp'){const rs=rsvpFor(g,b.dataset.date);rs[ME]=rs[ME]===b.dataset.v?null:b.dataset.v;render();return}
+  if(a==='exc')return excModal(b.dataset.date,b.dataset.no);
+  if(a==='editRule')return editRuleModal();
+  if(a==='hookTest')return toast('디스코드 채널에 테스트 메시지를 보냈어요 (목업)');
+});
+main.addEventListener('change',e=>{
+  if(e.target.dataset.todo!==undefined){const r=R();const t=r.me.todos[+e.target.dataset.todo];t.done=e.target.checked;paintMe();paintSeat(ME);paintHead();
+    if(t.done){fx(ME,'text','할 일 완료');addFeed(`<b>나</b> 할 일 완료 · ${esc(t.t)}`);setTimeout(()=>{const p=r.people.find(x=>x.in);if(p&&R()===r){fx(ME,'cheer',p.n);addChat(p.n,'오 하나 끝냈네요')}},1500)}return}
+  const k=e.target.dataset.notif;if(k){S.notif[k]=e.target.checked}
+});
+main.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.id==='addTodo'){e.preventDefault();main.querySelector('[data-action="addTodo"]').click()}
+  if(e.key==='Enter'&&e.target.id==='todoIn'){e.preventDefault();main.querySelector('[data-action="enter"]').click()}});
+main.addEventListener('submit',e=>{if(e.target.id!=='chatForm')return;e.preventDefault();const i=document.getElementById('chatIn');sendChat(i.value.trim());i.value=''});
+function sendChat(x){
+  const r=R();if(!x)return;if(!r.me.in||r.me.out){toast('입장하면 채팅할 수 있어요');return}
+  addChat(ME,x);
+  const mention=Object.keys(G().members).find(n=>n!==ME&&x.includes('@'+n));
+  if(mention||/[?？]|질문|도와/.test(x)){setTimeout(()=>{if(R()!==r)return;const p=(mention&&r.people.find(q=>q.n===mention&&q.in))||r.people.find(q=>q.in&&q.st==='ask')||r.people.find(q=>q.in);if(p)addChat(p.n,pick(REPLY))},2600)}
+  else if(Math.random()<.4){setTimeout(()=>{if(R()!==r)return;const p=pick(r.people.filter(q=>q.in));if(p)addChat(p.n,pick(['좋아요','화이팅','저도요']))},2200)}
+}
+render();
+</script>
+
+</body>
+</html>

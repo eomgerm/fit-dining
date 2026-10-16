@@ -1,0 +1,889 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BidLens</title>
+<!-- DEMO: 서비스 화면 데모. 공고·기관·회사·수치는 모두 가상이며 서버 없이 브라우저 메모리에서만 동작한다. -->
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--text:#1a1b22;--muted:#6b6e7b;--line:#e4e5eb;--accent:#4f46e5;--accent-2:#4338ca;--soft:#eef0ff;--bad:#c2410c;--bad-soft:#fff1e8;--ok:#15803d;--ok-soft:#eafaf0;--warn:#946f00;--warn-soft:#fff8d6;--hl:#fff3a8;--hl-on:#ffe066;--paper:#fff;--shadow:0 1px 2px rgba(20,20,40,.05),0 4px 16px rgba(20,20,40,.06)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#111216;--card:#1b1c22;--text:#ececf1;--muted:#9a9cab;--line:#2c2d36;--accent:#8b85ff;--accent-2:#a5a0ff;--soft:#24224a;--bad:#ff8a4c;--bad-soft:#3a2216;--ok:#4ade80;--ok-soft:#13301f;--warn:#e6c34a;--warn-soft:#352d10;--hl:#5a4d10;--hl-on:#7a6812;--paper:#16171c;--shadow:0 1px 2px rgba(0,0,0,.3)}}
+:root[data-theme="dark"]{--bg:#111216;--card:#1b1c22;--text:#ececf1;--muted:#9a9cab;--line:#2c2d36;--accent:#8b85ff;--accent-2:#a5a0ff;--soft:#24224a;--bad:#ff8a4c;--bad-soft:#3a2216;--ok:#4ade80;--ok-soft:#13301f;--warn:#e6c34a;--warn-soft:#352d10;--hl:#5a4d10;--hl-on:#7a6812;--paper:#16171c;--shadow:0 1px 2px rgba(0,0,0,.3)}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);font:14px/1.6 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR",sans-serif}
+a{color:inherit;text-decoration:none}
+button,select,input{font:inherit;color:inherit}
+button{cursor:pointer;border:1px solid var(--line);background:var(--card);border-radius:8px;padding:7px 13px}
+button:hover:not(:disabled){border-color:var(--accent)}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+button.primary:hover:not(:disabled){background:var(--accent-2)}
+button.ghost{border-color:transparent;background:transparent}
+button.sm{padding:3px 9px;font-size:12px}
+select,input[type=text]{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:6px 10px}
+.muted{color:var(--muted)}
+h1{font-size:22px;margin:0}h2{font-size:16px;margin:0 0 12px}h3{font-size:14px;margin:0 0 8px}
+
+/* shell */
+.top{position:sticky;top:0;z-index:20;height:56px;display:flex;align-items:center;gap:12px;padding:0 16px;background:var(--card);border-bottom:1px solid var(--line)}
+.logo{font-weight:800;font-size:18px;color:var(--accent);letter-spacing:-.3px}
+.logo small{display:block;font-size:11px;font-weight:500;color:var(--muted);letter-spacing:0;margin-top:-4px}
+.company{margin-left:12px;padding:4px 10px;border:1px solid var(--line);border-radius:99px;font-size:13px}
+.top .sp{flex:1}
+.bell{position:relative;width:36px;height:36px;padding:0;border-radius:50%;display:grid;place-items:center}
+.bell .cnt{position:absolute;top:-3px;right:-3px;min-width:18px;height:18px;border-radius:9px;background:var(--bad);color:#fff;font-size:11px;font-weight:700;display:grid;place-items:center;padding:0 4px}
+.me{display:flex;align-items:center;gap:8px;font-size:13px}
+.shell{display:grid;grid-template-columns:212px minmax(0,1fr)}
+.side{position:sticky;top:56px;height:calc(100vh - 56px);border-right:1px solid var(--line);background:var(--card);padding:14px 10px;display:flex;flex-direction:column}
+.side a{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;color:var(--muted);font-weight:500;margin-bottom:2px}
+.side a:hover{background:var(--bg);color:var(--text)}
+.side a.on{background:var(--soft);color:var(--accent);font-weight:700}
+.side .n{margin-left:auto;font-size:11px;background:var(--bg);border-radius:99px;padding:0 7px;color:var(--muted)}
+.side a.on .n{background:var(--card)}
+.side .foot{margin-top:auto;font-size:11px;color:var(--muted);padding:10px;border-top:1px solid var(--line)}
+.ic{width:18px;height:18px;flex:none}
+main{padding:22px 24px 90px;min-width:0}
+.ph{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.ph .sub{color:var(--muted);font-size:13px;margin-top:2px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;box-shadow:var(--shadow)}
+@media (max-width:900px){.shell{grid-template-columns:1fr}.side{position:static;height:auto;flex-direction:row;overflow-x:auto;padding:6px 8px;border-right:0;border-bottom:1px solid var(--line)}.side a{white-space:nowrap;margin:0 2px}.side .foot{display:none}main{padding:16px 16px 90px}.company,.me span{display:none}}
+
+/* common */
+.pill{display:inline-flex;align-items:center;gap:4px;font-weight:700;font-size:12px;padding:3px 10px;border-radius:99px;white-space:nowrap}
+.pill.ok{background:var(--ok-soft);color:var(--ok)}.pill.warn{background:var(--warn-soft);color:var(--warn)}.pill.bad{background:var(--bad-soft);color:var(--bad)}.pill.info{background:var(--soft);color:var(--accent)}.pill.gray{background:var(--bg);color:var(--muted);border:1px solid var(--line)}
+.chip{display:inline-block;font-size:11px;font-weight:600;padding:1px 7px;border-radius:5px;background:var(--bg);border:1px solid var(--line);color:var(--muted)}
+.chip.warn{background:var(--warn-soft);color:var(--warn);border-color:transparent}
+.av{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;font-size:10px;font-weight:700;color:#fff;flex:none}
+.av-kjw{background:#4f46e5}.av-psy{background:#db2777}.av-ldh{background:#0891b2}.av-cyn{background:#65a30d}
+.ok-t{color:var(--ok)}.bad-t{color:var(--bad)}.warn-t{color:var(--warn)}
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{text-align:left;font-size:12px;color:var(--muted);font-weight:600;padding:8px;border-bottom:1px solid var(--line)}
+.tbl td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+.tbl tr:last-child td{border-bottom:0}
+.scroll{overflow-x:auto}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media (max-width:1000px){.grid2{grid-template-columns:1fr}}
+
+/* feed */
+.tiles{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;text-align:left;box-shadow:var(--shadow)}
+.tile b{display:block;font-size:24px;line-height:1.2;margin-top:2px}
+.tile.on{border-color:var(--accent);outline:1px solid var(--accent)}
+@media (max-width:900px){.tiles{grid-template-columns:repeat(2,1fr)}}
+.ask{display:flex;gap:12px;align-items:center;flex-wrap:wrap;background:var(--warn-soft);border-radius:12px;padding:12px 16px;margin-bottom:14px}
+.ask .q{flex:1;min-width:240px}
+.ask .q b{color:var(--warn)}
+.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.toolbar input{flex:1;min-width:180px}
+.list{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:var(--shadow)}
+.row{display:grid;grid-template-columns:96px minmax(0,1fr) 140px;gap:14px;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line);cursor:pointer}
+.row:last-child{border-bottom:0}
+.row:hover{background:var(--bg)}
+.row-title{font-weight:700;font-size:15px}
+.row-meta{font-size:12px;color:var(--muted)}
+.row-why{font-size:13px;margin-top:2px}
+.row-side{text-align:right;font-size:12px}
+.dl{font-size:16px;font-weight:800}
+.dl.urgent{color:var(--bad)}
+@media (max-width:700px){.row{grid-template-columns:1fr}.row-side{text-align:left}}
+.empty{padding:30px;text-align:center;color:var(--muted)}
+
+/* detail */
+.crumb{font-size:12px;color:var(--muted);margin-bottom:6px}
+.crumb a:hover{color:var(--accent)}
+.dhead{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:12px}
+.dhead h1{font-size:21px}
+.kv{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:13px;color:var(--muted);margin-top:6px}
+.kv b{color:var(--text);font-weight:600}
+.bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:13px}
+.bar.amend{background:var(--soft)}
+.bar.alarm{background:var(--bad-soft);color:var(--bad);font-weight:600}
+.banner{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;border-radius:12px;padding:16px 18px;margin-bottom:12px;border:1px solid var(--line)}
+.banner.ok{background:var(--ok-soft)}.banner.warn{background:var(--warn-soft)}.banner.bad{background:var(--bad-soft)}
+.banner .big{font-size:20px;font-weight:800}
+.banner.ok .big{color:var(--ok)}.banner.warn .big{color:var(--warn)}.banner.bad .big{color:var(--bad)}
+.banner .acts{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.diffbox{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin:-4px 0 10px;font-size:13px}
+.diffbox li{margin:2px 0}
+.split{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:16px;align-items:start}
+@media (max-width:1100px){.split{grid-template-columns:1fr}.viewer{position:static!important;height:auto!important;max-height:none!important}}
+.cat{font-size:12px;font-weight:700;color:var(--muted);margin:14px 0 6px}
+.cat:first-child{margin-top:0}
+.req{display:flex;gap:10px;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card);margin-bottom:6px;cursor:pointer}
+.req:hover{border-color:var(--accent)}
+.req.on{border-color:var(--accent);box-shadow:0 0 0 2px var(--soft)}
+.req-ic{width:22px;height:22px;flex:none;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:800}
+.req.MET .req-ic{background:var(--ok-soft);color:var(--ok)}.req.NOT_MET .req-ic{background:var(--bad-soft);color:var(--bad)}.req.UNKNOWN .req-ic{background:var(--warn-soft);color:var(--warn)}.req.NA .req-ic{background:var(--bg);color:var(--muted)}
+.req-t{font-weight:700}
+.req-r{font-size:13px;color:var(--muted)}
+.req.NOT_MET .req-r{color:var(--bad)}.req.UNKNOWN .req-r{color:var(--warn)}
+.req-ev{font-size:11px;color:var(--muted);margin-top:3px}
+.req-ev b{color:var(--ok);font-weight:600}
+.hard{font-size:10px;font-weight:700;padding:0 5px;border-radius:4px;margin-left:4px;vertical-align:2px;border:1px solid var(--line);color:var(--muted)}
+.hard.y{border-color:var(--text);color:var(--text)}
+.dropped{border:1px dashed var(--line);border-radius:10px;padding:10px 12px;margin-top:12px;font-size:13px}
+.dropped summary{cursor:pointer;font-weight:600}
+.dropped .x{margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}
+.viewer{position:sticky;top:72px;height:calc(100vh - 92px);overflow:auto;background:var(--bg);border:1px solid var(--line);border-radius:12px}
+.vhead{position:sticky;top:0;z-index:1;display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--card);border-bottom:1px solid var(--line);font-size:12px}
+.vhead b{font-size:13px}
+.page{background:var(--paper);margin:12px;border:1px solid var(--line);border-radius:4px;padding:18px 22px;font-size:13.5px;line-height:1.85}
+.page .pno{font-size:11px;color:var(--muted);text-align:right;margin-bottom:4px}
+.page p{margin:0 0 6px}
+.page h4{margin:4px 0 10px;font-size:16px;text-align:center}
+.page table{width:100%;border-collapse:collapse;font-size:13px}
+.page td{border:1px solid var(--line);padding:5px 8px}
+.page td:first-child{width:28%;background:var(--bg);font-weight:600}
+.gap{text-align:center;color:var(--muted);font-size:11px}
+mark.q{background:var(--hl);color:inherit;border-radius:3px;padding:1px 0;cursor:pointer}
+mark.q.on{background:var(--hl-on);outline:2px solid var(--accent);outline-offset:1px}
+.note{font-size:12px;color:var(--muted);margin-top:10px}
+
+/* board */
+.bids{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-bottom:16px}
+.bidc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;cursor:pointer;box-shadow:var(--shadow)}
+.bidc:hover{border-color:var(--accent)}
+.bidc .t{font-weight:700;margin:4px 0}
+.prog{height:6px;background:var(--bg);border-radius:99px;overflow:hidden;margin-top:8px}
+.prog i{display:block;height:100%;background:var(--accent)}
+.kanban{display:grid;grid-template-columns:repeat(4,minmax(220px,1fr));gap:12px;overflow-x:auto}
+.col{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px;min-height:260px}
+.col.over{border-color:var(--accent);background:var(--soft)}
+.col h3{display:flex;justify-content:space-between;font-size:13px;margin:2px 4px 10px}
+.task{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;box-shadow:var(--shadow)}
+.task[draggable=true]{cursor:grab}
+.task .nt{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.task .tt{font-weight:600;margin:2px 0 6px}
+.task .ft{display:flex;align-items:center;gap:6px;font-size:12px}
+.task .ft .sp{flex:1}
+.task.over{border-color:var(--bad)}
+.task.done .tt{text-decoration:line-through;color:var(--muted)}
+
+/* analyze */
+.an{display:flex;gap:8px;flex-wrap:wrap}
+.an input{flex:1;min-width:220px;font-size:15px;padding:9px 12px}
+.steps{list-style:none;margin:16px 0 0;padding:0}
+.steps li{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line)}
+.steps li:last-child{border-bottom:0}
+.steps .s{width:22px;height:22px;flex:none;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:700;border:1px solid var(--line);color:var(--muted)}
+.steps li.done .s{background:var(--ok-soft);color:var(--ok);border-color:var(--ok)}
+.steps li.run .s{background:var(--accent);color:#fff;border-color:var(--accent)}
+.steps .d{font-size:12px;color:var(--muted)}
+.console{margin-top:14px;font:12px/1.7 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;max-height:220px;overflow:auto;white-space:pre-wrap}
+
+/* profile & report */
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.lic{display:inline-flex;align-items:center;gap:6px;padding:4px 6px 4px 10px;border-radius:99px;background:var(--soft);color:var(--accent);font-weight:600;font-size:13px}
+.lic button{border:0;background:transparent;padding:0 4px;color:inherit}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;box-shadow:var(--shadow)}
+.kpi .v{font-size:26px;font-weight:800;line-height:1.2}
+.kpi .l{font-size:12px;color:var(--muted)}
+@media (max-width:800px){.kpis{grid-template-columns:repeat(2,1fr)}}
+.hb{display:grid;grid-template-columns:80px 1fr 48px;gap:8px;align-items:center;font-size:12px;margin:6px 0}
+.hb .tr{height:8px;background:var(--bg);border-radius:99px;position:relative;overflow:hidden}
+.hb .tr i{position:absolute;left:0;top:0;bottom:0;border-radius:99px}
+.hb .base{background:var(--line)}.hb .now{background:var(--accent)}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--muted);margin-bottom:6px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+.sample{background:var(--warn-soft);color:var(--warn);font-size:12px;font-weight:600;padding:8px 12px;border-radius:8px;margin-bottom:14px}
+
+/* overlays */
+.drop{position:absolute;top:50px;right:60px;width:360px;max-height:440px;overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.18);z-index:30}
+.drop .h{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);font-weight:700}
+.drop .it{display:flex;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);cursor:pointer;font-size:13px}
+.drop .it:hover{background:var(--bg)}
+.drop .dot{width:7px;height:7px;border-radius:50%;background:var(--accent);margin-top:7px;flex:none}
+.drop .it.read .dot{background:transparent}
+@media (max-width:600px){.drop{right:8px;left:8px;width:auto}}
+.modal-bg{position:fixed;inset:0;background:rgba(10,10,20,.45);display:grid;place-items:center;z-index:50;padding:16px}
+.modal{background:var(--card);border-radius:14px;width:min(560px,100%);max-height:90vh;overflow:auto;padding:20px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.modal .f{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+.radio{display:flex;gap:8px;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;cursor:pointer}
+.toasts{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:60;display:flex;flex-direction:column;gap:8px;align-items:center;width:min(560px,calc(100% - 32px))}
+.toast{background:#1f2030;color:#fff;border-radius:10px;padding:10px 16px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.25);width:100%}
+.toast.err{background:var(--bad)}
+.demo{position:fixed;right:16px;bottom:16px;z-index:40}
+.demo>button{border-radius:99px;font-size:12px;background:#1f2030;color:#fff;border-color:#1f2030}
+.demo .pn{position:absolute;bottom:42px;right:0;width:250px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;box-shadow:0 12px 40px rgba(0,0,0,.2)}
+.demo .pn button{width:100%;margin-bottom:6px;text-align:left}
+.demo .pn .h{font-size:11px;color:var(--muted);margin-bottom:8px}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="logo">BidLens<small>공공 SW 입찰 판단</small></div>
+  <div class="company">(주)오름테크 ▾</div>
+  <div class="sp"></div>
+  <button class="bell" data-ui="notif" aria-label="알림"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span id="bellCnt"></span></button>
+  <div class="me"><span class="av av-kjw">지원</span><span>김지원 · 입찰 담당</span></div>
+  <div id="notif"></div>
+</header>
+<div class="shell">
+  <nav class="side" id="side"></nav>
+  <main id="main"></main>
+</div>
+<div id="modal"></div>
+<div class="toasts" id="toasts"></div>
+<div class="demo" id="demo"></div>
+
+<script>
+/* ===================== 판정 엔진 (화면과 무관한 순수 로직) ===================== */
+const Engine = (() => {
+  const BASE = new Date(2026, 9, 6), YEAR = 2026, W = '일월화수목금토';
+  const at = d => { const x = new Date(BASE); x.setDate(x.getDate() + d); return x; };
+  const fmt = d => { const x = at(d); return `${x.getMonth() + 1}/${x.getDate()}(${W[x.getDay()]})`; };
+  const fmtLong = d => { const x = at(d); return `${x.getFullYear()}.${String(x.getMonth() + 1).padStart(2, '0')}.${String(x.getDate()).padStart(2, '0')}`; };
+  const norm = s => s.replace(/\s+/g, '');
+  const LABEL = { '가능': '참여 가능', '확인 필요': '확인 필요', '불가': '참여 불가' };
+  const R = (id, cat, hard, subject, rule, page, quote) => ({ id, cat, hard, subject, rule, ev: { page, quote } });
+  const LIC = '소프트웨어사업자 신고';
+  const lic = (id, page) => R(id, '참가자격', true, LIC, { op: 'license', value: LIC }, page, '소프트웨어사업자로 신고한 자');
+  const sme = (id, page) => R(id, '참가자격', true, '중소기업자', { op: 'sme' }, page, '「중소기업기본법」에 따른 중소기업자');
+  const docs = (id, page, items) => R(id, '제출서류', false, '제출서류', { op: 'docs', items }, page, '제출서류: 제안서');
+  const pmReq = (id, page, years, quote) => R(id, '인력', true, `PM 정보처리기사 + 경력 ${years}년 이상`, { op: 'pm', cert: '정보처리기사', minYears: years }, page, quote);
+
+  const A3 = '제3장 입찰참가자격\n가. 「소프트웨어 진흥법」에 따라 소프트웨어사업자로 신고한 자.\n나. 「중소기업기본법」에 따른 중소기업자.';
+  const A12 = { page: 12, text: '제5장 평가 기준\n1. 유사사업 수행실적: 공고일 기준 최근 3년 이내 민원 관련 시스템 구축 또는 고도화 실적 2건 이상인 자.\n2. 실적은 발주기관이 발급한 실적증명서로 확인한다.' };
+  const A14 = { page: 14, text: '제6장 투입인력\n1. 사업책임자(PM)는 정보처리기사 자격을 보유하고 해당 분야 경력 10년 이상인 자로 한다.\n2. 웹 접근성 품질인증 획득 계획을 제안서에 포함할 것.' };
+  const A21 = extra => ({ page: 21, text: `제8장 제출서류\n제출서류: 제안서, 유사사업 실적증명서, 투입인력 증빙서류, 발표 자료${extra}.\n제안서는 나라장터 전자제출을 원칙으로 한다.` });
+  const A_DOCS = ['제안서', '실적증명서', '인력 증빙', '발표 자료'];
+  const A04 = R('R-04', '실적', true, '최근 3년 민원 분야 유사실적 2건 이상', { op: 'track', min: 2, years: 3, topic: '민원' }, 12, '최근 3년 이내 민원 관련 시스템 구축 또는 고도화 실적 2건 이상');
+  const A05 = pmReq('R-05', 14, 10, '정보처리기사 자격을 보유하고 해당 분야 경력 10년 이상');
+  const A06 = R('R-06', '기술', false, '웹 접근성 품질인증 획득 계획', { op: 'plan' }, 14, '웹 접근성 품질인증 획득 계획을 제안서에 포함할 것');
+
+  const NOTICES = {
+    A: { no: 'R26BK00412871', title: '○○시 민원 통합 플랫폼 고도화', org: '○○시청', budget: '4.8억', method: '협상에 의한 계약', period: '계약일로부터 8개월', posted: -1, versions: [
+      { label: '원공고', note: '', deadline: 14,
+        pages: [{ page: 3, text: A3 + '\n다. 「판로지원법」에 따른 직접생산확인증명서(소프트웨어개발서비스)를 보유한 자.' }, A12, A14, A21('')],
+        reqs: [lic('R-01', 3), sme('R-02', 3), R('R-03', '참가자격', true, '직접생산확인증명서(소프트웨어개발서비스)', { op: 'license', value: '직접생산확인증명' }, 3, '직접생산확인증명서(소프트웨어개발서비스)를 보유한 자'), A04, A05, A06, docs('R-07', 21, A_DOCS)] },
+      { label: '정정 1차', note: '직접생산확인 요건 삭제, 제안서 마감 7일 연장', deadline: 21,
+        pages: [{ page: 3, text: A3 }, A12, A14, A21('')],
+        reqs: [lic('R-01', 3), sme('R-02', 3), A04, A05, A06, docs('R-07', 21, A_DOCS)] },
+      { label: '정정 2차', note: 'ISO/IEC 27001 인증 요건 추가, 보안 서약서 제출 추가', deadline: 21,
+        pages: [{ page: 3, text: A3 + '\n다. 정보보호 관리체계 ISO/IEC 27001 인증을 보유한 자.' }, A12, A14, A21(', 보안 서약서')],
+        reqs: [lic('R-01', 3), sme('R-02', 3), R('R-08', '참가자격', true, 'ISO/IEC 27001 인증', { op: 'license', value: 'ISO/IEC 27001' }, 3, 'ISO/IEC 27001 인증을 보유한 자'), A04, A05, A06, docs('R-07', 21, [...A_DOCS, '보안 서약서'])] },
+    ] },
+    B: { no: 'R26BK00413305', title: '◇◇청 데이터 분석 플랫폼 구축', org: '◇◇청', budget: '2.1억', method: '협상에 의한 계약', period: '계약일로부터 5개월', posted: -3, versions: [
+      { label: '원공고', note: '', deadline: 5,
+        pages: [
+          { page: 2, text: '제2장 입찰참가자격\n가. 소프트웨어사업자로 신고한 자.\n나. 공동수급은 허용하지 않는다.' },
+          { page: 9, text: '제4장 투입인력\n사업책임자(PM)는 정보처리기사 자격과 경력 8년 이상을 갖출 것.\nPython 기반 데이터 분석 플랫폼 구축 경험이 있는 경우 우대한다.' },
+          { page: 15, text: '제7장 제출서류\n제출서류: 제안서, 투입인력 증빙서류.' }],
+        reqs: [lic('R-01', 2), pmReq('R-02', 9, 8, '정보처리기사 자격과 경력 8년 이상'),
+          R('R-03', '기술', false, '데이터 분석 플랫폼 구축 경험 (우대)', { op: 'topic', topic: '데이터' }, 9, '데이터 분석 플랫폼 구축 경험이 있는 경우 우대'),
+          docs('R-04', 15, ['제안서', '인력 증빙'])] },
+    ] },
+    C: { no: 'R26BK00413920', title: '△△공단 ERP 유지보수', org: '△△공단', budget: '6.0억', method: '협상에 의한 계약', period: '12개월', posted: 0, versions: [
+      { label: '원공고', note: '', deadline: 9,
+        pages: [
+          { page: 4, text: '제3장 입찰참가자격\n가. 소프트웨어사업자로 신고한 자.\n나. 본사 소재지가 서울특별시 또는 경기도인 자.\n※ 보안 관련 인증 보유 시 기술평가에서 가점을 부여한다.' },
+          { page: 18, text: '제8장 제출서류\n제출서류: 제안서, 유지보수 수행계획서.' }],
+        reqs: [lic('R-01', 4), R('R-02', '참가자격', true, '본사 소재지 서울·경기', { op: 'region', allowed: ['서울', '경기'] }, 4, '본사 소재지가 서울특별시 또는 경기도인 자'),
+          R('R-03', '참가자격', true, 'CC인증 보유', { op: 'license', value: 'CC인증' }, 4, 'CC인증을 보유한 자'),
+          docs('R-04', 18, ['제안서', '수행계획서'])] },
+    ] },
+    D: { no: 'R26BK00410057', title: '□□교육청 학사관리 시스템 클라우드 전환', org: '□□교육청', budget: '3.6억', method: '협상에 의한 계약', period: '계약일로부터 7개월', posted: -4, versions: [
+      { label: '원공고', note: '', deadline: 18,
+        pages: [
+          { page: 3, text: '제3장 입찰참가자격\n가. 소프트웨어사업자로 신고한 자.\n나. 「중소기업기본법」에 따른 중소기업자.' },
+          { page: 11, text: '제5장 평가 기준\n1. 수행실적: 최근 3년 이내 교육 분야 정보시스템 구축 실적 1건 이상.\n2. 클라우드 전환 수행 경험이 있는 경우 기술평가 시 우대한다.' },
+          { page: 19, text: '제8장 제출서류\n제출서류: 제안서, 유사사업 실적증명서, 투입인력 증빙서류, 발표 자료.' }],
+        reqs: [lic('R-01', 3), sme('R-02', 3),
+          R('R-03', '실적', true, '최근 3년 교육 분야 실적 1건 이상', { op: 'track', min: 1, years: 3, topic: '교육' }, 11, '최근 3년 이내 교육 분야 정보시스템 구축 실적 1건 이상'),
+          R('R-04', '기술', false, '클라우드 전환 경험 (우대)', { op: 'topic', topic: '클라우드' }, 11, '클라우드 전환 수행 경험이 있는 경우 기술평가 시 우대'),
+          docs('R-05', 19, A_DOCS)] },
+    ] },
+    E: { no: 'R26BK00413477', title: '◎◎도 재난안전 통합상황판 구축', org: '◎◎도청', budget: '5.2억', method: '협상에 의한 계약', period: '계약일로부터 9개월', posted: -1, versions: [
+      { label: '원공고', note: '', deadline: 11,
+        pages: [
+          { page: 2, text: '제2장 입찰참가자격\n가. 소프트웨어사업자로 신고한 자.' },
+          { page: 8, text: '제4장 수행실적\n최근 3년 이내 재난·안전 분야 정보시스템 구축 실적 1건 이상인 자.' },
+          { page: 13, text: '제5장 투입인력\n사업책임자(PM)는 정보처리기사 자격을 보유하고 해당 분야 경력 10년 이상인 자로 한다.' },
+          { page: 20, text: '제8장 제출서류\n제출서류: 제안서, 투입인력 증빙서류, 발표 자료.' }],
+        reqs: [lic('R-01', 2),
+          R('R-02', '실적', true, '최근 3년 재난·안전 분야 실적 1건 이상', { op: 'track', min: 1, years: 3, topic: '재난' }, 8, '최근 3년 이내 재난·안전 분야 정보시스템 구축 실적 1건 이상'),
+          pmReq('R-03', 13, 10, '정보처리기사 자격을 보유하고 해당 분야 경력 10년 이상'),
+          docs('R-04', 20, ['제안서', '인력 증빙', '발표 자료'])] },
+    ] },
+    F: { no: 'R26BK00413612', title: '▽▽공사 통합 홈페이지 유지관리', org: '▽▽공사', budget: '7.5억', method: '제한경쟁(적격심사)', period: '24개월', posted: 0, versions: [
+      { label: '원공고', note: '', deadline: 7,
+        pages: [
+          { page: 3, text: '제3장 입찰참가자격\n가. 소프트웨어사업자로 신고한 자.\n나. 최근 3년 이내 단일 사업 금액 5억 원 이상의 홈페이지 구축 또는 유지관리 실적을 보유한 자.' },
+          { page: 16, text: '제7장 제출서류\n제출서류: 제안서, 유사사업 실적증명서.' }],
+        reqs: [lic('R-01', 3),
+          R('R-02', '실적', true, '최근 3년 단일 사업 5억 이상 실적', { op: 'amount', min: 5, years: 3 }, 3, '단일 사업 금액 5억 원 이상의 홈페이지 구축 또는 유지관리 실적'),
+          docs('R-03', 16, ['제안서', '실적증명서'])] },
+    ] },
+    G: { no: 'R26BK00414188', title: '★★시 스마트 주차 정보 플랫폼 구축', org: '★★시청', budget: '3.0억', method: '협상에 의한 계약', period: '계약일로부터 6개월', posted: 0, versions: [
+      { label: '원공고', note: '', deadline: 16,
+        pages: [
+          { page: 2, text: '제2장 입찰참가자격\n가. 소프트웨어사업자로 신고한 자.\n나. 「중소기업기본법」에 따른 중소기업자.\n다. 본사 소재지가 충청권(대전·세종·충남·충북)인 자.\n라. 공동수급은 2개사 이내로 허용한다.' },
+          { page: 10, text: '제4장 투입인력\n사업책임자(PM)는 정보처리기사 자격과 경력 7년 이상을 갖출 것.\nIoT 센서 연계 구축 경험이 있는 경우 우대한다.' },
+          { page: 17, text: '제7장 제출서류\n제출서류: 제안서, 투입인력 증빙서류, 발표 자료.' }],
+        reqs: [lic('R-01', 2), sme('R-02', 2),
+          R('R-03', '참가자격', true, '본사 소재지 충청권', { op: 'region', allowed: ['대전', '세종', '충남', '충북'] }, 2, '본사 소재지가 충청권(대전·세종·충남·충북)인 자'),
+          pmReq('R-04', 10, 7, '정보처리기사 자격과 경력 7년 이상'),
+          R('R-05', '기술', false, 'IoT 센서 연계 경험 (우대)', { op: 'topic', topic: 'IoT' }, 10, 'IoT 센서 연계 구축 경험이 있는 경우 우대'),
+          R('R-07', '참가자격', true, '공동수급 불허', { op: 'plan' }, 2, '공동수급을 허용하지 아니한다'),
+          docs('R-06', 17, ['제안서', '인력 증빙', '발표 자료'])] },
+    ] },
+  };
+  const IDS = Object.keys(NOTICES);
+  const PEOPLE = { kjw: '김지원', psy: '박서연', ldh: '이도현', cyn: '최유나' };
+  const OWNER = { '제안서': 'psy', '발표 자료': 'psy', '수행계획서': 'psy', '실적증명서': 'ldh', '인력 증빙': 'ldh', '보안 서약서': 'ldh' };
+  const LEAD = { '제안서': 2, '실적증명서': 5, '인력 증빙': 5, '발표 자료': 1, '보안 서약서': 3, '수행계획서': 3 };
+
+  const ok = reason => ({ status: 'MET', reason });
+  const no = reason => ({ status: 'NOT_MET', reason });
+  function evaluate(req, p) {
+    const x = req.rule, pm = p.staff[0];
+    switch (x.op) {
+      case 'license': return p.licenses.includes(x.value) ? ok(`${x.value} 보유`) : no(`${x.value} 없음`);
+      case 'sme': return p.sme ? ok('중소기업 확인서 보유') : no('중소기업 아님');
+      case 'region': return x.allowed.includes(p.region) ? ok(`본사 소재지 ${p.region}`) : no(`본사 소재지 ${p.region} (허용 지역: ${x.allowed.join('·')})`);
+      case 'plan': return ok('제안서에 계획을 포함하면 충족');
+      case 'docs': return { status: 'NA', reason: '참여 결정 시 할 일로 만들어집니다' };
+      case 'topic': { const hit = p.records.filter(r => r.topics.includes(x.topic)); return hit.length ? ok(`관련 실적: ${hit.map(r => r.name).join(', ')}`) : no(`'${x.topic}' 관련 실적 없음 (우대 항목)`); }
+      case 'amount': {
+        const recent = p.records.filter(r => r.year >= YEAR - x.years), max = Math.max(0, ...recent.map(r => r.amount));
+        return max >= x.min ? ok(`최대 단일 실적 ${max}억`) : no(`최근 ${x.years}년 최대 단일 실적 ${max}억 (기준 ${x.min}억 이상)`);
+      }
+      case 'pm': {
+        const has = pm.certs[x.cert];
+        if (pm.years < x.minYears) return no(`PM ${pm.name} 경력 ${pm.years}년 (기준 ${x.minYears}년)`);
+        if (has === undefined) return { status: 'UNKNOWN', reason: `PM ${pm.name} 경력 ${pm.years}년 충족 · ${x.cert} 보유 여부 미등록`,
+          question: { key: `pm:${x.cert}`, kind: 'pmCert', cert: x.cert, text: `PM ${pm.name}에게 ${x.cert} 자격증이 있나요?` } };
+        return has ? ok(`PM ${pm.name} · ${x.cert} 보유 · 경력 ${pm.years}년`) : no(`PM ${pm.name} ${x.cert} 미보유`);
+      }
+      case 'track': {
+        const from = YEAR - x.years, yes = [], maybe = [], out = [];
+        for (const r of p.records) {
+          const key = `${r.id}:${x.topic}`, related = r.topics.includes(x.topic) || r.maybe.includes(x.topic);
+          if (r.year < from) { if (related) out.push(r); continue; }
+          if (r.topics.includes(x.topic) || p.similar[key] === true) yes.push(r);
+          else if (p.similar[key] === undefined && r.maybe.includes(x.topic)) maybe.push(r);
+        }
+        const parts = [`인정 ${yes.length}건${yes.length ? ` (${yes.map(r => r.name).join(', ')})` : ''}`];
+        if (maybe.length) parts.push(`유사 여부 확인 ${maybe.length}건 (${maybe.map(r => r.name).join(', ')})`);
+        if (out.length) parts.push(`기간 밖 ${out.map(r => `${r.name}·${r.year}`).join(', ')}`);
+        const reason = parts.join(' · ');
+        if (yes.length >= x.min) return ok(reason);
+        if (yes.length + maybe.length >= x.min) return { status: 'UNKNOWN', reason,
+          question: { key: `sim:${maybe[0].id}:${x.topic}`, kind: 'similar', recordId: maybe[0].id, topic: x.topic, text: `'${maybe[0].name}' 실적을 ${x.topic} 분야 유사사업으로 볼 수 있나요?` } };
+        return no(`${reason} (기준 ${x.min}건)`);
+      }
+    }
+  }
+
+  function judge(reqs) {
+    const hard = reqs.filter(r => r.hard && r.status !== 'NA');
+    const bad = hard.filter(r => r.status === 'NOT_MET'), unk = hard.filter(r => r.status === 'UNKNOWN');
+    const counts = { total: hard.length, met: hard.length - bad.length - unk.length, unk: unk.length, bad: bad.length };
+    if (bad.length) return { level: '불가', why: `${bad.map(r => r.subject).join(', ')} 미충족`, counts, bad, unk };
+    if (unk.length) return { level: '확인 필요', why: `${unk.map(r => r.subject).join(', ')} 확인 필요`, counts, bad, unk };
+    return { level: '가능', why: `필수 요건 ${hard.length}건 모두 충족`, counts, bad, unk };
+  }
+
+  function diffVersions(a, b) {
+    const out = [];
+    if (a.deadline !== b.deadline) out.push(`제안서 마감 ${fmt(a.deadline)} → ${fmt(b.deadline)}`);
+    for (const r of a.reqs) if (!b.reqs.some(x => x.id === r.id)) out.push(`삭제 · ${r.subject}`);
+    for (const r of b.reqs) {
+      const old = a.reqs.find(x => x.id === r.id);
+      if (!old) out.push(`추가 · ${r.subject}${r.hard ? ' (필수)' : ''}`);
+      else if (r.rule.op === 'docs') { const add = r.rule.items.filter(i => !old.rule.items.includes(i)); if (add.length) out.push(`제출서류 추가 · ${add.join(', ')}`); }
+    }
+    return out;
+  }
+
+  function view(state, id) {
+    const n = NOTICES[id], ns = state.notices[id], ver = n.versions[ns.v];
+    const all = ver.reqs.map(r => {
+      const page = ver.pages.find(p => p.page === r.ev.page);
+      const verified = !!page && norm(page.text).includes(norm(r.ev.quote));
+      return verified ? { ...r, verified, ...evaluate(r, state.profile) } : { ...r, verified, status: 'DROPPED' };
+    });
+    const reqs = all.filter(r => r.verified), dropped = all.filter(r => !r.verified);
+    const verdict = judge(reqs), dLeft = ver.deadline - state.today, bid = state.bids[id] || null;
+    let bidStatus = null;
+    if (bid && bid.decision === '참여') bidStatus = dLeft < 0 ? '마감' : verdict.level === '불가' ? '재검토 필요' : '참여 준비 중';
+    else if (bid) bidStatus = '불참';
+    return { id, ...n, versions: undefined, v: ns.v, versionLabel: ver.label, versionNote: ver.note, hasNext: ns.v < n.versions.length - 1,
+      deadline: ver.deadline, dLeft, closed: dLeft < 0, pages: ver.pages, reqs, dropped, verdict, bid, bidStatus,
+      diff: ns.v > 0 ? diffVersions(n.versions[ns.v - 1], ver) : null,
+      questions: reqs.filter(r => r.question).map(r => ({ ...r.question, reqId: r.id })) };
+  }
+
+  const visibleIds = s => IDS.filter(id => s.notices[id].visible);
+  const docItems = v => v.reqs.filter(r => r.rule.op === 'docs').flatMap(r => r.rule.items);
+
+  function previewTasks(state, nid) {
+    const v = view(state, nid), out = [];
+    v.verdict.unk.forEach(r => out.push({ key: `check:${r.id}`, kind: 'check', nid, reqId: r.id, title: `확인: ${r.subject}`,
+      due: Math.max(state.today, Math.min(state.today + 2, v.deadline - 1)), owner: 'kjw', tight: false }));
+    docItems(v).forEach(item => {
+      let due = v.deadline - (LEAD[item] ?? 2); const tight = due < state.today; if (tight) due = state.today;
+      out.push({ key: `doc:${item}`, kind: 'doc', nid, item, title: `${item} 준비`, due, owner: OWNER[item] || 'kjw', tight });
+    });
+    return out;
+  }
+
+  function taskViews(state) {
+    return state.tasks.map(t => {
+      const v = view(state, t.nid); let col = t.col;
+      if (t.kind === 'check') { const r = v.reqs.find(x => x.id === t.reqId); col = !r || r.status !== 'UNKNOWN' ? 'done' : 'todo'; }
+      return { ...t, col, auto: t.kind === 'check', done: col === 'done', overdue: col !== 'done' && t.due < state.today, notice: v };
+    });
+  }
+
+  function openQuestions(state) {
+    const map = {};
+    for (const id of visibleIds(state)) for (const q of view(state, id).questions) (map[q.key] ??= { ...q, nids: [] }).nids.push(id);
+    return Object.values(map);
+  }
+
+  function init() {
+    const s = { today: 0, seq: 1,
+      profile: { company: '(주)오름테크', bizNo: '000-00-00000', sme: true, region: '대전', licenses: [LIC],
+        staff: [{ name: '김민수', role: 'PM', years: 12, certs: {} }, { name: '정하은', role: '개발 리드', years: 9, certs: { '정보처리기사': true } }, { name: '오세훈', role: '개발자', years: 5, certs: {} }],
+        records: [
+          { id: 'rec1', name: '△△구청 민원 접수 시스템 구축', org: '△△구청', year: 2024, amount: 3.2, topics: ['민원'], maybe: [] },
+          { id: 'rec2', name: '□□공사 홈페이지 개편', org: '□□공사', year: 2023, amount: 1.1, topics: ['홈페이지'], maybe: ['민원'] },
+          { id: 'rec3', name: '◇◇대학 학사 시스템 유지보수', org: '◇◇대학교', year: 2022, amount: 0.8, topics: ['교육'], maybe: ['민원'] },
+          { id: 'rec4', name: '◎◎군 재난문자 연계 시스템 구축', org: '◎◎군청', year: 2025, amount: 2.4, topics: ['재난'], maybe: [] },
+          { id: 'rec5', name: '□□교육지원청 학사 데이터 클라우드 이관', org: '□□교육지원청', year: 2024, amount: 1.9, topics: ['교육', '클라우드'], maybe: [] }],
+        similar: {} },
+      notices: Object.fromEntries(IDS.map(id => [id, { v: 0, visible: id !== 'G' }])),
+      bids: { D: { decision: '참여', day: -2 } }, tasks: [], alerts: [], last: { ok: true } };
+    const cols = { '제안서': 'doing', '실적증명서': 'doing', '인력 증빙': 'done', '발표 자료': 'todo' };
+    previewTasks(s, 'D').forEach(t => s.tasks.push({ ...t, id: `t${s.seq++}`, col: cols[t.item] || 'todo' }));
+    const n = visibleIds(s).length;
+    s.alerts.push({ id: s.seq++, day: 0, kind: 'new', nid: null, read: false, text: `오늘 SW·정보화 용역 공고 ${n}건을 분석했습니다` });
+    s.alerts.push({ id: s.seq++, day: -1, kind: 'task', nid: 'D', read: true, text: `${NOTICES.D.title}: 실적증명서 준비 기한 ${fmt(13)}` });
+    return s;
+  }
+
+  function reduce(state, a) {
+    const before = Object.fromEntries(visibleIds(state).map(id => [id, view(state, id).verdict.level]));
+    const s = structuredClone(state); s.last = { ok: true };
+    const alert = (kind, text, nid = null) => s.alerts.unshift({ id: s.seq++, day: s.today, kind, text, nid, read: false });
+    const reject = msg => { s.last = { ok: false, msg }; };
+    const pm = s.profile.staff[0];
+    switch (a.type) {
+      case 'answerPmCert': if (a.value === null) delete pm.certs[a.cert]; else pm.certs[a.cert] = a.value; break;
+      case 'decideSimilar': { const k = `${a.recordId}:${a.topic}`; if (a.value === null) delete s.profile.similar[k]; else s.profile.similar[k] = a.value; break; }
+      case 'addLicense': if (!a.value || s.profile.licenses.includes(a.value)) reject('이미 등록된 면허·인증입니다'); else s.profile.licenses.push(a.value); break;
+      case 'removeLicense': s.profile.licenses = s.profile.licenses.filter(x => x !== a.value); break;
+      case 'amend': {
+        const n = NOTICES[a.nid], ns = s.notices[a.nid];
+        if (ns.v >= n.versions.length - 1) { reject('더 받을 정정공고가 없습니다'); break; }
+        const prev = n.versions[ns.v]; ns.v++;
+        const cur = n.versions[ns.v], delta = cur.deadline - prev.deadline;
+        alert('amend', `[${cur.label}] ${n.title}: ${cur.note}`, a.nid);
+        if (s.bids[a.nid] && s.bids[a.nid].decision === '참여') {
+          const mine = s.tasks.filter(t => t.nid === a.nid);
+          if (delta) mine.forEach(t => { if (t.col !== 'done') t.due += delta; });
+          const have = mine.filter(t => t.kind === 'doc').map(t => t.item);
+          previewTasks(s, a.nid).filter(t => t.kind === 'doc' && !have.includes(t.item))
+            .forEach(t => { s.tasks.push({ ...t, id: `t${s.seq++}`, col: 'todo' }); alert('task', `${n.title}: 할 일 추가 · ${t.title}`, a.nid); });
+        }
+        break;
+      }
+      case 'bid': {
+        const v = view(s, a.nid);
+        if (v.closed) { reject('마감이 지난 공고입니다'); break; }
+        if (v.verdict.level === '불가') { reject(`참여 불가 판정입니다: ${v.verdict.why}`); break; }
+        if (s.bids[a.nid] && s.bids[a.nid].decision === '참여') { reject('이미 참여로 결정한 공고입니다'); break; }
+        s.bids[a.nid] = { decision: '참여', day: s.today };
+        s.tasks = s.tasks.filter(t => t.nid !== a.nid);
+        previewTasks(s, a.nid).forEach(t => s.tasks.push({ ...t, id: `t${s.seq++}`, owner: (a.owners && a.owners[t.key]) || t.owner, col: 'todo' }));
+        break;
+      }
+      case 'noBid': s.bids[a.nid] = { decision: '불참', day: s.today, reason: a.reason }; s.tasks = s.tasks.filter(t => t.nid !== a.nid); break;
+      case 'moveTask': {
+        const t = s.tasks.find(x => x.id === a.id);
+        if (!t) break;
+        if (t.kind === 'check') { reject('확인 할 일은 회사 정보에 답하면 자동으로 완료됩니다'); break; }
+        t.col = a.col; break;
+      }
+      case 'nextDay': {
+        s.today++;
+        for (const id of visibleIds(s)) {
+          const b = s.bids[id]; if (!b || b.decision !== '참여') continue;
+          const v = view(s, id), t = NOTICES[id].title;
+          if ([7, 3, 1].includes(v.dLeft)) alert('deadline', `[마감 D-${v.dLeft}] ${t}`, id);
+          if (v.dLeft === 0) alert('deadline', `[오늘 마감] ${t}`, id);
+          if (v.dLeft === -1) alert('deadline', `[마감 지남] ${t}`, id);
+        }
+        taskViews(s).filter(t => !t.done && t.due === s.today - 1).forEach(t => alert('task', `[기한 지남] ${NOTICES[t.nid].title}: ${t.title}`, t.nid));
+        break;
+      }
+      case 'analyze': s.notices.G.visible = true; alert('new', `분석 완료 · ${NOTICES.G.title}`, 'G'); break;
+      case 'readAll': s.alerts.forEach(x => { x.read = true; }); break;
+      case 'read': { const x = s.alerts.find(x => x.id === a.id); if (x) x.read = true; break; }
+    }
+    for (const id of visibleIds(s)) {
+      const after = view(s, id).verdict.level;
+      if (before[id] && before[id] !== after && s.bids[id] && s.bids[id].decision === '참여')
+        alert('verdict', `${NOTICES[id].title}: 판정 ${LABEL[before[id]]} → ${LABEL[after]}${after === '불가' ? ' · 참여 재검토 필요' : ''}`, id);
+    }
+    return s;
+  }
+
+  return { init, reduce, view, visibleIds, taskViews, openQuestions, previewTasks, fmt, fmtLong, LABEL, PEOPLE, NOTICES };
+})();
+</script>
+
+<script>
+/* ===================== 화면 ===================== */
+const E = Engine;
+let S = E.init();
+const ui = { filter: 'all', sort: 'verdict', q: '', activeReq: null, showDiff: false, notif: false, demo: false, modal: null, analyze: { status: 'idle', step: -1, logs: [], no: '' } };
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const J = o => esc(JSON.stringify(o));
+const VC = { '가능': 'ok', '확인 필요': 'warn', '불가': 'bad' };
+const ICON = { MET: '✓', NOT_MET: '✕', UNKNOWN: '?', NA: '·' };
+const pill = l => `<span class="pill ${VC[l]}">${E.LABEL[l]}</span>`;
+const dText = d => d < 0 ? '마감' : d === 0 ? '오늘 마감' : `D-${d}`;
+const av = id => `<span class="av av-${id}" title="${E.PEOPLE[id]}">${E.PEOPLE[id].slice(1)}</span>`;
+const bidPill = s => !s ? '' : s === '참여 준비 중' ? '<span class="pill info">참여 준비 중</span>' : s === '재검토 필요' ? '<span class="pill bad">재검토 필요</span>' : `<span class="pill gray">${s}</span>`;
+const ICONS = {
+  feed: '<path d="M4 6h16M4 12h16M4 18h10"/>',
+  board: '<rect x="3" y="4" width="5" height="16" rx="1"/><rect x="10" y="4" width="5" height="11" rx="1"/><rect x="17" y="4" width="4" height="7" rx="1"/>',
+  analyze: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  profile: '<path d="M3 21V7l9-4 9 4v14"/><path d="M9 21v-6h6v6"/>',
+  report: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+};
+const svg = k => `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[k]}</svg>`;
+
+function toast(text, kind = '') {
+  const el = document.createElement('div');
+  el.className = `toast ${kind}`; el.textContent = text;
+  $('#toasts').appendChild(el);
+  setTimeout(() => el.remove(), 4200);
+}
+
+function dispatch(action, okMsg) {
+  const before = Object.fromEntries(E.visibleIds(S).map(id => [id, E.view(S, id).verdict.level]));
+  S = E.reduce(S, action);
+  if (!S.last.ok) toast(S.last.msg, 'err');
+  else {
+    const ch = E.visibleIds(S).filter(id => before[id] && before[id] !== E.view(S, id).verdict.level);
+    if (ch.length) {
+      const first = E.view(S, ch[0]);
+      toast(`판정을 다시 계산했습니다 · ${first.title}: ${E.LABEL[before[ch[0]]]} → ${E.LABEL[first.verdict.level]}${ch.length > 1 ? ` 외 ${ch.length - 1}건` : ''}`);
+    }
+    if (okMsg) toast(okMsg);
+  }
+  render();
+}
+
+function route() {
+  const [, page, arg] = (location.hash || '#/feed').split('/');
+  return { page: page || 'feed', arg };
+}
+
+/* ---------- 공통 영역 ---------- */
+function renderChrome(r) {
+  const bids = Object.values(S.bids).filter(b => b.decision === '참여').length;
+  const nav = [['feed', '오늘의 공고', E.visibleIds(S).length], ['board', '입찰 보드', bids], ['analyze', '공고 분석', ''], ['profile', '회사 프로필', ''], ['report', '정확도 리포트', '']];
+  $('#side').innerHTML = nav.map(([k, l, n]) => `<a href="#/${k}" class="${r.page === k || (k === 'feed' && r.page === 'notice') ? 'on' : ''}">${svg(k)}${l}${n !== '' ? `<span class="n">${n}</span>` : ''}</a>`).join('')
+    + `<div class="foot">데이터: 조달청 나라장터 (공공데이터포털)<br>데모 · 공고·기관·회사는 가상입니다</div>`;
+  const unread = S.alerts.filter(a => !a.read).length;
+  $('#bellCnt').innerHTML = unread ? `<span class="cnt">${unread}</span>` : '';
+  $('#notif').innerHTML = !ui.notif ? '' : `<div class="drop"><div class="h">알림 <button class="sm ghost" data-do="${J({ type: 'readAll' })}">모두 읽음</button></div>
+    ${S.alerts.length ? S.alerts.map(a => `<div class="it ${a.read ? 'read' : ''}" data-ui="alert" data-arg="${a.id}"><span class="dot"></span><div>${esc(a.text)}<div class="muted" style="font-size:11px">${E.fmt(a.day)}</div></div></div>`).join('') : '<div class="empty">알림이 없습니다</div>'}</div>`;
+  const A = E.view(S, 'A');
+  $('#demo').innerHTML = `<button data-ui="demo">시연 도구 ${ui.demo ? '▾' : '▴'}</button>${ui.demo ? `<div class="pn"><div class="h">발표용 · 실제 서비스에는 없는 버튼입니다<br>오늘: ${E.fmt(S.today)}</div>
+    <button data-do="${J({ type: 'amend', nid: 'A' })}" ${A.hasNext ? '' : 'disabled'}>공고 A ${A.hasNext ? (A.v === 0 ? '정정 1차' : '정정 2차') : '정정'} 도착시키기</button>
+    <button data-do="${J({ type: 'nextDay' })}">하루 지나기</button>
+    <button data-ui="reset">처음 상태로</button></div>` : ''}`;
+}
+
+/* ---------- 오늘의 공고 ---------- */
+function questionBar(qs, scope) {
+  if (!qs.length) return '';
+  return qs.map(q => {
+    const yes = q.kind === 'pmCert' ? { type: 'answerPmCert', cert: q.cert, value: true } : { type: 'decideSimilar', recordId: q.recordId, topic: q.topic, value: true };
+    const no = { ...yes, value: false };
+    const n = q.nids.length;
+    return `<div class="ask"><div class="q"><b>확인이 필요한 회사 정보</b><br>${esc(q.text)}<div class="muted" style="font-size:12px">${scope === 'feed' ? `답하면 공고 ${n}건의 판정이 바로 다시 계산되고, 회사 프로필에 저장됩니다` : n > 1 ? `답하면 회사 프로필에 저장되어 다른 공고 ${n - 1}건에도 바로 반영됩니다` : '답하면 회사 프로필에 저장되어 다음 공고부터 다시 묻지 않습니다'}</div></div>
+      <button class="primary" data-do="${J(yes)}">${q.kind === 'pmCert' ? '있음' : '유사사업 맞음'}</button><button data-do="${J(no)}">${q.kind === 'pmCert' ? '없음' : '유사사업 아님'}</button></div>`;
+  }).join('');
+}
+
+function feedRows() {
+  const order = { '가능': 0, '확인 필요': 1, '불가': 2 };
+  let vs = E.visibleIds(S).map(id => E.view(S, id));
+  if (ui.filter === '참여') vs = vs.filter(v => v.bid && v.bid.decision === '참여');
+  else if (ui.filter !== 'all') vs = vs.filter(v => v.verdict.level === ui.filter);
+  if (ui.q) vs = vs.filter(v => (v.title + v.org + v.no).includes(ui.q));
+  vs.sort((a, b) => ui.sort === 'deadline' ? a.dLeft - b.dLeft : (order[a.verdict.level] - order[b.verdict.level]) || a.dLeft - b.dLeft);
+  if (!vs.length) return '<div class="empty">조건에 맞는 공고가 없습니다</div>';
+  return vs.map(v => {
+    const why = v.verdict.level === '불가' ? `<span class="bad-t">✕ ${esc(v.verdict.bad.map(r => r.subject).join(', '))}</span>`
+      : v.verdict.level === '확인 필요' ? `<span class="warn-t">? ${esc(v.verdict.unk.map(r => r.subject).join(', '))} 확인 필요</span>`
+      : `<span class="ok-t">✓ 필수 요건 ${v.verdict.counts.total}건 모두 충족</span>`;
+    return `<div class="row" data-nav="#/notice/${v.id}"><div>${pill(v.verdict.level)}</div>
+      <div><div class="row-title">${esc(v.title)} ${v.v > 0 ? `<span class="chip warn">${v.versionLabel}</span>` : ''}</div>
+        <div class="row-meta">${esc(v.org)} · 추정가격 ${v.budget} · ${v.method} · 공고 ${E.fmt(v.posted)}</div><div class="row-why">${why}</div></div>
+      <div class="row-side"><div class="dl ${v.dLeft <= 3 ? 'urgent' : ''}">${dText(v.dLeft)}</div><div class="muted">${E.fmt(v.deadline)} 제안서 마감</div><div style="margin-top:4px">${bidPill(v.bidStatus)}</div></div></div>`;
+  }).join('');
+}
+
+function renderFeed() {
+  const vs = E.visibleIds(S).map(id => E.view(S, id));
+  const c = l => vs.filter(v => v.verdict.level === l).length;
+  const joined = vs.filter(v => v.bid && v.bid.decision === '참여').length;
+  const tile = (f, label, n, cls = '') => `<button class="tile ${ui.filter === f ? 'on' : ''}" data-ui="filter" data-arg="${f}"><span class="muted">${label}</span><b class="${cls}">${n}</b></button>`;
+  return `<div class="ph"><div><h1>오늘의 공고</h1><div class="sub">${E.fmtLong(S.today)} 기준 · 나라장터 전체 132건 중 SW·정보화 용역 ${vs.length}건 · (주)오름테크 프로필로 판정</div></div></div>
+    <div class="tiles">${tile('all', 'SW·정보화 용역', vs.length)}${tile('가능', '참여 가능', c('가능'), 'ok-t')}${tile('확인 필요', '확인 필요', c('확인 필요'), 'warn-t')}${tile('불가', '참여 불가', c('불가'), 'bad-t')}${tile('참여', '참여 진행 중', joined)}</div>
+    ${questionBar(E.openQuestions(S), 'feed')}
+    <div class="toolbar"><input type="text" id="q" placeholder="공고명, 기관, 공고번호 검색" value="${esc(ui.q)}">
+      <select data-change="sort"><option value="verdict" ${ui.sort === 'verdict' ? 'selected' : ''}>판정순</option><option value="deadline" ${ui.sort === 'deadline' ? 'selected' : ''}>마감 임박순</option></select></div>
+    <div class="list" id="feedList">${feedRows()}</div>`;
+}
+
+/* ---------- 공고 상세 ---------- */
+function pageHtml(v, page) {
+  const marks = v.reqs.filter(r => r.ev.page === page.page);
+  const lines = page.text.split('\n').map(line => {
+    const hits = marks.map(r => ({ r, i: line.indexOf(r.ev.quote) })).filter(h => h.i >= 0).sort((a, b) => a.i - b.i);
+    let out = '', pos = 0;
+    for (const { r, i } of hits) {
+      if (i < pos) continue;
+      out += esc(line.slice(pos, i)) + `<mark class="q ${ui.activeReq === r.id ? 'on' : ''}" id="q-${r.id}" data-ui="req" data-arg="${r.id}">${esc(r.ev.quote)}</mark>`;
+      pos = i + r.ev.quote.length;
+    }
+    return `<p>${out + esc(line.slice(pos))}</p>`;
+  });
+  return `<div class="page"><div class="pno">- ${page.page} -</div>${lines.join('')}</div>`;
+}
+
+function renderNotice(id) {
+  if (!E.NOTICES[id] || !S.notices[id].visible) return `<div class="empty">공고를 찾을 수 없습니다. <a href="#/feed" style="color:var(--accent)">목록으로</a></div>`;
+  const v = E.view(S, id), vc = VC[v.verdict.level], c = v.verdict.counts;
+  let acts;
+  if (v.bid && v.bid.decision === '참여') acts = `${bidPill(v.bidStatus)}<button data-nav="#/board">입찰 보드에서 보기</button><button class="ghost sm" data-ui="noBidOpen" data-arg="${id}">불참으로 변경</button>`;
+  else if (v.bid && v.bid.decision === '불참') acts = `<span class="pill gray">불참 · ${esc(v.bid.reason)}</span><button data-ui="bidOpen" data-arg="${id}" ${v.verdict.level === '불가' || v.closed ? 'disabled' : ''}>다시 참여 검토</button>`;
+  else acts = `<button class="primary" data-ui="bidOpen" data-arg="${id}" ${v.verdict.level === '불가' || v.closed ? 'disabled title="필수 요건 미충족으로 참여할 수 없습니다"' : ''}>참여 결정</button><button data-ui="noBidOpen" data-arg="${id}" ${v.closed ? 'disabled' : ''}>불참</button>`;
+
+  const cats = ['참가자격', '인력', '실적', '기술', '제출서류'];
+  const reqHtml = cats.map(cat => {
+    const rs = v.reqs.filter(r => r.cat === cat);
+    if (!rs.length) return '';
+    return `<div class="cat">${cat}</div>` + rs.map(r => `<div class="req ${r.status} ${ui.activeReq === r.id ? 'on' : ''}" data-ui="req" data-arg="${r.id}">
+      <div class="req-ic">${ICON[r.status]}</div><div style="min-width:0"><div class="req-t">${esc(r.subject)}<span class="hard ${r.hard ? 'y' : ''}">${r.hard ? '필수' : '선택'}</span></div>
+      <div class="req-r">${r.rule.op === 'docs' ? `${r.rule.items.map(i => `<span class="chip">${esc(i)}</span>`).join(' ')} <span class="muted">· ${esc(r.reason)}</span>` : esc(r.reason)}</div>
+      <div class="req-ev">원문 p.${r.ev.page} · <b>✓ 인용 확인됨</b></div></div></div>`).join('');
+  }).join('');
+  const dropped = v.dropped.length ? `<details class="dropped"><summary>원문에서 확인되지 않아 제외한 요건 ${v.dropped.length}건</summary>
+    ${v.dropped.map(r => `<div class="x"><b class="bad-t">✕ ${esc(r.subject)}</b> <span class="muted">(필수로 추출됨)</span><br><span class="muted">AI가 붙인 근거: p.${r.ev.page} "${esc(r.ev.quote)}"</span><br><span class="muted">→ 해당 쪽 원문에 이 문장이 없어 판정에 쓰지 않았습니다.</span></div>`).join('')}</details>` : '';
+
+  const pages = v.pages.slice().sort((a, b) => a.page - b.page);
+  let viewer = `<div class="page"><div class="pno">- 1 -</div><h4>${esc(v.title)}<br>제안요청서</h4><table>
+    <tr><td>사업명</td><td>${esc(v.title)}</td></tr><tr><td>발주기관</td><td>${esc(v.org)}</td></tr><tr><td>사업기간</td><td>${esc(v.period)}</td></tr>
+    <tr><td>추정가격</td><td>${v.budget}원 (부가세 포함)</td></tr><tr><td>계약방법</td><td>${esc(v.method)}</td></tr><tr><td>제안서 마감</td><td>${E.fmtLong(v.deadline)} 10:00</td></tr></table></div>`;
+  let prev = 1;
+  for (const p of pages) { if (p.page > prev + 1) viewer += `<div class="gap">··· ${p.page - 1 > prev + 1 ? `${prev + 1}~${p.page - 1}` : prev + 1}쪽 생략 ···</div>`; viewer += pageHtml(v, p); prev = p.page; }
+
+  return `<div class="crumb"><a href="#/feed">오늘의 공고</a> › ${v.no}</div>
+    <div class="dhead"><div><h1>${esc(v.title)} ${v.v > 0 ? `<span class="chip warn">${v.versionLabel}</span>` : ''}</h1>
+      <div class="kv"><span>발주 <b>${esc(v.org)}</b></span><span>추정가격 <b>${v.budget}</b></span><span>계약 <b>${esc(v.method)}</b></span><span>공고일 <b>${E.fmtLong(v.posted)}</b></span>
+      <span>제안서 마감 <b class="${v.dLeft <= 3 ? 'bad-t' : ''}">${E.fmtLong(v.deadline)} (${dText(v.dLeft)})</b></span></div></div>
+      <div><a class="muted" style="font-size:12px" href="#/feed">← 목록</a></div></div>
+    ${v.bidStatus === '재검토 필요' ? `<div class="bar alarm">⚠ 참여 준비 중인 공고가 참여 불가로 바뀌었습니다 · 원인: ${esc(v.verdict.why)} · 할 일은 그대로 두었습니다</div>` : ''}
+    ${v.diff ? `<div class="bar amend"><b>${v.versionLabel} 반영됨</b><span>${esc(v.versionNote)}</span><button class="sm" data-ui="diff">${ui.showDiff ? '변경 내용 닫기' : '변경 내용 보기'}</button></div>
+      ${ui.showDiff ? `<div class="diffbox"><ul style="margin:0;padding-left:18px">${v.diff.map(d => `<li>${esc(d)}</li>`).join('')}</ul></div>` : ''}` : ''}
+    <div class="banner ${vc}"><div><div class="big">${E.LABEL[v.verdict.level]}</div><div>${esc(v.verdict.why)}</div>
+      <div class="muted" style="font-size:12px">필수 요건 ${c.total}건 · 충족 ${c.met} · 확인 필요 ${c.unk} · 미충족 ${c.bad}</div></div><div class="acts">${acts}</div></div>
+    ${questionBar(E.openQuestions(S).filter(q => q.nids.includes(id)), 'detail')}
+    <div class="split"><div>${reqHtml}${dropped}<div class="note">판정은 참고용입니다. 최종 판단은 원문으로 확인하세요. 요건을 누르면 오른쪽 원문 위치로 이동합니다.</div></div>
+      <div class="viewer" id="viewer"><div class="vhead"><b>제안요청서.hwpx</b><span class="muted">${v.versionLabel} · 인용 ${v.reqs.length}곳 표시</span></div>${viewer}</div></div>`;
+}
+
+/* ---------- 입찰 보드 ---------- */
+function renderBoard() {
+  const tv = E.taskViews(S);
+  const ids = E.visibleIds(S).filter(id => S.bids[id] && S.bids[id].decision === '참여');
+  const bids = ids.map(id => {
+    const v = E.view(S, id), ts = tv.filter(t => t.nid === id), done = ts.filter(t => t.done).length;
+    return `<div class="bidc" data-nav="#/notice/${id}"><div style="display:flex;justify-content:space-between;gap:6px">${bidPill(v.bidStatus)}<span class="dl ${v.dLeft <= 3 ? 'urgent' : ''}" style="font-size:14px">${dText(v.dLeft)}</span></div>
+      <div class="t">${esc(v.title)}</div><div class="muted" style="font-size:12px">할 일 ${done}/${ts.length} 완료 · 마감 ${E.fmt(v.deadline)}</div><div class="prog"><i style="width:${ts.length ? done / ts.length * 100 : 0}%"></i></div></div>`;
+  }).join('');
+  const COLS = [['todo', '준비 전'], ['doing', '작성 중'], ['review', '검토'], ['done', '완료']];
+  const next = { todo: 'doing', doing: 'review', review: 'done' };
+  const card = t => `<div class="task ${t.overdue ? 'over' : ''} ${t.done ? 'done' : ''}" ${t.auto ? '' : `draggable="true" data-task="${t.id}"`}>
+    <div class="nt">${esc(t.notice.title)}</div><div class="tt">${t.auto ? '<span class="chip warn">확인</span> ' : ''}${esc(t.title)}</div>
+    <div class="ft">${av(t.owner)}<span class="${t.overdue ? 'bad-t' : 'muted'}">${t.overdue ? '기한 지남 · ' : ''}${E.fmt(t.due)}${t.tight ? ' · 빠듯' : ''}</span><span class="sp"></span>
+    ${t.auto ? (t.done ? '<span class="muted">자동 완료</span>' : `<button class="sm" data-nav="#/notice/${t.nid}">답하러 가기</button>`) : next[t.col] ? `<button class="sm" data-do="${J({ type: 'moveTask', id: t.id, col: next[t.col] })}" title="다음 단계로">›</button>` : ''}</div></div>`;
+  return `<div class="ph"><div><h1>입찰 보드</h1><div class="sub">참여를 결정한 공고의 할 일입니다. 마감일에서 거꾸로 계산한 기한이 붙고, 정정공고가 오면 자동으로 조정됩니다.</div></div></div>
+    ${ids.length ? `<div class="bids">${bids}</div>` : '<div class="card empty">참여를 결정한 공고가 없습니다</div>'}
+    <div class="kanban">${COLS.map(([k, l]) => { const ts = tv.filter(t => t.col === k).sort((a, b) => a.due - b.due); return `<div class="col" data-col="${k}"><h3>${l}<span class="muted">${ts.length}</span></h3>${ts.map(card).join('')}</div>`; }).join('')}</div>`;
+}
+
+/* ---------- 공고 분석 ---------- */
+const STEPS = [
+  ['공고 정보 조회', '나라장터 입찰공고 API'], ['첨부파일 내려받기', '제안요청서, 공고문'], ['문서 파싱', 'HWPX·PDF → 쪽 단위 텍스트'],
+  ['요건 추출', 'LLM 구조화 출력'], ['인용 검증', '근거 문장이 원문에 있는지 대조'], ['판정', '회사 프로필과 규칙 대조'],
+];
+function renderAnalyze() {
+  const a = ui.analyze, done = S.notices.G.visible;
+  const res = done ? E.view(S, 'G') : null;
+  return `<div class="ph"><div><h1>공고 분석</h1><div class="sub">나라장터 공고번호를 넣으면 수집부터 판정까지 바로 진행합니다.</div></div></div>
+    <div class="card"><div class="an"><input type="text" id="anNo" placeholder="공고번호 입력 (예: R26BK00414188)" value="${esc(a.no)}" ${a.status === 'running' ? 'disabled' : ''}>
+      <button class="primary" data-ui="startAnalyze" ${a.status === 'running' ? 'disabled' : ''}>${a.status === 'running' ? '분석 중…' : '분석 시작'}</button></div>
+      <ol class="steps">${STEPS.map(([t, d], i) => `<li class="${a.step > i || a.status === 'done' ? 'done' : a.step === i ? 'run' : ''}"><span class="s">${a.step > i || a.status === 'done' ? '✓' : i + 1}</span><div><b>${t}</b><div class="d">${d}</div></div></li>`).join('')}</ol>
+      ${a.logs.length ? `<div class="console" id="console">${a.logs.map(esc).join('\n')}</div>` : ''}</div>
+    ${res && a.status !== 'running' ? `<div class="banner ${VC[res.verdict.level]}" style="margin-top:14px"><div><div class="muted" style="font-size:12px">${res.no} · ${esc(res.org)}</div><div class="big">${esc(res.title)}</div>
+      <div>${pill(res.verdict.level)} ${esc(res.verdict.why)}</div></div><div class="acts"><button class="primary" data-nav="#/notice/G">결과 보기</button></div></div>` : ''}`;
+}
+function startAnalyze() {
+  const input = $('#anNo');
+  ui.analyze.no = (input && input.value.trim()) || 'R26BK00414188';
+  if (S.notices.G.visible) { ui.analyze.status = 'done'; ui.analyze.step = STEPS.length; toast('이미 분석한 공고입니다'); render(); return; }
+  const g = E.NOTICES.G, logs = [
+    [`> 공고 ${ui.analyze.no} 조회`, `  ${g.title} · ${g.org} · 용역 · 추정가격 ${g.budget}`],
+    ['> 첨부 2개 내려받는 중', '  제안요청서.hwpx (1.8MB) · 공고문.pdf (0.4MB) · 해시 저장'],
+    ['> 파싱', '  HWPX 38쪽 · PDF 6쪽 → 텍스트 44쪽, 표 5개'],
+    ['> 요건 추출 (참가자격·인력·실적·제출서류 섹션만 전송)', '  요건 후보 7건 · 입력 9,812 토큰'],
+    ['> 인용 검증', '  7건 중 6건 원문 일치 · 1건 제외 ("공동수급을 허용하지 아니한다" → p.2에 없음)'],
+    ['> 판정', null],
+  ];
+  const run = {};
+  Object.assign(ui.analyze, { status: 'running', step: 0, logs: [], run });
+  const durs = [700, 800, 1300, 1700, 800, 700];
+  let i = 0;
+  const tick = () => {
+    if (ui.analyze.run !== run) return; // 도중에 초기화하면 중단
+    if (i < STEPS.length) {
+      ui.analyze.step = i; ui.analyze.logs.push(logs[i][0]); render();
+      setTimeout(() => {
+        if (ui.analyze.run !== run) return;
+        if (i === STEPS.length - 1) { S = E.reduce(S, { type: 'analyze' }); const v = E.view(S, 'G'); logs[i][1] = `  필수 요건 ${v.verdict.counts.total}건 · 충족 ${v.verdict.counts.met} · 확인 필요 ${v.verdict.counts.unk} · 미충족 ${v.verdict.counts.bad} → ${E.LABEL[v.verdict.level]}`; }
+        ui.analyze.logs.push(logs[i][1]); i++; tick();
+      }, durs[i]);
+    } else { ui.analyze.status = 'done'; ui.analyze.logs.push('완료 · 총 6.0초'); toast('분석이 끝났습니다'); render(); }
+  };
+  tick();
+}
+
+/* ---------- 회사 프로필 ---------- */
+function renderProfile() {
+  const p = S.profile, pm = p.staff[0];
+  const certSel = s => { const v = s.certs['정보처리기사']; return s === pm ? `<select data-change="pmCert"><option value="" ${v === undefined ? 'selected' : ''}>미등록</option><option value="true" ${v === true ? 'selected' : ''}>보유</option><option value="false" ${v === false ? 'selected' : ''}>미보유</option></select>` : (v ? '보유' : '미보유'); };
+  const simSel = r => { if (!r.maybe.length) return '<span class="muted">—</span>'; const t = r.maybe[0], v = p.similar[`${r.id}:${t}`];
+    return `<select data-change="similar" data-arg="${r.id}:${t}"><option value="" ${v === undefined ? 'selected' : ''}>${t} 유사: 미정</option><option value="true" ${v === true ? 'selected' : ''}>${t} 유사: 인정</option><option value="false" ${v === false ? 'selected' : ''}>${t} 유사: 아님</option></select>`; };
+  const addable = ['직접생산확인증명', 'ISO/IEC 27001', 'CC인증'].filter(x => !p.licenses.includes(x));
+  return `<div class="ph"><div><h1>회사 프로필</h1><div class="sub">여기 정보가 바뀌면 모든 공고의 판정이 바로 다시 계산됩니다.</div></div></div>
+    <div class="grid2"><div class="card"><h2>기본 정보</h2><table class="tbl"><tr><td class="muted">회사명</td><td><b>${esc(p.company)}</b> <span class="chip">가상</span></td></tr>
+      <tr><td class="muted">사업자등록번호</td><td>${p.bizNo}</td></tr><tr><td class="muted">기업 규모</td><td>${p.sme ? '중소기업' : '-'}</td></tr><tr><td class="muted">본사 소재지</td><td>${p.region}</td></tr></table></div>
+    <div class="card"><h2>면허·인증</h2><div class="chips">${p.licenses.map(l => `<span class="lic">${esc(l)}<button data-do="${J({ type: 'removeLicense', value: l })}" title="삭제">×</button></span>`).join('')}</div>
+      ${addable.length ? `<div style="display:flex;gap:8px;margin-top:12px"><select id="licSel">${addable.map(x => `<option>${x}</option>`).join('')}</select><button data-ui="addLic">추가</button></div>` : ''}</div></div>
+    <div class="card" style="margin-top:16px"><h2>인력</h2><div class="scroll"><table class="tbl"><tr><th>이름</th><th>역할</th><th>경력</th><th>정보처리기사</th></tr>
+      ${p.staff.map(s => `<tr><td><b>${s.name}</b></td><td>${s.role}</td><td>${s.years}년</td><td>${certSel(s)}</td></tr>`).join('')}</table></div></div>
+    <div class="card" style="margin-top:16px"><h2>수행 실적</h2><div class="scroll"><table class="tbl"><tr><th>사업명</th><th>발주처</th><th>연도</th><th>금액</th><th>분야</th><th>유사 판단</th></tr>
+      ${p.records.map(r => `<tr><td><b>${esc(r.name)}</b></td><td>${esc(r.org)}</td><td>${r.year}</td><td>${r.amount}억</td><td>${r.topics.map(t => `<span class="chip">${t}</span>`).join(' ')}</td><td>${simSel(r)}</td></tr>`).join('')}</table></div></div>`;
+}
+
+/* ---------- 정확도 리포트 ---------- */
+function renderReport() {
+  const kpi = (v, l) => `<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`;
+  const cats = [['참가자격', 81, 96], ['인력', 74, 90], ['실적', 69, 85], ['기술', 66, 81], ['제출서류', 92, 98]];
+  const droppedLive = E.visibleIds(S).flatMap(id => E.view(S, id).dropped.map(r => [E.NOTICES[id].title, r.subject, `p.${r.ev.page} "${r.ev.quote}"`]));
+  const rows = [...droppedLive, ['(골든셋) ○○공단 홈페이지 재구축', 'PM 기술사 자격 필수', 'p.15 "기술사 자격을 보유한 자" → 원문은 "기술사 보유 시 가점"']];
+  return `<div class="ph"><div><h1>정확도 리포트</h1><div class="sub">골든셋(사람이 라벨링한 RFP 30건)과 낙찰 결과로 시스템을 채점합니다.</div></div></div>
+    <div class="sample">예시 값입니다. 실제 수치는 1주차 기준선 측정과 5주차 골든셋 30건 평가 후 채웁니다.</div>
+    <div class="kpis">${kpi('92.4%', '필수 요건 추출 재현율')}${kpi('88.1%', '필수 요건 추출 정밀도')}${kpi('100%', '화면 표시 요건 인용 일치')}${kpi('6.3%', '인용 검증으로 제외된 요건 비율')}${kpi('3.8%', '낙찰자 오탈락률 (52건)')}${kpi('1분 12초', '공고 1건 평균 분석 시간')}</div>
+    <div class="grid2"><div class="card"><h2>카테고리별 재현율</h2><div class="legend"><span><i style="background:var(--line)"></i>1주차 기준선</span><span><i style="background:var(--accent)"></i>현재</span></div>
+      ${cats.map(([c, b, n]) => `<div class="hb"><span>${c}</span><div class="tr"><i class="base" style="width:${b}%"></i></div><span class="muted">${b}%</span></div><div class="hb"><span></span><div class="tr"><i class="now" style="width:${n}%"></i></div><span><b>${n}%</b></span></div>`).join('')}</div>
+    <div class="card"><h2>인용 검증으로 제외한 요건</h2><div class="scroll"><table class="tbl"><tr><th>공고</th><th>AI가 추출한 요건</th><th>근거로 붙인 문장</th></tr>
+      ${rows.map(r => `<tr><td>${esc(r[0])}</td><td class="bad-t">${esc(r[1])}</td><td class="muted" style="font-size:12px">${esc(r[2])}</td></tr>`).join('')}</table></div>
+      <div class="note">AI가 "가점"이나 "우대"를 "필수"로 잘못 읽은 경우가 대부분입니다. 근거 문장이 원문에 없으면 화면에 표시하지 않습니다.</div></div></div>`;
+}
+
+/* ---------- 모달 ---------- */
+function renderModal() {
+  const m = ui.modal;
+  if (!m) return '';
+  const v = E.view(S, m.nid);
+  if (m.type === 'bid') {
+    const ts = E.previewTasks(S, m.nid);
+    return `<div class="modal-bg" data-ui="close"><div class="modal" data-stop><h2>참여 결정 · ${esc(v.title)}</h2>
+      <div class="muted">제안서 마감 ${E.fmtLong(v.deadline)} (${dText(v.dLeft)})에서 거꾸로 계산해 할 일 ${ts.length}개를 만듭니다.</div>
+      ${v.verdict.level === '확인 필요' ? `<div class="bar" style="background:var(--warn-soft);color:var(--warn);margin-top:10px">? 확인이 끝나지 않은 필수 요건 ${v.verdict.counts.unk}건이 있습니다. 확인 할 일이 함께 만들어지고, 답하면 자동으로 완료됩니다.</div>` : ''}
+      <table class="tbl" style="margin-top:10px"><tr><th>할 일</th><th>기한</th><th>담당</th></tr>
+      ${ts.map(t => `<tr><td>${t.kind === 'check' ? '<span class="chip warn">확인</span> ' : ''}${esc(t.title)}</td><td>${E.fmt(t.due)}${t.tight ? ' <span class="bad-t" style="font-size:11px">빠듯</span>' : ''}</td>
+        <td><select data-change="owner" data-arg="${t.key}">${Object.entries(E.PEOPLE).map(([k, n]) => `<option value="${k}" ${(m.owners[t.key] || t.owner) === k ? 'selected' : ''}>${n}</option>`).join('')}</select></td></tr>`).join('')}</table>
+      <div class="f"><button data-ui="close">취소</button><button class="primary" data-ui="bidConfirm">참여 확정</button></div></div></div>`;
+  }
+  const reasons = ['자격 요건 미충족', '수익성 낮음', '일정·인력 부족', '기타'];
+  return `<div class="modal-bg" data-ui="close"><div class="modal" data-stop><h2>불참 · ${esc(v.title)}</h2><div class="muted" style="margin-bottom:10px">사유는 다음 공고 추천에 참고합니다.</div>
+    ${reasons.map(r => `<label class="radio"><input type="radio" name="nb" value="${r}" ${m.reason === r ? 'checked' : ''} data-change="reason">${r}</label>`).join('')}
+    <div class="f"><button data-ui="close">취소</button><button class="primary" data-ui="noBidConfirm">불참 확정</button></div></div></div>`;
+}
+
+/* ---------- 렌더와 이벤트 ---------- */
+function render() {
+  const r = route();
+  renderChrome(r);
+  const pages = { feed: renderFeed, notice: () => renderNotice(r.arg), board: renderBoard, analyze: renderAnalyze, profile: renderProfile, report: renderReport };
+  $('#main').innerHTML = (pages[r.page] || renderFeed)();
+  $('#modal').innerHTML = renderModal();
+  const con = $('#console'); if (con) con.scrollTop = con.scrollHeight;
+  if (r.page === 'notice' && ui.activeReq) {
+    const mk = document.getElementById(`q-${ui.activeReq}`), vw = $('#viewer');
+    if (mk && vw && getComputedStyle(vw).position === 'sticky') vw.scrollTop = mk.offsetTop - vw.clientHeight / 3;
+  }
+}
+
+const UI = {
+  filter: a => { ui.filter = ui.filter === a && a !== 'all' ? 'all' : a; render(); },
+  req: a => { ui.activeReq = ui.activeReq === a ? null : a; render(); },
+  diff: () => { ui.showDiff = !ui.showDiff; render(); },
+  notif: () => { ui.notif = !ui.notif; render(); },
+  demo: () => { ui.demo = !ui.demo; render(); },
+  reset: () => { S = E.init(); Object.assign(ui, { modal: null, activeReq: null, analyze: { status: 'idle', step: -1, logs: [], no: '' } }); toast('처음 상태로 되돌렸습니다'); location.hash = '#/feed'; render(); },
+  alert: a => { const al = S.alerts.find(x => x.id === +a); S = E.reduce(S, { type: 'read', id: +a }); ui.notif = false; if (al && al.nid) location.hash = `#/notice/${al.nid}`; render(); },
+  bidOpen: a => { ui.modal = { type: 'bid', nid: a, owners: {} }; render(); },
+  noBidOpen: a => { ui.modal = { type: 'nobid', nid: a, reason: '자격 요건 미충족' }; render(); },
+  close: () => { ui.modal = null; render(); },
+  bidConfirm: () => { const m = ui.modal; ui.modal = null; dispatch({ type: 'bid', nid: m.nid, owners: m.owners }, '참여를 결정했습니다 · 입찰 보드에 할 일이 생겼습니다'); },
+  noBidConfirm: () => { const m = ui.modal; ui.modal = null; dispatch({ type: 'noBid', nid: m.nid, reason: m.reason }, '불참으로 기록했습니다'); },
+  startAnalyze: () => startAnalyze(),
+  addLic: () => dispatch({ type: 'addLicense', value: $('#licSel').value }, '면허·인증을 추가했습니다'),
+};
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-do],[data-ui],[data-nav]');
+  const box = e.target.closest('[data-stop]');
+  if (box && (!t || !box.contains(t))) return; // 모달 안쪽 빈 곳 클릭은 무시
+  if (ui.notif && !e.target.closest('.drop,.bell')) { ui.notif = false; if (!t) { render(); return; } }
+  if (!t || t.disabled) return;
+  if (t.dataset.do) dispatch(JSON.parse(t.dataset.do));
+  else if (t.dataset.ui) UI[t.dataset.ui](t.dataset.arg);
+  else if (t.dataset.nav) location.hash = t.dataset.nav;
+});
+document.addEventListener('change', e => {
+  const t = e.target.closest('[data-change]'); if (!t) return;
+  const k = t.dataset.change, val = t.value;
+  if (k === 'sort') { ui.sort = val; render(); }
+  else if (k === 'pmCert') dispatch({ type: 'answerPmCert', cert: '정보처리기사', value: val === '' ? null : val === 'true' });
+  else if (k === 'similar') { const [recordId, topic] = t.dataset.arg.split(':'); dispatch({ type: 'decideSimilar', recordId, topic, value: val === '' ? null : val === 'true' }); }
+  else if (k === 'owner') ui.modal.owners[t.dataset.arg] = val;
+  else if (k === 'reason') ui.modal.reason = val;
+});
+document.addEventListener('input', e => { if (e.target.id === 'q') { ui.q = e.target.value.trim(); $('#feedList').innerHTML = feedRows(); } });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && ui.modal) { ui.modal = null; render(); } });
+document.addEventListener('dragstart', e => { const t = e.target.closest('[data-task]'); if (t) e.dataTransfer.setData('text/plain', t.dataset.task); });
+document.addEventListener('dragover', e => { const c = e.target.closest('[data-col]'); if (c) { e.preventDefault(); c.classList.add('over'); } });
+document.addEventListener('dragleave', e => { const c = e.target.closest('[data-col]'); if (c && !c.contains(e.relatedTarget)) c.classList.remove('over'); });
+document.addEventListener('drop', e => { const c = e.target.closest('[data-col]'); if (!c) return; e.preventDefault(); const id = e.dataTransfer.getData('text/plain'); if (id) dispatch({ type: 'moveTask', id, col: c.dataset.col }); });
+window.addEventListener('hashchange', () => { ui.activeReq = null; ui.showDiff = false; render(); window.scrollTo(0, 0); });
+render();
+</script>
+</body>
+</html>

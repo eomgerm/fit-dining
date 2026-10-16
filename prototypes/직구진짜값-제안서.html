@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>직구 진짜값 제안서</title>
+</head>
+<body>
+<title>직구 진짜값</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* 레이아웃: 한 열 설득 문서 + PC 브라우저 창 목업. 영수증처럼 숫자가 또렷한 녹색 계열, 경고는 주황 하나. */
+:root{
+  --bg:#f3f5f2; --surface:#ffffff; --surface-2:#e7ebe4; --fg:#16201a; --muted:#5f6b63;
+  --line:#d3dad0; --accent:#1f7a4d; --accent-ink:#ffffff; --alert:#d9480f; --ok:#1e9e62; --warn:#b7791f; --bad:#c9402f;
+  --win:#101512; --win-fg:#eef2ec; --panel:#171f1a; --panel-2:#1f2a22; --num:#a7f3c3;
+  --display:"IBM Plex Sans KR",system-ui,sans-serif; --body:"Noto Sans KR",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0f1411; --surface:#161d18; --surface-2:#1e2721; --fg:#e9efe9; --muted:#9faba2;
+  --line:#2b3630; --accent:#4cc38a; --accent-ink:#0f1411; --alert:#ff7a45; --ok:#3ccf8a; --warn:#e3b341; --bad:#ff6b5c;
+  --win:#070a08; --win-fg:#eef2ec; --panel:#121a15; --panel-2:#192219; --num:#a7f3c3; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#0f1411; --surface:#161d18; --surface-2:#1e2721; --fg:#e9efe9; --muted:#9faba2;
+  --line:#2b3630; --accent:#4cc38a; --accent-ink:#0f1411; --alert:#ff7a45; --ok:#3ccf8a; --warn:#e3b341; --bad:#ff6b5c;
+  --win:#070a08; --win-fg:#eef2ec; --panel:#121a15; --panel-2:#192219; --num:#a7f3c3; color-scheme:dark }
+
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:16px;line-height:1.65;margin:0}
+.wrap{max-width:960px;margin:0 auto;padding-block:32px 80px;padding-inline:16px}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;line-height:1.25;margin:0}
+h1{font-size:clamp(28px,5vw,40px);font-weight:700}
+h2{font-size:22px;font-weight:700;margin-top:56px;padding-top:16px;border-top:2px solid var(--fg)}
+h3{font-size:17px;font-weight:600;margin-top:24px}
+p{margin:12px 0;max-width:68ch}
+.eyebrow{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.lead{font-size:18px;max-width:62ch}
+.meta{color:var(--muted);font-size:14px}
+.pill{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--surface-2);color:var(--fg);vertical-align:middle}
+.pill.ok{background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok)}
+.pill.warn{background:color-mix(in srgb,var(--warn) 20%,transparent);color:var(--warn)}
+table{border-collapse:collapse;width:100%;font-size:14.5px}
+.tablewrap{overflow-x:auto;margin-top:12px}
+th,td{text-align:left;vertical-align:top;padding:10px 10px;border-bottom:1px solid var(--line)}
+th{font-weight:600;color:var(--muted);font-size:13px;white-space:nowrap}
+td:first-child{font-weight:600;white-space:nowrap}
+ul{padding-left:20px;margin:8px 0}
+li{margin:4px 0}
+.note{background:var(--surface-2);border-radius:10px;padding:14px 16px;font-size:14.5px;margin-top:16px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:12px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;min-width:0}
+.card h3{margin-top:0}
+.card .who{font-size:12px;color:var(--muted);font-weight:600;letter-spacing:.04em}
+.card dl{display:grid;grid-template-columns:52px 1fr;gap:4px 10px;margin:10px 0 0;font-size:14px}
+.card dt{color:var(--muted);font-weight:600}
+.card dd{margin:0}
+.core{background:var(--fg);color:var(--bg);border-radius:12px;padding:12px 16px;margin-top:12px;font-size:14.5px;display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center}
+.core b{font-family:var(--display)}
+.src{font-size:13.5px;color:var(--muted)}
+.src ol{padding-left:20px}
+.src a{color:var(--muted)}
+a{color:var(--fg)}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+[hidden]{display:none!important}
+.q{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:12px}
+.q .card b{font-family:var(--display);display:block;font-size:15px;margin-bottom:4px}
+
+/* 브라우저 창 */
+.win{background:var(--win);color:var(--win-fg);border-radius:12px;overflow:hidden;border:1px solid #243029;box-shadow:0 16px 40px rgba(0,0,0,.25)}
+.win .bar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:#141b17;font-family:var(--mono);font-size:11px;color:#9faba2}
+.win .bar i{width:10px;height:10px;border-radius:50%;background:#2f3b34;display:inline-block}
+.win .bar .url{margin-left:6px;background:#0a0e0c;border-radius:6px;padding:3px 10px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.win .body{padding:14px;display:grid;gap:12px;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr)}
+@media (max-width:700px){.win .body{grid-template-columns:1fr}}
+.pane{background:var(--panel);border:1px solid #243029;border-radius:10px;padding:12px;min-width:0}
+.pane h4{font-family:var(--display);font-size:13px;margin:0 0 8px;color:#cfd9d2;letter-spacing:.02em}
+.prod{display:grid;grid-template-columns:64px 1fr;gap:10px;align-items:center;background:#0a0e0c;border-radius:8px;padding:10px}
+.prod .img{width:64px;height:64px;border-radius:8px;background:linear-gradient(135deg,#243029,#0a0e0c);display:grid;place-items:center;font-family:var(--mono);font-size:11px;color:#9faba2}
+.prod .t{font-weight:600;font-size:13.5px}
+.prod .p{font-family:var(--mono);font-size:20px;font-weight:600;color:#fff}
+.prod .s{font-size:11.5px;color:#9faba2}
+.choices{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.choices button,.tog button{background:#1f2a22;color:#e9efe9;border:1px solid #2f3b34;border-radius:999px;padding:4px 10px;font-size:12px;cursor:pointer}
+.choices button[aria-pressed="true"],.tog button[aria-pressed="true"]{background:#fff;color:#0a0e0c;border-color:#fff}
+.tog{display:flex;gap:6px;align-items:center;font-size:12px;color:#9faba2;flex-wrap:wrap;margin-top:6px}
+.badge{background:var(--panel-2);border-radius:10px;padding:12px;margin-top:8px}
+.badge .big{font-family:var(--mono);font-size:30px;font-weight:600;color:var(--num);line-height:1;font-variant-numeric:tabular-nums}
+.badge .lbl{font-size:12px;color:#9faba2}
+.rows{font-family:var(--mono);font-size:12.5px;display:grid;gap:4px;margin-top:8px;font-variant-numeric:tabular-nums}
+.rows div{display:flex;justify-content:space-between;gap:10px;background:#0a0e0c;border-radius:6px;padding:5px 8px}
+.rows .k{color:#cfd9d2}
+.rows .sub{color:#9faba2;font-size:11.5px}
+.rows .warn{color:#fcd34d}.rows .bad{color:#ff8a65}.rows .ok{color:#86efac}
+.alertbox{border-left:3px solid var(--alert);background:#2a1a12;border-radius:8px;padding:8px 10px;font-size:12.5px;margin-top:8px}
+.cmp{display:grid;gap:6px;margin-top:8px;font-size:12.5px}
+.cmp .r{display:grid;grid-template-columns:70px 1fr 90px;gap:8px;align-items:center}
+.cmp .n{font-weight:600}
+.cmp .bar2{height:14px;border-radius:4px;background:#0a0e0c;overflow:hidden}
+.cmp .bar2 i{display:block;height:100%;background:#2f3b34}
+.cmp .r.best .bar2 i{background:var(--accent)}
+.cmp .v{font-family:var(--mono);text-align:right;font-variant-numeric:tabular-nums}
+.cmp .s{grid-column:2/4;color:#9faba2;font-size:11.5px}
+.toast{font-size:12px;color:#86efac;min-height:18px;margin-top:6px}
+.demo-help{font-size:14px}
+.demo-help li{margin:6px 0}
+
+/* 플로우 미니 창 */
+.flow{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:18px 14px;margin-top:16px}
+.step{min-width:0}
+.step .cap{font-size:13px;margin-top:8px;line-height:1.45}
+.step .cap b{font-family:var(--display);display:block;font-size:13px}
+.step .n{font-family:var(--display);font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.06em}
+.mini{background:var(--win);color:var(--win-fg);border-radius:10px;overflow:hidden;border:1px solid #243029}
+.mini .bar{display:flex;gap:5px;padding:6px 8px;background:#141b17}
+.mini .bar i{width:7px;height:7px;border-radius:50%;background:#2f3b34;display:inline-block}
+.mini .scr{padding:9px;min-height:210px;display:flex;flex-direction:column;gap:5px;font-size:10.5px;line-height:1.4}
+.mini .ttl{font-family:var(--display);font-weight:700;font-size:12px}
+.mini .sub{color:#9faba2}
+.mini .r{background:#0a0e0c;border:1px solid #243029;border-radius:6px;padding:5px 7px;display:flex;justify-content:space-between;gap:6px;align-items:center}
+.mini .r .k{font-weight:600}
+.mini .r .v{font-family:var(--mono);font-weight:600;color:#cfd9d2;white-space:nowrap}
+.mini .b{background:var(--accent);color:var(--accent-ink);border-radius:6px;padding:6px;text-align:center;font-family:var(--display);font-weight:700;font-size:11px;margin-top:auto}
+.mini .g{background:#1f2a22;border:1px solid #2f3b34;color:#cfd9d2;border-radius:6px;padding:5px;text-align:center}
+.mini .big{font-family:var(--mono);font-size:20px;font-weight:600;line-height:1;color:var(--num)}
+.mini .pb{background:#1f2a22;border-radius:6px;padding:6px 7px;border-left:3px solid var(--accent)}
+.mini .pb.warn{border-left-color:var(--alert);background:#2a1a12}
+.mini .bar2{height:6px;border-radius:999px;background:#243029;overflow:hidden}
+.mini .bar2 i{display:block;height:100%;background:var(--accent)}
+.mini .lbl{font-family:var(--display);font-size:9px;color:#9faba2;letter-spacing:.04em}
+.mini .inp{background:#0a0e0c;border:1px dashed #2f3b34;border-radius:6px;padding:6px;color:#9faba2}
+.mini .chips{display:flex;gap:4px;flex-wrap:wrap}
+.mini .chip{border:1px solid #2f3b34;border-radius:999px;padding:2px 7px;font-size:9.5px;color:#cfd9d2}
+.mini .chip.on{background:#fff;color:#0a0e0c;border-color:#fff}
+.mini .ok{color:#86efac}.mini .bad{color:#ff8a65}.mini .wn{color:#fcd34d}
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">팀 회의용 제안서 · 2026-10-06 · 가칭 · 유익 축 · PC 웹 확장</div>
+  <h1>직구 진짜값</h1>
+  <p class="lead">알리·테무·아마존 상품 페이지를 열면 가격 옆에 <b>원화 최종 예상가</b>가 뜬다. 배송비, 관부가세, 카드 수수료, 환율까지 더한 값이다. 그 아래에 "90일 중 어느 가격인지"와 "테무·쿠팡·네이버에선 얼마인지"가 나란히 선다. 사용자는 아무것도 입력하지 않는다.</p>
+  <p class="meta">읽는 데 7분. 재미 축 "원칙 던전"과 짝을 이루는 유익 축 제안이다. 제안자의 실제 고충(이게 진짜 싼지, 최종가인지, 다른 데가 더 싼지)에서 출발했다. 숫자에는 출처를 달았고 확인 못 한 것은 <span class="pill warn">미확인</span>으로 표시했다. 데모의 가격·세율·환율은 예시다.</p>
+
+  <h2>1. 세 질문이 곧 세 기능</h2>
+  <div class="q">
+    <div class="card"><b>"이게 최종가 맞아?"</b>상품가 + 배송비 + 관부가세 + 카드 수수료 + 환율을 항목별로 보여 준다. 면세 한도(150달러, 미국발 200달러)까지 남은 금액과 원화 결제(DCC) 함정 경고를 같이 띄운다[1][2].</div>
+    <div class="card"><b>"진짜 싼 거야?"</b>같은 상품을 본 사용자들의 열람 가격이 익명으로 쌓여 "90일 중 하위 20%" 같은 위치가 뜬다. 알리의 '할인 전 가격'이 아니라 실제 관측값 기준이다.</div>
+    <div class="card"><b>"다른 데가 더 싸지 않아?"</b>알리·테무·아마존(직구끼리)과 쿠팡·네이버 최저가(국내)를 최종가 기준으로 나란히. 알리가 쿠팡보다 비싼 품목이 보도될 만큼 "직구가 항상 싸진 않다"[3].</div>
+  </div>
+
+  <h2>2. 유저 플로우 한눈에</h2>
+  <p>PC 브라우저 화면 8개. 사용자가 손대는 건 ①(설치·카드 선택 한 번)뿐이다. 나머지는 보던 페이지 위에 그냥 뜬다.</p>
+  <div class="flow">
+
+    <div class="step"><div class="n">① 설치 · 30초</div>
+      <div class="mini"><div class="bar"><i></i><i></i><i></i></div><div class="scr">
+        <div class="ttl">내 카드만 골라 두면 끝</div>
+        <div class="sub">수수료 계산에만 쓴다. 카드 번호는 안 받는다.</div>
+        <div class="chips"><span class="chip on">VISA · 해외 1%+0.25%</span><span class="chip">Master</span><span class="chip">트래블카드(0%)</span></div>
+        <div class="r"><span class="k">열람 가격 익명 공유</span><span class="v">켜짐</span></div>
+        <div class="r"><span class="k">국내 비교</span><span class="v">쿠팡·네이버</span></div>
+        <div class="sub">읽는 건 알리·테무·아마존·쿠팡 상품 페이지뿐.</div>
+        <div class="b">시작</div>
+      </div></div>
+      <div class="cap"><b>유일한 설정</b>카드 종류 하나. 그 뒤 입력은 없다.</div></div>
+
+    <div class="step"><div class="n">② 알리 상품 페이지</div>
+      <div class="mini"><div class="bar"><i></i><i></i><i></i></div><div class="scr">
+        <div class="ttl">무선 이어폰 · US $23.90</div>
+        <div class="sub">페이지 원래 표시: "US $23.90 · 무료배송"</div>
+        <div class="pb"><div class="lbl">진짜값</div><div class="big">₩34,120</div><div class="sub">세금 0 · 카드 수수료 412 · 환율 1,380</div></div>
+        <div class="r"><span class="k">90일 위치</span><span class="v ok">하위 18%</span></div>
+        <div class="r"><span class="k">면세 한도까지</span><span class="v">$126.10 남음</span></div>
+        <div class="g">항목별 보기 ▾</div>
+      </div></div>
+      <div class="cap"><b>배지 하나</b>페이지를 열면 그냥 떠 있다. 누르면 ③.</div></div>
+
+    <div class="step"><div class="n">③ 항목별 영수증</div>
+      <div class="mini"><div class="bar"><i></i><i></i><i></i></div><div class="scr">
+        <div class="ttl">₩34,120은 이렇게 나왔다</div>
+        <div class="r"><span class="k">상품가 (쿠폰 -$2 반영)</span><span class="v">$23.90</span></div>
+        <div class="r"><span class="k">배송비</span><span class="v">$0</span></div>
+        <div class="r"><span class="k">관세·부가세</span><span class="v ok">면세</span></div>
+        <div class="r"><span class="k">환율(고시)</span><span class="v">1,380</span></div>
+        <div class="r"><span class="k">카드 수수료 1.25%</span><span class="v">₩412</span></div>
+        <div class="sub">세율은 '이어폰 → 무선통신기기 8%'로 분류했지만 면세 구간이라 0. 분류가 틀렸으면 눌러서 고치기.</div>
+      </div></div>
+      <div class="cap"><b>근거를 숨기지 않는다</b>항목·세율·환율 출처까지. 틀리면 고치는 탭이 라벨.</div></div>
+
+    <div class="step"><div class="n">④ DCC 함정</div>
+      <div class="mini"><div class="bar"><i></i><i></i><i></i></div><div class="scr">
+        <div class="ttl">결제 화면</div>
+        <div class="sub">알리가 "₩33,990 원화 결제"를 기본으로 보여 줌</div>
+        <div class="pb warn"><div class="lbl">주의</div><div><b>원화로 결제하면 ₩1,900 더 낸다.</b></div><div class="sub">원화 결제(DCC) 환율은 3~8% 불리. 달러를 고르세요.</div></div>
+        <div class="r"><span class="k">USD 결제 예상</span><span class="v ok">₩34,120</span></div>
+        <div class="r"><span class="k">KRW 결제 예상</span><span class="v bad">₩36,020</span></div>
+      </div></div>
+      <div class="cap"><b>결제 직전 한 번 더</b>가장 많이 새는 돈이 여기서 잡힌다.</div></div>
+
+    <div class="step"><div class="n">⑤ 다른 데는?</div>
+      <div class="mini"><div class="bar"><i></i><i></i><i></i></div><div class="scr">
+        <div class="ttl">같은 이어폰, 최종가 기준</div>
+        <div class="r"><span class="k">알리 (지금 페이지)</span><span class="v">₩34,120 · 12일</span></div>
+        <div class="r"><span class="k">테무</span><span class="v">₩36,800 · 9일</span></div>
+        <div class="r"><span class="k">쿠팡</span><span class="v">₩39,900 · 내일</span></div>
+        <div class="r"><span class="k">네이버 최저</span><span class="v">₩35,400 · 3일</span></div>
+        <div class="sub">동일품 확신 92%. "다른 물건이에요"를 누르면 모델이 배운다.</div>
+        <div class="g">쿠팡에서 보기</div>
+      </div></div>
+      <div class="cap"><b>가격과 날짜를 같이</b>5,780원 싸고 11일 늦다. 결정은 사용자가.</div></div>
+
+    <div class="step"><div class="n">⑥ 합산과세 경고</div>
+      <div class="mini"><div class="bar"><i></i><i></i><i></i></div><div class="scr">
+        <div class="ttl">오늘 이미 $140 주문했다</div>
+        <div class="pb warn"><div class="lbl">합산</div><div><b>이 주문까지 합치면 $163.90 → 전체 과세</b></div><div class="sub">같은 날 입항하면 합산된다. 내일 주문하면 면세.</div></div>
+        <div class="r"><span class="k">오늘 주문 시 세금</span><span class="v bad">₩24,300</span></div>
+        <div class="r"><span class="k">내일 주문 시 세금</span><span class="v ok">₩0</span></div>
+        <div class="sub">친구가 켜 두면 "같이 사면 배송비 절약"도 뜬다.</div>
+      </div></div>
+      <div class="cap"><b>혼자서도, 친구면 더</b>내 주문 이력으로 혼자 완결. 친구는 선택.</div></div>
+
+    <div class="step"><div class="n">⑦ 떨어지면 알림</div>
+      <div class="mini"><div class="bar"><i></i><i></i><i></i></div><div class="scr">
+        <div class="ttl">지켜보는 중 · 3개</div>
+        <div class="r"><span class="k">이어폰</span><span class="v">하락 확률 61%</span></div>
+        <div class="r"><span class="k">기계식 키보드</span><span class="v">지금이 최저</span></div>
+        <div class="r"><span class="k">러닝화</span><span class="v">11/11 세일 예상</span></div>
+        <div class="sub">위시리스트에 담은 것만. 데스크톱 알림 하루 1회.</div>
+        <div class="lbl">지난 90일</div>
+        <div class="bar2"><i style="width:35%"></i></div>
+      </div></div>
+      <div class="cap"><b>기다릴지 살지</b>하락 확률은 관측 가격이 라벨인 모델.</div></div>
+
+    <div class="step"><div class="n">⑧ 규칙이 바뀌면</div>
+      <div class="mini"><div class="bar"><i></i><i></i><i></i></div><div class="scr">
+        <div class="ttl">면세 한도 변경 감지</div>
+        <div class="pb warn"><div class="lbl">공지</div><div><b>소액면세 기준이 바뀌었습니다.</b></div><div class="sub">계산기에 반영됨. 출처: 관세청 고시</div></div>
+        <div class="sub">정부 TF가 150달러 하향을 검토 중이라 바뀔 수 있다. 바뀌면 그날 계산이 달라져야 한다.</div>
+        <div class="r"><span class="k">고시환율 갱신</span><span class="v">매주 월</span></div>
+      </div></div>
+      <div class="cap"><b>규칙 감시가 제품의 일부</b>세법이 바뀌어도 사용자는 할 일이 없다.</div></div>
+
+  </div>
+  <div class="note">하루 루프: ② 페이지 열기 → 배지 → (③ 근거 / ⑤ 비교 / ④ 결제 경고) → 사거나 ⑦에 담기 → 알림. 사용자 행동은 전부 "보던 페이지에서 보기"다. 쇼핑 습관 위에 얹히므로 따로 켤 이유를 만들 필요가 없다.</div>
+
+  <h2>3. 직접 눌러 보기</h2>
+  <div class="win">
+    <div class="bar"><i></i><i></i><i></i><span class="url">aliexpress.com/item/…  · 확장 배지</span></div>
+    <div class="body">
+      <div class="pane">
+        <h4>상품 고르기</h4>
+        <div class="choices" role="group" aria-label="샘플 상품">
+          <button data-p="0" aria-pressed="true" id="p0">알리 · 이어폰 $23.9</button>
+          <button data-p="1" aria-pressed="false" id="p1">테무 · 패딩 $68</button>
+          <button data-p="2" aria-pressed="false" id="p2">아마존 · 키보드 $149</button>
+        </div>
+        <div class="prod" id="prod"></div>
+        <div class="tog">결제 통화
+          <button data-c="usd" aria-pressed="true" id="c0">현지 통화</button>
+          <button data-c="krw" aria-pressed="false" id="c1">원화(DCC)</button>
+        </div>
+        <div class="tog">오늘 다른 주문
+          <button data-o="0" aria-pressed="true" id="o0">없음</button>
+          <button data-o="140" aria-pressed="false" id="o1">$140 있음</button>
+        </div>
+        <div class="toast" id="toast"></div>
+      </div>
+      <div class="pane">
+        <h4>진짜값</h4>
+        <div class="badge"><div class="big" id="final">—</div><div class="lbl" id="finallbl">원화 최종 예상가</div></div>
+        <div class="rows" id="rows"></div>
+        <div class="alertbox" id="alert" hidden></div>
+        <h4 style="margin-top:12px">같은 상품, 최종가 기준</h4>
+        <div class="cmp" id="cmp"></div>
+      </div>
+    </div>
+  </div>
+  <ul class="demo-help" style="margin-top:12px">
+    <li><b>통화</b>를 원화로 바꾸면 최종가가 오른다. 페이지가 기본으로 보여 주는 "원화 결제"가 왜 함정인지 숫자로 보인다.</li>
+    <li><b>오늘 다른 주문 $140</b>을 켜면 이어폰은 면세에서 과세로 넘어간다. 합산과세는 직구에서 가장 자주 당하는 실수다.</li>
+    <li>비교 막대는 <b>최종가</b>로 그린다. 상품가만 보면 알리가 늘 싸 보인다.</li>
+  </ul>
+  <div class="note">세율(이어폰 8%, 의류 13%, 키보드 8%)·환율(1,380)·수수료(1.25%)·배송비는 예시다. 실제 서비스는 관세청 고시환율과 품목분류 사례를 매주 받아 쓰고, 세율 분류가 틀렸을 때 사용자가 고치는 탭이 모델의 라벨이 된다.</div>
+
+  <h2>4. 우리가 정한 조건에 어떻게 맞는가</h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>조건</th><th>어떻게 충족하나</th><th>상태</th></tr></thead>
+    <tbody>
+      <tr><td>빠른 출시, 긴 유저 테스트</td><td>2주차에 "알리 페이지 리더 + 진짜값 배지"만으로 출시. 혼자서도 바로 쓸모가 있다. 가격 이력·비교는 쓰는 사람이 늘수록 좋아진다.</td><td><span class="pill ok">충족</span></td></tr>
+      <tr><td>DevOps / MLOps 지속</td><td>4개 사이트 DOM 변경 감시와 어댑터 자동 회귀 테스트, 고시환율·관세 규칙 주간 수집, 동일품 매칭 모델과 하락 예측 모델의 주 1회 재학습 → 섀도 → 카나리, 매칭 정확도 게이트.</td><td><span class="pill ok">충족</span></td></tr>
+      <tr><td>버티컬 슬라이스, 1인 1슬라이스</td><td>페이지 리더 / 진짜값 규칙 엔진 / 가격 이력·하락 예측 / 동일품 비교 / 알림·위시리스트·합산 / 수집 품질·규칙 감시. 각자 데이터·모델·화면이 다르다(5장). 코어 계약은 "상품 관측 JSON" 하나.</td><td><span class="pill ok">충족</span></td></tr>
+      <tr><td>포트폴리오</td><td>사이트 어댑터와 변경 감지, 규칙 엔진과 세법 데이터, 크라우드 수집·중복 제거, 상품 매칭 모델, 시계열 예측, 공식 API 통합. 여섯 명의 이야기가 다 다르다.</td><td><span class="pill ok">충족</span></td></tr>
+      <tr><td>실제로 원하고 자주 씀</td><td>알리 MAU 약 900만·테무 약 848만(와이즈앱 2025, 조사원 확인). 제안자 본인의 고충이고, "이게 최종가인가"는 직구하는 모두의 질문이다.</td><td><span class="pill ok">충족</span></td></tr>
+      <tr><td>딱딱하지 않음</td><td>"원화로 결제하면 1,900원 더 낸다", "내일 주문하면 세금 0"처럼 결과가 돈으로 바로 보인다. 교육이 아니라 영수증이다.</td><td><span class="pill ok">충족</span></td></tr>
+      <tr><td>모델을 직접 학습</td><td>① 동일품 판별(제목·이미지·스펙 → 같은 물건인가, 라벨: "다른 물건이에요" 탭·비교 클릭 뒤 이탈) ② 품목→세율 분류(라벨: 사용자 교정·관세청 사례) ③ 7일 내 하락 확률(라벨: 나중에 관측된 가격). 외부 LLM 없음.</td><td><span class="pill ok">충족</span></td></tr>
+      <tr><td>혼자 완결, 친구면 더 좋음</td><td>혼자서도 계산·이력·비교가 된다. 친구가 켜 두면 합산과세 경고와 "같이 사면 배송비 절약"이 붙는다. 친구가 할 일은 없다.</td><td><span class="pill ok">충족</span></td></tr>
+      <tr><td>콘텐츠를 만들 필요 없음</td><td>가격은 사용자들이 보고, 규칙은 관세청이 바꾸고, 환율은 매주 고시된다.</td><td><span class="pill ok">충족</span></td></tr>
+      <tr><td>지속 사용 설득력</td><td>직구는 반복 행동이고 배지는 그 위에 얹힌다. 따로 켤 이유가 필요 없다. 쓰는 사람이 늘수록 이력·매칭이 좋아져 떠날 이유가 준다.</td><td><span class="pill ok">충족</span></td></tr>
+      <tr><td>사용자 입력 0</td><td>설치 때 카드 종류 하나. 그 뒤 입력 없음. 교정 탭은 선택.</td><td><span class="pill ok">충족</span></td></tr>
+      <tr><td>비용 0~소액, 법·안전</td><td>서버 크롤링 없음(사용자가 연 페이지만 확장이 읽음), 국내 가격은 네이버 쇼핑 공식 API(일 25,000건), 제휴 수익 없음. 알리·테무·쿠팡 약관의 "자동 수집" 조항에 확장 읽기가 걸리는지는 법률 확인 필요. 면세 한도 하향 검토 중.</td><td><span class="pill warn">약관 확인 · 규칙 변동</span></td></tr>
+    </tbody>
+  </table></div>
+
+  <h2>5. 슬라이스 6개와 각자가 얻는 것</h2>
+  <p>공통 코어는 1주차에 여섯 명이 같이 만들고 "상품 관측 JSON"(사이트·상품 식별자·가격·통화·배송·카테고리·시각) 계약을 고정한다. 그 뒤 각자 하나씩 맡아 FE·BE·인프라·AI를 끝까지 가져간다.</p>
+  <div class="core"><b>공통 코어(1주차, 전원)</b><span>익명 설치 식별자·설정</span><span>상품 관측 JSON 계약</span><span>확장 셸(배지 슬롯)</span><span>이벤트 수집</span><span>알림 발송 공통부</span></div>
+  <div class="grid2">
+    <div class="card"><div class="who">슬라이스 A</div><h3>페이지 리더</h3>
+      <dl><dt>FE</dt><dd>알리·테무·아마존·쿠팡 어댑터, 배지 삽입, 결제 화면 통화 감지</dd><dt>BE</dt><dd>관측 수신 API, 정규화(통화·단위·옵션)</dd><dt>인프라</dt><dd>어댑터 회귀 테스트(저장된 페이지 스냅샷), 깨짐 알림</dd><dt>AI</dt><dd>페이지 요소 위치가 바뀌어도 가격·배송비를 찾는 추출 모델(라벨: 어댑터 성공 기록)</dd></dl>
+      <p class="meta">면접 한 줄: 사이트 4곳의 잦은 DOM 변경에도 추출이 깨지지 않게 스냅샷 회귀 테스트와 학습형 추출기를 붙였다.</p></div>
+    <div class="card"><div class="who">슬라이스 B</div><h3>진짜값 규칙 엔진</h3>
+      <dl><dt>FE</dt><dd>항목별 영수증, DCC 경고, 면세 한도 게이지</dd><dt>BE</dt><dd>관세·부가세·면세·합산 규칙, 카드 수수료표, 고시환율 수집</dd><dt>인프라</dt><dd>규칙 버전 관리, 주간 환율 배치, 규칙 변경 감시</dd><dt>AI</dt><dd>품목 → 세율(HS 대분류) 분류기(라벨: 사용자 교정·관세청 사례)</dd></dl>
+      <p class="meta">면접 한 줄: 세법·환율·수수료를 버전 있는 규칙 엔진으로 만들고, 품목 분류기로 "이 물건 세율이 몇 %인가"를 자동으로 맞혔다.</p></div>
+    <div class="card"><div class="who">슬라이스 C</div><h3>가격 이력·하락 예측</h3>
+      <dl><dt>FE</dt><dd>90일 위치 배지, 가격 그래프</dd><dt>BE</dt><dd>크라우드 관측 집계, 중복 제거, 상품 식별자 정합</dd><dt>인프라</dt><dd>시계열 저장, 집계 배치</dd><dt>AI</dt><dd>7일 내 하락 확률(라벨: 미래 관측 가격, 자동)</dd></dl>
+      <p class="meta">면접 한 줄: 수천 명의 열람 관측을 익명 집계해 가격 이력을 만들고, 미래 관측을 라벨로 쓰는 하락 예측을 주간 재학습했다.</p></div>
+    <div class="card"><div class="who">슬라이스 D</div><h3>동일품 비교</h3>
+      <dl><dt>FE</dt><dd>최종가 비교 카드, "다른 물건이에요" 탭</dd><dt>BE</dt><dd>네이버 쇼핑 API 연동, 직구 간 후보 검색, 최종가 환산 호출</dd><dt>인프라</dt><dd>API 쿼터 관리, 후보 캐시</dd><dt>AI</dt><dd>동일품 판별 모델(제목·이미지·스펙 임베딩, 라벨: 교정 탭·클릭 뒤 이탈)</dd></dl>
+      <p class="meta">면접 한 줄: 사이트가 다른 상품을 같은 물건으로 묶는 매칭 모델을 사용자 행동 라벨로 학습하고 정확도 게이트로 배포했다.</p></div>
+    <div class="card"><div class="who">슬라이스 E</div><h3>알림·위시리스트·합산</h3>
+      <dl><dt>FE</dt><dd>지켜보기 목록, 데스크톱 알림, 합산과세 경고, 친구 묶음</dd><dt>BE</dt><dd>내 주문 이력(로컬), 합산 규칙, 친구 그래프(선택)</dd><dt>인프라</dt><dd>알림 스케줄러, 하루 1회 상한</dd><dt>AI</dt><dd>알림 시각·빈도 밴딧(라벨: 클릭·끄기)</dd></dl>
+      <p class="meta">면접 한 줄: 합산과세처럼 날짜가 돈이 되는 규칙을 알림으로 바꾸고, 알림 피로를 밴딧으로 관리했다.</p></div>
+    <div class="card"><div class="who">슬라이스 F</div><h3>수집 품질·규칙 감시·MLOps</h3>
+      <dl><dt>FE</dt><dd>상태 페이지(어댑터 건강, 규칙 버전, 모델 정확도)</dd><dt>BE</dt><dd>관측 이상 탐지, 규칙 변경 수집(관세청 공지)</dd><dt>인프라</dt><dd>모델 레지스트리, 섀도·카나리·롤백, 드리프트 감시</dd><dt>AI</dt><dd>이상 관측(조작·오추출) 탐지, 능동 학습 샘플링</dd></dl>
+      <p class="meta">면접 한 줄: 데이터 품질과 세법 변경을 감시하는 운영 층을 만들어 "틀린 최종가"가 사용자에게 나가기 전에 막았다.</p></div>
+  </div>
+  <div class="note">A(리더)가 모든 슬라이스의 입력이라 병목이 될 수 있다. 1주차에 알리 어댑터 하나와 관측 JSON 계약을 먼저 넘기고, 나머지 사이트는 A가 순차로 늘린다. B는 규칙만으로 먼저 출시하고 분류기는 교정 라벨이 쌓인 뒤 붙인다.</div>
+
+  <h2>6. 이 주제의 이점</h2>
+  <ul>
+    <li><b>제안자의 진짜 고충이다.</b> 첫 사용자가 우리이고, 쓸 때마다 돈이 보여서 피드백이 빠르다.</li>
+    <li><b>습관 위에 얹힌다.</b> 직구하는 사람은 이미 매일 그 페이지를 연다. 서비스를 켤 이유를 만들 필요가 없다.</li>
+    <li><b>라벨이 공짜고 세 모델이 서로 다르다.</b> 매칭(분류), 세율(분류), 하락(시계열). 포폴에서 겹치지 않는다.</li>
+    <li><b>빈틈이 선명하다.</b> AliPrice는 알리 가격 이력만, 쿠팡 쇼핑 도우미는 5천 명에 고장 리뷰, 네이버 가격추적기는 국내만(조사원 확인). "한국 사용자의 최종가 + 직구 간 + 국내 비교"는 못 찾았다(미확인).</li>
+    <li><b>슬라이스가 진짜 독립적이다.</b> 추출·규칙·시계열·매칭·알림·운영. 데이터 소스와 모델이 다 다르다.</li>
+    <li><b>확장이 자연스럽다.</b> 큐텐·아이허브·일본 아마존을 어댑터로 추가하면 된다.</li>
+  </ul>
+
+  <h2>7. 솔직한 위험과 대응</h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>위험</th><th>왜 위험한가</th><th>대응</th></tr></thead>
+    <tbody>
+      <tr><td>"최종가"가 틀림</td><td>통관에서 세금이 더 나오면 신뢰가 끝난다.</td><td>"예상가"로 부르고 항목·세율·환율 출처를 항상 펼쳐 보인다. 세율 분류 확신이 낮으면 범위(₩34,120~36,900)로 보여 준다. 실제 청구액이 달랐다는 신고 탭을 두고 그걸로 규칙·분류기를 고친다.</td></tr>
+      <tr><td>사이트 약관</td><td>알리·테무·쿠팡은 자동 수집을 금지한다.</td><td>서버 크롤링은 하지 않는다. 사용자가 직접 연 페이지를 사용자 동의하에 확장이 읽는 구조로 한정하고, 착수 전에 약관 원문과 법률 자문을 확인한다. 국내 가격은 공식 API만.</td></tr>
+      <tr><td>DOM 변경으로 깨짐</td><td>기존 확장이 실제로 그렇게 죽었다(쿠팡 쇼핑 도우미 고장 리뷰).</td><td>슬라이스 A의 스냅샷 회귀 테스트와 F의 깨짐 알림. 깨진 사이트는 배지를 숨기고 "점검 중"을 띄운다.</td></tr>
+      <tr><td>동일품 매칭 오탐</td><td>다른 물건을 같은 물건이라 하면 비교가 거짓이 된다.</td><td>확신도 높을 때만 "같은 상품", 아니면 "유사 상품"으로 표시. 교정 탭이 라벨이 되어 매주 좋아진다.</td></tr>
+      <tr><td>면세 규칙 변경</td><td>정부 TF가 150달러 하향을 검토 중이다[1].</td><td>규칙은 버전으로 관리하고 F가 관세청 공지를 감시한다. 바뀌면 그날 반영되고 ⑧처럼 사용자에게 알린다.</td></tr>
+      <tr><td>초기 가격 이력 부족</td><td>사용자가 적으면 "90일 위치"가 비어 보인다.</td><td>초기엔 "관측 N건"을 정직하게 표시하고, 최종가 계산과 비교는 이력 없이도 돌아간다.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h2>8. 결정 전에 하루 만에 해 볼 수 있는 것</h2>
+  <p>코드 없이 검증한다. 동기 10명의 최근 직구 주문(알리·테무·아마존)을 받아 상품가·배송비·세금·카드 수수료를 손으로 더해 "실제 낸 돈"과 비교하고, 같은 물건의 쿠팡·네이버 최저가를 찾아 표로 만든다. <b>"원화 결제로 손해 본 사람"과 "국내가 더 쌌던 건"의 비율</b>이 나오면 그게 첫 슬라이드다. 셋 중 하나라도 30%를 넘으면 수요는 충분하다(기준은 제안).</p>
+
+  <h2>9. 근거</h2>
+  <div class="src">
+    <ol>
+      <li>소액면세 기준 150달러(미국발 200달러), 정부 TF가 하향 검토: <a href="https://biz.sbs.co.kr/amp/article/20000171724">SBS Biz</a></li>
+      <li>원화 결제(DCC) 시 3~8% 추가 비용, 이중 환전 구조: <a href="https://beancount.io/ko/blog/2026/07/10/dynamic-currency-conversion-hidden-checkout-fee-guide">beancount.io (2026-07)</a></li>
+      <li>알리가 쿠팡보다 비싼 품목 사례: <a href="https://economist.co.kr/article/view/ecn202502190044">이코노미스트 (2025-02)</a></li>
+      <li>알리 MAU 약 900만·테무 약 848만(와이즈앱 2025, 조사원 확인). AliPrice 확장(알리 가격 이력, 사용자 수 미확인), 쿠팡 쇼핑 도우미 약 5천 명·고장 리뷰(조사원 확인).</li>
+      <li>네이버 쇼핑 검색 API: 공식, 일 25,000건(조사원 확인). 쿠팡 파트너스 API의 가격 필드는 <span class="pill warn">미확인</span>.</li>
+    </ol>
+    <p>데모와 플로우의 가격·세율·환율·수수료는 예시다. 관세율은 품목마다 다르며 실제 서비스는 관세청 품목분류와 고시환율을 쓴다. 약관 적용 범위는 법률 확인 전까지 <span class="pill warn">미확인</span>.</p>
+  </div>
+</div>
+
+<script>
+(function(){
+  var FX=1380, FEE=0.0125, DCC=0.055;
+  var P=[
+    {site:'알리',name:'무선 이어폰 (쿠폰 -$2 반영)',price:23.90,ship:0,cat:'무선통신기기',rate:0.08,us:false,days:12,
+     cmp:[['테무',36800,'9일'],['쿠팡',39900,'내일'],['네이버 최저',35400,'3일']]},
+    {site:'테무',name:'경량 패딩',price:68.00,ship:3.50,cat:'의류',rate:0.13,us:false,days:9,
+     cmp:[['알리',103000,'14일'],['쿠팡',89000,'내일'],['네이버 최저',84500,'2일']]},
+    {site:'아마존(미국)',name:'기계식 키보드',price:149.00,ship:14.90,cat:'컴퓨터 주변기기',rate:0.08,us:true,days:7,
+     cmp:[['알리',198000,'15일'],['쿠팡 로켓직구',232000,'4일'],['네이버 최저',215000,'3일']]}
+  ];
+  var pi=0, cur='usd', other=0;
+  var prod=document.getElementById('prod'), rows=document.getElementById('rows'), fin=document.getElementById('final'), finl=document.getElementById('finallbl'), al=document.getElementById('alert'), cmp=document.getElementById('cmp'), toast=document.getElementById('toast');
+  function won(n){return '₩'+Math.round(n).toLocaleString('ko-KR')}
+  function calc(){
+    var p=P[pi]; var limit=p.us?200:150; var goods=p.price; var base=p.price+p.ship; var total=goods+other;
+    var taxable = total>limit;
+    var krwBase=base*FX;
+    var duty=0, vat=0;
+    if(taxable){ duty=krwBase*p.rate; vat=(krwBase+duty)*0.10; }
+    var fee=krwBase*FEE;
+    var dcc= cur==='krw' ? krwBase*DCC : 0;
+    var final=krwBase+duty+vat+fee+dcc;
+    prod.innerHTML='<div class="img">'+p.site+'</div><div><div class="t">'+p.name+'</div><div class="p">$'+p.price.toFixed(2)+'</div><div class="s">페이지 표시: 배송 '+(p.ship?'$'+p.ship.toFixed(2):'무료')+' · 도착 약 '+p.days+'</div></div>';
+    fin.textContent=won(final);
+    finl.textContent='원화 최종 예상가 · '+(taxable?'과세':'면세')+(other?' (오늘 다른 주문 합산)':'');
+    var r='';
+    r+='<div><span class="k">상품가</span><span>$'+p.price.toFixed(2)+'</span></div>';
+    r+='<div><span class="k">배송비</span><span>$'+p.ship.toFixed(2)+'</span></div>';
+    r+='<div><span class="k">환율(고시, 예시)</span><span>'+FX.toLocaleString()+'</span></div>';
+    r+='<div><span class="k">면세 한도 '+(p.us?'$200(미국발)':'$150')+'</span><span class="'+(taxable?'bad':'ok')+'">'+(taxable?'초과 $'+(total-limit).toFixed(2):'남음 $'+(limit-total).toFixed(2))+'</span></div>';
+    r+='<div><span class="k">관세 ('+p.cat+' '+Math.round(p.rate*100)+'%, 예시)</span><span class="'+(duty?'bad':'ok')+'">'+won(duty)+'</span></div>';
+    r+='<div><span class="k">부가세 10%</span><span class="'+(vat?'bad':'ok')+'">'+won(vat)+'</span></div>';
+    r+='<div><span class="k">카드 해외 수수료 1.25%</span><span>'+won(fee)+'</span></div>';
+    if(dcc) r+='<div><span class="k warn">원화 결제(DCC) 추가 약 5.5%</span><span class="bad">'+won(dcc)+'</span></div>';
+    rows.innerHTML=r;
+    if(cur==='krw'){ al.hidden=false; al.innerHTML='<b>원화로 결제하면 '+won(dcc)+' 더 낸다.</b> 결제 화면에서 현지 통화(USD)를 고르면 사라진다.'; }
+    else if(taxable && other){ al.hidden=false; al.innerHTML='<b>오늘 다른 주문 $'+other+'과 합산돼 전체 과세.</b> 내일 주문하면 세금 '+won(duty+vat)+'이 0이 된다(같은 날 입항 기준, 예시).'; }
+    else if(taxable){ al.hidden=false; al.innerHTML='<b>면세 한도 초과.</b> 상품가 기준 $'+(total-limit).toFixed(2)+' 넘었다. 세금 '+won(duty+vat)+'이 붙는다.'; }
+    else { al.hidden=true; }
+    var list=[[p.site+' (지금)',final,p.days+'일']].concat(p.cmp.map(function(c){return [c[0],c[1],c[2]]}));
+    var max=Math.max.apply(null,list.map(function(x){return x[1]})); var min=Math.min.apply(null,list.map(function(x){return x[1]}));
+    cmp.innerHTML=list.map(function(x){return '<div class="r'+(x[1]===min?' best':'')+'"><span class="n">'+x[0]+'</span><div class="bar2"><i style="width:'+Math.round(x[1]/max*100)+'%"></i></div><span class="v">'+won(x[1])+'</span><span class="s">도착 '+x[2]+(x[1]===min?' · 최종가 최저':'')+'</span></div>'}).join('');
+    toast.textContent='';
+  }
+  document.querySelectorAll('.choices button').forEach(function(b){b.addEventListener('click',function(){pi=+b.dataset.p;document.querySelectorAll('.choices button').forEach(function(x){x.setAttribute('aria-pressed',x===b?'true':'false')});calc();})});
+  document.querySelectorAll('[data-c]').forEach(function(b){b.addEventListener('click',function(){cur=b.dataset.c;document.querySelectorAll('[data-c]').forEach(function(x){x.setAttribute('aria-pressed',x===b?'true':'false')});calc();})});
+  document.querySelectorAll('[data-o]').forEach(function(b){b.addEventListener('click',function(){other=+b.dataset.o;document.querySelectorAll('[data-o]').forEach(function(x){x.setAttribute('aria-pressed',x===b?'true':'false')});calc();})});
+  calc();
+})();
+</script>
+
+</body>
+</html>

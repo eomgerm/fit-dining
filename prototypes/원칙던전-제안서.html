@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>원칙 던전 제안서</title>
+</head>
+<body>
+<title>원칙 던전</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* 레이아웃: 한 열 설득 문서 + PC 브라우저 창 목업. 던전답게 어두운 패널, 횃불색 강조 하나. */
+:root{
+  --bg:#f4f2ee; --surface:#ffffff; --surface-2:#eae6de; --fg:#1d1a16; --muted:#6a6358;
+  --line:#d8d2c6; --accent:#c2410c; --accent-ink:#ffffff; --ok:#1e9e62; --warn:#b7791f; --bad:#c9402f;
+  --win:#14110e; --win-fg:#efe9df; --panel:#211c17; --panel-2:#2a241d; --torch:#f59e0b;
+  --display:"IBM Plex Sans KR",system-ui,sans-serif; --body:"Noto Sans KR",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#141210; --surface:#1c1915; --surface-2:#26221c; --fg:#efe9df; --muted:#a39a8c;
+  --line:#352f27; --accent:#f97316; --accent-ink:#141210; --ok:#3ccf8a; --warn:#e3b341; --bad:#ff6b5c;
+  --win:#0b0907; --win-fg:#efe9df; --panel:#1a1511; --panel-2:#241d17; --torch:#f59e0b; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#141210; --surface:#1c1915; --surface-2:#26221c; --fg:#efe9df; --muted:#a39a8c;
+  --line:#352f27; --accent:#f97316; --accent-ink:#141210; --ok:#3ccf8a; --warn:#e3b341; --bad:#ff6b5c;
+  --win:#0b0907; --win-fg:#efe9df; --panel:#1a1511; --panel-2:#241d17; --torch:#f59e0b; color-scheme:dark }
+
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:16px;line-height:1.65;margin:0}
+.wrap{max-width:960px;margin:0 auto;padding-block:32px 80px;padding-inline:16px}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;line-height:1.25;margin:0}
+h1{font-size:clamp(28px,5vw,40px);font-weight:700}
+h2{font-size:22px;font-weight:700;margin-top:56px;padding-top:16px;border-top:2px solid var(--fg)}
+h3{font-size:17px;font-weight:600;margin-top:24px}
+p{margin:12px 0;max-width:68ch}
+.eyebrow{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.lead{font-size:18px;max-width:62ch}
+.meta{color:var(--muted);font-size:14px}
+.pill{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--surface-2);color:var(--fg);vertical-align:middle}
+.pill.ok{background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok)}
+.pill.warn{background:color-mix(in srgb,var(--warn) 20%,transparent);color:var(--warn)}
+table{border-collapse:collapse;width:100%;font-size:14.5px}
+.tablewrap{overflow-x:auto;margin-top:12px}
+th,td{text-align:left;vertical-align:top;padding:10px 10px;border-bottom:1px solid var(--line)}
+th{font-weight:600;color:var(--muted);font-size:13px;white-space:nowrap}
+td:first-child{font-weight:600;white-space:nowrap}
+ul{padding-left:20px;margin:8px 0}
+li{margin:4px 0}
+.note{background:var(--surface-2);border-radius:10px;padding:14px 16px;font-size:14.5px;margin-top:16px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:12px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;min-width:0}
+.card h3{margin-top:0}
+.card .who{font-size:12px;color:var(--muted);font-weight:600;letter-spacing:.04em}
+.card dl{display:grid;grid-template-columns:52px 1fr;gap:4px 10px;margin:10px 0 0;font-size:14px}
+.card dt{color:var(--muted);font-weight:600}
+.card dd{margin:0}
+.core{background:var(--fg);color:var(--bg);border-radius:12px;padding:12px 16px;margin-top:12px;font-size:14.5px;display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center}
+.core b{font-family:var(--display)}
+.src{font-size:13.5px;color:var(--muted)}
+.src ol{padding-left:20px}
+.src a{color:var(--muted)}
+a{color:var(--fg)}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+[hidden]{display:none!important}
+code{font-family:var(--mono);font-size:.92em}
+
+/* 브라우저 창 목업(PC) */
+.win{background:var(--win);color:var(--win-fg);border-radius:12px;overflow:hidden;border:1px solid #2b241c;box-shadow:0 16px 40px rgba(0,0,0,.25)}
+.win .bar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:#1b1612;font-family:var(--mono);font-size:11px;color:#a39a8c}
+.win .bar i{width:10px;height:10px;border-radius:50%;background:#3a322a;display:inline-block}
+.win .bar .url{margin-left:6px;background:#0f0c09;border-radius:6px;padding:3px 10px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.win .body{padding:14px;display:grid;gap:10px}
+.demo .win .body{grid-template-columns:minmax(0,1fr) minmax(0,1.2fr)}
+@media (max-width:700px){.demo .win .body{grid-template-columns:1fr}}
+.pane{background:var(--panel);border:1px solid #2b241c;border-radius:10px;padding:12px;min-width:0}
+.pane h4{font-family:var(--display);font-size:13px;margin:0 0 8px;color:#d9cfbf;letter-spacing:.02em}
+.rule{font-family:var(--mono);font-size:12.5px;line-height:1.55;background:#0f0c09;border-radius:8px;padding:10px;min-height:92px;color:#efe9df;white-space:pre-wrap}
+.cnt{font-family:var(--mono);font-size:11px;color:#a39a8c;text-align:right}
+.choices{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.choices button,.mod button{background:#2a241d;color:#efe9df;border:1px solid #3a322a;border-radius:999px;padding:4px 10px;font-size:12px;cursor:pointer}
+.choices button[aria-pressed="true"],.mod button[aria-pressed="true"]{background:var(--torch);color:#14110e;border-color:var(--torch)}
+.run{background:var(--accent);color:var(--accent-ink);border:0;border-radius:8px;padding:9px 12px;font-family:var(--display);font-weight:700;font-size:13px;cursor:pointer;width:100%}
+.log{font-family:var(--mono);font-size:12px;line-height:1.6;background:#0f0c09;border-radius:8px;padding:10px;height:200px;overflow:auto;color:#d9cfbf}
+.log .f{color:#a39a8c}
+.log .bad{color:#ff8a65}.log .ok{color:#86efac}.log .ev{color:#fcd34d}
+.res{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;align-items:center;background:var(--panel-2);border-radius:10px;padding:10px 12px;margin-top:8px}
+.res .big{font-family:var(--display);font-size:30px;font-weight:700;line-height:1;color:var(--torch);font-variant-numeric:tabular-nums}
+.res .lbl{font-size:12px;color:#a39a8c}
+.res .ttl{font-family:var(--display);font-weight:700;font-size:14px}
+.rank{font-size:12px;display:grid;gap:4px;margin-top:8px}
+.rank div{display:flex;justify-content:space-between;background:#0f0c09;border-radius:6px;padding:5px 8px}
+.rank .me{outline:1px solid var(--torch)}
+.mod{display:flex;gap:6px;align-items:center;font-size:12px;color:#a39a8c;flex-wrap:wrap}
+.toast{font-size:12px;color:#86efac;min-height:18px;margin-top:6px}
+.demo-help{font-size:14px}
+.demo-help li{margin:6px 0}
+
+/* 플로우 미니 창 */
+.flow{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:18px 14px;margin-top:16px}
+.step{min-width:0}
+.step .cap{font-size:13px;margin-top:8px;line-height:1.45}
+.step .cap b{font-family:var(--display);display:block;font-size:13px}
+.step .n{font-family:var(--display);font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.06em}
+.mini{background:var(--win);color:var(--win-fg);border-radius:10px;overflow:hidden;border:1px solid #2b241c}
+.mini .bar{display:flex;gap:5px;padding:6px 8px;background:#1b1612}
+.mini .bar i{width:7px;height:7px;border-radius:50%;background:#3a322a;display:inline-block}
+.mini .scr{padding:9px;min-height:210px;display:flex;flex-direction:column;gap:5px;font-size:10.5px;line-height:1.4}
+.mini .ttl{font-family:var(--display);font-weight:700;font-size:12px}
+.mini .sub{color:#a39a8c}
+.mini .r{background:#0f0c09;border:1px solid #2b241c;border-radius:6px;padding:5px 7px;display:flex;justify-content:space-between;gap:6px;align-items:center}
+.mini .r .k{font-weight:600}
+.mini .r .v{font-family:var(--mono);font-weight:600;color:#d9cfbf;white-space:nowrap}
+.mini .b{background:var(--accent);color:var(--accent-ink);border-radius:6px;padding:6px;text-align:center;font-family:var(--display);font-weight:700;font-size:11px;margin-top:auto}
+.mini .g{background:#2a241d;border:1px solid #3a322a;color:#d9cfbf;border-radius:6px;padding:5px;text-align:center}
+.mini .m{font-family:var(--mono);font-size:10px;background:#0f0c09;border-radius:6px;padding:6px 7px;color:#efe9df;white-space:pre-wrap}
+.mini .big{font-family:var(--display);font-size:22px;font-weight:700;line-height:1;color:var(--torch)}
+.mini .bar2{height:6px;border-radius:999px;background:#2b241c;overflow:hidden}
+.mini .bar2 i{display:block;height:100%;background:var(--torch)}
+.mini .chips{display:flex;gap:4px;flex-wrap:wrap}
+.mini .chip{border:1px solid #3a322a;border-radius:999px;padding:2px 7px;font-size:9.5px;color:#d9cfbf}
+.mini .chip.on{background:var(--torch);color:#14110e;border-color:var(--torch)}
+.mini .lbl{font-family:var(--display);font-size:9px;color:#a39a8c;letter-spacing:.04em}
+.mini .ev{color:#fcd34d}.mini .bad{color:#ff8a65}.mini .ok{color:#86efac}
+
+/* 던전 지도(캔버스) */
+.map{width:100%;aspect-ratio:16/10;max-width:100%;background:#0f0c09;border-radius:8px;display:block}
+.legend{display:flex;flex-wrap:wrap;gap:6px 12px;font-family:var(--mono);font-size:11px;color:#a39a8c;margin-top:6px}
+.legend span b{color:#efe9df;font-weight:600}
+.mini .tiles{display:grid;grid-template-columns:repeat(6,1fr);gap:3px}
+.mini .tile{aspect-ratio:1;border-radius:3px;background:#1f1913;border:1px solid #2b241c;display:grid;place-items:center;font-family:var(--mono);font-size:9px;color:#a39a8c}
+.mini .tile.cur{background:var(--torch);color:#14110e;border-color:var(--torch)}
+.mini .tile.done{background:#2a241d;color:#d9cfbf}
+.mini .tile.bad{background:#4a1f17;color:#ff8a65;border-color:#6b2b20}
+.mini .deathcard{background:linear-gradient(160deg,#2a241d,#0f0c09);border:1px solid #3a322a;border-radius:8px;padding:8px;display:grid;grid-template-columns:34px 1fr;gap:8px;align-items:center}
+.mini .skull{width:34px;height:34px;border-radius:8px;background:#4a1f17;display:grid;place-items:center;font-family:var(--mono);font-size:14px;color:#ff8a65}
+.vis{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:12px}
+.vis .card p{font-size:14px;margin:6px 0 0}
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">팀 회의용 제안서 · 2026-10-06 · 가칭 · 재미 축 · PC 웹</div>
+  <h1>원칙 던전</h1>
+  <p class="lead">매일 전원이 같은 던전에 들어간다. 조작은 없다. 내가 쓰는 건 <b>행동 원칙 200자</b>뿐이고, AI가 그 원칙대로 던전을 돌린다. "12층에서 상인에게 속아 사망. 1위는 27층." 어제 1등 원칙을 벌주는 수정자가 내일 던전에 자동으로 붙어서, 메타가 굳는 순간 판이 바뀐다.</p>
+  <p class="meta">읽는 데 7분. 세부 설계는 주제가 정해진 뒤에 쓴다. 숫자에는 출처를 달았고 확인 못 한 것은 <span class="pill warn">미확인</span>으로 표시했다. 데모의 던전·숫자는 예시다.</p>
+
+  <h2>1. 유저 플로우 한눈에</h2>
+  <p>PC 브라우저 화면 8개. 사용자가 손대는 건 ②(원칙 200자)와 ⑥(수정, 선택)뿐이다. 나머지는 서비스가 돌리고 보여 준다.</p>
+  <div class="flow">
+
+    <div class="step"><div class="n">① 오늘의 던전</div>
+      <div class="mini"><div class="bar"><i></i><i></i><i></i></div><div class="scr">
+        <div class="ttl">던전 #312 · 10월 6일</div>
+        <div class="sub">오늘 전원 같은 시드. 자정에 결과 공개.</div>
+        <div class="r"><span class="k">오늘의 수정자</span><span class="v">상인 불신 금지</span></div>
+        <div class="sub">어제 상위 10% 중 7명이 "상인 안 믿음"을 썼다. 오늘은 상인만 물약을 판다.</div>
+        <div class="r"><span class="k">입장</span><span class="v">1,284명</span></div>
+        <div class="b">내 원칙 쓰기</div>
+      </div></div>
+      <div class="cap"><b>같은 시드, 공개된 수정자</b>로그인 전에도 오늘 판이 보인다. 수정자가 곧 "오늘의 뉴스".</div></div>
+
+    <div class="step"><div class="n">② 원칙 200자</div>
+      <div class="mini"><div class="bar"><i></i><i></i><i></i></div><div class="scr">
+        <div class="ttl">내 원칙</div>
+        <div class="m">체력 40% 아래면 후퇴.
+상인은 물약만 산다.
+보스는 함정부터 확인.
+동료 제안은 거절.</div>
+        <div class="sub">143 / 200자 · 모순 검사: 통과</div>
+        <div class="r"><span class="k">AI 읽기 미리보기</span><span class="v">4개 규칙</span></div>
+        <div class="b">이 원칙으로 출발</div>
+      </div></div>
+      <div class="cap"><b>유일한 입력</b>글 네 줄. AI가 어떻게 읽었는지 미리 보여 줘 억울함을 줄인다.</div></div>
+
+    <div class="step"><div class="n">③ 실행 리플레이</div>
+      <div class="mini"><div class="bar"><i></i><i></i><i></i></div><div class="scr">
+        <div class="ttl">실행 중 · 8층</div>
+        <div class="tiles"><div class="tile done">1</div><div class="tile done">2</div><div class="tile done">3</div><div class="tile done">4</div><div class="tile done">$</div><div class="tile done">6</div><div class="tile done">7</div><div class="tile cur">▲</div><div class="tile">9</div><div class="tile">10</div><div class="tile">11</div><div class="tile">B</div></div>
+        <div class="m"><span class="ev">5F</span> 상인 → 물약 2개
+<span class="bad">8F</span> 함정방 38% → 후퇴 발동
+<span class="ok">8F</span> 회복</div>
+        <div class="sub">지도 위 토큰이 로그와 같이 움직인다 · 틱 23/60</div>
+      </div></div>
+      <div class="cap"><b>내 규칙이 발동하는 순간</b>어느 줄이 언제 작동했는지 로그에 남는다.</div></div>
+
+    <div class="step"><div class="n">④ 결과·랭킹</div>
+      <div class="mini"><div class="bar"><i></i><i></i><i></i></div><div class="scr">
+        <div class="deathcard"><div class="skull">☠</div><div><div class="big">12F</div><div class="ttl">상인에게 속아 사망</div></div></div>
+        <div class="sub">물약이 가짜였다. 오늘 수정자가 네 2번 규칙을 노렸다. 이 카드가 그대로 공유 이미지.</div>
+        <div class="r"><span class="k">오늘 1위</span><span class="v">27F · 지훈</span></div>
+        <div class="r"><span class="k">내 순위</span><span class="v">412 / 1,284</span></div>
+        <div class="r"><span class="k">같은 사인</span><span class="v">331명</span></div>
+        <div class="g">내 로그 공유</div>
+      </div></div>
+      <div class="cap"><b>비교가 되는 결과</b>같은 시드라 "왜 걔는 27층"이 성립한다.</div></div>
+
+    <div class="step"><div class="n">⑤ PvP 조우</div>
+      <div class="mini"><div class="bar"><i></i><i></i><i></i></div><div class="scr">
+        <div class="ttl">11층에서 민수와 마주침</div>
+        <div class="m">민수 원칙: "마주치면 거래 제안,
+거절당하면 공격"
+내 원칙: "동료 제안은 거절"
+→ 전투. 민수 승. 내 물약 1개 손실</div>
+        <div class="sub">같은 층을 같은 틱에 지나는 사람끼리 자동 조우.</div>
+        <div class="r"><span class="k">오늘 조우</span><span class="v">3회 · 1승 2패</span></div>
+      </div></div>
+      <div class="cap"><b>사람이 콘텐츠</b>남의 원칙이 내 던전의 사건이 된다.</div></div>
+
+    <div class="step"><div class="n">⑥ 내일을 위한 수정</div>
+      <div class="mini"><div class="bar"><i></i><i></i><i></i></div><div class="scr">
+        <div class="ttl">내일 수정자 예고</div>
+        <div class="r"><span class="k">#313</span><span class="v">함정이 2배</span></div>
+        <div class="sub">오늘 상위 10%의 68%가 "함정 무시하고 돌진"을 썼다.</div>
+        <div class="lbl">내 원칙 고치기 (선택)</div>
+        <div class="m">+ 함정방은 반드시 우회.</div>
+        <div class="sub">안 고치면 어제 원칙 그대로 자동 출발.</div>
+        <div class="b">저장</div>
+      </div></div>
+      <div class="cap"><b>메타가 굳으면 판이 바뀐다</b>수정자는 데이터가 고른다. 운영이 쓰지 않는다.</div></div>
+
+    <div class="step"><div class="n">⑦ 원칙 족보</div>
+      <div class="mini"><div class="bar"><i></i><i></i><i></i></div><div class="scr">
+        <div class="ttl">이번 주 원칙 지형</div>
+        <div class="r"><span class="k">신중파 (후퇴 규칙)</span><span class="v">평균 14F</span></div>
+        <div class="r"><span class="k">돌진파</span><span class="v">평균 9F</span></div>
+        <div class="r"><span class="k">상인 신뢰파</span><span class="v">평균 17F ↑</span></div>
+        <div class="sub">원칙 텍스트를 임베딩으로 묶은 자동 분류. 내 위치: 신중파.</div>
+        <div class="g">내 원칙 변천사 보기</div>
+      </div></div>
+      <div class="cap"><b>내 원칙이 쌓인다</b>떠나기 아까운 기록. 분류도 자동.</div></div>
+
+    <div class="step"><div class="n">⑧ 시즌·길드</div>
+      <div class="mini"><div class="bar"><i></i><i></i><i></i></div><div class="scr">
+        <div class="ttl">시즌 1 · 2주차</div>
+        <div class="r"><span class="k">서울 캠퍼스</span><span class="v">평균 13.2F</span></div>
+        <div class="r"><span class="k">광주 캠퍼스</span><span class="v">평균 14.8F</span></div>
+        <div class="r"><span class="k">우리 반</span><span class="v">7위 / 40</span></div>
+        <div class="sub">시즌 끝엔 엔진 규칙 자체가 데이터로 바뀐다(예: 상인 등장률).</div>
+        <div class="chips"><span class="chip on">혼자</span><span class="chip">반</span><span class="chip">캠퍼스</span></div>
+      </div></div>
+      <div class="cap"><b>혼자 완결, 모이면 더 큼</b>길드는 집계일 뿐, 친구가 없어도 매일 판이 선다.</div></div>
+
+  </div>
+  <div class="note">하루 루프: ① 오늘 던전 확인 → (② 원칙 수정은 선택) → ③ 자동 실행 → ④ 결과 → ⑤ 조우 로그 → ⑥ 내일 수정자 예고 → 다음 날 ①. 사용자가 매일 하는 건 "결과 보기"와 "고칠까 말까 결정"뿐이다. 글은 처음 한 번, 그 뒤는 선택.</div>
+
+  <h2>2. 직접 눌러 보기</h2>
+  <div class="demo">
+    <div class="win">
+      <div class="bar"><i></i><i></i><i></i><span class="url">dungeon.example/today</span></div>
+      <div class="body">
+        <div class="pane">
+          <h4>내 원칙 (샘플 고르기)</h4>
+          <div class="choices" role="group" aria-label="샘플 원칙">
+            <button data-r="0" aria-pressed="true" id="r0">신중파</button>
+            <button data-r="1" aria-pressed="false" id="r1">돌진파</button>
+            <button data-r="2" aria-pressed="false" id="r2">상인 신뢰파</button>
+          </div>
+          <div class="rule" id="rule"></div>
+          <div class="cnt" id="cnt"></div>
+          <div class="mod" style="margin:10px 0">오늘 수정자
+            <button data-m="none" aria-pressed="true" id="m0">없음</button>
+            <button data-m="merchant" aria-pressed="false" id="m1">상인 불신 금지</button>
+            <button data-m="trap" aria-pressed="false" id="m2">함정 2배</button>
+          </div>
+          <button class="run" id="run">이 원칙으로 던전 돌리기</button>
+          <div class="toast" id="toast"></div>
+        </div>
+        <div class="pane">
+          <h4>던전 지도 · 실행 로그</h4>
+          <canvas class="map" id="map" width="640" height="400" aria-label="던전 지도: 층을 따라 내려가는 토큰과 사건 표시"></canvas>
+          <div class="legend"><span><b>●</b> 나</span><span><b>$</b> 상인</span><span><b>▲</b> 함정</span><span><b>B</b> 보스</span><span><b>⚔</b> 조우</span><span><b>☠</b> 사망</span></div>
+          <div class="log" id="log" style="height:140px;margin-top:8px"><span class="f">샘플과 수정자를 고르고 돌려 보세요.</span></div>
+          <div class="res" id="res" hidden><div class="big" id="floor">—</div><div><div class="ttl" id="cause">—</div><div class="lbl" id="rank">—</div></div></div>
+          <div class="rank" id="board" hidden></div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <ul class="demo-help">
+        <li><b>같은 원칙, 다른 수정자</b>를 돌려 보면 "어제 통하던 게 오늘 안 통하는" 구조가 보인다. 이게 질림을 막는 장치다.</li>
+        <li>로그에서 <b>어느 규칙이 언제 발동했는지</b>가 보이는 게 억울함을 줄이는 핵심이다. 판정이 아니라 실행 기록이다.</li>
+        <li>지도의 <b>토큰이 로그와 같은 박자로 내려간다.</b> 텍스트만 흐르면 실감이 없어서, 모든 사건은 지도 위 자리와 아이콘을 가진다(3장에서 자세히).</li>
+        <li>실제로는 LLM이 틱마다 행동을 고르고, 쌓이면 소형 정책 모델로 증류해 비용을 0에 가깝게 만든다(7장).</li>
+      </ul>
+      <div class="note">데모는 스크립트다. 실제 결과는 시드·수정자·남의 원칙(조우)으로 매일 달라진다.</div>
+    </div>
+  </div>
+
+  <h2>3. 텍스트만으로는 실감이 안 난다: 보여 주는 것</h2>
+  <p>3D도, 그림 에셋 제작도 하지 않는다. 대신 <b>모든 사건이 지도 위의 자리와 아이콘을 갖게</b> 해서 "읽는 게임"이 아니라 "보는 게임"으로 만든다. 전부 벡터·캔버스라 운영 제작물은 아이콘 한 벌뿐이고, 원본은 어디까지나 구조화된 실행 로그다. 시각화는 그 로그를 그리는 층이라 슬라이스 D(랭킹·리플레이)가 통째로 맡는다.</p>
+  <div class="vis">
+    <div class="card"><h3>절차 생성 지도</h3><p>시드로 만든 층·방·통로가 한 장의 지도로 그려진다. 전원 같은 시드라 "같은 지도에서 누가 더 내려갔나"가 한눈에 보인다.</p></div>
+    <div class="card"><h3>토큰 리플레이</h3><p>내 토큰이 로그와 같은 박자로 내려간다. 규칙이 발동하는 순간 해당 줄과 지도의 방이 같이 번쩍인다(위 데모).</p></div>
+    <div class="card"><h3>사인 카드</h3><p>"12F · 상인에게 속아 사망"이 아이콘·층·한 줄로 카드가 된다. 그대로 공유 이미지. 같은 사인 331명은 같은 카드를 받는다.</p></div>
+    <div class="card"><h3>조우 장면</h3><p>같은 층에서 두 토큰이 마주치는 순간을 짧은 연출(접근·충돌·결과)로 보여 준다. 상대 원칙의 발동 줄도 함께.</p></div>
+    <div class="card"><h3>유령 토큰</h3><p>내 지도 위에 1위와 친구의 토큰이 반투명으로 함께 내려간다. "쟤는 여기서 우회했네"가 글 없이 보인다.</p></div>
+    <div class="card"><h3>원칙 지형도</h3><p>원칙 군집(신중파·돌진파…)을 2차원 지형으로, 캠퍼스 평균 층을 히트맵으로. 숫자 표 대신 땅 모양으로 읽는다.</p></div>
+  </div>
+  <div class="note">원칙: 모든 시각 요소는 로그에서 파생된다(별도 상태 없음). 그래서 FE가 바뀌어도 게임 로직은 안 바뀌고, 리플레이·공유 카드·유령은 같은 데이터를 다르게 그릴 뿐이다. 음향은 선택(규칙 발동·사망 두 가지 소리만).</div>
+
+  <h2>4. 우리가 정한 조건에 어떻게 맞는가</h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>조건</th><th>어떻게 충족하나</th><th>상태</th></tr></thead>
+    <tbody>
+      <tr><td>빠른 출시, 긴 유저 테스트</td><td>2주차에 "원칙 → 실행 → 결과·랭킹"만으로 출시. 매일 던전이 서니 데이터가 매일 쌓이고, 수정자 선정이 매일 작은 실험이다.</td><td><span class="pill ok">충족</span></td></tr>
+      <tr><td>DevOps / MLOps 지속</td><td>자정 배치 실행(1,000명 × 60틱)의 큐·재시도·비용 가드, 정책 모델 증류 → 섀도 → 카나리, 밸런스 회귀 테스트(상위 10% 전략 과점률), 수정자 선정 A/B.</td><td><span class="pill ok">충족</span></td></tr>
+      <tr><td>버티컬 슬라이스, 1인 1슬라이스</td><td>던전 생성 / 실행기 / 원칙 편집·검증 / 랭킹·리플레이 / 수정자 선정 / 조우·시즌. 각자 데이터·모델·화면이 다르다(5장). 코어 계약은 "원칙 JSON"과 "실행 로그 스키마" 둘.</td><td><span class="pill ok">충족</span></td></tr>
+      <tr><td>포트폴리오</td><td>절차 생성, LLM 에이전트 실행기, 텍스트 검증, 랭킹 집계, 데이터 기반 밸런싱, 정책 증류. 여섯 명의 이야기가 다 다르다.</td><td><span class="pill ok">충족</span></td></tr>
+      <tr><td>사람들이 원하고 자주 씀</td><td>"글 한 줄 → AI가 실행" 포맷은 Death by AI가 3개월 2,000만 명·D7 30% 이상으로 증명했다[1]. 그건 친구 모임 게임이고, 이건 혼자 매일 하는 데일리다.</td><td><span class="pill warn">혼자용은 우리가 증명</span></td></tr>
+      <tr><td>재미</td><td>내 말이 행동이 되는 창발, "상인에게 속았다"의 억울함, 1위 원칙 훔쳐보기, 조우에서 당하기. 좋아하신 두 게임의 특징(짧은 글, AI 실행, 비동기 PvP, 메타 공략)이 전부 들어간다.</td><td><span class="pill ok">충족</span></td></tr>
+      <tr><td>모델을 직접 학습</td><td>원칙 텍스트 → 도달 층수 회귀(라벨 자동, 매일 1,000건). 실행 로그(상태 → 행동)로 LLM을 소형 정책 모델로 증류. 원칙 임베딩 군집으로 족보·수정자 선정.</td><td><span class="pill ok">충족</span></td></tr>
+      <tr><td>혼자 완결, 친구면 더 좋음</td><td>혼자여도 매일 랭킹이 선다. 친구·반·캠퍼스는 집계와 조우로 얹힌다. 친구가 할 일은 없다.</td><td><span class="pill ok">충족</span></td></tr>
+      <tr><td>콘텐츠를 만들 필요 없음</td><td>던전은 시드로 절차 생성, 사건은 남의 원칙(조우), 수정자는 어제 데이터가 고른다. 운영이 쓰는 글이 없다. Blaseball은 운영이 서사를 쓰다 "비용이 너무 높다"며 끝났다[3].</td><td><span class="pill ok">충족</span></td></tr>
+      <tr><td>지속 사용 설득력</td><td>질림의 원인은 메타 수렴이다. 여기선 수렴이 감지되는 순간 수정자가 그걸 벌한다. 사람이 바뀌고(조우), 규칙이 바뀌고(수정자·시즌), 내 원칙 족보가 쌓인다. 고정 레벨이던 Gandalf가 깨지면 끝났던 것과 반대 설계다[4].</td><td><span class="pill ok">구조로 대응</span></td></tr>
+      <tr><td>사용자 입력 0 또는 이미 하던 행동</td><td>원칙 200자 한 번. 그 뒤로는 결과 보기와 "고칠까" 결정뿐. 안 고치면 어제 원칙으로 자동 출발.</td><td><span class="pill ok">200자 1회</span></td></tr>
+      <tr><td>비용 0~소액, 법·안전</td><td>LLM 호출이 가장 큰 비용: 틱 상한 60, 결정 캐시(같은 상태·같은 규칙), 야간 배치, 3주차부터 정책 증류. 사행성 요소 없음(가상 화폐·보상 없음). 비영리 웹게임 등급분류 면제 범위는 확인 필요.</td><td><span class="pill warn">비용 설계 필수 · 등급 미확인</span></td></tr>
+    </tbody>
+  </table></div>
+
+  <h2>5. 슬라이스 6개와 각자가 얻는 것</h2>
+  <p>공통 코어는 1주차에 여섯 명이 같이 만들고 두 계약(원칙 JSON, 실행 로그 스키마)을 고정한다. 그 뒤 각자 하나씩 맡아 FE·BE·인프라·AI를 끝까지 가져간다.</p>
+  <div class="core"><b>공통 코어(1주차, 전원)</b><span>로그인·프로필·반/캠퍼스</span><span>원칙 JSON 계약</span><span>실행 로그 스키마</span><span>일일 배치 트리거</span><span>이벤트 수집</span></div>
+  <div class="grid2">
+    <div class="card"><div class="who">슬라이스 A</div><h3>던전 생성</h3>
+      <dl><dt>FE</dt><dd>오늘의 던전 화면, 층 지도 미리보기</dd><dt>BE</dt><dd>시드 기반 절차 생성(층·방·상인·함정·보스), 수정자 적용 API</dd><dt>인프라</dt><dd>자정 생성 배치, 시드 재현 보장</dd><dt>AI</dt><dd>던전 난이도 예측기(라벨: 전원 도달 층 분포)로 "너무 쉬운 날" 자동 보정</dd></dl>
+      <p class="meta">면접 한 줄: 재현 가능한 절차 생성과 난이도 예측기로 매일 다른데 공정한 던전을 만들었다.</p></div>
+    <div class="card"><div class="who">슬라이스 B</div><h3>실행기</h3>
+      <dl><dt>FE</dt><dd>실행 리플레이, 규칙 발동 하이라이트</dd><dt>BE</dt><dd>틱 루프, 상태 머신, LLM 행동 선택기, 결정 캐시</dd><dt>인프라</dt><dd>큐·동시성·재시도, 비용 가드(틱 상한·일일 예산)</dd><dt>AI</dt><dd>상태→행동 로그로 소형 정책 모델 증류, 섀도 비교</dd></dl>
+      <p class="meta">면접 한 줄: LLM 에이전트 1,000개를 야간 배치로 돌리며 캐시·증류로 호출을 몇 분의 일로 줄였다.</p></div>
+    <div class="card"><div class="who">슬라이스 C</div><h3>원칙 편집·검증</h3>
+      <dl><dt>FE</dt><dd>200자 편집기, "AI가 이렇게 읽음" 미리보기</dd><dt>BE</dt><dd>원칙 → 구조화 JSON 변환, 모순·금지 표현 검사, 버전 이력</dd><dt>인프라</dt><dd>변환 캐시, 검증 파이프라인</dd><dt>AI</dt><dd>원칙 텍스트 → 도달 층수 회귀(라벨 자동), 원칙 임베딩</dd></dl>
+      <p class="meta">면접 한 줄: 자유 텍스트를 실행 가능한 규칙으로 바꾸고, 결과 라벨로 "어떤 문장이 강한지" 예측하는 모델을 돌렸다.</p></div>
+    <div class="card"><div class="who">슬라이스 D</div><h3>랭킹·리플레이·공유</h3>
+      <dl><dt>FE</dt><dd>캔버스 지도·토큰 리플레이·유령 토큰, 사인 카드, 일일 랭킹</dd><dt>BE</dt><dd>집계, 동일 사인 묶기, 공유 토큰, 리플레이 데이터 API</dd><dt>인프라</dt><dd>집계 배치, 카드 이미지 생성·CDN</dd><dt>AI</dt><dd>"볼 만한 리플레이" 랭킹(라벨: 열람·공유)</dd></dl>
+      <p class="meta">면접 한 줄: 구조화 로그 하나로 지도 리플레이·사인 카드·유령 토큰을 그리는 렌더링 층을 만들고, 1,000명의 "왜 죽었나"를 한눈에 보여 줬다.</p></div>
+    <div class="card"><div class="who">슬라이스 E</div><h3>수정자 선정</h3>
+      <dl><dt>FE</dt><dd>내일 수정자 예고, 원칙 족보</dd><dt>BE</dt><dd>상위 원칙 군집 → 카운터 수정자 후보 → 선정 규칙</dd><dt>인프라</dt><dd>일일 분석 배치, 실험 플래그</dd><dt>AI</dt><dd>원칙 군집화(임베딩), 과점 탐지, 수정자 효과 A/B</dd></dl>
+      <p class="meta">면접 한 줄: 메타 수렴을 데이터로 감지해 다음 날 규칙을 자동으로 바꾸는 밸런싱 루프를 만들었다.</p></div>
+    <div class="card"><div class="who">슬라이스 F</div><h3>조우·시즌</h3>
+      <dl><dt>FE</dt><dd>조우 로그, 반·캠퍼스 집계, 시즌 화면</dd><dt>BE</dt><dd>같은 층·같은 틱 매칭, 조우 해소 규칙, 시즌 리셋</dd><dt>인프라</dt><dd>매칭 배치, 시즌 아카이브</dd><dt>AI</dt><dd>조우 승률 예측(라벨 자동), 시즌 규칙 수정 후보</dd></dl>
+      <p class="meta">면접 한 줄: 비동기 플레이어끼리의 PvP를 배치로 매칭·해소하고 시즌 단위로 엔진 규칙을 데이터로 갱신했다.</p></div>
+  </div>
+  <div class="note">B(실행기)가 비용과 품질의 중심이라 병목이 될 수 있다. 1주차에 "원칙 JSON → 틱 로그" 계약을 먼저 넘기고, 처음엔 규칙 기반 실행기(LLM 없이)로 돌려 다른 슬라이스가 막히지 않게 한다. LLM 행동 선택은 2주차, 증류는 3주차.</div>
+
+  <h2>6. 이 주제의 이점</h2>
+  <ul>
+    <li><b>좋아하신 특징을 전부 가져가면서 원형을 베끼지 않는다.</b> 짧은 글이 무기, AI가 실행, 비동기 PvP, 메타 공략. 소재는 캐릭터 전투도 금고도 아닌 던전 레이스다.</li>
+    <li><b>질림을 구조로 푼다.</b> 수렴하면 수정자가 벌하고, 사람이 바뀌고(조우), 시즌이 엔진을 바꾼다. 운영이 콘텐츠를 쓰지 않는다.</li>
+    <li><b>PC가 본무대다.</b> 로그를 읽고 원칙을 다듬는 건 키보드와 큰 화면의 일이다. 모바일 제약이 없다.</li>
+    <li><b>라벨이 공짜다.</b> 도달 층수, 사인, 조우 승패, 열람·공유. 매일 1,000건.</li>
+    <li><b>첫 사용자가 보장된다.</b> 우리 여섯이 첫날부터 매일 돌리고, 동기 2천 명은 링크 하나로 들어온다.</li>
+    <li><b>슬라이스가 진짜 독립적이다.</b> 생성·실행·검증·랭킹·밸런싱·매칭. 겹치지 않는다.</li>
+  </ul>
+
+  <h2>7. 솔직한 위험과 대응</h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>위험</th><th>왜 위험한가</th><th>대응</th></tr></thead>
+    <tbody>
+      <tr><td>LLM 비용</td><td>1,000명 × 60틱을 매일 LLM으로 돌리면 무료 한도를 넘는다.</td><td>틱 상한, 같은 상태·같은 규칙 결정 캐시, 야간 배치, 1주차는 규칙 기반 실행기, 3주차부터 정책 증류. 일일 예산 초과 시 캐시 결정으로 폴백.</td></tr>
+      <tr><td>"AI가 내 원칙을 잘못 읽었다"</td><td>억울하면 떠난다.</td><td>원칙을 구조화 JSON으로 바꿔 "이렇게 읽음"을 미리 보여 주고, 로그에 어느 규칙이 언제 발동했는지 남긴다. 판정이 아니라 실행 기록이라 반박 지점이 명확하다.</td></tr>
+      <tr><td>방치형으로 보임</td><td>"자동으로 돈다"는 거절된 방치형 약탈과 닮아 보일 수 있다.</td><td>매일 "고칠까 말까"가 결정이고, 수정자 예고가 매일 새 문제를 낸다. 결과 화면이 아니라 "내일 뭘 바꿀까" 화면이 중심이다.</td></tr>
+      <tr><td>수정자가 재미없거나 불공정</td><td>데이터 기반 선정이 뻔하거나 특정 파벌만 벌줄 수 있다.</td><td>수정자 후보 풀을 넓게 두고 효과를 A/B로 재며, 같은 군집을 연속으로 벌하지 않는 규칙을 둔다.</td></tr>
+      <tr><td>초기 참여자 부족</td><td>조우·족보는 사람이 있어야 재밌다.</td><td>혼자 완결(랭킹은 봇 원칙으로도 채움), 반 단위로 먼저 밀도를 만든다.</td></tr>
+      <tr><td>등급분류</td><td>웹게임의 등급분류 해당 여부.</td><td>무료·비영리·광고 없음으로 시작하고 게임물관리위원회에 면제 범위를 확인한다. 가상 화폐·보상 없음.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h2>8. 결정 전에 하루 만에 해 볼 수 있는 것</h2>
+  <p>코드 없이 검증한다. 구글폼으로 동기 20명의 원칙 200자를 받고, 같은 시드 던전(종이 규칙)으로 Claude에 돌려 결과표를 단톡에 올린다. 다음 날 "내일 수정자: 함정 2배"를 예고하고 <b>원칙을 고쳐 다시 내는 사람 비율</b>을 센다. 절반 이상이 고치면 루프가 산다. 아무도 안 고치면 수정자 설계를 다시 본다.</p>
+
+  <h2>9. 근거</h2>
+  <div class="src">
+    <ol>
+      <li>Death by AI(글 한 줄 → AI 판정 파티 게임): 3일차 DAU 70만, 3개월 2,000만 명, D7 30% 이상(Discord Build Case Studies, 조사원 원문 확인). <a href="https://discord.com/build-case-studies/playroom">discord.com/build-case-studies/playroom</a></li>
+      <li>코드로 쓰는 전략 게임의 진입 장벽: Screeps World 동접 수십 명(steambase, 조사원 확인). 글로 쓰면 장벽이 사라진다는 근거.</li>
+      <li>Blaseball: 2020-07~2023-06, 운영이 시즌 서사를 쓰다 "비용이 너무 높다"며 종료. <a href="https://en.wikipedia.org/wiki/Blaseball">en.wikipedia.org/wiki/Blaseball</a></li>
+      <li>Gandalf: 고정 레벨이라 깨면 끝나는 구조, 100만+ 참가·4,000만+ 프롬프트(Lakera, 조사원 확인). 반대로 Tensor Trust는 사용자가 방어를 출제해 2026-10 현재도 운영 중.</li>
+      <li>SaltyBet: 사용자 제작 캐릭터 무한 공급 + 24시간 무인으로 13년 생존(streamscharts, 조사원 확인). "운영이 콘텐츠를 안 쓰는" 구조의 선례.</li>
+    </ol>
+    <p>데모와 플로우의 숫자(1,284명, 12층, 27층 등)는 예시다. 등급분류 면제 범위와 LLM 무료 한도는 <span class="pill warn">미확인</span>.</p>
+  </div>
+</div>
+
+<script>
+(function(){
+  var rules=[
+    {name:'신중파',text:'체력 40% 아래면 후퇴.\n상인은 물약만 산다.\n보스는 함정부터 확인.\n동료 제안은 거절.'},
+    {name:'돌진파',text:'멈추지 않는다. 함정은 무시하고 돌진.\n상인은 안 믿는다.\n보스는 선공.\n동료는 받는다.'},
+    {name:'상인 신뢰파',text:'상인 물건은 다 산다.\n체력 30% 아래면 물약.\n함정방은 우회.\n동료 제안은 수락.'}
+  ];
+  // 결과 표: [원칙][수정자] -> {floor, cause, log[]}
+  var R={
+    0:{none:{f:16,c:'보스 함정 확인 중 포위',log:[['5F','ev','상인 등장 → 물약 2개 구매'],['7F','ev','동료 레온 제안 → 거절'],['8F','bad','함정방 체력 38% → 후퇴 규칙 발동'],['8F','ok','회복 후 재진입'],['12F','ok','물약 사용, 생존'],['16F','bad','보스 함정 확인 중 포위 → 사망']]},
+      merchant:{f:12,c:'상인에게 속아 사망',log:[['5F','ev','상인 등장 → 물약 2개 구매'],['9F','ev','수정자: 오늘 상인 물약 중 1개는 가짜'],['11F','bad','체력 35% → 가짜 물약 사용'],['12F','bad','회복 실패 → 사망']]},
+      trap:{f:14,c:'함정 연속에 체력 소진',log:[['3F','ev','수정자: 함정 2배'],['6F','bad','함정 → 체력 55%'],['8F','bad','함정 → 38% → 후퇴 발동'],['10F','ok','회복'],['14F','bad','함정 3연속 → 사망']]}},
+    1:{none:{f:9,c:'함정 돌진 중 사망',log:[['2F','ev','함정 무시 돌진 → 체력 70%'],['5F','ev','동료 합류'],['7F','bad','함정 → 30%'],['9F','bad','보스 선공 → 사망']]},
+      merchant:{f:11,c:'회복 수단 없이 보스전',log:[['5F','ev','상인 무시(수정자로 유일한 회복처였음)'],['8F','bad','체력 40%'],['11F','bad','보스 선공 → 사망']]},
+      trap:{f:5,c:'함정 2배에 즉사',log:[['2F','bad','함정 2연속 → 50%'],['4F','bad','함정 → 20%'],['5F','bad','함정 → 사망']]}},
+    2:{none:{f:19,c:'동료 배신',log:[['5F','ev','상인 물건 전부 구매'],['9F','ev','동료 합류'],['13F','ok','물약으로 회복'],['19F','bad','동료가 보물 들고 이탈 → 고립 → 사망']]},
+      merchant:{f:27,c:'생존 · 오늘 1위',log:[['5F','ev','수정자: 상인만 물약 판매 → 전부 구매'],['12F','ok','물약 3개로 회복'],['18F','ev','동료 합류'],['24F','ok','보스 처치'],['27F','ok','시간 종료 · 생존']]},
+      trap:{f:17,c:'우회로 막힘',log:[['3F','ev','함정 2배 → 우회 규칙'],['9F','ok','상인 물약'],['17F','bad','우회로 없는 층 → 함정 → 사망']]}}
+  };
+  var rank={none:[['지훈',24],['서연',21],['민수',15]],merchant:[['지훈',27],['민수',18],['서연',16]],trap:[['서연',20],['지훈',18],['민수',12]]};
+  var ri=0, mod='none';
+  var ruleEl=document.getElementById('rule'), cnt=document.getElementById('cnt'), log=document.getElementById('log'), res=document.getElementById('res'), board=document.getElementById('board'), toast=document.getElementById('toast');
+  // 지도: 30층을 6x5 격자로, 토큰·사건 아이콘을 그린다
+  var cv=document.getElementById('map'), ctx=cv.getContext('2d');
+  var COLS=6, ROWS=5, W=cv.width, H=cv.height, PAD=18, GW=(W-PAD*2)/COLS, GH=(H-PAD*2)/ROWS;
+  var fixed={5:'$',9:'$',8:'▲',6:'▲',14:'▲',12:'B',24:'B',11:'⚔'};
+  function cell(f){var i=f-1,r=Math.floor(i/COLS),c=i%COLS; if(r%2===1)c=COLS-1-c; return {x:PAD+c*GW,y:PAD+r*GH};}
+  function drawMap(cur,events,dead){
+    ctx.clearRect(0,0,W,H); ctx.fillStyle='#0f0c09'; ctx.fillRect(0,0,W,H);
+    for(var f=1;f<=COLS*ROWS;f++){
+      var p=cell(f), x=p.x+4, y=p.y+4, w=GW-8, h=GH-8;
+      ctx.fillStyle= f<cur?'#2a241d': f===cur?(dead?'#4a1f17':'#f59e0b'):'#1a1511';
+      ctx.strokeStyle='#2b241c'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.roundRect(x,y,w,h,6); ctx.fill(); ctx.stroke();
+      ctx.font='600 13px IBM Plex Mono, monospace'; ctx.textBaseline='top';
+      ctx.fillStyle= f===cur && !dead ? '#14110e' : '#a39a8c'; ctx.fillText(f+'F',x+6,y+5);
+      var ic=events[f]||fixed[f];
+      if(ic){ctx.font='700 22px IBM Plex Mono, monospace'; ctx.textBaseline='middle'; ctx.fillStyle= ic==='☠'?'#ff8a65': ic==='▲'?'#ff8a65': ic==='$'?'#86efac': ic==='⚔'?'#fcd34d':'#d9cfbf'; if(f===cur&&!dead)ctx.fillStyle='#14110e'; ctx.fillText(ic,x+w-30,y+h/2);}
+    }
+    if(cur>0){var q=cell(cur); ctx.beginPath(); ctx.arc(q.x+22,q.y+GH-18,8,0,Math.PI*2); ctx.fillStyle= dead?'#ff8a65':'#14110e'; ctx.fill(); ctx.strokeStyle='#efe9df'; ctx.lineWidth=2; ctx.stroke();}
+  }
+  drawMap(0,{},false);
+  function showRule(){ ruleEl.textContent=rules[ri].text; cnt.textContent=rules[ri].text.length+' / 200자 · 모순 검사 통과'; }
+  document.querySelectorAll('.choices button').forEach(function(b){b.addEventListener('click',function(){ri=+b.dataset.r;document.querySelectorAll('.choices button').forEach(function(x){x.setAttribute('aria-pressed',x===b?'true':'false')});showRule();})});
+  document.querySelectorAll('.mod button').forEach(function(b){b.addEventListener('click',function(){mod=b.dataset.m;document.querySelectorAll('.mod button').forEach(function(x){x.setAttribute('aria-pressed',x===b?'true':'false')});toast.textContent='';})});
+  document.getElementById('run').addEventListener('click',function(){
+    var r=R[ri][mod]; log.innerHTML=''; res.hidden=true; board.hidden=true; toast.textContent='실행 중…';
+    var i=0; var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var ev={}, lastF=0;
+    function iconFor(l){ if(/사망/.test(l[2]))return '☠'; if(/조우|마주/.test(l[2]))return '⚔'; if(/상인/.test(l[2]))return '$'; if(/함정/.test(l[2]))return '▲'; if(/보스/.test(l[2]))return 'B'; return null; }
+    function step(){
+      if(i<r.log.length){
+        var l=r.log[i++]; var f=parseInt(l[0],10)||lastF; lastF=f; var ic=iconFor(l); if(ic)ev[f]=ic;
+        var dead=(i===r.log.length)&&/사망/.test(l[2]);
+        drawMap(f,ev,dead);
+        var d=document.createElement('div');d.innerHTML='<span class="f">'+l[0]+'</span> <span class="'+l[1]+'">'+l[2]+'</span>';log.appendChild(d);log.scrollTop=log.scrollHeight;setTimeout(step,reduce?0:420);
+      } else{
+        if(!/사망/.test(r.c)) drawMap(r.f,ev,false);
+        document.getElementById('floor').textContent=r.f+'F';
+        document.getElementById('cause').textContent=r.c;
+        var all=rank[mod].concat([['나',r.f]]).sort(function(a,b){return b[1]-a[1]});
+        var pos=all.findIndex(function(x){return x[0]==='나'})+1;
+        document.getElementById('rank').textContent='오늘 '+pos+'위 / '+(all.length)+' (샘플) · 같은 사인 331명';
+        res.hidden=false;
+        board.innerHTML=all.map(function(x){return '<div'+(x[0]==='나'?' class="me"':'')+'><span>'+x[0]+'</span><span>'+x[1]+'F</span></div>'}).join('');
+        board.hidden=false;
+        toast.textContent= mod==='none' ? '수정자를 바꿔 같은 원칙으로 다시 돌려 보세요.' : '같은 원칙인데 결과가 달라졌다. 이게 매일의 "뉴스".';
+      }
+    }
+    step();
+  });
+  showRule();
+})();
+</script>
+
+</body>
+</html>
