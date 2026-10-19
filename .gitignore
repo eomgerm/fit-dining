@@ -13,3 +13,6 @@ desktop.ini
 .env
 .env.*
 !.env.example
+
+### 루트 도구(lefthook) ###
+node_modules/
