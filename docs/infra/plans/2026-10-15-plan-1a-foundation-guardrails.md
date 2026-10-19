@@ -38,14 +38,15 @@
   - 팀원 코드 모양의 파일(경고만 있는 Dockerfile·셸·YAML)은 통과하고, `be/`의 오류 수준 Dockerfile(`sudo`)만 막는다.
 - 시크릿을 추가했다가 지운 MR은 `gitleaks dir`로는 안 보이고 `gitleaks git --log-opts`로 잡힌다. pre-commit 훅은 토큰을 막고 깨끗한 변경은 통과시킨다.
 - 러너의 파일 목록 수집 루프(`while read`)는 `bash:3.2` 이미지에서 빈 목록까지 돈다.
+- GitLab CE 18.11.5에 이 PC의 임시 러너(gitlab-runner 18.11.4, docker executor, 태그 `verify`)를 등록해 MR 파이프라인을 돌렸고 `lint:*` 잡 7개가 모두 통과했다.
 - 팀원이 올린 `prototypes/`, `be/`(Gradle Spring Boot), `fe/`(Next.js·pnpm) 초기 프로젝트를 포함한 저장소(origin/master 4acf654)에서도 모든 검사가 통과한다. `be/`에는 Dockerfile이 아직 없어 `hadolint(be)`는 SKIP이다.
 
 아래 코드를 그대로 옮기면 같은 결과가 나와야 한다. 다르면 코드를 고치기 전에 원인을 먼저 확인한다.
 
 **아직 확인하지 못한 것**
 
-- 실제 GitLab 러너에서의 파이프라인 실행(러너가 없다)
-- GitLab이 `git fetch --depth=1 origin <sha>`를 허용하는지(Task 4의 `ensure_commit`이 쓰며, CI는 `GIT_DEPTH: "0"`도 함께 쓴다)
+- 실제 verify 러너(B, Arm)에서의 파이프라인 실행. 지금까지는 이 PC의 임시 러너(amd64)로만 돌렸다
+- GitLab이 `git fetch --depth=1 origin <sha>`를 허용하는지(Task 4의 `ensure_commit`이 쓰며, CI는 `GIT_DEPTH: "0"`이라 이 경로는 아직 실행되지 않았다)
 - macOS의 `tar --null -T -`(러너의 시크릿 스캔)
 
 ## Global Constraints
@@ -62,6 +63,7 @@
 - 실행 환경: Windows 11, Git Bash 또는 WSL, Docker Desktop(Docker 29.x), `python`은 3.12다. Git Bash의 `python3`는 스토어 바로가기라 실제 Python이 아닐 수 있다. Git Bash에서 Python이 출력하는 한글이 깨져 보이면(콘솔이 cp949, 터미널이 UTF-8) `export PYTHONUTF8=1`을 먼저 실행한다. 러너는 스스로 설정한다.
 - 작업 규칙: 검증은 이 계획의 게이트에 필요한 것만 돌린다. 범위를 넓히는 조사는 사용자에게 묻고 시작한다. 로컬에서 띄운 컨테이너는 `--rm`이고, 임시 디렉터리는 정확한 경로만 지운다(이름 패턴 일괄 삭제 금지).
 - 커밋은 사용자가 허용한 경우에만 하고, 기본 브랜치(master)에 직접 하지 않는다. 아래 커밋 단계는 모두 "허용된 경우에만"이다.
+- 커밋 메시지는 `type(scope): 설명`(scope는 `infra`)이고, 이모지와 Jira 키는 팀의 lefthook이 브랜치 이름에서 채운다. 브랜치는 `infra/<타입>/<설명>-<Jira키>`다(저장소 루트 `CONTRIBUTING.md`, 설계 10.8절).
 
 ## 파일 구조
 
@@ -138,7 +140,7 @@ git status --short
 
 Expected: Python 3.9 이상(이 PC는 3.12.x), Docker 서버 버전 출력(29.x), Compose v2 이상, bash 5.x. `docs/infra/` 아래 파일이 미추적으로 보일 수 있다. Docker 서버 버전이 안 나오면 Docker Desktop을 먼저 켠다.
 
-사용자에게 커밋 허용 여부를 한 번 묻는다. 허용하면 `git switch -c feature/infra-foundation`으로(브랜치 이름 규칙은 설계 10.8절) 브랜치를 만든 뒤 시작한다. 허용하지 않으면 커밋 단계를 모두 건너뛴다.
+사용자에게 커밋 허용 여부를 한 번 묻는다. 허용하면 `git switch -c infra/chore/foundation-guardrails-S15P31A302-19`로(브랜치 이름 규칙은 설계 10.8절) 브랜치를 만든 뒤 시작한다. 허용하지 않으면 커밋 단계를 모두 건너뛴다.
 
 - [ ] **Step 2: 저장소 기반 파일 3개 작성**
 
@@ -426,7 +428,7 @@ Expected: `OK eol (5 file(s) checked)`
 
 ```bash
 git add .gitattributes .gitignore .editorconfig infra/ci/check_eol.py infra/ci/tests/test_check_eol.py
-git commit -m "Chore: 저장소 기반 파일과 CRLF 검사 추가"
+git commit -m "chore(infra): 저장소 기반 파일과 CRLF 검사 추가"
 ```
 
 ---
@@ -661,7 +663,7 @@ Expected: `Ran 15 tests` 다음에 `OK`
 
 ```bash
 git add infra/ci/check_env_files.py infra/ci/tests/test_check_env_files.py
-git commit -m "Chore: env 형식 가드 추가"
+git commit -m "chore(infra): env 형식 가드 추가"
 ```
 
 ---
@@ -921,7 +923,7 @@ Expected: `Ran 16 tests` 다음에 `OK` (Docker CLI가 없으면 통합 5개는 
 
 ```bash
 git add infra/ci/ports_invariant.py infra/ci/tests/test_ports_invariant.py
-git commit -m "Chore: compose 포트 노출 불변식 가드 추가"
+git commit -m "chore(infra): compose 포트 노출 불변식 가드 추가"
 ```
 
 ---
@@ -1178,7 +1180,7 @@ Expected: `Ran 10 tests` 다음에 `OK`
 
 ```bash
 git add infra/ci/migration_immutability.py infra/ci/tests/test_migration_immutability.py
-git commit -m "Chore: 마이그레이션 불변성 가드 추가"
+git commit -m "chore(infra): 마이그레이션 불변성 가드 추가"
 ```
 
 ---
@@ -1482,7 +1484,7 @@ FAIL docker.io/library/this-image-does-not-exist-xyz:1: inspect-error ERROR: pul
 
 ```bash
 git add infra/ci/images_arch.py infra/ci/tests/test_images_arch.py
-git commit -m "Chore: 이미지 아키텍처 가드 추가"
+git commit -m "chore(infra): 이미지 아키텍처 가드 추가"
 ```
 
 ---
@@ -1636,7 +1638,7 @@ Expected: `SKIP ports (compose 프로젝트 없음)`
 
 ```bash
 git add infra/ci/check_compose_projects.py infra/ci/compose-projects.txt infra/ci/tests/test_check_compose_projects.py
-git commit -m "Chore: compose 프로젝트 순회 스크립트 추가"
+git commit -m "chore(infra): compose 프로젝트 순회 스크립트 추가"
 ```
 
 ---
@@ -2014,7 +2016,7 @@ Expected:
 ```bash
 git add infra/ci/tool-images.sh .yamllint.yaml .gitleaks.toml infra/ci/run-local-checks.sh infra/ci/pre-commit-secrets.sh .githooks/pre-commit
 git update-index --chmod=+x .githooks/pre-commit
-git commit -m "Chore: 도구 이미지 핀, 로컬 검사 러너, pre-commit 훅 추가"
+git commit -m "chore(infra): 도구 이미지 핀, 로컬 검사 러너, pre-commit 훅 추가"
 ```
 
 ---
@@ -2269,7 +2271,7 @@ Expected: Task 7 Step 6과 같은 출력이고 `guards unit tests`가 새 테스
 
 ```bash
 git add .gitlab-ci.yml infra/ci/tests/test_tool_images_sync.py
-git commit -m "Chore: CI lint 잡과 도구 이미지 핀 동기화 테스트 추가"
+git commit -m "chore(infra): CI lint 잡과 도구 이미지 핀 동기화 테스트 추가"
 ```
 
 ---
@@ -2371,5 +2373,5 @@ Expected: 이 계획이 만든 파일(`.gitattributes`, `.gitignore`, `.editorco
 
 ```bash
 git add infra/README.md
-git commit -m "Docs: infra README 추가"
+git commit -m "docs(infra): infra README 추가"
 ```
