@@ -1,0 +1,13 @@
+title = "fit gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "env 예제의 자리표시자와 .git 디렉터리"
+regexes = [
+  '''CHANGE_ME[A-Z0-9_]*''',
+]
+paths = [
+  '''(^|/)\.git/''',
+]
