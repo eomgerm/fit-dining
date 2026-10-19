@@ -86,7 +86,9 @@ def images_from_dockerfile(text: str) -> tuple[set[str], set[str]]:
 
 
 def images_from_compose_config(config: dict) -> set[str]:
-    return {s["image"] for s in (config.get("services") or {}).values() if s.get("image")}
+    """services.*.image. build가 있는 서비스의 image는 이 저장소의 Dockerfile이 만드는 이름이라 레지스트리에 없으므로 제외한다.
+    그 Dockerfile의 FROM은 --dockerfile로 검사한다."""
+    return {s["image"] for s in (config.get("services") or {}).values() if s.get("image") and not s.get("build")}
 
 
 def images_from_shell_vars(text: str) -> set[str]:
