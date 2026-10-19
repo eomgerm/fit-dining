@@ -1,0 +1,15 @@
+### IDE ###
+.idea/
+*.iml
+out/
+.vscode/
+
+### OS ###
+.DS_Store
+Thumbs.db
+desktop.ini
+
+### 로컬 설정·비밀값 ###
+.env
+.env.*
+!.env.example
