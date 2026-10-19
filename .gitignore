@@ -13,3 +13,20 @@ desktop.ini
 .env
 .env.*
 !.env.example
+
+### 인프라: 실제 env와 키는 git에 올리지 않는다. 예제(*.env.example)만 추적한다. ###
+*.env
+!*.env.example
+/infra/**/secrets/
+*.pem
+*.key
+id_ed25519
+id_rsa
+
+### 도구 산출물 ###
+.tmp-selftest/
+.tmp-gitleaks/
+__pycache__/
+*.pyc
+.venv/
+node_modules/

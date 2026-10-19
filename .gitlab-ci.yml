@@ -1,0 +1,109 @@
+stages:
+  - verify
+  - build
+  - deploy
+  - smoke
+
+workflow:
+  rules:
+    # develop→master MR은 같은 커밋을 develop 브랜치 파이프라인이 이미 검사한다(중복 방지)
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == "develop"
+      when: never
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "develop" || $CI_COMMIT_BRANCH == "master"
+
+# deploy·smoke 단계 잡은 tags를 직접 지정한다(여기 기본값은 verify 러너다).
+default:
+  tags:
+    - verify
+
+variables:
+  GIT_DEPTH: "20"
+  # 도구 이미지 핀. infra/ci/tool-images.sh와 같아야 한다(tests/test_tool_images_sync.py가 검사한다).
+  # 러너가 docker executor라 job 컨테이너 안에서 `docker run -v $PWD`로 도구 컨테이너를 띄울 수 없다
+  # (워크스페이스가 호스트 경로가 아니다). 그래서 도구마다 job image를 따로 쓴다.
+  SHELLCHECK_IMAGE: koalaman/shellcheck-alpine:v0.11.0
+  HADOLINT_IMAGE: hadolint/hadolint:v2.15.1-alpine
+  YAMLLINT_IMAGE: pipelinecomponents/yamllint:0.35.27
+  GITLEAKS_IMAGE: zricethezav/gitleaks:v8.30.1
+  CADDY_IMAGE: caddy:2.11.7
+  PROMETHEUS_IMAGE: prom/prometheus:v3.15.0
+  DOCKER_CLI_IMAGE: docker:29.9.0-cli
+  PYTHON_IMAGE: python:3.12.15-slim
+
+# interruptible은 verify 잡에만 둔다. deploy 잡이 새 푸시에 자동 취소되면 전환 도중에 끊긴다.
+.verify:
+  stage: verify
+  interruptible: true
+
+lint:guards:
+  extends: .verify
+  image: $DOCKER_CLI_IMAGE
+  before_script:
+    - apk add --no-cache python3 git
+  script:
+    - python3 -m unittest discover -s infra/ci/tests -v
+    - python3 infra/ci/check_eol.py
+    - python3 infra/ci/check_compose_projects.py
+    - |
+      files=$(git ls-files 'infra/*.env.example')
+      if [ -n "$files" ]; then python3 infra/ci/check_env_files.py $files; fi
+
+# 레지스트리 조회가 필요하다(익명 pull 한도). docker 데몬은 필요 없다(imagetools는 레지스트리에 직접 묻는다).
+# 핀이나 이미지 참조가 바뀔 때만 실행한다.
+lint:image-arch:
+  extends: .verify
+  image: $DOCKER_CLI_IMAGE
+  before_script:
+    - apk add --no-cache python3
+  script:
+    - python3 infra/ci/images_arch.py --platform linux/arm64 --platform linux/amd64 --images-from-sh infra/ci/tool-images.sh
+  rules:
+    - changes:
+        - infra/ci/tool-images.sh
+        - infra/ci/images_arch.py
+
+# 인프라 소유 파일만 엄격하게 검사한다. be·fe·ai는 각 팀 린트가 맡는다(스펙 6.3, 12.2).
+lint:shell:
+  extends: .verify
+  image: $SHELLCHECK_IMAGE
+  script:
+    - find infra -type f -name '*.sh' -print0 | xargs -0 -r shellcheck -x
+
+lint:docker:
+  extends: .verify
+  image: $HADOLINT_IMAGE
+  script:
+    - find infra -type f \( -name 'Dockerfile' -o -name 'Dockerfile.*' -o -name '*.Dockerfile' \) -print0 | xargs -0 -r hadolint
+    # be의 Dockerfile은 오류(sudo, ADD 등)만 막고 경고(버전 핀 등)는 출력만 한다
+    - find be -type f \( -name 'Dockerfile' -o -name 'Dockerfile.*' -o -name '*.Dockerfile' \) -print0 | xargs -0 -r hadolint --failure-threshold error
+
+lint:yaml:
+  extends: .verify
+  image: $YAMLLINT_IMAGE
+  script:
+    - yamllint -c .yamllint.yaml .gitlab-ci.yml .yamllint.yaml infra
+
+lint:secrets:
+  extends: .verify
+  image:
+    name: $GITLEAKS_IMAGE
+    entrypoint: [""]
+  variables:
+    GIT_DEPTH: "0"
+  script:
+    - gitleaks dir --config .gitleaks.toml --redact --no-banner .
+    # MR 커밋 이력도 본다. 추가했다가 지운 시크릿은 dir 검사에 안 보이지만 이력에 남는다
+    - if [ -n "${CI_MERGE_REQUEST_DIFF_BASE_SHA:-}" ]; then gitleaks git --config .gitleaks.toml --redact --no-banner --log-opts="$CI_MERGE_REQUEST_DIFF_BASE_SHA..HEAD" .; fi
+
+lint:migrations:
+  extends: .verify
+  image: $DOCKER_CLI_IMAGE
+  variables:
+    GIT_DEPTH: "0"
+  before_script:
+    - apk add --no-cache python3 git
+  script:
+    - python3 infra/ci/migration_immutability.py
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
