@@ -33,10 +33,10 @@ SKIP_ARCH=1 bash infra/ci/run-local-checks.sh  # 오프라인일 때 이미지 �
 
 ## 커밋 전 시크릿 검사
 
-clone한 뒤 한 번만 켠다(선택). gitleaks 실행 파일이나 Docker가 있어야 하고 둘 다 없으면 경고만 하고 통과한다. CI의 `lint:secrets`가 다시 본다.
+팀의 lefthook(저장소 루트 `CONTRIBUTING.md`)이 커밋할 때 `lefthook.yml`의 pre-commit으로 `infra/ci/pre-commit-secrets.sh`를 불러 스테이징한 변경에서 시크릿을 찾는다. clone한 뒤 `npm install`을 한 번 실행하면 켜진다. gitleaks 실행 파일이나 Docker가 있어야 하고 둘 다 없으면 경고만 하고 통과한다. CI의 `lint:secrets`가 다시 본다.
 
 ```bash
-git config core.hooksPath .githooks
+sh infra/ci/pre-commit-secrets.sh   # 스테이징한 변경을 직접 검사
 ```
 
 시크릿이 아닌데 걸리는 값(프런트의 공개 키 등)은 그 줄에 `gitleaks:allow` 주석을 붙이거나 `.gitleaksignore`에 지문을 적는다.

@@ -1,5 +1,5 @@
 #!/bin/sh
-# 스테이징된 변경에서 시크릿을 찾는다(스펙 13.2). 켜기: git config core.hooksPath .githooks
+# 스테이징된 변경에서 시크릿을 찾는다(스펙 13.2). lefthook.yml의 pre-commit이 부른다(켜기: npm install, CONTRIBUTING.md).
 # gitleaks 실행 파일이 있으면 그것을, 없으면 핀한 이미지를 쓴다. 둘 다 없으면 경고만 하고 통과한다(CI lint:secrets가 다시 본다).
 set -u
 # shellcheck source=infra/ci/tool-images.sh

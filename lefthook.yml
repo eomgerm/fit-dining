@@ -23,13 +23,18 @@ commit-msg:
       priority: 2
       run: node scripts/git-rules.cjs verify {1}
 
-# 포맷터/린터는 각 파트 기술 스택이 정해지면 추가한다. 예시:
+# 스테이징한 변경에서 시크릿을 찾는다(설계 13.2절). gitleaks 실행 파일이나 docker가 없으면 경고만 하고 통과하며 CI의 lint:secrets가 다시 본다.
+# 직접 돌리려면 `sh infra/ci/pre-commit-secrets.sh`다.
+pre-commit:
+  commands:
+    secrets:
+      run: sh infra/ci/pre-commit-secrets.sh
+
+# 포맷터/린터는 각 파트 기술 스택이 정해지면 위 pre-commit의 commands에 추가한다. 예시:
 #  - {staged_files} 는 저장소 루트 기준 경로(fe/src/...)다. root 를 쓰면 해당 폴더 기준으로 바뀐다.
 #  - stage_fixed: true 는 포맷터가 고친 파일을 다시 스테이징한다.
+#  - 여러 커맨드를 동시에 돌리려면 pre-commit 아래에 parallel: true 를 둔다.
 #
-# pre-commit:
-#   parallel: true
-#   commands:
 #     lint-fe:
 #       root: "fe/"
 #       glob: "*.{js,jsx,ts,tsx}"
