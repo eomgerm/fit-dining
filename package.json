@@ -1,0 +1,13 @@
+{
+  "name": "fit-dining",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "prepare": "lefthook install",
+    "test:hooks": "node --test scripts/git-rules.test.cjs"
+  },
+  "devDependencies": {
+    "lefthook": "^2.2.2"
+  }
+}
