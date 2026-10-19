@@ -1,0 +1,86 @@
+# 환경변수 계약
+
+서비스가 읽는 환경변수의 키 목록이다. 값은 서버의 `/etc/fit/*.env`에만 두고 저장소에는 `*.env.example`(키와 자리표시자)만 둔다([design.md](../design.md) 12.4절, 13.2절).
+
+- 상태: **제안**. BE·프런트 팀과 M1 전에 합의한다([README.md](README.md)).
+- 형식: `KEY=VALUE`만 쓴다. 공백, 따옴표, `#`, `$`, 백슬래시, 백틱, CRLF를 금지한다. `check_env_files.py`가 검사한다.
+- 일치: 아래 표와 예제 파일의 키는 `infra/ci/check_env_contract.py`가 맞춰 본다. 예제 파일에 있는 키는 표에 있어야 하고, 필수 키는 예제 파일에 있어야 한다. 키를 바꾸면 이 표와 예제 파일을 함께 고친다.
+- 자리표시자: 예제의 `REPLACE_ME`는 비밀이 아직 없다는 표시다. BE는 이 값이나 비어 있는 값으로는 기동을 거부한다(BE 계약 #8).
+- `$`가 필요한 값(bcrypt 해시 등)은 base64로 인코딩해 둔다(design.md 13.2절).
+
+## 파일 대응
+
+| 그룹 | 예제 파일 | 소비자 |
+|---|---|---|
+| `app` | `infra/app/app.env.example` | BE 웹 컨테이너(`/etc/fit/dev.env`, `/etc/fit/prod.env`) |
+| `migrate` | `infra/app/migrate.env.example` | 마이그레이션 일회성 컨테이너. DDL 자격만 담고 웹 컨테이너에는 넣지 않는다 |
+| `local` | `infra/local/local.env.example` | 로컬 개발 스택(`infra/local/compose.yml`) |
+
+이 문서를 만든 계획 이후의 계획이 `data`, `edge`, `obs`, `ops` 그룹을 같은 표에 더한다(design.md 13.2절의 파일 구분).
+
+## 키 목록
+
+필수가 `O`이면 그 그룹의 예제 파일에 반드시 있어야 하고 `X`이면 선택이다.
+
+| 키 | 그룹 | 필수 | 설명 |
+|---|---|---|---|
+| `APP_ENV` | app, migrate | O | 환경 이름 `dev` 또는 `prod`. 부팅 때 DB 이름, Redis 호스트, OpenSearch 접두사가 이 값과 맞는지 검사한다 |
+| `SPRING_PROFILES_ACTIVE` | app, migrate | O | 웹은 `dev` 또는 `prod`, 마이그레이션 컨테이너는 `migrate` |
+| `TZ` | app, migrate | O | `Asia/Seoul` |
+| `SPRING_DATASOURCE_URL` | app, migrate | O | JDBC URL. 환경별 DB는 `fit_dev`, `fit_prod` |
+| `SPRING_DATASOURCE_USERNAME` | app, migrate | O | app은 `fit_dev_app`·`fit_prod_app`(DML), migrate는 `fit_migrator`(DDL) |
+| `SPRING_DATASOURCE_PASSWORD` | app, migrate | O | 비밀 |
+| `SPRING_DATA_REDIS_HOST` | app | O | `redis-dev` 또는 `redis-prod` |
+| `SPRING_DATA_REDIS_PORT` | app | O | `6379` |
+| `SPRING_DATA_REDIS_PASSWORD` | app | O | 비밀(requirepass) |
+| `OPENSEARCH_URL` | app | O | `http://opensearch:9200` |
+| `OPENSEARCH_INDEX_PREFIX` | app | O | `dev-` 또는 `prod-` |
+| `S3_ENDPOINT` | app | O | Garage S3 API. 서버는 `http://garage:3900` |
+| `S3_REGION` | app | O | `garage` |
+| `S3_BUCKET` | app, local | O | `fit-dev-photos` 또는 `fit-prod-photos` |
+| `S3_ACCESS_KEY` | app, local | O | 환경 전용 키 |
+| `S3_SECRET_KEY` | app, local | O | 비밀 |
+| `S3_PATH_STYLE` | app | O | `true`. Garage는 path-style을 쓴다 |
+| `JWT_SECRET` | app | O | 비밀. 서명 방식은 BE 팀이 정한다 |
+| `MODAL_BASE_URL` | app | O | Modal 엔드포인트의 기준 URL. 환경별 앱이 다르다 |
+| `MODAL_KEY` | app | O | `Modal-Key` 헤더 값. 비밀 |
+| `MODAL_SECRET` | app | O | `Modal-Secret` 헤더 값. 비밀 |
+| `MODAL_ENABLED` | app | O | 킬스위치. `false`면 키워드 검색으로 대체한다 |
+| `GMS_BASE_URL` | app | O | GMS(SSAFY LLM API) 기준 URL |
+| `GMS_API_KEY` | app | O | 비밀 |
+| `GMS_ENABLED` | app | O | 킬스위치 |
+| `BATCH_ENABLED` | app | O | 새벽 배치. dev 기본값은 `false` |
+| `MODAL_TIMEOUT_MS` | app | X | 일반 호출 타임아웃 |
+| `MODAL_COLD_START_TIMEOUT_MS` | app | X | 첫 호출(콜드 스타트) 타임아웃 |
+| `MODAL_DAILY_CALL_BUDGET` | app | X | 하루 호출 예산(Redis 카운터) |
+| `GMS_DAILY_CALL_BUDGET` | app | X | 하루 호출 예산 |
+| `APIFY_TOKEN` | app | X | 비밀. 리뷰 수집을 쓸 때만 |
+| `APIFY_ENABLED` | app | X | 킬스위치 |
+| `PUSH_ENABLED` | app | X | 웹 푸시 킬스위치. 방식은 미정이다(design.md 16절) |
+| `PUSH_VAPID_PUBLIC_KEY` | app | X | VAPID 방식일 때 |
+| `PUSH_VAPID_PRIVATE_KEY` | app | X | VAPID 방식일 때. 비밀 |
+| `PUSH_VAPID_SUBJECT` | app | X | VAPID 방식일 때 `mailto:` 주소 |
+| `FIT_LOCAL_PG_PORT` | local | X | 호스트에 게시하는 Postgres 포트. 기본 `15432` |
+| `FIT_LOCAL_REDIS_PORT` | local | X | Redis 포트. 기본 `16379` |
+| `FIT_LOCAL_S3_PORT` | local | X | Garage S3 API 포트. 기본 `13900` |
+| `FIT_LOCAL_S3_WEB_PORT` | local | X | Garage 웹 엔드포인트 포트. 기본 `13902` |
+| `FIT_LOCAL_OPENSEARCH_PORT` | local | X | OpenSearch 포트. 기본 `19200` |
+| `POSTGRES_PASSWORD` | local | O | Postgres 관리자(`postgres`) 비밀번호 |
+| `FIT_MIGRATOR_PASSWORD` | local | O | `fit_migrator` 비밀번호 |
+| `FIT_DEV_APP_PASSWORD` | local | O | `fit_dev_app` 비밀번호 |
+| `REDIS_PASSWORD` | local | O | Redis 비밀번호 |
+| `GARAGE_RPC_SECRET` | local | O | Garage RPC 비밀. 64자리 16진수 |
+| `GARAGE_ADMIN_TOKEN` | local | O | Garage 관리 API 토큰 |
+
+로컬 그룹의 값은 개발용 가짜 값이다. 서버 값으로 쓰지 않는다.
+
+## 프런트 런타임 설정 (`/config.json`)
+
+번들에는 환경 값을 넣지 않고 시작할 때 `/config.json`을 받아 쓴다(design.md 12.5절 #3). 브라우저에 공개되는 값만 둔다. 이 표는 파일이 없어 검사기가 보지 않는다.
+
+| 키 | 필수 | 설명 |
+|---|---|---|
+| `env` | O | `dev` 또는 `prod` |
+| `posthogKey` | X | PostHog 공개 키 |
+| `posthogHost` | X | PostHog 호스트 |
+| `pushPublicKey` | X | 웹 푸시 공개 키 |
