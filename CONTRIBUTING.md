@@ -102,6 +102,8 @@ infra/chore/jenkins-pipeline-S15P31A302-4
 | `prepare-commit-msg` | `git-rules.cjs branch` | 브랜치 이름 검사 (에디터가 열리기 전에 막음) |
 | `commit-msg` | `git-rules.cjs complete` | type에 맞는 이모지와 브랜치의 Jira 키를 메시지에 채움 |
 | `commit-msg` | `git-rules.cjs verify` | 커밋 메시지 형식 최종 검사 |
+| `pre-commit` | `infra/ci/pre-commit-secrets.sh` | 스테이징한 변경에서 시크릿(토큰, 비밀번호) 검사 |
+| `pre-merge-commit` | `infra/ci/no-merge-commit.sh` | 병합 커밋(3-way merge) 차단 |
 
 - 설정 파일: [`lefthook.yml`](lefthook.yml)
 - 검사 로직 + 타입 목록 단일 소스: [`scripts/git-rules.cjs`](scripts/git-rules.cjs)
@@ -114,3 +116,14 @@ LEFTHOOK=0 git commit -m "..."
 ```
 
 `git commit --no-verify` 는 `commit-msg` 만 건너뛰고 브랜치 이름 검사(`prepare-commit-msg`)는 그대로 실행됩니다.
+
+## 4. 병합 커밋 금지
+
+`master`에는 병합 커밋(3-way merge) 없이 fast-forward로만 들어갑니다. 파이프라인이 검증한 커밋이 그대로 올라가야 하기 때문입니다.
+
+- 브랜치를 최신으로 만들 때: `git fetch origin` 다음 `git rebase origin/master`
+- 원격 변경을 당겨받을 때: `git pull --rebase` (한 번만 `git config --global pull.rebase true`로 기본값을 바꿔 둘 수 있습니다)
+- rebase 뒤에는 `git push --force-with-lease`로 올립니다. `master`에는 force push가 막혀 있습니다.
+- MR 화면에서 병합할 때는 먼저 **Rebase** 버튼으로 rebase하고 파이프라인이 다시 돈 뒤 병합합니다.
+- 병합 커밋을 만들려 하면 로컬 훅(`pre-merge-commit`)이 막습니다. 진행 중인 병합은 `git merge --abort`로 취소합니다.
+- 이미 병합 커밋을 올렸다면 MR의 `lint:history`가 실패합니다. `git rebase origin/master`로 없앤 뒤 다시 올립니다.

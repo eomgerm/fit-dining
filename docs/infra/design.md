@@ -398,7 +398,7 @@ Caddy 컨테이너(`caddy:2.x`, 구현 시 최신 2.x를 핀)가 A의 80·443·8
 
 ### 6.3 파이프라인 `.gitlab-ci.yml`
 
-단계는 `verify` → `build` → `deploy` → `smoke` 순서다. `verify`는 B에서, 나머지는 A의 deploy 러너에서 돈다. 변경 감지는 쓰지 않는다. 레지스트리 조회가 필요한 `lint:image-arch`와 MR에서만 의미 있는 `lint:migrations`만 조건부로 돌고, 나머지는 항상 전체를 실행한다.
+단계는 `verify` → `build` → `deploy` → `smoke` 순서다. `verify`는 B에서, 나머지는 A의 deploy 러너에서 돈다. 변경 감지는 쓰지 않는다. 레지스트리 조회가 필요한 `lint:image-arch`와 MR에서만 의미 있는 `lint:migrations`와 `lint:history`만 조건부로 돌고, 나머지는 항상 전체를 실행한다.
 
 | 잡 | 단계 | 내용 |
 |---|---|---|
@@ -417,6 +417,7 @@ Caddy 컨테이너(`caddy:2.x`, 구현 시 최신 2.x를 핀)가 A의 80·443·8
 - `lint:image-arch`: 도구 이미지 핀이나 로컬 스택 이미지가 바뀔 때만 돈다
 - `lint:shell`, `lint:docker`, `lint:yaml`: `infra/`와 루트 설정만 엄격하게 본다. be의 Dockerfile은 오류 수준만 막는다. 다른 팀 코드는 각자의 잡이 맡는다
 - `lint:secrets`: 저장소 전체와 MR 커밋 이력
+- `lint:history`: MR에서만 돈다. MR 안의 병합 커밋(3-way merge)을 막는다
 - `lint:migrations`: MR에서만 돈다. 적용된 Flyway 파일의 수정, 버전 중복, 순서 역전을 막는다
 - 도구별로 잡을 나눈다. job 컨테이너 안에서 `docker run -v $PWD`로 도구 컨테이너를 띄우면 워크스페이스가 호스트 경로가 아니라 마운트되지 않기 때문이다
 - `caddy validate`와 `promtool check/test`는 해당 파일이 생기는 계획에서 추가한다
@@ -673,6 +674,7 @@ Grafana는 팀원에게 viewer 계정을 준다. A503에서는 SSH 보유자만 
 **병합 순서**
 
 - fast-forward 병합은 병합 전에 source 브랜치를 target 위로 rebase해야 한다. 그래서 병합은 한 번에 하나씩 일어나고, 병합될 때마다 남은 MR은 rebase하고 파이프라인을 다시 돌린다.
+- 병합 커밋(3-way merge)은 쓰지 않는다. 브랜치는 `git rebase origin/master`로 최신화하고 `git pull --rebase`로 당겨받는다. 로컬에서는 lefthook의 `pre-merge-commit`이, MR에서는 CI의 `lint:history`가 병합 커밋을 막는다. GitLab의 fast-forward 병합은 병합 커밋이 든 브랜치도 받아주므로 이 검사가 필요하다.
 - merge train은 쓰지 않는다. Premium·Ultimate 기능이고 fast-forward와 완전히 호환되지 않는다 (확인: GitLab 문서).
 - 병합 권한자는 준비된 MR을 먼저 올라온 순서로 하나씩 병합한다. 대기가 길면 변경이 작은 MR부터 병합한다.
 - verify 러너가 B 한 대(`concurrent 1`)라 MR이 몰리면 큐가 길어진다. 파이프라인에는 시간 상한(`timeout`, 예: 30분, 제안값)을 둔다.
@@ -973,7 +975,7 @@ infra/
   ops/         (B) compose.ops.yml, prometheus/, alertmanager/, blackbox, port-audit.sh, vault-ingest.sh
   deploy/      deploy.sh, rollback.sh, preflight.sh, smoke.sh, notify.sh, fit-up.sh
   backup/      pg-backup.sh, verify-dump.sh, push-vault.sh, photos-backup.sh, restore-check.sh(노트북용)
-  ci/          ports_invariant.py, check_compose_projects.py, check_env_files.py, check_env_contract.py, check_eol.py, migration_immutability.py, images_arch.py, run-local-checks.sh, tool-images.sh, compose-projects.txt, tests/
+  ci/          ports_invariant.py, check_compose_projects.py, check_env_files.py, check_env_contract.py, check_eol.py, check_linear_history.py, no-merge-commit.sh, migration_immutability.py, images_arch.py, run-local-checks.sh, tool-images.sh, compose-projects.txt, tests/
   local/       compose.yml (profile: core, search), fit-local.sh, local.env.example, garage/, opensearch/Dockerfile, README.md
 .gitlab-ci.yml
 docs/infra/

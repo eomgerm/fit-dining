@@ -16,6 +16,7 @@ Fit Dining 인프라 코드. 설계는 [docs/infra/design.md](../docs/infra/desi
 | `check_env_files.py` | env는 `KEY=VALUE`만, 주석·공백·따옴표·`#`·`$`·백슬래시·백틱 금지, 필수 키 검사. 값은 출력하지 않는다 | 12.4절 |
 | `ports_invariant.py` | 호스트 게시 포트는 `127.0.0.1:`만, 예외는 caddy의 80/443/8443 | 13.1절 |
 | `check_env_contract.py` | 환경변수 계약 표(`docs/infra/contracts/env.md`)와 `*.env.example`의 키가 같음, 필수 키 존재 | 12.4절 |
+| `check_linear_history.py` | MR 안에 병합 커밋(3-way merge) 금지. 브랜치는 rebase로 최신화 | 10.8절 |
 | `migration_immutability.py` | 적용된 마이그레이션 수정·삭제·이름 변경 금지(MR) | 6.5절 |
 | `images_arch.py` | 이미지가 대상 호스트 플랫폼(A amd64, B arm64)을 지원 | 3절 |
 
