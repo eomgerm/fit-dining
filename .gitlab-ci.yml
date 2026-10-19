@@ -45,6 +45,7 @@ lint:guards:
     - python3 -m unittest discover -s infra/ci/tests -v
     - python3 infra/ci/check_eol.py
     - python3 infra/ci/check_compose_projects.py
+    - python3 infra/ci/check_env_contract.py
     - |
       files=$(git ls-files 'infra/*.env.example')
       if [ -n "$files" ]; then python3 infra/ci/check_env_files.py $files; fi
@@ -58,10 +59,13 @@ lint:image-arch:
     - apk add --no-cache python3
   script:
     - python3 infra/ci/images_arch.py --platform linux/arm64 --platform linux/amd64 --images-from-sh infra/ci/tool-images.sh
+    - python3 infra/ci/images_arch.py --platform linux/arm64 --platform linux/amd64 --compose infra/local/compose.yml --env-file infra/local/local.env.example --dockerfile infra/local/opensearch/Dockerfile
   rules:
     - changes:
         - infra/ci/tool-images.sh
         - infra/ci/images_arch.py
+        - infra/local/compose.yml
+        - infra/local/opensearch/Dockerfile
 
 # 인프라 소유 파일만 엄격하게 검사한다. be·fe·ai는 각 팀 린트가 맡는다(스펙 6.3, 12.2).
 lint:shell:

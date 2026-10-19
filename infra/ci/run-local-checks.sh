@@ -105,11 +105,14 @@ check_all() {
   else
     run_step "env 형식" "$PY" infra/ci/check_env_files.py "${envs[@]}"
   fi
+  run_step "env 계약 (표와 예제 파일)" "$PY" infra/ci/check_env_contract.py
   run_step "ports (compose 프로젝트)" "$PY" infra/ci/check_compose_projects.py
   if [ "${SKIP_ARCH:-0}" = "1" ]; then
     skip "arch (SKIP_ARCH=1)"
   else
     run_step "arch (도구 이미지)" "$PY" infra/ci/images_arch.py --platform linux/arm64 --platform linux/amd64 --images-from-sh infra/ci/tool-images.sh
+    # 로컬 스택은 개발자 PC(Windows·Intel Mac은 amd64, Apple Silicon은 arm64)에서 돈다
+    run_step "arch (로컬 스택)" "$PY" infra/ci/images_arch.py --platform linux/arm64 --platform linux/amd64 --compose infra/local/compose.yml --env-file infra/local/local.env.example --dockerfile infra/local/opensearch/Dockerfile
   fi
   # 인프라 소유 파일만 엄격하게 본다. be·fe·ai는 각 팀 린트가 맡는다(스펙 6.3, 12.2). be의 Dockerfile은 오류만 막는다.
   check_tool shellcheck "$SHELLCHECK_IMAGE" 'infra/*.sh' -- shellcheck -x
@@ -145,6 +148,9 @@ EOF
   printf 'A="x"\n' >"$d/bad.env"
   printf 'services:\n  a:\n    image: x\n    ports: ["8080:80"]\n' >"$d/bad-compose.yml"
   printf 'a: 1\r\n' >"$d/crlf.yml"
+  # shellcheck disable=SC2016 # 백틱은 마크다운 표의 일부이며 확장하지 않는다
+  printf '| `A_KEY` | app | O | 설명 |\n| `app` | `x.env.example` | 소비자 |\n' >"$d/contract.md"
+  printf 'STRAY_KEY=1\n' >"$d/x.env.example"
   expect_fail shellcheck drun "$SHELLCHECK_IMAGE" shellcheck "$d/bad.sh"
   expect_fail hadolint drun "$HADOLINT_IMAGE" hadolint "$d/Dockerfile"
   expect_fail yamllint drun "$YAMLLINT_IMAGE" yamllint -c .yamllint.yaml "$d/bad.yml"
@@ -152,6 +158,7 @@ EOF
   expect_fail env-format "$PY" infra/ci/check_env_files.py "$d/bad.env"
   expect_fail ports "$PY" infra/ci/ports_invariant.py "$d/bad-compose.yml"
   expect_fail eol "$PY" infra/ci/check_eol.py "$d/crlf.yml"
+  expect_fail env-contract "$PY" infra/ci/check_env_contract.py --contract "$d/contract.md" --root "$d"
 }
 
 if [ "${1:-}" = "--self-test" ]; then
