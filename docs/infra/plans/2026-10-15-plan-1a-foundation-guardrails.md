@@ -92,7 +92,7 @@
 
 | 계획 | 내용 |
 |---|---|
-| 1B 로컬 개발 환경과 서비스 계약 | `infra/local/compose.yml`(profile `core`: Postgres(pgvector)·Redis·Garage, `search`: nori를 넣은 OpenSearch), `docs/infra/contracts/`(env.md, BE·AI(Modal 호출)·프런트 계약, 설계 12절), `*.env.example`. BE·FE 팀이 이미 개발 중이라 서버 없이도 가장 먼저 쓰이는 산출물이고, 계약은 M1 전에 합의해야 한다 |
+| [1B 로컬 개발 환경과 서비스 계약](2026-10-19-plan-1b-local-env-contracts.md) | `infra/local/compose.yml`(profile `core`: Postgres(pgvector)·Redis·Garage, `search`: nori를 넣은 OpenSearch)과 `fit-local.sh`, `docs/infra/contracts/`(env.md와 합의 상태 목록. BE·AI(Modal 호출)·프런트 계약은 합의되면 옮긴다), `*.env.example`, 계약과 예제의 일치 검사. BE·FE 팀이 이미 개발 중이라 서버 없이도 가장 먼저 쓰이는 산출물이고, 계약은 M1 전에 합의해야 한다 |
 | 1C 엣지와 배포 | Caddyfile(PWA 정적 서빙, dev 쿠키 게이트, 사진 업로드·읽기 프록시), `deploy.sh`(BE Blue/Green과 PWA 릴리스 링크 전환)·`rollback.sh`·`preflight.sh`(다운그레이드 가드 포함)·`smoke.sh`(검색 1건의 폴백 표시 확인 포함), `.gitlab-ci.yml`의 `be:test`·`fe:test`·`fe:build`(PWA 산출물 검사 포함)·`build`·`deploy`(`environment`, 환경별 `resource_group`)·`smoke` 잡, 로컬 시뮬레이션. 이 계획의 `check_env_files.py`, `ports_invariant.py`를 호출한다 |
 | 1D 데이터와 백업 | compose.data.yml, `ensure-databases.sh`, 백업·검증·전송·복원 스크립트 |
 | 1E 관측성 | A와 B의 Prometheus·Alertmanager·blackbox 설정, 알림 규칙(Modal 폴백·예산 알림, B 도달 알림 포함)과 `promtool test`, 포트 노출 감사, 대시보드. B의 ops 스택 compose가 생기면 그 이미지의 arm64 검사를 `lint:image-arch`에 추가한다 |
