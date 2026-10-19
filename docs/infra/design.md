@@ -660,14 +660,15 @@ Grafana는 팀원에게 viewer 계정을 준다. A503에서는 SSH 보유자만 
 
 **GitLab 프로젝트 설정** (인프라 담당이 설정한다. 단계별 절차와 시점은 [gitlab-setup.md](gitlab-setup.md))
 
-- `develop`, `master`는 protected로 둔다. push는 막고 병합 권한은 인프라 담당과 지정한 리뷰어로 좁힌다(동결 중에는 10.6절). 사용자 단위 지정은 Premium 이상에서만 가능하다 (확인: GitLab 문서). Free면 Maintainer 역할을 인프라 담당과 지정한 리뷰어로만 둔다.
-- Merge method는 fast-forward merge로 한다. 병합 시점의 자동 rebase(Enable automatic rebase prior to merge)는 켜지 않는다. 켜면 rebase한 결과에 파이프라인이 다시 돌지 않아 검증하지 않은 SHA가 병합된다 (확인: GitLab 문서).
+- `develop`(만든 뒤)과 `master`는 protected로 둔다. push는 막고 병합 권한은 인프라 담당과 지정한 리뷰어로 좁힌다(동결 중에는 10.6절). 사용자 단위 지정은 Premium 이상에서만 가능하다 (확인: GitLab 문서). Free면 Maintainer 역할을 인프라 담당과 지정한 리뷰어로만 둔다.
+- Merge method는 fast-forward merge로 한다. 병합 시점의 자동 rebase(Enable automatic rebase prior to merge)는 켜지 않는다(이 서버 18.11에는 옵션이 없다). 켜면 rebase한 결과에 파이프라인이 다시 돌지 않아 검증하지 않은 SHA가 병합된다 (확인: GitLab 문서).
+- 병합할 때 squash(Squash commits when merging)는 `Do not allow`로 둔다. squash는 새 커밋을 만들어 파이프라인이 검증한 SHA와 달라진다.
 - "Pipelines must succeed"와 "All threads must be resolved"를 켠다.
 - 병합한 뒤 source branch를 지운다.
 - "Auto-cancel redundant pipelines"를 켠다(구현 시 확인). 같은 브랜치에 새 커밋이 오면 이전 파이프라인의 verify 잡이 취소된다. verify 잡만 `interruptible`이다.
 - "Prevent outdated deployment jobs"를 켜고 `process_mode`를 `oldest_first`로 바꾼다(6.2절).
 - 브랜치 이름과 커밋 메시지는 저장소 루트의 `CONTRIBUTING.md`(lefthook으로 검사)를 따른다. 브랜치는 `[플랫폼/]<타입>/<설명>-<Jira키>`, 커밋은 `<:gitmoji:> <type>(<scope>): <설명> (<Jira 키>)`이고 type은 소문자, 인프라 작업의 scope는 `infra`다. `develop`과 `master`는 이름 검사에서 제외된다.
-- MR 승인은 1명 이상을 요구한다(제안값, 팀 합의).
+- MR 승인은 설정으로 강제할 수 없다(CE에 승인 규칙이 없다). 병합 권한을 Maintainer로 좁히고 MR 설명에 체크 항목을 둔다.
 
 **병합 순서**
 
@@ -680,7 +681,7 @@ Grafana는 팀원에게 viewer 계정을 준다. A503에서는 SSH 보유자만 
 **인프라 경로 변경**
 
 - `.gitlab-ci.yml`, `infra/`, `be/src/main/resources/db/migration/`을 바꾸는 MR은 인프라 담당 승인을 받는다. CI 파일은 B와 A의 러너에서 코드를 실행하는 경로이기 때문이다.
-- MR approval rules와 CODEOWNERS 강제는 Premium 기능이라 Community Edition인 이 GitLab에서는 쓸 수 없다고 본다 (추정, 16절 #25). 쓸 수 없으면 병합 권한을 Maintainer 역할로 좁히고(Maintainer는 인프라 담당과 지정한 리뷰어만) MR 설명에 체크 항목을 둔다.
+- MR approval rules와 CODEOWNERS 강제는 Premium 기능이라 Community Edition인 이 GitLab에서는 쓸 수 없다 (확인: 설정 화면에 승인 규칙 항목이 없다, 16절 #25). 그래서 병합 권한을 Maintainer 역할로 좁히고(Maintainer는 인프라 담당과 지정한 리뷰어만) MR 설명에 체크 항목을 둔다.
 
 **dev 사용**
 
@@ -958,7 +959,7 @@ AI 팀과 M1 전에 합의한다. FastAPI는 Modal에서 돌고 A·B에는 AI �
 | 22 | 검색·요청 해석 API를 비로그인으로 허용하는지(허용하면 IP당 일일 횟수 제한) | BE·AI 팀 | M1 전 |
 | 23 | 예상 규모(동시 사용자, 피크 RPS, 문서·벡터 수, 사진). 4.4절 자리표시자 확정 | 팀 | M1 전 |
 | 24 | prod 첫 데이터 적재·임베딩 백필의 담당·일정, 소요 시간과 비용 추정 | BE·AI 팀 | M1 전 |
-| 25 | MR approval rules·CODEOWNERS 강제 (CE라 불가로 추정, 설정 화면으로 확인), `process_mode` 변경에 쓸 API 토큰 권한(Maintainer 이상) | 인프라, 팀장 | 사전~M0 |
+| 25 | `process_mode` 변경에 쓸 API 토큰 권한(Maintainer 이상). 승인 규칙·CODEOWNERS 강제는 CE에서 쓸 수 없다(확인) | 인프라, 팀장 | 사전~M0 |
 
 ## 17. 산출물
 

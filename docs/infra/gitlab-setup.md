@@ -30,18 +30,18 @@ lab.ssafy.com의 프로젝트(S15P31A302)를 설계([design.md](design.md) 6절,
 |---|---|---|
 | 보호 브랜치 (역할 단위: Developers + Maintainers, Maintainers, No one) | 가능 | 가능 |
 | 병합·push 권한을 사용자·그룹 단위로 지정 | 불가 | 가능 (확인: GitLab 문서) |
-| MR 승인 규칙, CODEOWNERS 강제 | 불가로 추정 (설정 화면에 승인 규칙 항목이 있는지로 확인, #25) | 가능 (미확인) |
+| MR 승인 규칙, CODEOWNERS 강제 | 불가 (확인: 18.11 CE의 설정 화면에 승인 규칙 항목이 없다, #25) | 가능 (미확인) |
 | merge train | 불가 | 가능. 이 설계는 쓰지 않는다 (10.8절) |
 
 ## 1단계: 브랜치 보호와 병합 규칙 (서버 없이)
 
 ### 보호 브랜치
 
-Settings → Repository → Branch rules → **Add branch rule**에서 `develop`, `master` 각각 다음으로 만든다. `develop`이 아직 없으면 `master`에서 먼저 만든다.
+Settings → Repository → Branch rules → **Add branch rule**에서 `master`에 다음으로 만든다. 지금은 `develop`이 없어 `master`에만 적용했다. `develop`은 배포 파이프라인(계획 1C)을 만들 때 팀과 합의해 만들고 같은 설정을 건다.
 
-- [ ] Allowed to push and merge: **No one**
-- [ ] Allowed to merge: Premium 이상이면 인프라 담당과 지정한 리뷰어. Free면 **Maintainers**
-- [ ] Allowed to force push: 끔
+- [x] Allowed to push and merge: **No one**
+- [x] Allowed to merge: Premium 이상이면 인프라 담당과 지정한 리뷰어. Free면 **Maintainers**
+- [x] Allowed to force push: 끔
 
 Free(CE 포함)에서는 병합 권한자를 개별 사용자로 지정할 수 없다. 이 경우 Maintainer 역할을 인프라 담당과 지정한 리뷰어로만 둔다.
 
@@ -49,26 +49,27 @@ Free(CE 포함)에서는 병합 권한자를 개별 사용자로 지정할 수 �
 
 Settings → Merge requests에서 설정한다.
 
-- [ ] Merge method: **Fast-forward merge**
-- [ ] **Enable automatic rebase prior to merge**: 켜지 않는다. 켜면 병합 시점에 rebase한 결과에 파이프라인이 다시 돌지 않아 검증하지 않은 SHA가 병합된다 (확인: GitLab 문서). 병합 전 rebase는 MR 화면의 Rebase 버튼으로 하고 파이프라인이 다시 돈 뒤 병합한다.
-- [ ] Merge checks의 **All threads must be resolved**: 켬
-- [ ] 병합 후 source branch 삭제를 기본으로 선택
-- [ ] 승인 1명 이상. 플랜이 승인 규칙을 지원하지 않으면 MR 설명에 체크 항목을 둔다 (10.8절).
+- [x] Merge method: **Fast-forward merge**
+- [x] **Enable automatic rebase prior to merge**: 켜지 않는다. 이 서버(18.11)의 설정 화면에는 옵션이 없다(GitLab 19.2에서 추가됐다). 있는 버전에서 켜면 병합 시점에 rebase한 결과에 파이프라인이 다시 돌지 않아 검증하지 않은 SHA가 병합된다 (확인: GitLab 문서). 병합 전 rebase는 MR 화면의 Rebase 버튼으로 하고 파이프라인이 다시 돈 뒤 병합한다.
+- [x] **Squash commits when merging**: **Do not allow**. squash는 병합할 때 새 커밋(새 SHA)을 만들어 파이프라인이 검증한 커밋과 달라진다.
+- [x] Merge checks의 **All threads must be resolved**: 켬
+- [x] 병합 후 source branch 삭제를 기본으로 선택
+- [x] 승인 규칙: 이 서버(CE)에는 설정이 없다. 병합 권한을 Maintainer로 좁히고 MR 설명에 체크 항목을 둔다 (10.8절).
 - [ ] Merge checks의 **Pipelines must succeed**: 2단계에서 켠다
 
 ### 배포 안전 설정
 
 Settings → CI/CD → General pipelines에서 설정한다.
 
-- [ ] **Prevent outdated deployment jobs**: 켬. 같은 환경에서 더 최근에 시작한 배포가 있으면 오래된 배포 잡이 실패한다 (확인).
-- [ ] **Allow job retries for rollback deployments**: 끔. prod는 재시도 대신 `rollback.sh`로 되돌린다 (6.2절).
+- [x] **Prevent outdated deployment jobs**: 켬. 같은 환경에서 더 최근에 시작한 배포가 있으면 오래된 배포 잡이 실패한다 (확인).
+- [x] **Allow job retries for rollback deployments**: 끔. prod는 재시도 대신 `rollback.sh`로 되돌린다 (6.2절).
 
 ### 확인
 
 보호 브랜치에 직접 push해 보는 방식으로 시험하지 않는다. 설정이 틀렸다면 그 push가 실제로 반영되기 때문이다.
 
 - [ ] Branch rules 화면에서 `develop`, `master`의 Allowed to push and merge가 No one인지 읽는다.
-- [ ] 다음 MR에서 Merge method가 fast-forward로 표시되는지 확인한다. 설정 전에 병합된 MR 1번은 merge commit으로 병합됐다.
+- [ ] 설정 뒤 처음 병합되는 MR에서 병합 커밋이 생기지 않는지(`git log --graph`) 확인한다. 설정 전에 병합된 MR 1번은 merge commit으로 병합됐다.
 
 ## 2단계: 러너 등록과 병합 조건 강화 (M1)
 
@@ -112,8 +113,8 @@ curl --fail --header "PRIVATE-TOKEN: $GITLAB_API_TOKEN" \
 | 내 역할 (Maintainer 이상) | | | |
 | Create project runner 버튼 (#5) | 있음 | 2026-10-19 | 인프라 담당 |
 | 플랜과 GitLab 버전 | Community Edition v18.11.5 | 2026-10-19 | 인프라 담당 |
-| 승인 규칙·CODEOWNERS 사용 가능 (#25) | | | |
+| 승인 규칙·CODEOWNERS 사용 가능 (#25) | 불가 (CE, 설정 화면에 항목 없음) | 2026-10-19 | 인프라 담당 |
 | API 토큰 권한 (#25) | | | |
-| 1단계 완료 | | | |
+| 1단계 완료 | 완료 (사용자 보고) | 2026-10-19 | 인프라 담당 |
 | 2단계 완료 (러너 online) | | | |
 | 3단계 완료 (`oldest_first`) | | | |
