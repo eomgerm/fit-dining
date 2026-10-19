@@ -107,6 +107,12 @@ check_all() {
   fi
   run_step "env 계약 (표와 예제 파일)" "$PY" infra/ci/check_env_contract.py
   run_step "ports (compose 프로젝트)" "$PY" infra/ci/check_compose_projects.py
+  # MR의 병합 기준점은 origin/master다. 병합 커밋이 있으면 rebase로 없앤다.
+  if git rev-parse --verify -q origin/master >/dev/null; then
+    run_step "history (병합 커밋 금지)" "$PY" infra/ci/check_linear_history.py --base origin/master
+  else
+    skip "history (origin/master 없음)"
+  fi
   if [ "${SKIP_ARCH:-0}" = "1" ]; then
     skip "arch (SKIP_ARCH=1)"
   else
@@ -151,6 +157,17 @@ EOF
   # shellcheck disable=SC2016 # 백틱은 마크다운 표의 일부이며 확장하지 않는다
   printf '| `A_KEY` | app | O | 설명 |\n| `app` | `x.env.example` | 소비자 |\n' >"$d/contract.md"
   printf 'STRAY_KEY=1\n' >"$d/x.env.example"
+  # 병합 커밋이 든 임시 저장소(커밋 identity는 이 저장소 설정을 건드리지 않게 -c로 준다)
+  local g=(git -C "$d/hist" -c user.name=t -c user.email=t@t.t)
+  git init -q -b main "$d/hist"
+  "${g[@]}" commit -q --allow-empty -m base
+  "${g[@]}" tag start
+  "${g[@]}" switch -q -c feature
+  "${g[@]}" commit -q --allow-empty -m feature-work
+  "${g[@]}" switch -q main
+  "${g[@]}" commit -q --allow-empty -m main-moved
+  "${g[@]}" switch -q feature
+  "${g[@]}" merge -q --no-ff -m "Merge main into feature" main
   expect_fail shellcheck drun "$SHELLCHECK_IMAGE" shellcheck "$d/bad.sh"
   expect_fail hadolint drun "$HADOLINT_IMAGE" hadolint "$d/Dockerfile"
   expect_fail yamllint drun "$YAMLLINT_IMAGE" yamllint -c .yamllint.yaml "$d/bad.yml"
@@ -159,6 +176,7 @@ EOF
   expect_fail ports "$PY" infra/ci/ports_invariant.py "$d/bad-compose.yml"
   expect_fail eol "$PY" infra/ci/check_eol.py "$d/crlf.yml"
   expect_fail env-contract "$PY" infra/ci/check_env_contract.py --contract "$d/contract.md" --root "$d"
+  expect_fail history "$PY" infra/ci/check_linear_history.py --repo "$d/hist" --base start
 }
 
 if [ "${1:-}" = "--self-test" ]; then

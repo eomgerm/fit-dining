@@ -111,3 +111,16 @@ lint:migrations:
     - python3 infra/ci/migration_immutability.py
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+# MR 안의 병합 커밋(3-way merge)을 막는다. 브랜치는 rebase로 최신화한다(설계 10.8절).
+lint:history:
+  extends: .verify
+  image: $DOCKER_CLI_IMAGE
+  variables:
+    GIT_DEPTH: "0"
+  before_script:
+    - apk add --no-cache python3 git
+  script:
+    - python3 infra/ci/check_linear_history.py
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
