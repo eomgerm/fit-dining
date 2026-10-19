@@ -24,13 +24,13 @@ lab.ssafy.com의 프로젝트(S15P31A302)를 설계([design.md](design.md) 6절,
 - [ ] 내 역할이 Maintainer 이상인가 (프로젝트 Manage → Members).
 - [x] Settings → CI/CD → Runners에 **Create project runner** 버튼이 보이는가 (#5). 보인다(2026-10-19 확인). 안 보이면 설계 6.1절의 Jenkins 폴백을 팀과 논의한다.
 - [ ] 같은 화면에서 Instance runners 토글이 켜져 있는가. 켜져 있어도 이 설계는 프로젝트 러너 2개를 쓴다.
-- [ ] GitLab 플랜(Free, Premium, Ultimate)과 버전. 기능 차이는 아래 표다.
+- [x] GitLab 플랜과 버전. 이 GitLab은 Community Edition v18.11.5다(2026-10-19 확인). CE에는 Premium 기능이 없어 아래 표의 Free 열이 적용된다.
 
 | 기능 | Free | Premium 이상 |
 |---|---|---|
 | 보호 브랜치 (역할 단위: Developers + Maintainers, Maintainers, No one) | 가능 | 가능 |
 | 병합·push 권한을 사용자·그룹 단위로 지정 | 불가 | 가능 (확인: GitLab 문서) |
-| MR 승인 규칙, CODEOWNERS 강제 | (미확인, #25) | (미확인, #25) |
+| MR 승인 규칙, CODEOWNERS 강제 | 불가로 추정 (설정 화면에 승인 규칙 항목이 있는지로 확인, #25) | 가능 (미확인) |
 | merge train | 불가 | 가능. 이 설계는 쓰지 않는다 (10.8절) |
 
 ## 1단계: 브랜치 보호와 병합 규칙 (서버 없이)
@@ -43,7 +43,7 @@ Settings → Repository → Branch rules → **Add branch rule**에서 `develop`
 - [ ] Allowed to merge: Premium 이상이면 인프라 담당과 지정한 리뷰어. Free면 **Maintainers**
 - [ ] Allowed to force push: 끔
 
-Free에서는 병합 권한자를 개별 사용자로 지정할 수 없다. 이 경우 Maintainer 역할을 인프라 담당과 지정한 리뷰어로만 둔다.
+Free(CE 포함)에서는 병합 권한자를 개별 사용자로 지정할 수 없다. 이 경우 Maintainer 역할을 인프라 담당과 지정한 리뷰어로만 둔다.
 
 ### 병합 규칙
 
@@ -109,7 +109,7 @@ curl --fail --header "PRIVATE-TOKEN: $GITLAB_API_TOKEN" \
 |---|---|---|---|
 | 내 역할 (Maintainer 이상) | | | |
 | Create project runner 버튼 (#5) | 있음 | 2026-10-19 | 인프라 담당 |
-| 플랜과 GitLab 버전 | | | |
+| 플랜과 GitLab 버전 | Community Edition v18.11.5 | 2026-10-19 | 인프라 담당 |
 | 승인 규칙·CODEOWNERS 사용 가능 (#25) | | | |
 | API 토큰 권한 (#25) | | | |
 | 1단계 완료 | | | |

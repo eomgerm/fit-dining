@@ -93,7 +93,7 @@ Fit Dining(PWA 프런트, Spring Boot 백엔드, OpenSearch 검색, Modal 위의
 - **Docker 포트:** Docker 게시 포트는 ufw를 우회한다.
 - **인증서:** DNS-01은 못 쓴다. `p.ssafy.io` 존의 TXT 권한이 없다 (확인: A503 문서). Let's Encrypt HTTP-01만 가능하므로 80 포트는 갱신 때문에 상시 열어 둔다.
 - **도메인:** 패턴은 `<접두><기수><팀>.p.ssafy.io`이고 선배 팀은 `i15a603`, `j15a503`이었다. 우리 접두는 (미확인).
-- **GitLab:** lab.ssafy.com에 공용 러너가 없다 (확인: A503 문서). 프로젝트 러너 생성에는 Maintainer 권한이 필요하다 (확인: GitLab 문서).
+- **GitLab:** lab.ssafy.com은 Community Edition v18.11.5이고 Premium 기능은 쓸 수 없다 (확인: 팀원 확인). 공용 러너가 없다 (확인: A503 문서). 프로젝트 러너 생성에는 Maintainer 권한이 필요하다 (확인: GitLab 문서).
 - **AWS·S3:** AWS 콘솔·IAM·S3 사용 흔적이 선배 팀 양쪽에 없다. S3는 쓸 수 없다고 가정한다.
 - **아웃바운드:** 제한이 없었다(Docker Hub, HuggingFace 등 접근 가능).
 - **공인 IP:** Lightsail의 기본 공인 IP는 stop/start하면 바뀌고, 정적 IP는 인스턴스에 붙여 두면 무료다 (확인: AWS 문서). EC2의 공인 IP도 Elastic IP가 없으면 stop/start로 바뀐다. `remote_ip` 허용, 금고 전송, DNS가 이 IP에 기대므로 인스턴스는 멈추지 않고 M0에서 둘 다 고정 IP를 붙인다.
@@ -680,7 +680,7 @@ Grafana는 팀원에게 viewer 계정을 준다. A503에서는 SSH 보유자만 
 **인프라 경로 변경**
 
 - `.gitlab-ci.yml`, `infra/`, `be/src/main/resources/db/migration/`을 바꾸는 MR은 인프라 담당 승인을 받는다. CI 파일은 B와 A의 러너에서 코드를 실행하는 경로이기 때문이다.
-- MR approval rules와 CODEOWNERS 강제는 유료 플랜 기능일 수 있다 (미확인, 16절 #25). 쓸 수 없으면 병합 권한을 Maintainer 역할로 좁히고(Maintainer는 인프라 담당과 지정한 리뷰어만) MR 설명에 체크 항목을 둔다.
+- MR approval rules와 CODEOWNERS 강제는 Premium 기능이라 Community Edition인 이 GitLab에서는 쓸 수 없다고 본다 (추정, 16절 #25). 쓸 수 없으면 병합 권한을 Maintainer 역할로 좁히고(Maintainer는 인프라 담당과 지정한 리뷰어만) MR 설명에 체크 항목을 둔다.
 
 **dev 사용**
 
@@ -958,7 +958,7 @@ AI 팀과 M1 전에 합의한다. FastAPI는 Modal에서 돌고 A·B에는 AI �
 | 22 | 검색·요청 해석 API를 비로그인으로 허용하는지(허용하면 IP당 일일 횟수 제한) | BE·AI 팀 | M1 전 |
 | 23 | 예상 규모(동시 사용자, 피크 RPS, 문서·벡터 수, 사진). 4.4절 자리표시자 확정 | 팀 | M1 전 |
 | 24 | prod 첫 데이터 적재·임베딩 백필의 담당·일정, 소요 시간과 비용 추정 | BE·AI 팀 | M1 전 |
-| 25 | GitLab 플랜에서 MR approval rules·CODEOWNERS 강제 가능 여부, `process_mode` 변경에 쓸 API 토큰 권한(Maintainer 이상) | 인프라, 팀장 | 사전~M0 |
+| 25 | MR approval rules·CODEOWNERS 강제 (CE라 불가로 추정, 설정 화면으로 확인), `process_mode` 변경에 쓸 API 토큰 권한(Maintainer 이상) | 인프라, 팀장 | 사전~M0 |
 
 ## 17. 산출물
 
