@@ -636,7 +636,7 @@ Grafana는 팀원에게 viewer 계정을 준다. A503에서는 SSH 보유자만 
 
 - **병합 방식:** MR은 fast-forward로 병합한다(프로젝트 설정). 병합 커밋이 새 SHA를 만들면 dev에서 검증한 이미지·번들과 prod가 달라진다. `develop → master`가 fast-forward가 되려면 master에 develop에 없는 커밋이 없어야 하므로 핫픽스도 반드시 develop을 거친다.
 - **동결(11/04 이후):** 기능 MR은 받지 않는다. develop·master의 병합 권한을 인프라 담당과 지정한 리뷰어로 좁힌다.
-- **핫픽스 순서:** `hotfix/*` 브랜치 → develop MR(dev 자동 배포, `smoke:public` 통과) → `develop → master` fast-forward MR → 인프라 담당이 `deploy:prod`를 수동 실행 → smoke와 `rollback.sh` 준비 상태 확인 → Mattermost 공지.
+- **핫픽스 순서:** `hotfix` 타입 브랜치(10.8절) → develop MR(dev 자동 배포, `smoke:public` 통과) → `develop → master` fast-forward MR → 인프라 담당이 `deploy:prod`를 수동 실행 → smoke와 `rollback.sh` 준비 상태 확인 → Mattermost 공지.
 - **승인:** 2인(인프라 담당과 해당 영역 담당). 배포는 공지한 시간대에 한다. 장애 중에는 사후 승인을 허용하고 사유를 남긴다(RB-02b 포함).
 
 ### 10.7 첫 공개 준비 (11/02까지)
@@ -653,10 +653,10 @@ Grafana는 팀원에게 viewer 계정을 준다. A503에서는 SSH 보유자만 
 
 | 브랜치 | 역할 | 배포 |
 |---|---|---|
-| `feature/*` | 기능 개발. MR로 `develop`에 합친다 | 배포하지 않는다 |
+| `[플랫폼/]<타입>/<설명>-<Jira키>` (예: `fe/feat/login-page-S15P31A302-123`) | 개발 브랜치. MR로 `develop`에 합친다 | 배포하지 않는다 |
 | `develop` | 통합. 항상 배포 가능한 상태로 둔다 | dev 자동 배포 |
 | `master` | prod 승격 | prod 수동 배포 |
-| `hotfix/*` | 긴급 수정. `develop`을 거쳐 `master`로 간다(10.6절) | 위 경로를 따른다 |
+| `[플랫폼/]hotfix/<설명>-<Jira키>` | 긴급 수정. `develop`을 거쳐 `master`로 간다(10.6절) | 위 경로를 따른다 |
 
 **GitLab 프로젝트 설정** (인프라 담당이 설정한다. 단계별 절차와 시점은 [gitlab-setup.md](gitlab-setup.md))
 
@@ -666,7 +666,7 @@ Grafana는 팀원에게 viewer 계정을 준다. A503에서는 SSH 보유자만 
 - 병합한 뒤 source branch를 지운다.
 - "Auto-cancel redundant pipelines"를 켠다(구현 시 확인). 같은 브랜치에 새 커밋이 오면 이전 파이프라인의 verify 잡이 취소된다. verify 잡만 `interruptible`이다.
 - "Prevent outdated deployment jobs"를 켜고 `process_mode`를 `oldest_first`로 바꾼다(6.2절).
-- 브랜치 이름은 `feature/*`, `hotfix/*`를 쓴다.
+- 브랜치 이름과 커밋 메시지는 저장소 루트의 `CONTRIBUTING.md`(lefthook으로 검사)를 따른다. 브랜치는 `[플랫폼/]<타입>/<설명>-<Jira키>`, 커밋은 `<:gitmoji:> <type>(<scope>): <설명> (<Jira 키>)`이고 type은 소문자, 인프라 작업의 scope는 `infra`다. `develop`과 `master`는 이름 검사에서 제외된다.
 - MR 승인은 1명 이상을 요구한다(제안값, 팀 합의).
 
 **병합 순서**

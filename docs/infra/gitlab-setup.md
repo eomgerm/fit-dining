@@ -68,9 +68,11 @@ Settings → CI/CD → General pipelines에서 설정한다.
 보호 브랜치에 직접 push해 보는 방식으로 시험하지 않는다. 설정이 틀렸다면 그 push가 실제로 반영되기 때문이다.
 
 - [ ] Branch rules 화면에서 `develop`, `master`의 Allowed to push and merge가 No one인지 읽는다.
-- [ ] 첫 MR(`feature/infra-foundation`)에서 Merge method가 fast-forward로 표시되는지 확인한다.
+- [ ] 다음 MR에서 Merge method가 fast-forward로 표시되는지 확인한다. 설정 전에 병합된 MR 1번은 merge commit으로 병합됐다.
 
 ## 2단계: 러너 등록과 병합 조건 강화 (M1)
+
+서버를 받기 전에도 이 PC의 Docker에서 임시 verify 러너(태그 `verify`, docker executor, `concurrent 1`)를 돌려 파이프라인을 확인할 수 있다. GitLab CE 18.11.5에는 러너 이미지 `gitlab/gitlab-runner:alpine-v18.11.4`로 동작했다. B에 verify 러너를 등록한 뒤에는 임시 러너를 지우고 GitLab의 Runners 목록에서도 삭제한다.
 
 호스트에 `gitlab-runner`를 설치하는 일은 호스트 부트스트랩(계획 1F, 설계 3절)에서 한다. 아래는 GitLab 쪽 작업이다. 러너 생성은 Settings → CI/CD → Runners → **Create project runner**다. runner authentication token 방식이고, 옛 registration token은 GitLab 17.0부터 비활성화됐다 (확인).
 
