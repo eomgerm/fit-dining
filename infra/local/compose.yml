@@ -1,0 +1,98 @@
+# 로컬 개발용 스택. 서버 A의 fit-data와 같은 이미지·설정 방향을 쓰되 노트북에 맞게 줄였다.
+# profile: core(postgres, redis, garage), search(nori를 넣은 opensearch). 사용법은 infra/local/README.md.
+# 모든 호스트 게시는 127.0.0.1 바인딩이다(ports_invariant.py가 검사한다).
+name: fit-local
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.7-pg16
+    profiles: [core]
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+    command:
+      - postgres
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - max_connections=60
+      - -c
+      - idle_in_transaction_session_timeout=60000
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+    ports:
+      - 127.0.0.1:${FIT_LOCAL_PG_PORT:-15432}:5432
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U postgres -d postgres]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  redis:
+    image: redis:7.4.9-alpine
+    profiles: [core]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?}
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?}
+    command:
+      - sh
+      - -c
+      - exec redis-server --requirepass "$$REDIS_PASSWORD" --maxmemory 96mb --maxmemory-policy noeviction --appendonly yes --appendfsync everysec
+    ports:
+      - 127.0.0.1:${FIT_LOCAL_REDIS_PORT:-16379}:6379
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  garage:
+    image: dxflrs/garage:v2.4.1
+    profiles: [core]
+    command: [/garage, -c, /etc/garage/garage.toml, server]
+    environment:
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:?}
+      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:?}
+    ports:
+      - 127.0.0.1:${FIT_LOCAL_S3_PORT:-13900}:3900
+      - 127.0.0.1:${FIT_LOCAL_S3_WEB_PORT:-13902}:3902
+    volumes:
+      - ./garage:/etc/garage:ro
+      - garage-meta:/var/lib/garage/meta
+      - garage-data:/var/lib/garage/data
+    healthcheck:
+      test: [CMD, /garage, -c, /etc/garage/garage.toml, status]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  opensearch:
+    build:
+      context: ./opensearch
+    profiles: [search]
+    environment:
+      discovery.type: single-node
+      DISABLE_SECURITY_PLUGIN: "true"
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+      OPENSEARCH_JAVA_OPTS: -Xms512m -Xmx512m
+      action.destructive_requires_name: "true"
+    mem_limit: 1g
+    ports:
+      - 127.0.0.1:${FIT_LOCAL_OPENSEARCH_PORT:-19200}:9200
+    volumes:
+      - osdata:/usr/share/opensearch/data
+    healthcheck:
+      test: [CMD-SHELL, "curl -fsS 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s' >/dev/null"]
+      interval: 10s
+      timeout: 8s
+      retries: 18
+
+volumes:
+  pgdata:
+  redisdata:
+  garage-meta:
+  garage-data:
+  osdata:

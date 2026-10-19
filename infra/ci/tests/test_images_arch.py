@@ -43,6 +43,10 @@ class SourcesTest(unittest.TestCase):
         cfg = {"services": {"a": {"image": "x:1"}, "b": {"build": {"context": "."}}, "c": {"image": "y:2"}}}
         self.assertEqual(ia.images_from_compose_config(cfg), {"x:1", "y:2"})
 
+    def test_compose_service_with_build_is_not_looked_up_in_a_registry(self):
+        cfg = {"services": {"a": {"image": "x:1"}, "b": {"image": "fit/b:1", "build": {"context": "."}}}}
+        self.assertEqual(ia.images_from_compose_config(cfg), {"x:1"})
+
     def test_shell_vars_images_ignore_comments_and_other_variables(self):
         text = "# comment\nFOO_IMAGE=a/b:1\nBAR=not-an-image\nBAZ_IMAGE=c:2\n"
         self.assertEqual(ia.images_from_shell_vars(text), {"a/b:1", "c:2"})

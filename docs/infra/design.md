@@ -413,8 +413,8 @@ Caddy 컨테이너(`caddy:2.x`, 구현 시 최신 2.x를 핀)가 A의 80·443·8
 
 **`lint:*` 잡**
 
-- `lint:guards`: 단위 테스트, CRLF, `infra/`의 env 예제 형식, 포트 규칙
-- `lint:image-arch`: 도구 이미지 핀이 바뀔 때만 돈다
+- `lint:guards`: 단위 테스트, CRLF, `infra/`의 env 예제 형식, env 계약과 예제 파일의 키 일치, 포트 규칙
+- `lint:image-arch`: 도구 이미지 핀이나 로컬 스택 이미지가 바뀔 때만 돈다
 - `lint:shell`, `lint:docker`, `lint:yaml`: `infra/`와 루트 설정만 엄격하게 본다. be의 Dockerfile은 오류 수준만 막는다. 다른 팀 코드는 각자의 잡이 맡는다
 - `lint:secrets`: 저장소 전체와 MR 커밋 이력
 - `lint:migrations`: MR에서만 돈다. 적용된 Flyway 파일의 수정, 버전 중복, 순서 역전을 막는다
@@ -472,14 +472,14 @@ PWA는 `fe/`를 정적 산출물로 빌드해 A의 Caddy가 서빙한다(5절). 
 
 ### 7.1 Postgres
 
-- 이미지는 `pgvector/pgvector:pg16`이고 버전을 핀한다.
+- 이미지는 `pgvector/pgvector:0.8.7-pg16`으로 핀한다(로컬 스택과 같다).
 - 튜닝은 mount한 설정 파일이 아니라 `command:` 플래그로 한다(shared_buffers 256MB, max_connections 60, `idle_in_transaction_session_timeout`, `pg_stat_statements`).
 - 환경별 DB·role은 init 스크립트가 아니라 멱등 `ensure-databases.sh`로 만든다. init 스크립트는 빈 볼륨에서 한 번만 돌기 때문이다(A503 함정). dev role에는 `statement_timeout`을 건다.
 - 개발자용 dev DB 접근은 SSH 터널 → `127.0.0.1:5432`이고 dev role 비밀번호만 공유한다.
 
 ### 7.2 OpenSearch
 
-- 공식 이미지에 `analysis-nori`를 설치한 커스텀 이미지다(버전 핀, 힙 768MB). 설치는 `opensearch-plugin install --batch analysis-nori`이며 nori 전용 근거는 못 찾았고 일반 패턴이다. `opensearch-plugin list`로 nori와 k-NN을 확인한다 (미확인).
+- 공식 이미지(`opensearchproject/opensearch:3.9.0`)에 `analysis-nori`를 설치한 커스텀 이미지다(힙 768MB). 설치는 `opensearch-plugin install --batch analysis-nori`다. 로컬에서 빌드해 `analysis-nori`와 `opensearch-knn` 플러그인이 있고 nori 분석기가 동작함을 확인했다 (확인: `infra/local/fit-local.sh`).
 - single-node이고 보안 플러그인은 끈다. 내부 망이고 호스트 게시가 없다는 전제이며 잔여 위험은 13절에 있다.
 - `action.destructive_requires_name=true`, 인덱스 템플릿은 `replicas: 0`이다(아니면 yellow).
 - 무중단 재색인은 별칭 전환이다(BE 계약).
@@ -493,16 +493,16 @@ PWA는 `fe/`를 정적 산출물로 빌드해 A의 Caddy가 서빙한다(5절). 
 
 ### 7.4 사진 저장소 (Garage)
 
-Garage(버전 핀, 데이터·메타 볼륨, 설정은 디렉터리 마운트)를 쓴다. 공식 문서 기준으로 기획서의 업로드 흐름에 필요한 기능을 지원한다 (확인).
+Garage(`dxflrs/garage:v2.4.1`, 데이터·메타 볼륨, 설정은 디렉터리 마운트)를 쓴다. 공식 문서 기준으로 기획서의 업로드 흐름에 필요한 기능을 지원한다 (확인).
 
 - **지원:** SigV4 presigned URL, PostObject, 멀티파트, Head/Copy/Delete, 수명주기의 `Expiration`과 `AbortIncompleteMultipartUpload`(접두사는 `Filter` 안에), CORS, ListObjectsV2, path-style
 - **미지원:** 버킷 정책, 태깅, 버저닝(접두사로 대체)
 - **흐름:** 업로드는 `pending/`, 리뷰 등록이 확정되면 `confirmed/`로 Copy 후 Delete, `pending/`는 수명주기로 자동 정리
 - **읽기:** 확정된 사진(`confirmed/`)만 웹 엔드포인트로 공개 읽기한다(5절). 업로드는 S3 API, 읽기는 웹 엔드포인트로 경로가 갈린다
 
-**첫 주 스파이크(2시간):** PostObject의 `content-length-range` 강제 여부, presigned PUT/POST가 Caddy 경유(Host 보존)로 서명이 통과하는지, 수명주기 동작, 웹 엔드포인트(3902)로 `confirmed/` 공개 읽기가 되고 익명 S3 GET은 거부되는지를 확인한다. 실패하면 Cloudflare R2나 Firebase Storage로 간다(계정·결제수단 필요, 국외 이전이면 처리방침 고지).
+**첫 주 스파이크(2시간):** PostObject의 `content-length-range` 강제 여부, presigned PUT/POST가 Caddy 경유(Host 보존)로 서명이 통과하는지, 수명주기 동작, 웹 엔드포인트(3902)로 `confirmed/` 공개 읽기가 되고 익명 S3 GET은 거부되는지를 확인한다. 웹 엔드포인트의 공개 읽기와 익명 S3 GET 거부는 로컬 스택 점검에서 확인했다 (확인). 나머지는 서버에서 확인한다. 실패하면 Cloudflare R2나 Firebase Storage로 간다(계정·결제수단 필요, 국외 이전이면 처리방침 고지).
 
-Garage는 단일 노드라도 레이아웃 설정이 필요하다(`layout assign/apply`, 버킷·키 생성). Garage 퀵스타트 기준이며 구현 시 확인한다. 이 과정을 멱등 스크립트로 만들고 키는 `/etc/fit/*.env`에 둔다. 메모리는 작을 것으로 보고(추정) 0.25GB를 잡았다.
+Garage는 단일 노드라도 레이아웃 설정이 필요하다(`layout assign/apply`, 버킷·키 생성). 로컬에서 v2.4.1로 확인했고 멱등 스크립트는 `infra/local/fit-local.sh`의 `init_garage`다 (확인). 서버용 스크립트는 계획 1D가 같은 순서로 만들고 키는 `/etc/fit/*.env`에 둔다. 메모리는 작을 것으로 보고(추정) 0.25GB를 잡았다.
 
 ## 8. 백업·복구
 
@@ -628,7 +628,7 @@ Grafana는 팀원에게 viewer 계정을 준다. A503에서는 SSH 보유자만 
 
 ### 10.5 로컬 개발·사전 검증
 
-- 로컬 개발용 `infra/local/compose.yml`은 profile(`core`, `search`)로 나눠 노트북 메모리에 맞게 고르게 한다. AI는 Modal의 dev 앱을 쓴다.
+- 로컬 개발용 `infra/local/compose.yml`은 profile(`core`, `search`)로 나눠 노트북 메모리에 맞게 고르게 한다. AI는 Modal의 dev 앱을 쓴다. 켜고 점검하는 명령은 `bash infra/local/fit-local.sh`이고 접속 값은 `infra/local/README.md`에 있다. 환경변수 이름은 `docs/infra/contracts/env.md`를 따른다.
 - 서버 수령 전에는 이 PC의 Docker Desktop(Docker 29.7.2, Compose v5.4.0)과 WSL Ubuntu로 compose·스크립트·알림 규칙·Caddy 설정을 검증한다. shellcheck, promtool, age는 컨테이너로 돌린다.
 - 서버에서만 확인되는 것은 ufw, sysctl, 실제 TLS 발급, CPU 버스트, 외부 포트 노출이다.
 
@@ -755,7 +755,7 @@ Grafana는 팀원에게 viewer 계정을 준다. A503에서는 SSH 보유자만 
 
 ## 12. 서비스 계약
 
-BE·AI·프런트 팀과 M1 전에 합의한다. 합의되면 `docs/infra/contracts/`로 분리한다. AI는 Modal에서 도는 서비스라 AI 계약은 BE가 Modal을 호출하는 규약이다(12.2·12.3절).
+BE·AI·프런트 팀과 M1 전에 합의한다. 합의되면 `docs/infra/contracts/`로 분리한다. 환경변수 계약은 [contracts/env.md](contracts/env.md)에 있고 합의 상태는 [contracts/README.md](contracts/README.md)에 적는다. AI는 Modal에서 도는 서비스라 AI 계약은 BE가 Modal을 호출하는 규약이다(12.2·12.3절).
 
 ### 12.1 BE (Spring Boot, Java 21)
 
@@ -804,7 +804,7 @@ AI 팀과 M1 전에 합의한다. FastAPI는 Modal에서 돌고 A·B에는 AI �
 ### 12.4 공통 환경변수
 
 - `KEY=VALUE`만 쓴다. 공백·따옴표·CRLF·`#`을 금지한다.
-- 필수·선택·빌드타임을 구분한 목록을 `docs/infra/contracts/env.md`에 둔다.
+- 필수·선택을 구분한 목록은 [contracts/env.md](contracts/env.md)에 있고 `check_env_contract.py`가 예제 파일과 맞춰 본다.
 - 파일 소비자가 셋(compose 보간, 서비스 `env_file:`, 마이그레이션 일회성 컨테이너)이라 가장 보수적인 형식을 쓴다.
 - compose `env_file`은 컨테이너 생성 시점에 굳으므로 파일만 고치면 반영되지 않고 재생성이 필요하다.
 - `$`를 쓰는 값(bcrypt 해시 등)은 base64로 인코딩해 둔다(13.2절).
@@ -972,14 +972,14 @@ infra/
   ops/         (B) compose.ops.yml, prometheus/, alertmanager/, blackbox, port-audit.sh, vault-ingest.sh
   deploy/      deploy.sh, rollback.sh, preflight.sh, smoke.sh, notify.sh, fit-up.sh
   backup/      pg-backup.sh, verify-dump.sh, push-vault.sh, photos-backup.sh, restore-check.sh(노트북용)
-  ci/          ports_invariant.py, check_compose_projects.py, check_env_files.py, check_eol.py, migration_immutability.py, images_arch.py, run-local-checks.sh, tool-images.sh, compose-projects.txt, tests/
-  local/       compose.yml (profile: core, search)
+  ci/          ports_invariant.py, check_compose_projects.py, check_env_files.py, check_env_contract.py, check_eol.py, migration_immutability.py, images_arch.py, run-local-checks.sh, tool-images.sh, compose-projects.txt, tests/
+  local/       compose.yml (profile: core, search), fit-local.sh, local.env.example, garage/, opensearch/Dockerfile, README.md
 .gitlab-ci.yml
 docs/infra/
   design.md    이 문서
   runbooks/    RB-01 ~ RB-13
   porting/     포팅 매뉴얼 초안(버전, 환경변수, 외부 서비스, DB 덤프, 시연)
-  contracts/   env.md, BE·AI(Modal 호출)·프런트 계약
+  contracts/   README.md(합의 상태), env.md. BE·AI(Modal 호출)·프런트 계약은 합의되면 이 폴더로 옮긴다
   ssh-matrix.md
   gitlab-setup.md  GitLab 프로젝트 설정·러너 등록 체크리스트
 ```
