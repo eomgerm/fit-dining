@@ -462,7 +462,7 @@ B가 죽으면 CI가 멈추고 배포가 막힌다. 서비스는 영향이 없�
 
 PWA는 `fe/`를 정적 산출물로 빌드해 A의 Caddy가 서빙한다(5절). 서버에는 Node 런타임이 없고 빌드는 CI에서만 한다. 프런트 계약은 12.5절이다.
 
-- **빌드:** `fe:build`가 번들을 **한 번만** 만든다. 환경별 값(PostHog 키, 푸시 공개 키 등 브라우저에 공개되는 값)은 번들에 넣지 않고 `/config.json`으로 받는다. Caddy가 환경별 파일(`/srv/fit/web/<env>/config.json`)로 서빙한다. dev에서 검증한 번들이 곧 prod 번들이다. 시크릿은 어디에도 넣지 않는다. 키 목록은 `docs/infra/contracts/env.md`에 둔다.
+- **빌드:** `fe:build`가 번들을 **한 번만** 만든다. Next.js는 `output: 'export'`로 `out/`을 만든다(12.5절 #1). 환경별 값(PostHog 키, 푸시 공개 키 등 브라우저에 공개되는 값)은 번들에 넣지 않고 `/config.json`으로 받는다. Caddy가 환경별 파일(`/srv/fit/web/<env>/config.json`)로 서빙한다. dev에서 검증한 번들이 곧 prod 번들이다. 시크릿은 어디에도 넣지 않는다. 키 목록은 `docs/infra/contracts/env.md`에 둔다.
 - **산출물 검사(P0):** 번들에 `localhost`·mock 값이 없는지, `index.html`·`sw.js`·manifest가 있는지 확인한다. 배치 뒤 smoke는 해당 환경의 `/config.json`에 필수 키가 모두 있는지 확인한다. A503이 빌드타임 설정 누락으로 빈 번들을 6회 배포한 교훈이다. 환경 값을 런타임 설정으로 받으면 그 실패 유형이 줄어든다.
 - **배치:** deploy 스크립트가 `/srv/fit/web/<env>/releases/<SHA>/`에 풀고 `current` 링크를 원자적으로 바꾼다. 상대 링크 `releases/<SHA>`를 `current.tmp`로 만든 뒤 `mv -T current.tmp current`로 교체한다(`ln -sfn`은 원자적이지 않다). 롤백은 링크를 직전 릴리스로 되돌린다. 릴리스는 최근 5개를 보관한다. 순서는 BE 전환이 먼저, 프런트가 나중이다.
 - **버전 스큐:** 서비스 워커가 옛 번들을 캐시한 브라우저가 새 API를 호출한다. 그래서 API는 직전 배포의 번들과 하위호환을 유지한다(BE 계약 #16). `index.html`과 `sw.js`는 `no-cache`로 서빙해 새 서비스 워커가 곧바로 감지되게 한다. 열려 있는 탭이 이전 릴리스의 해시 자산을 요청해도 404가 나지 않아야 한다(구현 방식은 계획에서 정한다. 예: 해시 자산을 공용 디렉터리에 누적).
@@ -815,8 +815,8 @@ AI 팀과 M1 전에 합의한다. FastAPI는 Modal에서 돌고 A·B에는 AI �
 
 | # | 항목 | 요구 | 이유 |
 |---|---|---|---|
-| 1 | 정적 빌드 | `fe/`가 `npm ci`와 빌드 명령으로 정적 산출물을 만든다. SSR 서버(Node)는 쓰지 않는다. 필요하면 먼저 알린다 | 서버에 Node 런타임이 없다(6.8절) |
-| 2 | 같은 출처 | API는 `/api`, 사진은 `/fit-<env>-photos/` 상대 경로로 호출한다. 호스트·포트를 번들에 박지 않는다. 로컬 개발만 프록시를 쓴다 | CORS가 필요 없다(5절) |
+| 1 | 정적 빌드 | `fe/`가 잠금 파일 기준 설치(`pnpm install --frozen-lockfile`, 패키지 매니저는 `package.json`의 `packageManager` 필드)와 빌드 명령으로 정적 산출물을 만든다. Next.js는 `output: 'export'`를 쓰고 산출물은 `out/`이다. SSR 서버(Node)와 서버 기능(쿠키 읽기, Server Actions, 동적 Route Handler, `rewrites`·`redirects`·`headers`, 기본 이미지 최적화 로더)은 쓰지 않는다(Next.js 정적 export 미지원 목록). 필요하면 먼저 알린다 | 서버에 Node 런타임이 없다(6.8절) |
+| 2 | 같은 출처 | API는 `/api`, 사진은 `/fit-<env>-photos/` 상대 경로로 호출한다. 호스트·포트를 번들에 박지 않는다. 로컬 개발만 프록시를 쓴다(정적 export는 `rewrites`를 쓸 수 없어 방식은 프런트 팀이 정한다) | CORS가 필요 없다(5절) |
 | 3 | 환경 값 | 번들에 환경별 값을 넣지 않는다. 시작할 때 `/config.json`을 받아 쓰고(없으면 오류 화면) 키 목록은 `contracts/env.md`에 둔다. 브라우저에 공개되는 값만 둔다. 빌드 메모리는 1.5GB 이내(예: `NODE_OPTIONS=--max-old-space-size=1536`) | 번들 하나로 dev 검증을 prod에 그대로 쓴다(6.8절). 빌드타임 설정 누락(A503) 방지, B의 CI 메모리 한도(4.2절) |
 | 4 | 서비스 워커 | 루트 `/sw.js`와 `/manifest.webmanifest`로 경로를 고정한다. `/api/*`, 사진 경로, `/config.json`은 캐시하지 않는다(네트워크 전용). 새 서비스 워커의 활성화 정책은 프런트 팀이 정하되 API 한 버전 하위호환(BE #16)을 전제로 한다 | 5절 캐시 정책, 6.8절 버전 스큐 |
 | 5 | 파일명 | 정적 자산은 내용 해시를 파일명에 넣는다 | `immutable` 캐시 전제 |
@@ -938,7 +938,7 @@ AI 팀과 M1 전에 합의한다. FastAPI는 Modal에서 돌고 A·B에는 AI �
 | 2 | 서버 수령일 | 인프라 | 즉시 확인 |
 | 3 | 도메인 접두사와 B의 도메인·공인 IP | 인프라 | M0 |
 | 4 | Lightsail/EC2 방화벽 접근 권한, Lightsail 스냅샷 권한 | 인프라 | M0 |
-| 5 | GitLab에서 Create project runner 가능 여부(Maintainer), Package Registry 사용 가능 여부 | 인프라, 팀장 | 사전~M0 |
+| 5 | GitLab Package Registry 사용 가능 여부. Create project runner 메뉴는 보인다 (확인) | 인프라, 팀장 | 사전~M0 |
 | 6 | A↔B SSH 연결성 | 인프라 | M0 |
 | 7 | AI 팀 합의: Modal 엔드포인트 계약(12.2·12.3절), 콜드 스타트와 상시 가동 컨테이너 수·비용 상한, 키워드 폴백, 외부 호출 계약 | AI 팀, 인프라 | M1 전 |
 | 8 | BE 팀 합의: 12.1절 계약 항목(폴백 표시 포함), 검색의 키워드 폴백 경로, Modal 호출 규약 | BE 팀, 인프라 | M1 전 |

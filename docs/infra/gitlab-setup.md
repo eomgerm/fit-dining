@@ -22,7 +22,7 @@ lab.ssafy.com의 프로젝트(S15P31A302)를 설계([design.md](design.md) 6절,
 결과는 아래 "확인 결과 기록"에 적고, 설계 16절 #5와 #25를 갱신한다.
 
 - [ ] 내 역할이 Maintainer 이상인가 (프로젝트 Manage → Members).
-- [ ] Settings → CI/CD → Runners에 **Create project runner** 버튼이 보이는가 (#5). 안 보이면 설계 6.1절의 Jenkins 폴백을 팀과 논의한다.
+- [x] Settings → CI/CD → Runners에 **Create project runner** 버튼이 보이는가 (#5). 보인다(2026-10-19 확인). 안 보이면 설계 6.1절의 Jenkins 폴백을 팀과 논의한다.
 - [ ] 같은 화면에서 Instance runners 토글이 켜져 있는가. 켜져 있어도 이 설계는 프로젝트 러너 2개를 쓴다.
 - [ ] GitLab 플랜(Free, Premium, Ultimate)과 버전. 기능 차이는 아래 표다.
 
@@ -68,7 +68,7 @@ Settings → CI/CD → General pipelines에서 설정한다.
 보호 브랜치에 직접 push해 보는 방식으로 시험하지 않는다. 설정이 틀렸다면 그 push가 실제로 반영되기 때문이다.
 
 - [ ] Branch rules 화면에서 `develop`, `master`의 Allowed to push and merge가 No one인지 읽는다.
-- [ ] 첫 MR(`feat/infra-foundation`)에서 Merge method가 fast-forward로 표시되는지 확인한다.
+- [ ] 첫 MR(`feature/infra-foundation`)에서 Merge method가 fast-forward로 표시되는지 확인한다.
 
 ## 2단계: 러너 등록과 병합 조건 강화 (M1)
 
@@ -108,7 +108,7 @@ curl --fail --header "PRIVATE-TOKEN: $GITLAB_API_TOKEN" \
 | 항목 | 결과 | 날짜 | 확인한 사람 |
 |---|---|---|---|
 | 내 역할 (Maintainer 이상) | | | |
-| Create project runner 버튼 (#5) | | | |
+| Create project runner 버튼 (#5) | 있음 | 2026-10-19 | 인프라 담당 |
 | 플랜과 GitLab 버전 | | | |
 | 승인 규칙·CODEOWNERS 사용 가능 (#25) | | | |
 | API 토큰 권한 (#25) | | | |

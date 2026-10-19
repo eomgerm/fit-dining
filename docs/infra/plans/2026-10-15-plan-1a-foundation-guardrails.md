@@ -138,7 +138,7 @@ git status --short
 
 Expected: Python 3.9 이상(이 PC는 3.12.x), Docker 서버 버전 출력(29.x), Compose v2 이상, bash 5.x. `docs/infra/` 아래 파일이 미추적으로 보일 수 있다. Docker 서버 버전이 안 나오면 Docker Desktop을 먼저 켠다.
 
-사용자에게 커밋 허용 여부를 한 번 묻는다. 허용하면 `git switch -c feat/infra-foundation`으로 브랜치를 만든 뒤 시작한다. 허용하지 않으면 커밋 단계를 모두 건너뛴다.
+사용자에게 커밋 허용 여부를 한 번 묻는다. 허용하면 `git switch -c feature/infra-foundation`으로(브랜치 이름 규칙은 설계 10.8절) 브랜치를 만든 뒤 시작한다. 허용하지 않으면 커밋 단계를 모두 건너뛴다.
 
 - [ ] **Step 2: 저장소 기반 파일 3개 작성**
 
