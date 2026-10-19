@@ -856,7 +856,7 @@ AI 팀과 M1 전에 합의한다. FastAPI는 Modal에서 돌고 A·B에는 AI �
 
 - `/_ops` basic auth 해시는 `caddy hash-password` 출력을 base64로 인코딩해 둔다. 원본의 `$`가 env 형식 규칙에 걸리고, Caddy는 base64 형태도 받는다 (확인).
 - 앱 시크릿은 서버에만 두고 GitLab 변수에는 넣지 않는다. repo에는 `*.env.example`만 둔다.
-- gitleaks를 CI와 pre-commit에 둔다. pre-commit 훅은 각자 켠다(`git config core.hooksPath .githooks`). CI의 `lint:secrets`가 MR 이력까지 다시 본다.
+- gitleaks를 CI와 pre-commit에 둔다. pre-commit은 팀의 lefthook(저장소 루트 `CONTRIBUTING.md`)이 `lefthook.yml`에서 `infra/ci/pre-commit-secrets.sh`를 불러 검사하고, `npm install`로 켠다. CI의 `lint:secrets`가 MR 이력까지 다시 본다.
 - 실제 값은 로그·문서·채팅에 출력하지 않는다.
 
 ### 13.3 SSH 매트릭스
