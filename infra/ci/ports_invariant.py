@@ -3,7 +3,7 @@
 
 규칙
   1. 호스트에 게시하는 포트는 host_ip가 127.0.0.1이어야 한다. host_ip가 없는 짧은 문법(`8080:80`)은 0.0.0.0이다.
-  2. 예외는 (서비스, 호스트 포트) 조합으로 명시한 것뿐이다. 기본값은 caddy=80,443,8443이고 --allow로 더한다.
+  2. 예외는 (서비스, 호스트 포트) 조합으로 명시한 것뿐이다. 기본값은 caddy=80,443이고 --allow로 더한다.
   3. network_mode: host는 모든 포트를 노출하므로 --allow-host-network로 명시한 서비스만 허용한다.
 
 Docker가 게시한 포트는 ufw를 우회하므로 이 검사가 노출 사고(A603)를 막는 1차 방어선이다.
@@ -16,7 +16,7 @@ import subprocess
 import sys
 
 LOOPBACK = frozenset({"127.0.0.1", "::1", "localhost"})
-DEFAULT_ALLOW: dict[str, set[int]] = {"caddy": {80, 443, 8443}}
+DEFAULT_ALLOW: dict[str, set[int]] = {"caddy": {80, 443}}
 
 
 def violations(

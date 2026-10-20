@@ -27,13 +27,16 @@ class ViolationsTest(unittest.TestCase):
         cfg = svc(ports=[{"host_ip": "0.0.0.0", "target": 80, "published": "9000"}])
         self.assertEqual(pi.violations(cfg), ["s: 0.0.0.0:9000 -> 80"])
 
-    def test_caddy_may_publish_80_443_8443(self):
+    def test_caddy_may_publish_80_and_443(self):
         cfg = {"services": {"caddy": {"ports": [
             {"target": 80, "published": "80"},
             {"target": 443, "published": "443"},
-            {"target": 8443, "published": "8443"},
         ]}}}
         self.assertEqual(pi.violations(cfg), [])
+
+    def test_caddy_publishing_8443_is_a_violation(self):
+        cfg = {"services": {"caddy": {"ports": [{"target": 8443, "published": "8443"}]}}}
+        self.assertEqual(pi.violations(cfg), ["caddy: 0.0.0.0:8443 -> 8443"])
 
     def test_caddy_publishing_another_port_is_a_violation(self):
         cfg = {"services": {"caddy": {"ports": [{"target": 2019, "published": "2019"}]}}}
@@ -61,7 +64,7 @@ class ViolationsTest(unittest.TestCase):
 
     def test_parse_allow_merges_with_defaults(self):
         allow = pi.parse_allow(["grafana=3000,3001"])
-        self.assertEqual(allow["caddy"], {80, 443, 8443})
+        self.assertEqual(allow["caddy"], {80, 443})
         self.assertEqual(allow["grafana"], {3000, 3001})
 
 

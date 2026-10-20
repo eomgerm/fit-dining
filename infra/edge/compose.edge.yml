@@ -1,0 +1,61 @@
+# 엣지(Caddy). 서버 A의 fit-edge 프로젝트다(설계 2.2절, 5절).
+# 값은 `docker compose --env-file /etc/fit/edge.env`로 읽는다(compose 보간). 필요한 키는 docs/infra/contracts/env.md의 edge 그룹이다.
+# 망(net-*)은 다른 프로젝트와 공유해서 호스트에서 먼저 만들어 둔다(계획 1F). 공개 게시는 이 컨테이너의 80·443뿐이다.
+name: fit-edge
+
+services:
+  caddy:
+    image: caddy:2.11.7
+    restart: unless-stopped
+    environment:
+      PROD_HOST: ${PROD_HOST:?edge.env에 PROD_HOST가 없다}
+      DEV_HOST: ${DEV_HOST:?edge.env에 DEV_HOST가 없다}
+      ACME_EMAIL: ${ACME_EMAIL:?edge.env에 ACME_EMAIL이 없다}
+      ACME_MODE: ${ACME_MODE:?edge.env에 ACME_MODE(staging 또는 production)가 없다}
+      HSTS_MODE: ${HSTS_MODE:?edge.env에 HSTS_MODE(off 또는 on)가 없다}
+      DEV_GATE_KEY: ${DEV_GATE_KEY:?edge.env에 DEV_GATE_KEY가 없다}
+    ports:
+      - "80:80"
+      - "443:443"
+    mem_limit: 150m
+    volumes:
+      # 설정과 상태는 파일이 아니라 디렉터리째 마운트한다(파일을 새 inode로 바꾸면 컨테이너가 옛 파일을 본다)
+      - ./conf:/etc/caddy:ro
+      - ${FIT_WEB_DIR:-/srv/fit/web}:/srv/fit/web:ro
+      - ${FIT_STATE_DIR:-/srv/fit/state}:/srv/fit/state:ro
+      # 인증서 보관. 삭제하지 않고 백업한다(재발급 한도)
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - net-edge
+      - net-prod
+      - net-dev
+      - net-obs
+    healthcheck:
+      test: [CMD-SHELL, "wget -q -O /dev/null http://127.0.0.1:9180/metrics"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    logging:
+      driver: json-file
+      options:
+        max-size: 50m
+        max-file: "5"
+
+volumes:
+  caddy_data:
+  caddy_config:
+
+networks:
+  net-edge:
+    name: ${FIT_NET_EDGE:-net-edge}
+    external: true
+  net-prod:
+    name: ${FIT_NET_PROD:-net-prod}
+    external: true
+  net-dev:
+    name: ${FIT_NET_DEV:-net-dev}
+    external: true
+  net-obs:
+    name: ${FIT_NET_OBS:-net-obs}
+    external: true
