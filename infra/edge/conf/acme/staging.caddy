@@ -1,0 +1,2 @@
+# staging 인증서 단계: staging CA만 쓴다(설계 5.1절). 운영 단계로 넘어가면 ACME_MODE=production으로 바꾼다.
+acme_ca https://acme-staging-v02.api.letsencrypt.org/directory

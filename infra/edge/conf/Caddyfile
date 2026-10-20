@@ -1,0 +1,131 @@
+# 엣지 Caddy 설정(설계 5절). 필요한 환경변수는 infra/edge/edge.env.example에 있다.
+# prod와 dev는 호스트(PROD_HOST, DEV_HOST)로 나뉘고 둘 다 443이다. 호스트마다 인증서를 따로 받는다.
+{
+	email {$ACME_EMAIL}
+	# 인증서 단계. staging이면 staging CA만, production이면 기본 이슈어(ZeroSSL, Let's Encrypt)를 쓴다
+	import acme/{$ACME_MODE:production}.caddy
+	servers {
+		protocols h1 h2
+	}
+	metrics
+}
+
+# 두 사이트 공통: 로그(쿼리의 k는 지운다), 압축, 보안 헤더
+(common) {
+	log {
+		output stdout
+		format filter {
+			wrap json
+			fields {
+				request>uri query {
+					delete k
+				}
+			}
+		}
+	}
+	encode zstd gzip
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+		-X-Powered-By
+	}
+	import hsts/{$HSTS_MODE:off}.caddy
+}
+
+# 환경별 라우팅(설계 5.2절). {args[0]}은 환경(prod, dev)이다.
+# 활성 색은 배포 스크립트가 /srv/fit/state/upstream-<환경>-<서비스>.caddy에 쓴다(서비스는 be, fe).
+(env_routes) {
+	# 해시가 붙은 불변 정적 자산은 누적 풀에서 직접 준다. 풀에 없으면 아래 FE가 응답한다
+	@pooled {
+		path /_next/static/*
+		file {
+			root /srv/fit/web/{args[0]}/pool
+			try_files {path}
+		}
+	}
+	handle @pooled {
+		root * /srv/fit/web/{args[0]}/pool
+		header Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+	handle /api/* {
+		request_body {
+			max_size 2MB
+		}
+		import /srv/fit/state/upstream-{args[0]}-be.caddy
+	}
+	handle /healthz {
+		import /srv/fit/state/upstream-{args[0]}-be.caddy
+	}
+	# 사진 업로드: garage S3 API(path-style). Host 헤더를 그대로 넘겨 SigV4 서명이 통과한다
+	handle /fit-{args[0]}-photos/* {
+		request_body {
+			max_size 10MB
+		}
+		reverse_proxy garage:3900
+	}
+	# 사진 읽기: garage 웹 엔드포인트. confirmed/만 공개한다(pending/은 아래 404)
+	handle /photos/{args[0]}/confirmed/* {
+		uri strip_prefix /photos/{args[0]}
+		reverse_proxy garage:3902 {
+			header_up Host fit-{args[0]}-photos.web.garage.localhost
+			header_down Cache-Control "public, max-age=86400"
+		}
+	}
+	handle /photos/* {
+		respond 404
+	}
+	# 그 외 전부는 FE(Next.js SSR)다
+	handle {
+		import /srv/fit/state/upstream-{args[0]}-fe.caddy
+	}
+}
+
+# prod
+{$PROD_HOST} {
+	import common
+	import env_routes prod
+}
+
+# dev. /?k=<키>로 한 번 접속해 쿠키를 받아야 열린다(설계 5.4절)
+{$DEV_HOST} {
+	import common
+	@issue {
+		path /
+		query k={$DEV_GATE_KEY}
+	}
+	@pass header_regexp gate Cookie "(^|;[ ]*)fit_dev={$DEV_GATE_KEY}(;|$)"
+	# 브라우저가 쿠키 없이 가져오는 파일(FE의 public/)
+	@open path /manifest.webmanifest /icons/*
+	handle @issue {
+		header Set-Cookie "fit_dev={$DEV_GATE_KEY}; Path=/; Max-Age=1209600; Secure; HttpOnly; SameSite=Lax"
+		redir * / 302
+	}
+	handle @open {
+		import /srv/fit/state/upstream-dev-fe.caddy
+	}
+	handle @pass {
+		# 게이트 키는 앱 컨테이너로 보내지 않는다(통과를 판정한 뒤에 지운다)
+		request_header Cookie "fit_dev=[^;]*;? ?" ""
+		import env_routes dev
+	}
+	handle {
+		respond 404
+	}
+}
+
+# 내부 리스너: FE 서버가 BE를 부르는 주소(BE_INTERNAL_URL)다. 호스트에 게시하지 않고 compose 망 안에서만 닿는다.
+# 활성 색을 고르는 곳이 여기(상태 파일) 한 곳이라 FE는 BE의 색을 모른다.
+:8081 {
+	import /srv/fit/state/upstream-prod-be.caddy
+}
+
+:8082 {
+	import /srv/fit/state/upstream-dev-be.caddy
+}
+
+# 메트릭: 호스트에 게시하지 않고 compose 망 안에서만 닿는다
+:9180 {
+	metrics /metrics
+}

@@ -1,0 +1,2 @@
+# HSTS. includeSubDomains와 preload는 쓰지 않는다(ssafy.io는 공유 도메인이다).
+header Strict-Transport-Security "max-age=31536000"
