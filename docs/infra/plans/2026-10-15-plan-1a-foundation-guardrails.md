@@ -93,10 +93,10 @@
 | 계획 | 내용 |
 |---|---|
 | [1B 로컬 개발 환경과 서비스 계약](2026-10-19-plan-1b-local-env-contracts.md) | `infra/local/compose.yml`(profile `core`: Postgres(pgvector)·Redis·Garage, `search`: nori를 넣은 OpenSearch)과 `fit-local.sh`, `docs/infra/contracts/`(env.md와 합의 상태 목록. BE·AI(Modal 호출)·프런트 계약은 합의되면 옮긴다), `*.env.example`, 계약과 예제의 일치 검사. BE·FE 팀이 이미 개발 중이라 서버 없이도 가장 먼저 쓰이는 산출물이고, 계약은 M1 전에 합의해야 한다 |
-| 1C 엣지와 배포(셋으로 나눈다) | **1C-1 엣지**([계획](2026-10-20-plan-1c1-edge.md)): Caddyfile(PWA 정적 서빙, dev 쿠키 게이트, 사진 업로드·읽기 프록시), `compose.edge.yml`, `verify-edge.sh`, 노트북 시험 환경. **1C-2 배포 스크립트**: `deploy.sh`(BE Blue/Green과 PWA 릴리스 링크 전환)·`rollback.sh`·`preflight.sh`(다운그레이드 가드 포함)·`smoke.sh`(검색 1건의 폴백 표시 확인 포함), 로컬 시뮬레이션. **1C-3 CI 파이프라인**: `.gitlab-ci.yml`의 `be:test`·`fe:test`·`fe:build`(PWA 산출물 검사 포함)·`build`·`deploy`(`environment`, 환경별 `resource_group`)·`smoke` 잡. 이 계획의 `check_env_files.py`, `ports_invariant.py`를 호출한다 |
+| 1C 엣지와 배포(셋으로 나눈다) | **1C-1 엣지**([계획](2026-10-20-plan-1c1-edge.md)): Caddyfile(호스트별 사이트, Next.js SSR 프록시와 정적 자산 풀, dev 쿠키 게이트, 사진 업로드·읽기 프록시), `compose.edge.yml`, `edgectl.sh`, `verify-edge.sh`, 노트북 시험 환경. **1C-2 배포 스크립트**: `compose.app.yml`(be, fe), `deploy.sh`(BE·FE Blue/Green과 정적 자산 풀 동기화)·`rollback.sh`·`preflight.sh`(다운그레이드 가드, `BE_INTERNAL_URL` 포트 확인 포함)·`smoke.sh`(검색 1건의 폴백 표시 확인 포함)·`fit-up.sh`(재부팅 뒤 기동 순서), 로컬 시뮬레이션. **1C-3 CI 파이프라인**: `.gitlab-ci.yml`의 `be:test`·`fe:test`·`fe:build`(FE 산출물 검사 포함)·`build`·`deploy`(`environment`, 환경별 `resource_group`)·`smoke` 잡. 이 계획의 `check_env_files.py`, `ports_invariant.py`를 호출한다 |
 | 1D 데이터와 백업 | compose.data.yml, `ensure-databases.sh`, 백업·검증·전송·복원 스크립트 |
 | 1E 관측성 | A와 B의 Prometheus·Alertmanager·blackbox 설정, 알림 규칙(Modal 폴백·예산 알림, B 도달 알림 포함)과 `promtool test`, 포트 노출 감사, 대시보드. B의 ops 스택 compose가 생기면 그 이미지의 arm64 검사를 `lint:image-arch`에 추가한다 |
-| 1F 호스트 부트스트랩 | `infra/host/`(`bootstrap.sh` ROLE=app\|ops, `verify-host.sh`, daemon.json, sysctl, sshd drop-in, fail2ban, systemd 유닛, `fit-up.sh`). 설계 3절 |
+| 1F 호스트 부트스트랩([계획](2026-10-20-plan-1f-host.md)) | `infra/host/`(`bootstrap.sh` ROLE=app\|ops, `verify-host.sh`, `networks.sh`, `docker-prune.sh`, daemon.json, sysctl, sshd drop-in, fail2ban, 자동 업데이트, systemd 유닛), 컨테이너 시험. 설계 3절 |
 | 1G 런북과 포팅 매뉴얼 | 런북 초안 RB-01~13(설계 10.2절), 포팅 매뉴얼 골격(설계 17절) |
 | 2 (M0~M4) | 서버 수령일이 정해진 뒤에 쓴다 |
 

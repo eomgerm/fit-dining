@@ -7,6 +7,7 @@ Fit Dining 인프라 코드. 설계는 [docs/infra/design.md](../docs/infra/desi
 - `ci/` 가드 스크립트(Python 표준 라이브러리만), 단위 테스트, 로컬 러너, 도구 이미지 핀
 - `local/` 로컬 개발 스택(Postgres, Redis, Garage, OpenSearch). 사용법은 [local/README.md](local/README.md)
 - `edge/` 엣지(Caddy) 설정, 운영 명령(`edgectl.sh`), 점검, 노트북 시험 환경. 사용법은 [edge/README.md](edge/README.md)
+- `host/` 서버 부트스트랩(`bootstrap.sh`)과 점검(`verify-host.sh`), 공유 Docker 망, 컨테이너 시험. 사용법은 [host/README.md](host/README.md)
 - `app/` BE·FE의 환경변수 예제(`app.env.example`, `migrate.env.example`, `fe.env.example`). 키 계약은 [docs/infra/contracts/env.md](../docs/infra/contracts/env.md)
 
 가드가 강제하는 규칙:

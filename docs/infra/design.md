@@ -176,7 +176,7 @@ Fit Dining(Next.js SSR 프런트(PWA), Spring Boot 백엔드, OpenSearch 검색,
 | `net-obs` | bridge | 관측성 컨테이너, caddy | prometheus는 `net-prod`·`net-dev`에도 속해 BE의 관리 포트(8081)를 긁고, postgres-exporter·opensearch-exporter는 `net-data`에도 속한다. caddy는 메트릭용으로 속한다 |
 | `net-dbaccess` | bridge | postgres | postgres가 `127.0.0.1:5432`를 게시하기 위해 추가로 속한다. 개발자 SSH 터널 용도다 |
 
-FE는 DB 망(`net-data`)에 속하지 않는다. FE 서버가 BE를 부를 때는 Caddy의 내부 리스너(`caddy:8081` prod, `caddy:8082` dev)를 거친다. 활성 색을 고르는 곳이 Caddy 한 곳이라 FE는 BE의 색을 모른다(5.2절).
+공유 망 여섯 개는 `infra/host/networks.sh`가 만든다(몇 번 실행해도 같고 `net-data`만 `internal`이다. 확인: `test-host.sh prune`). FE는 DB 망(`net-data`)에 속하지 않는다. FE 서버가 BE를 부를 때는 Caddy의 내부 리스너(`caddy:8081` prod, `caddy:8082` dev)를 거친다. 활성 색을 고르는 곳이 Caddy 한 곳이라 FE는 BE의 색을 모른다(5.2절).
 
 두 환경의 BE가 `net-data`를 공유하므로 환경 분리는 자격 증명(Postgres role, Redis 비밀번호, Garage 키)이 맡는다. OpenSearch만 인증이 없어 접두사가 관례일 뿐이다(2.3절, 13.4절).
 
@@ -195,7 +195,7 @@ FE는 DB 망(`net-data`)에 속하지 않는다. FE 서버가 BE를 부를 때�
 
 ## 3. 호스트 기반
 
-서버 설정은 멱등 스크립트 `infra/host/bootstrap.sh`(`ROLE=app|ops`)와 검증 스크립트 `infra/host/verify-host.sh`로 한다. verify는 PASS/FAIL만 출력하고 값은 찍지 않는다. 서버에서의 실행은 사람이 하고 출력을 붙여 주면 검토한다.
+서버 설정은 멱등 스크립트 `infra/host/bootstrap.sh`(`ROLE=app|ops`)와 검증 스크립트 `infra/host/verify-host.sh`로 한다. verify는 PASS/FAIL만 출력하고 값은 찍지 않는다. 서버에서의 실행은 사람이 하고 출력을 붙여 주면 검토한다. `infra/host/` 디렉터리만 서버로 복사해 쓴다(순서와 안전장치는 `infra/host/README.md`). 두 스크립트를 Ubuntu 22.04와 24.04 컨테이너에서 실제로 적용하고 점검했고, 설정을 하나씩 망가뜨리면 verify가 잡고 bootstrap이 고치며 두 번째 실행은 변경이 없음을 확인했다 (확인: `infra/host/test/test-host.sh`). 컨테이너에서 확인되지 않는 것(스왑, sysctl 적용, 시간 동기화, Docker 데몬과 systemd 타이머, fail2ban의 실제 차단, B의 arm64)은 서버에서 `verify-host.sh`로 확인한다.
 
 | 영역 | A | B | 근거 |
 |---|---|---|---|
@@ -203,11 +203,11 @@ FE는 DB 망(`net-data`)에 속하지 않는다. FE 서버가 BE를 부를 때�
 | 스왑 | 4GB swapfile, swappiness 10 | 2GB swapfile, swappiness 10 | OOM 완충 |
 | 커널 | `vm.max_map_count=262144` | 해당 없음 | OpenSearch 필수값 |
 | Docker 로그 | `json-file` 10MB×3. be·fe·caddy는 50MB×5(compose `logging:`) | 10MB×3 | 로그 로테이션 부재가 선배 팀의 공통 결함 |
-| Docker 운영 | `live-restore`, 주 1회 이미지·빌더 캐시 prune(서비스당 최근 SHA 5개 유지) | 주 1회 prune | prune 부재가 공통 결함 |
+| Docker 운영 | `live-restore`, 주 1회 이미지·빌더 캐시 prune(be·fe는 SHA 태그 최근 5개 유지, 볼륨은 지우지 않는다) | 주 1회 prune(7일 넘게 쓰지 않은 이미지) | prune 부재가 공통 결함. 시험에서 최근 5개 유지와 사용 중 이미지 보호를 확인했다 (확인: `test-host.sh prune`) |
 | Docker 버전 | `docker version`으로 확인. 29 이상이면 API 클라이언트(cAdvisor, Dozzle, Testcontainers)를 최신으로 핀하고, 안 되면 daemon.json의 `min-api-version`으로 완화 | 〃 | 1.3절 |
 | ufw | 기본 deny. 허용 22(limit), 80, 443 | 기본 deny. 허용 22(limit)만 | 80은 인증서 갱신 때문에 상시 개방 |
 | 포트 규칙 | 컨테이너는 `127.0.0.1:` 바인딩만. 공개는 caddy 하나. CI가 compose 파일을 검사해 위반하면 실패 | 〃 | 13절 |
-| SSH | 키 전용, root 금지, fail2ban(`ignoreip`에 A↔B 상대 호스트 IP). 자동 보안 업데이트는 켜고 자동 재부팅은 끈다(11/06 이후 재부팅은 공지된 창에서만) | 〃 | |
+| SSH | 키 전용, root 금지, fail2ban(`ignoreip`에 A↔B 상대 호스트 IP). 자동 보안 업데이트는 켜고 자동 재부팅은 끈다(11/06 이후 재부팅은 공지된 창에서만) | 〃 | 설정은 `sshd_config.d/10-fit.conf`다. sshd는 같은 키워드의 첫 값을 쓰고 파일을 이름 순서로 읽으므로 클라우드 이미지의 `60-cloudimg-settings.conf`보다 먼저 읽히게 10번을 쓴다. `Match User` 블록은 그 사용자에게만 적용된다 (확인: `sshd -T -C`). 키가 등록된 로그인 계정이 없으면 bootstrap이 비밀번호 로그인을 끄지 않는다 |
 | 이미지 아키텍처 | amd64 | arm64 | B에 amd64 전용 이미지를 올리지 않는다 |
 | 디렉터리 | `/srv/fit/{state,backups,web}`, `/etc/fit/` | `/srv/vault/{incoming,store}`, `/etc/fit/` | |
 
@@ -657,8 +657,8 @@ Grafana는 팀원에게 viewer 계정을 준다. A503에서는 SSH 보유자만 
 ### 10.5 로컬 개발·사전 검증
 
 - 로컬 개발용 `infra/local/compose.yml`은 profile(`core`, `search`)로 나눠 노트북 메모리에 맞게 고르게 한다. AI는 Modal의 dev 앱을 쓴다. 켜고 점검하는 명령은 `bash infra/local/fit-local.sh`이고 접속 값은 `infra/local/README.md`에 있다. 환경변수 이름은 `docs/infra/contracts/env.md`를 따른다. 엣지는 `bash infra/edge/test/test-edge.sh up|verify|down`으로 목 BE·FE와 시험용 풀, 로컬 스택의 garage를 붙여 시험한다.
-- 서버 수령 전에는 이 PC의 Docker Desktop(Docker 29.7.2, Compose v5.4.0)과 WSL Ubuntu로 compose·스크립트·알림 규칙·Caddy 설정을 검증한다. shellcheck, promtool, age는 컨테이너로 돌린다.
-- 서버에서만 확인되는 것은 ufw, sysctl, 실제 TLS 발급, CPU 버스트, 외부 포트 노출이다.
+- 서버 수령 전에는 이 PC의 Docker Desktop(Docker 29.7.2, Compose v5.4.0)과 Ubuntu 컨테이너(호스트 스크립트)로 compose·스크립트·알림 규칙·Caddy 설정을 검증한다. shellcheck, promtool, age는 컨테이너로 돌린다.
+- 서버에서만 확인되는 것은 스왑·sysctl 적용, ufw의 실제 차단, 실제 TLS 발급, CPU 버스트, 외부 포트 노출, 클라우드 방화벽이다.
 
 ### 10.6 동결과 핫픽스
 
@@ -1002,7 +1002,7 @@ AI 팀과 M1 전에 합의한다. FastAPI는 Modal에서 돌고 A·B에는 AI �
 
 ```
 infra/
-  host/        bootstrap.sh, verify-host.sh, daemon.json, sysctl.d, sshd drop-in, fail2ban, systemd units
+  host/        bootstrap.sh, verify-host.sh, networks.sh, docker-prune.sh, README.md, conf/(sshd, sysctl, daemon.json, fail2ban, apt, systemd units), test/(test-host.sh, run-in-container.sh)
   edge/        compose.edge.yml, conf/(Caddyfile, acme/, hsts/), state-sample/, edge.env.example, edgectl.sh, verify-edge.sh, README.md, test/(compose.test.yml, test-edge.sh, 목 BE·FE)
   data/        compose.data.yml, ensure-databases.sh, opensearch/Dockerfile, garage/ 설정과 초기화 스크립트
   app/         compose.app.yml, compose.prod.yml, compose.dev.yml, *.env.example
