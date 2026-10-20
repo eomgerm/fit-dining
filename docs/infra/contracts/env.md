@@ -15,8 +15,10 @@
 | `app` | `infra/app/app.env.example` | BE 웹 컨테이너(`/etc/fit/dev.env`, `/etc/fit/prod.env`) |
 | `migrate` | `infra/app/migrate.env.example` | 마이그레이션 일회성 컨테이너. DDL 자격만 담고 웹 컨테이너에는 넣지 않는다 |
 | `local` | `infra/local/local.env.example` | 로컬 개발 스택(`infra/local/compose.yml`) |
+| `fe` | `infra/app/fe.env.example` | FE Node 컨테이너(`/etc/fit/fe-dev.env`, `/etc/fit/fe-prod.env`). 비밀을 담지 않는다 |
+| `edge` | `infra/edge/edge.env.example` | 엣지 Caddy(`/etc/fit/edge.env`). compose가 `--env-file`로 읽는다 |
 
-이 문서를 만든 계획 이후의 계획이 `data`, `edge`, `obs`, `ops` 그룹을 같은 표에 더한다(design.md 13.2절의 파일 구분).
+이 문서를 만든 계획 이후의 계획이 `data`, `obs`, `ops` 그룹을 같은 표에 더한다(design.md 13.2절의 파일 구분).
 
 ## 키 목록
 
@@ -24,7 +26,7 @@
 
 | 키 | 그룹 | 필수 | 설명 |
 |---|---|---|---|
-| `APP_ENV` | app, migrate | O | 환경 이름 `dev` 또는 `prod`. 부팅 때 DB 이름, Redis 호스트, OpenSearch 접두사가 이 값과 맞는지 검사한다 |
+| `APP_ENV` | app, migrate, fe | O | 환경 이름 `dev` 또는 `prod`. 부팅 때 DB 이름, Redis 호스트, OpenSearch 접두사가 이 값과 맞는지 검사한다 |
 | `SPRING_PROFILES_ACTIVE` | app, migrate | O | 웹은 `dev` 또는 `prod`, 마이그레이션 컨테이너는 `migrate` |
 | `TZ` | app, migrate | O | `Asia/Seoul` |
 | `SPRING_DATASOURCE_URL` | app, migrate | O | JDBC URL. 환경별 DB는 `fit_dev`, `fit_prod` |
@@ -60,6 +62,21 @@
 | `PUSH_VAPID_PUBLIC_KEY` | app | X | VAPID 방식일 때 |
 | `PUSH_VAPID_PRIVATE_KEY` | app | X | VAPID 방식일 때. 비밀 |
 | `PUSH_VAPID_SUBJECT` | app | X | VAPID 방식일 때 `mailto:` 주소 |
+| `NODE_ENV` | fe | O | `production` |
+| `PORT` | fe | O | `3000`. Caddy가 이 포트로 프록시한다 |
+| `HOSTNAME` | fe | O | `0.0.0.0`. Docker가 컨테이너 ID로 채우는 값을 덮어써야 Caddy가 닿는다 |
+| `NODE_OPTIONS` | fe | O | 힙 상한(`--max-old-space-size=384`). 컨테이너 메모리 한도(design.md 4.1절)보다 작게 둔다 |
+| `BE_INTERNAL_URL` | fe | O | 서버 쪽 호출이 BE로 가는 주소. prod는 `http://caddy:8081`, dev는 `http://caddy:8082`다(Caddy가 활성 색을 고른다) |
+| `NEXT_TELEMETRY_DISABLED` | fe | X | `1` |
+| `POSTHOG_KEY` | fe | X | PostHog 공개 키. `/config.json`의 `posthogKey`로 나간다 |
+| `POSTHOG_HOST` | fe | X | PostHog 호스트. `/config.json`의 `posthogHost`로 나간다 |
+| `PUSH_PUBLIC_KEY` | fe | X | 웹 푸시 공개 키. `/config.json`의 `pushPublicKey`로 나간다 |
+| `PROD_HOST` | edge | O | prod 호스트명(예: `fit.<도메인>`). 호스트마다 인증서를 따로 받는다 |
+| `DEV_HOST` | edge | O | dev 호스트명(예: `dev.fit.<도메인>`). prod와 다른 호스트여야 쿠키·서비스 워커가 분리된다 |
+| `ACME_EMAIL` | edge | O | 인증서 발급 알림을 받을 이메일 |
+| `ACME_MODE` | edge | O | `staging`이면 staging CA만 쓴다. `production`이면 기본 이슈어(Let's Encrypt, ZeroSSL)를 쓴다 |
+| `HSTS_MODE` | edge | O | `off` 또는 `on`. 운영 인증서가 확정된 뒤에만 `on`으로 바꾼다 |
+| `DEV_GATE_KEY` | edge | O | dev 접근 키. `/?k=<키>`로 접속하면 쿠키를 받는다. 영문자·숫자·`_`·`-` 32자 이상, 비밀 |
 | `FIT_LOCAL_PG_PORT` | local | X | 호스트에 게시하는 Postgres 포트. 기본 `15432` |
 | `FIT_LOCAL_REDIS_PORT` | local | X | Redis 포트. 기본 `16379` |
 | `FIT_LOCAL_S3_PORT` | local | X | Garage S3 API 포트. 기본 `13900` |
@@ -84,3 +101,5 @@
 | `posthogKey` | X | PostHog 공개 키 |
 | `posthogHost` | X | PostHog 호스트 |
 | `pushPublicKey` | X | 웹 푸시 공개 키 |
+
+FE는 `APP_ENV`, `POSTHOG_KEY`, `POSTHOG_HOST`, `PUSH_PUBLIC_KEY`를 런타임에 읽어 위 키로 돌려준다(`fe` 그룹).
