@@ -1,0 +1,10 @@
+# /etc/fail2ban/jail.d/fit.local (설계 3절). @IGNOREIP@는 bootstrap이 채운다(로컬과 상대 서버).
+[DEFAULT]
+ignoreip = @IGNOREIP@
+bantime = 1h
+findtime = 10m
+maxretry = 5
+
+[sshd]
+enabled = true
+backend = systemd

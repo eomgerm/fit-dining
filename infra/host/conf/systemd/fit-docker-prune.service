@@ -1,0 +1,9 @@
+[Unit]
+Description=Weekly Docker image and builder cache prune (fit)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/fit/docker-prune.sh
+Nice=10

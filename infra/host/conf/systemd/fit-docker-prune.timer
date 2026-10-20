@@ -1,0 +1,11 @@
+[Unit]
+Description=Weekly Docker prune (fit)
+
+[Timer]
+# 새벽 4시 일괄 처리(BE 배치)와 겹치지 않게 일요일 3시에 돈다. 시간대는 서버의 Asia/Seoul이다
+OnCalendar=Sun *-*-* 03:00:00
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
