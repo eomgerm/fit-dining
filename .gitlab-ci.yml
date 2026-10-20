@@ -60,12 +60,15 @@ lint:image-arch:
   script:
     - python3 infra/ci/images_arch.py --platform linux/arm64 --platform linux/amd64 --images-from-sh infra/ci/tool-images.sh
     - python3 infra/ci/images_arch.py --platform linux/arm64 --platform linux/amd64 --compose infra/local/compose.yml --env-file infra/local/local.env.example --dockerfile infra/local/opensearch/Dockerfile
+    - python3 infra/ci/images_arch.py --platform linux/arm64 --platform linux/amd64 --compose infra/edge/compose.edge.yml --compose infra/edge/test/compose.test.yml --env-file infra/edge/edge.env.example
   rules:
     - changes:
         - infra/ci/tool-images.sh
         - infra/ci/images_arch.py
         - infra/local/compose.yml
         - infra/local/opensearch/Dockerfile
+        - infra/edge/compose.edge.yml
+        - infra/edge/test/compose.test.yml
 
 # 인프라 소유 파일만 엄격하게 검사한다. be·fe·ai는 각 팀 린트가 맡는다(스펙 6.3, 12.2).
 lint:shell:
@@ -81,6 +84,15 @@ lint:docker:
     - find infra -type f \( -name 'Dockerfile' -o -name 'Dockerfile.*' -o -name '*.Dockerfile' \) -print0 | xargs -0 -r hadolint
     # be의 Dockerfile은 오류(sudo, ADD 등)만 막고 경고(버전 핀 등)는 출력만 한다
     - find be -type f \( -name 'Dockerfile' -o -name 'Dockerfile.*' -o -name '*.Dockerfile' \) -print0 | xargs -0 -r hadolint --failure-threshold error
+
+# 엣지 Caddy 설정의 형식과 문법(설계 5절). 환경변수와 상태 파일은 예제 값과 견본을 쓴다
+lint:caddy:
+  extends: .verify
+  image:
+    name: $CADDY_IMAGE
+    entrypoint: [""]
+  script:
+    - sh infra/ci/check-caddy.sh
 
 lint:yaml:
   extends: .verify

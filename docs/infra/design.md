@@ -311,17 +311,17 @@ Caddy 컨테이너(`caddy:2.x`, 구현 시 최신 2.x를 핀)가 A의 80·443만
 |---|---|---|
 | 프로토콜 | `protocols h1 h2`. UDP 443(h3)은 열지 않는다 | Caddy 기본값은 h3를 포함한다 (확인) |
 | 호스트·인증서 | 호스트명 둘(`PROD_HOST`, `DEV_HOST`). 둘 다 443이고 호스트마다 인증서를 따로 받는다. Let's Encrypt HTTP-01(80) | 가비아 도메인(1.3절). DNS-01은 쓰지 않는다 |
-| 인증서 단계 | staging 단계에서만 `acme_ca`(`ACME_CA`)로 staging CA를 지정하고, 운영 단계에서는 지정하지 않는다 | 아래 인증서 메모 |
+| 인증서 단계 | `ACME_MODE`로 고른다. `staging`이면 staging CA만 쓰고, `production`이면 `acme_ca`를 지정하지 않아 기본 이슈어를 쓴다 | 아래 인증서 메모 |
 | 인증서 보관 | `caddy_data` 볼륨은 삭제 금지, 백업 대상. 운영 인증서는 M1 첫날 발급하고 곧바로 백업한다 | 삭제하면 재발급 한도에 걸릴 수 있다 |
 | 프록시 헤더 | Caddy가 `X-Forwarded-For/Proto/Host`를 설정하고 외부에서 온 값은 무시, Host는 원본 유지 | (확인: Caddy 문서). BE는 `server.forward-headers-strategy` 설정이 필요하다 |
-| 요청 크기 | API 본문 2MB 상한. 사진 업로드 경로는 `request_body max_size 10MB` | presigned PUT은 크기를 정책으로 묶을 수 없어(POST policy만 가능) 프록시에서도 상한을 둔다 |
+| 요청 크기 | API 본문 2MB 상한. 사진 업로드 경로는 `request_body max_size 10MB` | presigned PUT은 크기를 정책으로 묶을 수 없어(POST policy만 가능) 프록시에서도 상한을 둔다. 본문을 읽는 upstream에서 초과 요청이 413으로 거부됨을 확인했다 (확인: `infra/edge/test/test-edge.sh`). 본문을 읽지 않는 upstream은 한도를 넘기 전에 응답을 먼저 돌려준다 |
 | 관리면 | Grafana·Dozzle·Prometheus는 127.0.0.1 게시 + SSH 터널. 공개 경로 없음. Caddy admin은 컨테이너 내부에서만 | |
 | 로그 | JSON을 stdout으로, json-file 로테이션 | |
-| 메트릭 | 전역 `metrics` 옵션을 켜고 내부 전용 리스너로 노출(`net-obs`) | (확인: Caddy 문서는 전역 `metrics`를 스크래핑의 전제로 설명한다) |
+| 메트릭 | 전역 `metrics` 옵션을 켜고 `:9180/metrics`를 호스트에 게시하지 않는 내부 리스너로 노출(`net-obs`) | (확인: Caddy 문서는 전역 `metrics`를 스크래핑의 전제로 설명한다. `servers` 안의 `metrics`는 폐기 예정이라 쓰지 않는다. 호스트 미게시와 망 안 응답은 `test-edge.sh`로 확인) |
 
 **인증서 메모**
 
-- 기본 이슈어는 ZeroSSL과 Let's Encrypt다 (확인: Caddy 문서). `acme_ca`를 지정하면 그 CA만 쓰는 것으로 알려져 폴백이 사라진다(문서에 명시 없음, `caddy adapt`로 확인). 그래서 운영 단계에서는 지정하지 않는다.
+- 기본 이슈어는 ZeroSSL과 Let's Encrypt다 (확인: Caddy 문서). `acme_ca`를 지정하면 그 CA만 쓰고 폴백이 사라진다(확인: `caddy adapt` 결과. `ACME_MODE=staging`은 이슈어 하나, `production`은 Let's Encrypt와 ZeroSSL 둘). 그래서 운영 단계에서는 지정하지 않는다.
 - Let's Encrypt는 등록 도메인당 주 50장 제한이 있다. 가비아에서 등록한 우리 도메인의 한도라 다른 팀과 나누지 않는다. 호스트가 둘이라 첫 발급은 2장이다.
 
 ### 5.2 라우팅
@@ -331,14 +331,14 @@ Caddy 컨테이너(`caddy:2.x`, 구현 시 최신 2.x를 핀)가 A의 80·443만
 | `/_next/static/*` | 누적 풀(`/srv/fit/web/<env>/pool/`)의 파일. 풀에 없으면 활성 색 FE | 해시가 붙은 불변 자산(5.3절) |
 | `/api/*` | 활성 색 BE | |
 | `/healthz` | BE 헬스(상태만) | 외부 감시용 |
-| `/fit-prod-photos/*`, `/fit-dev-photos/*` | garage S3 API(사진 업로드, path-style) | Host 헤더가 보존돼 SigV4 서명이 통과해야 한다. 7.4절 스파이크로 확인 |
+| `/fit-prod-photos/*`, `/fit-dev-photos/*` | garage S3 API(사진 업로드, path-style) | Host 헤더가 보존돼 SigV4 서명이 통과해야 한다. 헤더 서명 PUT은 엣지를 거쳐 로컬 garage에서 통과했다 (확인: `test-edge.sh`). presigned URL과 POST policy는 7.4절 스파이크로 확인 |
 | `/photos/<env>/confirmed/*` | garage 웹 엔드포인트(3902) | `header_up Host`를 그 버킷의 웹 호스트(`<버킷>.<web_root_domain>`)로 바꾼다. `pending/`은 공개 경로에서 막는다. 객체 키는 추측할 수 없는 UUID이고, 읽기 응답은 캐시 가능하게(`Cache-Control: public`) 둔다 |
 | `/_ops/prometheus/healthy`, `/_ops/alertmanager/healthy` | 내부 `/-/healthy`로 rewrite | B의 IP(`remote_ip`)와 basic auth를 둘 다 통과해야 하고 실패하면 404. 이 외의 `/_ops` 경로는 없다. B가 A의 감시 체계를 감시한다 |
 | 그 외 모두 | 활성 색 FE(Next.js SSR) | 페이지, RSC, `/config.json`, `/fe-healthz`, `public/` 파일(`/sw.js`, `/manifest.webmanifest`) |
 
 각 호스트는 자기 환경의 경로만 라우팅한다. 예를 들어 dev 호스트는 `/fit-prod-photos/*`를 프록시하지 않는다.
 
-**내부 리스너:** `:8081`(prod)과 `:8082`(dev)는 호스트에 게시하지 않고 compose 망 안에서만 닿는다. 활성 색 BE로 프록시하며 FE 서버가 BE를 부를 때 쓰는 주소(`BE_INTERNAL_URL`)다.
+**내부 리스너:** `:8081`(prod)과 `:8082`(dev)는 호스트에 게시하지 않고 compose 망 안에서만 닿는다. 활성 색 BE로 프록시하며 FE 서버가 BE를 부를 때 쓰는 주소(`BE_INTERNAL_URL`)다 (확인: `test-edge.sh`. 호스트에 게시되지 않고, 전환하면 FE 서버가 읽는 BE 색이 FE 재시작 없이 바뀐다). 같은 망의 컨테이너는 어느 환경의 리스너에도 닿으므로 `BE_INTERNAL_URL`의 포트가 환경과 맞는지는 배포 사전 점검이 확인한다.
 
 **사진 읽기 경로의 근거**
 
@@ -348,10 +348,10 @@ Caddy 컨테이너(`caddy:2.x`, 구현 시 최신 2.x를 핀)가 A의 80·443만
 ### 5.3 프런트 서빙 (SSR)
 
 - **FE 컨테이너:** `fe-prod-blue`·`fe-prod-green`, `fe-dev`. Next.js `output: 'standalone'`의 `node server.js`(포트 3000)를 돌리며 호스트에 게시하지 않는다. 루트 파일시스템은 읽기 전용이고 Next의 캐시 디렉터리(`.next/cache`)만 tmpfs로 쓴다.
-- **정적 자산:** `/_next/static/*`는 Caddy가 누적 풀에서 직접 준다. 배포 스크립트가 릴리스마다 `.next/static`을 풀에 쌓고 지우지 않으므로, 열려 있는 탭이 이전 릴리스의 해시 자산을 요청해도 404가 나지 않는다(Next.js 문서의 immutable assets 방식). 풀에 없으면 FE가 대신 응답해서 풀 동기화 실수가 장애로 번지지 않는다. 풀 정리는 배포 스크립트가 맡는다.
+- **정적 자산:** `/_next/static/*`는 Caddy가 누적 풀에서 직접 준다. 배포 스크립트가 릴리스마다 `.next/static`을 풀에 쌓고 지우지 않으므로, 열려 있는 탭이 이전 릴리스의 해시 자산을 요청해도 404가 나지 않는다(Next.js 문서의 immutable assets 방식). 풀에 없으면 FE가 대신 응답해서 풀 동기화 실수가 장애로 번지지 않는다. 풀은 URL 경로를 그대로 따르는 `/srv/fit/web/<env>/pool/_next/static/…`이다. 풀 정리는 배포 스크립트가 맡는다 (확인: `test-edge.sh`. 풀에 있는 자산은 FE를 거치지 않고 응답하고 없는 자산은 FE가 응답하며, `..` 경로로 풀 밖의 파일을 읽을 수 없다).
 - **캐시 헤더:** `/_next/static`은 `Cache-Control: public, max-age=31536000, immutable`이다(Next가 붙이고 풀도 같다). HTML·RSC·`public/` 파일의 캐시 헤더는 FE가 정하고 Caddy는 바꾸지 않는다.
-- **헤더:** `encode zstd gzip`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`를 붙이고 `Server`와 `X-Powered-By`를 지운다.
-- **스트리밍:** FE의 스트리밍 응답(Suspense, RSC)은 Caddy가 버퍼링하지 않고 그대로 흘려야 한다.
+- **헤더:** `encode zstd gzip`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`를 붙이고 `Server`와 `X-Powered-By`를 지운다 (확인: upstream이 보내도 지워진다).
+- **스트리밍:** FE의 스트리밍 응답(Suspense, RSC)은 Caddy가 버퍼링하지 않고 그대로 흘려야 한다 (확인: `test-edge.sh`. `encode`를 켠 상태에서 첫 덩어리가 1.5초 뒤의 마지막 덩어리를 기다리지 않고 도착한다).
 - **환경 값:** FE는 `/etc/fit/fe-<env>.env`를 런타임에 읽는다(번들에 넣지 않는다). 브라우저가 쓸 공개 값은 `/config.json`(FE 라우트)이 돌려준다.
 - **HSTS:** `Strict-Transport-Security`는 운영 인증서가 확정된 뒤에만 켠다. staging 인증서 단계에서 켜면 브라우저가 거부해 테스트가 막힌다.
 - **CSP:** 프런트 팀과 합의한 뒤 추가한다.
@@ -363,7 +363,8 @@ Caddy 컨테이너(`caddy:2.x`, 구현 시 최신 2.x를 핀)가 A의 80·443만
 - dev 호스트(`DEV_HOST`)는 쿠키가 없으면 404다.
 - `/?k=<dev 키>`로 한 번 접속하면 Caddy가 `fit_dev` 쿠키(Secure, HttpOnly, SameSite=Lax, `Max-Age=1209600`, `Domain` 없음)를 심고 `/`로 보낸다. 같은 출처 요청에는 쿠키가 자동으로 붙는다.
 - `/manifest.webmanifest`와 `/icons/*`는 게이트에서 제외한다. 브라우저가 쿠키 없이 가져오기 때문이다.
-- 로그에서는 쿼리의 `k`를 지운다(`log`의 `filter` 인코더에서 `request>uri query { delete k }`, 구현 시 확인). `Cookie`·`Authorization` 헤더는 Caddy가 기본으로 가린다(Caddy 문서의 `log_credentials`, 구현 시 확인).
+- 로그에서는 쿼리의 `k`를 지운다(`log`의 `filter` 인코더에서 `request>uri query { delete k }`). `Cookie`·`Authorization` 헤더는 Caddy가 기본으로 가린다(Caddy 문서의 `log_credentials`). 키가 쿼리와 쿠키 어느 쪽으로도 로그에 남지 않음을 확인했다 (확인: `test-edge.sh`).
+- 게이트를 통과한 요청은 `fit_dev` 쿠키를 지운 뒤 프록시한다(`handle` 안의 `request_header`). 키가 앱 컨테이너 로그에 남지 않게 하려는 것이고 다른 쿠키는 그대로 전달된다 (확인: `test-edge.sh`). `curl --aws-sigv4`처럼 Cookie를 서명 대상에 넣는 클라이언트는 서명이 어긋난다. 브라우저의 presigned URL 요청은 Cookie를 서명하지 않을 것으로 본다 (미확인, 7.4절 스파이크).
 - 목적은 스캐너 차단용 최소 방어다. 헤더 방식은 브라우저의 페이지 탐색에 붙일 수 없고, basic auth는 JWT를 담는 `Authorization` 헤더와 충돌해 쓰지 않는다. 만료가 없는 세션 쿠키면 모바일에서 앱을 닫을 때마다 사라진다.
 - iOS 홈 화면 PWA는 Safari와 쿠키를 공유하지 않을 수 있다. 그 경우 PWA 안에서 다시 `?k=`로 들어와야 한다 (미확인).
 
@@ -375,13 +376,23 @@ Caddy 컨테이너(`caddy:2.x`, 구현 시 최신 2.x를 핀)가 A의 80·443만
 
 ### 5.5 전환·연결·검증
 
-**Blue/Green 전환:** 배포 스크립트가 서비스(be, fe)별 활성 색 upstream 조각(`/srv/fit/state/upstream-<환경>-<서비스>.caddy`)을 쓰고 `caddy reload`를 호출한다. 상태 디렉터리는 파일이 아니라 디렉터리째 마운트한다(A603의 bind-mount inode 사고 교훈). `lb_try_duration`으로 전환 중 연결 실패를 재시도한다. BE와 FE가 같은 방식이라 배포·롤백 절차가 하나다.
+**Blue/Green 전환:** 배포 스크립트가 서비스(be, fe)별 활성 색 upstream 조각(`/srv/fit/state/upstream-<환경>-<서비스>.caddy`)을 쓰고 `caddy reload`를 호출한다. 상태 디렉터리는 파일이 아니라 디렉터리째 마운트한다(A603의 bind-mount inode 사고 교훈). `lb_try_duration`으로 전환 중 연결 실패를 재시도한다. BE와 FE가 같은 방식이라 배포·롤백 절차가 하나다. 형식 견본은 `infra/edge/state-sample/`이고 파일은 임시 이름으로 쓴 뒤 `mv`로 바꾼다. 적용은 `infra/edge/edgectl.sh reload`(문법 검사를 통과해야 reload) 하나이고 배포 스크립트도 같은 명령을 쓴다.
+
+**reload의 성질** (확인: `test-edge.sh`)
+
+- 상태 파일만 바꾸고 reload하기 전에는 트래픽이 옮겨지지 않는다.
+- BE와 FE는 따로 전환된다. BE만 되돌려도 FE는 그대로이고 FE 서버가 읽는 BE 색은 즉시 바뀐다.
+- reload 중 compose 망 안의 요청은 끊기지 않는다(요청 150건 실패 0건). 호스트 포트 경로에서는 Docker Desktop의 포트 포워더가 새 연결을 간헐적으로 거부했는데 Caddy 쪽 원인이 아니었다(응답 코드가 4xx·5xx인 요청은 0건).
+- 문법이 틀린 상태 파일은 `check`와 `reload`가 거부하고 직전 설정이 유지된다.
+- 문법은 맞지만 없는 호스트를 가리키는 upstream은 `check`와 `reload`를 통과하고 요청이 502가 된다. 그래서 reload 뒤 Caddy 경유 스모크(6.4절 5단계)가 필수다.
+
+**바꿀 곳이 하나씩이다:** 도메인은 `edge.env`의 호스트 두 값과 DNS, 라우트는 `Caddyfile`의 `env_routes` 한 곳(prod와 dev에 같이 적용), 색 전환은 상태 파일과 `edgectl.sh reload`다(`infra/edge/README.md`).
 
 **장기 연결:** SSE는 `text/event-stream`이면 자동 flush된다 (확인). reload 때 WebSocket은 기본으로 강제 종료되고 `stream_close_delay`로 지연할 수 있다 (확인). 일반 HTTP는 grace period가 무제한이라 끝까지 처리된다 (확인). 어느 쪽이든 old 색을 멈추면 끊기므로 클라이언트 재연결(`Last-Event-ID`)이 전제다.
 
 **PWA와 TLS:** 서비스 워커, 설치(홈 화면 추가), 웹 푸시는 브라우저가 신뢰하는 HTTPS에서만 동작한다. staging CA 인증서는 신뢰되지 않으므로 프런트 테스트 전에 운영 CA 인증서를 확정한다. prod와 dev는 호스트가 달라 출처가 다르므로 서비스 워커, localStorage, 쿠키가 모두 분리된다(12.5절).
 
-**검증:** `verify-edge.sh`는 서버 안에서 TLS·헤더·라우팅을 확인한다(`/`가 200, `/_next/static` 자산은 `immutable`, 없는 자산은 404(`immutable` 아님), `/healthz`·`/fe-healthz`·`/config.json`이 200, dev 호스트는 쿠키 없이 404). 서버 밖에서는 포트 스캔(22/80/443만 열림)과 인증서 만료일을 확인한다.
+**검증:** `verify-edge.sh`는 서버 안에서 TLS·헤더·라우팅을 확인한다(`/`가 200, `/_next/static` 자산은 `immutable`, 없는 자산은 404(`immutable` 아님), `/healthz`·`/fe-healthz`·`/config.json`이 200, dev 호스트는 쿠키 없이 404). `--resolve`를 주면 DNS를 바꾸기 전에도 서버를 점검할 수 있다. 서버 밖에서는 포트 스캔(22/80/443만 열림)과 인증서 만료일을 확인한다.
 
 ## 6. CI/CD
 
@@ -427,13 +438,14 @@ Caddy 컨테이너(`caddy:2.x`, 구현 시 최신 2.x를 핀)가 A의 80·443만
 **`lint:*` 잡**
 
 - `lint:guards`: 단위 테스트, CRLF, `infra/`의 env 예제 형식, env 계약과 예제 파일의 키 일치, 포트 규칙
-- `lint:image-arch`: 도구 이미지 핀이나 로컬 스택 이미지가 바뀔 때만 돈다
+- `lint:image-arch`: 도구 이미지 핀, 로컬 스택, 엣지 이미지가 바뀔 때만 돈다
 - `lint:shell`, `lint:docker`, `lint:yaml`: `infra/`와 루트 설정만 엄격하게 본다. be의 Dockerfile은 오류 수준만 막는다. 다른 팀 코드는 각자의 잡이 맡는다
 - `lint:secrets`: 저장소 전체와 MR 커밋 이력
 - `lint:history`: MR에서만 돈다. MR 안의 병합 커밋(3-way merge)을 막는다
 - `lint:migrations`: MR에서만 돈다. 적용된 Flyway 파일의 수정, 버전 중복, 순서 역전을 막는다
 - 도구별로 잡을 나눈다. job 컨테이너 안에서 `docker run -v $PWD`로 도구 컨테이너를 띄우면 워크스페이스가 호스트 경로가 아니라 마운트되지 않기 때문이다
-- `caddy validate`와 `promtool check/test`는 해당 파일이 생기는 계획에서 추가한다
+- `lint:caddy`: 엣지 설정의 형식(`caddy fmt --diff`)과 문법(`caddy validate`, 인증서 단계와 HSTS의 네 조합)
+- `promtool check/test`는 해당 파일이 생기는 계획에서 추가한다
 
 verify는 Arm, prod는 x86이다. 그래서 deploy 스크립트가 idle 색에서 실제 x86 이미지로 스모크를 돌린 뒤에만 전환한다.
 
@@ -644,7 +656,7 @@ Grafana는 팀원에게 viewer 계정을 준다. A503에서는 SSH 보유자만 
 
 ### 10.5 로컬 개발·사전 검증
 
-- 로컬 개발용 `infra/local/compose.yml`은 profile(`core`, `search`)로 나눠 노트북 메모리에 맞게 고르게 한다. AI는 Modal의 dev 앱을 쓴다. 켜고 점검하는 명령은 `bash infra/local/fit-local.sh`이고 접속 값은 `infra/local/README.md`에 있다. 환경변수 이름은 `docs/infra/contracts/env.md`를 따른다.
+- 로컬 개발용 `infra/local/compose.yml`은 profile(`core`, `search`)로 나눠 노트북 메모리에 맞게 고르게 한다. AI는 Modal의 dev 앱을 쓴다. 켜고 점검하는 명령은 `bash infra/local/fit-local.sh`이고 접속 값은 `infra/local/README.md`에 있다. 환경변수 이름은 `docs/infra/contracts/env.md`를 따른다. 엣지는 `bash infra/edge/test/test-edge.sh up|verify|down`으로 목 BE·FE와 시험용 풀, 로컬 스택의 garage를 붙여 시험한다.
 - 서버 수령 전에는 이 PC의 Docker Desktop(Docker 29.7.2, Compose v5.4.0)과 WSL Ubuntu로 compose·스크립트·알림 규칙·Caddy 설정을 검증한다. shellcheck, promtool, age는 컨테이너로 돌린다.
 - 서버에서만 확인되는 것은 ufw, sysctl, 실제 TLS 발급, CPU 버스트, 외부 포트 노출이다.
 
@@ -991,14 +1003,14 @@ AI 팀과 M1 전에 합의한다. FastAPI는 Modal에서 돌고 A·B에는 AI �
 ```
 infra/
   host/        bootstrap.sh, verify-host.sh, daemon.json, sysctl.d, sshd drop-in, fail2ban, systemd units
-  edge/        compose.edge.yml, Caddyfile, snippets/
+  edge/        compose.edge.yml, conf/(Caddyfile, acme/, hsts/), state-sample/, edge.env.example, edgectl.sh, verify-edge.sh, README.md, test/(compose.test.yml, test-edge.sh, 목 BE·FE)
   data/        compose.data.yml, ensure-databases.sh, opensearch/Dockerfile, garage/ 설정과 초기화 스크립트
   app/         compose.app.yml, compose.prod.yml, compose.dev.yml, *.env.example
   obs/         compose.obs.yml, prometheus/(rules, tests), alertmanager/, grafana/(provisioning, dashboards), blackbox/
   ops/         (B) compose.ops.yml, prometheus/, alertmanager/, blackbox, port-audit.sh, vault-ingest.sh
   deploy/      deploy.sh, rollback.sh, preflight.sh, smoke.sh, notify.sh, fit-up.sh
   backup/      pg-backup.sh, verify-dump.sh, push-vault.sh, photos-backup.sh, restore-check.sh(노트북용)
-  ci/          ports_invariant.py, check_compose_projects.py, check_env_files.py, check_env_contract.py, check_eol.py, check_linear_history.py, no-merge-commit.sh, migration_immutability.py, images_arch.py, run-local-checks.sh, tool-images.sh, compose-projects.txt, tests/
+  ci/          ports_invariant.py, check_compose_projects.py, check_env_files.py, check_env_contract.py, check_eol.py, check_linear_history.py, no-merge-commit.sh, check-caddy.sh, migration_immutability.py, images_arch.py, run-local-checks.sh, tool-images.sh, compose-projects.txt, tests/
   local/       compose.yml (profile: core, search), fit-local.sh, local.env.example, garage/, opensearch/Dockerfile, README.md
 .gitlab-ci.yml
 docs/infra/
