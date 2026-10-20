@@ -1,0 +1,120 @@
+# compose.edge.yml 위에 얹어 노트북에서 엣지를 시험하는 오버라이드(test-edge.sh가 쓴다).
+# 목 BE·FE와 시험용 풀을 함께 띄우고, 사진 경로는 로컬 스택의 실제 garage에 붙는다. 호스트 게시는 127.0.0.1의 높은 번호다.
+# 상대 경로는 첫 파일(compose.edge.yml)이 있는 디렉터리 기준이다.
+x-mock: &mock
+  image: python:3.12.15-slim
+  command: [python, /mock/mock.py]
+  volumes:
+    - ./test:/mock:ro
+
+x-be-health: &be-health
+  test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz')"]
+  interval: 2s
+  timeout: 3s
+  retries: 15
+
+x-fe-health: &fe-health
+  test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/fe-healthz')"]
+  interval: 2s
+  timeout: 3s
+  retries: 15
+
+services:
+  caddy:
+    ports: !override
+      - 127.0.0.1:${FIT_EDGE_TEST_HTTP_PORT:-18080}:80
+      - 127.0.0.1:${FIT_EDGE_TEST_HTTPS_PORT:-18443}:443
+    volumes: !override
+      - ./conf:/etc/caddy:ro
+      - web:/srv/fit/web:ro
+      - state:/srv/fit/state:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+      be-prod-blue:
+        condition: service_healthy
+      be-prod-green:
+        condition: service_healthy
+      be-dev:
+        condition: service_healthy
+      fe-prod-blue:
+        condition: service_healthy
+      fe-prod-green:
+        condition: service_healthy
+      fe-dev:
+        condition: service_healthy
+
+  seed:
+    image: caddy:2.11.7
+    entrypoint: [sh, /seed/seed.sh]
+    volumes:
+      - ./test:/seed:ro
+      - ./state-sample:/state-sample:ro
+      - web:/srv/fit/web
+      - state:/srv/fit/state
+
+  be-prod-blue:
+    <<: *mock
+    environment:
+      MOCK_KIND: be
+      MOCK_NAME: blue
+    healthcheck: *be-health
+    networks: [net-prod]
+
+  be-prod-green:
+    <<: *mock
+    environment:
+      MOCK_KIND: be
+      MOCK_NAME: green
+    healthcheck: *be-health
+    networks: [net-prod]
+
+  be-dev:
+    <<: *mock
+    environment:
+      MOCK_KIND: be
+      MOCK_NAME: dev
+    healthcheck: *be-health
+    networks: [net-dev]
+
+  fe-prod-blue:
+    <<: *mock
+    environment:
+      MOCK_KIND: fe
+      MOCK_NAME: blue
+      APP_ENV: prod
+      BE_INTERNAL_URL: http://caddy:8081
+    healthcheck: *fe-health
+    networks: [net-prod]
+
+  fe-prod-green:
+    <<: *mock
+    environment:
+      MOCK_KIND: fe
+      MOCK_NAME: green
+      APP_ENV: prod
+      BE_INTERNAL_URL: http://caddy:8081
+    healthcheck: *fe-health
+    networks: [net-prod]
+
+  fe-dev:
+    <<: *mock
+    environment:
+      MOCK_KIND: fe
+      MOCK_NAME: dev
+      APP_ENV: dev
+      BE_INTERNAL_URL: http://caddy:8082
+    healthcheck: *fe-health
+    networks: [net-dev]
+
+volumes:
+  web:
+  state:
+
+# net-edge만 로컬 스택(garage가 있는 망)에 붙고, 나머지 망은 이 시험 프로젝트가 만든다
+networks:
+  net-prod: !override {}
+  net-dev: !override {}
+  net-obs: !override {}
