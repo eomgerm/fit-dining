@@ -121,6 +121,8 @@ check_all() {
     run_step "arch (로컬 스택)" "$PY" infra/ci/images_arch.py --platform linux/arm64 --platform linux/amd64 --compose infra/local/compose.yml --env-file infra/local/local.env.example --dockerfile infra/local/opensearch/Dockerfile
     # 엣지는 서버 A(x86)에서, 시험 환경은 개발자 PC에서 돈다
     run_step "arch (엣지)" "$PY" infra/ci/images_arch.py --platform linux/arm64 --platform linux/amd64 --compose infra/edge/compose.edge.yml --compose infra/edge/test/compose.test.yml --env-file infra/edge/edge.env.example
+    # 데이터 스택은 서버 A(x86)에서, 백업 시험 이미지는 개발자 PC에서 돈다
+    run_step "arch (데이터, 백업 시험)" "$PY" infra/ci/images_arch.py --platform linux/arm64 --platform linux/amd64 --compose infra/data/compose.data.yml --env-file infra/data/data.env.example --dockerfile infra/backup/test/node/Dockerfile
   fi
   # 인프라 소유 파일만 엄격하게 본다. be·fe·ai는 각 팀 린트가 맡는다(스펙 6.3, 12.2). be의 Dockerfile은 오류만 막는다.
   check_tool shellcheck "$SHELLCHECK_IMAGE" 'infra/*.sh' -- shellcheck -x

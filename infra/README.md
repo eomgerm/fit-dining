@@ -10,6 +10,8 @@ Fit Dining 인프라 코드. 설계는 [docs/infra/design.md](../docs/infra/desi
 - `host/` 서버 부트스트랩(`bootstrap.sh`)과 점검(`verify-host.sh`), 공유 Docker 망, 컨테이너 시험. 사용법은 [host/README.md](host/README.md)
 - `app/` BE·FE 컨테이너 정의(`compose.app.yml`)와 환경변수 예제(`app.env.example`, `migrate.env.example`, `fe.env.example`). 키 계약은 [docs/infra/contracts/env.md](../docs/infra/contracts/env.md)
 - `deploy/` 배포·롤백·사전 점검·스모크·재부팅 뒤 기동(`deploy.sh` 등)과 노트북 시험 환경. 사용법은 [deploy/README.md](deploy/README.md)
+- `data/` 데이터 스택(Postgres, OpenSearch, Redis 2개, Garage)의 compose와 멱등 초기화 스크립트(DB·role·버킷·키), 점검, 노트북 시험. 사용법은 [data/README.md](data/README.md)
+- `backup/` Postgres 덤프·사진·인증서 볼륨의 암호화 백업, B 금고로 전송과 수신 검증, 복원 리허설, 마이그레이션 전 덤프, 설치 스크립트와 systemd 타이머, 노트북 시험. 사용법은 [backup/README.md](backup/README.md)
 
 가드가 강제하는 규칙:
 

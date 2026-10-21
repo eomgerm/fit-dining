@@ -41,7 +41,8 @@ dev는 같은 흐름이지만 색이 없어서 교체하고, 확인에 실패하
 - 이미지 `be:<sha>`, `fe:<sha>`(CI의 `build:images`가 만든다. 환경변수 `FIT_BE_IMAGE`, `FIT_FE_IMAGE`로 저장소 이름을 바꿀 수 있다)
 - `/etc/fit/<env>.env`, `fe-<env>.env`, `migrate-<env>.env`(키는 [env.md](../../docs/infra/contracts/env.md)의 `app`, `fe`, `migrate` 그룹). 다른 사용자가 읽을 수 없어야 한다
 - 호스트 설정(`infra/host/`)과 엣지(`infra/edge/`)가 먼저 떠 있어야 한다. 엣지의 첫 상태 파일은 `infra/edge/state-sample/`을 `/srv/fit/state/`에 복사한 것이다(prod는 blue를 가리킨다)
-- prod 마이그레이션이 있는 배포는 사전 덤프 스크립트가 있어야 한다. 기본은 `infra/backup/pg-backup.sh`이고 `predeploy <환경> <sha>`로 부른다(계획 1D가 만든다). `FIT_PREDEPLOY_DUMP`로 바꿀 수 있다
+- prod 마이그레이션이 있는 배포는 사전 덤프 스크립트가 있어야 한다. 기본은 `infra/backup/pg-backup.sh`이고 `predeploy <환경> <sha>`로 부른다(결과는 `/srv/fit/predeploy/`, [backup](../backup/README.md)). `FIT_PREDEPLOY_DUMP`로 바꿀 수 있다
+- 데이터 스택(`infra/data/`)과 `/etc/fit/data.env`. `fit-up.sh`가 올리고 DB·버킷 초기화까지 한다([data](../data/README.md))
 - 웹훅 알림은 `FIT_NOTIFY_WEBHOOK` 또는 `/etc/fit/obs.env`의 `MATTERMOST_WEBHOOK_URL`을 읽는다(없으면 화면에만 출력)
 
 ## 이미지 계약
@@ -71,6 +72,7 @@ dev는 같은 흐름이지만 색이 없어서 교체하고, 확인에 실패하
 | `FIT_MIN_DISK_GB`, `FIT_MIN_MEM_MB` | 5, prod 2560 / dev 512 | 사전 점검의 여유 기준 |
 | `FIT_FORCE_MIGRATE=1` | | 마이그레이션 파일이 안 바뀌어도 마이그레이션을 실행한다 |
 | `FIT_SMOKE_SEARCH_PATH` | 없음 | 검색 1건을 호출해 `X-Fallback` 헤더가 없는지 본다(예: `/api/v1/search?q=김치`). 없으면 건너뛴다 |
+| `FIT_DATA_COMPOSE`, `FIT_OBS_COMPOSE` | `infra/data/compose.data.yml`, `infra/obs/compose.obs.yml` | `fit-up.sh`가 올릴 data·obs compose 파일. 파일이 없으면 건너뛴다(시험이 없는 파일을 가리킨다) |
 | `FIT_ENV_DIR`, `FIT_STATE_DIR`, `FIT_WEB_DIR`, `FIT_REPO_DIR`, `FIT_EDGE_PROJECT`, `FIT_NET_PROD`·`FIT_NET_DEV`·`FIT_NET_DATA` | `/etc/fit`, `/srv/fit/state`, `/srv/fit/web`, 저장소 루트, `fit-edge`, 망 이름 | 시험 환경이 바꾼다 |
 
 ## 노트북에서 시험하기
@@ -85,4 +87,4 @@ bash infra/deploy/test/test-deploy.sh down   # 시험이 만든 것을 모두 �
 
 ## 서버에서만 확인되는 것
 
-실제 BE(Spring)와 FE(Next.js) 이미지의 준비 시간과 메모리, 실제 Postgres와 사전 덤프(계획 1D), 실제 도메인과 인증서를 거친 스모크, 서버의 파일 권한(`root:docker 0640`), 메모리 여유 판정(`MemAvailable`), 재부팅 뒤 `fit-up.sh`의 실제 기동 순서.
+실제 BE(Spring)와 FE(Next.js) 이미지의 준비 시간과 메모리, 실제 BE 마이그레이션과 사전 덤프의 조합(사전 덤프 스크립트 자체는 실제 Postgres로 시험했다. [backup](../backup/README.md)), 이 시험이 건너뛰는 data 스택의 기동과 초기화(`infra/data/test/test-data.sh`가 따로 시험한다), 실제 도메인과 인증서를 거친 스모크, 서버의 파일 권한(`root:docker 0640`), 메모리 여유 판정(`MemAvailable`), 재부팅 뒤 `fit-up.sh`의 실제 기동 순서.

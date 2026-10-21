@@ -32,6 +32,8 @@ export FIT_SMOKE_SEARCH_PATH="/api/v1/search?q=a"
 export FIT_DRAIN_SECONDS=1 FIT_BE_READY_TIMEOUT=40 FIT_FE_READY_TIMEOUT=30
 export FIT_MEM_AVAILABLE_MB=8000 FIT_SKIP_PERM=1 FIT_PREDEPLOY_DUMP="$ROOT/infra/deploy/test/fake-dump.sh"
 export FIT_NOTIFY_WEBHOOK=http://127.0.0.1:18099/hook
+# 이 시험은 배포 흐름만 본다. data(실제 Postgres 등)와 obs는 없는 파일을 가리켜 건너뛰게 한다(data는 infra/data/test/test-data.sh가 따로 시험한다)
+export FIT_DATA_COMPOSE="$T/none-data.yml" FIT_OBS_COMPOSE="$T/none-obs.yml"
 
 PY=""
 for c in "${PYTHON:-}" python3 python; do
@@ -375,7 +377,7 @@ run_fit_up_checks() {
   ok_if "엣지가 다시 떴고 prod·dev 서비스가 전과 같은 버전으로 응답한다" \
     "$(is "$(be_sha)$(fe_sha)$(dev_be_sha)$(dev_fe_sha)" "$C6$C6$C2$C1")"
   ok_if "활성이 아닌 prod 색은 올리지 않는다(green은 멈춘 채)" "$(is "$(running be-prod-green)$(running fe-prod-green)" falsefalse)"
-  ok_if "data·obs 프로젝트는 아직 없어서 건너뛴다고 알린다" "$([ "$(has "$out" 'data: 건너뜀')$(has "$out" 'obs: 건너뜀')" = 11 ] && echo 1 || echo 0)"
+  ok_if "compose 파일이 없는 data·obs는 건너뛰고 data 초기화도 하지 않는다" "$([ "$(has "$out" 'data: 건너뜀')$(has "$out" 'obs: 건너뜀')$(has "$out" '데이터 초기화')" = 110 ] && echo 1 || echo 0)"
 }
 
 run_hygiene_checks() {

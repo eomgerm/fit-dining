@@ -438,7 +438,7 @@ Caddy 컨테이너(`caddy:2.x`, 구현 시 최신 2.x를 핀)가 A의 80·443만
 **`lint:*` 잡**
 
 - `lint:guards`: 단위 테스트, CRLF, `infra/`의 env 예제 형식, env 계약과 예제 파일의 키 일치, 포트 규칙
-- `lint:image-arch`: 도구 이미지 핀, 로컬 스택, 엣지 이미지가 바뀔 때만 돈다
+- `lint:image-arch`: 도구 이미지 핀, 로컬 스택, 엣지, 데이터 스택, 백업 시험 이미지가 바뀔 때만 돈다
 - `lint:shell`, `lint:docker`, `lint:yaml`: `infra/`와 루트 설정만 엄격하게 본다. be의 Dockerfile은 오류 수준만 막는다. 다른 팀 코드는 각자의 잡이 맡는다
 - `lint:secrets`: 저장소 전체와 MR 커밋 이력
 - `lint:history`: MR에서만 돈다. MR 안의 병합 커밋(3-way merge)을 막는다
@@ -469,7 +469,7 @@ BE와 FE는 같은 절차로 전환하되 BE가 먼저, FE가 나중이다. 새 
 
 - `fit-app-prod`와 `fit-app-dev`는 `infra/app/compose.app.yml` 하나를 프로필(`prod`, `dev`)로 나눠 쓴다. 이미지 태그와 활성 색은 상태 파일 `/srv/fit/state/deploy-<환경>.env`가 정하고(compose의 `--env-file`), 처음 배포는 활성이 green으로 시작해 blue로 간다(엣지 견본의 upstream과 같다).
 - 준비 확인과 idle 색 확인은 호스트에 게시하지 않는 포트를 위해 같은 망의 caddy 컨테이너 안에서 `wget`으로 한다. BE는 `/actuator/health/readiness`, `/healthz`, `/api/v1/version`(SHA), FE는 `/fe-healthz`, `/`, `/config.json`(`env`)이다.
-- 마이그레이션은 이전 배포 SHA와 새 SHA 사이에 `be/src/main/resources/db/migration`이 바뀌었을 때(첫 배포 포함)만 실행한다. prod는 그 전에 `infra/backup/pg-backup.sh predeploy <환경> <sha>`(계획 1D)로 덤프하고, 덤프나 마이그레이션이 실패하면 트래픽을 건드리기 전에 멈춘다.
+- 마이그레이션은 이전 배포 SHA와 새 SHA 사이에 `be/src/main/resources/db/migration`이 바뀌었을 때(첫 배포 포함)만 실행한다. prod는 그 전에 `infra/backup/pg-backup.sh predeploy <환경> <sha>`(8절)로 덤프하고, 덤프나 마이그레이션이 실패하면 트래픽을 건드리기 전에 멈춘다.
 - 새 색의 준비·직접 확인이나 엣지 전환 뒤 확인에 실패하면 새 색을 치우고 엣지를 이전 색으로 되돌린다. BE는 성공하고 FE가 실패하면 BE는 새 버전, FE는 이전 버전으로 남는다(새 BE가 직전 FE와 호환돼야 한다). `rollback.sh`는 서비스별로 이전 색(컨테이너와 이미지가 남아 있다)으로 옮기고, 전체 롤백이면 `DEPLOYED_SHA`와 `PREVIOUS_SHA`를 맞바꾼다.
 - 사전 점검은 FE env의 `BE_INTERNAL_URL`이 이 환경의 엣지 내부 리스너(prod `caddy:8081`, dev `caddy:8082`)인지 확인한다. 같은 망의 컨테이너는 어느 환경의 리스너에도 닿으므로 환경 간 호출을 여기서 막는다.
 - 정적 자산 풀(`/srv/fit/web/<환경>/pool/_next/static`)은 FE 이미지의 `/app/.next/static`을 `docker cp`로 꺼내 이미 있는 파일은 덮어쓰지 않고 쌓는다. 이번 릴리스가 가진 파일의 수정 시각을 갱신하고, 14일 넘게 어느 릴리스에도 없던 파일은 지운다.
@@ -512,12 +512,15 @@ FE는 `fe/`의 Next.js를 `output: 'standalone'`으로 빌드한 Node 컨테이�
 
 - 이미지는 `pgvector/pgvector:0.8.7-pg16`으로 핀한다(로컬 스택과 같다).
 - 튜닝은 mount한 설정 파일이 아니라 `command:` 플래그로 한다(shared_buffers 256MB, max_connections 60, `idle_in_transaction_session_timeout`, `pg_stat_statements`).
-- 환경별 DB·role은 init 스크립트가 아니라 멱등 `ensure-databases.sh`로 만든다. init 스크립트는 빈 볼륨에서 한 번만 돌기 때문이다(A503 함정). dev role에는 `statement_timeout`을 건다.
+- 환경별 DB·role은 init 스크립트가 아니라 멱등 `infra/data/ensure-databases.sh`로 만든다. init 스크립트는 빈 볼륨에서 한 번만 돌기 때문이다(A503 함정). role은 `fit_migrator`(DDL, 두 DB의 소유자), `fit_prod_app`, `fit_dev_app`(DML만)이고 DB는 `fit_prod`, `fit_dev`다. 각 앱 role은 자기 DB에만 접속하고(`REVOKE ... FROM PUBLIC`), 마이그레이터가 만드는 테이블·시퀀스에는 기본 권한으로 DML 권한이 따라간다. 비밀번호는 실행할 때마다 `/etc/fit/data.env` 값으로 맞춘다(교체는 값을 바꾸고 다시 실행). dev role에는 `statement_timeout` 30초를 건다 (확인: `infra/data/test/test-data.sh`).
+- 비밀번호는 SQL에 그대로 들어가므로 영문·숫자·`._~-`만 쓴 16자 이상으로 제한하고 스크립트가 그 밖의 값을 거부한다. data.env는 셸로 실행하지 않고 `KEY=VALUE` 줄만 읽는다. SQL은 표준 입력으로 넘기고 `log_statement`와 `pg_stat_statements.track_utility`를 꺼서 비밀번호가 프로세스 목록, Postgres 로그, 통계에 남지 않는다 (확인: 위 시험).
+- 공식 이미지는 컨테이너 안 loopback 접속을 비밀번호 없이 허용(trust)한다. 다른 컨테이너가 서비스 이름으로 들어오는 접속은 scram-sha-256 비밀번호 검사를 받는다 (확인: 틀린 비밀번호가 거부됨). 호스트 게시 포트(`127.0.0.1:5432`)로 들어오는 접속은 출발지가 loopback이 아니라 같은 규칙을 받는다 (서버에서 터널로 확인).
 - 개발자용 dev DB 접근은 SSH 터널 → `127.0.0.1:5432`이고 dev role 비밀번호만 공유한다.
 
 ### 7.2 OpenSearch
 
 - 공식 이미지(`opensearchproject/opensearch:3.9.0`)에 `analysis-nori`를 설치한 커스텀 이미지다(힙 768MB). 설치는 `opensearch-plugin install --batch analysis-nori`다. 로컬에서 빌드해 `analysis-nori`와 `opensearch-knn` 플러그인이 있고 nori 분석기가 동작함을 확인했다 (확인: `infra/local/fit-local.sh`).
+- 서버용 정의는 `infra/data/compose.data.yml`이고 로컬과 같은 Dockerfile(`infra/local/opensearch`)을 빌드한다(메모리 상한 2GB, 힙 768MB, 호스트 게시 없음). 이 compose로 띄운 OpenSearch에서 nori 분석기가 한국어를 형태소로 나눈다(`닭가슴살` → `닭`, `가슴`, `살`) (확인: `FIT_TEST_OPENSEARCH=1 bash infra/data/test/test-data.sh`). 빈 인덱스 상태에서 컨테이너 메모리는 약 1.3GiB였다(4.1절의 평상시 추정과 같다. Postgres 약 63MiB, Redis 각 약 4MiB, Garage 약 5MiB는 유휴 값이라 실제 데이터로 다시 잰다).
 - single-node이고 보안 플러그인은 끈다. 내부 망이고 호스트 게시가 없다는 전제이며 잔여 위험은 13절에 있다.
 - `action.destructive_requires_name=true`, 인덱스 템플릿은 `replicas: 0`이다(아니면 yellow).
 - 무중단 재색인은 별칭 전환이다(BE 계약).
@@ -527,7 +530,7 @@ FE는 `fe/`의 Next.js를 `output: 'standalone'`으로 빌드한 Node 컨테이�
 
 ### 7.3 Redis ×2
 
-`redis-prod`, `redis-dev`. maxmemory 96MB, `noeviction`(멱등성 키가 쫓겨나지 않게), AOF everysec, requirepass.
+`redis-prod`, `redis-dev`. maxmemory 96MB, `noeviction`(멱등성 키가 쫓겨나지 않게), AOF everysec, requirepass(환경별 비밀번호). maxmemory를 넘으면 기존 키를 쫓아내지 않고 쓰기를 `OOM` 오류로 거절하고, 재시작하면 AOF로 데이터가 돌아오며, dev 비밀번호로는 prod Redis에 들어가지 못한다 (확인: `infra/data/test/test-data.sh`).
 
 ### 7.4 사진 저장소 (Garage)
 
@@ -540,7 +543,7 @@ Garage(`dxflrs/garage:v2.4.1`, 데이터·메타 볼륨, 설정은 디렉터리 
 
 **첫 주 스파이크(2시간):** PostObject의 `content-length-range` 강제 여부, presigned PUT/POST가 Caddy 경유(Host 보존)로 서명이 통과하는지, 수명주기 동작, 웹 엔드포인트(3902)로 `confirmed/` 공개 읽기가 되고 익명 S3 GET은 거부되는지를 확인한다. 웹 엔드포인트의 공개 읽기와 익명 S3 GET 거부는 로컬 스택 점검에서 확인했다 (확인). 나머지는 서버에서 확인한다. 실패하면 Cloudflare R2나 Firebase Storage로 간다(계정·결제수단 필요, 국외 이전이면 처리방침 고지).
 
-Garage는 단일 노드라도 레이아웃 설정이 필요하다(`layout assign/apply`, 버킷·키 생성). 로컬에서 v2.4.1로 확인했고 멱등 스크립트는 `infra/local/fit-local.sh`의 `init_garage`다 (확인). 서버용 스크립트는 계획 1D가 같은 순서로 만들고 키는 `/etc/fit/*.env`에 둔다. 메모리는 작을 것으로 보고(추정) 0.25GB를 잡았다.
+Garage는 단일 노드라도 레이아웃 설정이 필요하다(`layout assign/apply`, 버킷·키 생성). 로컬의 멱등 스크립트는 `infra/local/fit-local.sh`의 `init_garage`다 (확인). 서버용 멱등 스크립트는 `infra/data/init-garage.sh`이고 환경별 키는 `/etc/fit/data.env`에 둔다. 키 ID는 `GK` + 16진수 24자리, 비밀 키는 16진수 64자리여야 하고(Garage의 `key import` 형식) 스크립트가 이미 있는 키는 바꾸지 않는다. 버킷마다 자기 환경의 키에만 읽기·쓰기·소유 권한을 주고 웹 엔드포인트 공개 읽기와 수명주기(`pending/`와 끝나지 않은 멀티파트를 1일 뒤 삭제)를 건다. 호스트에는 S3 도구가 없고 Garage의 S3 포트를 게시하지 않으므로 스크립트는 net-data에 붙인 python 컨테이너에서 서명한 요청(`infra/data/s3tool.py`, 표준 라이브러리 SigV4)으로 수명주기 설정과 사진 읽기를 한다. 실제 Garage v2.4.1에서 dev 키가 prod 버킷을 읽거나 쓰지 못하고, 서명 없는 S3 GET은 거부되며 웹 엔드포인트 읽기는 되고, 재시작 뒤에도 객체와 레이아웃이 남으며 초기화를 다시 실행해도 변경이 없음을 확인했다 (확인: `infra/data/test/test-data.sh`). 메모리는 작을 것으로 보고(추정) 0.25GB를 잡았다.
 
 ## 8. 백업·복구
 
@@ -549,21 +552,23 @@ Garage는 단일 노드라도 레이아웃 설정이 필요하다(`layout assign
 | 대상 | 주기 | 보관 위치 |
 |---|---|---|
 | Postgres 덤프 | 4시간마다 | A 로컬, B 금고(4시간 단위 48시간 + 일 단위 14일) |
-| 사진 | 하루 1회(사진의 RPO는 24시간) | B 금고(rclone, S3 API 경유) |
+| 사진 | 하루 1회(사진의 RPO는 24시간) | A 로컬, B 금고(S3 API로 읽어 tar로 묶는다) |
 | Caddy 인증서 볼륨 | 주 1회 | B 금고 |
 | `/etc/fit/*.env` | 변경 때마다(수동) | 팀 비밀번호 관리자(암호화) |
 | OpenSearch | 백업하지 않는다 | Postgres에서 재색인 |
 
-1. **덤프와 검증(A):** A가 4시간마다 `pg_dump -Fc`를 뜬다. 하루 1회 이상은 같은 덤프를 임시 컨테이너 DB에 복원해 sanity 검사를 한다(덤프 시점 검증, `verify-dump.sh`). 통과하면 `age`로 암호화한다. 수신자는 2명(인프라 담당, 백업 담당)이고 공개키만 A에 둔다.
-2. **전송:** B로 `rsync`한다. 전용 `vault` 사용자가 쓰기 전용 강제 명령(`rrsync -wo -no-del /srv/vault/incoming`)으로만 접속하므로 삭제 옵션이 막힌다. `rrsync`는 구현 시 확인한다 (미확인).
-3. **보관(B):** B의 timer가 sha256·크기를 검증하고 `incoming`에서 `store`로 옮기며 보관 정책(4시간 단위 48시간 + 일 단위 14일)을 적용한다. 마지막 수신 시각을 지표로 낸다. 8시간 넘게 새 백업이 안 오면 B가 알린다(A가 죽어도 감지).
+1. **덤프와 검증(A):** A가 4시간마다 `pg_dump -Fc`를 뜬다(`infra/backup/pg-backup.sh scheduled`). 마지막 검증 뒤 24시간이 지났으면 같은 덤프를 임시 컨테이너 DB(망 없음, 메모리 디스크)에 복원해 검사한다(덤프 시점 검증, `verify-dump.sh`). 복원 오류가 없고 복원된 public 테이블 수가 덤프 시점의 수와 같아야 통과한다. 통과하면 `age`로 암호화한다. 실패하면 그 덤프는 보내지 않고 `failed-verify-*`로 남기며 지표 `fit_backup_last_verify_ok`가 0이 된다. 수신자는 2명(인프라 담당, 백업 담당)이고 공개키만 A에 둔다(`/etc/fit/keys/age-recipients.txt`). 수신자 2명이 각자 풀 수 있고 수신자가 아닌 키로는 풀 수 없으며, 암호화 파일에서 테이블 이름이나 데이터가 보이지 않고, 복원한 DB에서 원래 행이 조회됨을 확인했다 (확인: `infra/backup/test/test-backup.sh`).
+2. **전송:** B로 `rsync`한다(`push-vault.sh`). 암호화 파일을 먼저, sha256·크기를 적은 `.meta`를 나중에 보내고 B는 `.meta`가 있어야 받은 것으로 친다. 전용 `vault` 사용자가 쓰기 전용 강제 명령(`rrsync -wo -no-del /srv/vault/incoming`, `restrict`, 선택적으로 `from=<A의 IP>`)으로만 접속한다. Ubuntu 24.04에서 A의 키로 셸 명령 실행, 금고 읽기, `--delete`, `incoming/` 밖 쓰기가 모두 거부되고 등록하지 않은 주소에서는 같은 키도 거부됨을 확인했다 (확인: 위 시험). 22.04의 `rrsync`는 `python3`가 있어야 한다. B의 호스트 키는 사람이 지문을 B의 지문과 대조한 뒤 등록한 `known_hosts`로 고정하고, 다른 키가 오면 보내지 않는다 (확인: 위 시험). 보내기에 성공한 파일만 A의 outbox에서 지우고 실패하면 다음 실행이 다시 보낸다.
+3. **보관(B):** B의 timer가 10분마다 `vault-ingest.sh`를 돌린다. `incoming`의 파일을 root만 쓰는 staging으로 옮긴 뒤(vault 계정이 검증 뒤에 바꿔치기하지 못하게) 이름 형식, sha256, 크기, 일반 파일 여부를 검증해 `store/<종류>/`로 옮기고 실패한 것은 `store/quarantine/`으로 보낸다. 보관 정책(4시간 단위 48시간 + 한국 시간 기준 하루 1벌 14일)을 적용하고 마지막 수신 시각, 보관 수·크기, 격리·실패 수를 지표로 낸다. 8시간 넘게 새 백업이 안 오면 B가 알린다(A가 죽어도 감지, 알림 규칙은 계획 1E). 손상된 파일, 크기가 다른 파일, 형식이 틀린 `.meta`, 심볼릭 링크는 격리되고 보관소에 들어가지 않음을 확인했다 (확인: 위 시험).
 4. **복호화 키:** 개인키는 A·B 어디에도 두지 않고 수신자 2명이 각자 오프라인으로 보관한다. 서버가 뚫려도 백업 평문이 나가지 않는 대신 자동 복원 리허설은 하지 않는다.
-5. **복원 리허설:** 사람이 노트북(Docker Desktop)에서 B 사본을 내려받아 복호화·복원하고 걸린 시간(RTO)을 `restore-check.sh`로 기록한다. 주 1회 하고 11/06 전에는 최소 2회 한다. 결과는 B에 기록해 지표로 낸다. 내려받은 암호화 덤프 최신 1벌은 노트북에 남긴다(3번째 사본, 13.4절).
-6. **A 로컬 보관:** 같은 보관 정책(4시간 단위 48시간 + 일 단위 14일)을 쓴다.
-7. **그 외 대상:** 사진과 Caddy 인증서 볼륨도 같은 경로로 B에 보낸다. OpenSearch는 Postgres에서 재색인한다. `/etc/fit/*.env`는 자동화하지 않고 인프라 담당이 변경 때마다 암호화해 팀 비밀번호 관리자에 둔다.
+5. **복원 리허설:** 사람이 노트북(Docker Desktop, `age`)에서 B 사본을 내려받아 복호화·복원하고 걸린 시간(RTO)을 `restore-check.sh`로 잰다. 주 1회 하고 11/06 전에는 최소 2회 한다. 결과는 B에서 `vault-ingest.sh record-restore <epoch> <RTO>`로 기록해 지표(`fit_vault_last_restore_check_*`)로 낸다. 내려받은 암호화 덤프 최신 1벌은 노트북에 남긴다(3번째 사본, 13.4절). 절차는 `infra/backup/README.md`다.
+6. **A 로컬 보관:** 같은 보관 정책(4시간 단위 48시간 + 일 단위 14일)을 쓴다(`/srv/fit/backups/{pg,photos,caddy}`, 보낼 파일은 `outbox/`).
+7. **그 외 대상:** 사진(`files-backup.sh photos`: prod 버킷 전체를 S3 API로 읽어 tar)과 Caddy 인증서 볼륨(`files-backup.sh caddy`: 데이터 볼륨을 읽기 전용으로 tar)도 암호화해 같은 경로로 B에 보낸다. OpenSearch는 Postgres에서 재색인한다. `/etc/fit/*.env`는 자동화하지 않고 인프라 담당이 변경 때마다 암호화해 팀 비밀번호 관리자에 둔다. 백업하는 DB는 `fit_prod`뿐이다(dev DB와 dev 사진은 하지 않는다).
 8. **선택(P2):** GitLab Package Registry에 암호화 사본을 2차로 올린다. Lightsail 스냅샷은 권한이 있으면 일 1회 자동으로 켠다(권한 (미확인)).
 9. **B 소실:** 금고 내용은 사라지지만 A에 로컬 사본이 있다. B를 재구축한다(RB-01).
 10. **A 소실(RB-12):** bootstrap → 금고에서 복원(사람, 개인키 사용) → OpenSearch 재색인 → 사진 복원 → env를 팀 비밀번호 관리자에서 복구 → 배포 순서다.
+11. **마이그레이션 전 덤프:** `pg-backup.sh predeploy <환경> <sha>`가 평문 덤프를 `/srv/fit/predeploy/`에 두고 환경별 최근 5개만 남긴다. 개인키가 서버에 없어 암호화하면 급할 때 복원할 수 없고, 이 덤프는 A의 DB 볼륨과 같은 신뢰 범위에 있으며 B로 보내지 않는다. 디렉터리는 배포 러너(`gitlab-runner`, docker 그룹)가 쓸 수 있도록 root 전용 백업 디렉터리 밖에 두고(`root:docker 2770`) 파일은 640이다.
+12. **설치:** `infra/backup/install.sh app|ops`가 패키지(`age`, `rsync`), 디렉터리, 전송 키, systemd 타이머(A: `fit-backup-pg`(00:15부터 4시간마다), `fit-backup-photos`(04:40), `fit-backup-caddy`(일요일 04:50), B: `fit-vault-ingest`(10분마다))를 멱등하게 만든다. 타이머는 저장소 체크아웃이 아니라 root만 쓸 수 있는 사본(`/usr/local/lib/fit/repo`)을 실행해서 배포 러너가 저장소를 바꿔도 root로 도는 백업 코드가 바뀌지 않는다. 유닛 파일은 `systemd-analyze`로 `OnCalendar` 표현과 문법을 확인했다 (확인: `test-backup.sh`의 `units` 구역, systemd 255). 지표는 Prometheus textfile 형식으로 A는 `/var/lib/fit/metrics/fit_backup.prom`, B는 `/srv/vault/metrics/fit_vault.prom`에 쓰고 수집은 계획 1E다. 타이머의 실제 실행, A↔B의 실제 네트워크, 22.04의 `rrsync`는 서버에서 확인한다.
 
 종료(11/18)에는 합성 데이터 덤프를 만들어 포팅 매뉴얼에 첨부한다(실데이터를 커밋한 A603 사고 방지). 실데이터와 호스트 밖 사본은 RB-10으로 삭제한다.
 
@@ -896,7 +901,8 @@ AI 팀과 M1 전에 합의한다. FastAPI는 Modal에서 돌고 A·B에는 AI �
 | `/etc/fit/data.env` | A | root:docker 0640 | DB·Redis·Garage 자격 |
 | `/etc/fit/edge.env` | A | root:docker 0640 | `ACME_EMAIL`, `ACME_MODE`, `HSTS_MODE`, `PROD_HOST`, `DEV_HOST`, B의 IP, `/_ops` basic auth 해시, dev 게이트 키(`?k=` 쿠키 발급용) |
 | `/etc/fit/obs.env` | A | root:docker 0640 | Grafana admin, Mattermost 웹훅 |
-| `/etc/fit/keys/` | A | root:root 0400 | vault SSH 개인키, B 접속 정보, age 공개키(호스트 간 전송용) |
+| `/etc/fit/backup.env` | A, B | root:docker 0640 | 백업 설정(B의 주소와 SSH 포트, 보관 기간). 비밀은 없다 |
+| `/etc/fit/keys/` | A | root:root 0700(파일 0600) | vault SSH 개인키(`vault_ed25519`), B의 호스트 키(`vault_known_hosts`), age 수신자 공개키(`age-recipients.txt`) |
 | `/etc/fit/ops.env` | B | root:docker 0640 | Mattermost 웹훅, A의 `/_ops` 자격 |
 | age 개인키 | 서버 없음 | 수신자 2명이 오프라인 보관 | 백업 복호화 |
 
@@ -914,7 +920,7 @@ AI 팀과 M1 전에 합의한다. FastAPI는 Modal에서 돌고 A·B에는 AI �
 | A (root timer) | B | `vault` | `rrsync -wo -no-del /srv/vault/incoming` |
 | B | A | 없음 | HTTPS 프로브만(`/healthz`, `/_ops/*`) |
 
-키 자체는 repo에 두지 않는다. 배포 러너 사용자(`gitlab-runner`)는 `/etc/fit/keys/`를 읽지 못한다(root 0400, systemd timer만 사용).
+키 자체는 repo에 두지 않는다. 배포 러너 사용자(`gitlab-runner`)는 `/etc/fit/keys/`를 읽지 못한다(root 0700, systemd timer만 사용).
 
 ### 13.4 한계
 
@@ -998,7 +1004,7 @@ AI 팀과 M1 전에 합의한다. FastAPI는 Modal에서 돌고 A·B에는 AI �
 | 14 | 푸시 방식(FCM 웹 푸시 vs VAPID 직접 구현) | 프런트 팀 | M2 |
 | 15 | Docker 29일 때 cAdvisor·Dozzle 호환 | 인프라 | 사전(로컬 Docker 29.7.2로 확인) |
 | 16 | 포팅 매뉴얼 필요 여부와 양식 | 팀, 코치 | M3 전 |
-| 17 | `rrsync` 가용성, buildx 자원 상한 방법 | 인프라 | M0~M1 |
+| 17 | buildx 자원 상한 방법. `rrsync`는 24.04에서 확인했고(8절) 22.04는 서버에서 확인한다 | 인프라 | M0~M1 |
 | 18 | 프런트 팀 합의: 12.5절 계약(standalone 빌드, 같은 출처, 환경 값, 헬스, 이미지, 서비스 워커, dev 게이트, 쿠키, SSE, 공유) | 프런트 팀, 인프라 | M1 전 |
 | 19 | 가게 데이터에 네이버 장소 ID(또는 URL)가 포함되는지. 없으면 상호·주소 검색 링크로 대체(정확도 낮음) | BE·AI 팀 | M1 전 |
 | 20 | Modal 워크스페이스 접근 권한, 지출 한도·알림 설정 담당, 콜드 스타트·상시 가동 정책과 비용 상한 | AI 팀, 인프라 | M1 전 |
@@ -1016,12 +1022,12 @@ AI 팀과 M1 전에 합의한다. FastAPI는 Modal에서 돌고 A·B에는 AI �
 infra/
   host/        bootstrap.sh, verify-host.sh, networks.sh, docker-prune.sh, README.md, conf/(sshd, sysctl, daemon.json, fail2ban, apt, systemd units), test/(test-host.sh, run-in-container.sh)
   edge/        compose.edge.yml, conf/(Caddyfile, acme/, hsts/), state-sample/, edge.env.example, edgectl.sh, verify-edge.sh, README.md, test/(compose.test.yml, test-edge.sh, 목 BE·FE)
-  data/        compose.data.yml, ensure-databases.sh, opensearch/Dockerfile, garage/ 설정과 초기화 스크립트
+  data/        compose.data.yml, data.env.example, lib.sh, init-data.sh, ensure-databases.sh, init-garage.sh, verify-data.sh, s3tool.py, garage/garage.toml, README.md, test/(test-data.sh, compose.test.yml). OpenSearch는 local/opensearch/Dockerfile을 빌드한다
   app/         compose.app.yml(프로필 prod·dev), *.env.example
   obs/         compose.obs.yml, prometheus/(rules, tests), alertmanager/, grafana/(provisioning, dashboards), blackbox/
-  ops/         (B) compose.ops.yml, prometheus/, alertmanager/, blackbox, port-audit.sh, vault-ingest.sh
+  ops/         (B) compose.ops.yml, prometheus/, alertmanager/, blackbox, port-audit.sh
   deploy/      deploy.sh, rollback.sh, preflight.sh, smoke.sh, notify.sh, fit-up.sh, lib.sh, README.md, test/(test-deploy.sh, 목 BE·FE 이미지)
-  backup/      pg-backup.sh, verify-dump.sh, push-vault.sh, photos-backup.sh, restore-check.sh(노트북용)
+  backup/      lib.sh, pg-backup.sh, verify-dump.sh, files-backup.sh(photos, caddy), push-vault.sh, backup-run.sh, vault-ingest.sh(B), vault-authorize.sh(B), restore-check.sh(노트북용), install.sh, backup.env.example, conf/systemd/, README.md, test/(test-backup.sh, node/Dockerfile)
   ci/          ports_invariant.py, check_compose_projects.py, check_env_files.py, check_env_contract.py, check_eol.py, check_linear_history.py, no-merge-commit.sh, check-caddy.sh, migration_immutability.py, images_arch.py, run-local-checks.sh, tool-images.sh, compose-projects.txt, tests/
   local/       compose.yml (profile: core, search), fit-local.sh, local.env.example, garage/, opensearch/Dockerfile, README.md
 .gitlab-ci.yml
@@ -1093,6 +1099,10 @@ docs/infra/
 | 보안 | 팀원 접근 | 비특권 계정 + SSH 터널 | infra 담당만, 전원 sudo |
 | 백업 | 백업 키 | 서버에 두지 않고 2인 오프라인 보관 | B에 키를 두고 복원 자동화 |
 | 백업 | 호스트 밖 백업 위치 | B 금고. GitLab Package Registry는 선택적 2차 사본(P2) | GitLab Package Registry를 주 저장소로 |
+| 백업 | 마이그레이션 전 덤프 | 평문, A의 `/srv/fit/predeploy`(최근 5개), B로 보내지 않는다 | 암호화(개인키가 서버에 없어 급할 때 복원하지 못한다) |
+| 백업 | 백업 코드 실행 위치 | root 소유 사본(`/usr/local/lib/fit/repo`)에서 타이머가 돈다 | 저장소 체크아웃에서 실행(배포 러너가 root로 도는 코드를 바꿀 수 있다) |
+| 백업 | 금고 수신 검증 | incoming을 신뢰하지 않고 root 전용 staging에서 sha256·크기·이름을 검증, 실패는 격리 | incoming에서 바로 검증해 이동(검증 뒤 바꿔치기 가능) |
+| 백업 | 덤프 검증 방식 | 임시 컨테이너에 복원하고 테이블 수를 덤프 시점 값과 비교 | `pg_restore -l` 목차 확인만(데이터가 읽히는지 모른다) |
 | 관측성 | B 감시 구성 | Prometheus-B·Alertmanager-B·blackbox(설정이 repo에 남는다) | Uptime Kuma 한 개(설정이 UI에 남아 repo 관리 원칙과 어긋난다) |
 | 관측성 | 우선순위 | 감시 체계 감시(`/_ops`)는 P0, `lint:image-arch`는 P1 | 둘 다 P2로 내리기(비용이 거의 없어 유지) |
 
