@@ -4,7 +4,7 @@ import type { ComponentProps, ReactNode } from "react";
 import { cn } from "@/shared/lib/cn";
 
 // Figma 'Icon'의 공통 틀. 24px 격자, 선 두께 1.75, 색은 부모 글자색(currentColor)을 따른다
-const iconVariants = cva("shrink-0", {
+const iconVariants = cva("shrink-0 stroke-non-scaling", {
   variants: {
     size: { sm: "size-4", md: "size-5", lg: "size-6" },
   },

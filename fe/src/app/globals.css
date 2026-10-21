@@ -171,6 +171,13 @@
     "Malgun Gothic", sans-serif;
 }
 
+/* 아이콘을 16·20px로 줄여도 선 두께를 그대로 둔다. Figma도 크기와 관계없이 1.75px로 그린다 */
+@utility stroke-non-scaling {
+  & * {
+    vector-effect: non-scaling-stroke;
+  }
+}
+
 @layer base {
   body {
     @apply bg-surface font-sans text-body-md text-ink;
