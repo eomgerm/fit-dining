@@ -89,7 +89,7 @@ Glossary: none · ADRs: none
 - Anchors: `be/src/main/resources/application.properties#spring` (modify)
 
 ## D-18 AI 파트와의 경계(교체 범위 정정)
-- Status: settled
+- Status: superseded by D-62
 - Decision: BE는 인터페이스 하나(`PlaceSearchEngine`)만 두고 Mock 구현을 꽂는다. 요청 해석, 임베딩, OpenSearch 질의, 리랭크, 점수 계산을 이어 붙이는 주체는 미결이다. 구현을 교체할 때 DTO뿐 아니라 이 인터페이스의 시그니처(실패, 폴백 표시, 타임아웃 처리)도 바뀔 수 있으며, 이를 감수한다. 타임아웃, 서킷 브레이커, 예산, 속도 제한, `X-Fallback` 헤더는 이번 범위가 아니고 연동 시점에 다룬다(`docs/infra/design.md` §11.2, §12.1).
 - Rejected: BE가 Modal과 OpenSearch를 직접 호출(`docs/infra/design.md` §12.2 제안) → 담당이 정해지지 않았다. 지금 실패 모델을 인터페이스에 넣기 → 실제 계약이 없어서 추측이 된다.
 - Anchors: `be/src/main/java/kr/co/fitdining/api/place/PlaceSearchEngine.java#PlaceSearchEngine` (new)
@@ -233,7 +233,7 @@ Glossary: none · ADRs: none
 - Rejected: 좌표 서버 전송 → 위치정보법 신고 대상이 될 가능성(PRD D-03). 위치를 쓰지 않고 지역 안 상위 몇 개만 표시 → 팀이 기기 위치 사용을 택했다. 위치 실패 즉시 `mapBounds`로 자동 재검색 → Mock처럼 근처 응답이 다시 오면 반복될 수 있다.
 
 ## D-47 Mock의 규모, 시나리오, 노출 범위(인프라 문서는 고치지 않음)
-- Status: settled
+- Status: superseded by D-63
 - Decision: Mock 장소는 25곳 이상이라 20개 페이징과 `nextCursor`가 실제로 나온다. 시나리오는 요청 헤더 `X-Mock-Scenario`로 고르고, FE는 주소창의 `?mock=empty`를 읽어 이 헤더를 붙인다. 지금은 `empty`만 만들고 `error`는 필요해질 때 추가한다. 헤더가 없으면 정상 결과이며, "근처"가 들어간 검색어는 AI의 해석을 흉내 내 `nearby: true`로 응답한다. 후속 검색에서 Mock은 받은 `previousConditions`를 그대로 `conditions`에 담아 돌려준다. Mock은 설정 스위치(`PLACE_MOCK_ENABLED`)로 켜고 local과 dev에서만 켠다. prod는 실제 데이터만 보여 주며 Mock을 켜지 않는다. 실제 구현이 없으면 검색 API는 503을 돌려준다. 이 기능은 `docs/infra/` 아래 문서(`contracts/env.md` 포함)를 고치지 않으며, 스위치를 환경변수 계약에 올리는 일은 인프라 담당에게 알린다.
 - Rejected: 검색어 부분 문자열로 시나리오 분기("근처", "없음") → 평범한 문장과 충돌하고 우선순위가 없다. 입력창에 `mock:empty` 같은 명령어 입력 → 직관적이지 않다. 개발용 선택 상자 → 지금은 과하다. prod에서 Mock으로 시연 → 팀이 실제 데이터로 보여 주기로 했다. 이 기능에서 `env.md`에 행 추가 → 인프라 담당의 문서다.
 - Anchors: `be/src/main/java/kr/co/fitdining/api/place/MockPlaceSearchEngine.java#MockPlaceSearchEngine` (new) · `be/src/main/resources/mock/places.json#places` (new)
@@ -272,7 +272,7 @@ Glossary: none · ADRs: none
 - Anchors: `be/src/main/java/kr/co/fitdining/api/place/PlaceDtos.java#PlaceDtos` (new)
 
 ## D-54 DTO를 팀 BE 컨벤션에 맞춰 파일로 나눈다
-- Status: settled
+- Status: superseded by D-64
 - Decision: D-53의 필드 구성은 그대로 두고, 팀 BE 컨벤션(`be/docs/convention.md`)에 맞춰 DTO를 `kr.co.fitdining.api.place.dto` 패키지에 클래스마다 파일 하나로 둔다. 엔드포인트의 요청과 응답은 `PlaceSuggestResponse`(자동완성 후보 1개), `PlaceSearchRequest`, `PlaceSearchResponse`, `PlaceDetailResponse`이고, 하위 구조(`PlaceSummary`, `PlaceCard`, `Reason`, `ReasonTag`, `ScoreItem`, `EmptyReason`, `MapBounds`, `Hours`, `Menu`)와 enum도 같은 패키지에 하나씩 둔다. 역직렬화되는 record(요청과 Mock이 읽는 `places.json` 매핑 모두)의 숫자와 boolean은 박싱 타입(`Long`, `Integer`, `Double`, `Boolean`)이다. 장소 `id`는 ERD의 `places.place_id`(bigint)를 따라 정수다. 추천 이유와 핏 점수 설명은 검색 응답 카드에 담고 상세 응답에는 장소 고유 정보만 담는다. 이 값을 만드는 주체는 AI 파트이며, 상세 API가 검색 맥락을 받는 안도 열려 있어 검색 구체화 뒤에 다시 정한다. `conditions`와 `previousConditions`는 BE와 FE가 해석하지 않는 불투명한 JSON 객체다. BE는 엔진이 돌려준 내용을 검증하거나 가공하지 않는다.
 - Rejected: `PlaceDtos` 한 파일에 모으기 → 여러 사람이 DTO를 고칠 때 병합 충돌이 잦고 컨벤션의 이름 규칙과 다르다. 원시 타입 record → Jackson 3에서 값이 빠진 원시 타입은 원인을 알기 어려운 400이 된다.
 - Anchors: `be/src/main/java/kr/co/fitdining/api/place/dto/PlaceSearchRequest.java#PlaceSearchRequest` (new) · `be/src/main/java/kr/co/fitdining/api/place/dto/PlaceSearchResponse.java#PlaceSearchResponse` (new) · `be/src/main/java/kr/co/fitdining/api/place/dto/PlaceSuggestResponse.java#PlaceSuggestResponse` (new) · `be/src/main/java/kr/co/fitdining/api/place/dto/PlaceDetailResponse.java#PlaceDetailResponse` (new)
@@ -299,3 +299,41 @@ Glossary: none · ADRs: none
 - Decision: FE는 항상 상대 경로 `/api/v1/...`를 부른다. 운영에서는 Caddy가 `/api/*`를 BE로 보낸다. 로컬에서는 `next dev`일 때만 `next.config.ts`의 `rewrites`가 `/api/:path*`를 `BE_INTERNAL_URL`(인프라가 정한 FE 서버의 BE 주소 이름, 기본값 `http://localhost:8080`)로 넘긴다. 운영 빌드에는 rewrites가 없어 산출물에 `localhost`가 남지 않는다. BE는 CORS를 설정하지 않는다.
 - Rejected: 항상 켜는 rewrites와 `API_PROXY_TARGET` 이름 → 운영 빌드 산출물에 `localhost`가 남아 인프라의 산출물 검사에 걸리고, 인프라가 정한 이름과 다르다. BE CORS 허용 → 같은 출처를 유지하는 편이 단순하다.
 - Anchors: `fe/next.config.ts#nextConfig` (modify)
+
+## D-59 `q` 검증은 MVC 내장 메서드 검증으로 한다(클래스 `@Validated` 없음)
+- Status: settled
+- Decision: `PlaceController`에는 클래스 수준 `@Validated`를 붙이지 않고, `q` 파라미터의 `@NotBlank`, `@Size(max = 200)`만으로 Spring MVC 내장 메서드 검증(Spring 6.1+)을 받는다. 실패하면 `HandlerMethodValidationException`이 나고 `PlaceExceptionHandler`가 400으로 바꾼다. 의존성(`spring-boot-starter-validation`)은 그대로다.
+- Rejected: 클래스 `@Validated` 유지 → Spring 7.0.9는 클래스에 `@Validated`가 있으면 내장 검증을 끄고(`HandlerMethod.MethodValidationInitializer`) AOP 프록시가 `ConstraintViolationException`을 던져, 처리 목록에 없는 예외가 500이 된다. 그 예외를 처리 목록에 추가 → 같은 검증에 두 방식이 섞인다.
+
+## D-60 Mock 데이터 파일은 `places` 루트 객체로 감싼다
+- Status: settled
+- Decision: `classpath:mock/places.json`은 최상위 배열이 아니라 `{"places": [{"card": PlaceCard, "detail": PlaceDetailResponse}]}`이다. Mock 엔진 안의 private record로 읽고, 전역 알 수 없는 속성 거부를 그대로 받는다.
+- Rejected: 최상위 배열을 두고 anchor 이름을 바꾸기 → 결정 로그 변경이 더 크고, 루트 이름이 있으면 파일이 스스로 설명된다.
+
+## D-61 `conditions` 내부의 null 값은 그대로 내보낸다
+- Status: settled
+- Decision: 전역 null 생략 설정(`spring.jackson.default-property-inclusion: non_null`)은 Spring Boot 4.1.1에서 Map 내부 값에도 적용되어 `conditions`의 null 값을 지운다. `PlaceSearchResponse.conditions`에만 `@JsonInclude(content = JsonInclude.Include.ALWAYS)`를 붙여 받은 `previousConditions`를 내부 null 값까지 그대로 돌려준다.
+- Rejected: 생략을 감수 → `{"a": null}`이 `{}`로 바뀌어 AC-5의 "그대로"와 어긋난다.
+
+## D-62 AI 파트와의 경계(엔진은 `place.engine` 하위 패키지)
+- Status: settled
+- Decision: BE는 인터페이스 하나(`PlaceSearchEngine`)만 두고 Mock 구현을 꽂는다. 요청 해석, 임베딩, OpenSearch 질의, 리랭크, 점수 계산을 이어 붙이는 주체는 미결이다. 구현을 교체할 때 DTO뿐 아니라 이 인터페이스의 시그니처(실패, 폴백 표시, 타임아웃 처리)도 바뀔 수 있으며, 이를 감수한다. 타임아웃, 서킷 브레이커, 예산, 속도 제한, `X-Fallback` 헤더는 이번 범위가 아니고 연동 시점에 다룬다(`docs/infra/design.md` §11.2, §12.1). 교체 지점인 엔진 관련 파일(`PlaceSearchEngine`, 그 구현, 엔진 계약의 예외 `InvalidCursorException`)은 하위 패키지 `kr.co.fitdining.api.place.engine`에 모아 교체 지점이 구조로 드러나게 한다. 엔진은 장소 기능 전용이라 최상위 패키지로 빼지 않는다.
+- Rejected: BE가 Modal과 OpenSearch를 직접 호출(`docs/infra/design.md` §12.2 제안) → 담당이 정해지지 않았다. 지금 실패 모델을 인터페이스에 넣기 → 실제 계약이 없어서 추측이 된다. 최상위 `kr.co.fitdining.api.search` → 엔진 시그니처가 `place.dto`를 써서 상호 의존이 생기고, 다른 기능이 함께 쓰는 모듈이 아니다. 이름에 `I` 접두사나 `Impl` 접미사 → Java 주류가 아니고, 구현이 Mock과 실제 엔진처럼 여럿이라 구현 이름은 특징을 담는다.
+- Anchors: `be/src/main/java/kr/co/fitdining/api/place/engine/PlaceSearchEngine.java#PlaceSearchEngine` (new)
+
+## D-63 Mock의 규모, 시나리오, 노출 범위(Mock 위치는 `place.engine`)
+- Status: settled
+- Decision: Mock 장소는 25곳 이상이라 20개 페이징과 `nextCursor`가 실제로 나온다. 시나리오는 요청 헤더 `X-Mock-Scenario`로 고르고, FE는 주소창의 `?mock=empty`를 읽어 이 헤더를 붙인다. 지금은 `empty`만 만들고 `error`는 필요해질 때 추가한다. 헤더가 없으면 정상 결과이며, "근처"가 들어간 검색어는 AI의 해석을 흉내 내 `nearby: true`로 응답한다. 후속 검색에서 Mock은 받은 `previousConditions`를 그대로 `conditions`에 담아 돌려준다. Mock은 설정 스위치(`PLACE_MOCK_ENABLED`)로 켜고 local과 dev에서만 켠다. prod는 실제 데이터만 보여 주며 Mock을 켜지 않는다. 실제 구현이 없으면 검색 API는 503을 돌려준다. 이 기능은 `docs/infra/` 아래 문서(`contracts/env.md` 포함)를 고치지 않으며, 스위치를 환경변수 계약에 올리는 일은 인프라 담당에게 알린다. Mock 구현은 D-62에 따라 `kr.co.fitdining.api.place.engine`에 둔다.
+- Rejected: 검색어 부분 문자열로 시나리오 분기("근처", "없음") → 평범한 문장과 충돌하고 우선순위가 없다. 입력창에 `mock:empty` 같은 명령어 입력 → 직관적이지 않다. 개발용 선택 상자 → 지금은 과하다. prod에서 Mock으로 시연 → 팀이 실제 데이터로 보여 주기로 했다. 이 기능에서 `env.md`에 행 추가 → 인프라 담당의 문서다.
+- Anchors: `be/src/main/java/kr/co/fitdining/api/place/engine/MockPlaceSearchEngine.java#MockPlaceSearchEngine` (new) · `be/src/main/resources/mock/places.json#places` (new)
+
+## D-64 DTO는 응답별 파일에 하위 타입을 중첩한다
+- Status: settled
+- Decision: D-53의 필드 구성은 그대로 두고 DTO를 `kr.co.fitdining.api.place.dto` 패키지에 둔다. 엔드포인트의 요청과 응답은 `PlaceSuggestResponse`(자동완성 후보 1개), `PlaceSearchRequest`, `PlaceSearchResponse`, `PlaceDetailResponse`이고 각각 파일 하나다. 여러 곳이 함께 쓰는 `PlaceSummary`, `OpenStatus`와 하위 구조가 많은 `PlaceCard`도 파일 하나씩 둔다. 부모 하나에서만 쓰는 하위 record와 enum은 그 부모 안에 중첩한다(`PlaceSummary`의 `CategoryGroup`, `Station`, `PlaceSuggestResponse`의 `SuggestType`, `PlaceSearchRequest`의 `MapBounds`, `PlaceSearchResponse`의 `EmptyReason`, `PlaceCard`의 `Reason`, `ReasonTag`, `ScoreItem`, `EvidenceSource`, `PlaceDetailResponse`의 `Hours`, `Menu`, `DayCode`, `Facility`). 응답 하나의 모양이 파일 하나에 보이게 하려는 것이며 JSON 모양은 바뀌지 않는다. 역직렬화되는 record(요청과 Mock이 읽는 `places.json` 매핑 모두)의 숫자와 boolean은 박싱 타입(`Long`, `Integer`, `Double`, `Boolean`)이다. 장소 `id`는 ERD의 `places.place_id`(bigint)를 따라 정수다. 추천 이유와 핏 점수 설명은 검색 응답 카드에 담고 상세 응답에는 장소 고유 정보만 담는다. 이 값을 만드는 주체는 AI 파트이며, 상세 API가 검색 맥락을 받는 안도 열려 있어 검색 구체화 뒤에 다시 정한다. `conditions`와 `previousConditions`는 BE와 FE가 해석하지 않는 불투명한 JSON 객체다. BE는 엔진이 돌려준 내용을 검증하거나 가공하지 않는다.
+- Rejected: 클래스마다 파일 하나(D-54) → 파일이 20개라 응답 하나의 모양을 보려면 여러 파일을 열어야 한다. 하위 패키지(`dto/search` 등)로 묶기 → 파일 수가 줄지 않는다. `PlaceDtos` 한 파일에 모으기 → 여러 사람이 DTO를 고칠 때 병합 충돌이 잦고 컨벤션의 이름 규칙과 다르다. 원시 타입 record → Jackson 3에서 값이 빠진 원시 타입은 원인을 알기 어려운 400이 된다.
+- Anchors: `be/src/main/java/kr/co/fitdining/api/place/dto/PlaceSearchRequest.java#PlaceSearchRequest` (new) · `be/src/main/java/kr/co/fitdining/api/place/dto/PlaceSearchResponse.java#PlaceSearchResponse` (new) · `be/src/main/java/kr/co/fitdining/api/place/dto/PlaceSuggestResponse.java#PlaceSuggestResponse` (new) · `be/src/main/java/kr/co/fitdining/api/place/dto/PlaceDetailResponse.java#PlaceDetailResponse` (new)
+
+## D-65 `be/.env.example`의 DB 비밀번호는 `REPLACE_ME`로 둔다
+- Status: settled
+- Decision: 리뷰 기능(S15P31A302-18)이 먼저 master에 올린 `be/.env.example`의 `SPRING_DATASOURCE_PASSWORD=REPLACE_ME`를 따른다. 개발자는 복사한 뒤 이 값을 `infra/local/.env`의 `FIT_DEV_APP_PASSWORD`로 바꾸며, 파일 주석에 이 방법을 적는다. `PLACE_MOCK_ENABLED=true`는 그대로 둔다.
+- Rejected: `infra/local` 예제와 같은 가짜 값(`local-app-password`)을 미리 넣기 → 팀이 정한 `REPLACE_ME` 표시(`docs/infra/contracts/env.md`의 "비밀이 아직 없다는 표시")와 어긋난다.
