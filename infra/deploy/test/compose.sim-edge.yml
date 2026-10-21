@@ -1,0 +1,6 @@
+# 배포 시험(test-deploy.sh)에서 엣지를 노트북의 127.0.0.1 높은 포트에 게시하는 오버라이드다. compose.edge.yml 위에 얹는다.
+services:
+  caddy:
+    ports: !override
+      - 127.0.0.1:${FIT_DEPLOY_TEST_HTTP_PORT:-18080}:80
+      - 127.0.0.1:${FIT_DEPLOY_TEST_HTTPS_PORT:-18443}:443
