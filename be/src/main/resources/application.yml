@@ -1,0 +1,11 @@
+spring:
+  application:
+    name: api
+  config:
+    import: optional:file:.env[.properties]
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://127.0.0.1:15432/fit_dev}
+    username: ${SPRING_DATASOURCE_USERNAME:fit_dev_app}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+  flyway:
+    enabled: false
