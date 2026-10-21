@@ -1,0 +1,151 @@
+# 앱(BE, FE) 컨테이너. 서버 A의 fit-app-prod, fit-app-dev 프로젝트다(설계 2.2절, 6.4절, 6.8절).
+# 환경마다 프로젝트를 따로 띄운다. 직접 부르지 않고 infra/deploy/ 스크립트가 부른다.
+#   docker compose -p fit-app-prod -f compose.app.yml --env-file /srv/fit/state/deploy-prod.env --profile prod ...
+#   docker compose -p fit-app-dev  -f compose.app.yml --env-file /srv/fit/state/deploy-dev.env  --profile dev ...
+# prod는 BE·FE가 각각 blue와 green 두 색이고 deploy.sh가 반대 색만 띄워 전환한다. dev는 색이 하나다.
+# 이미지 태그는 상태 파일(deploy.sh가 쓴다)이 정한다. 아직 배포하지 않은 색은 태그가 none이라 `config`는 통과하고 `up`은 하지 않는다.
+# /etc/fit의 env 파일은 없어도 `config`가 통과하도록 required: false로 둔다. 파일이 없으면 preflight.sh가 배포를 막는다.
+# 호스트에 게시하는 포트는 없다. Caddy가 compose 망 안에서 서비스 이름으로 프록시한다.
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 50m
+    max-file: "5"
+
+# BE: 포트 8080(공개 API), 8081(관리, 프록시하지 않는다). JVM 힙은 컨테이너 한도에 비례시킨다(BE 계약 #10).
+x-be: &be
+  restart: unless-stopped
+  logging: *logging
+  stop_grace_period: 40s
+  init: true
+
+x-be-env: &be-env
+  TZ: Asia/Seoul
+  JAVA_TOOL_OPTIONS: -XX:InitialRAMPercentage=25 -XX:MaxRAMPercentage=60 -XX:MaxMetaspaceSize=192m -XX:+UseSerialGC
+
+# FE: Next.js standalone(`node server.js`, 포트 3000). 루트 파일시스템은 읽기 전용이고 .next/cache만 tmpfs로 쓴다(설계 6.8절).
+x-fe: &fe
+  restart: unless-stopped
+  logging: *logging
+  stop_grace_period: 40s
+  init: true
+  read_only: true
+  tmpfs:
+    - /app/.next/cache
+    - /tmp
+  environment:
+    TZ: Asia/Seoul
+  healthcheck:
+    test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/fe-healthz').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+    interval: 10s
+    timeout: 5s
+    retries: 6
+    start_period: 20s
+
+services:
+  be-prod-blue:
+    <<: *be
+    profiles: [prod]
+    container_name: be-prod-blue
+    image: ${FIT_BE_IMAGE:-be}:${BE_BLUE_TAG:-none}
+    env_file:
+      - path: ${FIT_ENV_DIR:-/etc/fit}/prod.env
+        required: false
+    environment:
+      <<: *be-env
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "10"
+    mem_limit: 1536m
+    cpu_shares: 2048
+    networks: [net-prod, net-data]
+    labels: &labels-be-prod
+      com.fit.service: be
+      com.fit.env: prod
+
+  be-prod-green:
+    <<: *be
+    profiles: [prod]
+    container_name: be-prod-green
+    image: ${FIT_BE_IMAGE:-be}:${BE_GREEN_TAG:-none}
+    env_file:
+      - path: ${FIT_ENV_DIR:-/etc/fit}/prod.env
+        required: false
+    environment:
+      <<: *be-env
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "10"
+    mem_limit: 1536m
+    cpu_shares: 2048
+    networks: [net-prod, net-data]
+    labels: *labels-be-prod
+
+  fe-prod-blue:
+    <<: *fe
+    profiles: [prod]
+    container_name: fe-prod-blue
+    image: ${FIT_FE_IMAGE:-fe}:${FE_BLUE_TAG:-none}
+    env_file:
+      - path: ${FIT_ENV_DIR:-/etc/fit}/fe-prod.env
+        required: false
+    mem_limit: 512m
+    cpu_shares: 2048
+    networks: [net-prod]
+    labels: &labels-fe-prod
+      com.fit.service: fe
+      com.fit.env: prod
+
+  fe-prod-green:
+    <<: *fe
+    profiles: [prod]
+    container_name: fe-prod-green
+    image: ${FIT_FE_IMAGE:-fe}:${FE_GREEN_TAG:-none}
+    env_file:
+      - path: ${FIT_ENV_DIR:-/etc/fit}/fe-prod.env
+        required: false
+    mem_limit: 512m
+    cpu_shares: 2048
+    networks: [net-prod]
+    labels: *labels-fe-prod
+
+  be-dev:
+    <<: *be
+    profiles: [dev]
+    container_name: be-dev
+    image: ${FIT_BE_IMAGE:-be}:${BE_DEV_TAG:-none}
+    env_file:
+      - path: ${FIT_ENV_DIR:-/etc/fit}/dev.env
+        required: false
+    environment:
+      <<: *be-env
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "5"
+    mem_limit: 1024m
+    cpus: 1.0
+    networks: [net-dev, net-data]
+    labels:
+      com.fit.service: be
+      com.fit.env: dev
+
+  fe-dev:
+    <<: *fe
+    profiles: [dev]
+    container_name: fe-dev
+    image: ${FIT_FE_IMAGE:-fe}:${FE_DEV_TAG:-none}
+    env_file:
+      - path: ${FIT_ENV_DIR:-/etc/fit}/fe-dev.env
+        required: false
+    mem_limit: 400m
+    cpus: 0.5
+    networks: [net-dev]
+    labels:
+      com.fit.service: fe
+      com.fit.env: dev
+
+networks:
+  net-prod:
+    name: ${FIT_NET_PROD:-net-prod}
+    external: true
+  net-dev:
+    name: ${FIT_NET_DEV:-net-dev}
+    external: true
+  net-data:
+    name: ${FIT_NET_DATA:-net-data}
+    external: true
