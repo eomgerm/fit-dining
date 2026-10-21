@@ -99,6 +99,8 @@
   --shadow-2: 0 4px 16px rgb(31 27 25 / 0.12);
   --shadow-3: 0 8px 24px rgb(31 27 25 / 0.16);
   --shadow-pin: 0 4px 10px rgb(242 98 46 / 0.35);
+  /* 바텀시트 위쪽 그림자. Figma 그림자 스타일에는 없고 시트에만 직접 들어간 효과다 */
+  --shadow-sheet: 0 -6px 24px rgb(31 27 25 / 0.1);
 
   /* 글자: Figma 텍스트 스타일 14개. text-title-md 하나로 크기·행간·자간·굵기가 함께 적용된다 */
   --text-headline-lg: 1.875rem; /* 30/40 Bold -2% */
