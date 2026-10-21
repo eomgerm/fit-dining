@@ -1,0 +1,137 @@
+# 데이터 스택. 서버 A의 fit-data 프로젝트다(설계 2.2절, 4.1절, 7절): postgres, opensearch, redis-prod, redis-dev, garage.
+# 값은 `docker compose --env-file /etc/fit/data.env`로 읽는다(compose 보간). 필요한 키는 docs/infra/contracts/env.md의 data 그룹이다.
+# DB·role·버킷·키는 이 파일이 아니라 멱등 스크립트(ensure-databases.sh, init-garage.sh)가 만든다. 직접 부르지 않고 init-data.sh를 쓴다.
+# 호스트에 게시하는 포트는 postgres의 127.0.0.1:5432 하나다(개발자 SSH 터널용). 나머지는 net-data 안에서 서비스 이름으로 닿는다.
+# 망(net-*)은 호스트에서 먼저 만들어 둔다(infra/host/networks.sh). 서비스 이름이 BE가 쓰는 호스트 이름이다(`postgres`, `redis-prod`, `garage` 등).
+name: fit-data
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.7-pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?data.env에 POSTGRES_PASSWORD가 없다}
+    # 튜닝은 설정 파일이 아니라 command 플래그로 한다(설계 7.1절)
+    command:
+      - postgres
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - max_connections=60
+      - -c
+      - idle_in_transaction_session_timeout=60000
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+    ports:
+      - 127.0.0.1:5432:5432
+    mem_limit: 1g
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # net-data는 internal이라 포트를 게시할 수 없다. 127.0.0.1:5432를 위해 net-dbaccess에도 속한다(설계 2.2절)
+    networks: [net-data, net-dbaccess]
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U postgres -d postgres]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  # 공식 이미지에 analysis-nori를 넣은 이미지다. 로컬 스택과 같은 Dockerfile을 쓴다(설계 7.2절)
+  opensearch:
+    build:
+      context: ../local/opensearch
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      DISABLE_SECURITY_PLUGIN: "true"
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+      OPENSEARCH_JAVA_OPTS: -Xms768m -Xmx768m
+      action.destructive_requires_name: "true"
+    mem_limit: 2g
+    volumes:
+      - osdata:/usr/share/opensearch/data
+    networks: [net-data]
+    healthcheck:
+      test: [CMD-SHELL, "curl -fsS 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s' >/dev/null"]
+      interval: 10s
+      timeout: 8s
+      retries: 18
+
+  # 멱등성 키가 쫓겨나지 않게 noeviction, AOF everysec, requirepass(설계 7.3절)
+  redis-prod:
+    image: redis:7.4.9-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PROD_PASSWORD:?data.env에 REDIS_PROD_PASSWORD가 없다}
+      REDISCLI_AUTH: ${REDIS_PROD_PASSWORD:?data.env에 REDIS_PROD_PASSWORD가 없다}
+    command:
+      - sh
+      - -c
+      - exec redis-server --requirepass "$$REDIS_PASSWORD" --maxmemory 96mb --maxmemory-policy noeviction --appendonly yes --appendfsync everysec
+    mem_limit: 128m
+    volumes:
+      - redisdata-prod:/data
+    networks: [net-data]
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  redis-dev:
+    image: redis:7.4.9-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_DEV_PASSWORD:?data.env에 REDIS_DEV_PASSWORD가 없다}
+      REDISCLI_AUTH: ${REDIS_DEV_PASSWORD:?data.env에 REDIS_DEV_PASSWORD가 없다}
+    command:
+      - sh
+      - -c
+      - exec redis-server --requirepass "$$REDIS_PASSWORD" --maxmemory 96mb --maxmemory-policy noeviction --appendonly yes --appendfsync everysec
+    mem_limit: 128m
+    volumes:
+      - redisdata-dev:/data
+    networks: [net-data]
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  # 사진 저장소(설계 7.4절). S3 API(3900)와 웹 엔드포인트(3902)는 엣지가 net-edge로 프록시한다. 설정은 디렉터리째 마운트한다
+  garage:
+    image: dxflrs/garage:v2.4.1
+    restart: unless-stopped
+    command: [/garage, -c, /etc/garage/garage.toml, server]
+    environment:
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:?data.env에 GARAGE_RPC_SECRET이 없다}
+      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:?data.env에 GARAGE_ADMIN_TOKEN이 없다}
+    mem_limit: 192m
+    volumes:
+      - ./garage:/etc/garage:ro
+      - garage-meta:/var/lib/garage/meta
+      - garage-data:/var/lib/garage/data
+    networks: [net-data, net-edge]
+    healthcheck:
+      test: [CMD, /garage, -c, /etc/garage/garage.toml, status]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  pgdata:
+  osdata:
+  redisdata-prod:
+  redisdata-dev:
+  garage-meta:
+  garage-data:
+
+networks:
+  net-data:
+    name: ${FIT_NET_DATA:-net-data}
+    external: true
+  net-edge:
+    name: ${FIT_NET_EDGE:-net-edge}
+    external: true
+  net-dbaccess:
+    name: ${FIT_NET_DBACCESS:-net-dbaccess}
+    external: true

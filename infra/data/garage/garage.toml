@@ -1,0 +1,21 @@
+# 서버 A의 Garage 설정(설계 7.4절). 단일 노드다. 로컬 스택(infra/local/garage/garage.toml)과 같은 구조를 쓴다.
+# 웹 엔드포인트의 root_domain은 엣지가 보내는 Host(<버킷>.web.garage.localhost)와 맞아야 한다(설계 5.2절).
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "lmdb"
+replication_factor = 1
+
+rpc_bind_addr = "[::]:3901"
+rpc_public_addr = "127.0.0.1:3901"
+
+[s3_api]
+s3_region = "garage"
+api_bind_addr = "[::]:3900"
+
+[s3_web]
+bind_addr = "[::]:3902"
+root_domain = ".web.garage.localhost"
+index = "index.html"
+
+[admin]
+api_bind_addr = "[::]:3903"

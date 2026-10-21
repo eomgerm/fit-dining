@@ -17,8 +17,10 @@
 | `local` | `infra/local/local.env.example` | 로컬 개발 스택(`infra/local/compose.yml`) |
 | `fe` | `infra/app/fe.env.example` | FE Node 컨테이너(`/etc/fit/fe-dev.env`, `/etc/fit/fe-prod.env`). 비밀을 담지 않는다 |
 | `edge` | `infra/edge/edge.env.example` | 엣지 Caddy(`/etc/fit/edge.env`). compose가 `--env-file`로 읽는다 |
+| `data` | `infra/data/data.env.example` | 데이터 스택(`infra/data/compose.data.yml`)과 DB·버킷 초기화 스크립트(`/etc/fit/data.env`). 환경별 자격이 앱 env와 같아야 한다 |
+| `backup` | `infra/backup/backup.env.example` | A의 백업 스크립트와 타이머(`/etc/fit/backup.env`) |
 
-이 문서를 만든 계획 이후의 계획이 `data`, `obs`, `ops` 그룹을 같은 표에 더한다(design.md 13.2절의 파일 구분).
+이 문서를 만든 계획 이후의 계획이 `obs`, `ops` 그룹을 같은 표에 더한다(design.md 13.2절의 파일 구분).
 
 ## 키 목록
 
@@ -77,19 +79,32 @@
 | `ACME_MODE` | edge | O | `staging`이면 staging CA만 쓴다. `production`이면 기본 이슈어(Let's Encrypt, ZeroSSL)를 쓴다 |
 | `HSTS_MODE` | edge | O | `off` 또는 `on`. 운영 인증서가 확정된 뒤에만 `on`으로 바꾼다 |
 | `DEV_GATE_KEY` | edge | O | dev 접근 키. `/?k=<키>`로 접속하면 쿠키를 받는다. 영문자·숫자·`_`·`-` 32자 이상, 비밀 |
+| `FIT_PROD_APP_PASSWORD` | data | O | `fit_prod_app` 비밀번호. `prod.env`의 `SPRING_DATASOURCE_PASSWORD`와 같아야 한다 |
+| `REDIS_PROD_PASSWORD` | data | O | `redis-prod` 비밀번호. `prod.env`의 `SPRING_DATA_REDIS_PASSWORD`와 같아야 한다 |
+| `REDIS_DEV_PASSWORD` | data | O | `redis-dev` 비밀번호. `dev.env`의 `SPRING_DATA_REDIS_PASSWORD`와 같아야 한다 |
+| `S3_PROD_ACCESS_KEY` | data | O | prod 버킷 전용 Garage 키 ID. `prod.env`의 `S3_ACCESS_KEY`와 같아야 한다 |
+| `S3_PROD_SECRET_KEY` | data | O | prod 버킷 전용 Garage 비밀 키. `prod.env`의 `S3_SECRET_KEY`와 같아야 한다 |
+| `S3_DEV_ACCESS_KEY` | data | O | dev 버킷 전용 Garage 키 ID. `dev.env`의 `S3_ACCESS_KEY`와 같아야 한다 |
+| `S3_DEV_SECRET_KEY` | data | O | dev 버킷 전용 Garage 비밀 키. `dev.env`의 `S3_SECRET_KEY`와 같아야 한다 |
+| `BACKUP_VAULT_HOST` | backup | O | 백업 금고(B)의 주소(공인 IP나 호스트 이름). 문서나 저장소에 적지 않는다 |
+| `BACKUP_VAULT_PORT` | backup | X | 금고의 SSH 포트. 기본 `22` |
+| `BACKUP_KEEP_HOURS` | backup | X | 4시간 단위 덤프를 모두 보관하는 시간. 기본 `48` |
+| `BACKUP_KEEP_DAYS` | backup | X | 그 뒤 하루 한 벌씩 보관하는 일수. 기본 `14` |
 | `FIT_LOCAL_PG_PORT` | local | X | 호스트에 게시하는 Postgres 포트. 기본 `15432` |
 | `FIT_LOCAL_REDIS_PORT` | local | X | Redis 포트. 기본 `16379` |
 | `FIT_LOCAL_S3_PORT` | local | X | Garage S3 API 포트. 기본 `13900` |
 | `FIT_LOCAL_S3_WEB_PORT` | local | X | Garage 웹 엔드포인트 포트. 기본 `13902` |
 | `FIT_LOCAL_OPENSEARCH_PORT` | local | X | OpenSearch 포트. 기본 `19200` |
-| `POSTGRES_PASSWORD` | local | O | Postgres 관리자(`postgres`) 비밀번호 |
-| `FIT_MIGRATOR_PASSWORD` | local | O | `fit_migrator` 비밀번호 |
-| `FIT_DEV_APP_PASSWORD` | local | O | `fit_dev_app` 비밀번호 |
+| `POSTGRES_PASSWORD` | local, data | O | Postgres 관리자(`postgres`) 비밀번호 |
+| `FIT_MIGRATOR_PASSWORD` | local, data | O | `fit_migrator` 비밀번호. `migrate-<env>.env`의 `SPRING_DATASOURCE_PASSWORD`와 같아야 한다 |
+| `FIT_DEV_APP_PASSWORD` | local, data | O | `fit_dev_app` 비밀번호. `dev.env`의 `SPRING_DATASOURCE_PASSWORD`와 같아야 한다 |
 | `REDIS_PASSWORD` | local | O | Redis 비밀번호 |
-| `GARAGE_RPC_SECRET` | local | O | Garage RPC 비밀. 64자리 16진수 |
-| `GARAGE_ADMIN_TOKEN` | local | O | Garage 관리 API 토큰 |
+| `GARAGE_RPC_SECRET` | local, data | O | Garage RPC 비밀. 64자리 16진수 |
+| `GARAGE_ADMIN_TOKEN` | local, data | O | Garage 관리 API 토큰 |
 
 로컬 그룹의 값은 개발용 가짜 값이다. 서버 값으로 쓰지 않는다.
+
+`data` 그룹의 값 형식은 스크립트가 검사한다(`infra/data/lib.sh`, `init-garage.sh`). 비밀번호와 토큰(`*_PASSWORD`, `GARAGE_ADMIN_TOKEN`)은 영문·숫자·`._~-`만 쓴 16자 이상이고, `GARAGE_RPC_SECRET`과 `S3_*_SECRET_KEY`는 16진수 64자리, `S3_*_ACCESS_KEY`는 `GK` + 16진수 24자리다.
 
 ## 프런트 런타임 설정 (`/config.json`)
 
