@@ -140,7 +140,7 @@ Glossary: none · ADRs: none
 - Decision: 운영은 같은 출처(`/api`)지만 로컬은 FE(`localhost:3000`)와 BE(`localhost:8080`)가 달라서 BE의 CORS 허용이나 FE 개발 서버의 프록시 같은 방법이 필요하다. 정적 export에서는 `rewrites`를 못 쓰므로(D-11) 방법은 정적 export 결정과 함께 미결이며, 구현에서 처음 연결할 때 정한다.
 
 ## D-29 지도 클라이언트 ID의 주입 방식(미결)
-- Status: settled
+- Status: superseded by D-57
 - Decision: FE가 네이버 지도 클라이언트 ID를 어떻게 얻는지(빌드 시점 `NEXT_PUBLIC_*` 환경변수, 런타임 설정 파일 등)는 보안 확인 후 정하며 미결이다. 이 기능은 키를 읽는 코드를 `PlaceMap.tsx` 안의 한 곳에 모으고, 값이 없으면 지도 영역을 비운다(D-13). 서버용 Client Secret은 브라우저로 내리지 않는다.
 
 ## D-30 검증 방식(자동완성 로직은 React와 분리해 테스트)
@@ -189,7 +189,7 @@ Glossary: none · ADRs: none
 - Rejected: 정적 export → 팀이 Node 서버로 정했다. 이 기능에서 `docs/infra/design.md` 수정 → 인프라 담당의 문서다.
 
 ## D-39 FE가 BE를 부르는 방법(Next 프록시)
-- Status: settled
+- Status: superseded by D-58
 - Decision: FE는 항상 상대 경로 `/api/v1/...`를 부르고, Next.js 서버가 `next.config.ts`의 `rewrites`로 `/api/:path*`를 BE에 넘긴다. 대상 주소는 환경변수 `API_PROXY_TARGET`(기본값 `http://localhost:8080`)이다. BE는 CORS를 설정하지 않는다.
 - Rejected: BE CORS 허용 → Node 서버가 있으니 프록시로 같은 출처를 유지하는 편이 단순하다.
 - Anchors: `fe/next.config.ts#nextConfig` (modify)
@@ -287,3 +287,15 @@ Glossary: none · ADRs: none
 - Decision: 팀 BE 컨벤션에 따라 존재 여부 같은 비즈니스 판단은 Service에서 한다. `PlaceController`는 `PlaceService`에 위임만 하고, `PlaceService`가 `PlaceSearchEngine`을 선택적 의존성으로 받아 엔진이 없으면 503 예외를, `findPlace`가 비어 있으면 404 예외를 던진다. `PlaceService`도 엔진이 돌려준 값을 가공하지 않는다.
 - Rejected: 컨트롤러가 404와 503을 직접 처리 → 컨벤션과 다르다.
 - Anchors: `be/src/main/java/kr/co/fitdining/api/place/PlaceService.java#PlaceService` (new)
+
+## D-57 지도 클라이언트 ID는 FE의 `/config.json`으로 전달한다
+- Status: settled
+- Decision: 인프라 설계(`docs/infra/design.md` §12.5 #3, `contracts/env.md`의 "프런트 런타임 설정")에 맞춰 브라우저가 쓰는 공개 값은 FE(Next.js)의 `/config.json` 라우트가 런타임 환경변수에서 읽어 돌려준다. 이 기능에서 `fe/src/app/config.json/route.ts`를 새로 만들고, 계약의 `env`(`APP_ENV`)와 새 키 `naverMapClientId`(환경변수 `NAVER_MAP_CLIENT_ID`)만 돌려준다. 로컬은 `fe/.env.local`에 둔다. 브라우저는 앱이 시작될 때 한 번 받아 메모리에 두고, `PlaceMap`은 그 값을 쓴다. 값이 없으면 지도 영역을 비운다. 네이버 지도 Client ID는 스크립트 주소에 드러나는 공개 키이고 도메인 등록과 한도로 보호되며, Client Secret은 브라우저로 보내지 않는다. `NAVER_MAP_CLIENT_ID`를 env 계약에 올리는 일은 인프라 담당에게 알린다(이 기능은 `docs/infra/`를 고치지 않는다).
+- Rejected: `NEXT_PUBLIC_*` 빌드 시점 주입 → 인프라 설계가 금지하고, CI 빌드에서 값을 빠뜨리면 빈 지도가 이미지에 굳는다. SSR로 HTML에 넣기 → 인프라 문서의 공개 값 경로와 달라진다.
+- Anchors: `fe/src/app/config.json/route.ts#GET` (new)
+
+## D-58 로컬에서 FE가 BE를 부르는 방법(개발 서버 전용 프록시)
+- Status: settled
+- Decision: FE는 항상 상대 경로 `/api/v1/...`를 부른다. 운영에서는 Caddy가 `/api/*`를 BE로 보낸다. 로컬에서는 `next dev`일 때만 `next.config.ts`의 `rewrites`가 `/api/:path*`를 `BE_INTERNAL_URL`(인프라가 정한 FE 서버의 BE 주소 이름, 기본값 `http://localhost:8080`)로 넘긴다. 운영 빌드에는 rewrites가 없어 산출물에 `localhost`가 남지 않는다. BE는 CORS를 설정하지 않는다.
+- Rejected: 항상 켜는 rewrites와 `API_PROXY_TARGET` 이름 → 운영 빌드 산출물에 `localhost`가 남아 인프라의 산출물 검사에 걸리고, 인프라가 정한 이름과 다르다. BE CORS 허용 → 같은 출처를 유지하는 편이 단순하다.
+- Anchors: `fe/next.config.ts#nextConfig` (modify)

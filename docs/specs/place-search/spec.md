@@ -41,7 +41,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 
 ### FE 검색 흐름
 
-23. FE는 항상 상대 경로 `/api/v1/...`를 부르고, Next.js 서버의 `rewrites`가 `API_PROXY_TARGET`(기본 `http://localhost:8080`)으로 넘긴다. 이 값은 `next dev`와 `next build` 시점에 읽혀 고정된다. env.md에는 올리지 않고 Node 서버 배포(D-38)와 함께 인프라 담당에게 알린다(D-39).
+23. FE는 항상 상대 경로 `/api/v1/...`를 부른다. `rewrites`는 `process.env.NODE_ENV === 'development'`일 때만 `/api/:path*`를 `${BE_INTERNAL_URL ?? 'http://localhost:8080'}/api/:path*`로 넘기고, 그 밖에는 빈 배열을 돌려준다. 운영에서는 Caddy가 같은 역할을 한다(D-58).
 24. 결과가 없을 때는 화면 위쪽 검색창(자동완성 있음, `maxLength` 200)이 보이고, 엔터나 `ACTION` 선택은 새 검색이다. 결과가 있을 때는 위쪽 검색창이 사라지고 결과 패널 아래 입력창("조건을 더 말해 보세요", 자동완성 없음)이 보이며 그 입력은 항상 후속 조건이다. 패널의 "새 검색"은 결과, 조건, 커서를 비우고 위쪽 검색창으로 돌아간다(D-50).
 25. 후속 조건은 새 입력을 `query`로, 기준 요청의 첫 페이지 응답 `conditions`를 `previousConditions`로 보낸다(빈 객체 `{}`여도 그대로 보낸다). 기준 요청은 항상 지금 보는 요청이다. 요청 기록의 "여기서 이어 검색"은 그 요청의 결과로 화면을 바꾸고("결과 보기"와 같다) 후속 입력창에 초점을 둔다. 후속 요청이 성공하면 그 새 요청이 지금 보는 요청이 된다(D-50).
 26. 커서 요청은 첫 요청의 `query`, `preferences`, `previousConditions`, `mapBounds`를 그대로 다시 보내고 `cursor`만 더한다. 빈 다음 페이지를 받으면 이어 붙이기만 멈추고 결과 없음 화면을 띄우지 않는다. 다음 페이지는 스크롤 위치로 불러온다(IntersectionObserver)(D-50).
@@ -56,7 +56,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 
 ### FE 지도와 위치
 
-35. 지도 클라이언트 ID 주입 방식은 보류다(D-29). 그동안 `PlaceMap.tsx` 안의 함수 하나가 `process.env.NEXT_PUBLIC_NAVER_MAP_CLIENT_ID`를 임시로 읽고(`fe/.env.local`), 값이 없으면 지도 영역을 비운다. 방식이 정해지면 이 함수만 바꾼다(D-29, D-51).
+35. `fe/src/app/config.json/route.ts`의 `GET`은 요청 때마다 `process.env`에서 읽어 `{ env, naverMapClientId? }`만 돌려준다(`env`는 `APP_ENV`, 없으면 `dev`. `naverMapClientId`는 `NAVER_MAP_CLIENT_ID`, 비어 있으면 생략). 빌드 때 미리 렌더링되면 값이 굳으므로 요청 시점에 실행되게 하고(`cacheComponents`가 켜져 있어 방법은 `fe/node_modules/next/dist/docs/`에서 확인), 응답에 `Cache-Control: no-store`를 둔다. FE는 `fe/src/lib/runtimeConfig.ts`에서 `/config.json`을 페이지 세션에 한 번만 받아 메모리에 두고, `PlaceMap`은 `naverMapClientId`가 없거나 요청이 실패하면 지도 영역을 비운다(D-57, D-51).
 36. 지도 스크립트는 `PlaceMap`이 처음 마운트될 때 한 번만 `<script>`로 넣고, 이미 로드됐으면 다시 넣지 않는다. URL은 `https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=<encodeURIComponent(Client ID)>`이며 `submodules`는 붙이지 않는다. `window.navermap_authFailure`는 스크립트를 넣기 전에 정의한다(D-51).
 37. 지도 컨테이너는 CSS로 높이를 지정하고, 크기가 바뀌면 `map.setSize`를 호출한다. 결과가 바뀌어도 지도를 새로 만들지 않고 핀만 바꾼다(지도 사용량은 지도 생성 횟수로 집계된다)(D-51).
 38. 핀은 `naver.maps.Marker`의 HTML 아이콘(`icon.content`)으로 순위 번호를 그린다. 선택된 핀은 강조 아이콘으로 바꾸고(`setIcon`) 가장 위에 그린다(`setZIndex`). 핀을 누르면 그 카드를 선택하고 목록을 그 카드로 스크롤한다. 선택되지 않은 카드를 누르면 지도를 `panTo`로 그 핀에 옮기고(줌 유지) 선택한다. 선택된 카드를 다시 누르면 `/place?id=<id>`로 간다. 지도가 없을 때도 같은 두 단계로 동작한다. 한 번에 선택된 카드는 하나이고, 보는 결과가 바뀌면(새 요청, "결과 보기") 선택을 비우며 다음 페이지를 이어 붙일 때는 유지한다(D-51).
@@ -108,11 +108,11 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 - [ ] AC-15: 자동완성은 입력이 멈춘 뒤 300ms 뒤에 한 번만 요청하고, 입력이 비면 요청하지 않으며, 새 요청을 보내면 이전 요청을 취소하고, 늦게 도착한 응답은 화면에 반영하지 않는다. (D-51)
 - [ ] AC-16: FE가 만드는 검색 요청 본문에는 기기 위치를 얻었어도 그 좌표가 어떤 필드에도 들어가지 않는다. 검색 대상 지역인 `mapBounds`는 좌표 금지의 예외이며, 사용자가 "이 지역에서 검색"을 눌렀거나 위치를 얻지 못한 것이 확인된 뒤에만 담는다. 근처 응답이 오고 위치를 얻으면 FE는 현재 위치와 반경으로 항목을 걸러 낸다. (D-41, D-52)
 - [ ] AC-17: 주소에 `?mock=empty`가 있으면 FE의 검색 요청에 `X-Mock-Scenario: empty` 헤더가 붙고, 없으면 붙지 않는다. (D-47)
-- [ ] AC-18: 지도 키가 없거나 인증이 실패하면(`navermap_authFailure`) 지도 영역은 비어 있고 카드 목록, 후속 조건, 요청 기록은 정상 동작한다. (D-51, D-29)
+- [ ] AC-18: `/config.json`에 지도 키가 없거나 그 요청이 실패하거나 인증이 실패하면(`navermap_authFailure`) 지도 영역은 비어 있고 카드 목록, 후속 조건, 요청 기록은 정상 동작한다. (D-51, D-57)
 - [ ] AC-19: 선택된 카드를 다시 누르면 `/place?id=…`로 이동해 상세가 표시되고, 뒤로 가면 기존 결과, 선택된 카드, 요청 기록이 유지된다(보관 방식은 미결이며 어떤 방식이든 이 동작이 목표다). (D-49, D-43, D-35, D-27)
 - [ ] AC-20: 장소 데이터는 브라우저의 `fetch`로 `/api/v1/...`를 불러 가져온다. Server Actions나 Route Handler로 장소 데이터를 가져오지 않는다. (D-38)
 - [ ] AC-21: `infra/local`의 Postgres를 띄우고 `be/.env.example`을 `be/.env`로 복사하면 다른 환경변수 없이 BE가 `fit_dev_app` 계정으로 기동하고 세 엔드포인트가 응답한다. Flyway는 실행되지 않는다. 환경변수 `SPRING_DATASOURCE_*`가 있으면 기본값보다 우선한다. `build.gradle`은 사용자가 추가한 validation starter 외에는 바뀌지 않는다. (D-32, D-40, D-55)
-- [ ] AC-22: FE 개발 서버(`localhost:3000`)에서 `/api/v1/places/suggest?q=역삼`을 부르면 BE(`localhost:8080`)의 응답이 그대로 오고, BE에는 CORS 설정이 없다. (D-39)
+- [ ] AC-22: FE 개발 서버(`localhost:3000`)에서 `/api/v1/places/suggest?q=역삼`을 부르면 BE(`localhost:8080`)의 응답이 그대로 오고, BE에는 CORS 설정이 없다. `next build` 산출물(`.next/routes-manifest.json`)에는 rewrites와 `localhost`가 없다. (D-58)
 - [ ] AC-23: 지도가 있으면 지금 보이는 카드마다 핀이 하나씩 있고, 핀에는 그 카드와 같은 순위 번호가 보인다. 근처 필터로 걸러진 카드의 핀은 보이지 않는다. (D-51)
 - [ ] AC-24: 핀을 누르면 해당 카드가 선택되고 핀이 강조되며 목록이 그 카드로 스크롤된다. 선택되지 않은 카드를 누르면 지도가 그 핀으로 이동하고 카드와 핀이 선택된다. 한 번에 선택된 카드는 하나다. (D-51)
 - [ ] AC-25: Mock의 `openStatus`는 고정한 시각에서 영업시간 밖 또는 휴무일이면 `CLOSED`, 브레이크타임이면 `BREAK`, 마감 60분 이내면 `CLOSING_SOON`, 그 밖의 영업시간이면 `OPEN`이다. (D-54)
@@ -120,6 +120,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 - [ ] AC-27: 요청 기록에는 이번 세션의 요청이 입력 문장, 업종과 곳 수, 시각과 함께 쌓인다. "결과 보기"는 네트워크 요청 없이 그 요청의 결과를 보여 주고, "여기서 이어 검색" 뒤의 후속 입력은 그 요청의 `conditions`를 `previousConditions`로 보낸다. (D-50)
 - [ ] AC-28: 위치를 얻기 전에는 자동완성, 카드, 상세에 거리가 보이지 않는다. "내 위치"를 눌러 위치를 얻으면 지도에 내 위치 점이 생기고 세 곳 모두 거리가 보인다. 이 과정에서 서버로 가는 요청에는 좌표가 없다. (D-52)
 - [ ] AC-29: 상세 화면은 홈, 메뉴, 정보 탭을 보여 주고 리뷰 탭은 없다. 검색 카드가 저장돼 있으면 핏 점수와 ⓘ 시트(`scoreItems`), AI 추천 이유, 주의점이 보이고, 없으면 이 영역들이 숨겨지고 장소 정보만 보인다. (D-49, D-54, D-27)
+- [ ] AC-30: `GET /config.json`은 요청 시점의 환경변수에서 `env`와 `naverMapClientId`만 돌려주고 다른 키는 없다. 환경변수를 바꾸고 서버를 다시 띄우면 다시 빌드하지 않아도 새 값이 나온다. (D-57)
 
 ## Implementation anchors
 
@@ -136,7 +137,8 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 | `be/src/main/java/kr/co/fitdining/api/place/dto/PlaceSuggestResponse.java#PlaceSuggestResponse` | new | D-54 |
 | `be/src/main/java/kr/co/fitdining/api/place/dto/PlaceDetailResponse.java#PlaceDetailResponse` | new | D-54 |
 | `be/src/main/resources/application.yml#spring` | new | D-40, D-41 |
-| `fe/next.config.ts#nextConfig` | modify | D-39 |
+| `fe/next.config.ts#nextConfig` | modify | D-58 |
+| `fe/src/app/config.json/route.ts#GET` | new | D-57 |
 | `fe/src/app/page.tsx#Home` | modify | D-43 |
 | `fe/src/app/place/page.tsx#PlaceDetailPage` | new | D-43 |
 | `fe/src/lib/placeApi.ts#searchPlaces` | new | D-43 |
@@ -216,7 +218,7 @@ FE 로직 (src/lib)
                   다음 요청 본문을 만드는 순수 함수(새 검색, 후속, 커서, 이 지역에서 검색)를 함께 둔다
 ```
 
-anchor 표에 없지만 만들거나 고치는 파일: `fe/src/lib/placeTypes.ts`, `fe/src/lib/nearby.ts`, `fe/src/lib/suggest.ts`, `fe/src/lib/useSuggest.ts`, `fe/src/lib/searchStore.ts`, 화면 컴포넌트(위쪽 검색창과 자동완성, 결과 패널과 카드, 후속 입력창, 요청 기록, 상세 탭과 핏 점수 시트), `fe/src/app/layout.tsx`, `fe/pnpm-workspace.yaml`(필요할 때만), vitest 설정과 테스트, `be/.env.example`, `PlaceExceptionHandler`와 예외 클래스, `dto` 패키지의 하위 record와 enum, BE 테스트(컨트롤러, Mock 데이터, 영업 상태). `docs/infra/` 아래 파일은 고치지 않는다.
+anchor 표에 없지만 만들거나 고치는 파일: `fe/src/lib/runtimeConfig.ts`(`/config.json`을 한 번 받아 두는 모듈), `fe/src/lib/placeTypes.ts`, `fe/src/lib/nearby.ts`, `fe/src/lib/suggest.ts`, `fe/src/lib/useSuggest.ts`, `fe/src/lib/searchStore.ts`, 화면 컴포넌트(위쪽 검색창과 자동완성, 결과 패널과 카드, 후속 입력창, 요청 기록, 상세 탭과 핏 점수 시트), `fe/src/app/layout.tsx`, `fe/pnpm-workspace.yaml`(필요할 때만), vitest 설정과 테스트, `be/.env.example`, `PlaceExceptionHandler`와 예외 클래스, `dto` 패키지의 하위 record와 enum, BE 테스트(컨트롤러, Mock 데이터, 영업 상태). `docs/infra/` 아래 파일은 고치지 않는다.
 
 설정:
 
@@ -229,8 +231,9 @@ application.yml : application.properties를 대체한다 (D-40)
   spring.flyway.enabled     : false (웹 앱은 DML 전용 계정이다)
   JSON                      : 요청 본문의 알 수 없는 속성 거부, null 필드 생략 (속성 이름은 구현 때 확인, D-41)
   place.mock.enabled        : ${PLACE_MOCK_ENABLED:false} (D-47)
-fe/next.config.ts : rewrites /api/:path* → ${API_PROXY_TARGET ?? 'http://localhost:8080'}/api/:path* (D-39)
-fe/.env.local     : NEXT_PUBLIC_NAVER_MAP_CLIENT_ID (임시, git 무시, D-29)
+fe/next.config.ts : next dev일 때만 rewrites /api/:path* → ${BE_INTERNAL_URL ?? 'http://localhost:8080'}/api/:path* (D-58)
+fe/.env.local     : NAVER_MAP_CLIENT_ID, (선택) APP_ENV, BE_INTERNAL_URL. git 무시 (D-57, D-58)
+GET /config.json  : { env: "dev" | "prod", naverMapClientId?: string }, Cache-Control: no-store (D-57)
 ```
 
 ## Seams & test plan
@@ -238,9 +241,10 @@ fe/.env.local     : NEXT_PUBLIC_NAVER_MAP_CLIENT_ID (임시, git 무시, D-29)
 - **BE 컨트롤러 경계** (example), AC-1, AC-2, AC-3, AC-4, AC-5, AC-7, AC-9, AC-10, AC-11, AC-12, AC-13, AC-14: `@WebMvcTest`로 MockMvc가 세 엔드포인트를 호출한다. `PlaceService`와 Mock 엔진은 `@Import`로 넣고, 일부는 가짜 `PlaceSearchEngine`을 꽂아 컨트롤러와 Service가 반환값을 가공하지 않는지 본다. 테스트 이름은 팀 BE 컨벤션(`method_scenario_expected`, 한글 `@DisplayName`)을 따른다. 로그 검증은 출력 캡처를 쓴다. 잡는 것: 경로, 상태 코드, 요청 검증, 페이징, 로그 누출. 놓치는 것: 실제 JSON 직렬화 설정이 전체 앱에서 같은지(기동 테스트는 AC-21). Prior art: 없음(`be/src/test`에는 `ApiApplicationTests`의 기동 테스트뿐).
 - **Mock 데이터와 영업 상태** (example), AC-2, AC-4, AC-6, AC-8, AC-25: `places.json`을 읽어 장소가 25곳 이상이고 점수, 라벨, `scoreItems`, `hours` 규칙을 지키며 응답 JSON 키가 문서화된 집합을 넘지 않는지 확인한다. 고정 `Clock`으로 영업 상태 경계(마감 60분 전, 브레이크 시작, 휴무일)를 확인한다. 잡는 것: 데이터 오타, 규칙 위반, 시각 계산 오류. 놓치는 것: 실제 AI 데이터의 품질.
 - **FE 순수 로직** (example), AC-15, AC-16, AC-26, AC-27: 근처 필터와 거리 표시(haversine, 반경 이하 포함, "350m"과 "1.2km" 경계)는 `fe/src/lib/nearby.test.ts`에서, 자동완성 로직은 가짜 타이머와 가짜 fetch로 요청 횟수, 빈 입력, 취소, 늦은 응답 무시를 확인한다. `searchStore.ts`의 요청 본문 생성 함수로 새 검색, 후속(기준 요청의 `conditions`), 커서, "이 지역에서 검색", "여기서 이어 검색"의 요청 본문과 좌표 미포함을 확인한다. 잡는 것: 거리 계산 오류, 요청 폭주, 잘못된 후속 기준. 놓치는 것: 실제 브라우저 입력기(한글 조합) 동작. Prior art: 없음(`fe/`에 테스트 러너가 없어 Vitest를 추가한다).
+- **FE 설정 라우트** (example), AC-30: Vitest에서 `process.env`를 바꿔 가며 `route.ts`의 `GET`을 직접 호출해 돌려주는 키가 `env`, `naverMapClientId`뿐인지, 값이 없으면 생략되는지 확인한다. 잡는 것: 환경변수 누출, 키 이름 오타. 놓치는 것: 빌드 때 미리 렌더링되는지(수동 확인).
 - **FE API 함수** (example), AC-16, AC-17: `fetch`를 가짜로 바꿔 요청 본문에 기기 좌표가 없는지, `?mock=empty`일 때만 헤더가 붙는지 확인한다. 잡는 것: 위치 누출, 헤더 오작동. 놓치는 것: 실제 BE와의 통합.
 - **BE 기동** (example), AC-21: `infra/local` Postgres와 `be/.env`로 `./gradlew test`와 `bootRun`이 통과하는지 확인한다. 기존 `ApiApplicationTests`는 고치지 않는다. 잡는 것: 의존성, 설정, Flyway 권한 문제. 놓치는 것: prod 설정.
-- **수동 확인** AC-18, AC-19, AC-20, AC-22, AC-23, AC-24, AC-28, AC-29: 지도 키가 없거나 잘못된 상태의 화면, 순위 핀과 핀↔카드 선택, 상세로 갔다가 뒤로 가기, 내 위치 버튼과 거리 표시(브라우저 Network 탭에서 좌표가 나가지 않는지), 상세 탭과 핏 점수 시트, 데이터를 브라우저에서 가져오는지(코드 검토), FE 개발 서버 프록시로 BE 호출을 Figma 화면과 대조한다. E2E는 하지 않는다(D-30).
+- **수동 확인** AC-18, AC-19, AC-20, AC-22, AC-23, AC-24, AC-28, AC-29, AC-30(`next build` 뒤 `next start`로 환경변수를 바꿔 `/config.json` 확인, 산출물에 `localhost` 없음): 지도 키가 없거나 잘못된 상태의 화면, 순위 핀과 핀↔카드 선택, 상세로 갔다가 뒤로 가기, 내 위치 버튼과 거리 표시(브라우저 Network 탭에서 좌표가 나가지 않는지), 상세 탭과 핏 점수 시트, 데이터를 브라우저에서 가져오는지(코드 검토), FE 개발 서버 프록시로 BE 호출을 Figma 화면과 대조한다. E2E는 하지 않는다(D-30).
 
 ## Out of scope
 
@@ -251,18 +255,17 @@ fe/.env.local     : NEXT_PUBLIC_NAVER_MAP_CLIENT_ID (임시, git 무시, D-29)
 - OpenSearch 임베딩과 벡터 관리, Postgres에서 OpenSearch로의 동기화 방식(D-36, D-37)
 - DB 테이블, JPA 엔티티(`places`, `Place`), Flyway 마이그레이션과 마이그레이션 전용 프로필, validation starter 밖의 `build.gradle` 변경(D-32, D-35, D-40, D-55)
 - 공통 응답과 예외 형식의 확정(D-10)
-- `docs/infra/` 아래 문서(`design.md`, `contracts/env.md`) 수정. Node 서버 배포, `PLACE_MOCK_ENABLED`, `API_PROXY_TARGET`은 인프라 담당에게 알린다(D-38, D-47)
+- `docs/infra/` 아래 문서(`design.md`, `contracts/env.md`) 수정. `PLACE_MOCK_ENABLED`, `NAVER_MAP_CLIENT_ID`(fe 그룹)와 `/config.json`의 `naverMapClientId` 키는 인프라 담당에게 알린다(D-47, D-57)
 - `X-Mock-Scenario: error`와 개발용 시나리오 선택 상자(D-47)
 - Caddy 접근 로그의 `q` 필터. 인프라 담당에게 넘긴다(D-20)
 - 추천 이유와 점수를 만드는 방식, 취향을 결과에 반영하는 일(AI 파트 몫, Mock은 반영하지 않음)(D-33, D-54)
-- 지도 클라이언트 ID의 주입 방식 확정(D-29), 새로고침과 PWA 재로드에서 검색 상태를 살리는 방식 확정(D-27)
+- 새로고침과 PWA 재로드에서 검색 상태를 살리는 방식 확정(D-27)
 
 ## Open questions
 
 - 추천 이유와 핏 점수 설명을 검색 응답 항목에 담을지, 상세 호출이 검색 맥락을 받을지는 검색 구체화 뒤에 정한다(D-54).
 - 후속 조건 전달을 `previousConditions` 되돌려주기로 계속 갈지, 검색 측의 `thread_id`로 바꿀지 정해지지 않았다(D-50).
 - 근처 반경의 최종 값은 몇 미터인가요? 임시값은 1000m다(D-52).
-- 지도 클라이언트 ID를 `NEXT_PUBLIC_*` 빌드 시점 값으로 넣을지 인프라 설계의 `/config.json`으로 넣을지 보류됐다. 그동안은 임시로 `NEXT_PUBLIC_*`를 읽는다(D-29).
 - 검색 상태를 프런트 메모리에만 둘지 `sessionStorage`까지 쓸지 정해지지 않았다. 그동안은 메모리에 둔다(D-27).
 - 공통 응답과 예외 형식은 BE 팀 논의 뒤 정한다(지금은 ProblemDetail)(D-10).
 - Postgres에서 OpenSearch로 어떻게 동기화하나요? (D-37)
