@@ -465,6 +465,16 @@ GitLab이 죽어도 서버에서 직접 실행할 수 있다.
 
 BE와 FE는 같은 절차로 전환하되 BE가 먼저, FE가 나중이다. 새 BE는 직전 FE와 하위호환이어야 한다(BE 계약 #16).
 
+**구현 메모** (확인: `infra/deploy/test/test-deploy.sh`)
+
+- `fit-app-prod`와 `fit-app-dev`는 `infra/app/compose.app.yml` 하나를 프로필(`prod`, `dev`)로 나눠 쓴다. 이미지 태그와 활성 색은 상태 파일 `/srv/fit/state/deploy-<환경>.env`가 정하고(compose의 `--env-file`), 처음 배포는 활성이 green으로 시작해 blue로 간다(엣지 견본의 upstream과 같다).
+- 준비 확인과 idle 색 확인은 호스트에 게시하지 않는 포트를 위해 같은 망의 caddy 컨테이너 안에서 `wget`으로 한다. BE는 `/actuator/health/readiness`, `/healthz`, `/api/v1/version`(SHA), FE는 `/fe-healthz`, `/`, `/config.json`(`env`)이다.
+- 마이그레이션은 이전 배포 SHA와 새 SHA 사이에 `be/src/main/resources/db/migration`이 바뀌었을 때(첫 배포 포함)만 실행한다. prod는 그 전에 `infra/backup/pg-backup.sh predeploy <환경> <sha>`(계획 1D)로 덤프하고, 덤프나 마이그레이션이 실패하면 트래픽을 건드리기 전에 멈춘다.
+- 새 색의 준비·직접 확인이나 엣지 전환 뒤 확인에 실패하면 새 색을 치우고 엣지를 이전 색으로 되돌린다. BE는 성공하고 FE가 실패하면 BE는 새 버전, FE는 이전 버전으로 남는다(새 BE가 직전 FE와 호환돼야 한다). `rollback.sh`는 서비스별로 이전 색(컨테이너와 이미지가 남아 있다)으로 옮기고, 전체 롤백이면 `DEPLOYED_SHA`와 `PREVIOUS_SHA`를 맞바꾼다.
+- 사전 점검은 FE env의 `BE_INTERNAL_URL`이 이 환경의 엣지 내부 리스너(prod `caddy:8081`, dev `caddy:8082`)인지 확인한다. 같은 망의 컨테이너는 어느 환경의 리스너에도 닿으므로 환경 간 호출을 여기서 막는다.
+- 정적 자산 풀(`/srv/fit/web/<환경>/pool/_next/static`)은 FE 이미지의 `/app/.next/static`을 `docker cp`로 꺼내 이미 있는 파일은 덮어쓰지 않고 쌓는다. 이번 릴리스가 가진 파일의 수정 시각을 갱신하고, 14일 넘게 어느 릴리스에도 없던 파일은 지운다.
+- 잠금은 `mkdir`로 잡는다(프로세스가 죽어 남은 잠금은 pid로 알아본다). `flock`이 없는 환경에서도 같게 돈다. CI 밖에서 직접 실행하려면 `SKIP_VERIFY=<사유>`가 필요하고 사유는 이력에 남는다.
+
 dev는 같은 스크립트를 단일 색으로 돌린다. 교체형이고 헬스 실패 시 직전 이미지로 복귀한다. 일정상 Blue/Green(P1)이 어려우면 prod도 이 교체형(헬스 게이트 + 직전 이미지 복귀)으로 먼저 배포한다(P0).
 
 ### 6.5 DB 마이그레이션
@@ -491,7 +501,7 @@ FE는 `fe/`의 Next.js를 `output: 'standalone'`으로 빌드한 Node 컨테이�
 - **빌드:** `fe:build`가 B에서 `next build`로 번들을 **한 번만** 만든다. 환경별 값은 번들에 넣지 않는다(`NEXT_PUBLIC_*`에 환경별 값을 두지 않는다). dev에서 검증한 이미지가 곧 prod 이미지다. `generateBuildId`와 `deploymentId`는 커밋 SHA다. 시크릿은 어디에도 넣지 않는다.
 - **아키텍처:** B(Arm)에서 만든 번들을 A(x86)에서 돌린다. standalone 번들에는 `sharp`의 플랫폼 전용 네이티브 모듈이 들어가고 이미지 최적화를 꺼도 빠지지 않는다(확인: Linux x64 빌드에서 `images.unoptimized: true`여도 `@img/sharp-linux-x64`가 들어간다). 그래서 이미지 최적화 기본 로더를 쓰지 않는다(`unoptimized: true` 또는 커스텀 로더). 사진은 Garage가 제공한다.
 - **산출물 검사(P0):** 번들에 `localhost`·mock 값이 없는지, `.next/images-manifest.json`의 `unoptimized`가 `true`인지(확인: 설정에 따라 `false`나 `true`로 기록된다), 네이티브 모듈이 `sharp-*`뿐인지, `server.js`와 `.next/static`이 있는지 확인한다. 배치 뒤 smoke는 `/config.json`에 필수 키가 모두 있는지 확인한다. A503이 빌드타임 설정 누락으로 빈 번들을 6회 배포한 교훈이다.
-- **배치:** `fit-fe:<SHA>` 이미지로 반대 색 FE를 띄우고 idle 색에서 SSR 페이지(`/`)와 `/config.json`을 확인한 뒤 전환한다. 정적 자산은 색을 띄우기 전에 `.next/static`을 풀(`/srv/fit/web/<env>/pool/`)에 쌓는다.
+- **배치:** `fe:<SHA>` 이미지로 반대 색 FE를 띄우고 idle 색에서 SSR 페이지(`/`)와 `/config.json`을 확인한 뒤 전환한다. 정적 자산은 색을 띄우기 전에 `.next/static`을 풀(`/srv/fit/web/<env>/pool/`)에 쌓는다.
 - **운영:** 루트 파일시스템은 읽기 전용이고 `.next/cache`만 tmpfs다(확인: 쓰기 불가이면 `/app/.next/cache`를 만들지 못해 오류가 난다). 컨테이너 메모리 한도(4.1절)와 `NODE_OPTIONS=--max-old-space-size`로 힙을 묶고, 로그는 JSON을 stdout으로 낸다. 종료는 SIGTERM이며 진행 중 요청을 끝낼 시간으로 30초 드레인을 둔다(Next.js 문서는 10~30초를 권장한다).
 - **버전 스큐:** `deploymentId`가 있으면 Next가 어긋남을 감지해 전체 새로고침을 한다(Next.js 문서). 이전 릴리스 자산은 풀에 남아 있고, API는 직전 배포의 FE와 하위호환을 유지한다(BE 계약 #16).
 - **푸시와 설치:** 웹 푸시와 설치 흐름은 프런트 팀 몫이다. 인프라는 HTTPS, 캐시 정책, 푸시 키 보관을 맡는다(11.3절).
@@ -656,7 +666,7 @@ Grafana는 팀원에게 viewer 계정을 준다. A503에서는 SSH 보유자만 
 
 ### 10.5 로컬 개발·사전 검증
 
-- 로컬 개발용 `infra/local/compose.yml`은 profile(`core`, `search`)로 나눠 노트북 메모리에 맞게 고르게 한다. AI는 Modal의 dev 앱을 쓴다. 켜고 점검하는 명령은 `bash infra/local/fit-local.sh`이고 접속 값은 `infra/local/README.md`에 있다. 환경변수 이름은 `docs/infra/contracts/env.md`를 따른다. 엣지는 `bash infra/edge/test/test-edge.sh up|verify|down`으로 목 BE·FE와 시험용 풀, 로컬 스택의 garage를 붙여 시험한다.
+- 로컬 개발용 `infra/local/compose.yml`은 profile(`core`, `search`)로 나눠 노트북 메모리에 맞게 고르게 한다. AI는 Modal의 dev 앱을 쓴다. 켜고 점검하는 명령은 `bash infra/local/fit-local.sh`이고 접속 값은 `infra/local/README.md`에 있다. 환경변수 이름은 `docs/infra/contracts/env.md`를 따른다. 엣지는 `bash infra/edge/test/test-edge.sh up|verify|down`으로 목 BE·FE와 시험용 풀, 로컬 스택의 garage를 붙여 시험한다. 배포는 `bash infra/deploy/test/test-deploy.sh up|run|down`으로 실제 Caddy와 목 BE·FE 이미지를 띄워 배포·롤백·실패 복구를 시험한다.
 - 서버 수령 전에는 이 PC의 Docker Desktop(Docker 29.7.2, Compose v5.4.0)과 Ubuntu 컨테이너(호스트 스크립트)로 compose·스크립트·알림 규칙·Caddy 설정을 검증한다. shellcheck, promtool, age는 컨테이너로 돌린다.
 - 서버에서만 확인되는 것은 스왑·sysctl 적용, ufw의 실제 차단, 실제 TLS 발급, CPU 버스트, 외부 포트 노출, 클라우드 방화벽이다.
 
@@ -859,6 +869,7 @@ AI 팀과 M1 전에 합의한다. FastAPI는 Modal에서 돌고 A·B에는 AI �
 | 11 | 푸시 | 방식(FCM 웹 푸시 또는 VAPID)은 프런트·BE 팀이 정하고 키는 서버 env에 둔다 | 11.3절, 16절 |
 | 12 | 공유 | 장소 공유는 외부 지도(네이버) 링크를 Web Share API(`navigator.share`)로 보내고, 미지원 환경은 클립보드 복사로 대체한다. Fit Dining URL 자체를 공유해야 하면 FE가 OG 메타를 렌더링한다. 장소 ID 확보는 16절 #19 | SSR이라 별도 공유 페이지가 필요 없다 |
 | 13 | 런타임 | 로그는 JSON 한 줄을 stdout으로 내고 토큰·개인정보를 마스킹한다. SIGTERM을 받으면 진행 중 요청을 끝내고 내려간다. 쓰기는 `.next/cache`뿐이며 운영이 tmpfs로 준다 | 4.1절, 6.8절. 읽기 전용 루트 |
+| 14 | 이미지 | `WORKDIR /app`, `server.js`와 `.next/static`이 `/app` 아래에 있고 컨테이너 안에 `node`가 있다 | 배포가 `docker cp`로 정적 자산을 풀에 쌓고(6.4절) compose healthcheck가 `node`로 `/fe-healthz`를 부른다. 읽기 전용 루트에서 쓰기는 `/app/.next/cache`(tmpfs)와 `/tmp`뿐이다 |
 
 ## 13. 보안 요약
 
@@ -881,6 +892,7 @@ AI 팀과 M1 전에 합의한다. FastAPI는 Modal에서 돌고 A·B에는 AI �
 |---|---|---|---|
 | `/etc/fit/prod.env`, `dev.env` | A | root:docker 0640 | 앱 env(Modal URL·토큰 포함) |
 | `/etc/fit/fe-prod.env`, `fe-dev.env` | A | root:docker 0640 | FE env(비밀 없음. 내부 BE 주소, 브라우저에 공개되는 키) |
+| `/etc/fit/migrate-prod.env`, `migrate-dev.env` | A | root:docker 0640 | 마이그레이션 일회성 컨테이너의 DDL 자격(웹 컨테이너에는 넣지 않는다) |
 | `/etc/fit/data.env` | A | root:docker 0640 | DB·Redis·Garage 자격 |
 | `/etc/fit/edge.env` | A | root:docker 0640 | `ACME_EMAIL`, `ACME_MODE`, `HSTS_MODE`, `PROD_HOST`, `DEV_HOST`, B의 IP, `/_ops` basic auth 해시, dev 게이트 키(`?k=` 쿠키 발급용) |
 | `/etc/fit/obs.env` | A | root:docker 0640 | Grafana admin, Mattermost 웹훅 |
@@ -1005,10 +1017,10 @@ infra/
   host/        bootstrap.sh, verify-host.sh, networks.sh, docker-prune.sh, README.md, conf/(sshd, sysctl, daemon.json, fail2ban, apt, systemd units), test/(test-host.sh, run-in-container.sh)
   edge/        compose.edge.yml, conf/(Caddyfile, acme/, hsts/), state-sample/, edge.env.example, edgectl.sh, verify-edge.sh, README.md, test/(compose.test.yml, test-edge.sh, 목 BE·FE)
   data/        compose.data.yml, ensure-databases.sh, opensearch/Dockerfile, garage/ 설정과 초기화 스크립트
-  app/         compose.app.yml, compose.prod.yml, compose.dev.yml, *.env.example
+  app/         compose.app.yml(프로필 prod·dev), *.env.example
   obs/         compose.obs.yml, prometheus/(rules, tests), alertmanager/, grafana/(provisioning, dashboards), blackbox/
   ops/         (B) compose.ops.yml, prometheus/, alertmanager/, blackbox, port-audit.sh, vault-ingest.sh
-  deploy/      deploy.sh, rollback.sh, preflight.sh, smoke.sh, notify.sh, fit-up.sh
+  deploy/      deploy.sh, rollback.sh, preflight.sh, smoke.sh, notify.sh, fit-up.sh, lib.sh, README.md, test/(test-deploy.sh, 목 BE·FE 이미지)
   backup/      pg-backup.sh, verify-dump.sh, push-vault.sh, photos-backup.sh, restore-check.sh(노트북용)
   ci/          ports_invariant.py, check_compose_projects.py, check_env_files.py, check_env_contract.py, check_eol.py, check_linear_history.py, no-merge-commit.sh, check-caddy.sh, migration_immutability.py, images_arch.py, run-local-checks.sh, tool-images.sh, compose-projects.txt, tests/
   local/       compose.yml (profile: core, search), fit-local.sh, local.env.example, garage/, opensearch/Dockerfile, README.md

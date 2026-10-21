@@ -1,0 +1,88 @@
+# 배포 (deploy)
+
+서버 A에서 BE·FE를 배포하고 되돌린다. prod는 Blue/Green, dev는 단일 색 교체다. 설계는 [design.md](../../docs/infra/design.md) 6.4절과 6.8절이다. GitLab이 죽어도 서버에서 직접 실행할 수 있다.
+
+## 자주 하는 일
+
+| 하고 싶은 일 | 명령 |
+|---|---|
+| 배포 | `bash infra/deploy/deploy.sh <prod\|dev> <sha>`(이미지 `be:<sha>`, `fe:<sha>`가 있어야 한다) |
+| 직전으로 되돌리기 | `bash infra/deploy/rollback.sh <prod\|dev> [be\|fe\|all]` |
+| 배포 전 점검만 | `bash infra/deploy/preflight.sh <prod\|dev> <sha>` |
+| 배포한 서비스 확인 | `bash infra/deploy/smoke.sh <prod\|dev> [--sha <sha>] [--only be\|fe]` |
+| 지금 활성 색 보기 | `bash infra/edge/edgectl.sh status` |
+| 재부팅·장애 뒤에 전체 올리기 | `bash infra/deploy/fit-up.sh` |
+| 이력 보기 | `cat /srv/fit/state/history-<환경>.log` |
+
+CI가 아닌 곳에서 `deploy.sh`를 직접 실행하려면 `SKIP_VERIFY=<사유>`를 줘야 한다(CI의 verify 단계를 건너뛰는 긴급 배포, RB-02b). 사유는 이력에 남는다. `rollback.sh`는 긴급 복구라 사유가 필요 없다.
+
+## 배포가 하는 일 (prod)
+
+1. `preflight.sh`: env 파일(권한, `APP_ENV`, 자리표시자, 필수 키), FE의 `BE_INTERNAL_URL`이 이 환경의 엣지 내부 리스너(prod `caddy:8081`, dev `caddy:8082`)인지, compose 설정, 공유 망과 엣지, 디스크와 메모리 여유, 이미지와 커밋, **다운그레이드 가드**(현재 배포된 커밋의 후손이거나 같은 커밋만 허용), 마이그레이션이 있으면 사전 덤프 스크립트
+2. 잠금(`/srv/fit/state/deploy-<환경>.lock`). 다른 배포가 돌고 있으면 거부한다
+3. 마이그레이션 파일이 바뀌었으면 사전 덤프(prod만) 뒤 일회성 컨테이너로 마이그레이션. 실패하면 트래픽을 건드리기 전에 멈춘다
+4. BE, FE 순서로 서비스마다: 반대 색을 띄운다(FE는 먼저 정적 자산을 풀에 쌓는다) → 준비 확인 → 그 색을 직접 확인 → 엣지 전환 → 엣지를 거친 확인
+5. 30초 드레인 뒤 이전 색을 멈춘다(컨테이너와 이미지는 남겨서 롤백이 빠르다)
+6. 상태 파일, 이력, Mattermost 알림
+
+## 실패하면
+
+| 단계 | 일어나는 일 |
+|---|---|
+| 사전 점검, 잠금, 사전 덤프, 마이그레이션 | 서비스를 건드리지 않고 멈춘다 |
+| 새 색이 안 뜨거나 준비·직접 확인에 실패 | 새 색을 지우고 트래픽은 옮기지 않는다 |
+| 엣지 전환 뒤 확인에 실패 | 엣지를 이전 색으로 되돌리고 새 색을 지운다 |
+| BE는 성공했는데 FE가 실패 | FE만 이전 색이다. BE는 새 버전으로 남는다(새 BE는 직전 FE와 호환돼야 한다. BE 계약 #16). 문제를 고쳐 같은 SHA로 다시 배포하거나 `rollback.sh prod be`로 BE를 되돌린다 |
+
+dev는 같은 흐름이지만 색이 없어서 교체하고, 확인에 실패하면 직전 이미지로 다시 교체한다. DB 마이그레이션은 어느 경우에도 되돌리지 않는다(forward-fix 원칙).
+
+## 서버가 갖출 것
+
+- 이미지 `be:<sha>`, `fe:<sha>`(CI의 `build:images`가 만든다. 환경변수 `FIT_BE_IMAGE`, `FIT_FE_IMAGE`로 저장소 이름을 바꿀 수 있다)
+- `/etc/fit/<env>.env`, `fe-<env>.env`, `migrate-<env>.env`(키는 [env.md](../../docs/infra/contracts/env.md)의 `app`, `fe`, `migrate` 그룹). 다른 사용자가 읽을 수 없어야 한다
+- 호스트 설정(`infra/host/`)과 엣지(`infra/edge/`)가 먼저 떠 있어야 한다. 엣지의 첫 상태 파일은 `infra/edge/state-sample/`을 `/srv/fit/state/`에 복사한 것이다(prod는 blue를 가리킨다)
+- prod 마이그레이션이 있는 배포는 사전 덤프 스크립트가 있어야 한다. 기본은 `infra/backup/pg-backup.sh`이고 `predeploy <환경> <sha>`로 부른다(계획 1D가 만든다). `FIT_PREDEPLOY_DUMP`로 바꿀 수 있다
+- 웹훅 알림은 `FIT_NOTIFY_WEBHOOK` 또는 `/etc/fit/obs.env`의 `MATTERMOST_WEBHOOK_URL`을 읽는다(없으면 화면에만 출력)
+
+## 이미지 계약
+
+- **BE:** `SPRING_PROFILES_ACTIVE=migrate`로 실행하면 서버 없이 마이그레이션 뒤 종료한다. 공개 8080(`/healthz`, `/api/v1/version`), 관리 8081(`/actuator/health/readiness`)
+- **FE:** `WORKDIR /app`, `server.js`와 `.next/static`이 `/app` 아래에 있다(배포가 `docker cp`로 정적 자산을 꺼낸다). 컨테이너 안에 `node`가 있어야 한다(healthcheck). 루트는 읽기 전용이고 `/app/.next/cache`만 tmpfs다
+- 서비스 점검은 호스트에 게시하지 않는 포트를 위해 같은 망의 엣지(caddy) 컨테이너 안에서 `wget`으로 한다
+
+## 파일
+
+| 경로 | 내용 |
+|---|---|
+| `lib.sh` | 공통 함수(상태 파일, 이름 규칙, 점검, 엣지 전환, 잠금). 직접 실행하지 않는다 |
+| `deploy.sh`, `rollback.sh`, `preflight.sh`, `smoke.sh`, `notify.sh`, `fit-up.sh` | 위 표의 명령 |
+| `../app/compose.app.yml` | BE·FE 컨테이너 정의(`fit-app-prod`, `fit-app-dev`, 프로필 `prod`·`dev`) |
+| `test/` | 노트북 시험(목 BE·FE 이미지, 시험용 엣지) |
+
+상태 파일은 `/srv/fit/state/deploy-<환경>.env`다(compose의 `--env-file`이기도 하다). 서비스별 활성 색(`BE_ACTIVE`, `FE_ACTIVE`), 색별 이미지 태그(`BE_BLUE_TAG` 등), `DEPLOYED_SHA`, `PREVIOUS_SHA`가 있다.
+
+## 환경변수
+
+| 이름 | 기본 | 뜻 |
+|---|---|---|
+| `FIT_DRAIN_SECONDS` | 30 | 전환 뒤 이전 색을 멈추기까지 기다리는 시간 |
+| `FIT_BE_READY_TIMEOUT`, `FIT_FE_READY_TIMEOUT` | 150, 60 | 준비 확인 제한 시간(초) |
+| `FIT_POOL_KEEP_DAYS` | 14 | 정적 자산 풀에서 이 기간 동안 어느 릴리스에도 없던 파일을 지운다 |
+| `FIT_MIN_DISK_GB`, `FIT_MIN_MEM_MB` | 5, prod 2560 / dev 512 | 사전 점검의 여유 기준 |
+| `FIT_FORCE_MIGRATE=1` | | 마이그레이션 파일이 안 바뀌어도 마이그레이션을 실행한다 |
+| `FIT_SMOKE_SEARCH_PATH` | 없음 | 검색 1건을 호출해 `X-Fallback` 헤더가 없는지 본다(예: `/api/v1/search?q=김치`). 없으면 건너뛴다 |
+| `FIT_ENV_DIR`, `FIT_STATE_DIR`, `FIT_WEB_DIR`, `FIT_REPO_DIR`, `FIT_EDGE_PROJECT`, `FIT_NET_PROD`·`FIT_NET_DEV`·`FIT_NET_DATA` | `/etc/fit`, `/srv/fit/state`, `/srv/fit/web`, 저장소 루트, `fit-edge`, 망 이름 | 시험 환경이 바꾼다 |
+
+## 노트북에서 시험하기
+
+```bash
+bash infra/deploy/test/test-deploy.sh up     # 가짜 서버(공유 망, 엣지, 목 이미지, 시험용 저장소)
+bash infra/deploy/test/test-deploy.sh run    # 배포·롤백·실패 복구·fit-up 시나리오
+bash infra/deploy/test/test-deploy.sh down   # 시험이 만든 것을 모두 지운다
+```
+
+시험은 실제 Caddy와 목 BE·FE 컨테이너로 돌고 `https://localhost:18443`(prod), `https://dev.localhost:18443`(dev)에 뜬다. 목 이미지의 모드(준비 안 됨, 엣지 경유 시 실패, 마이그레이션 실패, 폴백 표시, 화면 오류)로 각 실패 경로를 만든다. Windows(Git Bash)의 NTFS에는 권한 비트가 없어서 env 파일 권한 점검은 `FIT_SKIP_PERM=1`로 건너뛰고, 그 함수는 Linux 컨테이너에서 따로 시험한다.
+
+## 서버에서만 확인되는 것
+
+실제 BE(Spring)와 FE(Next.js) 이미지의 준비 시간과 메모리, 실제 Postgres와 사전 덤프(계획 1D), 실제 도메인과 인증서를 거친 스모크, 서버의 파일 권한(`root:docker 0640`), 메모리 여유 판정(`MemAvailable`), 재부팅 뒤 `fit-up.sh`의 실제 기동 순서.
