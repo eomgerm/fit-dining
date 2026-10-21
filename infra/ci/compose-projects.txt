@@ -6,3 +6,4 @@ edge infra/edge/compose.edge.yml --env-file infra/edge/edge.env.example
 edge-test infra/edge/compose.edge.yml infra/edge/test/compose.test.yml --env-file infra/edge/edge.env.example
 app infra/app/compose.app.yml
 data infra/data/compose.data.yml --env-file infra/data/data.env.example
+data-test infra/data/compose.data.yml infra/data/test/compose.test.yml --env-file infra/data/data.env.example
