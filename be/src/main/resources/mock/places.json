@@ -1,0 +1,5045 @@
+{
+  "places": [
+    {
+      "card": {
+        "place": {
+          "id": 1,
+          "name": "하노이 쌀국수 역삼점",
+          "categoryGroup": "RESTAURANT",
+          "station": "YEOKSAM",
+          "lat": 37.4984,
+          "lng": 127.0328
+        },
+        "score": 88,
+        "labels": [
+          "대화하기 좋아요",
+          "양이 넉넉해요"
+        ],
+        "caution": "점심시간에는 대기가 있을 수 있어요",
+        "openStatus": "UNKNOWN",
+        "reasons": [
+          {
+            "title": "리뷰에서 \"대화하기 좋아요\"라는 말이 많아요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "대화하기 좋아요"
+              }
+            ],
+            "quote": "대화하기 좋아요. 다음에도 오고 싶어요.",
+            "quoteSource": "앱 리뷰"
+          },
+          {
+            "title": "\"양이 넉넉해요\"라는 평이 있어요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "양이 넉넉해요"
+              },
+              {
+                "source": "PREFERENCE",
+                "label": "가성비"
+              }
+            ]
+          }
+        ],
+        "scoreItems": [
+          {
+            "source": "REQUEST",
+            "label": "대화하기 좋아요",
+            "matched": true,
+            "evidenceCount": 3
+          },
+          {
+            "source": "REQUEST",
+            "label": "양이 넉넉해요",
+            "matched": true,
+            "evidenceCount": 2
+          },
+          {
+            "source": "PREFERENCE",
+            "label": "조용한 곳",
+            "matched": false,
+            "evidenceCount": 0
+          },
+          {
+            "source": "PREFERENCE",
+            "label": "가성비",
+            "matched": true,
+            "evidenceCount": 4
+          }
+        ]
+      },
+      "detail": {
+        "place": {
+          "id": 1,
+          "name": "하노이 쌀국수 역삼점",
+          "categoryGroup": "RESTAURANT",
+          "station": "YEOKSAM",
+          "lat": 37.4984,
+          "lng": 127.0328
+        },
+        "address": "서울 강남구 테헤란로 107, 2층",
+        "tags": [
+          "점심 식사",
+          "가성비"
+        ],
+        "photos": [],
+        "phone": "02-5501-1037",
+        "openStatus": "UNKNOWN",
+        "hours": [
+          {
+            "dayOfWeek": "MON",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "TUE",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "WED",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "THU",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "FRI",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SAT",
+            "open": "11:00",
+            "close": "21:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "20:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SUN",
+            "lastOrders": [],
+            "closed": true
+          }
+        ],
+        "closedDayNote": "매주 일요일 휴무",
+        "menus": [
+          {
+            "category": "쌀국수",
+            "name": "양지 쌀국수",
+            "price": 11000
+          },
+          {
+            "category": "쌀국수",
+            "name": "분짜",
+            "price": 13000
+          },
+          {
+            "category": "사이드",
+            "name": "짜조",
+            "price": 7000
+          }
+        ],
+        "facilities": [
+          "WIFI",
+          "GROUP"
+        ]
+      }
+    },
+    {
+      "card": {
+        "place": {
+          "id": 2,
+          "name": "포레스트 키친",
+          "categoryGroup": "RESTAURANT",
+          "station": "YEOKSAM",
+          "lat": 37.4995,
+          "lng": 127.034
+        },
+        "score": 91,
+        "labels": [
+          "혼밥하기 좋아요",
+          "음식이 빨리 나와요"
+        ],
+        "caution": "주차 공간이 좁아요",
+        "openStatus": "UNKNOWN",
+        "reasons": [
+          {
+            "title": "리뷰에서 \"혼밥하기 좋아요\"라는 말이 많아요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "혼밥하기 좋아요"
+              }
+            ],
+            "quote": "혼밥하기 좋아요. 다음에도 오고 싶어요.",
+            "quoteSource": "앱 리뷰"
+          }
+        ],
+        "scoreItems": [
+          {
+            "source": "REQUEST",
+            "label": "혼밥하기 좋아요",
+            "matched": true,
+            "evidenceCount": 4
+          },
+          {
+            "source": "REQUEST",
+            "label": "음식이 빨리 나와요",
+            "matched": false,
+            "evidenceCount": 0
+          }
+        ]
+      },
+      "detail": {
+        "place": {
+          "id": 2,
+          "name": "포레스트 키친",
+          "categoryGroup": "RESTAURANT",
+          "station": "YEOKSAM",
+          "lat": 37.4995,
+          "lng": 127.034
+        },
+        "address": "서울 강남구 테헤란로 114, 3층",
+        "tags": [
+          "점심 식사",
+          "가성비",
+          "단체석"
+        ],
+        "photos": [],
+        "website": "https://example.com/places/2",
+        "openStatus": "UNKNOWN",
+        "hours": [
+          {
+            "dayOfWeek": "MON",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "TUE",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "WED",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "THU",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "FRI",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SAT",
+            "open": "11:00",
+            "close": "21:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "20:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SUN",
+            "open": "11:00",
+            "close": "21:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "20:00"
+            ],
+            "closed": false
+          }
+        ],
+        "menus": [
+          {
+            "category": "브런치",
+            "name": "에그 베네딕트",
+            "price": 16000
+          },
+          {
+            "category": "식사",
+            "name": "양지 쌀국수",
+            "price": 12000
+          },
+          {
+            "category": "음료",
+            "name": "레몬 에이드",
+            "price": 6000
+          }
+        ],
+        "facilities": [
+          "PARKING",
+          "WIFI",
+          "RESERVATION"
+        ]
+      }
+    },
+    {
+      "card": {
+        "place": {
+          "id": 3,
+          "name": "카페 온유",
+          "categoryGroup": "CAFE",
+          "station": "GANGNAM",
+          "lat": 37.4979,
+          "lng": 127.0264
+        },
+        "score": 94,
+        "labels": [
+          "디저트가 맛있어요",
+          "채광이 좋아요"
+        ],
+        "caution": "주말에는 시끄러울 수 있어요",
+        "openStatus": "UNKNOWN",
+        "reasons": [
+          {
+            "title": "리뷰에서 \"디저트가 맛있어요\"라는 말이 많아요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "디저트가 맛있어요"
+              }
+            ],
+            "quote": "디저트가 맛있어요. 다음에도 오고 싶어요.",
+            "quoteSource": "앱 리뷰"
+          },
+          {
+            "title": "\"채광이 좋아요\"라는 평이 있어요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "채광이 좋아요"
+              },
+              {
+                "source": "PREFERENCE",
+                "label": "가성비"
+              }
+            ]
+          }
+        ],
+        "scoreItems": [
+          {
+            "source": "REQUEST",
+            "label": "디저트가 맛있어요",
+            "matched": true,
+            "evidenceCount": 5
+          },
+          {
+            "source": "REQUEST",
+            "label": "채광이 좋아요",
+            "matched": true,
+            "evidenceCount": 4
+          },
+          {
+            "source": "PREFERENCE",
+            "label": "주차 가능",
+            "matched": false,
+            "evidenceCount": 0
+          }
+        ]
+      },
+      "detail": {
+        "place": {
+          "id": 3,
+          "name": "카페 온유",
+          "categoryGroup": "CAFE",
+          "station": "GANGNAM",
+          "lat": 37.4979,
+          "lng": 127.0264
+        },
+        "address": "서울 강남구 강남대로 121, 4층",
+        "tags": [
+          "조용한",
+          "콘센트 많음",
+          "디저트",
+          "넓은 좌석"
+        ],
+        "photos": [],
+        "phone": "02-5503-1111",
+        "openStatus": "UNKNOWN",
+        "hours": [
+          {
+            "dayOfWeek": "MON",
+            "open": "10:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "TUE",
+            "open": "10:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "WED",
+            "open": "10:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "THU",
+            "open": "10:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "FRI",
+            "open": "10:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SAT",
+            "open": "10:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SUN",
+            "open": "10:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          }
+        ],
+        "menus": [
+          {
+            "category": "커피",
+            "name": "아메리카노",
+            "price": 4500
+          },
+          {
+            "category": "커피",
+            "name": "카페 라테",
+            "price": 5000
+          },
+          {
+            "category": "디저트",
+            "name": "바스크 치즈케이크",
+            "price": 7000
+          }
+        ],
+        "facilities": [
+          "PARKING",
+          "GROUP",
+          "RESERVATION"
+        ]
+      }
+    },
+    {
+      "card": {
+        "place": {
+          "id": 4,
+          "name": "브루잉 랩",
+          "categoryGroup": "CAFE",
+          "station": "YEOKSAM",
+          "lat": 37.5017,
+          "lng": 127.0364
+        },
+        "score": 86,
+        "labels": [
+          "조용해요",
+          "오래 머물기 좋아요"
+        ],
+        "openStatus": "UNKNOWN",
+        "reasons": [
+          {
+            "title": "리뷰에서 \"조용해요\"라는 말이 많아요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "조용해요"
+              }
+            ],
+            "quote": "조용해요. 다음에도 오고 싶어요.",
+            "quoteSource": "앱 리뷰"
+          }
+        ],
+        "scoreItems": [
+          {
+            "source": "REQUEST",
+            "label": "조용해요",
+            "matched": true,
+            "evidenceCount": 6
+          },
+          {
+            "source": "REQUEST",
+            "label": "오래 머물기 좋아요",
+            "matched": false,
+            "evidenceCount": 0
+          },
+          {
+            "source": "PREFERENCE",
+            "label": "조용한 곳",
+            "matched": false,
+            "evidenceCount": 0
+          }
+        ]
+      },
+      "detail": {
+        "place": {
+          "id": 4,
+          "name": "브루잉 랩",
+          "categoryGroup": "CAFE",
+          "station": "YEOKSAM",
+          "lat": 37.5017,
+          "lng": 127.0364
+        },
+        "address": "서울 강남구 테헤란로 128, 5층",
+        "tags": [
+          "조용한",
+          "콘센트 많음"
+        ],
+        "photos": [],
+        "phone": "02-5504-1148",
+        "openStatus": "UNKNOWN",
+        "hours": [
+          {
+            "dayOfWeek": "MON",
+            "open": "08:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "TUE",
+            "open": "08:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "WED",
+            "open": "08:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "THU",
+            "open": "08:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "FRI",
+            "open": "08:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SAT",
+            "open": "08:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SUN",
+            "open": "08:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          }
+        ],
+        "menus": [
+          {
+            "category": "커피",
+            "name": "핸드드립",
+            "price": 6500
+          },
+          {
+            "category": "커피",
+            "name": "콜드브루",
+            "price": 5500
+          },
+          {
+            "category": "디저트",
+            "name": "휘낭시에",
+            "price": 3000
+          }
+        ],
+        "facilities": [
+          "WIFI",
+          "GROUP"
+        ]
+      }
+    },
+    {
+      "card": {
+        "place": {
+          "id": 5,
+          "name": "선릉 한우집",
+          "categoryGroup": "RESTAURANT",
+          "station": "SEOLLEUNG",
+          "lat": 37.5067,
+          "lng": 127.0502
+        },
+        "score": 79,
+        "labels": [
+          "혼밥하기 좋아요",
+          "음식이 빨리 나와요"
+        ],
+        "caution": "점심시간에는 대기가 있을 수 있어요",
+        "openStatus": "UNKNOWN",
+        "reasons": [
+          {
+            "title": "리뷰에서 \"혼밥하기 좋아요\"라는 말이 많아요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "혼밥하기 좋아요"
+              }
+            ],
+            "quote": "혼밥하기 좋아요. 다음에도 오고 싶어요.",
+            "quoteSource": "앱 리뷰"
+          },
+          {
+            "title": "\"음식이 빨리 나와요\"라는 평이 있어요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "음식이 빨리 나와요"
+              },
+              {
+                "source": "PREFERENCE",
+                "label": "가성비"
+              }
+            ]
+          }
+        ],
+        "scoreItems": [
+          {
+            "source": "REQUEST",
+            "label": "혼밥하기 좋아요",
+            "matched": true,
+            "evidenceCount": 7
+          },
+          {
+            "source": "REQUEST",
+            "label": "음식이 빨리 나와요",
+            "matched": true,
+            "evidenceCount": 2
+          },
+          {
+            "source": "PREFERENCE",
+            "label": "주차 가능",
+            "matched": false,
+            "evidenceCount": 0
+          }
+        ]
+      },
+      "detail": {
+        "place": {
+          "id": 5,
+          "name": "선릉 한우집",
+          "categoryGroup": "RESTAURANT",
+          "station": "SEOLLEUNG",
+          "lat": 37.5067,
+          "lng": 127.0502
+        },
+        "address": "서울 강남구 선릉로 135, 1층",
+        "tags": [
+          "점심 식사",
+          "가성비",
+          "단체석"
+        ],
+        "photos": [],
+        "openStatus": "UNKNOWN",
+        "hours": [
+          {
+            "dayOfWeek": "MON",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "TUE",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "WED",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "THU",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "FRI",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SAT",
+            "open": "11:00",
+            "close": "21:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "20:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SUN",
+            "lastOrders": [],
+            "closed": true
+          }
+        ],
+        "closedDayNote": "매주 일요일 휴무",
+        "menus": [
+          {
+            "category": "구이",
+            "name": "한우 등심",
+            "price": 52000
+          },
+          {
+            "category": "식사",
+            "name": "된장찌개",
+            "price": 8000
+          },
+          {
+            "category": "식사",
+            "name": "냉면",
+            "price": 10000
+          }
+        ],
+        "facilities": [
+          "PARKING",
+          "WIFI",
+          "RESERVATION"
+        ]
+      }
+    },
+    {
+      "card": {
+        "place": {
+          "id": 6,
+          "name": "루프탑 23",
+          "categoryGroup": "BAR",
+          "station": "GANGNAM",
+          "lat": 37.4957,
+          "lng": 127.03
+        },
+        "score": 72,
+        "labels": [
+          "음악이 좋아요",
+          "늦게까지 해요"
+        ],
+        "caution": "주차 공간이 좁아요",
+        "openStatus": "UNKNOWN",
+        "reasons": [
+          {
+            "title": "리뷰에서 \"음악이 좋아요\"라는 말이 많아요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "음악이 좋아요"
+              }
+            ],
+            "quote": "음악이 좋아요. 다음에도 오고 싶어요.",
+            "quoteSource": "앱 리뷰"
+          }
+        ],
+        "scoreItems": [
+          {
+            "source": "REQUEST",
+            "label": "음악이 좋아요",
+            "matched": true,
+            "evidenceCount": 8
+          },
+          {
+            "source": "REQUEST",
+            "label": "늦게까지 해요",
+            "matched": false,
+            "evidenceCount": 0
+          },
+          {
+            "source": "PREFERENCE",
+            "label": "가성비",
+            "matched": true,
+            "evidenceCount": 4
+          }
+        ]
+      },
+      "detail": {
+        "place": {
+          "id": 6,
+          "name": "루프탑 23",
+          "categoryGroup": "BAR",
+          "station": "GANGNAM",
+          "lat": 37.4957,
+          "lng": 127.03
+        },
+        "address": "서울 강남구 강남대로 142, 2층",
+        "tags": [
+          "분위기",
+          "데이트",
+          "칵테일",
+          "늦게까지"
+        ],
+        "photos": [],
+        "phone": "02-5506-1222",
+        "website": "https://example.com/places/6",
+        "openStatus": "UNKNOWN",
+        "hours": [
+          {
+            "dayOfWeek": "MON",
+            "open": "18:00",
+            "close": "23:00",
+            "lastOrders": [
+              "22:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "TUE",
+            "open": "18:00",
+            "close": "23:00",
+            "lastOrders": [
+              "22:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "WED",
+            "open": "18:00",
+            "close": "23:00",
+            "lastOrders": [
+              "22:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "THU",
+            "open": "18:00",
+            "close": "23:00",
+            "lastOrders": [
+              "22:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "FRI",
+            "open": "18:00",
+            "close": "23:50",
+            "lastOrders": [
+              "23:20"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SAT",
+            "open": "18:00",
+            "close": "23:50",
+            "lastOrders": [
+              "23:20"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SUN",
+            "open": "18:00",
+            "close": "23:00",
+            "lastOrders": [
+              "22:30"
+            ],
+            "closed": false
+          }
+        ],
+        "menus": [
+          {
+            "category": "칵테일",
+            "name": "하이볼",
+            "price": 12000
+          },
+          {
+            "category": "칵테일",
+            "name": "모히토",
+            "price": 13000
+          },
+          {
+            "category": "안주",
+            "name": "감자튀김",
+            "price": 9000
+          }
+        ],
+        "facilities": [
+          "PARKING",
+          "GROUP",
+          "RESERVATION"
+        ]
+      }
+    },
+    {
+      "card": {
+        "place": {
+          "id": 7,
+          "name": "조용한 서재 카페",
+          "categoryGroup": "CAFE",
+          "station": "SEOLLEUNG",
+          "lat": 37.5034,
+          "lng": 127.0526
+        },
+        "score": 97,
+        "labels": [
+          "조용해요",
+          "오래 머물기 좋아요"
+        ],
+        "caution": "주말에는 시끄러울 수 있어요",
+        "openStatus": "UNKNOWN",
+        "reasons": [
+          {
+            "title": "리뷰에서 \"조용해요\"라는 말이 많아요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "조용해요"
+              }
+            ],
+            "quote": "조용해요. 다음에도 오고 싶어요.",
+            "quoteSource": "앱 리뷰"
+          },
+          {
+            "title": "\"오래 머물기 좋아요\"라는 평이 있어요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "오래 머물기 좋아요"
+              },
+              {
+                "source": "PREFERENCE",
+                "label": "가성비"
+              }
+            ]
+          }
+        ],
+        "scoreItems": [
+          {
+            "source": "REQUEST",
+            "label": "조용해요",
+            "matched": true,
+            "evidenceCount": 9
+          },
+          {
+            "source": "REQUEST",
+            "label": "오래 머물기 좋아요",
+            "matched": true,
+            "evidenceCount": 4
+          },
+          {
+            "source": "PREFERENCE",
+            "label": "조용한 곳",
+            "matched": false,
+            "evidenceCount": 0
+          }
+        ]
+      },
+      "detail": {
+        "place": {
+          "id": 7,
+          "name": "조용한 서재 카페",
+          "categoryGroup": "CAFE",
+          "station": "SEOLLEUNG",
+          "lat": 37.5034,
+          "lng": 127.0526
+        },
+        "address": "서울 강남구 선릉로 149, 3층",
+        "tags": [
+          "조용한",
+          "콘센트 많음"
+        ],
+        "photos": [],
+        "phone": "02-5507-1259",
+        "openStatus": "UNKNOWN",
+        "hours": [
+          {
+            "dayOfWeek": "MON",
+            "open": "10:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "TUE",
+            "open": "10:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "WED",
+            "open": "10:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "THU",
+            "open": "10:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "FRI",
+            "open": "10:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SAT",
+            "open": "10:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SUN",
+            "open": "10:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          }
+        ],
+        "menus": [
+          {
+            "category": "커피",
+            "name": "아메리카노",
+            "price": 4800
+          },
+          {
+            "category": "차",
+            "name": "얼그레이",
+            "price": 5500
+          },
+          {
+            "category": "디저트",
+            "name": "스콘",
+            "price": 4000
+          }
+        ],
+        "facilities": [
+          "WIFI",
+          "GROUP"
+        ]
+      }
+    },
+    {
+      "card": {
+        "place": {
+          "id": 8,
+          "name": "역삼 돈카츠",
+          "categoryGroup": "RESTAURANT",
+          "station": "YEOKSAM",
+          "lat": 37.5006,
+          "lng": 127.0328
+        },
+        "score": 83,
+        "labels": [
+          "혼밥하기 좋아요",
+          "음식이 빨리 나와요"
+        ],
+        "openStatus": "UNKNOWN",
+        "reasons": [
+          {
+            "title": "리뷰에서 \"혼밥하기 좋아요\"라는 말이 많아요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "혼밥하기 좋아요"
+              }
+            ],
+            "quote": "혼밥하기 좋아요. 다음에도 오고 싶어요.",
+            "quoteSource": "앱 리뷰"
+          }
+        ],
+        "scoreItems": [
+          {
+            "source": "REQUEST",
+            "label": "혼밥하기 좋아요",
+            "matched": true,
+            "evidenceCount": 10
+          },
+          {
+            "source": "REQUEST",
+            "label": "음식이 빨리 나와요",
+            "matched": false,
+            "evidenceCount": 0
+          }
+        ]
+      },
+      "detail": {
+        "place": {
+          "id": 8,
+          "name": "역삼 돈카츠",
+          "categoryGroup": "RESTAURANT",
+          "station": "YEOKSAM",
+          "lat": 37.5006,
+          "lng": 127.0328
+        },
+        "address": "서울 강남구 테헤란로 156, 4층",
+        "tags": [
+          "점심 식사",
+          "가성비",
+          "단체석"
+        ],
+        "photos": [],
+        "openStatus": "UNKNOWN",
+        "hours": [
+          {
+            "dayOfWeek": "MON",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "TUE",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "WED",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "THU",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "FRI",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SAT",
+            "open": "11:00",
+            "close": "21:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "20:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SUN",
+            "open": "11:00",
+            "close": "21:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "20:00"
+            ],
+            "closed": false
+          }
+        ],
+        "menus": [
+          {
+            "category": "돈카츠",
+            "name": "등심 돈카츠",
+            "price": 12000
+          },
+          {
+            "category": "돈카츠",
+            "name": "안심 돈카츠",
+            "price": 13500
+          },
+          {
+            "category": "사이드",
+            "name": "카레 우동",
+            "price": 8000
+          }
+        ],
+        "facilities": [
+          "PARKING",
+          "WIFI",
+          "RESERVATION"
+        ]
+      }
+    },
+    {
+      "card": {
+        "place": {
+          "id": 9,
+          "name": "강남 파스타 공방",
+          "categoryGroup": "RESTAURANT",
+          "station": "GANGNAM",
+          "lat": 37.499,
+          "lng": 127.0252
+        },
+        "score": 81,
+        "labels": [
+          "단체로 가기 좋아요",
+          "재료가 신선해요"
+        ],
+        "caution": "점심시간에는 대기가 있을 수 있어요",
+        "openStatus": "UNKNOWN",
+        "reasons": [
+          {
+            "title": "리뷰에서 \"단체로 가기 좋아요\"라는 말이 많아요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "단체로 가기 좋아요"
+              }
+            ],
+            "quote": "단체로 가기 좋아요. 다음에도 오고 싶어요.",
+            "quoteSource": "앱 리뷰"
+          },
+          {
+            "title": "\"재료가 신선해요\"라는 평이 있어요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "재료가 신선해요"
+              },
+              {
+                "source": "PREFERENCE",
+                "label": "가성비"
+              }
+            ]
+          }
+        ],
+        "scoreItems": [
+          {
+            "source": "REQUEST",
+            "label": "단체로 가기 좋아요",
+            "matched": true,
+            "evidenceCount": 11
+          },
+          {
+            "source": "REQUEST",
+            "label": "재료가 신선해요",
+            "matched": true,
+            "evidenceCount": 2
+          },
+          {
+            "source": "PREFERENCE",
+            "label": "주차 가능",
+            "matched": false,
+            "evidenceCount": 0
+          }
+        ]
+      },
+      "detail": {
+        "place": {
+          "id": 9,
+          "name": "강남 파스타 공방",
+          "categoryGroup": "RESTAURANT",
+          "station": "GANGNAM",
+          "lat": 37.499,
+          "lng": 127.0252
+        },
+        "address": "서울 강남구 강남대로 163, 5층",
+        "tags": [
+          "점심 식사",
+          "가성비",
+          "단체석",
+          "깔끔해요"
+        ],
+        "photos": [],
+        "phone": "02-5509-1333",
+        "openStatus": "UNKNOWN",
+        "hours": [
+          {
+            "dayOfWeek": "MON",
+            "open": "11:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "TUE",
+            "open": "11:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "WED",
+            "open": "11:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "THU",
+            "open": "11:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "FRI",
+            "open": "11:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SAT",
+            "open": "11:00",
+            "close": "21:00",
+            "lastOrders": [
+              "20:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SUN",
+            "lastOrders": [],
+            "closed": true
+          }
+        ],
+        "closedDayNote": "매주 일요일 휴무",
+        "menus": [
+          {
+            "category": "파스타",
+            "name": "봉골레",
+            "price": 17000
+          },
+          {
+            "category": "파스타",
+            "name": "까르보나라",
+            "price": 16000
+          },
+          {
+            "category": "샐러드",
+            "name": "리코타 샐러드",
+            "price": 12000
+          }
+        ],
+        "facilities": [
+          "PARKING",
+          "GROUP",
+          "RESERVATION"
+        ]
+      }
+    },
+    {
+      "card": {
+        "place": {
+          "id": 10,
+          "name": "오크 앤 바",
+          "categoryGroup": "BAR",
+          "station": "SEOLLEUNG",
+          "lat": 37.5067,
+          "lng": 127.0478
+        },
+        "score": 76,
+        "labels": [
+          "분위기가 좋아요",
+          "대화하기 좋아요"
+        ],
+        "caution": "주차 공간이 좁아요",
+        "openStatus": "UNKNOWN",
+        "reasons": [
+          {
+            "title": "리뷰에서 \"분위기가 좋아요\"라는 말이 많아요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "분위기가 좋아요"
+              }
+            ],
+            "quote": "분위기가 좋아요. 다음에도 오고 싶어요.",
+            "quoteSource": "앱 리뷰"
+          }
+        ],
+        "scoreItems": [
+          {
+            "source": "REQUEST",
+            "label": "분위기가 좋아요",
+            "matched": true,
+            "evidenceCount": 3
+          },
+          {
+            "source": "REQUEST",
+            "label": "대화하기 좋아요",
+            "matched": false,
+            "evidenceCount": 0
+          },
+          {
+            "source": "PREFERENCE",
+            "label": "조용한 곳",
+            "matched": false,
+            "evidenceCount": 0
+          }
+        ]
+      },
+      "detail": {
+        "place": {
+          "id": 10,
+          "name": "오크 앤 바",
+          "categoryGroup": "BAR",
+          "station": "SEOLLEUNG",
+          "lat": 37.5067,
+          "lng": 127.0478
+        },
+        "address": "서울 강남구 선릉로 170, 1층",
+        "tags": [
+          "분위기",
+          "데이트"
+        ],
+        "photos": [],
+        "phone": "02-5510-1370",
+        "website": "https://example.com/places/10",
+        "openStatus": "UNKNOWN",
+        "hours": [
+          {
+            "dayOfWeek": "MON",
+            "open": "18:00",
+            "close": "23:00",
+            "lastOrders": [
+              "22:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "TUE",
+            "open": "18:00",
+            "close": "23:00",
+            "lastOrders": [
+              "22:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "WED",
+            "open": "18:00",
+            "close": "23:00",
+            "lastOrders": [
+              "22:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "THU",
+            "open": "18:00",
+            "close": "23:00",
+            "lastOrders": [
+              "22:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "FRI",
+            "open": "18:00",
+            "close": "23:50",
+            "lastOrders": [
+              "23:20"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SAT",
+            "open": "18:00",
+            "close": "23:50",
+            "lastOrders": [
+              "23:20"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SUN",
+            "open": "18:00",
+            "close": "23:00",
+            "lastOrders": [
+              "22:30"
+            ],
+            "closed": false
+          }
+        ],
+        "menus": [
+          {
+            "category": "위스키",
+            "name": "하이볼",
+            "price": 11000
+          },
+          {
+            "category": "와인",
+            "name": "하우스 와인",
+            "price": 9000
+          },
+          {
+            "category": "안주",
+            "name": "치즈 플래터",
+            "price": 18000
+          }
+        ],
+        "facilities": [
+          "WIFI",
+          "GROUP"
+        ]
+      }
+    },
+    {
+      "card": {
+        "place": {
+          "id": 11,
+          "name": "모닝 브레드",
+          "categoryGroup": "CAFE",
+          "station": "GANGNAM",
+          "lat": 37.4957,
+          "lng": 127.0276
+        },
+        "score": 69,
+        "labels": [
+          "커피가 맛있어요",
+          "자리가 넓어요"
+        ],
+        "caution": "주말에는 시끄러울 수 있어요",
+        "openStatus": "UNKNOWN",
+        "reasons": [
+          {
+            "title": "리뷰에서 \"커피가 맛있어요\"라는 말이 많아요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "커피가 맛있어요"
+              }
+            ],
+            "quote": "커피가 맛있어요. 다음에도 오고 싶어요.",
+            "quoteSource": "앱 리뷰"
+          },
+          {
+            "title": "\"자리가 넓어요\"라는 평이 있어요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "자리가 넓어요"
+              },
+              {
+                "source": "PREFERENCE",
+                "label": "가성비"
+              }
+            ]
+          }
+        ],
+        "scoreItems": [
+          {
+            "source": "REQUEST",
+            "label": "커피가 맛있어요",
+            "matched": true,
+            "evidenceCount": 4
+          },
+          {
+            "source": "REQUEST",
+            "label": "자리가 넓어요",
+            "matched": true,
+            "evidenceCount": 4
+          },
+          {
+            "source": "PREFERENCE",
+            "label": "가성비",
+            "matched": true,
+            "evidenceCount": 4
+          },
+          {
+            "source": "PREFERENCE",
+            "label": "주차 가능",
+            "matched": false,
+            "evidenceCount": 0
+          }
+        ]
+      },
+      "detail": {
+        "place": {
+          "id": 11,
+          "name": "모닝 브레드",
+          "categoryGroup": "CAFE",
+          "station": "GANGNAM",
+          "lat": 37.4957,
+          "lng": 127.0276
+        },
+        "address": "서울 강남구 강남대로 177, 2층",
+        "tags": [
+          "조용한",
+          "콘센트 많음",
+          "디저트"
+        ],
+        "photos": [],
+        "openStatus": "UNKNOWN",
+        "hours": [
+          {
+            "dayOfWeek": "MON",
+            "open": "10:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "TUE",
+            "open": "10:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "WED",
+            "open": "10:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "THU",
+            "open": "10:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "FRI",
+            "open": "10:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SAT",
+            "open": "10:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SUN",
+            "open": "10:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          }
+        ],
+        "menus": [
+          {
+            "category": "빵",
+            "name": "소금빵",
+            "price": 3500
+          },
+          {
+            "category": "빵",
+            "name": "크루아상",
+            "price": 4000
+          },
+          {
+            "category": "커피",
+            "name": "카페 라테",
+            "price": 5000
+          }
+        ],
+        "facilities": [
+          "PARKING",
+          "WIFI",
+          "RESERVATION"
+        ]
+      }
+    },
+    {
+      "card": {
+        "place": {
+          "id": 12,
+          "name": "테헤란 국밥",
+          "categoryGroup": "RESTAURANT",
+          "station": "YEOKSAM",
+          "lat": 37.4995,
+          "lng": 127.0376
+        },
+        "score": 74,
+        "labels": [
+          "단체로 가기 좋아요",
+          "재료가 신선해요"
+        ],
+        "openStatus": "UNKNOWN",
+        "reasons": [
+          {
+            "title": "리뷰에서 \"단체로 가기 좋아요\"라는 말이 많아요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "단체로 가기 좋아요"
+              }
+            ],
+            "quote": "단체로 가기 좋아요. 다음에도 오고 싶어요.",
+            "quoteSource": "앱 리뷰"
+          }
+        ],
+        "scoreItems": [
+          {
+            "source": "REQUEST",
+            "label": "단체로 가기 좋아요",
+            "matched": true,
+            "evidenceCount": 5
+          },
+          {
+            "source": "REQUEST",
+            "label": "재료가 신선해요",
+            "matched": false,
+            "evidenceCount": 0
+          }
+        ]
+      },
+      "detail": {
+        "place": {
+          "id": 12,
+          "name": "테헤란 국밥",
+          "categoryGroup": "RESTAURANT",
+          "station": "YEOKSAM",
+          "lat": 37.4995,
+          "lng": 127.0376
+        },
+        "address": "서울 강남구 테헤란로 184, 3층",
+        "tags": [
+          "점심 식사",
+          "가성비",
+          "단체석",
+          "깔끔해요"
+        ],
+        "photos": [],
+        "phone": "02-5512-1444",
+        "openStatus": "UNKNOWN",
+        "hours": [
+          {
+            "dayOfWeek": "MON",
+            "open": "11:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "TUE",
+            "open": "11:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "WED",
+            "open": "11:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "THU",
+            "open": "11:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "FRI",
+            "open": "11:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SAT",
+            "open": "11:00",
+            "close": "21:00",
+            "lastOrders": [
+              "20:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SUN",
+            "open": "11:00",
+            "close": "21:00",
+            "lastOrders": [
+              "20:00"
+            ],
+            "closed": false
+          }
+        ],
+        "menus": [
+          {
+            "category": "국밥",
+            "name": "돼지국밥",
+            "price": 9500
+          },
+          {
+            "category": "국밥",
+            "name": "순대국밥",
+            "price": 9500
+          },
+          {
+            "category": "사이드",
+            "name": "수육",
+            "price": 15000
+          }
+        ],
+        "facilities": [
+          "PARKING",
+          "GROUP",
+          "RESERVATION"
+        ]
+      }
+    },
+    {
+      "card": {
+        "place": {
+          "id": 13,
+          "name": "선릉 스시 오마카세",
+          "categoryGroup": "RESTAURANT",
+          "station": "SEOLLEUNG",
+          "lat": 37.5045,
+          "lng": 127.0514
+        },
+        "score": 92,
+        "labels": [
+          "대화하기 좋아요",
+          "양이 넉넉해요"
+        ],
+        "caution": "점심시간에는 대기가 있을 수 있어요",
+        "openStatus": "UNKNOWN",
+        "reasons": [
+          {
+            "title": "리뷰에서 \"대화하기 좋아요\"라는 말이 많아요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "대화하기 좋아요"
+              }
+            ],
+            "quote": "대화하기 좋아요. 다음에도 오고 싶어요.",
+            "quoteSource": "앱 리뷰"
+          },
+          {
+            "title": "\"양이 넉넉해요\"라는 평이 있어요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "양이 넉넉해요"
+              },
+              {
+                "source": "PREFERENCE",
+                "label": "가성비"
+              }
+            ]
+          }
+        ],
+        "scoreItems": [
+          {
+            "source": "REQUEST",
+            "label": "대화하기 좋아요",
+            "matched": true,
+            "evidenceCount": 6
+          },
+          {
+            "source": "REQUEST",
+            "label": "양이 넉넉해요",
+            "matched": true,
+            "evidenceCount": 2
+          },
+          {
+            "source": "PREFERENCE",
+            "label": "조용한 곳",
+            "matched": false,
+            "evidenceCount": 0
+          }
+        ]
+      },
+      "detail": {
+        "place": {
+          "id": 13,
+          "name": "선릉 스시 오마카세",
+          "categoryGroup": "RESTAURANT",
+          "station": "SEOLLEUNG",
+          "lat": 37.5045,
+          "lng": 127.0514
+        },
+        "address": "서울 강남구 선릉로 191, 4층",
+        "tags": [
+          "점심 식사",
+          "가성비"
+        ],
+        "photos": [],
+        "phone": "02-5513-1481",
+        "openStatus": "UNKNOWN",
+        "hours": [
+          {
+            "dayOfWeek": "MON",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "TUE",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "WED",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "THU",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "FRI",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SAT",
+            "open": "11:00",
+            "close": "21:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "20:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SUN",
+            "lastOrders": [],
+            "closed": true
+          }
+        ],
+        "closedDayNote": "매주 일요일 휴무",
+        "menus": [
+          {
+            "category": "코스",
+            "name": "점심 오마카세",
+            "price": 45000
+          },
+          {
+            "category": "코스",
+            "name": "저녁 오마카세",
+            "price": 90000
+          }
+        ],
+        "facilities": [
+          "WIFI",
+          "GROUP"
+        ]
+      }
+    },
+    {
+      "card": {
+        "place": {
+          "id": 14,
+          "name": "카페 그린노트",
+          "categoryGroup": "CAFE",
+          "station": "YEOKSAM",
+          "lat": 37.5017,
+          "lng": 127.04
+        },
+        "score": 88,
+        "labels": [
+          "커피가 맛있어요",
+          "자리가 넓어요"
+        ],
+        "caution": "주차 공간이 좁아요",
+        "openStatus": "UNKNOWN",
+        "reasons": [
+          {
+            "title": "리뷰에서 \"커피가 맛있어요\"라는 말이 많아요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "커피가 맛있어요"
+              }
+            ],
+            "quote": "커피가 맛있어요. 다음에도 오고 싶어요.",
+            "quoteSource": "앱 리뷰"
+          }
+        ],
+        "scoreItems": [
+          {
+            "source": "REQUEST",
+            "label": "커피가 맛있어요",
+            "matched": true,
+            "evidenceCount": 7
+          },
+          {
+            "source": "REQUEST",
+            "label": "자리가 넓어요",
+            "matched": false,
+            "evidenceCount": 0
+          }
+        ]
+      },
+      "detail": {
+        "place": {
+          "id": 14,
+          "name": "카페 그린노트",
+          "categoryGroup": "CAFE",
+          "station": "YEOKSAM",
+          "lat": 37.5017,
+          "lng": 127.04
+        },
+        "address": "서울 강남구 테헤란로 198, 5층",
+        "tags": [
+          "조용한",
+          "콘센트 많음",
+          "디저트"
+        ],
+        "photos": [],
+        "website": "https://example.com/places/14",
+        "openStatus": "UNKNOWN",
+        "hours": [
+          {
+            "dayOfWeek": "MON",
+            "open": "08:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "TUE",
+            "open": "08:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "WED",
+            "open": "08:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "THU",
+            "open": "08:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "FRI",
+            "open": "08:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SAT",
+            "open": "08:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SUN",
+            "open": "08:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          }
+        ],
+        "menus": [
+          {
+            "category": "커피",
+            "name": "아메리카노",
+            "price": 4300
+          },
+          {
+            "category": "음료",
+            "name": "말차 라테",
+            "price": 5800
+          },
+          {
+            "category": "디저트",
+            "name": "당근 케이크",
+            "price": 6500
+          }
+        ],
+        "facilities": [
+          "PARKING",
+          "WIFI",
+          "RESERVATION"
+        ]
+      }
+    },
+    {
+      "card": {
+        "place": {
+          "id": 15,
+          "name": "강남 맥주창고",
+          "categoryGroup": "BAR",
+          "station": "GANGNAM",
+          "lat": 37.5001,
+          "lng": 127.024
+        },
+        "score": 65,
+        "labels": [
+          "음악이 좋아요",
+          "늦게까지 해요"
+        ],
+        "caution": "주말에는 시끄러울 수 있어요",
+        "openStatus": "UNKNOWN",
+        "reasons": [
+          {
+            "title": "리뷰에서 \"음악이 좋아요\"라는 말이 많아요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "음악이 좋아요"
+              }
+            ],
+            "quote": "음악이 좋아요. 다음에도 오고 싶어요.",
+            "quoteSource": "앱 리뷰"
+          },
+          {
+            "title": "\"늦게까지 해요\"라는 평이 있어요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "늦게까지 해요"
+              },
+              {
+                "source": "PREFERENCE",
+                "label": "가성비"
+              }
+            ]
+          }
+        ],
+        "scoreItems": [
+          {
+            "source": "REQUEST",
+            "label": "음악이 좋아요",
+            "matched": true,
+            "evidenceCount": 8
+          },
+          {
+            "source": "REQUEST",
+            "label": "늦게까지 해요",
+            "matched": true,
+            "evidenceCount": 4
+          },
+          {
+            "source": "PREFERENCE",
+            "label": "주차 가능",
+            "matched": false,
+            "evidenceCount": 0
+          }
+        ]
+      },
+      "detail": {
+        "place": {
+          "id": 15,
+          "name": "강남 맥주창고",
+          "categoryGroup": "BAR",
+          "station": "GANGNAM",
+          "lat": 37.5001,
+          "lng": 127.024
+        },
+        "address": "서울 강남구 강남대로 205, 1층",
+        "tags": [
+          "분위기",
+          "데이트",
+          "칵테일",
+          "늦게까지"
+        ],
+        "photos": [],
+        "phone": "02-5515-1555",
+        "openStatus": "UNKNOWN",
+        "hours": [
+          {
+            "dayOfWeek": "MON",
+            "open": "18:00",
+            "close": "23:00",
+            "lastOrders": [
+              "22:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "TUE",
+            "open": "18:00",
+            "close": "23:00",
+            "lastOrders": [
+              "22:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "WED",
+            "open": "18:00",
+            "close": "23:00",
+            "lastOrders": [
+              "22:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "THU",
+            "open": "18:00",
+            "close": "23:00",
+            "lastOrders": [
+              "22:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "FRI",
+            "open": "18:00",
+            "close": "23:50",
+            "lastOrders": [
+              "23:20"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SAT",
+            "open": "18:00",
+            "close": "23:50",
+            "lastOrders": [
+              "23:20"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SUN",
+            "open": "18:00",
+            "close": "23:00",
+            "lastOrders": [
+              "22:30"
+            ],
+            "closed": false
+          }
+        ],
+        "menus": [
+          {
+            "category": "맥주",
+            "name": "생맥주",
+            "price": 6000
+          },
+          {
+            "category": "맥주",
+            "name": "IPA",
+            "price": 8000
+          },
+          {
+            "category": "안주",
+            "name": "치킨",
+            "price": 19000
+          }
+        ],
+        "facilities": [
+          "PARKING",
+          "GROUP",
+          "RESERVATION"
+        ]
+      }
+    },
+    {
+      "card": {
+        "place": {
+          "id": 16,
+          "name": "역삼 반점",
+          "categoryGroup": "RESTAURANT",
+          "station": "YEOKSAM",
+          "lat": 37.4984,
+          "lng": 127.034
+        },
+        "score": 70,
+        "labels": [
+          "대화하기 좋아요",
+          "양이 넉넉해요"
+        ],
+        "openStatus": "UNKNOWN",
+        "reasons": [
+          {
+            "title": "리뷰에서 \"대화하기 좋아요\"라는 말이 많아요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "대화하기 좋아요"
+              }
+            ],
+            "quote": "대화하기 좋아요. 다음에도 오고 싶어요.",
+            "quoteSource": "앱 리뷰"
+          }
+        ],
+        "scoreItems": [
+          {
+            "source": "REQUEST",
+            "label": "대화하기 좋아요",
+            "matched": true,
+            "evidenceCount": 9
+          },
+          {
+            "source": "REQUEST",
+            "label": "양이 넉넉해요",
+            "matched": false,
+            "evidenceCount": 0
+          },
+          {
+            "source": "PREFERENCE",
+            "label": "조용한 곳",
+            "matched": false,
+            "evidenceCount": 0
+          },
+          {
+            "source": "PREFERENCE",
+            "label": "가성비",
+            "matched": true,
+            "evidenceCount": 4
+          }
+        ]
+      },
+      "detail": {
+        "place": {
+          "id": 16,
+          "name": "역삼 반점",
+          "categoryGroup": "RESTAURANT",
+          "station": "YEOKSAM",
+          "lat": 37.4984,
+          "lng": 127.034
+        },
+        "address": "서울 강남구 테헤란로 212, 2층",
+        "tags": [
+          "점심 식사",
+          "가성비"
+        ],
+        "photos": [],
+        "phone": "02-5516-1592",
+        "openStatus": "UNKNOWN",
+        "hours": [
+          {
+            "dayOfWeek": "MON",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "TUE",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "WED",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "THU",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "FRI",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SAT",
+            "open": "11:00",
+            "close": "21:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "20:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SUN",
+            "open": "11:00",
+            "close": "21:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "20:00"
+            ],
+            "closed": false
+          }
+        ],
+        "menus": [
+          {
+            "category": "면",
+            "name": "짜장면",
+            "price": 7000
+          },
+          {
+            "category": "면",
+            "name": "짬뽕",
+            "price": 8500
+          },
+          {
+            "category": "요리",
+            "name": "탕수육",
+            "price": 18000
+          }
+        ],
+        "facilities": [
+          "WIFI",
+          "GROUP"
+        ]
+      }
+    },
+    {
+      "card": {
+        "place": {
+          "id": 17,
+          "name": "라운지 블루",
+          "categoryGroup": "BAR",
+          "station": "YEOKSAM",
+          "lat": 37.4995,
+          "lng": 127.0352
+        },
+        "score": 77,
+        "labels": [
+          "안주가 맛있어요",
+          "혼술하기 좋아요"
+        ],
+        "caution": "점심시간에는 대기가 있을 수 있어요",
+        "openStatus": "UNKNOWN",
+        "reasons": [
+          {
+            "title": "리뷰에서 \"안주가 맛있어요\"라는 말이 많아요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "안주가 맛있어요"
+              }
+            ],
+            "quote": "안주가 맛있어요. 다음에도 오고 싶어요.",
+            "quoteSource": "앱 리뷰"
+          },
+          {
+            "title": "\"혼술하기 좋아요\"라는 평이 있어요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "혼술하기 좋아요"
+              },
+              {
+                "source": "PREFERENCE",
+                "label": "가성비"
+              }
+            ]
+          }
+        ],
+        "scoreItems": [
+          {
+            "source": "REQUEST",
+            "label": "안주가 맛있어요",
+            "matched": true,
+            "evidenceCount": 10
+          },
+          {
+            "source": "REQUEST",
+            "label": "혼술하기 좋아요",
+            "matched": true,
+            "evidenceCount": 2
+          },
+          {
+            "source": "PREFERENCE",
+            "label": "주차 가능",
+            "matched": false,
+            "evidenceCount": 0
+          }
+        ]
+      },
+      "detail": {
+        "place": {
+          "id": 17,
+          "name": "라운지 블루",
+          "categoryGroup": "BAR",
+          "station": "YEOKSAM",
+          "lat": 37.4995,
+          "lng": 127.0352
+        },
+        "address": "서울 강남구 테헤란로 219, 3층",
+        "tags": [
+          "분위기",
+          "데이트",
+          "칵테일"
+        ],
+        "photos": [],
+        "openStatus": "UNKNOWN",
+        "hours": [
+          {
+            "dayOfWeek": "MON",
+            "lastOrders": [],
+            "closed": true
+          },
+          {
+            "dayOfWeek": "TUE",
+            "open": "18:00",
+            "close": "23:00",
+            "lastOrders": [
+              "22:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "WED",
+            "open": "18:00",
+            "close": "23:00",
+            "lastOrders": [
+              "22:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "THU",
+            "open": "18:00",
+            "close": "23:00",
+            "lastOrders": [
+              "22:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "FRI",
+            "open": "18:00",
+            "close": "23:50",
+            "lastOrders": [
+              "23:20"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SAT",
+            "open": "18:00",
+            "close": "23:50",
+            "lastOrders": [
+              "23:20"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SUN",
+            "open": "18:00",
+            "close": "23:00",
+            "lastOrders": [
+              "22:30"
+            ],
+            "closed": false
+          }
+        ],
+        "closedDayNote": "매주 월요일 휴무",
+        "menus": [
+          {
+            "category": "칵테일",
+            "name": "진토닉",
+            "price": 12000
+          },
+          {
+            "category": "칵테일",
+            "name": "올드 패션드",
+            "price": 15000
+          },
+          {
+            "category": "안주",
+            "name": "나초",
+            "price": 11000
+          }
+        ],
+        "facilities": [
+          "PARKING",
+          "WIFI",
+          "RESERVATION"
+        ]
+      }
+    },
+    {
+      "card": {
+        "place": {
+          "id": 18,
+          "name": "선릉 브런치 하우스",
+          "categoryGroup": "RESTAURANT",
+          "station": "SEOLLEUNG",
+          "lat": 37.5045,
+          "lng": 127.049
+        },
+        "score": 85,
+        "labels": [
+          "단체로 가기 좋아요",
+          "재료가 신선해요"
+        ],
+        "caution": "주차 공간이 좁아요",
+        "openStatus": "UNKNOWN",
+        "reasons": [
+          {
+            "title": "리뷰에서 \"단체로 가기 좋아요\"라는 말이 많아요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "단체로 가기 좋아요"
+              }
+            ],
+            "quote": "단체로 가기 좋아요. 다음에도 오고 싶어요.",
+            "quoteSource": "앱 리뷰"
+          }
+        ],
+        "scoreItems": [
+          {
+            "source": "REQUEST",
+            "label": "단체로 가기 좋아요",
+            "matched": true,
+            "evidenceCount": 11
+          },
+          {
+            "source": "REQUEST",
+            "label": "재료가 신선해요",
+            "matched": false,
+            "evidenceCount": 0
+          }
+        ]
+      },
+      "detail": {
+        "place": {
+          "id": 18,
+          "name": "선릉 브런치 하우스",
+          "categoryGroup": "RESTAURANT",
+          "station": "SEOLLEUNG",
+          "lat": 37.5045,
+          "lng": 127.049
+        },
+        "address": "서울 강남구 선릉로 226, 4층",
+        "tags": [
+          "점심 식사",
+          "가성비",
+          "단체석",
+          "깔끔해요"
+        ],
+        "photos": [],
+        "phone": "02-5518-1666",
+        "website": "https://example.com/places/18",
+        "openStatus": "UNKNOWN",
+        "hours": [
+          {
+            "dayOfWeek": "MON",
+            "open": "11:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "TUE",
+            "open": "11:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "WED",
+            "open": "11:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "THU",
+            "open": "11:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "FRI",
+            "open": "11:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SAT",
+            "open": "11:00",
+            "close": "21:00",
+            "lastOrders": [
+              "20:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SUN",
+            "open": "11:00",
+            "close": "21:00",
+            "lastOrders": [
+              "20:00"
+            ],
+            "closed": false
+          }
+        ],
+        "menus": [
+          {
+            "category": "브런치",
+            "name": "프렌치 토스트",
+            "price": 14000
+          },
+          {
+            "category": "브런치",
+            "name": "에그 베네딕트",
+            "price": 15000
+          },
+          {
+            "category": "음료",
+            "name": "오렌지 주스",
+            "price": 6000
+          }
+        ],
+        "facilities": [
+          "PARKING",
+          "GROUP",
+          "RESERVATION"
+        ]
+      }
+    },
+    {
+      "card": {
+        "place": {
+          "id": 19,
+          "name": "카페 소담",
+          "categoryGroup": "CAFE",
+          "station": "SEOLLEUNG",
+          "lat": 37.5056,
+          "lng": 127.0502
+        },
+        "score": 90,
+        "labels": [
+          "조용해요",
+          "오래 머물기 좋아요"
+        ],
+        "caution": "주말에는 시끄러울 수 있어요",
+        "openStatus": "UNKNOWN",
+        "reasons": [
+          {
+            "title": "리뷰에서 \"조용해요\"라는 말이 많아요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "조용해요"
+              }
+            ],
+            "quote": "조용해요. 다음에도 오고 싶어요.",
+            "quoteSource": "앱 리뷰"
+          },
+          {
+            "title": "\"오래 머물기 좋아요\"라는 평이 있어요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "오래 머물기 좋아요"
+              },
+              {
+                "source": "PREFERENCE",
+                "label": "가성비"
+              }
+            ]
+          }
+        ],
+        "scoreItems": [
+          {
+            "source": "REQUEST",
+            "label": "조용해요",
+            "matched": true,
+            "evidenceCount": 3
+          },
+          {
+            "source": "REQUEST",
+            "label": "오래 머물기 좋아요",
+            "matched": true,
+            "evidenceCount": 4
+          },
+          {
+            "source": "PREFERENCE",
+            "label": "조용한 곳",
+            "matched": false,
+            "evidenceCount": 0
+          }
+        ]
+      },
+      "detail": {
+        "place": {
+          "id": 19,
+          "name": "카페 소담",
+          "categoryGroup": "CAFE",
+          "station": "SEOLLEUNG",
+          "lat": 37.5056,
+          "lng": 127.0502
+        },
+        "address": "서울 강남구 선릉로 233, 5층",
+        "tags": [
+          "조용한",
+          "콘센트 많음"
+        ],
+        "photos": [],
+        "phone": "02-5519-1703",
+        "openStatus": "UNKNOWN",
+        "hours": [
+          {
+            "dayOfWeek": "MON",
+            "open": "10:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "TUE",
+            "open": "10:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "WED",
+            "open": "10:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "THU",
+            "open": "10:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "FRI",
+            "open": "10:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SAT",
+            "open": "10:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SUN",
+            "open": "10:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          }
+        ],
+        "menus": [
+          {
+            "category": "커피",
+            "name": "플랫 화이트",
+            "price": 5300
+          },
+          {
+            "category": "차",
+            "name": "유자차",
+            "price": 5500
+          },
+          {
+            "category": "디저트",
+            "name": "약과 쿠키",
+            "price": 3500
+          }
+        ],
+        "facilities": [
+          "WIFI",
+          "GROUP"
+        ]
+      }
+    },
+    {
+      "card": {
+        "place": {
+          "id": 20,
+          "name": "강남 샐러드랩",
+          "categoryGroup": "RESTAURANT",
+          "station": "GANGNAM",
+          "lat": 37.5001,
+          "lng": 127.03
+        },
+        "score": 67,
+        "labels": [
+          "혼밥하기 좋아요",
+          "음식이 빨리 나와요"
+        ],
+        "openStatus": "UNKNOWN",
+        "reasons": [
+          {
+            "title": "리뷰에서 \"혼밥하기 좋아요\"라는 말이 많아요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "혼밥하기 좋아요"
+              }
+            ],
+            "quote": "혼밥하기 좋아요. 다음에도 오고 싶어요.",
+            "quoteSource": "앱 리뷰"
+          }
+        ],
+        "scoreItems": [
+          {
+            "source": "REQUEST",
+            "label": "혼밥하기 좋아요",
+            "matched": true,
+            "evidenceCount": 4
+          },
+          {
+            "source": "REQUEST",
+            "label": "음식이 빨리 나와요",
+            "matched": false,
+            "evidenceCount": 0
+          }
+        ]
+      },
+      "detail": {
+        "place": {
+          "id": 20,
+          "name": "강남 샐러드랩",
+          "categoryGroup": "RESTAURANT",
+          "station": "GANGNAM",
+          "lat": 37.5001,
+          "lng": 127.03
+        },
+        "address": "서울 강남구 강남대로 240, 1층",
+        "tags": [
+          "점심 식사",
+          "가성비",
+          "단체석"
+        ],
+        "photos": [],
+        "openStatus": "UNKNOWN",
+        "hours": [
+          {
+            "dayOfWeek": "MON",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "TUE",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "WED",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "THU",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "FRI",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SAT",
+            "open": "11:00",
+            "close": "21:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "20:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SUN",
+            "open": "11:00",
+            "close": "21:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "20:00"
+            ],
+            "closed": false
+          }
+        ],
+        "menus": [
+          {
+            "category": "샐러드",
+            "name": "닭가슴살 샐러드",
+            "price": 11000
+          },
+          {
+            "category": "샐러드",
+            "name": "연어 포케",
+            "price": 13500
+          }
+        ],
+        "facilities": [
+          "PARKING",
+          "WIFI",
+          "RESERVATION"
+        ]
+      }
+    },
+    {
+      "card": {
+        "place": {
+          "id": 21,
+          "name": "역삼 와인바 루미",
+          "categoryGroup": "BAR",
+          "station": "YEOKSAM",
+          "lat": 37.4984,
+          "lng": 127.04
+        },
+        "score": 80,
+        "labels": [
+          "음악이 좋아요",
+          "늦게까지 해요"
+        ],
+        "caution": "점심시간에는 대기가 있을 수 있어요",
+        "openStatus": "UNKNOWN",
+        "reasons": [
+          {
+            "title": "리뷰에서 \"음악이 좋아요\"라는 말이 많아요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "음악이 좋아요"
+              }
+            ],
+            "quote": "음악이 좋아요. 다음에도 오고 싶어요.",
+            "quoteSource": "앱 리뷰"
+          },
+          {
+            "title": "\"늦게까지 해요\"라는 평이 있어요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "늦게까지 해요"
+              },
+              {
+                "source": "PREFERENCE",
+                "label": "가성비"
+              }
+            ]
+          }
+        ],
+        "scoreItems": [
+          {
+            "source": "REQUEST",
+            "label": "음악이 좋아요",
+            "matched": true,
+            "evidenceCount": 5
+          },
+          {
+            "source": "REQUEST",
+            "label": "늦게까지 해요",
+            "matched": true,
+            "evidenceCount": 2
+          },
+          {
+            "source": "PREFERENCE",
+            "label": "가성비",
+            "matched": true,
+            "evidenceCount": 4
+          },
+          {
+            "source": "PREFERENCE",
+            "label": "주차 가능",
+            "matched": false,
+            "evidenceCount": 0
+          }
+        ]
+      },
+      "detail": {
+        "place": {
+          "id": 21,
+          "name": "역삼 와인바 루미",
+          "categoryGroup": "BAR",
+          "station": "YEOKSAM",
+          "lat": 37.4984,
+          "lng": 127.04
+        },
+        "address": "서울 강남구 테헤란로 247, 2층",
+        "tags": [
+          "분위기",
+          "데이트",
+          "칵테일",
+          "늦게까지"
+        ],
+        "photos": [],
+        "phone": "02-5521-1777",
+        "openStatus": "UNKNOWN",
+        "hours": [
+          {
+            "dayOfWeek": "MON",
+            "lastOrders": [],
+            "closed": true
+          },
+          {
+            "dayOfWeek": "TUE",
+            "open": "18:00",
+            "close": "23:00",
+            "lastOrders": [
+              "22:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "WED",
+            "open": "18:00",
+            "close": "23:00",
+            "lastOrders": [
+              "22:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "THU",
+            "open": "18:00",
+            "close": "23:00",
+            "lastOrders": [
+              "22:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "FRI",
+            "open": "18:00",
+            "close": "23:50",
+            "lastOrders": [
+              "23:20"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SAT",
+            "open": "18:00",
+            "close": "23:50",
+            "lastOrders": [
+              "23:20"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SUN",
+            "open": "18:00",
+            "close": "23:00",
+            "lastOrders": [
+              "22:30"
+            ],
+            "closed": false
+          }
+        ],
+        "closedDayNote": "매주 월요일 휴무",
+        "menus": [
+          {
+            "category": "와인",
+            "name": "글라스 와인",
+            "price": 12000
+          },
+          {
+            "category": "와인",
+            "name": "보틀 와인",
+            "price": 55000
+          },
+          {
+            "category": "안주",
+            "name": "하몽 플래터",
+            "price": 22000
+          }
+        ],
+        "facilities": [
+          "PARKING",
+          "GROUP",
+          "RESERVATION"
+        ]
+      }
+    },
+    {
+      "card": {
+        "place": {
+          "id": 22,
+          "name": "더 로스터리",
+          "categoryGroup": "CAFE",
+          "station": "GANGNAM",
+          "lat": 37.4968,
+          "lng": 127.024
+        },
+        "score": 84,
+        "labels": [
+          "조용해요",
+          "오래 머물기 좋아요"
+        ],
+        "caution": "주차 공간이 좁아요",
+        "openStatus": "UNKNOWN",
+        "reasons": [
+          {
+            "title": "리뷰에서 \"조용해요\"라는 말이 많아요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "조용해요"
+              }
+            ],
+            "quote": "조용해요. 다음에도 오고 싶어요.",
+            "quoteSource": "앱 리뷰"
+          }
+        ],
+        "scoreItems": [
+          {
+            "source": "REQUEST",
+            "label": "조용해요",
+            "matched": true,
+            "evidenceCount": 6
+          },
+          {
+            "source": "REQUEST",
+            "label": "오래 머물기 좋아요",
+            "matched": false,
+            "evidenceCount": 0
+          },
+          {
+            "source": "PREFERENCE",
+            "label": "조용한 곳",
+            "matched": false,
+            "evidenceCount": 0
+          }
+        ]
+      },
+      "detail": {
+        "place": {
+          "id": 22,
+          "name": "더 로스터리",
+          "categoryGroup": "CAFE",
+          "station": "GANGNAM",
+          "lat": 37.4968,
+          "lng": 127.024
+        },
+        "address": "서울 강남구 강남대로 254, 3층",
+        "tags": [
+          "조용한",
+          "콘센트 많음"
+        ],
+        "photos": [],
+        "phone": "02-5522-1814",
+        "website": "https://example.com/places/22",
+        "openStatus": "UNKNOWN",
+        "hours": [
+          {
+            "dayOfWeek": "MON",
+            "open": "08:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "TUE",
+            "open": "08:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "WED",
+            "open": "08:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "THU",
+            "open": "08:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "FRI",
+            "open": "08:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SAT",
+            "open": "08:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SUN",
+            "open": "08:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          }
+        ],
+        "menus": [
+          {
+            "category": "커피",
+            "name": "에스프레소",
+            "price": 4000
+          },
+          {
+            "category": "커피",
+            "name": "핸드드립",
+            "price": 7000
+          },
+          {
+            "category": "디저트",
+            "name": "티라미수",
+            "price": 7500
+          }
+        ],
+        "facilities": [
+          "WIFI",
+          "GROUP"
+        ]
+      }
+    },
+    {
+      "card": {
+        "place": {
+          "id": 23,
+          "name": "선릉 칼국수",
+          "categoryGroup": "RESTAURANT",
+          "station": "SEOLLEUNG",
+          "lat": 37.5045,
+          "lng": 127.0466
+        },
+        "score": 73,
+        "labels": [
+          "혼밥하기 좋아요",
+          "음식이 빨리 나와요"
+        ],
+        "caution": "주말에는 시끄러울 수 있어요",
+        "openStatus": "UNKNOWN",
+        "reasons": [
+          {
+            "title": "리뷰에서 \"혼밥하기 좋아요\"라는 말이 많아요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "혼밥하기 좋아요"
+              }
+            ],
+            "quote": "혼밥하기 좋아요. 다음에도 오고 싶어요.",
+            "quoteSource": "앱 리뷰"
+          },
+          {
+            "title": "\"음식이 빨리 나와요\"라는 평이 있어요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "음식이 빨리 나와요"
+              },
+              {
+                "source": "PREFERENCE",
+                "label": "가성비"
+              }
+            ]
+          }
+        ],
+        "scoreItems": [
+          {
+            "source": "REQUEST",
+            "label": "혼밥하기 좋아요",
+            "matched": true,
+            "evidenceCount": 7
+          },
+          {
+            "source": "REQUEST",
+            "label": "음식이 빨리 나와요",
+            "matched": true,
+            "evidenceCount": 4
+          },
+          {
+            "source": "PREFERENCE",
+            "label": "주차 가능",
+            "matched": false,
+            "evidenceCount": 0
+          }
+        ]
+      },
+      "detail": {
+        "place": {
+          "id": 23,
+          "name": "선릉 칼국수",
+          "categoryGroup": "RESTAURANT",
+          "station": "SEOLLEUNG",
+          "lat": 37.5045,
+          "lng": 127.0466
+        },
+        "address": "서울 강남구 선릉로 261, 4층",
+        "tags": [
+          "점심 식사",
+          "가성비",
+          "단체석"
+        ],
+        "photos": [],
+        "openStatus": "UNKNOWN",
+        "hours": [
+          {
+            "dayOfWeek": "MON",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "TUE",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "WED",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "THU",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "FRI",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SAT",
+            "open": "11:00",
+            "close": "21:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "20:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SUN",
+            "open": "11:00",
+            "close": "21:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "20:00"
+            ],
+            "closed": false
+          }
+        ],
+        "menus": [
+          {
+            "category": "면",
+            "name": "바지락 칼국수",
+            "price": 9000
+          },
+          {
+            "category": "사이드",
+            "name": "왕만두",
+            "price": 7000
+          }
+        ],
+        "facilities": [
+          "PARKING",
+          "WIFI",
+          "RESERVATION"
+        ]
+      }
+    },
+    {
+      "card": {
+        "place": {
+          "id": 24,
+          "name": "강남 이자카야 츠키",
+          "categoryGroup": "BAR",
+          "station": "GANGNAM",
+          "lat": 37.499,
+          "lng": 127.0264
+        },
+        "score": 78,
+        "labels": [
+          "음악이 좋아요",
+          "늦게까지 해요"
+        ],
+        "openStatus": "UNKNOWN",
+        "reasons": [
+          {
+            "title": "리뷰에서 \"음악이 좋아요\"라는 말이 많아요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "음악이 좋아요"
+              }
+            ],
+            "quote": "음악이 좋아요. 다음에도 오고 싶어요.",
+            "quoteSource": "앱 리뷰"
+          }
+        ],
+        "scoreItems": [
+          {
+            "source": "REQUEST",
+            "label": "음악이 좋아요",
+            "matched": true,
+            "evidenceCount": 8
+          },
+          {
+            "source": "REQUEST",
+            "label": "늦게까지 해요",
+            "matched": false,
+            "evidenceCount": 0
+          }
+        ]
+      },
+      "detail": {
+        "place": {
+          "id": 24,
+          "name": "강남 이자카야 츠키",
+          "categoryGroup": "BAR",
+          "station": "GANGNAM",
+          "lat": 37.499,
+          "lng": 127.0264
+        },
+        "address": "서울 강남구 강남대로 268, 5층",
+        "tags": [
+          "분위기",
+          "데이트",
+          "칵테일",
+          "늦게까지"
+        ],
+        "photos": [],
+        "phone": "02-5524-1888",
+        "openStatus": "UNKNOWN",
+        "hours": [
+          {
+            "dayOfWeek": "MON",
+            "open": "18:00",
+            "close": "23:00",
+            "lastOrders": [
+              "22:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "TUE",
+            "open": "18:00",
+            "close": "23:00",
+            "lastOrders": [
+              "22:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "WED",
+            "open": "18:00",
+            "close": "23:00",
+            "lastOrders": [
+              "22:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "THU",
+            "open": "18:00",
+            "close": "23:00",
+            "lastOrders": [
+              "22:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "FRI",
+            "open": "18:00",
+            "close": "23:50",
+            "lastOrders": [
+              "23:20"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SAT",
+            "open": "18:00",
+            "close": "23:50",
+            "lastOrders": [
+              "23:20"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SUN",
+            "open": "18:00",
+            "close": "23:00",
+            "lastOrders": [
+              "22:30"
+            ],
+            "closed": false
+          }
+        ],
+        "menus": [
+          {
+            "category": "사케",
+            "name": "준마이 사케",
+            "price": 15000
+          },
+          {
+            "category": "안주",
+            "name": "모둠 꼬치",
+            "price": 18000
+          },
+          {
+            "category": "안주",
+            "name": "가라아게",
+            "price": 14000
+          }
+        ],
+        "facilities": [
+          "PARKING",
+          "GROUP",
+          "RESERVATION"
+        ]
+      }
+    },
+    {
+      "card": {
+        "place": {
+          "id": 25,
+          "name": "역삼 비건 테이블",
+          "categoryGroup": "RESTAURANT",
+          "station": "YEOKSAM",
+          "lat": 37.5028,
+          "lng": 127.0364
+        },
+        "score": 87,
+        "labels": [
+          "대화하기 좋아요",
+          "양이 넉넉해요"
+        ],
+        "caution": "점심시간에는 대기가 있을 수 있어요",
+        "openStatus": "UNKNOWN",
+        "reasons": [
+          {
+            "title": "리뷰에서 \"대화하기 좋아요\"라는 말이 많아요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "대화하기 좋아요"
+              }
+            ],
+            "quote": "대화하기 좋아요. 다음에도 오고 싶어요.",
+            "quoteSource": "앱 리뷰"
+          },
+          {
+            "title": "\"양이 넉넉해요\"라는 평이 있어요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "양이 넉넉해요"
+              },
+              {
+                "source": "PREFERENCE",
+                "label": "가성비"
+              }
+            ]
+          }
+        ],
+        "scoreItems": [
+          {
+            "source": "REQUEST",
+            "label": "대화하기 좋아요",
+            "matched": true,
+            "evidenceCount": 9
+          },
+          {
+            "source": "REQUEST",
+            "label": "양이 넉넉해요",
+            "matched": true,
+            "evidenceCount": 2
+          },
+          {
+            "source": "PREFERENCE",
+            "label": "조용한 곳",
+            "matched": false,
+            "evidenceCount": 0
+          }
+        ]
+      },
+      "detail": {
+        "place": {
+          "id": 25,
+          "name": "역삼 비건 테이블",
+          "categoryGroup": "RESTAURANT",
+          "station": "YEOKSAM",
+          "lat": 37.5028,
+          "lng": 127.0364
+        },
+        "address": "서울 강남구 테헤란로 275, 1층",
+        "tags": [
+          "점심 식사",
+          "가성비"
+        ],
+        "photos": [],
+        "phone": "02-5525-1925",
+        "openStatus": "UNKNOWN",
+        "hours": [
+          {
+            "dayOfWeek": "MON",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "TUE",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "WED",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "THU",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "FRI",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SAT",
+            "open": "11:00",
+            "close": "21:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "20:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SUN",
+            "lastOrders": [],
+            "closed": true
+          }
+        ],
+        "closedDayNote": "매주 일요일 휴무",
+        "menus": [
+          {
+            "category": "식사",
+            "name": "버섯 리조또",
+            "price": 15000
+          },
+          {
+            "category": "식사",
+            "name": "두부 스테이크",
+            "price": 14000
+          },
+          {
+            "category": "샐러드",
+            "name": "곡물 샐러드",
+            "price": 11000
+          }
+        ],
+        "facilities": [
+          "WIFI",
+          "GROUP"
+        ]
+      }
+    },
+    {
+      "card": {
+        "place": {
+          "id": 26,
+          "name": "카페 한숨",
+          "categoryGroup": "CAFE",
+          "station": "YEOKSAM",
+          "lat": 37.4984,
+          "lng": 127.0376
+        },
+        "score": 82,
+        "labels": [
+          "커피가 맛있어요",
+          "자리가 넓어요"
+        ],
+        "caution": "주차 공간이 좁아요",
+        "openStatus": "UNKNOWN",
+        "reasons": [
+          {
+            "title": "리뷰에서 \"커피가 맛있어요\"라는 말이 많아요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "커피가 맛있어요"
+              }
+            ],
+            "quote": "커피가 맛있어요. 다음에도 오고 싶어요.",
+            "quoteSource": "앱 리뷰"
+          }
+        ],
+        "scoreItems": [
+          {
+            "source": "REQUEST",
+            "label": "커피가 맛있어요",
+            "matched": true,
+            "evidenceCount": 10
+          },
+          {
+            "source": "REQUEST",
+            "label": "자리가 넓어요",
+            "matched": false,
+            "evidenceCount": 0
+          },
+          {
+            "source": "PREFERENCE",
+            "label": "가성비",
+            "matched": true,
+            "evidenceCount": 4
+          }
+        ]
+      },
+      "detail": {
+        "place": {
+          "id": 26,
+          "name": "카페 한숨",
+          "categoryGroup": "CAFE",
+          "station": "YEOKSAM",
+          "lat": 37.4984,
+          "lng": 127.0376
+        },
+        "address": "서울 강남구 테헤란로 282, 2층",
+        "tags": [
+          "조용한",
+          "콘센트 많음",
+          "디저트"
+        ],
+        "photos": [],
+        "website": "https://example.com/places/26",
+        "openStatus": "UNKNOWN",
+        "hours": [
+          {
+            "dayOfWeek": "MON",
+            "open": "08:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "TUE",
+            "open": "08:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "WED",
+            "open": "08:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "THU",
+            "open": "08:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "FRI",
+            "open": "08:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SAT",
+            "open": "08:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SUN",
+            "open": "08:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          }
+        ],
+        "menus": [
+          {
+            "category": "커피",
+            "name": "아메리카노",
+            "price": 4000
+          },
+          {
+            "category": "음료",
+            "name": "자몽 에이드",
+            "price": 6000
+          },
+          {
+            "category": "디저트",
+            "name": "마들렌",
+            "price": 2800
+          }
+        ],
+        "facilities": [
+          "PARKING",
+          "WIFI",
+          "RESERVATION"
+        ]
+      }
+    },
+    {
+      "card": {
+        "place": {
+          "id": 27,
+          "name": "선릉 펍 하우스",
+          "categoryGroup": "BAR",
+          "station": "SEOLLEUNG",
+          "lat": 37.5034,
+          "lng": 127.0514
+        },
+        "score": 68,
+        "labels": [
+          "음악이 좋아요",
+          "늦게까지 해요"
+        ],
+        "caution": "주말에는 시끄러울 수 있어요",
+        "openStatus": "UNKNOWN",
+        "reasons": [
+          {
+            "title": "리뷰에서 \"음악이 좋아요\"라는 말이 많아요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "음악이 좋아요"
+              }
+            ],
+            "quote": "음악이 좋아요. 다음에도 오고 싶어요.",
+            "quoteSource": "앱 리뷰"
+          },
+          {
+            "title": "\"늦게까지 해요\"라는 평이 있어요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "늦게까지 해요"
+              },
+              {
+                "source": "PREFERENCE",
+                "label": "가성비"
+              }
+            ]
+          }
+        ],
+        "scoreItems": [
+          {
+            "source": "REQUEST",
+            "label": "음악이 좋아요",
+            "matched": true,
+            "evidenceCount": 11
+          },
+          {
+            "source": "REQUEST",
+            "label": "늦게까지 해요",
+            "matched": true,
+            "evidenceCount": 4
+          },
+          {
+            "source": "PREFERENCE",
+            "label": "주차 가능",
+            "matched": false,
+            "evidenceCount": 0
+          }
+        ]
+      },
+      "detail": {
+        "place": {
+          "id": 27,
+          "name": "선릉 펍 하우스",
+          "categoryGroup": "BAR",
+          "station": "SEOLLEUNG",
+          "lat": 37.5034,
+          "lng": 127.0514
+        },
+        "address": "서울 강남구 선릉로 289, 3층",
+        "tags": [
+          "분위기",
+          "데이트",
+          "칵테일",
+          "늦게까지"
+        ],
+        "photos": [],
+        "phone": "02-5527-1999",
+        "openStatus": "UNKNOWN",
+        "hours": [
+          {
+            "dayOfWeek": "MON",
+            "open": "18:00",
+            "close": "23:00",
+            "lastOrders": [
+              "22:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "TUE",
+            "open": "18:00",
+            "close": "23:00",
+            "lastOrders": [
+              "22:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "WED",
+            "open": "18:00",
+            "close": "23:00",
+            "lastOrders": [
+              "22:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "THU",
+            "open": "18:00",
+            "close": "23:00",
+            "lastOrders": [
+              "22:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "FRI",
+            "open": "18:00",
+            "close": "23:50",
+            "lastOrders": [
+              "23:20"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SAT",
+            "open": "18:00",
+            "close": "23:50",
+            "lastOrders": [
+              "23:20"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SUN",
+            "open": "18:00",
+            "close": "23:00",
+            "lastOrders": [
+              "22:30"
+            ],
+            "closed": false
+          }
+        ],
+        "menus": [
+          {
+            "category": "맥주",
+            "name": "흑맥주",
+            "price": 8000
+          },
+          {
+            "category": "안주",
+            "name": "피시 앤 칩스",
+            "price": 17000
+          }
+        ],
+        "facilities": [
+          "PARKING",
+          "GROUP",
+          "RESERVATION"
+        ]
+      }
+    },
+    {
+      "card": {
+        "place": {
+          "id": 28,
+          "name": "강남 쌀국수 포",
+          "categoryGroup": "RESTAURANT",
+          "station": "GANGNAM",
+          "lat": 37.4979,
+          "lng": 127.0312
+        },
+        "score": 75,
+        "labels": [
+          "대화하기 좋아요",
+          "양이 넉넉해요"
+        ],
+        "openStatus": "UNKNOWN",
+        "reasons": [
+          {
+            "title": "리뷰에서 \"대화하기 좋아요\"라는 말이 많아요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "대화하기 좋아요"
+              }
+            ],
+            "quote": "대화하기 좋아요. 다음에도 오고 싶어요.",
+            "quoteSource": "앱 리뷰"
+          }
+        ],
+        "scoreItems": [
+          {
+            "source": "REQUEST",
+            "label": "대화하기 좋아요",
+            "matched": true,
+            "evidenceCount": 3
+          },
+          {
+            "source": "REQUEST",
+            "label": "양이 넉넉해요",
+            "matched": false,
+            "evidenceCount": 0
+          },
+          {
+            "source": "PREFERENCE",
+            "label": "조용한 곳",
+            "matched": false,
+            "evidenceCount": 0
+          }
+        ]
+      },
+      "detail": {
+        "place": {
+          "id": 28,
+          "name": "강남 쌀국수 포",
+          "categoryGroup": "RESTAURANT",
+          "station": "GANGNAM",
+          "lat": 37.4979,
+          "lng": 127.0312
+        },
+        "address": "서울 강남구 강남대로 296, 4층",
+        "tags": [
+          "점심 식사",
+          "가성비"
+        ],
+        "photos": [],
+        "phone": "02-5528-2036",
+        "openStatus": "UNKNOWN",
+        "hours": [
+          {
+            "dayOfWeek": "MON",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "TUE",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "WED",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "THU",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "FRI",
+            "open": "11:00",
+            "close": "22:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SAT",
+            "open": "11:00",
+            "close": "21:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "20:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SUN",
+            "open": "11:00",
+            "close": "21:00",
+            "breakStart": "15:00",
+            "breakEnd": "17:00",
+            "lastOrders": [
+              "14:30",
+              "20:00"
+            ],
+            "closed": false
+          }
+        ],
+        "menus": [
+          {
+            "category": "쌀국수",
+            "name": "차돌 쌀국수",
+            "price": 11500
+          },
+          {
+            "category": "밥",
+            "name": "볶음밥",
+            "price": 10000
+          }
+        ],
+        "facilities": [
+          "WIFI",
+          "GROUP"
+        ]
+      }
+    },
+    {
+      "card": {
+        "place": {
+          "id": 29,
+          "name": "북카페 페이지",
+          "categoryGroup": "CAFE",
+          "station": "GANGNAM",
+          "lat": 37.499,
+          "lng": 127.024
+        },
+        "score": 93,
+        "labels": [
+          "커피가 맛있어요",
+          "자리가 넓어요"
+        ],
+        "caution": "점심시간에는 대기가 있을 수 있어요",
+        "openStatus": "UNKNOWN",
+        "reasons": [
+          {
+            "title": "리뷰에서 \"커피가 맛있어요\"라는 말이 많아요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "커피가 맛있어요"
+              }
+            ],
+            "quote": "커피가 맛있어요. 다음에도 오고 싶어요.",
+            "quoteSource": "앱 리뷰"
+          },
+          {
+            "title": "\"자리가 넓어요\"라는 평이 있어요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "자리가 넓어요"
+              },
+              {
+                "source": "PREFERENCE",
+                "label": "가성비"
+              }
+            ]
+          }
+        ],
+        "scoreItems": [
+          {
+            "source": "REQUEST",
+            "label": "커피가 맛있어요",
+            "matched": true,
+            "evidenceCount": 4
+          },
+          {
+            "source": "REQUEST",
+            "label": "자리가 넓어요",
+            "matched": true,
+            "evidenceCount": 2
+          },
+          {
+            "source": "PREFERENCE",
+            "label": "주차 가능",
+            "matched": false,
+            "evidenceCount": 0
+          }
+        ]
+      },
+      "detail": {
+        "place": {
+          "id": 29,
+          "name": "북카페 페이지",
+          "categoryGroup": "CAFE",
+          "station": "GANGNAM",
+          "lat": 37.499,
+          "lng": 127.024
+        },
+        "address": "서울 강남구 강남대로 303, 5층",
+        "tags": [
+          "조용한",
+          "콘센트 많음",
+          "디저트"
+        ],
+        "photos": [],
+        "openStatus": "UNKNOWN",
+        "hours": [
+          {
+            "dayOfWeek": "MON",
+            "open": "10:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "TUE",
+            "open": "10:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "WED",
+            "open": "10:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "THU",
+            "open": "10:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "FRI",
+            "open": "10:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SAT",
+            "open": "10:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:30"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SUN",
+            "lastOrders": [],
+            "closed": true
+          }
+        ],
+        "closedDayNote": "매주 일요일 휴무",
+        "menus": [
+          {
+            "category": "커피",
+            "name": "아메리카노",
+            "price": 4500
+          },
+          {
+            "category": "차",
+            "name": "캐모마일",
+            "price": 5000
+          },
+          {
+            "category": "디저트",
+            "name": "브라우니",
+            "price": 4500
+          }
+        ],
+        "facilities": [
+          "PARKING",
+          "WIFI",
+          "RESERVATION"
+        ]
+      }
+    },
+    {
+      "card": {
+        "place": {
+          "id": 30,
+          "name": "역삼 한식당 소반",
+          "categoryGroup": "RESTAURANT",
+          "station": "YEOKSAM",
+          "lat": 37.5028,
+          "lng": 127.034
+        },
+        "score": 89,
+        "labels": [
+          "단체로 가기 좋아요",
+          "재료가 신선해요"
+        ],
+        "caution": "주차 공간이 좁아요",
+        "openStatus": "UNKNOWN",
+        "reasons": [
+          {
+            "title": "리뷰에서 \"단체로 가기 좋아요\"라는 말이 많아요",
+            "tags": [
+              {
+                "source": "REQUEST",
+                "label": "단체로 가기 좋아요"
+              }
+            ],
+            "quote": "단체로 가기 좋아요. 다음에도 오고 싶어요.",
+            "quoteSource": "앱 리뷰"
+          }
+        ],
+        "scoreItems": [
+          {
+            "source": "REQUEST",
+            "label": "단체로 가기 좋아요",
+            "matched": true,
+            "evidenceCount": 5
+          },
+          {
+            "source": "REQUEST",
+            "label": "재료가 신선해요",
+            "matched": false,
+            "evidenceCount": 0
+          }
+        ]
+      },
+      "detail": {
+        "place": {
+          "id": 30,
+          "name": "역삼 한식당 소반",
+          "categoryGroup": "RESTAURANT",
+          "station": "YEOKSAM",
+          "lat": 37.5028,
+          "lng": 127.034
+        },
+        "address": "서울 강남구 테헤란로 310, 1층",
+        "tags": [
+          "점심 식사",
+          "가성비",
+          "단체석",
+          "깔끔해요"
+        ],
+        "photos": [],
+        "phone": "02-5530-2110",
+        "website": "https://example.com/places/30",
+        "openStatus": "UNKNOWN",
+        "hours": [
+          {
+            "dayOfWeek": "MON",
+            "open": "11:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "TUE",
+            "open": "11:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "WED",
+            "open": "11:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "THU",
+            "open": "11:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "FRI",
+            "open": "11:00",
+            "close": "22:00",
+            "lastOrders": [
+              "21:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SAT",
+            "open": "11:00",
+            "close": "21:00",
+            "lastOrders": [
+              "20:00"
+            ],
+            "closed": false
+          },
+          {
+            "dayOfWeek": "SUN",
+            "open": "11:00",
+            "close": "21:00",
+            "lastOrders": [
+              "20:00"
+            ],
+            "closed": false
+          }
+        ],
+        "menus": [
+          {
+            "category": "정식",
+            "name": "불고기 정식",
+            "price": 13000
+          },
+          {
+            "category": "정식",
+            "name": "생선구이 정식",
+            "price": 14000
+          },
+          {
+            "category": "식사",
+            "name": "비빔밥",
+            "price": 10000
+          }
+        ],
+        "facilities": [
+          "PARKING",
+          "GROUP",
+          "RESERVATION"
+        ]
+      }
+    }
+  ]
+}
