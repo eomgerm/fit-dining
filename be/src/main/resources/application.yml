@@ -8,4 +8,13 @@ spring:
     username: ${SPRING_DATASOURCE_USERNAME:fit_dev_app}
     password: ${SPRING_DATASOURCE_PASSWORD}
   flyway:
+    # 웹 앱은 DML 전용 계정으로 접속하므로 마이그레이션을 실행하지 않는다.
     enabled: false
+  jackson:
+    default-property-inclusion: non_null
+    deserialization:
+      fail-on-unknown-properties: true
+
+place:
+  mock:
+    enabled: ${PLACE_MOCK_ENABLED:false}
