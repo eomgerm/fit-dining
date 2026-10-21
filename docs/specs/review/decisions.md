@@ -6,7 +6,7 @@ Glossary: none · ADRs: none
 
 ## D-1 범위와 단계
 - Status: settled
-- Decision: Jira S15P31A302-18의 BE·FE를 다룬다. Walking Skeleton(31 작성, 32 확인)은 누구나 쓰는 익명 댓글 수준이다. 사용자를 식별하지 않고 본문(선택)만으로 작성하며, 장소별 목록(작성일, 본문, 커서 페이지)을 보여 주고, 작성 화면은 한 화면 폼이다. 장소 존재와 중복은 확인하지 않는다. 1차 후속으로 로그인과 작성자 저장, 닉네임, 방문일, 장소 존재 확인, 중복 금지, 이유 태그, 재방문 의사, 1인당 금액, 작성 화면 데이터(`review-form`), Figma 2단계 흐름과 위치 확인, 사진, 수정·삭제, 신고·운영, 작성 차단을 붙인다(2026-10-21). Walking Skeleton의 익명 리뷰는 시험 데이터로 보고 1차 후속 마이그레이션 전에 지운다(D-3). 익명 쓰기는 누구나 반복해서 등록할 수 있으므로 Walking Skeleton 기간에만 둔다.
+- Decision: Jira S15P31A302-18의 BE·FE를 다룬다. Walking Skeleton(31 작성, 32 확인)은 누구나 쓰는 익명 댓글 수준이다. 사용자를 식별하지 않고 본문(선택)만으로 작성하며, 장소별 목록(작성일, 본문, 커서 페이지)을 보여 주고, 작성 화면은 한 화면 폼이다. 장소 존재와 중복은 확인하지 않는다. 1차 후속으로 로그인과 작성자 저장, 닉네임, 방문일, 장소 존재 확인, 중복 금지, 이유 태그, 재방문 의사, 1인당 금액, 작성 화면 데이터(`review-form`), Figma 2단계 흐름과 위치 확인, 사진, 수정·삭제, 신고·운영, 작성 차단을 붙인다(2026-10-21). Walking Skeleton의 익명 리뷰는 시험 데이터로 보고 메모리에만 두며 1차 후속으로 옮기지 않는다(D-27). 익명 쓰기는 누구나 반복해서 등록할 수 있으므로 Walking Skeleton 기간에만 둔다.
 - Rejected: Walking Skeleton에 태그 조회·태그 검증·2단계 흐름 포함(2026-10-20 범위), 로그인 사용자·방문일·중복 금지 포함(2026-10-21 오전 범위) → 다른 담당의 결정(특징 코드 목록, 사용자 식별, 닉네임 조회 등)을 기다리는 항목이 많아, 끝에서 끝까지 연결되는 가장 작은 기능을 먼저 만든다. 리뷰 자동 필터링 → PRD 2차 범위다. 취향 보정과 근거 장부 → 티켓 20. 장소 특징 추출·페르소나·색인 → 다른 담당이다.
 
 ## D-2 엔드포인트
@@ -16,7 +16,7 @@ Glossary: none · ADRs: none
 - Rejected: `/api/v1/reviews?placeId=` → 장소와 리뷰의 관계가 경로에 드러나지 않는다. 장소 상세 응답에 리뷰 포함 → 검색 담당의 DTO를 바꾸고 페이지를 나눌 수 없다.
 
 ## D-3 리뷰 상태와 중복 금지
-- Status: settled
+- Status: superseded by D-28
 - Decision: 삭제, 공개 숨김, 분석 제외는 서로 독립이라(PRD AC-13) 세 시각 컬럼(`deleted_at`, `hidden_at`, `analysis_excluded_at`)으로 둔다. 삭제는 soft delete이고, 같은 방문일 재작성(FR-11)을 위해 `(user_id, place_id, visited_at) WHERE deleted_at IS NULL` 부분 유니크 인덱스를 마이그레이션 SQL로 만든다. 동시 등록은 이 제약이 막는다. 서비스는 `saveAndFlush`로 저장해 그 자리에서 `DataIntegrityViolationException`을 받고, 원인 예외의 제약 이름이 이 인덱스일 때만 409로 바꾼다. 다른 제약 위반은 그대로 둔다. PostgreSQL은 제약 위반 뒤 트랜잭션을 더 쓸 수 없으므로 잡은 뒤 다른 작업을 잇지 않는다. 저장 전 조회는 하지 않는다. 리뷰와 태그는 한 트랜잭션에 저장한다. Walking Skeleton은 사용자와 방문일이 없어 `deleted_at`만 두고 중복을 막지 않는다. 1차 후속 마이그레이션은 Walking Skeleton 리뷰를 지운 뒤 `user_id`·`visited_at`(NOT NULL), 숨김·분석 제외 컬럼, 부분 유니크 인덱스를 더한다.
 - Rejected: 저장 전 `exists` 조회로 막기 → 두 요청이 함께 조회를 통과하면 둘 다 저장된다. Walking Skeleton 익명 리뷰를 남기고 `user_id`·`visited_at`을 NULL 허용으로 추가 → 중복 금지와 목록 표시에 익명 예외가 계속 남는다. status 단일 컬럼 → 숨김과 분석 제외를 동시에 표현할 수 없다. 하드 삭제 → 일괄 처리가 삭제된 리뷰를 알아볼 수 없다(D-17).
 
@@ -132,6 +132,22 @@ Glossary: none · ADRs: none
 - Rejected: Walking Skeleton에 리뷰 담당의 별도 리뷰 페이지(목록과 작성 칸, 상세에는 링크만) 두기 → 검색 담당이 Walking Skeleton부터 리뷰 탭을 붙이기로 해 Figma 6-03 구조를 처음부터 따를 수 있다. 검색 담당이 탭 안의 목록 UI를 직접 만들기 → 1차 후속에서 목록 필드가 늘 때마다 검색 담당 코드를 고쳐야 한다. 동적 경로 `/places/[id]/review` → 지금의 장소 상세 경로와 형식이 다르다. 리뷰 목록을 서버에서 렌더링 → `mine`과 숨김 표시가 사용자마다 달라 인증 정보를 서버 호출에 넘겨야 한다. `src/app/components`와 `src/lib`(검색 D-43, D-8) → master의 FE 공통 구조가 `domains`와 `shared`로 나누고 ESLint로 의존 방향을 강제한다.
 
 ## D-26 영속성 테스트 DB
-- Status: settled
+- Status: superseded by D-29
 - Decision: 저장과 커서 페이지(1차 후속의 부분 유니크 인덱스와 409 변환 포함)는 Testcontainers로 띄운 PostgreSQL에 마이그레이션으로 스키마를 만들어 확인한다. 인프라 BE 계약 #13(제안 상태)이 Testcontainers를 쓰기로 했고, 부분 인덱스(`WHERE deleted_at IS NULL`)와 제약 위반 뒤의 트랜잭션 동작은 H2로 재현되지 않는다. 의존성 추가는 공용 `be/build.gradle`을 바꾸므로 BE 팀과 합의한 뒤 한다(spec Open questions).
+- Rejected: H2 → PostgreSQL 동작을 재현하지 못한다. 로컬 스택(`infra/local`)의 DB에 붙기 → 테스트 결과가 개발 데이터와 로컬 스택 실행 여부에 따라 달라진다.
+
+## D-27 Walking Skeleton 저장소는 메모리 Mock이다
+- Status: settled
+- Decision: Walking Skeleton은 DB 테이블과 마이그레이션 없이 메모리 저장소로 구현한다. `ReviewService`는 저장소 인터페이스 `ReviewStore`(저장, 장소별 커서 페이지 조회, 개수)만 알고, Walking Skeleton은 `InMemoryReviewStore`를 꽂는다. 이 구현은 `review.mock.enabled`(환경변수 `REVIEW_MOCK_ENABLED`, 코드 기본값 꺼짐)가 켜졌을 때만 등록되고 local과 dev에서만 켠다(`be/.env.example`). 저장소가 없으면 `ReviewService`가 503을 낸다(검색 `PlaceService`와 같은 방식). 장소별 목록을 메모리에 두고 `reviewId`는 차례로 매긴다. 정렬(`createdAt DESC, reviewId DESC`), 커서 형식(`createdAt|reviewId`를 패딩 없는 base64url로 인코딩), 마이크로초로 자른 작성 시각은 1차 후속의 DB 구현과 같게 둔다. 그래서 1차 후속에서 저장소 구현만 `reviews` 테이블을 쓰는 `JpaReviewStore`로 바꾸면 API와 FE는 그대로다. 익명 쓰기로 메모리가 차지 않도록 전체 건수에 상한(임시 5,000건)을 두고, 넘으면 가장 오래된 리뷰부터 버린다. 시드는 `classpath:mock/reviews.json`으로 1번 Mock 장소에 25건을 넣어 커서 페이지를 바로 볼 수 있게 한다. 데이터는 재시작하면 시드만 남고 인스턴스마다 따로다. 그래서 1차 후속 전에 Walking Skeleton 리뷰를 지우는 작업이 없다. `reviews` 테이블, 마이그레이션, 영속성 테스트는 1차 후속부터이고(D-28, D-29), 일괄 처리가 읽는 리뷰 테이블(D-17)도 그때 생긴다. `REVIEW_MOCK_ENABLED`를 env 계약에 올리는 일은 인프라 담당에게 알린다(이 기능은 `docs/infra/`를 고치지 않는다).
+- Rejected: Walking Skeleton부터 `reviews` 테이블 → `migrate` 프로필, DB 공통 규칙, Testcontainers 의존성 합의를 기다려야 한다. 첫 마이그레이션과 DML 전용 계정 권한 같은 통합 위험이 1차 후속으로 미뤄지는 것은 감수한다. FE만 Mock(MSW 등) → BE 경로가 연결되지 않아 Walking Skeleton이 아니다. JSON 파일에 쓰기 → 컨테이너 파일 시스템과 동시 쓰기를 다뤄야 한다. 상한 없음 → 익명 등록을 반복하면 dev 서버의 메모리가 찬다.
+- Anchors: `be/src/main/java/kr/co/fitdining/api/review/store/ReviewStore.java#ReviewStore` (new) · `be/src/main/java/kr/co/fitdining/api/review/store/InMemoryReviewStore.java#InMemoryReviewStore` (new) · `be/src/main/resources/mock/reviews.json` (new)
+
+## D-28 리뷰 상태와 중복 금지(테이블은 1차 후속부터)
+- Status: settled
+- Decision: `reviews` 테이블은 1차 후속에서 처음 만든다(D-27). 삭제, 공개 숨김, 분석 제외는 서로 독립이라(PRD AC-13) 세 시각 컬럼(`deleted_at`, `hidden_at`, `analysis_excluded_at`)으로 둔다. 삭제는 soft delete이고, 같은 방문일 재작성(FR-11)을 위해 `(user_id, place_id, visited_at) WHERE deleted_at IS NULL` 부분 유니크 인덱스를 마이그레이션 SQL로 만든다. 동시 등록은 이 제약이 막는다. 서비스는 `saveAndFlush`로 저장해 그 자리에서 `DataIntegrityViolationException`을 받고, 원인 예외의 제약 이름이 이 인덱스일 때만 409로 바꾼다. 다른 제약 위반은 그대로 둔다. PostgreSQL은 제약 위반 뒤 트랜잭션을 더 쓸 수 없으므로 잡은 뒤 다른 작업을 잇지 않는다. 저장 전 조회는 하지 않는다. 리뷰와 태그는 한 트랜잭션에 저장한다. 첫 마이그레이션이 `user_id`·`visited_at`(NOT NULL), 숨김·분석 제외 컬럼, 부분 유니크 인덱스를 처음부터 담는다. Walking Skeleton 리뷰는 메모리에만 있어 옮기거나 지울 것이 없다.
+- Rejected: 저장 전 `exists` 조회로 막기 → 두 요청이 함께 조회를 통과하면 둘 다 저장된다. status 단일 컬럼 → 숨김과 분석 제외를 동시에 표현할 수 없다. 하드 삭제 → 일괄 처리가 삭제된 리뷰를 알아볼 수 없다(D-17).
+
+## D-29 영속성 테스트 DB(1차 후속부터)
+- Status: settled
+- Decision: Walking Skeleton은 메모리 저장소라 저장, 정렬, 커서 경계, 상한을 순수 단위 테스트로 확인한다(D-27). 1차 후속의 `JpaReviewStore`와 마이그레이션(부분 유니크 인덱스와 409 변환 포함)은 Testcontainers로 띄운 PostgreSQL에 마이그레이션으로 스키마를 만들어 확인한다. 인프라 BE 계약 #13(제안 상태)이 Testcontainers를 쓰기로 했고, 부분 인덱스(`WHERE deleted_at IS NULL`)와 제약 위반 뒤의 트랜잭션 동작은 H2로 재현되지 않는다. 의존성 추가는 공용 `be/build.gradle`을 바꾸므로 1차 후속 전에 BE 팀과 합의한다(spec Open questions).
 - Rejected: H2 → PostgreSQL 동작을 재현하지 못한다. 로컬 스택(`infra/local`)의 DB에 붙기 → 테스트 결과가 개발 데이터와 로컬 스택 실행 여부에 따라 달라진다.
