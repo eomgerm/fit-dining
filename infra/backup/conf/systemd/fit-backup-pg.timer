@@ -1,0 +1,12 @@
+[Unit]
+Description=Postgres dump every 4 hours (fit)
+
+[Timer]
+# 00:15, 04:15, 08:15 ... 새벽 4시 일괄 처리(BE 배치)가 막 끝난 뒤의 덤프도 한 번 잡힌다. 시간대는 서버의 Asia/Seoul이다
+OnCalendar=*-*-* 00/4:15:00
+RandomizedDelaySec=2min
+Persistent=true
+Unit=fit-backup@pg.service
+
+[Install]
+WantedBy=timers.target

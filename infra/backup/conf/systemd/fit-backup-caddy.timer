@@ -1,0 +1,11 @@
+[Unit]
+Description=Caddy certificate volume backup once a week (fit)
+
+[Timer]
+OnCalendar=Sun *-*-* 04:50:00
+RandomizedDelaySec=5min
+Persistent=true
+Unit=fit-backup@caddy.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,8 @@
+[Unit]
+Description=Verify received backups and apply retention (fit vault)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/fit/repo/infra/backup/vault-ingest.sh ingest
+Nice=10
+IOSchedulingClass=idle

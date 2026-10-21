@@ -1,0 +1,11 @@
+[Unit]
+Description=Fit backup %i (dump or archive, encrypt, send to the vault)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/fit/repo/infra/backup/backup-run.sh %i
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=3h

@@ -1,0 +1,11 @@
+[Unit]
+Description=Photo bucket backup once a day (fit)
+
+[Timer]
+OnCalendar=*-*-* 04:40:00
+RandomizedDelaySec=5min
+Persistent=true
+Unit=fit-backup@photos.service
+
+[Install]
+WantedBy=timers.target
