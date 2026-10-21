@@ -36,12 +36,12 @@ Glossary: none · ADRs: none
 - Rejected: Walking Skeleton에서 본문 필수 → 1차 후속에서 다시 선택으로 바꾸면 컬럼 변경 마이그레이션이 하나 더 필요하고, PRD FR-10도 본문을 선택으로 둔다. 1인당 금액 수정 허용 → PRD와 다르다. 상한 없음 → 0을 더 누르는 오타가 그대로 쌓인다.
 
 ## D-7 목록
-- Status: settled
+- Status: superseded by D-24
 - Decision: 장소별로 `created_at DESC, review_id DESC` 정렬, 불투명 커서, 한 번에 20건이다(검색 D-8과 같은 페이지 크기). 조건은 삭제되지 않았고, 숨김이 아니거나 조회자 본인의 리뷰다. `totalCount`는 공개 리뷰 수(삭제·숨김 제외)다. Walking Skeleton 항목은 `reviewId`, 작성 시각(`createdAt`), 본문이고 화면은 작성일을 보인다. 1차 후속에서 작성 시각을 방문일로 바꾸고, 현재 닉네임, 재방문 의사, 태그와 `sentiment`, 사진, `mine`, `hidden`을 더한다. 화면(Figma 6-03)은 날짜로 방문일만 보이고, 좋았어요 태그와 아쉬웠어요 태그("아쉬움" 표시)를 구분해 그리며, 본인 리뷰는 닉네임 대신 "나 · 내 리뷰"로 보인다.
 - Rejected: offset 페이지 → 새 리뷰가 올라오면 중복·누락이 생긴다.
 
 ## D-8 FE 호출과 화면
-- Status: settled
+- Status: superseded by D-25
 - Decision: 리뷰 영역(목록, 메뉴, 작성 버튼)과 작성 화면은 검색 spec D-11처럼 데이터를 브라우저 `fetch`로 가져오고 서버 전용 기능을 쓰지 않는다. 등록·수정·삭제·신고 후에는 목록을 다시 불러와 즉시 반영한다(PRD AC-11). 작성 화면 경로는 장소 상세 경로 규칙(`/place?id=`, 검색 D-11)을 따라 `/place/review?id=`이고, 검색 담당이 상세 경로를 바꾸면 함께 바꾼다. Walking Skeleton의 작성 화면은 본문만 받는 한 화면 폼이고, 로그인 없이 쓸 수 있다. 실패하면 화면에 오류를 보여 주고 입력을 남긴다. 등록 요청이 처리되는 동안 "등록하기"를 비활성화해 연타를 막는다. 1차 후속에서 중복 금지가 붙으면 409를 이미 쓴 날짜라고 안내해 방문일만 바꿔 다시 등록하게 하고, `review-form`의 `reviewedDates`로 달력에서 미리 막는다. 1차 후속부터 작성은 Figma의 2단계 흐름을 따른다. 1/2단계는 방문일과 좋았던 점(7-01), 아쉬웠던 점(7-02)이고, 2/2단계는 재방문 의사·본문·사진·1인당 금액(7-04, 7-05)이다. 입력은 화면 상태로만 들고 있다가 마지막 "등록하기"에서 한 번에 보낸다. 작성 중 닫으면 확인 모달(7-E03)을 띄운다. 등록 실패는 서버 오류(7-E05)와 연결 문제(7-E06)를 구분해 보여 준다. UI 컴포넌트는 `src/app/components`, API 호출과 순수 로직은 `src/lib`에 둔다(검색 D-12).
 - Rejected: 동적 경로 `/places/[id]/review` → 지금의 장소 상세 경로와 형식이 다르다. 리뷰 목록을 서버에서 렌더링 → `mine`과 숨김 표시가 사용자마다 달라 인증 정보를 서버 호출에 넘겨야 한다.
 
@@ -65,12 +65,12 @@ Glossary: none · ADRs: none
 - Rejected: 작성 화면 안의 버튼으로 시작 → Figma 디자인과 흐름이 달라지고 단계가 늘어난다.
 
 ## D-13 검색 spec이 정한 BE 규칙을 따른다
-- Status: settled
+- Status: superseded by D-20
 - Decision: 오류는 검색 spec이 만든 ProblemDetail 예외 처리 클래스를 함께 쓴다(검색 D-10, 가정 18). 요청의 알 수 없는 속성 거부와 응답의 null 필드 생략(검색 D-17, 가정 22)이 리뷰에도 적용된다. 입력 검증은 검색 가정 24처럼 validation starter 없이 컨트롤러와 도메인에서 한다. 요청 본문, 리뷰 본문, 신고 설명은 로그에 남기지 않는다(검색 D-20).
 - Rejected: validation starter 추가 → 공용 의존성이 바뀌고 검색과 검증 방식이 갈린다.
 
 ## D-14 장소 정보 조회
-- Status: settled
+- Status: superseded by D-21
 - Decision: Walking Skeleton은 장소 존재를 확인하지 않고 `placeId`의 형식과 길이만 검사한다. 목록은 `placeId`로만 조회하므로 없는 장소의 리뷰는 화면에 나오지 않는다. 1차 후속부터 리뷰는 장소의 존재 여부와 이름·업종·역을 장소 기능이 공개하는 조회 인터페이스로만 확인하고, 장소 테이블을 직접 조회하지 않는다. 인터페이스의 모양과 구현은 장소 담당이 정한다.
 - Rejected: `places` 테이블 직접 조회 → 장소 테이블 구조가 바뀌면 리뷰 코드도 고쳐야 한다.
 
@@ -91,10 +91,47 @@ Glossary: none · ADRs: none
 
 ## D-18 화면 기준과 재방문 의사
 - Status: settled
-- Decision: 화면은 Figma `핏다이닝` 파일의 UI/UX 페이지(장소 상세 6-03, 6-06~6-12, 방문 평가 7-01~7-06, 예외 상태 6-E03, 6-E06, 6-E07, 7-E01~7-E06)를 기준으로 한다. Walking Skeleton의 한 화면 작성 폼은 Figma에 없어 리뷰 담당이 간단히 만든다(D-8). 재방문 의사는 PRD FR-14대로 취향 추론과 추천에 쓰지 않는다. 7-04의 "앞으로 이 장소와 비슷한 곳을 찾아드릴게요" 문구는 이와 맞지 않아 문구만 바꾼다.
+- Decision: 화면은 Figma `핏다이닝` 파일의 UI/UX 페이지(장소 상세 6-03, 6-06~6-12, 방문 평가 7-01~7-06, 예외 상태 6-E03, 6-E06, 6-E07, 7-E01~7-E06)를 기준으로 한다. Walking Skeleton의 한 화면 작성 폼은 Figma에 없어 리뷰 담당이 간단히 만든다(D-25). 재방문 의사는 PRD FR-14대로 취향 추론과 추천에 쓰지 않는다. 7-04의 "앞으로 이 장소와 비슷한 곳을 찾아드릴게요" 문구는 이와 맞지 않아 문구만 바꾼다.
 - Rejected: 재방문 의사를 비슷한 장소 추천에 사용 → PRD FR-14와 충돌한다.
 
 ## D-19 Mock 장소의 리뷰
-- Status: settled
+- Status: superseded by D-22
 - Decision: 리뷰는 검색 Mock 장소(`p-001` 등, 검색 D-16)에도 쓸 수 있어야 한다. 실제 장소 데이터가 들어오기 전에도 검색 → 장소 상세 → 리뷰 작성·조회가 끝까지 이어져야 하기 때문이다. Walking Skeleton은 장소를 확인하지 않아 Mock ID로도 쓸 수 있다(D-14). 1차 후속에서 장소 확인을 붙일 때 Mock 장소도 통과하게 하는 방법은 장소 담당과 정한다.
 - Rejected: Mock 장소에는 리뷰를 막기 → 실제 데이터 적재 전까지 리뷰 기능을 화면에서 확인할 수 없다.
+
+## D-20 팀 BE 컨벤션을 따른다(기능별 예외 처리, Bean Validation)
+- Status: settled
+- Decision: 팀 BE 컨벤션(`be/docs/convention.md`)을 따른다. 오류는 리뷰 기능의 `ReviewExceptionHandler`(`@RestControllerAdvice(basePackageClasses = ReviewController.class)`)가 ProblemDetail로 바꾸고, `detail`에는 일반 문구만 넣는다(컨벤션 3절, 검색 D-10의 임시 형식). 형식 검증은 요청 DTO와 경로 변수의 Bean Validation(`@Valid`, `@Validated`)으로 하고, 비즈니스 검증(1차 후속의 장소 존재, 중복, 권한)은 `ReviewService`에서 한다(컨벤션 3절, 검색 D-55). 요청의 알 수 없는 속성 거부와 응답의 null 필드 생략은 `application.yml`의 JSON 설정 한 곳에 두고(검색 D-41, 컨벤션 5절), 검색과 리뷰 중 먼저 머지하는 MR이 넣는다. 요청 본문, 리뷰 본문, 신고 설명은 로그에 남기지 않고, 400은 예외 객체와 메시지 없이 남긴다(컨벤션 4절, 검색 D-20).
+- Rejected: 검색의 예외 처리 클래스를 함께 쓰기 → 컨벤션이 기능별 처리 클래스로 정했다. validation starter 없이 컨트롤러와 도메인에서 직접 검증 → 컨벤션과 다르고, starter는 이미 `be/build.gradle`에 있다.
+- Anchors: `be/src/main/java/kr/co/fitdining/api/review/ReviewExceptionHandler.java#ReviewExceptionHandler` (new) · `be/src/main/resources/application.yml#spring` (modify)
+
+## D-21 장소 정보 조회(장소 ID는 정수)
+- Status: settled
+- Decision: 장소 ID는 검색 spec을 따라 정수다(검색 D-44, D-54: ERD의 `places.place_id` bigint, BE `Long`, JSON 숫자, FE `number`). `reviews.place_id`는 `BIGINT`이고 경로의 `placeId`는 양의 정수만 받는다. 숫자가 아니거나 0 이하이거나 `long` 범위를 넘으면 400이다. Walking Skeleton은 장소 존재를 확인하지 않는다. 목록은 `placeId`로만 조회하므로 없는 장소의 리뷰는 화면에 나오지 않는다. 1차 후속부터 리뷰는 장소의 존재 여부와 이름·업종·역을 장소 기능이 공개하는 조회 인터페이스로만 확인하고, 장소 테이블을 직접 조회하지 않는다. 인터페이스의 모양과 구현은 장소 담당이 정한다.
+- Rejected: 문자열 ID(`p-001`) → 검색 spec과 ERD가 bigint로 정했다. `places` 테이블 직접 조회 → 장소 테이블 구조가 바뀌면 리뷰 코드도 고쳐야 한다.
+
+## D-22 Mock 장소의 리뷰(Mock ID 정정)
+- Status: settled
+- Decision: 리뷰는 검색 Mock 장소에도 쓸 수 있어야 한다. Mock 장소의 ID는 1부터 차례로 매긴 정수다(검색 D-44, D-54). 실제 장소 데이터가 들어오기 전에도 검색 → 장소 상세 → 리뷰 작성·조회가 끝까지 이어져야 하기 때문이다. Walking Skeleton은 장소를 확인하지 않아 Mock ID로도 쓸 수 있다(D-21). 1차 후속에서 장소 확인을 붙일 때 Mock 장소도 통과하게 하는 방법은 장소 담당과 정한다.
+- Rejected: Mock 장소에는 리뷰를 막기 → 실제 데이터 적재 전까지 리뷰 기능을 화면에서 확인할 수 없다.
+
+## D-23 DTO를 팀 BE 컨벤션에 맞춰 파일로 나눈다
+- Status: settled
+- Decision: 팀 BE 컨벤션(1절)과 검색 D-54에 맞춰 DTO를 `kr.co.fitdining.api.review.dto` 패키지에 클래스마다 파일 하나로 둔다. 엔드포인트의 요청과 응답은 역할이 드러나게 `Review` + 동작 + `Request`/`Response`로 짓는다. Walking Skeleton은 `ReviewListResponse`, `ReviewCreateRequest`, `ReviewCreateResponse`이고, 목록 항목 `ReviewItem`은 하위 구조다. 1차 후속은 `ReviewFormResponse`, `ReviewDetailResponse`, `ReviewUpdateRequest`, `ReviewReportRequest`, `ReviewPhotoUploadRequest`, `ReviewPhotoUploadResponse`이고, 하위 구조(`TagView`, `FormTag`, `PhotoUpload`)도 같은 패키지에 하나씩 둔다. 역직렬화되는 record의 숫자와 boolean(재방문 의사, 1인당 금액, 사진 수 등)은 박싱 타입이다. 엔티티는 응답으로 반환하지 않는다.
+- Rejected: 한 파일(`ReviewDtos`)에 모으기, `ReviewPage`·`CreateReviewRequest` 같은 이름 → 컨벤션의 이름 규칙과 다르고 여러 사람이 고칠 때 병합 충돌이 잦다. 원시 타입 record → Jackson 3에서 값이 빠진 원시 타입은 원인을 알기 어려운 400이 된다.
+- Anchors: `be/src/main/java/kr/co/fitdining/api/review/dto/ReviewCreateRequest.java#ReviewCreateRequest` (new) · `be/src/main/java/kr/co/fitdining/api/review/dto/ReviewListResponse.java#ReviewListResponse` (new)
+
+## D-24 목록(1차 후속에서도 작성 시각 유지)
+- Status: settled
+- Decision: 장소별로 `created_at DESC, review_id DESC` 정렬, 불투명 커서, 한 번에 20건이다(검색 D-8과 같은 페이지 크기). 조건은 삭제되지 않았고, 숨김이 아니거나 조회자 본인의 리뷰다. `totalCount`는 공개 리뷰 수(삭제·숨김 제외)다. Walking Skeleton 항목은 `reviewId`, 작성 시각(`createdAt`), 본문이고 화면은 작성일을 보인다. 1차 후속에서 방문일, 현재 닉네임, 재방문 의사, 태그와 `sentiment`, 사진, `mine`, `hidden`을 더하고, 작성 시각은 응답에 남긴다. 직전 배포의 FE 번들이 한 버전 동안 그대로 동작해야 하고 필드 삭제는 expand/contract로 하기 때문이다(인프라 BE 계약 #16). 화면(Figma 6-03)은 날짜로 방문일만 보이고, 좋았어요 태그와 아쉬웠어요 태그("아쉬움" 표시)를 구분해 그리며, 본인 리뷰는 닉네임 대신 "나 · 내 리뷰"로 보인다.
+- Rejected: offset 페이지 → 새 리뷰가 올라오면 중복·누락이 생긴다. 1차 후속에서 작성 시각을 방문일로 바꾸기(D-7) → 직전 FE 번들이 작성일을 그리지 못한다(인프라 BE 계약 #16).
+
+## D-25 FE 호출과 화면(리뷰 탭, 공통 API 클라이언트, 폴더 구조)
+- Status: settled
+- Decision: 리뷰 화면은 데이터를 브라우저에서 가져오고 서버 전용 기능을 쓰지 않는다(검색 D-38). 호출은 FE 공통 API 클라이언트(`@/shared/api`의 `request`)로 상대 경로 `/api/v1/...`를 부르고, 서버 상태는 TanStack Query로 다룬다. 로컬 `next dev`에서는 개발 서버 프록시가 `/api`를 BE로 넘긴다(검색 D-58). 등록·수정·삭제·신고 후에는 목록을 다시 불러와 즉시 반영한다(PRD AC-11). 폴더는 master의 FE 공통 구조(S15P31A302-36)를 따른다. 화면 경로는 `src/app`에 두고, 리뷰 코드는 `src/domains/review`에 둔다. 순수 타입과 규칙은 ESLint가 정한 `model`에, 호출과 컴포넌트는 `shared`를 본떠 `api`와 `ui`에 둔다. 의존 방향은 `app → domains → shared`다. 순수 규칙은 Vitest(`pnpm test`)로 확인한다. 장소 상세의 리뷰 탭(Figma 6-03)은 Walking Skeleton부터 둔다. 리뷰 담당이 BE 엔드포인트와 리뷰 도메인의 `ReviewSection`(목록과 "방문 평가 남기기" 버튼)을 만들어 넘기면, 검색 담당이 장소 상세 화면(`src/app/place/page.tsx`)의 탭에 이 컴포넌트를 붙인다(2026-10-21 검색 담당과 합의). 목록 UI는 리뷰 담당이 맡으므로 1차 후속에서 늘어나는 필드(닉네임, 태그, 사진, 내 리뷰 메뉴, 신고)도 리뷰 담당이 고친다. 작성은 리뷰 담당이 만드는 별도 작성 화면에서 하고, 경로는 장소 상세 경로 규칙(`/place?id=`, 검색 D-38)을 따라 `/place/review?id=`다. 검색 담당이 상세 경로를 바꾸면 함께 바꾼다. Walking Skeleton의 작성 화면은 본문만 받는 한 화면 폼이고, 로그인 없이 쓸 수 있다. 등록 요청이 처리되는 동안 "등록하기"를 비활성화해 연타를 막는다. 성공하면 장소 상세의 리뷰 탭으로 돌아가 새 리뷰를 목록 맨 위에 보인다. 실패하면 화면에 오류를 보여 주고 입력을 남긴다. 1차 후속에서 중복 금지가 붙으면 409를 이미 쓴 날짜라고 안내해 방문일만 바꿔 다시 등록하게 하고, `review-form`의 `reviewedDates`로 달력에서 미리 막는다. 1차 후속부터 작성은 Figma의 2단계 흐름을 따른다. 1/2단계는 방문일과 좋았던 점(7-01), 아쉬웠던 점(7-02)이고, 2/2단계는 재방문 의사·본문·사진·1인당 금액(7-04, 7-05)이다. 입력은 화면 상태로만 들고 있다가 마지막 "등록하기"에서 한 번에 보낸다. 작성 중 닫으면 확인 모달(7-E03)을 띄운다. 등록 실패는 서버 오류(7-E05)와 연결 문제(7-E06)를 구분해 보여 준다.
+- Rejected: Walking Skeleton에 리뷰 담당의 별도 리뷰 페이지(목록과 작성 칸, 상세에는 링크만) 두기 → 검색 담당이 Walking Skeleton부터 리뷰 탭을 붙이기로 해 Figma 6-03 구조를 처음부터 따를 수 있다. 검색 담당이 탭 안의 목록 UI를 직접 만들기 → 1차 후속에서 목록 필드가 늘 때마다 검색 담당 코드를 고쳐야 한다. 동적 경로 `/places/[id]/review` → 지금의 장소 상세 경로와 형식이 다르다. 리뷰 목록을 서버에서 렌더링 → `mine`과 숨김 표시가 사용자마다 달라 인증 정보를 서버 호출에 넘겨야 한다. `src/app/components`와 `src/lib`(검색 D-43, D-8) → master의 FE 공통 구조가 `domains`와 `shared`로 나누고 ESLint로 의존 방향을 강제한다.
+
+## D-26 영속성 테스트 DB
+- Status: settled
+- Decision: 저장과 커서 페이지(1차 후속의 부분 유니크 인덱스와 409 변환 포함)는 Testcontainers로 띄운 PostgreSQL에 마이그레이션으로 스키마를 만들어 확인한다. 인프라 BE 계약 #13(제안 상태)이 Testcontainers를 쓰기로 했고, 부분 인덱스(`WHERE deleted_at IS NULL`)와 제약 위반 뒤의 트랜잭션 동작은 H2로 재현되지 않는다. 의존성 추가는 공용 `be/build.gradle`을 바꾸므로 BE 팀과 합의한 뒤 한다(spec Open questions).
+- Rejected: H2 → PostgreSQL 동작을 재현하지 못한다. 로컬 스택(`infra/local`)의 DB에 붙기 → 테스트 결과가 개발 데이터와 로컬 스택 실행 여부에 따라 달라진다.
