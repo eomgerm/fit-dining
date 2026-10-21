@@ -28,11 +28,22 @@ const eslintConfig = defineConfig([
       ],
     },
   },
-  // 디자인 시스템 린트. shared/ui에서 import한 컴포넌트를 디자인 시스템 컴포넌트로 본다.
-  // 켤 규칙은 디자인 토큰과 공통 컴포넌트를 만들면서 정한다
+  // 디자인 시스템 린트. 색·크기는 globals.css 토큰만 쓰고,
+  // shared/ui 컴포넌트는 variant·size로 모양을 고른다. className으로는 폭·바깥 여백 같은 배치만 바꾼다
   {
     plugins: { shadcn },
     settings: { shadcn: { ui: "@/shared/ui" } },
+    rules: {
+      "shadcn/no-raw-colors": "error",
+      "shadcn/no-arbitrary-values": "error",
+      "shadcn/no-unknown-classes": "error",
+      "shadcn/no-restyle": ["error", { allow: ["layout"] }],
+    },
+  },
+  // 컴포넌트 파일은 자기 내부 모양을 정해야 하므로 restyle 검사를 하지 않는다
+  {
+    files: ["src/shared/ui/**"],
+    rules: { "shadcn/no-restyle": "off" },
   },
   // Override default ignores of eslint-config-next.
   globalIgnores([
