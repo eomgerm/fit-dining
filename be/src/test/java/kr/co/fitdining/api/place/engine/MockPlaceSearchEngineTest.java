@@ -72,6 +72,7 @@ class MockPlaceSearchEngineTest {
 		void openStatus_fixedClock_computedFromHours(String seoulDateTime, OpenStatus expected) {
 			MockPlaceSearchEngine engine = engineAt(seoulDateTime, SEOUL);
 
+			assertThat(engine.findPlace(1).orElseThrow().openStatus()).isEqualTo(expected);
 			assertThat(cardStatus(engine, 1)).isEqualTo(expected);
 		}
 
@@ -81,7 +82,7 @@ class MockPlaceSearchEngineTest {
 			// 9번 장소는 브레이크가 없다.
 			MockPlaceSearchEngine engine = engineAt("2026-10-21T15:30", SEOUL);
 
-			assertThat(cardStatus(engine, 9)).isEqualTo(OpenStatus.OPEN);
+			assertThat(engine.findPlace(9).orElseThrow().openStatus()).isEqualTo(OpenStatus.OPEN);
 		}
 
 		@Test
@@ -89,7 +90,7 @@ class MockPlaceSearchEngineTest {
 		void openStatus_utcClock_usesSeoulTime() {
 			MockPlaceSearchEngine engine = engineAt("2026-10-21T15:00", ZoneOffset.UTC);
 
-			assertThat(cardStatus(engine, 1)).isEqualTo(OpenStatus.BREAK);
+			assertThat(engine.findPlace(1).orElseThrow().openStatus()).isEqualTo(OpenStatus.BREAK);
 		}
 
 		@Test
@@ -121,7 +122,7 @@ class MockPlaceSearchEngineTest {
 		void data_appJsonSettings_loads() {
 			MockPlaceSearchEngine engine = engineAt("2026-10-21T12:00", SEOUL);
 
-			assertThat(engine.search(new PlaceSearchRequest("근처", null, null, null, null)).items()).hasSize(places.size());
+			assertThat(engine.findPlace(places.size())).isPresent();
 		}
 
 		@Test

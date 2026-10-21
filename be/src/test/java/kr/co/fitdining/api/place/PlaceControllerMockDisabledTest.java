@@ -38,6 +38,12 @@ class PlaceControllerMockDisabledTest {
 	}
 
 	@Test
+	@DisplayName("장소상세_Mock이꺼져있고다른구현도없으면_503이다")
+	void getPlace_noEngine_returnsServiceUnavailable() throws Exception {
+		expectUnavailable(get("/api/v1/places/{id}", 1));
+	}
+
+	@Test
 	@DisplayName("자동완성_엔진이없어도_형식검증이먼저라400이다")
 	void suggest_noEngineAndBlankQ_returnsBadRequest() throws Exception {
 		mockMvc.perform(get("/api/v1/places/suggest").param("q", " "))

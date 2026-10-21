@@ -11,12 +11,18 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import kr.co.fitdining.api.place.dto.OpenStatus;
 import kr.co.fitdining.api.place.dto.PlaceCard.EvidenceSource;
 import kr.co.fitdining.api.place.dto.PlaceCard.Reason;
 import kr.co.fitdining.api.place.dto.PlaceCard.ReasonTag;
 import kr.co.fitdining.api.place.dto.PlaceCard.ScoreItem;
 import kr.co.fitdining.api.place.dto.PlaceCard;
+import kr.co.fitdining.api.place.dto.PlaceDetailResponse.DayCode;
+import kr.co.fitdining.api.place.dto.PlaceDetailResponse.Facility;
+import kr.co.fitdining.api.place.dto.PlaceDetailResponse.Hours;
+import kr.co.fitdining.api.place.dto.PlaceDetailResponse.Menu;
+import kr.co.fitdining.api.place.dto.PlaceDetailResponse;
 import kr.co.fitdining.api.place.dto.PlaceSearchRequest;
 import kr.co.fitdining.api.place.dto.PlaceSearchResponse.EmptyReason;
 import kr.co.fitdining.api.place.dto.PlaceSearchResponse;
@@ -63,6 +69,11 @@ class PlaceControllerPassThroughTest {
 			new EmptyReason("원인", "제안"),
 			"요약");
 
+	static final PlaceDetailResponse DETAIL = new PlaceDetailResponse(PLACE, "주소", List.of(), List.of("p.jpg"),
+			"010", null, OpenStatus.BREAK,
+			List.of(new Hours(DayCode.SUN, "25:00", "01:00", null, null, List.of(), false)),
+			null, List.of(new Menu("분류", "이름", -100, null)), List.of(Facility.WIFI, Facility.WIFI));
+
 	private static Map<String, Object> conditions() {
 		Map<String, Object> conditions = new LinkedHashMap<>();
 		conditions.put("engineKey", Map.of("nested", 1));
@@ -85,6 +96,11 @@ class PlaceControllerPassThroughTest {
 		public PlaceSearchResponse search(PlaceSearchRequest request) {
 			lastRequest = request;
 			return SEARCH;
+		}
+
+		@Override
+		public Optional<PlaceDetailResponse> findPlace(long id) {
+			return id == 7 ? Optional.of(DETAIL) : Optional.empty();
 		}
 	}
 
@@ -113,6 +129,21 @@ class PlaceControllerPassThroughTest {
 				.andExpect(status().isOk())
 				.andExpect(content().json(jsonMapper.writeValueAsString(SEARCH), JsonCompareMode.STRICT));
 		assertThat(fakeEngine.lastRequest.cursor()).isEqualTo("엔진만 아는 값");
+	}
+
+	@Test
+	@DisplayName("장소상세_엔진의반환값을_그대로응답한다")
+	void getPlace_fakeEngine_returnsEngineValueAsIs() throws Exception {
+		mockMvc.perform(get("/api/v1/places/{id}", 7))
+				.andExpect(status().isOk())
+				.andExpect(content().json(jsonMapper.writeValueAsString(DETAIL), JsonCompareMode.STRICT));
+	}
+
+	@Test
+	@DisplayName("장소상세_엔진이빈값을주면_404다")
+	void getPlace_fakeEngineEmpty_returnsNotFound() throws Exception {
+		mockMvc.perform(get("/api/v1/places/{id}", 8))
+				.andExpect(status().isNotFound());
 	}
 
 }

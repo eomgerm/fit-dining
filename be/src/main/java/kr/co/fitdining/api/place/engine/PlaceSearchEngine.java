@@ -1,6 +1,8 @@
 package kr.co.fitdining.api.place.engine;
 
 import java.util.List;
+import java.util.Optional;
+import kr.co.fitdining.api.place.dto.PlaceDetailResponse;
 import kr.co.fitdining.api.place.dto.PlaceSearchRequest;
 import kr.co.fitdining.api.place.dto.PlaceSearchResponse;
 import kr.co.fitdining.api.place.dto.PlaceSuggestResponse;
@@ -30,5 +32,13 @@ public interface PlaceSearchEngine {
 	 * @throws InvalidCursorException {@code cursor}를 해석할 수 없을 때. 400으로 응답한다.
 	 */
 	PlaceSearchResponse search(PlaceSearchRequest request);
+
+	/**
+	 * 장소 상세를 찾는다.
+	 *
+	 * @param id 장소 id
+	 * @return 장소 상세. 없는 id면 빈 값이고, 이때 {@code PlaceService}가 404로 응답한다.
+	 */
+	Optional<PlaceDetailResponse> findPlace(long id);
 
 }

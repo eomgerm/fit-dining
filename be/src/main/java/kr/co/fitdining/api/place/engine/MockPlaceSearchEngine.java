@@ -128,6 +128,15 @@ public class MockPlaceSearchEngine implements PlaceSearchEngine {
 				changeSummary);
 	}
 
+	@Override
+	public Optional<PlaceDetailResponse> findPlace(long id) {
+		LocalDateTime now = now();
+		return places.stream()
+				.filter(place -> place.detail().place().id() == id)
+				.findFirst()
+				.map(place -> withOpenStatus(place.detail(), openStatus(place.detail().hours(), now)));
+	}
+
 	/** 점수 내림차순, 같으면 파일 순서다. */
 	private List<PlaceCard> rankedCards() {
 		LocalDateTime now = now();
@@ -169,6 +178,11 @@ public class MockPlaceSearchEngine implements PlaceSearchEngine {
 	private static PlaceCard withOpenStatus(PlaceCard card, OpenStatus status) {
 		return new PlaceCard(card.place(), card.score(), card.labels(), card.caution(), status, card.reasons(),
 				card.scoreItems());
+	}
+
+	private static PlaceDetailResponse withOpenStatus(PlaceDetailResponse detail, OpenStatus status) {
+		return new PlaceDetailResponse(detail.place(), detail.address(), detail.tags(), detail.photos(), detail.phone(),
+				detail.website(), status, detail.hours(), detail.closedDayNote(), detail.menus(), detail.facilities());
 	}
 
 	private static List<PlaceCard> page(List<PlaceCard> ranked, int offset) {

@@ -320,6 +320,57 @@ class PlaceControllerTest {
 	}
 
 	@Nested
+	@DisplayName("장소 상세")
+	class Detail {
+
+		@Test
+		@DisplayName("장소상세_알려진id면_영업시간메뉴시설을준다")
+		void getPlace_knownId_returnsDetail() throws Exception {
+			mockMvc.perform(get("/api/v1/places/{id}", 1))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.place.id").value(1))
+					.andExpect(jsonPath("$.place.name").value("하노이 쌀국수 역삼점"))
+					.andExpect(jsonPath("$.hours", hasSize(7)))
+					.andExpect(jsonPath("$.hours[*].dayOfWeek", contains("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")))
+					.andExpect(jsonPath("$.menus[0].category").isString())
+					.andExpect(jsonPath("$.menus[0].name").isString())
+					.andExpect(jsonPath("$.facilities").isArray())
+					.andExpect(jsonPath("$.tags").isArray())
+					.andExpect(jsonPath("$.photos").isArray())
+					.andExpect(jsonPath("$.openStatus").isString())
+					.andExpect(jsonPath("$.address").isString());
+		}
+
+		@Test
+		@DisplayName("장소상세_응답에는_점수와추천이유가없다")
+		void getPlace_knownId_hasNoSearchContext() throws Exception {
+			mockMvc.perform(get("/api/v1/places/{id}", 1))
+					.andExpect(jsonPath("$.score").doesNotExist())
+					.andExpect(jsonPath("$.reasons").doesNotExist())
+					.andExpect(jsonPath("$.scoreItems").doesNotExist());
+		}
+
+		@Test
+		@DisplayName("장소상세_모르는id면_404다")
+		void getPlace_unknownId_returnsNotFound() throws Exception {
+			mockMvc.perform(get("/api/v1/places/{id}", 999))
+					.andExpect(status().isNotFound())
+					.andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+					.andExpect(jsonPath("$.status").value(404));
+		}
+
+		@ParameterizedTest
+		@ValueSource(strings = {"abc", "1.5", "99999999999999999999"})
+		@DisplayName("장소상세_정수가아닌id면_400이다")
+		void getPlace_nonIntegerId_returnsBadRequest(String id) throws Exception {
+			mockMvc.perform(get("/api/v1/places/{id}", id))
+					.andExpect(status().isBadRequest())
+					.andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+					.andExpect(jsonPath("$.status").value(400));
+		}
+	}
+
+	@Nested
 	@DisplayName("요청 본문 검증")
 	class RequestBodyValidation {
 
@@ -431,7 +482,7 @@ class PlaceControllerTest {
 	class AuthorizationAndPreferences {
 
 		@ParameterizedTest(name = "{0}")
-		@ValueSource(strings = {"suggest", "search"})
+		@ValueSource(strings = {"suggest", "search", "detail"})
 		@DisplayName("엔드포인트_Authorization헤더가있든없든_응답이같다")
 		void endpoint_withOrWithoutAuthorization_sameResponse(String endpoint) throws Exception {
 			String plain = mockMvc.perform(request(endpoint)).andExpect(status().isOk())
@@ -445,7 +496,8 @@ class PlaceControllerTest {
 		private static MockHttpServletRequestBuilder request(String endpoint) {
 			return switch (endpoint) {
 				case "suggest" -> get("/api/v1/places/suggest").param("q", "역삼");
-				default -> search("{\"query\":\"카페\"}");
+				case "search" -> search("{\"query\":\"카페\"}");
+				default -> get("/api/v1/places/{id}", 3);
 			};
 		}
 
@@ -524,6 +576,11 @@ class PlaceControllerTest {
 		private static final Set<String> REASON = Set.of("title", "tags", "quote", "quoteSource");
 		private static final Set<String> REASON_TAG = Set.of("source", "label");
 		private static final Set<String> SCORE_ITEM = Set.of("source", "label", "matched", "evidenceCount");
+		private static final Set<String> DETAIL = Set.of("place", "address", "tags", "photos", "phone", "website",
+				"openStatus", "hours", "closedDayNote", "menus", "facilities");
+		private static final Set<String> HOURS = Set.of("dayOfWeek", "open", "close", "breakStart", "breakEnd",
+				"lastOrders", "closed");
+		private static final Set<String> MENU = Set.of("category", "name", "price", "photoUrl");
 
 		@Autowired
 		JsonMapper jsonMapper;
@@ -562,6 +619,18 @@ class PlaceControllerTest {
 					}
 					card.get("scoreItems").forEach(item -> assertKeys(item, SCORE_ITEM));
 				}
+			}
+		}
+
+		@Test
+		@DisplayName("장소상세_응답키는_문서화된필드를벗어나지않는다")
+		void getPlace_responseKeys_withinDocumentedFields() throws Exception {
+			for (int id = 1; id <= 30; id++) {
+				JsonNode detail = read(get("/api/v1/places/{id}", id));
+				assertKeys(detail, DETAIL);
+				assertKeys(detail.get("place"), SUMMARY);
+				detail.get("hours").forEach(hours -> assertKeys(hours, HOURS));
+				detail.get("menus").forEach(menu -> assertKeys(menu, MENU));
 			}
 		}
 

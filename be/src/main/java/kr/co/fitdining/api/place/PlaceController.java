@@ -4,11 +4,13 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import java.util.List;
+import kr.co.fitdining.api.place.dto.PlaceDetailResponse;
 import kr.co.fitdining.api.place.dto.PlaceSearchRequest;
 import kr.co.fitdining.api.place.dto.PlaceSearchResponse;
 import kr.co.fitdining.api.place.dto.PlaceSuggestResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -16,7 +18,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 장소 자동완성, 추천 검색 API. 요청 형식만 검증하고 처리는 {@link PlaceService}에 맡긴다.
+ * 장소 자동완성, 추천 검색, 상세 API. 요청 형식만 검증하고 처리는 {@link PlaceService}에 맡긴다.
  * 오류는 {@code PlaceExceptionHandler}가 ProblemDetail로 바꾼다.
  *
  * <p>클래스에 {@code @Validated}를 붙이지 않는다. 붙이면 Spring MVC 내장 메서드 검증이 꺼져
@@ -55,6 +57,19 @@ public class PlaceController {
 	@PostMapping("/search")
 	public PlaceSearchResponse search(@Valid @RequestBody PlaceSearchRequest request) {
 		return placeService.search(request);
+	}
+
+	/**
+	 * 장소 상세를 돌려준다. 핏 점수와 추천 이유는 담지 않는다(검색 카드에 있다).
+	 *
+	 * <p>오류: {@code id}가 정수가 아니면 400. 없는 장소면 404. 검색 엔진이 없으면 503.
+	 *
+	 * @param id 장소 id
+	 * @return 장소 상세
+	 */
+	@GetMapping("/{id}")
+	public PlaceDetailResponse getPlace(@PathVariable long id) {
+		return placeService.getPlace(id);
 	}
 
 }

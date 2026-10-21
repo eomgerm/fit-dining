@@ -34,6 +34,11 @@ public class PlaceExceptionHandler {
 		return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "요청 형식이 올바르지 않아요.");
 	}
 
+	@ExceptionHandler(PlaceNotFoundException.class)
+	public ProblemDetail handleNotFound() {
+		return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "장소를 찾을 수 없어요.");
+	}
+
 	@ExceptionHandler(PlaceSearchUnavailableException.class)
 	public ProblemDetail handleUnavailable() {
 		log.warn("Place search engine is not configured");
