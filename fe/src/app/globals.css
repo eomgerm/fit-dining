@@ -1,26 +1,183 @@
 @import "tailwindcss";
 
+/*
+ * 디자인 토큰. 원본은 Figma '핏다이닝' 파일의 변수(Color·Number), 텍스트·그림자 스타일, 모션 원칙 메모다.
+ * 값을 바꿀 때는 Figma를 먼저 고치고 여기에 옮긴다.
+ *
+ * 2층 구조:
+ *  - primitive(:root): 원본 색. 유틸리티를 만들지 않으므로 화면에서 쓸 수 없다.
+ *  - semantic(@theme): 역할 이름. 화면과 컴포넌트는 이것만 쓴다(bg-primary, text-ink, border-line).
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
+
+  --orange-700: #c2450f;
+  --orange-500: #f2622e;
+  --orange-200: #ffb896;
+  --orange-100: #ffdcc9;
+  --orange-50: #fff1ea;
+
+  --gray-900: #1f1b19;
+  --gray-800: #3a3431;
+  --gray-700: #57504c;
+  --gray-600: #6e6662;
+  --gray-500: #8c8480;
+  --gray-400: #b3aba7;
+  --gray-300: #d6cfcb;
+  --gray-200: #e9e3e0;
+  --gray-100: #f4f0ee;
+  --white: #ffffff;
+}
+
+@theme {
+  /* Tailwind 기본값 중 Figma와 겹치는 이름공간을 지운다. bg-zinc-50, rounded-2xl 같은 클래스는 만들어지지 않는다 */
+  --color-*: initial;
+  --radius-*: initial;
+  --shadow-*: initial;
+  --text-*: initial;
+  --ease-*: initial;
+
+  /* 색: Figma semantic 변수와 같은 이름 */
+  /* CTA 면, 선택 핀, 탭 밑줄, 24px 이상 점수 숫자 */
+  --color-primary: var(--orange-500);
+  /* 작은 주황 글자, 선택 칩·톤 버튼 글자 */
+  --color-primary-strong: var(--orange-500);
+  --color-primary-soft: var(--orange-50); /* primary-strong 글자 뒤 옅은 배경 */
+  --color-on-primary: var(--white);
+  --color-secondary: #2a2522; /* 웜 차콜. 보조 버튼 테두리, 사진 위 어두운 칩 */
+  --color-on-secondary: var(--white);
+
+  --color-surface: var(--white); /* 페이지·카드·시트 바탕 */
+  --color-surface-warm: #fcf6f1; /* 장소 상세 바탕, 섹션 구분 바탕 */
+  --color-surface-sunken: var(--gray-100); /* 채움형 입력창, 스켈레톤 */
+  --color-line: var(--gray-200); /* 구분선, 카드 외곽선 */
+  --color-line-strong: var(--gray-300); /* 입력창·기본 칩 테두리 */
+
+  --color-ink: var(--gray-900); /* 본문·제목 글자 */
+  --color-ink-muted: var(--gray-600); /* 보조 글자, 메타(업종·거리) */
+  --color-ink-subtle: #78706c; /* 플레이스홀더, 비필수 캡션 */
+  --color-ink-disabled: var(--gray-400);
+
+  /* 상태색은 항상 아이콘·문구와 함께 쓴다 */
+  --color-success: #1b7f45;
+  --color-success-soft: #eef8f2;
+  --color-warning: #a85f00;
+  --color-warning-soft: #fff8eb;
+  --color-danger: #c8281c; /* 오류·신고·삭제 */
+  --color-danger-soft: #fef4f3;
+  --color-info: #1f5fbf;
+  --color-info-soft: #e8f0fc;
+
+  --color-focus-ring: var(--orange-500);
+  --color-scrim: rgb(31 27 25 / 0.5); /* 다이얼로그·시트 뒤 딤 */
+  --color-photo-shade: rgb(0 0 0 / 0.65); /* 영상 하단 그라데이션 끝 */
+  --color-location: #2a72e5; /* 현재 위치 점 */
+  --color-location-halo: rgb(42 114 229 / 0.18);
+  --color-map-road: var(--white);
+  --color-map-bg: #f3efea;
+
+  /* Figma에는 primitive에 역할 설명만 있는 색. 컴포넌트가 primitive를 직접 쓰지 않도록 이름을 붙였다 */
+  --color-primary-pressed: var(--orange-700); /* primary 버튼 눌림 */
+  --color-primary-disabled: var(--orange-200); /* 비활성 primary 버튼 면 */
+  --color-primary-line: var(--orange-100); /* 선택 칩 테두리, 옅은 눌림 면 */
+  --color-icon: var(--gray-700); /* 아이콘 기본색 */
+  /* 캡션 아이콘, 지도 핀 테두리. 글자색으로는 쓰지 않는다 */
+  --color-icon-subtle: var(--gray-500);
+  --color-surface-inverse: var(--gray-800); /* 툴팁 배경 */
+
+  /* 라운드. rounded-full은 Tailwind 기본 유틸리티를 쓴다 */
+  --radius-xs: 0.25rem; /* 4px */
+  --radius-sm: 0.375rem; /* 6px */
+  --radius-md: 0.625rem; /* 10px */
+  --radius-lg: 0.875rem; /* 14px */
+  --radius-xl: 1.25rem; /* 20px */
+
+  /* 간격은 Figma space-1~12(4px 단위)가 Tailwind 기본 --spacing(0.25rem)과 같아 따로 두지 않는다. p-4 = 16px = space-4 */
+
+  --shadow-1: 0 1px 2px rgb(31 27 25 / 0.08);
+  --shadow-2: 0 4px 16px rgb(31 27 25 / 0.12);
+  --shadow-3: 0 8px 24px rgb(31 27 25 / 0.16);
+  --shadow-pin: 0 4px 10px rgb(242 98 46 / 0.35);
+
+  /* 글자: Figma 텍스트 스타일 14개. text-title-md 하나로 크기·행간·자간·굵기가 함께 적용된다 */
+  --text-headline-lg: 1.875rem; /* 30/40 Bold -2% */
+  --text-headline-lg--line-height: 2.5rem;
+  --text-headline-lg--letter-spacing: -0.02em;
+  --text-headline-lg--font-weight: 700;
+  --text-headline-md: 1.5rem; /* 24/32 Bold -2% */
+  --text-headline-md--line-height: 2rem;
+  --text-headline-md--letter-spacing: -0.02em;
+  --text-headline-md--font-weight: 700;
+
+  --text-title-lg: 1.25rem; /* 20/28 Bold -1% */
+  --text-title-lg--line-height: 1.75rem;
+  --text-title-lg--letter-spacing: -0.01em;
+  --text-title-lg--font-weight: 700;
+  --text-title-md: 1.125rem; /* 18/26 SemiBold -1% */
+  --text-title-md--line-height: 1.625rem;
+  --text-title-md--letter-spacing: -0.01em;
+  --text-title-md--font-weight: 600;
+  --text-title-sm: 1rem; /* 16/24 SemiBold */
+  --text-title-sm--line-height: 1.5rem;
+  --text-title-sm--font-weight: 600;
+
+  --text-body-md: 0.9375rem; /* 15/24 Regular */
+  --text-body-md--line-height: 1.5rem;
+  --text-body-md--font-weight: 400;
+  --text-body-sm: 0.875rem; /* 14/22 Regular */
+  --text-body-sm--line-height: 1.375rem;
+  --text-body-sm--font-weight: 400;
+
+  --text-caption-md: 0.8125rem; /* 13/18 Regular */
+  --text-caption-md--line-height: 1.125rem;
+  --text-caption-md--font-weight: 400;
+  --text-caption-sm: 0.75rem; /* 12/16 Regular */
+  --text-caption-sm--line-height: 1rem;
+  --text-caption-sm--font-weight: 400;
+
+  --text-label-md: 0.875rem; /* 14/20 SemiBold */
+  --text-label-md--line-height: 1.25rem;
+  --text-label-md--font-weight: 600;
+  --text-label-sm: 0.75rem; /* 12/16 SemiBold */
+  --text-label-sm--line-height: 1rem;
+  --text-label-sm--font-weight: 600;
+
+  --text-button-lg: 1.1875rem; /* 19/24 Bold */
+  --text-button-lg--line-height: 1.5rem;
+  --text-button-lg--font-weight: 700;
+  --text-button-md: 1rem; /* 16/24 SemiBold */
+  --text-button-md--line-height: 1.5rem;
+  --text-button-md--font-weight: 600;
+  --text-button-sm: 0.875rem; /* 14/20 SemiBold */
+  --text-button-sm--line-height: 1.25rem;
+  --text-button-sm--font-weight: 600;
+
+  /*
+   * 모션(Figma 모션 원칙 메모). 시간은 Tailwind 숫자 유틸리티를 그대로 쓴다:
+   * duration-120 누름·체크·색 변화 / 200 칩·토글·토스트 / 320 시트·모달·화면 전환 / 220 닫힘
+   * 움직임 줄이기(motion-reduce:)에서는 이동·확대를 빼고 투명도·색 변화만 120ms로 한다.
+   */
+  --ease-enter: cubic-bezier(0.16, 1, 0.3, 1); /* 들어올 때 */
+  --ease-exit: cubic-bezier(0.7, 0, 0.84, 0); /* 나갈 때 */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1); /* 제자리 변화 */
+  --default-transition-duration: 120ms;
+  --default-transition-timing-function: var(--ease-standard);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* next/font가 <html>에 붙이는 변수라 inline으로 값을 풀어 쓴다 */
+  --font-sans:
+    var(--font-pretendard), "Apple SD Gothic Neo", "Noto Sans KR",
+    "Malgun Gothic", sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  body {
+    @apply bg-surface font-sans text-body-md text-ink;
   }
-}
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  :focus-visible {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: 2px;
+  }
 }
