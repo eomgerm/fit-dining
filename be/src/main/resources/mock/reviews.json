@@ -1,0 +1,129 @@
+{
+  "reviews": [
+    {
+      "placeId": 1,
+      "description": "점심시간에도 자리가 넉넉했어요.",
+      "createdAt": "2026-09-26T03:00:00Z"
+    },
+    {
+      "placeId": 1,
+      "description": "국물이 진하고 양이 많아요.",
+      "createdAt": "2026-09-27T08:00:00Z"
+    },
+    {
+      "placeId": 1,
+      "createdAt": "2026-09-28T04:00:00Z"
+    },
+    {
+      "placeId": 1,
+      "description": "직원분들이 친절해요.",
+      "createdAt": "2026-09-29T09:00:00Z"
+    },
+    {
+      "placeId": 1,
+      "description": "혼밥하기 편한 자리가 있어요.",
+      "createdAt": "2026-09-30T05:00:00Z"
+    },
+    {
+      "placeId": 1,
+      "description": "주말 저녁에는 조금 기다렸어요.",
+      "createdAt": "2026-10-01T10:00:00Z"
+    },
+    {
+      "placeId": 1,
+      "description": "고수는 따로 달라고 하면 빼 줘요.",
+      "createdAt": "2026-10-02T06:00:00Z"
+    },
+    {
+      "placeId": 1,
+      "createdAt": "2026-10-03T11:00:00Z"
+    },
+    {
+      "placeId": 1,
+      "description": "가격 대비 만족스러워요.",
+      "createdAt": "2026-10-04T07:00:00Z"
+    },
+    {
+      "placeId": 1,
+      "description": "창가 자리가 밝아서 좋았어요.",
+      "createdAt": "2026-10-05T03:00:00Z"
+    },
+    {
+      "placeId": 1,
+      "description": "회사 동료들과 점심 먹기 좋아요.",
+      "createdAt": "2026-10-06T08:00:00Z"
+    },
+    {
+      "placeId": 1,
+      "description": "면이 탱탱해요.",
+      "createdAt": "2026-10-07T04:00:00Z"
+    },
+    {
+      "placeId": 1,
+      "createdAt": "2026-10-08T09:00:00Z"
+    },
+    {
+      "placeId": 1,
+      "description": "포장도 깔끔하게 해 줘요.",
+      "createdAt": "2026-10-09T05:00:00Z"
+    },
+    {
+      "placeId": 1,
+      "description": "음악 소리가 크지 않아 대화하기 좋았어요.",
+      "createdAt": "2026-10-10T10:00:00Z"
+    },
+    {
+      "placeId": 1,
+      "description": "월남쌈 세트를 추천해요.",
+      "createdAt": "2026-10-11T06:00:00Z"
+    },
+    {
+      "placeId": 1,
+      "description": "비 오는 날 생각나는 맛이에요.",
+      "createdAt": "2026-10-12T11:00:00Z"
+    },
+    {
+      "placeId": 1,
+      "createdAt": "2026-10-13T07:00:00Z"
+    },
+    {
+      "placeId": 1,
+      "description": "테이블 간격이 넓은 편이에요.",
+      "createdAt": "2026-10-14T03:00:00Z"
+    },
+    {
+      "placeId": 1,
+      "description": "주문하고 금방 나왔어요.",
+      "createdAt": "2026-10-15T08:00:00Z"
+    },
+    {
+      "placeId": 1,
+      "description": "디저트로 연유 커피를 마셨어요.",
+      "createdAt": "2026-10-16T04:00:00Z"
+    },
+    {
+      "placeId": 1,
+      "description": "역에서 가까워 찾기 쉬워요.",
+      "createdAt": "2026-10-17T09:00:00Z"
+    },
+    {
+      "placeId": 1,
+      "createdAt": "2026-10-18T05:00:00Z"
+    },
+    {
+      "placeId": 1,
+      "description": "재방문 의사 있어요.",
+      "createdAt": "2026-10-19T10:00:00Z"
+    },
+    {
+      "placeId": 1,
+      "description": "점심 피크 직전에 가면 조용해요.",
+      "createdAt": "2026-10-20T06:00:00Z"
+    },
+    {
+      "placeId": 2,
+      "description": "분위기가 좋아서 대화하기 편했어요.",
+      "createdAt": "2026-10-19T10:30:00Z"
+    }
+  ]
+}

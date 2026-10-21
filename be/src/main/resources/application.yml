@@ -18,3 +18,7 @@ spring:
 place:
   mock:
     enabled: ${PLACE_MOCK_ENABLED:false}
+
+review:
+  mock:
+    enabled: ${REVIEW_MOCK_ENABLED:false}
