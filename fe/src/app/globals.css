@@ -162,6 +162,17 @@
   --ease-standard: cubic-bezier(0.2, 0, 0, 1); /* 제자리 변화 */
   --default-transition-duration: 120ms;
   --default-transition-timing-function: var(--ease-standard);
+
+  /* 칩 선택 때 체크가 선으로 그려진다(200ms). 왼쪽부터 드러내 그리는 것처럼 보인다 */
+  --animate-draw-in: draw-in 200ms var(--ease-enter);
+  @keyframes draw-in {
+    from {
+      clip-path: inset(0 100% 0 0);
+    }
+    to {
+      clip-path: inset(0);
+    }
+  }
 }
 
 @theme inline {
@@ -176,6 +187,11 @@
   & * {
     vector-effect: non-scaling-stroke;
   }
+}
+
+/* 선택된 칩 테두리(Figma 1.5px). Tailwind 기본 테두리 두께에 없다 */
+@utility border-1.5 {
+  border-width: 1.5px;
 }
 
 @layer base {
