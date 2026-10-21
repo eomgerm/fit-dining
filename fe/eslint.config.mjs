@@ -37,7 +37,22 @@ const eslintConfig = defineConfig([
       "shadcn/no-raw-colors": "error",
       "shadcn/no-arbitrary-values": "error",
       "shadcn/no-unknown-classes": "error",
-      "shadcn/no-restyle": ["error", { allow: ["layout"] }],
+      "shadcn/no-restyle": [
+        "error",
+        {
+          // 높이·크기는 size prop으로 고른다
+          allow: ["layout"],
+          deny: ["h-*", "size-*"],
+          // 아이콘은 옆 글자와 다른 색을 쓰는 곳이 있어 색만 더 허용한다
+          contracts: [
+            {
+              pattern: "Icon$",
+              allow: ["layout", "color"],
+              deny: ["h-*", "w-*", "size-*"],
+            },
+          ],
+        },
+      ],
     },
   },
   // 컴포넌트 파일은 자기 내부 모양을 정해야 하므로 restyle 검사를 하지 않는다
