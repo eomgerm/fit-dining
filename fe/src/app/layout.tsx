@@ -24,8 +24,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="flex min-h-full flex-col">
-        <Providers>{children}</Providers>
+      {/* Base UI 권장 설정: relative는 iOS Safari에서 backdrop이 화면을 덮게 하고,
+          isolate는 body에 붙는 팝업(portal)이 페이지 z-index에 가리지 않게 한다 */}
+      <body className="relative flex min-h-full flex-col">
+        <div className="isolate flex flex-1 flex-col">
+          <Providers>{children}</Providers>
+        </div>
       </body>
     </html>
   );

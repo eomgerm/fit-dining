@@ -1,3 +1,4 @@
+import { plugin as shadcn } from "@shadcn/lint";
 import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
@@ -26,6 +27,12 @@ const eslintConfig = defineConfig([
         },
       ],
     },
+  },
+  // 디자인 시스템 린트. shared/ui에서 import한 컴포넌트를 디자인 시스템 컴포넌트로 본다.
+  // 켤 규칙은 디자인 토큰과 공통 컴포넌트를 만들면서 정한다
+  {
+    plugins: { shadcn },
+    settings: { shadcn: { ui: "@/shared/ui" } },
   },
   // Override default ignores of eslint-config-next.
   globalIgnores([
