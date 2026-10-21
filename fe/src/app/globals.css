@@ -91,6 +91,7 @@
   --radius-md: 0.625rem; /* 10px */
   --radius-lg: 0.875rem; /* 14px */
   --radius-xl: 1.25rem; /* 20px */
+  --radius-checkbox: 0.3125rem; /* 5px. Figma Checkbox row 상자만 라운드 단계 밖의 값을 쓴다 */
 
   /* 간격은 Figma space-1~12(4px 단위)가 Tailwind 기본 --spacing(0.25rem)과 같아 따로 두지 않는다. p-4 = 16px = space-4 */
 
