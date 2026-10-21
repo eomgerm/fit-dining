@@ -6,6 +6,8 @@ type StepProgressProps = Omit<ComponentProps<"div">, "className"> & {
   // 현재 단계(1부터)
   step: number;
   total: number;
+  // 화면 낭독기가 읽는 진행 막대 이름(예: "온보딩 진행", "방문 평가 진행")
+  label: string;
   // 폭·배치. Figma는 w-64(256px)
   className?: string;
 };
@@ -14,12 +16,14 @@ type StepProgressProps = Omit<ComponentProps<"div">, "className"> & {
 export function StepProgress({
   step,
   total,
+  label,
   className,
   ...props
 }: StepProgressProps) {
   return (
     <div
       role="progressbar"
+      aria-label={label}
       aria-valuemin={1}
       aria-valuemax={total}
       aria-valuenow={step}

@@ -1,7 +1,7 @@
 "use client";
 
 import { Field } from "@base-ui/react/field";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type TextareaProps = Omit<Field.Control.Props, "className"> & {
   // Figma처럼 화면에는 숨기고 화면 낭독기만 읽는다
@@ -23,13 +23,24 @@ export function Textarea({
 }: TextareaProps) {
   const [length, setLength] = useState(String(defaultValue ?? "").length);
   const count = value === undefined ? length : String(value).length;
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  // 폼을 reset하면 change 이벤트 없이 값만 돌아가므로 글자 수를 다시 센다
+  useEffect(() => {
+    const form = ref.current?.form;
+    if (!form) return;
+    const handleReset = () =>
+      setTimeout(() => setLength(ref.current?.value.length ?? 0));
+    form.addEventListener("reset", handleReset);
+    return () => form.removeEventListener("reset", handleReset);
+  }, []);
 
   return (
     <Field.Root className={className}>
       <Field.Label className="sr-only">{label}</Field.Label>
       <div className="flex h-35 flex-col gap-1 rounded-md border border-line-strong bg-surface p-3 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-focus-ring">
         <Field.Control
-          render={<textarea />}
+          render={<textarea ref={ref} />}
           value={value}
           defaultValue={defaultValue}
           maxLength={maxLength}

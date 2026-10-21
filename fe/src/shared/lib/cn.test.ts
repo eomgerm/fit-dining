@@ -13,6 +13,9 @@ describe("cn", () => {
     expect(cn("text-ink", "text-danger")).toBe("text-danger");
     expect(cn("text-body-md", "text-title-sm")).toBe("text-title-sm");
     expect(cn("shadow-1", "shadow-pin")).toBe("shadow-pin");
+    expect(cn("shadow-2", "shadow-sheet")).toBe("shadow-sheet");
+    expect(cn("ease-enter", "ease-exit")).toBe("ease-exit");
+    expect(cn("rounded-xs", "rounded-checkbox")).toBe("rounded-checkbox");
   });
 
   it("그림자 크기와 그림자 색은 서로 지우지 않는다", () => {

@@ -9,7 +9,9 @@ const twMerge = extendTailwindMerge({
         (value: string) =>
           /^(headline|title|body|caption|label|button)-(lg|md|sm)$/.test(value),
       ],
-      shadow: ["1", "2", "3", "pin"],
+      shadow: ["1", "2", "3", "pin", "sheet"],
+      ease: ["enter", "exit", "standard"],
+      radius: ["checkbox"],
     },
   },
 });

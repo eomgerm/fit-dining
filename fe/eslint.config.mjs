@@ -55,6 +55,20 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+  // globals.css에서 --color-*: initial로 white·black이 없어 bg-white 같은 클래스는 CSS가 생성되지 않는데,
+  // @shadcn/lint(0.2.3)가 이를 잡지 못한다. surface·ink 같은 토큰을 쓰도록 막는다
+  {
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        ...["Literal[value", "TemplateElement[value.raw"].map((target) => ({
+          selector: `${target}=/(^|[\\s:])[a-z-]+-(white|black)(\\/\\d+)?(\\s|$)/]`,
+          message:
+            "white·black 색 클래스는 CSS가 생성되지 않습니다. surface·ink 같은 토큰을 쓰세요.",
+        })),
+      ],
+    },
+  },
   // 컴포넌트 파일은 자기 내부 모양을 정해야 하므로 restyle 검사를 하지 않는다
   {
     files: ["src/shared/ui/**"],

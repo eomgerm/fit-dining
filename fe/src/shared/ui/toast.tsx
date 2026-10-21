@@ -10,7 +10,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <Toast.Provider timeout={2500} limit={1}>
       {children}
       <Toast.Portal>
-        <Toast.Viewport className="fixed inset-x-0 bottom-24 flex justify-center">
+        {/* 다이얼로그·시트의 딤은 나중에 body에 붙어 토스트를 덮으므로 z-index로 위에 둔다 */}
+        <Toast.Viewport className="fixed inset-x-4 bottom-24 z-10 flex justify-center">
           <ToastList />
         </Toast.Viewport>
       </Toast.Portal>
@@ -24,9 +25,10 @@ function ToastList() {
     <Toast.Root
       key={toast.id}
       toast={toast}
-      className="absolute bottom-0 flex h-10 items-center rounded-full bg-ink px-4 whitespace-nowrap text-surface shadow-2 transition duration-200 ease-enter data-ending-style:opacity-0 data-ending-style:duration-150 data-ending-style:ease-exit data-limited:opacity-0 data-starting-style:translate-y-4 data-starting-style:opacity-0 motion-reduce:translate-y-0 motion-reduce:transition-opacity"
+      // 끌어서 닫을 때 손가락을 따라 움직이도록 Base UI의 swipe 변수를 쓴다
+      className="absolute bottom-0 flex h-10 max-w-full translate-x-(--toast-swipe-movement-x) translate-y-(--toast-swipe-movement-y) items-center rounded-full bg-ink px-4 text-surface shadow-2 transition duration-200 ease-enter data-ending-style:opacity-0 data-ending-style:duration-150 data-ending-style:ease-exit data-limited:opacity-0 data-starting-style:translate-y-4 data-starting-style:opacity-0 data-swiping:duration-0 motion-reduce:data-starting-style:translate-y-0"
     >
-      <Toast.Description className="text-body-sm" />
+      <Toast.Description className="truncate text-body-sm" />
     </Toast.Root>
   ));
 }

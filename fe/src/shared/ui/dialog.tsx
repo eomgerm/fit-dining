@@ -40,7 +40,7 @@ export function DialogFrame({
     <BaseAlertDialog.Root {...props}>
       <BaseAlertDialog.Portal>
         <BaseAlertDialog.Backdrop className="fixed inset-0 bg-scrim transition-opacity duration-240 ease-enter data-ending-style:opacity-0 data-ending-style:duration-220 data-ending-style:ease-exit data-starting-style:opacity-0" />
-        <BaseAlertDialog.Popup className="fixed top-1/2 left-1/2 flex w-75 -translate-1/2 flex-col gap-3 rounded-xl bg-surface px-5 pt-6 pb-5 text-center shadow-3 transition delay-80 duration-240 ease-enter data-ending-style:scale-96 data-ending-style:opacity-0 data-ending-style:delay-0 data-ending-style:duration-220 data-ending-style:ease-exit data-starting-style:scale-96 data-starting-style:opacity-0 motion-reduce:scale-100 motion-reduce:transition-opacity motion-reduce:delay-0 motion-reduce:duration-120">
+        <BaseAlertDialog.Popup className="fixed top-1/2 left-1/2 flex w-75 -translate-1/2 flex-col gap-3 rounded-xl bg-surface px-5 pt-6 pb-5 text-center shadow-3 transition delay-80 duration-240 ease-enter data-ending-style:scale-96 data-ending-style:opacity-0 data-ending-style:delay-0 data-ending-style:duration-220 data-ending-style:ease-exit data-starting-style:scale-96 data-starting-style:opacity-0 motion-reduce:transition-opacity motion-reduce:delay-0 motion-reduce:duration-120 motion-reduce:data-ending-style:scale-100 motion-reduce:data-starting-style:scale-100">
           {icon && <span className={iconCircleVariants({ tone })}>{icon}</span>}
           <BaseAlertDialog.Title className="text-title-sm text-ink">
             {title}

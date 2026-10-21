@@ -1,7 +1,13 @@
 "use client";
 
 import useEmblaCarousel from "embla-carousel-react";
-import { Children, useEffect, type KeyboardEvent, type ReactNode } from "react";
+import {
+  Children,
+  useEffect,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 
 import { cn } from "@/shared/lib/cn";
 
@@ -32,7 +38,14 @@ export function Carousel({
   options,
   className,
 }: CarouselProps) {
-  const [viewportRef, api] = useEmblaCarousel(options);
+  // 처음 칸은 미끄러지지 않고 바로 보이게 시작 위치로 넘긴다.
+  // containScroll을 끄면 칸 하나가 스냅 하나가 되어 index가 칸 번호와 늘 같다
+  const [startIndex] = useState(index ?? 0);
+  const [viewportRef, api] = useEmblaCarousel({
+    ...options,
+    startIndex,
+    containScroll: false,
+  });
   const slides = Children.toArray(children);
 
   useEffect(() => {

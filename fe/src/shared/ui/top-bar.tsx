@@ -45,7 +45,7 @@ export function TopBar({
       <div className="flex min-w-0 flex-1 items-center">{children}</div>
       <div className="flex min-w-11 shrink-0 justify-end">{end}</div>
       {title && (
-        <h1 className="pointer-events-none absolute inset-0 flex items-center justify-center px-14 text-title-sm text-ink">
+        <h1 className="pointer-events-none absolute inset-0 flex items-center justify-center px-20 text-title-sm text-ink">
           <span className="truncate">{title}</span>
         </h1>
       )}

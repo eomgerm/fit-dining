@@ -28,16 +28,16 @@ const toneIcons = {
   ok: <CheckIcon size="md" />,
 };
 
-type NoteProps = Omit<ComponentProps<"p">, "className"> &
+type NoteProps = Omit<ComponentProps<"div">, "className"> &
   VariantProps<typeof noteVariants> & {
     className?: string;
   };
 
 export function Note({ tone, className, children, ...props }: NoteProps) {
   return (
-    <p className={cn(noteVariants({ tone }), className)} {...props}>
+    <div className={cn(noteVariants({ tone }), className)} {...props}>
       {toneIcons[tone ?? "muted"]}
       {children}
-    </p>
+    </div>
   );
 }
