@@ -3256,7 +3256,7 @@ Expected: 데이터 스택의 `Healthy` 줄과 `데이터 초기화 완료`에 �
 
 Run: `bash infra/backup/test/test-backup.sh run 2>&1 | grep -E "^---|^FAIL|^백업 시험|개 점검 실패"`
 
-Expected: 구역 제목 12개(`--- 보관 정책(순수 함수)`부터 `--- 비밀 값 노출`까지)가 나오고 `FAIL`은 하나도 없으며 마지막 줄이 `백업 시험 통과`다. 전체 `PASS` 줄은 159개다(`bash infra/backup/test/test-backup.sh run`의 출력에서 센다). 구역 하나만 돌리려면 구역 이름을 준다(앞 구역이 만든 상태를 쓰는 구역은 순서대로 이어서 돌린다: `install trust pg push ingest` 등).
+Expected: 구역 제목 12개(`--- 보관 정책(순수 함수)`부터 `--- 비밀 값 노출`까지)가 나오고 `FAIL`은 하나도 없으며 마지막 줄이 `백업 시험 통과`다. 전체 `PASS` 줄은 159개다(`bash infra/backup/test/test-backup.sh run`의 출력에서 센다). `pg-backup.sh`를 이미 커밋해서 git이 추적하면 `predeploy` 구역에 실행 권한(100755) 점검이 하나 더 붙어 160개다. 구역 하나만 돌리려면 구역 이름을 준다(앞 구역이 만든 상태를 쓰는 구역은 순서대로 이어서 돌린다: `install trust pg push ingest` 등).
 
 - [ ] **Step 6: 시험이 잡아내는지 확인 (변이)**
 
