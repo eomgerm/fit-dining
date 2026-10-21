@@ -125,6 +125,7 @@ LEFTHOOK=0 git commit -m "..."
 - 원격 변경을 당겨받을 때: `git pull --rebase` (한 번만 `git config --global pull.rebase true`로 기본값을 바꿔 둘 수 있습니다)
 - rebase 뒤에는 `git push --force-with-lease`로 올립니다. `master`에는 force push가 막혀 있습니다.
 - MR 화면에서 병합할 때는 먼저 **Rebase** 버튼으로 rebase하고 파이프라인이 다시 돈 뒤 병합합니다.
+- **Rebase without pipeline** 버튼은 누르지 않습니다. rebase하면 커밋 SHA가 바뀌는데, 합쳐진 상태를 검사하지 않은 커밋이 `develop`으로 가서 dev에 배포될 수 있습니다.
 - 병합 커밋을 만들려 하면 로컬 훅(`pre-merge-commit`)이 막습니다. 진행 중인 병합은 `git merge --abort`로 취소합니다.
 - 이미 병합 커밋을 올렸다면 MR의 `lint:history`가 실패합니다. `git rebase origin/master`로 없앤 뒤 다시 올립니다.
 

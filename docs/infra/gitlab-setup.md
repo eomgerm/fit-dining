@@ -51,6 +51,7 @@ Settings → Merge requests에서 설정한다.
 
 - [x] Merge method: **Fast-forward merge**
 - [x] **Enable automatic rebase prior to merge**: 켜지 않는다. 이 서버(18.11)의 설정 화면에는 옵션이 없다(GitLab 19.2에서 추가됐다). 있는 버전에서 켜면 병합 시점에 rebase한 결과에 파이프라인이 다시 돌지 않아 검증하지 않은 SHA가 병합된다 (확인: GitLab 문서). 병합 전 rebase는 MR 화면의 Rebase 버튼으로 하고 파이프라인이 다시 돈 뒤 병합한다.
+- [x] MR 화면의 **Rebase without pipeline** 버튼은 쓰지 않는다. rebase로 바뀐 SHA를 검사하지 않고 병합할 수 있다. 이 버튼을 숨기는 프로젝트 설정은 없고, "Pipelines must succeed"를 켜면 사라진다(2단계).
 - [x] **Squash commits when merging**: **Do not allow**. squash는 병합할 때 새 커밋(새 SHA)을 만들어 파이프라인이 검증한 커밋과 달라진다.
 - [x] Merge checks의 **All threads must be resolved**: 켬
 - [x] 병합 후 source branch 삭제를 기본으로 선택
@@ -87,7 +88,8 @@ Settings → CI/CD → General pipelines에서 설정한다.
 - [ ] 두 러너를 만들고 화면에 한 번만 보이는 인증 토큰(`glrt-`로 시작)을 호스트의 `gitlab-runner register`에 입력한다. 토큰은 호스트의 `config.toml`에만 남긴다.
 - [ ] Runners 목록에서 두 러너가 online인지 확인한다.
 - [ ] MR 파이프라인에서 `lint:*` 잡 7개가 verify 러너에서 통과하는지 확인한다.
-- [ ] Merge checks의 **Pipelines must succeed**: 켬
+- [ ] Merge checks의 **Pipelines must succeed**: 켬. 켜면 MR 화면의 **Rebase without pipeline** 버튼이 사라진다. 같은 곳의 **Skipped pipelines are considered successful**은 켜지 않는다(켜면 버튼이 다시 나타나 검사하지 않은 SHA를 병합할 수 있다) (확인: GitLab 문서).
+- [ ] `master`보다 뒤처진 MR에서 Rebase 버튼만 보이고 Rebase without pipeline 버튼이 보이지 않는지 확인한다.
 - [ ] Settings → CI/CD → General pipelines의 **Auto-cancel redundant pipelines**: 켬. 같은 브랜치에 새 커밋이 오면 이전 파이프라인의 verify 잡이 취소된다 (10.8절, 구현 시 확인).
 
 ## 3단계: 배포 순서 보장 (첫 배포 파이프라인 뒤)
