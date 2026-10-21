@@ -127,3 +127,10 @@ LEFTHOOK=0 git commit -m "..."
 - MR 화면에서 병합할 때는 먼저 **Rebase** 버튼으로 rebase하고 파이프라인이 다시 돈 뒤 병합합니다.
 - 병합 커밋을 만들려 하면 로컬 훅(`pre-merge-commit`)이 막습니다. 진행 중인 병합은 `git merge --abort`로 취소합니다.
 - 이미 병합 커밋을 올렸다면 MR의 `lint:history`가 실패합니다. `git rebase origin/master`로 없앤 뒤 다시 올립니다.
+
+## 5. MR description 작성
+
+MR을 올릴 때 [`.gitlab/merge_request_templates/Default.md`](.gitlab/merge_request_templates/Default.md) 템플릿이 자동으로 채워집니다.
+
+- **What / Why / How / Trade-off(필요한 경우만)** 는 AI가 대신 쓰지 않고 **사람이 직접 작성**합니다.
+- 그 외 추가하는 내용(스크린샷, 테스트 방법 등)은 형식 자유입니다.
