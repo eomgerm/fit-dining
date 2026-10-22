@@ -1,0 +1,82 @@
+import { useInfiniteQuery } from "@tanstack/react-query";
+import { useEffect, useEffectEvent } from "react";
+
+import { useToast } from "@/shared/ui/overlay/toast";
+
+import { placeQueries } from "../api/place-queries";
+import { filterNearby } from "../model/nearby";
+import { searchStore, type HistoryEntry } from "../model/search-store";
+import { LOCATION_FAILED_MESSAGE, locateDevice } from "./locate-device";
+import { useSearchStore } from "./use-search-store";
+
+const NO_ENTRY: HistoryEntry = {
+  id: "",
+  kind: "new",
+  sentence: "",
+  request: { query: "" },
+  conditions: {},
+  totalCount: 0,
+  at: 0,
+};
+
+// 지금 보는 요청의 결과. 첫 페이지는 기록에 넣기 전에 캐시에 받아 두었으므로 여기서는 캐시를 읽고,
+// 다음 페이지만 새로 받는다. 근처 응답이면 위치를 얻은 뒤 반경으로 거른다
+export function useViewingResults() {
+  const { entries, viewingId, location } = useSearchStore();
+  const toast = useToast();
+  const viewing = entries.find(({ id }) => id === viewingId);
+  const entry = viewing ?? NO_ENTRY;
+  const query = useInfiniteQuery({
+    ...placeQueries.search(entry.id, entry.request),
+    enabled: Boolean(viewing),
+  });
+
+  const pages = query.data?.pages ?? [];
+  const firstPage = pages[0];
+  const nearby = firstPage?.nearby ?? false;
+  const allCards = pages.flatMap(({ items }) => items);
+
+  // 다음 페이지의 카드도 상세 화면이 쓸 수 있게 둔다. 받은 그때만 기록해야
+  // 예전 요청을 다시 볼 때 더 최근에 받은 카드를 덮어쓰지 않는다
+  function loadMore() {
+    if (query.isFetchingNextPage) return;
+    const pageCount = pages.length;
+    query.fetchNextPage().then(({ data }) => {
+      if (data && data.pages.length > pageCount) {
+        searchStore.recordCards(data.pages[data.pages.length - 1].items);
+      }
+    });
+  }
+
+  // 근처 응답을 받았는데 아직 위치를 시도한 적이 없으면 위치를 요청한다
+  const shouldLocate = nearby && location.status === "idle";
+  const locate = useEffectEvent(() => {
+    locateDevice().then((here) => {
+      if (!here) toast(LOCATION_FAILED_MESSAGE);
+    });
+  });
+  useEffect(() => {
+    if (shouldLocate) locate();
+  }, [shouldLocate]);
+
+  const locating =
+    nearby && (location.status === "idle" || location.status === "pending");
+  const cards =
+    nearby && location.status === "ok"
+      ? filterNearby(allCards, location.here)
+      : allCards;
+
+  return {
+    viewing,
+    firstPage,
+    // 지금 보이는 카드. 순위 번호는 이 목록의 순서다
+    cards: locating ? [] : cards,
+    locating,
+    // 근처 응답인데 위치를 얻지 못해 거르지 않고 보여 줄 때
+    unfilteredNearby: nearby && location.status === "failed",
+    hasNextPage: query.hasNextPage,
+    loadMore,
+    // 다음 페이지를 받지 못했을 때. 다시 누를 때까지 더 부르지 않는다
+    loadMoreFailed: query.isFetchNextPageError,
+  };
+}
