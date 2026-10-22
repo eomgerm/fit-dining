@@ -1,0 +1,9 @@
+[Unit]
+Description=Daily check digest to Mattermost (fit)
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/lib/fit/obs/daily-digest.py
+TimeoutStartSec=120
+Nice=10

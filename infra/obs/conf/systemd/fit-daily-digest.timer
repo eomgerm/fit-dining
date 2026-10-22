@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily check digest at 09:00 KST (fit)
+
+[Timer]
+# 서버의 시간대는 Asia/Seoul이다(설계 10.1절)
+OnCalendar=*-*-* 09:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
