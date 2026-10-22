@@ -1,0 +1,11 @@
+[Unit]
+Description=Port exposure audit of server A, full scan daily (fit)
+
+[Timer]
+# 매일 05:30(서버 시간대 Asia/Seoul). 새벽 4시 배치와 4시 15분 백업이 끝난 뒤다
+OnCalendar=*-*-* 05:30:00
+RandomizedDelaySec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

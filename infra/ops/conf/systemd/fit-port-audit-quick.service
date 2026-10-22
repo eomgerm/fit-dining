@@ -1,0 +1,10 @@
+[Unit]
+Description=Port exposure audit of server A, quick scan (fit)
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/fit/ops.env
+ExecStart=/usr/bin/python3 /usr/local/lib/fit/ops/port-audit.py --target ${PROD_HOST} --mode quick
+TimeoutStartSec=300
+Nice=10
+IOSchedulingClass=idle

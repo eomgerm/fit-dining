@@ -1,0 +1,9 @@
+[Unit]
+Description=Port exposure audit of server A, quick scan every 15 minutes (fit)
+
+[Timer]
+OnCalendar=*:0/15
+Persistent=true
+
+[Install]
+WantedBy=timers.target
