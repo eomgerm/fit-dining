@@ -61,6 +61,7 @@
 | `APIFY_TOKEN` | app | X | 비밀. 리뷰 수집을 쓸 때만 |
 | `APIFY_ENABLED` | app | X | 킬스위치 |
 | `PLACE_MOCK_ENABLED` | app | X | 장소 검색 Mock 스위치(BE의 `place.mock.enabled`). 켜면 장소 검색이 `be/src/main/resources/mock/places.json`을 쓰는 Mock 엔진으로 응답한다. local과 dev에서만 `true`이고 prod는 설정하지 않는다(기본값 `false`) |
+| `REVIEW_MOCK_ENABLED` | app | X | 리뷰 Mock 저장소 스위치(BE의 `review.mock.enabled`). 켜면 리뷰 API가 메모리 저장소로 응답하고 `be/src/main/resources/mock/reviews.json`을 시드로 넣는다. 재시작하면 시드만 남는다. local과 dev에서만 `true`이고 prod는 설정하지 않는다(기본값 `false`, 꺼지면 리뷰 API는 503) |
 | `PUSH_ENABLED` | app | X | 웹 푸시 킬스위치. 방식은 미정이다(design.md 16절) |
 | `PUSH_VAPID_PUBLIC_KEY` | app | X | VAPID 방식일 때 |
 | `PUSH_VAPID_PRIVATE_KEY` | app | X | VAPID 방식일 때. 비밀 |
