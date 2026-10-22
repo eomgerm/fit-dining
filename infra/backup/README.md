@@ -64,9 +64,9 @@ bash infra/backup/restore-check.sh -i ~/fit-backup-key.txt --fetch-seconds <1에
 | 격리된 파일 보기 | `ls /srv/vault/store/quarantine`(B). 검증에 실패했거나 짝이 없는 파일이다 |
 | 덤프 검증만 따로 | `bash infra/backup/verify-dump.sh <평문 덤프> --expect-tables <N>`(복호화한 파일) |
 
-## 지표 (1E가 알림 규칙을 건다)
+## 지표
 
-A는 `/var/lib/fit/metrics/fit_backup.prom`(`FIT_METRICS_DIR`)에, B는 `/srv/vault/metrics/fit_vault.prom`에 Prometheus textfile 형식으로 쓴다. node_exporter의 textfile collector가 읽는 디렉터리로 마운트하는 것은 계획 1E다.
+A는 `/var/lib/fit/metrics/fit_backup.prom`(`FIT_METRICS_DIR`)에, B는 `/srv/vault/metrics/fit_vault.prom`에 Prometheus textfile 형식으로 쓴다. A의 node-exporter(`infra/obs`)와 B의 node-exporter(`infra/ops`)가 textfile collector로 읽고, 알림 규칙이 이 이름을 쓴다([obs/README.md](../obs/README.md), [ops/README.md](../ops/README.md)).
 
 | 지표 | 뜻 |
 |---|---|

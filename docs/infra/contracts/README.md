@@ -7,6 +7,7 @@ BE, AI, 프런트 팀과 인프라가 서로 지켜야 할 규약이다. 서버�
 | 계약 | 위치 | 합의할 팀 | 상태 | 합의일 |
 |---|---|---|---|---|
 | 환경변수 | [env.md](env.md) | BE, 프런트 | 제안 | |
+| 지표(BE) | [metrics.md](metrics.md) | BE, AI | 제안 | |
 | BE | design.md 12.1절 | BE | 제안 | |
 | AI(Modal 호출) | design.md 12.2절, 12.3절 | AI, BE | 제안 | |
 | 프런트 | design.md 12.5절 | 프런트 | 제안 | |

@@ -12,6 +12,8 @@ Fit Dining 인프라 코드. 설계는 [docs/infra/design.md](../docs/infra/desi
 - `deploy/` 배포·롤백·사전 점검·스모크·재부팅 뒤 기동(`deploy.sh` 등)과 노트북 시험 환경. 사용법은 [deploy/README.md](deploy/README.md)
 - `data/` 데이터 스택(Postgres, OpenSearch, Redis 2개, Garage)의 compose와 멱등 초기화 스크립트(DB·role·버킷·키), 점검, 노트북 시험. 사용법은 [data/README.md](data/README.md)
 - `backup/` Postgres 덤프·사진·인증서 볼륨의 암호화 백업, B 금고로 전송과 수신 검증, 복원 리허설, 마이그레이션 전 덤프, 설치 스크립트와 systemd 타이머, 노트북 시험. 사용법은 [backup/README.md](backup/README.md)
+- `obs/` 서버 A의 관측(Prometheus, Alertmanager, Grafana, exporter, Dozzle), 알림 규칙과 단위 시험, 대시보드, 일일 점검 요약, 노트북 시험. 사용법은 [obs/README.md](obs/README.md)
+- `ops/` 서버 B의 감시(A를 밖에서 보는 프로브, 인증서, 감시 체계 감시, 백업 금고 알림), 포트 노출 감사, 노트북 시험. 사용법은 [ops/README.md](ops/README.md)
 
 가드가 강제하는 규칙:
 
@@ -24,6 +26,8 @@ Fit Dining 인프라 코드. 설계는 [docs/infra/design.md](../docs/infra/desi
 | `check_linear_history.py` | MR 안에 병합 커밋(3-way merge) 금지. 브랜치는 rebase로 최신화 | 10.8절 |
 | `migration_immutability.py` | 적용된 마이그레이션 수정·삭제·이름 변경 금지(MR) | 6.5절 |
 | `images_arch.py` | 이미지가 대상 호스트 플랫폼(A amd64, B arm64)을 지원 | 3절 |
+| `check_alerts.py` | 알림 규칙의 이름·severity·runbook·단위 시험, 대시보드의 uid·패널 id·데이터소스 | 9.4절 |
+| `check-prometheus.sh`, `check-alertmanager.sh` | Prometheus 설정과 규칙 단위 시험(promtool), Alertmanager 설정과 라우팅(amtool). 각 도구 이미지 안에서 돈다 | 9.4절 |
 
 ## 로컬에서 검사하기
 

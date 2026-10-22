@@ -7,3 +7,7 @@ edge-test infra/edge/compose.edge.yml infra/edge/test/compose.test.yml --env-fil
 app infra/app/compose.app.yml
 data infra/data/compose.data.yml --env-file infra/data/data.env.example
 data-test infra/data/compose.data.yml infra/data/test/compose.test.yml --env-file infra/data/data.env.example
+obs infra/obs/compose.obs.yml --env-file infra/obs/obs.env.example
+obs-test infra/obs/compose.obs.yml infra/obs/test/compose.test.yml --env-file infra/obs/obs.env.example
+ops infra/ops/compose.ops.yml --env-file infra/ops/ops.env.example
+ops-test infra/ops/compose.ops.yml infra/ops/test/compose.test.yml --env-file infra/ops/ops.env.example

@@ -512,7 +512,7 @@ FE는 `fe/`의 Next.js를 `output: 'standalone'`으로 빌드한 Node 컨테이�
 
 - 이미지는 `pgvector/pgvector:0.8.7-pg16`으로 핀한다(로컬 스택과 같다).
 - 튜닝은 mount한 설정 파일이 아니라 `command:` 플래그로 한다(shared_buffers 256MB, max_connections 60, `idle_in_transaction_session_timeout`, `pg_stat_statements`).
-- 환경별 DB·role은 init 스크립트가 아니라 멱등 `infra/data/ensure-databases.sh`로 만든다. init 스크립트는 빈 볼륨에서 한 번만 돌기 때문이다(A503 함정). role은 `fit_migrator`(DDL, 두 DB의 소유자), `fit_prod_app`, `fit_dev_app`(DML만)이고 DB는 `fit_prod`, `fit_dev`다. 각 앱 role은 자기 DB에만 접속하고(`REVOKE ... FROM PUBLIC`), 마이그레이터가 만드는 테이블·시퀀스에는 기본 권한으로 DML 권한이 따라간다. 비밀번호는 실행할 때마다 `/etc/fit/data.env` 값으로 맞춘다(교체는 값을 바꾸고 다시 실행). dev role에는 `statement_timeout` 30초를 건다 (확인: `infra/data/test/test-data.sh`).
+- 환경별 DB·role은 init 스크립트가 아니라 멱등 `infra/data/ensure-databases.sh`로 만든다. init 스크립트는 빈 볼륨에서 한 번만 돌기 때문이다(A503 함정). role은 `fit_migrator`(DDL, 두 DB의 소유자), `fit_prod_app`, `fit_dev_app`(DML만), `fit_monitor`(`pg_monitor` 멤버. postgres_exporter가 `postgres` DB에서 통계만 읽고 앱 DB에는 접속하지 못한다)이고 DB는 `fit_prod`, `fit_dev`다. 각 앱 role은 자기 DB에만 접속하고(`REVOKE ... FROM PUBLIC`), 마이그레이터가 만드는 테이블·시퀀스에는 기본 권한으로 DML 권한이 따라간다. 비밀번호는 실행할 때마다 `/etc/fit/data.env` 값으로 맞춘다(교체는 값을 바꾸고 다시 실행). dev role에는 `statement_timeout` 30초를 건다 (확인: `infra/data/test/test-data.sh`).
 - 비밀번호는 SQL에 그대로 들어가므로 영문·숫자·`._~-`만 쓴 16자 이상으로 제한하고 스크립트가 그 밖의 값을 거부한다. data.env는 셸로 실행하지 않고 `KEY=VALUE` 줄만 읽는다. SQL은 표준 입력으로 넘기고 `log_statement`와 `pg_stat_statements.track_utility`를 꺼서 비밀번호가 프로세스 목록, Postgres 로그, 통계에 남지 않는다 (확인: 위 시험).
 - 공식 이미지는 컨테이너 안 loopback 접속을 비밀번호 없이 허용(trust)한다. 다른 컨테이너가 서비스 이름으로 들어오는 접속은 scram-sha-256 비밀번호 검사를 받는다 (확인: 틀린 비밀번호가 거부됨). 호스트 게시 포트(`127.0.0.1:5432`)로 들어오는 접속은 출발지가 loopback이 아니라 같은 규칙을 받는다 (서버에서 터널로 확인).
 - 개발자용 dev DB 접근은 SSH 터널 → `127.0.0.1:5432`이고 dev role 비밀번호만 공유한다.
@@ -576,8 +576,11 @@ Garage는 단일 노드라도 레이아웃 설정이 필요하다(`layout assign
 
 ### 9.1 A 스택
 
-- Prometheus(보존 7일 + 5GB 상한), Alertmanager → Mattermost, Grafana(대시보드 3개를 repo에서 프로비저닝, SSH 터널로 접속, 익명 접근 없음)
+- Prometheus(보존 7일 + 5GB 상한), Alertmanager → Mattermost(수신 웹훅에 Slack 형식으로 보낸다), Grafana(대시보드 3개를 repo에서 프로비저닝, SSH 터널로 접속, 익명 접근 없음)
 - node_exporter, cAdvisor, blackbox_exporter, postgres_exporter, OpenSearch exporter, Dozzle(로그 UI)
+- 프로젝트 `fit-obs`(`infra/obs/compose.obs.yml`). 서버마다 다른 값(B의 IP, 웹훅)은 일회성 서비스 `obs-init`(`render.py`)이 시작 때 설정 파일로 만들고, 나머지 설정은 저장소 파일 그대로 쓴다. 한도의 합은 1,344MB다(4.1절).
+- postgres_exporter는 `fit_monitor` role로 읽는다(7.1절). 호스트가 쓰는 지표(백업)는 node_exporter의 textfile collector로 읽는다(`/var/lib/fit/metrics`).
+- 사용법과 알림 목록은 [infra/obs/README.md](../../infra/obs/README.md)다.
 - Loki·Tempo·OTel은 올리지 않는다. 로그 검색이 필요해지면 Alloy + Loki(보존 3일)를 나중에 추가한다. Promtail은 2026-03-02에 EOL이다 (확인).
 
 대시보드 3개:
@@ -601,6 +604,9 @@ Garage는 단일 노드라도 레이아웃 설정이 필요하다(`layout assign
 | OpenSearch·Postgres | red, 힙 >90%, 연결 >80%, pg_up==0 | critical / warning |
 | 폴백 | `*_fallback_ratio` >30% 15분(임베딩·리랭커·LLM 각각) | warning |
 | Modal 예산 | 일일 호출 예산 80% 소진(Redis 카운터) | warning |
+| 백업 | 마지막 성공 pg >8시간, photos >36시간, caddy >9일, 복원 검증 실패나 36시간 넘게 없음, 전송 대기(outbox) 파일 | warning |
+| 수집 대상 | prometheus, alertmanager, node, cadvisor, caddy, postgres, opensearch, blackbox의 `up==0` 5분 | warning |
+| 지표 누락 | 반드시 있어야 하는 지표(BE HTTP, 배치, Modal 예산, 백업)가 15분 넘게 없음(`absent()`) | warning |
 | B 도달 불가 | A에서 B의 TCP 22 프로브 실패 | warning (CI·백업 영향) |
 
 ### 9.3 B 알림
@@ -608,17 +614,20 @@ Garage는 단일 노드라도 레이아웃 설정이 필요하다(`layout assign
 | 알림 | 조건 | 심각도 |
 |---|---|---|
 | 외부 접근 | A `/healthz` 또는 `/`(FE) 2분 연속 실패 | critical |
-| 인증서 | 밖에서 본 만료일 <14일 / <7일 | warning / critical |
+| 인증서 | 밖에서 본 만료일 <14일 / <7일. TLS 연결이 실패해 만료일을 읽지 못하면 따로 warning | warning / critical |
 | 포트 도달성 | A의 80·443 TCP 불가 | critical |
-| 포트 노출 감사 | 15분마다 A의 상위 1,000 포트(+매일 전체 스캔)를 밖에서 스캔. 22·80·443 외에 열린 포트가 있으면 | critical |
+| 포트 노출 감사 | 15분마다 A의 1~1,024번과 자주 쓰는 서비스 포트를, 매일 05:30에 1~65,535번 전체를 밖에서 스캔(`infra/ops/port-audit.py`). 22·80·443 외에 열린 포트가 있으면. 감사가 1시간(전체는 36시간) 넘게 안 돌면 warning | critical |
 | 감시 체계 감시 | A의 `/_ops/prometheus/healthy`, `/_ops/alertmanager/healthy` 실패 | critical |
-| 백업 금고 | 마지막 수신 >8시간 / 사람 복원 리허설 >8일 | critical / info |
-| B 자신 | 디스크 80%, 메모리 부족 | warning |
+| 백업 금고 | 마지막 수신 >8시간 / 사람 복원 리허설 >8일. 격리 파일, 검증 실패, ingest 중단은 warning | critical / info |
+| B 자신 | 디스크 80%, 메모리 8% 미만, 수집 대상 다운 | warning |
+
+B의 알림은 모두 prod에 관한 것이라 수신자는 하나다. 프로브 대상과 지표는 [infra/ops/README.md](../../infra/ops/README.md)다.
 
 ### 9.4 공통 규칙
 
 - heartbeat 지표는 counter가 아니라 gauge로 만든다(계열이 처음부터 존재). 반드시 있어야 하는 지표는 `absent()` 알림을 둔다.
-- 모든 규칙을 `promtool test rules`로 CI에서 검증한다(이름·uid 중복 포함).
+- 모든 규칙을 `promtool test rules`로 CI에서 검증한다. `infra/ci/check_alerts.py`가 알림 이름(`Fit` 접두사, 중복)과 severity·summary·description·runbook, 단위 시험의 존재, 대시보드의 uid·패널 id 중복과 데이터소스를, `infra/ci/check-alertmanager.sh`(amtool)가 설정과 라우팅(`routes.txt`)을 검사한다.
+- BE가 내는 지표 이름은 [contracts/metrics.md](contracts/metrics.md)가 정한다.
 - 알림마다 runbook 링크를 단다.
 - 두 Alertmanager 모두 Mattermost로 보내되 `site`(A/B)와 `env` 라벨을 붙인다. dev의 warning은 별도 수신자로 보낸다. critical 채널에는 prod와 B 알림만 간다.
 - Alertmanager 웹훅 URL은 `api_url_file`로 시크릿 파일에서 읽는다.
@@ -627,7 +636,7 @@ Garage는 단일 노드라도 레이아웃 설정이 필요하다(`layout assign
 
 ### 10.1 일일 점검
 
-매일 09:00 KST에 `daily-digest.sh`(A)가 아래 항목을 Mattermost에 올린다: 디스크·메모리·스왑, CPU 24시간 평균(40% 기준선 대비), 백업 나이, 마지막 배포, 인증서 잔여일, 5xx 건수, 배치 결과.
+매일 09:00 KST에 `infra/obs/daily-digest.py`(A, `fit-daily-digest.timer`)가 아래 항목을 Mattermost에 올린다: 디스크·메모리·스왑, CPU 24시간 평균(40% 기준선 대비), 백업 나이, 마지막 배포, 인증서 잔여일, 5xx 건수, 배치 결과, 지금 울리는 알림. 항목마다 정상·주의·값 없음을 붙인다. 인증서 잔여일은 서버 자신의 443에서 읽는다. Prometheus나 웹훅에 닿지 못하면 그 사실을 올리고 종료 코드 1로 끝난다.
 
 ### 10.2 런북
 
@@ -899,11 +908,11 @@ AI 팀과 M1 전에 합의한다. FastAPI는 Modal에서 돌고 A·B에는 AI �
 | `/etc/fit/fe-prod.env`, `fe-dev.env` | A | root:docker 0640 | FE env(비밀 없음. 내부 BE 주소, 브라우저에 공개되는 키) |
 | `/etc/fit/migrate-prod.env`, `migrate-dev.env` | A | root:docker 0640 | 마이그레이션 일회성 컨테이너의 DDL 자격(웹 컨테이너에는 넣지 않는다) |
 | `/etc/fit/data.env` | A | root:docker 0640 | DB·Redis·Garage 자격 |
-| `/etc/fit/edge.env` | A | root:docker 0640 | `ACME_EMAIL`, `ACME_MODE`, `HSTS_MODE`, `PROD_HOST`, `DEV_HOST`, B의 IP, `/_ops` basic auth 해시, dev 게이트 키(`?k=` 쿠키 발급용) |
-| `/etc/fit/obs.env` | A | root:docker 0640 | Grafana admin, Mattermost 웹훅 |
+| `/etc/fit/edge.env` | A | root:docker 0640 | `ACME_EMAIL`, `ACME_MODE`, `HSTS_MODE`, `PROD_HOST`, `DEV_HOST`, B의 IP, `/_ops` basic auth 사용자와 해시, dev 게이트 키(`?k=` 쿠키 발급용) |
+| `/etc/fit/obs.env` | A | root:docker 0640 | Grafana admin, Mattermost 웹훅(main·dev), B의 IP, `fit_monitor` 비밀번호 |
 | `/etc/fit/backup.env` | A, B | root:docker 0640 | 백업 설정(B의 주소와 SSH 포트, 보관 기간). 비밀은 없다 |
 | `/etc/fit/keys/` | A | root:root 0700(파일 0600) | vault SSH 개인키(`vault_ed25519`), B의 호스트 키(`vault_known_hosts`), age 수신자 공개키(`age-recipients.txt`) |
-| `/etc/fit/ops.env` | B | root:docker 0640 | Mattermost 웹훅, A의 `/_ops` 자격 |
+| `/etc/fit/ops.env` | B | root:root 0600 | A의 호스트(`PROD_HOST`, `DEV_HOST`), Mattermost 웹훅, A의 `/_ops` 자격(사용자와 평문 비밀번호) |
 | age 개인키 | 서버 없음 | 수신자 2명이 오프라인 보관 | 백업 복호화 |
 
 - `/_ops` basic auth 해시는 `caddy hash-password` 출력을 base64로 인코딩해 둔다. 원본의 `$`가 env 형식 규칙에 걸리고, Caddy는 base64 형태도 받는다 (확인).
@@ -928,6 +937,7 @@ AI 팀과 M1 전에 합의한다. FastAPI는 Modal에서 돌고 A·B에는 AI �
 - B의 verify 러너는 docker.sock으로 B의 root 권한을 가지므로 `ops.env`(웹훅, `/_ops` 자격)를 읽을 수 있다. A에 대한 SSH 키는 B에 없다. 그러나 같은 권한으로 `/srv/vault/store`(금고)를 지울 수도 있다. A에 로컬 사본(48시간 + 14일)이 남고 복원 리허설 때 내려받은 최신 덤프 1벌을 노트북에 둔다(8절). MR 파이프라인에서 임의 코드가 돌 수 있으므로 프로젝트 멤버를 팀원으로 한정하고 MR 리뷰 후 병합한다.
 - Modal 토큰이 유출되면 지출이 생긴다. 토큰은 환경별로 분리해 서버 env에만 두고, Modal의 지출 한도와 BE의 일일 호출 예산이 상한이다(11.2절).
 - OpenSearch는 보안 플러그인을 끈다. 내부 망이고 호스트 게시가 없다는 전제이며, 앱 컨테이너가 침해되면 인덱스가 변조될 수 있다. DB 자격 침해와 같은 수준의 위험으로 보고 수용한다. 두 환경의 BE가 `net-data`를 공유해 be-dev가 prod 인덱스를 읽고 쓸 수 있다. 기동 시 접두사 대조(12.1 #8)는 사고를 막지만 악의는 막지 못한다.
+- Dozzle(로그 UI)은 `docker.sock`을 읽기 전용으로 마운트한다. 읽기 전용이어도 소켓의 API는 컨테이너 설정(환경변수 포함)을 읽을 수 있어서 Dozzle이 침해되면 비밀이 노출될 수 있다. `127.0.0.1:8888`에만 게시하고 SSH 터널로만 연다. 팀원 터널 허용 목록(13.3절)에 8888이 들어 있어 팀원은 prod를 포함한 모든 컨테이너의 로그를 볼 수 있으므로, 로그에 개인정보와 비밀을 남기지 않는 것(12절)이 전제다. cAdvisor도 호스트의 `/`, `/sys`, `/var/lib/docker`를 읽기 전용으로 마운트한다.
 - 개인정보는 로그 마스킹(12절), 백업 암호화(8절), 종료 시 삭제(RB-10), 외부 전송 고지(11.2절)로 다룬다.
 
 ## 14. 일정과 우선순위
@@ -1002,7 +1012,7 @@ AI 팀과 M1 전에 합의한다. FastAPI는 Modal에서 돌고 A·B에는 AI �
 | 12 | 당번표(11/06~11/18)와 점검 창 | 팀 | M4 |
 | 13 | Garage 스파이크 결과 | 인프라 | M1~M2 |
 | 14 | 푸시 방식(FCM 웹 푸시 vs VAPID 직접 구현) | 프런트 팀 | M2 |
-| 15 | Docker 29일 때 cAdvisor·Dozzle 호환 | 인프라 | 사전(로컬 Docker 29.7.2로 확인) |
+| 15 | 서버의 Docker 버전에서 cAdvisor·Dozzle 호환. 로컬 Docker 29.7.2에서는 확인했다(`infra/obs/test/test-obs.sh`: cAdvisor가 컨테이너 이름과 메모리 한도를 내고 Dozzle이 뜬다) | 인프라 | M0(서버에서 `verify-obs.sh`) |
 | 16 | 포팅 매뉴얼 필요 여부와 양식 | 팀, 코치 | M3 전 |
 | 17 | buildx 자원 상한 방법. `rrsync`는 24.04에서 확인했고(8절) 22.04는 서버에서 확인한다 | 인프라 | M0~M1 |
 | 18 | 프런트 팀 합의: 12.5절 계약(standalone 빌드, 같은 출처, 환경 값, 헬스, 이미지, 서비스 워커, dev 게이트, 쿠키, SSE, 공유) | 프런트 팀, 인프라 | M1 전 |
@@ -1021,21 +1031,21 @@ AI 팀과 M1 전에 합의한다. FastAPI는 Modal에서 돌고 A·B에는 AI �
 ```
 infra/
   host/        bootstrap.sh, verify-host.sh, networks.sh, docker-prune.sh, README.md, conf/(sshd, sysctl, daemon.json, fail2ban, apt, systemd units), test/(test-host.sh, run-in-container.sh)
-  edge/        compose.edge.yml, conf/(Caddyfile, acme/, hsts/), state-sample/, edge.env.example, edgectl.sh, verify-edge.sh, README.md, test/(compose.test.yml, test-edge.sh, 목 BE·FE)
+  edge/        compose.edge.yml, conf/(Caddyfile, acme/, hsts/), state-sample/, edge.env.example, edgectl.sh, verify-edge.sh, README.md, test/(compose.test.yml, test-edge.sh, 목 BE·FE, `/_ops` 시험용 감시 체계 대역과 프로브)
   data/        compose.data.yml, data.env.example, lib.sh, init-data.sh, ensure-databases.sh, init-garage.sh, verify-data.sh, s3tool.py, garage/garage.toml, README.md, test/(test-data.sh, compose.test.yml). OpenSearch는 local/opensearch/Dockerfile을 빌드한다
   app/         compose.app.yml(프로필 prod·dev), *.env.example
-  obs/         compose.obs.yml, prometheus/(rules, tests), alertmanager/, grafana/(provisioning, dashboards), blackbox/
-  ops/         (B) compose.ops.yml, prometheus/, alertmanager/, blackbox, port-audit.sh
+  obs/         compose.obs.yml, obs.env.example, render.py(obs-init), prometheus/(prometheus.yml, rules, tests), alertmanager/(alertmanager.yml, templates, routes.txt), grafana/(provisioning, dashboards), blackbox/, daily-digest.py, install.sh, verify-obs.sh, conf/systemd/, README.md, test/(test-obs.sh, compose.test.yml, 가짜 대상)
+  ops/         (B) compose.ops.yml, ops.env.example, render.py(ops-init), prometheus/(prometheus.yml, rules, tests), alertmanager/, blackbox/, port-audit.py, install.sh, ops-up.sh, verify-ops.sh, conf/systemd/, README.md, test/(test-ops.sh, compose.test.yml)
   deploy/      deploy.sh, rollback.sh, preflight.sh, smoke.sh, notify.sh, fit-up.sh, lib.sh, README.md, test/(test-deploy.sh, 목 BE·FE 이미지)
   backup/      lib.sh, pg-backup.sh, verify-dump.sh, files-backup.sh(photos, caddy), push-vault.sh, backup-run.sh, vault-ingest.sh(B), vault-authorize.sh(B), restore-check.sh(노트북용), install.sh, backup.env.example, conf/systemd/, README.md, test/(test-backup.sh, node/Dockerfile)
-  ci/          ports_invariant.py, check_compose_projects.py, check_env_files.py, check_env_contract.py, check_eol.py, check_linear_history.py, no-merge-commit.sh, check-caddy.sh, migration_immutability.py, images_arch.py, run-local-checks.sh, tool-images.sh, compose-projects.txt, tests/
+  ci/          ports_invariant.py, check_compose_projects.py, check_env_files.py, check_env_contract.py, check_eol.py, check_linear_history.py, no-merge-commit.sh, check-caddy.sh, check-prometheus.sh, check-alertmanager.sh, check_alerts.py, migration_immutability.py, images_arch.py, run-local-checks.sh, tool-images.sh, compose-projects.txt, tests/
   local/       compose.yml (profile: core, search), fit-local.sh, local.env.example, garage/, opensearch/Dockerfile, README.md
 .gitlab-ci.yml
 docs/infra/
   design.md    이 문서
   runbooks/    RB-01 ~ RB-13
   porting/     포팅 매뉴얼 초안(버전, 환경변수, 외부 서비스, DB 덤프, 시연)
-  contracts/   README.md(합의 상태), env.md. BE·AI(Modal 호출)·프런트 계약은 합의되면 이 폴더로 옮긴다
+  contracts/   README.md(합의 상태), env.md, metrics.md. BE·AI(Modal 호출)·프런트 계약은 합의되면 이 폴더로 옮긴다
   ssh-matrix.md
   gitlab-setup.md  GitLab 프로젝트 설정·러너 등록 체크리스트
 ```
@@ -1105,6 +1115,13 @@ docs/infra/
 | 백업 | 덤프 검증 방식 | 임시 컨테이너에 복원하고 테이블 수를 덤프 시점 값과 비교 | `pg_restore -l` 목차 확인만(데이터가 읽히는지 모른다) |
 | 관측성 | B 감시 구성 | Prometheus-B·Alertmanager-B·blackbox(설정이 repo에 남는다) | Uptime Kuma 한 개(설정이 UI에 남아 repo 관리 원칙과 어긋난다) |
 | 관측성 | 우선순위 | 감시 체계 감시(`/_ops`)는 P0, `lint:image-arch`는 P1 | 둘 다 P2로 내리기(비용이 거의 없어 유지) |
+| 관측성 | 알림 전달 | Alertmanager `slack_configs`로 Mattermost 수신 웹훅에 보낸다(주소는 `api_url_file`) | 별도 알림 어댑터(구성요소가 늘어난다) |
+| 관측성 | 서버별 값 | 일회성 서비스(`obs-init`, `ops-init`)가 환경변수로 필요한 설정 파일만 만든다. 나머지 설정은 저장소 파일 그대로다 | 설정 파일 전체를 서버에서 생성(검증할 수 없는 파일이 는다) |
+| 관측성 | 호스트 지표 | 백업·금고·포트 감사 결과는 파일로 쓰고 node_exporter의 textfile collector가 읽는다 | pushgateway(상시 프로세스가 는다) |
+| 관측성 | `/_ops` 실패 응답 | B의 IP와 basic auth를 모두 통과하지 못하면 401이 아니라 404(경로가 있다는 단서를 주지 않는다) | 401 |
+| 관측성 | 포트 감사 방식 | B에서 표준 라이브러리만 쓰는 TCP connect 스캔. 자주 쓰는 포트 15분, 전체 매일 | nmap(패키지와 결과 파싱이 늘어난다) |
+| 관측성 | 일일 요약 | Python 표준 라이브러리와 openssl. 인증서 잔여일은 서버 자신의 443에서 읽는다 | 셸 스크립트(JSON 처리가 취약), A가 B의 인증서 프로브를 조회(호스트 사이에 새 경로가 생긴다) |
+| 관측성 | 로그 UI | Dozzle(`docker.sock` 읽기 전용, 127.0.0.1만 게시). 한계는 13.4절 | 로그 UI 없이 서버에서 `docker logs`(터널 접근자가 셸이 없어 로그를 볼 수 없다) |
 
 ## 부록 C. 출처
 
