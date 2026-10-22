@@ -1,0 +1,32 @@
+# 시험용 덮어쓰기(infra/obs/test/test-obs.sh). 호스트 포트를 시험용으로 바꾸고, 알림 규칙과 Alertmanager 설정은 시험 사본을 쓴다.
+# 사본은 저장소 파일에서 sed로 만든다: 규칙의 for를 0s로(대기 시간 없이 바로 울리게), group_wait·group_interval을 짧게. 그 밖의 식과 라우팅은 같다.
+# textfile 지표 디렉터리도 시험 디렉터리다. FIT_OBSTEST_DIR은 시험 스크립트가 정한다.
+services:
+  prometheus:
+    ports: !override
+      - 127.0.0.1:${FIT_OBSTEST_PROM_PORT:-19090}:9090
+    volumes: !override
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ${FIT_OBSTEST_DIR}/rules:/etc/prometheus/rules:ro
+      - generated:/generated:ro
+      - promdata:/prometheus
+
+  alertmanager:
+    volumes: !override
+      - ${FIT_OBSTEST_DIR}/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./alertmanager/templates:/etc/alertmanager/templates:ro
+      - generated:/generated:ro
+      - amdata:/alertmanager
+
+  grafana:
+    ports: !override
+      - 127.0.0.1:${FIT_OBSTEST_GRAFANA_PORT:-13000}:3000
+
+  node-exporter:
+    volumes: !override
+      - /:/host:ro
+      - ${FIT_OBSTEST_DIR}/textfile:/textfile:ro
+
+  dozzle:
+    ports: !override
+      - 127.0.0.1:${FIT_OBSTEST_DOZZLE_PORT:-18888}:8080
