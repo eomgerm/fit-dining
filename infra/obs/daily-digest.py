@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
-"""일일 점검 요약(설계 10.1절). 서버 A에서 매일 09:00 KST에 돌아 Mattermost에 한 건을 올린다. 표준 라이브러리와 openssl 명령만 쓴다.
+"""상태 요약(설계 10.1절). 서버 A에서 하루 두 번(09:00, 18:00 KST) 서버의 전체 상태를 Mattermost에 한 메시지로 올린다. 표준 라이브러리와 openssl 명령만 쓴다.
 
-항목: 디스크·메모리·스왑, CPU 24시간 평균(40% 기준선 대비), 백업 나이, 마지막 배포, 인증서 잔여일, 5xx 건수, 배치 결과, 지금 울리는 알림.
-알림이 한 번 놓쳐져도(알림 채널 중단) 하루에 한 번은 상태를 본다. Prometheus에 닿지 못해도 그 사실을 올리고 종료 코드 1로 끝난다.
+일반 글(제목 `#### Fit Dining · 전체 상태 · 월-일 시:분`과 표 셋)로 올린다. 알림 메시지와 달리 첨부(색 막대)가 아닌 것은 표가 어디서나 그대로 그려지게 하려는 것이다.
+  1. 확인 필요: 울리는 알림과 요약만 아는 문제(디스크, CPU, 배포 실패, 인증서 만료 임박 등)를 구분(장애·주의), 내용, 런북 번호로 보여 준다. 없으면 없다고 적는다.
+  2. 서비스: prod BE, dev BE, 엣지, DB, 검색, 금고(B)가 떠 있는지(✅, ❌, 값이 없으면 ❔).
+  3. 백업: pg, photos, caddy의 마지막 성공과 복원 검증 결과.
+정상인 값(디스크, 메모리, CPU, 배포, 인증서 등)은 문제가 생겼을 때만 확인 필요에 나온다. 알림 채널이 한 번 놓쳐져도 하루 두 번은 상태를 본다.
+Prometheus에 닿지 못해도 그 사실을 올리고 종료 코드 1로 끝한다.
 
   python3 infra/obs/daily-digest.py [--dry-run]
 옵션(기본값은 서버의 경로다. 시험이 바꾼다): --prom URL(http://127.0.0.1:9090) --state-dir(/srv/fit/state) --obs-env(/etc/fit/obs.env, 웹훅 주소를 읽는다)
@@ -21,8 +25,19 @@ import sys
 import urllib.parse
 import urllib.request
 
-OK, WARN, NONE = "✅", "⚠️", "❔"
+OK, WARN, BAD, NONE = "✅", "⚠️", "❌", "❔"
+CRIT_CELL, WARN_CELL = "🔴 장애", "🟡 주의"
 KST = datetime.timezone(datetime.timedelta(hours=9))
+# 알림 규칙의 기준과 같다(infra/obs/prometheus/rules)
+DISK_WARN, MEM_WARN, SWAP_WARN, CPU_WARN, CERT_WARN_DAYS = 0.8, 0.08, 0.5, 0.4, 14
+BACKUP_LIMITS = {"pg": 8 * 3600, "photos": 36 * 3600, "caddy": 9 * 86400}
+# 이 점검에 해당하는 알림이 이미 울리고 있으면 같은 문제를 확인 필요에 두 번 적지 않는다(알림 이름 접두사)
+COVERED_BY = {
+    "disk": ("FitDisk",), "memory": ("FitMemory",), "swap": ("FitSwap",), "cpu": ("FitCpu",),
+    "backup": ("FitBackup",), "verify": ("FitBackupVerify",), "app": ("FitHttp", "FitBatch", "FitBe"),
+}
+
+Problem = tuple[str, str, str]  # (구분 칸, 내용, 런북)
 
 
 def read_env(path: str, keys: set[str]) -> dict[str, str]:
@@ -42,91 +57,145 @@ class Prom:
     def __init__(self, base: str) -> None:
         self.base = base.rstrip("/")
 
-    def query(self, expr: str) -> list[tuple[dict[str, str], float]]:
-        url = f"{self.base}/api/v1/query?query={urllib.parse.quote(expr)}"
-        with urllib.request.urlopen(url, timeout=15) as resp:
+    def get(self, path: str) -> dict:
+        with urllib.request.urlopen(f"{self.base}{path}", timeout=15) as resp:
             body = json.load(resp)
         if body.get("status") != "success":
-            raise RuntimeError(f"Prometheus가 질의를 거부했다: {expr}")
-        return [(r["metric"], float(r["value"][1])) for r in body["data"]["result"]]
+            raise RuntimeError(f"Prometheus가 요청을 거부했다: {path}")
+        return body["data"]
+
+    def query(self, expr: str) -> list[tuple[dict[str, str], float]]:
+        data = self.get(f"/api/v1/query?query={urllib.parse.quote(expr)}")
+        return [(r["metric"], float(r["value"][1])) for r in data["result"]]
 
     def scalar(self, expr: str) -> float | None:
         rows = self.query(expr)
         return rows[0][1] if rows else None
 
+    def firing_alerts(self) -> list[dict]:
+        return [a for a in self.get("/api/v1/alerts")["alerts"] if a.get("state") == "firing"]
 
-def human_age(seconds: float) -> str:
+
+def short_age(seconds: float) -> str:
     seconds = max(0, int(seconds))
+    if seconds < 60:
+        return "방금"
     if seconds < 3600:
         return f"{seconds // 60}분 전"
-    if seconds < 86400:
-        return f"{seconds // 3600}시간 {seconds % 3600 // 60}분 전"
-    return f"{seconds // 86400}일 {seconds % 86400 // 3600}시간 전"
+    if seconds < 2 * 86400:
+        return f"{seconds // 3600}시간 전"
+    return f"{seconds // 86400}일 전"
 
 
 def pct(value: float) -> str:
     return f"{value * 100:.0f}%"
 
 
-def host_rows(prom: Prom) -> list[tuple[str, str, str]]:
-    rows: list[tuple[str, str, str]] = []
+def alert_problems(prom: Prom) -> tuple[list[Problem], list[str]]:
+    """울리는 알림(critical 먼저)과 그 알림 이름들."""
+    alerts = prom.firing_alerts()
+    alerts.sort(key=lambda a: (a["labels"].get("severity") != "critical", a["labels"].get("alertname", "")))
+    problems = []
+    for a in alerts:
+        ann = a.get("annotations", {})
+        cell = CRIT_CELL if a["labels"].get("severity") == "critical" else WARN_CELL
+        problems.append((cell, ann.get("summary", a["labels"].get("alertname", "?")), ann.get("runbook", "-")))
+    return problems, [a["labels"].get("alertname", "") for a in alerts]
+
+
+def service_cells(prom: Prom) -> list[tuple[str, str]]:
+    """서비스 표의 (이름, 표시). 값이 없으면 ❔."""
+    items = (
+        ("prod BE", 'max(up{job="be", env="prod"})'),
+        ("dev BE", 'max(up{job="be", env="dev"})'),
+        ("엣지", 'max(up{job="caddy"})'),
+        ("DB", "max(pg_up)"),
+        ("검색", "max(elasticsearch_clusterinfo_up)"),
+        ("금고(B)", 'max(probe_success{job="vault-ssh"})'),
+    )
+    cells = []
+    for label, expr in items:
+        v = prom.scalar(expr)
+        cells.append((label, NONE if v is None else (OK if v >= 1 else BAD)))
+    return cells
+
+
+def metric_problems(prom: Prom) -> list[tuple[str, str]]:
+    """알림이 없어도 요약이 알려야 하는 호스트·앱의 문제. (점검 이름, 내용)."""
+    out: list[tuple[str, str]] = []
     fs = '{mountpoint="/", fstype!~"tmpfs|overlay"}'
     disk = prom.scalar(f"1 - node_filesystem_avail_bytes{fs} / node_filesystem_size_bytes{fs}")
-    rows.append(("디스크(/)", f"{pct(disk)} 사용 (경고 80%)", OK if disk < 0.8 else WARN) if disk is not None else ("디스크(/)", "지표 없음", NONE))
+    if disk is not None and disk >= DISK_WARN:
+        out.append(("disk", f"디스크 사용률 {pct(disk)}(경고 {pct(DISK_WARN)})"))
     mem = prom.scalar("node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes")
-    rows.append(("메모리", f"가용 {pct(mem)} (경고 8% 미만)", OK if mem >= 0.08 else WARN) if mem is not None else ("메모리", "지표 없음", NONE))
-    swap_total = prom.scalar("node_memory_SwapTotal_bytes")
-    if swap_total is None:
-        rows.append(("스왑", "지표 없음", NONE))
-    elif swap_total == 0:
-        rows.append(("스왑", "스왑이 없다", OK))
-    else:
+    if mem is not None and mem < MEM_WARN:
+        out.append(("memory", f"가용 메모리 {pct(mem)}(경고 {pct(MEM_WARN)} 미만)"))
+    if prom.scalar("node_memory_SwapTotal_bytes"):
         swap = prom.scalar("1 - node_memory_SwapFree_bytes / node_memory_SwapTotal_bytes")
-        rows.append(("스왑", f"{pct(swap)} 사용 (경고 50%)", OK if swap <= 0.5 else WARN) if swap is not None else ("스왑", "지표 없음", NONE))
+        if swap is not None and swap > SWAP_WARN:
+            out.append(("swap", f"스왑 사용률 {pct(swap)}(경고 {pct(SWAP_WARN)})"))
     # 24시간 창을 rate로 보면 데이터가 24시간보다 짧을 때 사용률이 부풀려진다. 5분 사용률의 평균을 쌓인 데이터만으로 낸다
     cpu = prom.scalar('avg_over_time((1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m])))[24h:5m])')
-    full = prom.scalar('count(node_cpu_seconds_total{mode="idle"} offset 24h)') is not None
-    note = "기준선 40%" if full else "기준선 40%, 쌓인 데이터만"
-    rows.append(("CPU 24시간 평균", f"{pct(cpu)} ({note})", OK if cpu <= 0.4 else WARN) if cpu is not None else ("CPU 24시간 평균", "지표 없음", NONE))
-    return rows
+    if cpu is not None and cpu > CPU_WARN:
+        full = prom.scalar('count(node_cpu_seconds_total{mode="idle"} offset 24h)') is not None
+        out.append(("cpu", f"CPU 24시간 평균 {pct(cpu)}{'' if full else '(쌓인 기간)'}(기준선 {pct(CPU_WARN)})"))
+    n5xx = prom.scalar('sum(increase(http_server_requests_seconds_count{env="prod", status=~"5.."}[24h]))')
+    if n5xx and n5xx > 0:
+        out.append(("app", f"prod 5xx {n5xx:.0f}건(24시간)"))
+    age = prom.scalar('time() - max(batch_last_success_timestamp_seconds{env="prod"})')
+    if age is not None and age > 26 * 3600:
+        out.append(("app", f"새벽 배치 마지막 성공 {short_age(age)}(경고 26시간 초과)"))
+    return out
 
 
-def backup_rows(prom: Prom) -> list[tuple[str, str, str]]:
-    limits = {"pg": 8 * 3600, "photos": 36 * 3600, "caddy": 9 * 86400}
-    rows: list[tuple[str, str, str]] = []
+def backup_table(prom: Prom) -> tuple[list[str], list[str], bool, str | None]:
+    """백업 표의 머리글과 값, 표시(⚠️)가 있는지, 복원 검증이 실패했으면 그 내용."""
     ages = {m["kind"]: v for m, v in prom.query("time() - fit_backup_last_success_timestamp_seconds")}
     never = {m["kind"] for m, _ in prom.query("fit_backup_last_success_timestamp_seconds == 0")}  # 0은 한 번도 성공한 적이 없다는 뜻이다
-    for kind, limit in limits.items():
+    heads, cells, flagged = [], [], False
+    for kind, limit in BACKUP_LIMITS.items():
+        heads.append(kind)
         if kind in never:
-            rows.append((f"백업 {kind}", "아직 성공한 적이 없다", WARN))
+            cells.append(f"없음 {WARN}")
+            flagged = True
         elif kind in ages:
-            rows.append((f"백업 {kind}", f"마지막 성공 {human_age(ages[kind])} (경고 {human_age(limit).replace(' 전', '')} 초과)", OK if ages[kind] <= limit else WARN))
+            bad = ages[kind] > limit
+            cells.append(short_age(ages[kind]) + (f" {WARN}" if bad else ""))
+            flagged |= bad
         else:
-            rows.append((f"백업 {kind}", "지표 없음", NONE))
+            cells.append(NONE)
     verify = prom.scalar("fit_backup_last_verify_ok")
-    rows.append(("백업 복원 검증", "마지막 검증 통과" if verify == 1 else "마지막 검증 실패", OK if verify == 1 else WARN) if verify is not None else ("백업 복원 검증", "지표 없음", NONE))
-    return rows
+    heads.append("복원 검증")
+    failed = None
+    if verify is None:
+        cells.append(NONE)
+    elif verify == 1:
+        cells.append("통과")
+    else:
+        cells.append(f"실패 {WARN}")
+        flagged = True
+        failed = "마지막 덤프 복원 검증이 실패했다"
+    return heads, cells, flagged, failed
 
 
-def deploy_rows(state_dir: str) -> list[tuple[str, str, str]]:
-    rows: list[tuple[str, str, str]] = []
+def deploy_problems(state_dir: str) -> list[str]:
+    """마지막 배포가 실패한 환경."""
+    problems = []
     for env in ("prod", "dev"):
         log = pathlib.Path(state_dir) / f"history-{env}.log"
         last = ""
         if log.is_file():
             for line in log.read_text(encoding="utf-8").splitlines():
-                parts = line.split()
-                if len(parts) >= 5 and parts[1] in ("deploy-end", "rollback"):
+                fields = line.split()
+                if len(fields) >= 5 and fields[1] in ("deploy-end", "rollback"):
                     last = line
         if not last:
-            rows.append((f"마지막 배포({env})", "기록 없음", NONE))
             continue
-        ts, action, _svc, sha, result = last.split()[:5]
-        who = last.split()[5] if len(last.split()) > 5 else "?"
-        when = datetime.datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc).astimezone(KST)
-        what = "배포" if action == "deploy-end" else "롤백"
-        rows.append((f"마지막 배포({env})", f"{when:%m-%d %H:%M} KST {what} {result} {sha[:12]} ({who})", OK if result.startswith("ok") or action == "rollback" else WARN))
-    return rows
+        ts, action, _svc, _sha, result = last.split()[:5]
+        if action == "deploy-end" and not result.startswith("ok"):
+            when = datetime.datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc).astimezone(KST)
+            problems.append(f"{env} 배포가 실패했다({when:%m-%d %H:%M})")
+    return problems
 
 
 def cert_days(host: str, connect: str) -> float:
@@ -141,50 +210,53 @@ def cert_days(host: str, connect: str) -> float:
     return (expires - datetime.datetime.now(datetime.timezone.utc)).total_seconds() / 86400
 
 
-def cert_rows(hosts: list[tuple[str, str]], connect: str) -> list[tuple[str, str, str]]:
-    rows: list[tuple[str, str, str]] = []
+def cert_problems(hosts: list[tuple[str, str]], connect: str) -> list[str]:
+    """곧 만료되거나 읽지 못한 인증서."""
+    problems = []
     for label, host in hosts:
         try:
             days = cert_days(host, connect)
         except (OSError, subprocess.SubprocessError, ValueError):
-            rows.append((f"인증서({label})", "읽지 못했다", WARN))
+            problems.append(f"{label} 인증서를 읽지 못했다")
             continue
-        rows.append((f"인증서({label})", f"만료까지 {days:.0f}일 (경고 14일)", OK if days >= 14 else WARN))
-    return rows
+        if days < CERT_WARN_DAYS:
+            problems.append(f"{label} 인증서가 {days:.0f}일 뒤 만료된다(경고 {CERT_WARN_DAYS}일)")
+    return problems
 
 
-def app_rows(prom: Prom) -> list[tuple[str, str, str]]:
-    rows: list[tuple[str, str, str]] = []
-    n5xx = prom.scalar('sum(increase(http_server_requests_seconds_count{env="prod", status=~"5.."}[24h]))')
-    total = prom.scalar('sum(increase(http_server_requests_seconds_count{env="prod"}[24h]))')
-    if total is None:
-        rows.append(("5xx(24시간)", "지표 없음", NONE))
+def table(heads: list[str], cells: list[str]) -> list[str]:
+    """머리글 한 줄과 값 한 줄짜리 가운데 정렬 표."""
+    return ["| " + " | ".join(heads) + " |", "|" + ":-:|" * len(heads), "| " + " | ".join(cells) + " |"]
+
+
+def render(now: datetime.datetime, problems: list[Problem], services: list[tuple[str, str]], backup: tuple[list[str], list[str]] | None,
+           warn_flag: bool = False) -> tuple[str, str]:
+    """제목과 본문(표 셋)."""
+    crit = sum(1 for p in problems if p[0] == CRIT_CELL)
+    warn = len(problems) - crit
+    down = any(mark == BAD for _, mark in services)
+    if crit:
+        summary = f"장애 {crit}건" + (f" · 주의 {warn}건" if warn else "")
+    elif warn or down or warn_flag:
+        summary = f"주의 {warn}건" if warn else "주의"
     else:
-        count = n5xx or 0
-        rows.append(("5xx(24시간)", f"{count:.0f}건 / 전체 {total:.0f}건", OK if count == 0 else WARN))
-    age = prom.scalar('time() - max(batch_last_success_timestamp_seconds{env="prod"})')
-    rows.append(("새벽 배치", f"마지막 성공 {human_age(age)} (경고 26시간 초과)", OK if age <= 26 * 3600 else WARN) if age is not None else ("새벽 배치", "지표 없음", NONE))
-    return rows
+        summary = "정상"
+    title = f"Fit Dining · {summary} · {now.astimezone(KST):%m-%d %H:%M}"
+    body: list[str] = []
+    if problems:
+        body += ["| 구분 | 확인 필요 | 런북 |", "|:-:|:--|:-:|", *[f"| {c} | {text} | {rb} |" for c, text, rb in problems]]
+    else:
+        body += ["확인 필요한 항목이 없다."]
+    body += ["", *table([n for n, _ in services], [m for _, m in services])]
+    if backup:
+        heads, cells = backup
+        body += ["", "| 백업 | " + " | ".join(heads) + " |", "|:--" + "|:-:" * len(heads) + "|", "| 마지막 성공 | " + " | ".join(cells) + " |"]
+    return title, "\n".join(body)
 
 
-def alert_rows(prom: Prom) -> list[tuple[str, str, str]]:
-    firing = sorted({m["alertname"] for m, _ in prom.query('ALERTS{alertstate="firing"}')})
-    if not firing:
-        return [("지금 울리는 알림", "없음", OK)]
-    return [("지금 울리는 알림", f"{len(firing)}종: " + ", ".join(firing), WARN)]
-
-
-def render(now: datetime.datetime, rows: list[tuple[str, str, str]], notes: list[str]) -> str:
-    lines = [f"#### Fit Dining 일일 점검 ({now.astimezone(KST):%Y-%m-%d %H:%M} KST)", "", "| 항목 | 상태 | 값 |", "|---|---|---|"]
-    lines += [f"| {name} | {mark} | {value} |" for name, value, mark in rows]
-    warn = sum(1 for r in rows if r[2] == WARN)
-    lines += ["", f"주의 {warn}건." if warn else "모든 항목이 정상 범위다."]
-    lines += notes
-    return "\n".join(lines)
-
-
-def post(url: str, text: str) -> None:
-    data = json.dumps({"text": text}, ensure_ascii=False).encode("utf-8")
+def post(url: str, title: str, body: str) -> None:
+    """일반 글로 올린다(제목은 #### 제목, 본문은 표 셋). 채팅에 직접 쳐서 확인한 것과 같은 모양이다."""
+    data = json.dumps({"text": f"#### {title}\n\n{body}"}, ensure_ascii=False).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json; charset=utf-8"})
     with urllib.request.urlopen(req, timeout=15) as resp:
         if resp.status >= 300:
@@ -209,26 +281,34 @@ def main(argv: list[str]) -> int:
     hosts = [(label, hosts_env[key]) for label, key in (("prod", "PROD_HOST"), ("dev", "DEV_HOST")) if hosts_env.get(key)]
 
     now = datetime.datetime.now(datetime.timezone.utc)
-    rows: list[tuple[str, str, str]] = []
-    notes: list[str] = []
-    status = 0
     prom = Prom(args.prom)
+    status = 0
+    problems: list[Problem] = []
+    services: list[tuple[str, str]] = []
+    backup = None
+    backup_flag = False
     try:
-        rows += host_rows(prom)
-        rows += backup_rows(prom)
-        rows += app_rows(prom)
-        rows += alert_rows(prom)
-    except (OSError, RuntimeError, KeyError, ValueError) as e:
-        notes.append(f"Prometheus에서 값을 읽지 못했다({type(e).__name__}). 관측 스택을 먼저 본다(bash infra/obs/verify-obs.sh).")
+        problems, alert_names = alert_problems(prom)
+        services = service_cells(prom)
+        for key, text in metric_problems(prom):
+            if not any(n.startswith(COVERED_BY[key]) for n in alert_names):
+                problems.append((WARN_CELL, text, "-"))
+        heads, cells, backup_flag, verify_failed = backup_table(prom)
+        backup = (heads, cells)
+        if verify_failed and not any(n.startswith(COVERED_BY["verify"]) for n in alert_names):
+            problems.append((WARN_CELL, verify_failed, "-"))
+    except (OSError, RuntimeError, KeyError, ValueError, TypeError) as e:
+        problems = [(CRIT_CELL, f"Prometheus에서 값을 읽지 못했다({type(e).__name__}). 관측 스택을 먼저 본다(bash infra/obs/verify-obs.sh)", "-")]
+        services, backup = [], None
         status = 1
-    rows += deploy_rows(args.state_dir)
-    rows += cert_rows(hosts, args.tls_connect)
-    text = render(now, rows, notes)
-    print(text)
+    for text in deploy_problems(args.state_dir) + cert_problems(hosts, args.tls_connect):
+        problems.append((WARN_CELL, text, "-"))
+    title, body = render(now, problems, services, backup, backup_flag)
+    print(f"#### {title}\n\n{body}")
     if args.dry_run:
         return status
     try:
-        post(webhook, text)
+        post(webhook, title, body)
     except (OSError, RuntimeError) as e:
         print(f"FAIL 웹훅으로 보내지 못했다({type(e).__name__})", file=sys.stderr)
         return 1

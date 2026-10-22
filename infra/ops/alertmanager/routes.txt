@@ -1,3 +1,4 @@
 # 라우팅 시험(infra/ci/check-alertmanager.sh). 한 줄이 한 시험이다: <기대 수신자> <라벨=값>...
 main severity=critical env=prod site=B alertname=FitExternalDown
-main severity=warning env=prod site=B alertname=FitOpsDiskHigh
+main-quiet severity=warning env=prod site=B alertname=FitOpsDiskHigh
+main-quiet severity=info env=prod site=B alertname=FitVaultRestoreCheckOverdue

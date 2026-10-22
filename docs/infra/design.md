@@ -629,14 +629,14 @@ B의 알림은 모두 prod에 관한 것이라 수신자는 하나다. 프로브
 - 모든 규칙을 `promtool test rules`로 CI에서 검증한다. `infra/ci/check_alerts.py`가 알림 이름(`Fit` 접두사, 중복)과 severity·summary·description·runbook, 단위 시험의 존재, 대시보드의 uid·패널 id 중복과 데이터소스를, `infra/ci/check-alertmanager.sh`(amtool)가 설정과 라우팅(`routes.txt`)을 검사한다.
 - BE가 내는 지표 이름은 [contracts/metrics.md](contracts/metrics.md)가 정한다.
 - 알림마다 runbook 링크를 단다.
-- 두 Alertmanager 모두 Mattermost로 보내되 `site`(A/B)와 `env` 라벨을 붙인다. dev의 warning은 별도 수신자로 보낸다. critical 채널에는 prod와 B 알림만 간다.
+- 두 Alertmanager 모두 Mattermost로 보내되 `site`(A/B)와 `env` 라벨을 붙인다. 알림은 알림 이름이 아니라 `site/env`별로 묶어 한 메시지에 모은다. critical은 바로 보내고 해소도 알리며 1시간마다 다시 알린다. warning과 info는 5분 모아 보내고 새 알림만 1시간 단위로 보태며 24시간마다 다시 알리고 해소는 알리지 않는다. dev(`env=dev`)는 별도 수신자로 같은 방식(해소 없음)으로 보낸다. 메시지는 제목(상태, 건수, 환경)과 알림마다 요약, 런북 번호만 담는다(`alertmanager/templates/fit.tmpl`).
 - Alertmanager 웹훅 URL은 `api_url_file`로 시크릿 파일에서 읽는다.
 
 ## 10. 운영
 
 ### 10.1 일일 점검
 
-매일 09:00 KST에 `infra/obs/daily-digest.py`(A, `fit-daily-digest.timer`)가 아래 항목을 Mattermost에 올린다: 디스크·메모리·스왑, CPU 24시간 평균(40% 기준선 대비), 백업 나이, 마지막 배포, 인증서 잔여일, 5xx 건수, 배치 결과, 지금 울리는 알림. 항목마다 정상·주의·값 없음을 붙인다. 인증서 잔여일은 서버 자신의 443에서 읽는다. Prometheus나 웹훅에 닿지 못하면 그 사실을 올리고 종료 코드 1로 끝난다.
+하루 두 번(09:00, 18:00 KST) `infra/obs/daily-digest.py`(A, `fit-daily-digest.timer`)가 서버의 전체 상태를 Mattermost에 **한 메시지**로 올린다. 제목(`Fit Dining · 정상|주의 N건|장애 N건 · 월-일 시:분`)과 표 셋이다: 확인 필요(울리는 알림과 요약만 아는 문제를 구분·내용·런북으로), 서비스(prod·dev BE, 엣지, DB, 검색, 금고가 떠 있는지), 백업(pg·photos·caddy의 마지막 성공과 복원 검증). 정상인 값(디스크·메모리·CPU·배포·인증서)은 문제가 생겼을 때만 확인 필요에 나온다. 인증서 잔여일은 서버 자신의 443에서 읽는다. Prometheus나 웹훅에 닿지 못하면 그 사실을 올리고 종료 코드 1로 끝난다. 알림 메시지는 알림 이름이 아니라 환경(`site/env`)별로 묶어 한 메시지에 모으고, critical만 바로 보내며 warning과 info는 모아서 해소를 알리지 않는다(9.4절).
 
 ### 10.2 런북
 

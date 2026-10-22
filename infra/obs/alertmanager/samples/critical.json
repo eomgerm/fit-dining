@@ -1,0 +1,50 @@
+{
+  "receiver": "main",
+  "status": "firing",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "FitBeProdDown",
+        "severity": "critical",
+        "site": "A",
+        "env": "prod"
+      },
+      "annotations": {
+        "summary": "prod BE가 모든 색에서 응답하지 않는다",
+        "description": "be-prod-blue와 be-prod-green의 관리 포트(8081)를 2분 이상 긁지 못했다",
+        "runbook": "RB-02"
+      },
+      "startsAt": "2026-01-05T07:18:00.000Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "http://alertmanager:9093",
+      "fingerprint": "FitBeProdDown"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "FitHttp5xxHigh",
+        "severity": "critical",
+        "site": "A",
+        "env": "prod"
+      },
+      "annotations": {
+        "summary": "prod의 5xx 비율이 5%를 넘었다",
+        "description": "최근 5분 5xx 비율 8.2%",
+        "runbook": "RB-03"
+      },
+      "startsAt": "2026-01-05T07:26:00.000Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "http://alertmanager:9093",
+      "fingerprint": "FitHttp5xxHigh"
+    }
+  ],
+  "groupLabels": {},
+  "commonLabels": {
+    "site": "A",
+    "env": "prod",
+    "severity": "critical"
+  },
+  "commonAnnotations": {},
+  "externalURL": "http://alertmanager:9093"
+}

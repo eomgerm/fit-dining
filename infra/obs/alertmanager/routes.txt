@@ -1,7 +1,8 @@
 # 라우팅 시험(infra/ci/check-alertmanager.sh). 한 줄이 한 시험이다: <기대 수신자> <라벨=값>...
 main severity=critical env=prod site=A alertname=FitBeProdDown
-main severity=warning env=prod site=A alertname=FitHttp5xxHigh
+main-quiet severity=warning env=prod site=A alertname=FitHttp5xxHigh
+main-quiet severity=info env=prod site=A alertname=FitVaultRestoreCheckOverdue
 main severity=critical site=A alertname=FitMemoryLow
-main severity=warning site=A alertname=FitBackupPgStale
+main-quiet severity=warning site=A alertname=FitBackupPgStale
 dev severity=warning env=dev site=A alertname=FitBeDevDown
 dev severity=critical env=dev site=A alertname=FitHttp5xxHigh

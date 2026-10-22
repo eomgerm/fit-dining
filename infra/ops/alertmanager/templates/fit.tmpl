@@ -1,15 +1,69 @@
-{{ define "fit.title" -}}
-[{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }} ({{ .CommonLabels.site }}{{ with .CommonLabels.env }}/{{ . }}{{ end }})
+{{/* Fit Dining 알림 메시지. A(infra/obs)와 B(infra/ops)의 fit.tmpl은 같은 내용이다(CI가 다르면 거부한다). */}}
+{{/* 한 메시지에 같은 환경(site/env)의 알림이 모인다. 색 막대가 상태를 알려 주므로 제목에는 이모지를 쓰지 않는다(알림 미리보기용 fallback에만 쓴다). */}}
+
+{{ define "fit.scope" -}}
+{{ .CommonLabels.site }}{{ with .CommonLabels.env }}/{{ . }}{{ end }}
 {{- end }}
 
+{{/* 제목: 장애 N건 · A/prod, 주의 N건 · A/prod, 해소 · A/prod */}}
+{{ define "fit.title" -}}
+{{- $crit := false -}}
+{{- range .Alerts.Firing }}{{ if eq .Labels.severity "critical" }}{{ $crit = true }}{{ end }}{{ end -}}
+{{- if eq (len .Alerts.Firing) 0 -}}
+해소 · {{ template "fit.scope" . }}
+{{- else if $crit -}}
+장애 {{ len .Alerts.Firing }}건 · {{ template "fit.scope" . }}
+{{- else -}}
+주의 {{ len .Alerts.Firing }}건 · {{ template "fit.scope" . }}
+{{- end -}}
+{{- end }}
+
+{{/* 푸시 알림과 채널 목록 미리보기에 쓰이는 짧은 글. 여기에만 이모지를 쓴다 */}}
+{{ define "fit.fallback" -}}
+{{- $crit := false -}}
+{{- range .Alerts.Firing }}{{ if eq .Labels.severity "critical" }}{{ $crit = true }}{{ end }}{{ end -}}
+{{- if eq (len .Alerts.Firing) 0 -}}
+🟢 {{ template "fit.title" . }}
+{{- else if $crit -}}
+🔴 {{ template "fit.title" . }}
+{{- else -}}
+🟡 {{ template "fit.title" . }}
+{{- end -}}
+{{- end }}
+
+{{/* 시작 시각은 KST다. 하루가 넘었으면 날짜도 붙인다 */}}
+{{ define "fit.since" -}}
+{{ if gt (since .StartsAt).Hours 20.0 }}{{ (.StartsAt | tz "Asia/Seoul").Format "01-02 15:04" }}{{ else }}{{ (.StartsAt | tz "Asia/Seoul").Format "15:04" }}{{ end }}
+{{- end }}
+
+{{/* 지속 시간을 한국어로("22m 0s"는 "22분", "1h 2m 3s"는 "1시간 2분 3초"). 분 이상이면 초는 뗀다 */}}
+{{ define "fit.span" -}}
+{{ (.EndsAt.Sub .StartsAt).Seconds | humanizeDuration | reReplaceAll "([dhm]) [0-9]+s$" "${1}" | reReplaceAll "d" "일" | reReplaceAll "h" "시간" | reReplaceAll "m" "분" | reReplaceAll "s" "초" }}
+{{- end }}
+
+{{/* 알림 하나: 굵은 요약, 다음 줄에 설명(값이 들어 있다) · 시작 시각 · 런북 번호 */}}
+{{ define "fit.alert" -}}
+**{{ .Annotations.summary }}**
+{{ with .Annotations.description }}{{ . }} · {{ end }}{{ template "fit.since" $ }}부터 · {{ .Annotations.runbook }}
+{{- end }}
+
+{{/* critical을 먼저, 그다음 나머지. 해소된 것은 맨 아래 */}}
 {{ define "fit.text" -}}
-{{ range .Alerts -}}
-*{{ .Labels.severity | toUpper }}* {{ .Annotations.summary }}
-{{ .Annotations.description }}
-런북: {{ .Annotations.runbook }}
-{{ end }}
+{{ range .Alerts.Firing }}{{ if eq .Labels.severity "critical" -}}
+{{ template "fit.alert" . }}
+
+{{ end }}{{ end -}}
+{{ range .Alerts.Firing }}{{ if ne .Labels.severity "critical" -}}
+{{ template "fit.alert" . }}
+
+{{ end }}{{ end -}}
+{{ range .Alerts.Resolved -}}
+해소: {{ .Annotations.summary }} ({{ template "fit.span" . }} 지속)
+{{ end -}}
 {{- end }}
 
 {{ define "fit.color" -}}
-{{ if eq .Status "resolved" }}good{{ else if eq .CommonLabels.severity "critical" }}danger{{ else }}warning{{ end }}
+{{- $crit := false -}}
+{{- range .Alerts.Firing }}{{ if eq .Labels.severity "critical" }}{{ $crit = true }}{{ end }}{{ end -}}
+{{- if eq (len .Alerts.Firing) 0 -}}good{{- else if $crit -}}danger{{- else -}}warning{{- end -}}
 {{- end }}

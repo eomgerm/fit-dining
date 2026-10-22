@@ -1,0 +1,31 @@
+# 메시지 템플릿 시험(infra/ci/check-alertmanager.sh). 한 줄이 한 시험이다: <견본>|<title, fallback, text, color>|<들어 있어야 할 문자열>
+# 문자열 앞에 !를 붙이면 없어야 한다. 견본 시각은 일부러 먼 과거라 시작 시각에 날짜가 붙는다(07:18Z는 KST 16:18이다)
+# 제목에는 이모지가 없다(색 막대가 상태를 알려 준다). 이모지는 푸시 알림과 채널 목록 미리보기에 쓰는 fallback에만 있다
+critical|title|장애 2건 · A/prod
+critical|title|!🔴
+critical|fallback|🔴 장애 2건 · A/prod
+critical|text|**prod BE가 모든 색에서 응답하지 않는다**
+critical|text|관리 포트(8081)를 2분 이상 긁지 못했다 · 01-05 16:18부터 · RB-02
+critical|text|**prod의 5xx 비율이 5%를 넘었다**
+critical|text|최근 5분 5xx 비율 8.2% · 01-05 16:26부터 · RB-03
+critical|text|!런북:
+critical|text|!CRITICAL
+critical|color|danger
+warning|title|주의 3건 · A/prod
+warning|fallback|🟡 주의 3건 · A/prod
+warning|text|**30분 평균 CPU 사용률이 40%를 넘었다**
+warning|text|01-05 16:18부터 · RB-09
+warning|text|**caddy 백업이 9일 넘게 없다**
+warning|text|01-05 16:18부터 · RB-06
+warning|text|**새벽 배치 지표가 15분 넘게 없다**
+warning|text|01-05 16:18부터 · RB-07
+warning|color|warning
+resolved|title|해소 · A/prod
+resolved|fallback|🟢 해소 · A/prod
+resolved|text|해소: prod BE가 모든 색에서 응답하지 않는다 (22분 지속)
+resolved|text|!✅
+resolved|color|good
+mixed|title|장애 1건 · A/prod
+mixed|text|**prod의 5xx 비율이 5%를 넘었다**
+mixed|text|해소: prod BE가 모든 색에서 응답하지 않는다 (22분 지속)
+mixed|color|danger

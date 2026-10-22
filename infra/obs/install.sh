@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 서버 A에 관측 구성을 설치한다. 몇 번 실행해도 같은 결과다(멱등). root로 실행한다.
 #   sudo bash infra/obs/install.sh
-# 하는 일: 일일 점검 요약 스크립트의 root 소유 사본, obs.env(없으면 예제에서), 요약 타이머(매일 09:00 KST).
+# 하는 일: 일일 점검 요약 스크립트의 root 소유 사본, obs.env(없으면 예제에서), 요약 타이머(매일 09:00과 18:00 KST).
 # 타이머가 도는 코드는 저장소 체크아웃이 아니라 root만 쓸 수 있는 사본($FIT_OBS_ROOT, 기본 /usr/local/lib/fit/obs)이다(infra/backup/install.sh와 같은 이유).
 # 관측 스택(prometheus 등)은 이 스크립트가 올리지 않는다. obs.env를 채우면 `bash infra/deploy/fit-up.sh`가 올린다.
 # 타이머는 obs.env의 MATTERMOST_WEBHOOK_URL이 채워진 뒤에 켠다. 채우기 전에 실행했다면 채운 뒤 이 스크립트를 다시 실행한다.

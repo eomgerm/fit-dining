@@ -1,0 +1,68 @@
+{
+  "receiver": "main",
+  "status": "firing",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "FitCpuHigh30m",
+        "severity": "warning",
+        "site": "A",
+        "env": "prod"
+      },
+      "annotations": {
+        "summary": "30분 평균 CPU 사용률이 40%를 넘었다",
+        "description": "",
+        "runbook": "RB-09"
+      },
+      "startsAt": "2026-01-05T07:18:00.000Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "http://alertmanager:9093",
+      "fingerprint": "FitCpuHigh30m"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "FitBackupCaddyStale",
+        "severity": "warning",
+        "site": "A",
+        "env": "prod"
+      },
+      "annotations": {
+        "summary": "caddy 백업이 9일 넘게 없다",
+        "description": "",
+        "runbook": "RB-06"
+      },
+      "startsAt": "2026-01-05T07:18:00.000Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "http://alertmanager:9093",
+      "fingerprint": "FitBackupCaddyStale"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "FitBatchMetricMissing",
+        "severity": "warning",
+        "site": "A",
+        "env": "prod"
+      },
+      "annotations": {
+        "summary": "새벽 배치 지표가 15분 넘게 없다",
+        "description": "",
+        "runbook": "RB-07"
+      },
+      "startsAt": "2026-01-05T07:18:00.000Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "http://alertmanager:9093",
+      "fingerprint": "FitBatchMetricMissing"
+    }
+  ],
+  "groupLabels": {},
+  "commonLabels": {
+    "site": "A",
+    "env": "prod",
+    "severity": "warning"
+  },
+  "commonAnnotations": {},
+  "externalURL": "http://alertmanager:9093"
+}

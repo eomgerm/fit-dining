@@ -84,7 +84,14 @@ up() {
   sidecar tls-sim "$FIT_NET_OBS" tls-sim -v "$W/infra/obs/test/tls-sim.py:/tls.py:ro" -v "$T/tls:/tls:ro" "$PYTHON_IMAGE" python /tls.py 443 /tls/cert40.pem /tls/key.pem
   sidecar tls-sim-short "$FIT_NET_OBS" tls-sim-short -v "$W/infra/obs/test/tls-sim.py:/tls.py:ro" -v "$T/tls:/tls:ro" "$PYTHON_IMAGE" python /tls.py 443 /tls/cert5.pem /tls/key.pem
   : >"$T/sink.log"
-  dc up -d --wait --wait-timeout 300
+  # Windows의 Docker Desktop은 127.0.0.1 포트 게시가 가끔 실패한다(listen: The system detected an invalid pointer address).
+  # 시작하지 못한 컨테이너만 다시 시도한다(이미 뜬 것은 건드리지 않는다)
+  local try=1
+  until dc up -d --wait --wait-timeout 300; do
+    [ "$try" -lt 8 ] || { echo "FAIL compose up이 ${try}번 모두 실패했다" >&2; return 1; }
+    try=$((try + 1))
+    sleep 3
+  done
   echo "관측 시험 환경이 떴다(프로젝트 $PROJECT)"
 }
 
@@ -114,6 +121,7 @@ inside() { docker exec "$(cid "$1")" wget -qO- "$2" 2>/dev/null; }
 urlenc() { "$PY" -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$1"; }
 prom() { inside prometheus "http://localhost:9090/api/v1/query?query=$(urlenc "$1")"; }
 # 질의 결과의 첫 값(없으면 빈 문자열)
+prom_not_firing() { [ -z "$(pval "ALERTS{alertname=\"$1\",alertstate=\"firing\"}")" ]; } # prom_not_firing 알림이름: 지금 울리고 있지 않다
 pval() { prom "$1" | "$PY" -c 'import json,sys; r=json.load(sys.stdin)["data"]["result"]; print(r[0]["value"][1] if r else "")' 2>/dev/null || true; }
 pcount() { prom "$1" | "$PY" -c 'import json,sys; print(len(json.load(sys.stdin)["data"]["result"]))' 2>/dev/null || echo 0; }
 wait_for() { # wait_for 제한초 명령... : 명령이 성공할 때까지 기다린다
@@ -233,37 +241,41 @@ run_alert_checks() {
   : >"$T/sink.log" # 앞서 받은 메시지는 비운다(이 구역을 다시 돌려도 같은 결과가 나오게)
   # 1) prod BE가 모두 내려가면 critical이 main으로 간다
   docker stop "$PROJECT-be-prod-blue" "$PROJECT-be-prod-green" >/dev/null
-  ok_if "prod BE 두 색이 모두 내려가면 FitBeProdDown이 main 수신자(/hook)에 도착한다" "$(wait_for 150 sink_has "/hook/$tok_main" FitBeProdDown && echo 1 || echo 0)"
-  body="$(sink_body "/hook/$tok_main" "[FIRING:1] FitBeProdDown")"
+  ok_if "prod BE 두 색이 모두 내려가면 FitBeProdDown이 main 수신자(/hook)에 도착한다" "$(wait_for 150 sink_has "/hook/$tok_main" 'prod BE가 모든 색에서 응답하지 않는다' && echo 1 || echo 0)"
+  body="$(sink_body "/hook/$tok_main" "prod BE가 모든 색에서 응답하지 않는다")"
   out="$body"
   ok_if "메시지가 Slack 형식(attachments, title, text, color)이다" "$([ "$(has "$body" '"attachments"')" = 1 ] && [ "$(has "$body" '"title"')" = 1 ] && [ "$(has "$body" '"color":"danger"')" = 1 ] && echo 1 || echo 0)"
-  ok_if "제목에 상태, 알림 이름, site/env가 있다([FIRING:1] FitBeProdDown (A/prod))" "$(has "$body" '[FIRING:1] FitBeProdDown (A/prod)')"
-  ok_if "본문에 요약, 설명, 런북 ID가 있다" "$([ "$(has "$body" '*CRITICAL*')" = 1 ] && [ "$(has "$body" 'prod BE가 모든 색에서 응답하지 않는다')" = 1 ] && [ "$(has "$body" '런북: RB-02')" = 1 ] && echo 1 || echo 0)"
-  ok_if "prod 알림은 dev 수신자(/hook-dev)로 가지 않는다" "$(is "$(sink_count "/hook-dev/$tok_dev" FitBeProdDown)" 0)"
+  ok_if "제목에 상태, 건수, site/env가 있다(장애 1건 · A/prod). 푸시 미리보기(fallback)에만 이모지가 있다" "$([ "$(has "$body" '"title":"장애 1건 · A/prod"')" = 1 ] && [ "$(has "$body" '"fallback":"🔴 장애 1건 · A/prod"')" = 1 ] && echo 1 || echo 0)"
+  ok_if "본문에 요약, 설명, 시작 시각, 런북 ID만 있다(**요약**, 설명 · HH:MM부터 · RB-02)" "$([ "$(has "$body" '**prod BE가 모든 색에서 응답하지 않는다**')" = 1 ] && [ "$(has "$body" '관리 포트(8081)를 2분 이상 긁지 못했다 · ')" = 1 ] && printf '%s' "$body" | grep -Eq '[0-9][0-9]:[0-9][0-9]부터 · RB-02' && [ "$(has "$body" 'CRITICAL')" = 0 ] && [ "$(has "$body" '런북:')" = 0 ] && echo 1 || echo 0)"
+  ok_if "제목 링크는 비어 있다(Alertmanager 내부 주소로 가는 링크가 없다)" "$(is "$(has "$body" 'alertmanager:9093')" 0)"
+  ok_if "prod 알림은 dev 수신자(/hook-dev)로 가지 않는다" "$(is "$(sink_count "/hook-dev/$tok_dev" 'prod BE가 모든 색에서 응답하지 않는다')" 0)"
   docker start "$PROJECT-be-prod-blue" "$PROJECT-be-prod-green" >/dev/null
-  ok_if "복구되면 [RESOLVED] 메시지가 온다" "$(wait_for 150 sink_has "/hook/$tok_main" '[RESOLVED] FitBeProdDown' && echo 1 || echo 0)"
+  ok_if "복구되면 해소 메시지가 온다(critical은 해소를 알린다)" "$(wait_for 150 sink_has "/hook/$tok_main" '"title":"해소 · A/prod"' && echo 1 || echo 0)"
+  ok_if "해소 메시지에 지속 시간이 한국어로 나온다(분 지속)" "$(sink_body "/hook/$tok_main" '"title":"해소 · A/prod"' | grep -Eq '해소: prod BE가 모든 색에서 응답하지 않는다 \([0-9]+(분|시간|초)' && echo 1 || echo 0)"
   # 2) dev는 별도 수신자로 간다
   docker stop "$PROJECT-be-dev" >/dev/null
-  ok_if "dev BE가 내려가면 FitBeDevDown이 dev 수신자(/hook-dev)에 도착한다" "$(wait_for 150 sink_has "/hook-dev/$tok_dev" FitBeDevDown && echo 1 || echo 0)"
-  ok_if "dev 알림은 main 수신자로 가지 않는다" "$(is "$(sink_count "/hook/$tok_main" FitBeDevDown)" 0)"
+  ok_if "dev BE가 내려가면 FitBeDevDown이 dev 수신자(/hook-dev)에 도착한다" "$(wait_for 150 sink_has "/hook-dev/$tok_dev" 'dev BE가 응답하지 않는다' && echo 1 || echo 0)"
+  ok_if "dev 알림은 main 수신자로 가지 않는다" "$(is "$(sink_count "/hook/$tok_main" 'dev BE가 응답하지 않는다')" 0)"
   docker start "$PROJECT-be-dev" >/dev/null
   # 3) 백업 지표(textfile)가 알림까지 이어진다
   sed -i 's/^fit_backup_last_verify_ok .*/fit_backup_last_verify_ok 0/' "$mt"
-  ok_if "textfile의 fit_backup_last_verify_ok를 0으로 바꾸면 FitBackupVerifyFailed가 도착한다" "$(wait_for 150 sink_has "/hook/$tok_main" FitBackupVerifyFailed && echo 1 || echo 0)"
-  out="$(sink_body "/hook/$tok_main" "[FIRING:1] FitBackupVerifyFailed")"
-  ok_if "그 메시지의 색은 warning이고 런북은 RB-06이다" "$([ "$(has "$out" '"color":"warning"')" = 1 ] && [ "$(has "$out" '런북: RB-06')" = 1 ] && echo 1 || echo 0)"
+  ok_if "textfile의 fit_backup_last_verify_ok를 0으로 바꾸면 FitBackupVerifyFailed가 도착한다" "$(wait_for 150 sink_has "/hook/$tok_main" '마지막 덤프 복원 검증이 실패했다' && echo 1 || echo 0)"
+  out="$(sink_body "/hook/$tok_main" "마지막 덤프 복원 검증이 실패했다")"
+  ok_if "그 메시지는 주의 묶음이고 색은 warning이며 굵은 요약과 런북 번호(· RB-06)가 있다" "$([ "$(has "$out" '"title":"주의 ')" = 1 ] && [ "$(has "$out" '"color":"warning"')" = 1 ] && [ "$(has "$out" '**마지막 덤프 복원 검증이 실패했다**')" = 1 ] && [ "$(has "$out" '· RB-06')" = 1 ] && echo 1 || echo 0)"
   sed -i 's/^fit_backup_last_verify_ok .*/fit_backup_last_verify_ok 1/' "$mt"
-  ok_if "1로 되돌리면 해소 메시지가 온다" "$(wait_for 150 sink_has "/hook/$tok_main" '[RESOLVED] FitBackupVerifyFailed' && echo 1 || echo 0)"
+  before_res="$(sink_count "/hook/$tok_main" '해소')"
+  sleep 20
+  ok_if "warning이 풀려도 해소 메시지는 보내지 않는다(조용한 수신자)" "$(is "$(sink_count "/hook/$tok_main" '해소')" "$before_res")"
   # 4) B로 가는 22번 프로브가 실패하면 알린다
   docker stop "$PROJECT-b-sim" >/dev/null
-  ok_if "B의 22번 포트가 닫히면 FitVaultUnreachable이 도착한다" "$(wait_for 150 sink_has "/hook/$tok_main" FitVaultUnreachable && echo 1 || echo 0)"
+  ok_if "B의 22번 포트가 닫히면 FitVaultUnreachable이 도착한다" "$(wait_for 150 sink_has "/hook/$tok_main" 'SSH 포트에 닿지 못한다' && echo 1 || echo 0)"
   docker start "$PROJECT-b-sim" >/dev/null
   # 5) 지표가 사라지면(absent) 알린다
   rm -f "$T/be-prod-blue/actuator/prometheus" "$T/be-prod-green/actuator/prometheus"
-  ok_if "BE 지표 파일이 사라지면 FitHttpMetricMissing(absent)이 도착한다" "$(wait_for 150 sink_has "/hook/$tok_main" FitHttpMetricMissing && echo 1 || echo 0)"
+  ok_if "BE 지표 파일이 사라지면 FitHttpMetricMissing(absent)이 도착한다" "$(wait_for 150 sink_has "/hook/$tok_main" 'prod BE의 HTTP 요청 지표가 없다' && echo 1 || echo 0)"
   be_metrics be-prod-blue
   be_metrics be-prod-green
-  ok_if "지표 파일을 되살리면 해소 메시지가 온다(시험은 처음 상태로 돌아간다)" "$(wait_for 150 sink_has "/hook/$tok_main" '[RESOLVED] FitHttpMetricMissing' && echo 1 || echo 0)"
+  ok_if "지표 파일을 되살리면 FitHttpMetricMissing이 풀린다(시험은 처음 상태로 돌아간다)" "$(wait_for 150 prom_not_firing FitHttpMetricMissing && echo 1 || echo 0)"
 }
 
 run_grafana_checks() {
@@ -313,38 +325,36 @@ run_digest_checks() {
   }
   # shellcheck disable=SC2329 # wait_for가 이름으로 부른다
   digest_has() { digest --dry-run | grep -qF -- "$1"; } # digest_has 문자열: wait_for에 넘기려고 호출할 때마다 다시 만든다
-  before="$(sink_count /hook "일일 점검")"
+  before="$(sink_count /hook "Fit Dining ·")"
   out="$(digest --dry-run)" && rc=0 || rc=$?
-  ok_if "--dry-run은 종료 코드 0으로 끝나고 아무것도 올리지 않는다" "$([ "$rc" = 0 ] && [ "$(sink_count /hook "일일 점검")" = "$before" ] && echo 1 || echo 0)"
-  ok_if "표에 디스크, 메모리, 스왑, CPU 24시간 평균 행이 있다" "$([ "$(has "$out" '| 디스크(/) |')" = 1 ] && [ "$(has "$out" '| 메모리 |')" = 1 ] && [ "$(has "$out" '| 스왑 |')" = 1 ] && [ "$(has "$out" '| CPU 24시간 평균 |')" = 1 ] && echo 1 || echo 0)"
-  ok_if "CPU는 데이터가 24시간보다 짧으면 '쌓인 데이터만'이라고 적는다(방금 올린 시험 스택이다)" "$([ "$(printf '%s\n' "$out" | grep -F '| CPU 24시간 평균 |' | grep -c '쌓인 데이터만')" = 1 ] && echo 1 || echo 0)"
-  # CPU 행의 ✅와 ⚠️는 시험하는 PC의 부하에 달렸으므로 값이 나오는지만 본다
-  ok_if "메모리와 CPU는 실제 값이 나온다(지표 없음이 아니다)" "$([ "$(has "$out" '| 메모리 | ✅ | 가용')" = 1 ] && [ "$(printf '%s\n' "$out" | grep -F '| CPU 24시간 평균 |' | grep -c '기준선 40%')" = 1 ] && echo 1 || echo 0)"
-  ok_if "백업 행: pg, photos, caddy의 마지막 성공과 복원 검증 통과" "$([ "$(has "$out" '| 백업 pg | ✅ | 마지막 성공')" = 1 ] && [ "$(has "$out" '| 백업 photos | ✅ |')" = 1 ] && [ "$(has "$out" '| 백업 caddy | ✅ |')" = 1 ] && [ "$(has "$out" '| 백업 복원 검증 | ✅ | 마지막 검증 통과')" = 1 ] && echo 1 || echo 0)"
-  ok_if "5xx와 배치 행이 있다(BE 지표에서)" "$([ "$(has "$out" '| 5xx(24시간) | ✅ | 0건')" = 1 ] && [ "$(has "$out" '| 새벽 배치 | ✅ | 마지막 성공')" = 1 ] && echo 1 || echo 0)"
-  ok_if "마지막 배포: prod는 성공(KST로 바뀐 시각과 앞 12자리 sha), dev는 실패가 주의로 보인다" "$([ "$(has "$out" '| 마지막 배포(prod) | ✅ | 11-07 10:05 KST 배포 ok 0123456789ab (runner)')" = 1 ] && [ "$(has "$out" '| 마지막 배포(dev) | ⚠️ | 11-07 11:02 KST 배포 fail fedcba987654')" = 1 ] && echo 1 || echo 0)"
-  ok_if "인증서 잔여일을 서버 자신의 443에서 읽는다(40일, 정상)" "$([ "$(has "$out" '| 인증서(prod) | ✅ | 만료까지 40일')" = 1 ] && [ "$(has "$out" '| 인증서(dev) | ✅ | 만료까지 40일')" = 1 ] && echo 1 || echo 0)"
-  ok_if "지금 울리는 알림 행이 있다" "$(has "$out" '| 지금 울리는 알림 |')"
+  ok_if "--dry-run은 종료 코드 0으로 끝나고 아무것도 올리지 않는다" "$([ "$rc" = 0 ] && [ "$(sink_count /hook "Fit Dining ·")" = "$before" ] && echo 1 || echo 0)"
+  ok_if "제목은 #### Fit Dining · 전체 상태 · 월-일 시:분이다" "$(printf '%s\n' "$out" | grep -Eq '^#### Fit Dining · (정상|주의( [0-9]+건)?|장애 [0-9]+건( · 주의 [0-9]+건)?) · [0-9][0-9]-[0-9][0-9] [0-9][0-9]:[0-9][0-9]$' && echo 1 || echo 0)"
+  ok_if "서비스 표: BE prod·dev, 엣지, DB, 검색, 금고(B)가 모두 ✅다(내려간 것이 없다)" "$(wait_for 90 digest_has '| ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |' && echo 1 || echo 0)"
+  ok_if "서비스 표의 머리글이 있다" "$(has "$out" '| prod BE | dev BE | 엣지 | DB | 검색 | 금고(B) |')"
+  ok_if "백업 표: pg, photos, caddy의 마지막 성공과 복원 검증 통과가 있고 ⚠️가 없다" "$(printf '%s\n' "$out" | grep -E '^\| 마지막 성공 \| .+ \| .+ \| .+ \| 통과 \|$' | grep -qv '⚠️' && [ "$(has "$out" '| 백업 | pg | photos | caddy | 복원 검증 |')" = 1 ] && echo 1 || echo 0)"
+  ok_if "확인 필요 표: 실패한 dev 배포가 🟡 주의 줄로 나오고 런북 칸은 -다" "$(has "$out" '| 🟡 주의 | dev 배포가 실패했다(11-07 11:02) | - |')"
+  ok_if "확인 필요 표 머리글(구분, 확인 필요, 런북)이 있다" "$(has "$out" '| 구분 | 확인 필요 | 런북 |')"
+  ok_if "정상인 값은 요약에 나오지 않는다(인증서 40일, prod 배포 성공은 문제가 아니라 줄이 없다)" "$([ "$(has "$out" '인증서')" = 0 ] && [ "$(has "$out" 'prod 배포')" = 0 ] && echo 1 || echo 0)"
   ok_if "웹훅 주소, Grafana 비밀번호, dev 게이트 키는 출력하지 않는다" "$([ "$(has "$out" "$tok")" = 0 ] && [ "$(has "$out" "$gpw")" = 0 ] && [ "$(has "$out" "$gate")" = 0 ] && echo 1 || echo 0)"
   out2="$(digest --dry-run --tls-connect tls-sim-short)" && rc=0 || rc=$?
-  ok_if "인증서가 5일 남았으면 주의(14일 미만)로 보이고 주의 건수가 줄에 나온다" "$([ "$rc" = 0 ] && [ "$(has "$out2" '| 인증서(prod) | ⚠️ | 만료까지 5일')" = 1 ] && [ "$(has "$out2" '주의 ')" = 1 ] && echo 1 || echo 0)"
+  ok_if "인증서가 5일 남으면 확인 필요 표에 🟡 주의로 나온다(14일 미만)" "$([ "$rc" = 0 ] && [ "$(has "$out2" '| 🟡 주의 | prod 인증서가 5일 뒤 만료된다(경고 14일) | - |')" = 1 ] && [ "$(has "$out2" '| 🟡 주의 | dev 인증서가 5일 뒤 만료된다(경고 14일) | - |')" = 1 ] && echo 1 || echo 0)"
   # 백업 검증이 실패했다고 쓰면 요약에 주의로 나온다
   sed -i 's/^fit_backup_last_verify_ok .*/fit_backup_last_verify_ok 0/' "$T/textfile/fit_backup.prom"
-  ok_if "백업 복원 검증이 실패하면 요약에 주의로 나온다" "$(wait_for 90 digest_has '| 백업 복원 검증 | ⚠️ | 마지막 검증 실패' && echo 1 || echo 0)"
+  ok_if "백업 복원 검증이 실패하면 백업 표 칸에 ⚠️가 붙고 확인 필요에 나온다" "$(wait_for 90 digest_has '실패 ⚠️' && digest --dry-run | grep -qF '마지막 덤프 복원 검증이 실패했다' && echo 1 || echo 0)"
   sed -i 's/^fit_backup_last_verify_ok .*/fit_backup_last_verify_ok 1/' "$T/textfile/fit_backup.prom"
   # 한 번도 백업하지 않았으면(지표 값 0) "20748일 전"이 아니라 한 번도 없다고 적는다
   caddy_ts="$(sed -n 's/^fit_backup_last_success_timestamp_seconds{kind="caddy"} //p' "$T/textfile/fit_backup.prom")"
   sed -i 's/^\(fit_backup_last_success_timestamp_seconds{kind="caddy"}\) .*/\1 0/' "$T/textfile/fit_backup.prom"
-  ok_if "백업을 한 번도 안 한 종류는 '아직 성공한 적이 없다'로 주의에 나온다" "$(wait_for 90 digest_has '| 백업 caddy | ⚠️ | 아직 성공한 적이 없다' && echo 1 || echo 0)"
+  ok_if "백업을 한 번도 안 한 종류는 백업 표에 '없음 ⚠️'로 나온다" "$(wait_for 90 digest_has '없음 ⚠️' && echo 1 || echo 0)"
   sed -i "s/^\(fit_backup_last_success_timestamp_seconds{kind=\"caddy\"}\) .*/\1 $caddy_ts/" "$T/textfile/fit_backup.prom"
   # 실제로 올린다
   out="$(digest)" && rc=0 || rc=$?
-  ok_if "올리면 종료 코드 0이고 main 수신자에 도착한다" "$([ "$rc" = 0 ] && wait_for 30 sink_has "/hook/$tok" "일일 점검" && echo 1 || echo 0)"
-  out="$(sink_body "/hook/$tok" "일일 점검")"
-  ok_if "메시지는 Mattermost 수신 웹훅 형식({\"text\": ...})이고 제목이 있다" "$([ "$(has "$out" '{"text":')" = 1 ] && [ "$(has "$out" '#### Fit Dining 일일 점검')" = 1 ] && echo 1 || echo 0)"
+  ok_if "올리면 종료 코드 0이고 main 수신자에 도착한다" "$([ "$rc" = 0 ] && wait_for 30 sink_has "/hook/$tok" "Fit Dining ·" && echo 1 || echo 0)"
+  out="$(sink_body "/hook/$tok" "Fit Dining ·")"
+  ok_if "메시지는 Mattermost 수신 웹훅 형식({\"text\": ...})의 일반 글이고 #### 제목으로 시작한다" "$([ "$(has "$out" '{"text": "#### Fit Dining · ')" = 1 ] && [ "$(has "$out" '"attachments"')" = 0 ] && echo 1 || echo 0)"
   # 실패 경로
   out="$(digest --prom http://nonexistent.invalid:9090)" && rc=0 || rc=$?
-  ok_if "Prometheus에 닿지 못하면 그 사실을 올리고 종료 코드 1이다" "$([ "$rc" = 1 ] && wait_for 30 sink_has "/hook/$tok" "Prometheus에서 값을 읽지 못했다" && echo 1 || echo 0)"
+  ok_if "Prometheus에 닿지 못하면 그 사실을 올리고 종료 코드 1이다" "$([ "$rc" = 1 ] && wait_for 30 sink_has "/hook/$tok" "| 🔴 장애 | Prometheus에서 값을 읽지 못했다" && echo 1 || echo 0)"
   out="$(digest --obs-env /digest/none.env)" && rc=0 || rc=$?
   ok_if "웹훅 주소를 읽지 못하면 거부한다" "$([ "$rc" = 1 ] && [ "$(has "$out" 'MATTERMOST_WEBHOOK_URL을 읽지 못했다')" = 1 ] && echo 1 || echo 0)"
   out="$(digest --obs-env /digest/obs-bad.env)" && rc=0 || rc=$?

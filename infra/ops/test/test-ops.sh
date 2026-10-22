@@ -110,7 +110,14 @@ EOF
   sidecar webhook-sink webhook-sink -v "$W/infra/obs/test/webhook-sink.py:/sink.py:ro" -v "$T:/out" "$PYTHON_IMAGE" python /sink.py 18099 /out/sink.log
   : >"$T/sink.log"
   vault_metrics "$(date +%s)"
-  dc up -d --wait --wait-timeout 300
+  # Windows의 Docker Desktop은 127.0.0.1 포트 게시가 가끔 실패한다(listen: The system detected an invalid pointer address).
+  # 시작하지 못한 컨테이너만 다시 시도한다(이미 뜬 것은 건드리지 않는다)
+  local try=1
+  until dc up -d --wait --wait-timeout 300; do
+    [ "$try" -lt 8 ] || { echo "FAIL compose up이 ${try}번 모두 실패했다" >&2; return 1; }
+    try=$((try + 1))
+    sleep 3
+  done
   echo "B 시험 환경이 떴다(프로젝트 $PROJECT)"
 }
 
@@ -151,7 +158,14 @@ wait_for() { # wait_for 제한초 명령... : 명령이 성공할 때까지 기�
 }
 sink_count() { # sink_count 경로접두사 포함할문자열...: 모든 문자열이 들어 있는 메시지 수
   "$PY" - "$T/sink.log" "$@" <<'PYEOF'
-import json, sys
+import json, re, sys
+def hit(x, body):
+    # bold:요약조각 = 굵은 요약(**...**) 안에 조각이 있다. gone:요약조각 = 해소 줄(해소: ...) 안에 조각이 있다. 그 밖은 부분 문자열이다
+    if x.startswith("bold:"):
+        return re.search(r"\*\*[^*]*" + re.escape(x[5:]) + r"[^*]*\*\*", body) is not None
+    if x.startswith("gone:"):
+        return re.search(r"해소: [^\\]*" + re.escape(x[5:]), body) is not None
+    return x in body
 path, prefix, needles = sys.argv[1], sys.argv[2], sys.argv[3:]
 n = 0
 for line in open(path, encoding="utf-8"):
@@ -159,7 +173,7 @@ for line in open(path, encoding="utf-8"):
     if not line:
         continue
     rec = json.loads(line)
-    if rec["path"].startswith(prefix) and all(x in rec["body"] for x in needles):
+    if rec["path"].startswith(prefix) and all(hit(x, rec["body"]) for x in needles):
         n += 1
 print(n)
 PYEOF
@@ -167,23 +181,45 @@ PYEOF
 sink_has() { [ "$(sink_count "$@")" -ge 1 ]; }
 sink_body() { # sink_body 경로접두사 포함할문자열...: 마지막으로 받은 메시지의 body
   "$PY" - "$T/sink.log" "$@" <<'PYEOF'
-import json, sys
+import json, re, sys
+def hit(x, body):
+    # bold:요약조각 = 굵은 요약(**...**) 안에 조각이 있다. gone:요약조각 = 해소 줄(해소: ...) 안에 조각이 있다. 그 밖은 부분 문자열이다
+    if x.startswith("bold:"):
+        return re.search(r"\*\*[^*]*" + re.escape(x[5:]) + r"[^*]*\*\*", body) is not None
+    if x.startswith("gone:"):
+        return re.search(r"해소: [^\\]*" + re.escape(x[5:]), body) is not None
+    return x in body
 path, prefix, needles = sys.argv[1], sys.argv[2], sys.argv[3:]
 last = ""
 for line in open(path, encoding="utf-8"):
     line = line.strip()
     if line:
         rec = json.loads(line)
-        if rec["path"].startswith(prefix) and all(x in rec["body"] for x in needles):
+        if rec["path"].startswith(prefix) and all(hit(x, rec["body"]) for x in needles):
             last = rec["body"]
 print(last)
 PYEOF
 }
 tok() { sed -n "s/^$1=//p" "$T/tokens"; }
-# 알림 이름으로 보는 도착 확인. 같은 알림이 둘 이상이면 제목이 [FIRING:2]처럼 되므로 개수는 보지 않는다
-fired() { sink_has "/hook/$(tok webhook)" '[FIRING:' "] $1 ("; }
-resolved() { sink_has "/hook/$(tok webhook)" "[RESOLVED] $1 ("; }
-fired_body() { sink_body "/hook/$(tok webhook)" '[FIRING:' "] $1 ("; }
+# 알림 이름으로 보는 도착 확인. 메시지에는 알림 이름이 없고 요약만 있으므로 이름을 요약의 고정 부분으로 바꾼다.
+# 같은 환경(B/prod)의 알림은 한 메시지에 모이므로 개수는 보지 않고, 굵은 요약(`**요약**`) 안에 요약 조각이 있는지(`bold:`), 해소 줄에 있는지(`gone:`) 본다. 요약에는 `{{ $labels.instance }}` 같은 값이 섞여 앞부분이 달라진다
+alert_text() {
+  case "$1" in
+    FitCertExpiringCritical) echo '인증서가 7일 안에 만료된다' ;;
+    FitExternalDown) echo '밖에서 본 A가 응답하지 않는다' ;;
+    FitPortUnreachable) echo '포트에 닿지 못한다' ;;
+    FitOpsWatcherDown) echo 'A의 감시 체계(' ;;
+    FitTlsProbeFailed) echo 'TLS 연결이 실패한다' ;;
+    FitVaultStale) echo '금고가 Postgres 백업을 8시간 넘게 받지 못했다' ;;
+    FitVaultMetricMissing) echo '금고 지표(fit_vault.prom)가 없다' ;;
+    FitPortExposed) echo '22·80·443 말고 열린 포트가 있다' ;;
+    *) echo "알 수 없는 알림 $1" >&2; return 1 ;;
+  esac
+}
+fired() { sink_has "/hook/$(tok webhook)" "bold:$(alert_text "$1")"; }
+resolved() { sink_has "/hook/$(tok webhook)" "gone:$(alert_text "$1")"; } # critical만 해소를 알린다
+firing_none() { [ "$(pval "count(ALERTS{alertname=\"$1\", alertstate=\"firing\"})")" = "" ]; } # firing_none 알림이름: warning은 해소를 알리지 않으니 Prometheus에서 본다
+fired_body() { sink_body "/hook/$(tok webhook)" "bold:$(alert_text "$1")"; }
 pval_is() { [ "$(pval "$1")" = "$2" ]; } # pval_is 식 기대값: wait_for에 넘기려고 호출할 때마다 다시 질의한다
 run_audit() { # run_audit 모드 대상 [포트 목록]: 포트 감사를 컨테이너에서 돌려 지표 파일을 시험 디렉터리에 쓴다
   docker run --rm --network "$NET" -v "$W/infra/ops/port-audit.py:/pa.py:ro" -v "$T/metrics:/out" "$PYTHON_IMAGE" python /pa.py --target "$2" --mode "$1" --out /out ${3:+--expected "$3"} 2>&1
@@ -279,17 +315,17 @@ run_alert_checks() {
   ok_if "내부 CA 인증서는 12시간짜리라 FitCertExpiringCritical이 main 수신자에 도착한다" "$(wait_for 150 fired FitCertExpiringCritical && echo 1 || echo 0)"
   body="$(fired_body FitCertExpiringCritical)"
   out="$body"
-  ok_if "메시지가 Slack 형식이고 제목에 상태, 알림 이름, site/env가 있다([FIRING:1] ... (B/prod))" "$([ "$(has "$body" '"attachments"')" = 1 ] && [ "$(has "$body" '"color":"danger"')" = 1 ] && [ "$(has "$body" '(B/prod)')" = 1 ] && echo 1 || echo 0)"
-  ok_if "본문에 요약과 런북 ID(RB-05)가 있다" "$([ "$(has "$body" '인증서가 7일 안에 만료된다')" = 1 ] && [ "$(has "$body" '런북: RB-05')" = 1 ] && echo 1 || echo 0)"
+  ok_if "메시지가 Slack 형식이고 제목에 상태, 건수, site/env가 있다(장애 N건 · B/prod)" "$([ "$(has "$body" '"attachments"')" = 1 ] && [ "$(has "$body" '"color":"danger"')" = 1 ] && printf '%s' "$body" | grep -Eq '"title":"장애 [0-9]+건 · B/prod"' && echo 1 || echo 0)"
+  ok_if "본문에 요약과 런북 ID(RB-05)가 있고 옛 형식(런북:, CRITICAL)은 없다" "$([ "$(has "$body" '**인증서가 7일 안에 만료된다')" = 1 ] && [ "$(has "$body" '· RB-05')" = 1 ] && [ "$(has "$body" '런북:')" = 0 ] && [ "$(has "$body" 'CRITICAL')" = 0 ] && echo 1 || echo 0)"
   # 가짜 A가 죽으면 밖에서 본 알림 네 가지가 울린다
   docker stop "$PROJECT-a-sim" >/dev/null
   for a in FitExternalDown FitPortUnreachable FitOpsWatcherDown FitTlsProbeFailed; do
     ok_if "A가 죽으면 $a가 도착한다" "$(wait_for 150 fired "$a" && echo 1 || echo 0)"
   done
   out="$(fired_body FitExternalDown)"
-  ok_if "FitExternalDown은 critical이고 런북은 RB-02다" "$([ "$(has "$out" '"color":"danger"')" = 1 ] && [ "$(has "$out" '런북: RB-02')" = 1 ] && echo 1 || echo 0)"
+  ok_if "FitExternalDown은 critical이고 런북은 RB-02다" "$([ "$(has "$out" '"color":"danger"')" = 1 ] && [ "$(has "$out" '· RB-02')" = 1 ] && echo 1 || echo 0)"
   docker start "$PROJECT-a-sim" >/dev/null
-  ok_if "A가 돌아오면 [RESOLVED] FitExternalDown이 온다" "$(wait_for 150 resolved FitExternalDown && echo 1 || echo 0)"
+  ok_if "A가 돌아오면 해소(해소: 요약) 메시지가 온다" "$(wait_for 150 resolved FitExternalDown && echo 1 || echo 0)"
 }
 
 run_vault_checks() {
@@ -302,13 +338,13 @@ run_vault_checks() {
   vault_metrics "$n" "$((n - 9 * 3600))"
   ok_if "Postgres 백업을 9시간째 못 받았다고 쓰면 FitVaultStale이 도착한다" "$(wait_for 150 fired FitVaultStale && echo 1 || echo 0)"
   out="$(fired_body FitVaultStale)"
-  ok_if "그 메시지는 critical이고 런북은 RB-06이다" "$([ "$(has "$out" '"color":"danger"')" = 1 ] && [ "$(has "$out" '런북: RB-06')" = 1 ] && echo 1 || echo 0)"
+  ok_if "그 메시지는 critical이고 런북은 RB-06이다" "$([ "$(has "$out" '"color":"danger"')" = 1 ] && [ "$(has "$out" '· RB-06')" = 1 ] && echo 1 || echo 0)"
   vault_metrics "$(vm_now)"
-  ok_if "정상으로 되돌리면 [RESOLVED] FitVaultStale이 온다" "$(wait_for 150 resolved FitVaultStale && echo 1 || echo 0)"
+  ok_if "정상으로 되돌리면 해소(해소: 요약) 메시지가 온다" "$(wait_for 150 resolved FitVaultStale && echo 1 || echo 0)"
   rm -f "$T/metrics/fit_vault.prom"
-  ok_if "지표 파일이 사라지면 FitVaultMetricMissing(absent)이 도착한다" "$(wait_for 150 fired FitVaultMetricMissing && echo 1 || echo 0)"
+  ok_if "지표 파일이 사라지면 FitVaultMetricMissing(absent, warning)이 주의 묶음(굵은 요약 · RB)으로 도착한다" "$(wait_for 150 fired FitVaultMetricMissing && echo 1 || echo 0)"
   vault_metrics "$(vm_now)"
-  ok_if "되살리면 해소 메시지가 온다(시험은 처음 상태로 돌아간다)" "$(wait_for 150 resolved FitVaultMetricMissing && echo 1 || echo 0)"
+  ok_if "되살리면 FitVaultMetricMissing이 풀린다(warning은 해소 메시지를 보내지 않는다. 시험은 처음 상태로 돌아간다)" "$(wait_for 150 firing_none FitVaultMetricMissing && echo 1 || echo 0)"
 }
 
 run_ports_checks() {
@@ -331,7 +367,7 @@ run_ports_checks() {
   ok_if "지표에 port=8080이 라벨로 남는다" "$(has "$(cat "$T/metrics/fit_portaudit_quick.prom")" 'fit_portaudit_port_open{mode="quick",port="8080"} 1')"
   ok_if "FitPortExposed가 critical로 main 수신자에 도착한다" "$(wait_for 150 fired FitPortExposed && echo 1 || echo 0)"
   out="$(fired_body FitPortExposed)"
-  ok_if "메시지에 예상 밖 열린 포트 1개와 런북 RB-01이 있다" "$([ "$(has "$out" '예상 밖 열린 포트 1개')" = 1 ] && [ "$(has "$out" '런북: RB-01')" = 1 ] && echo 1 || echo 0)"
+  ok_if "메시지에 예상 밖 열린 포트 1개와 런북 RB-01이 있다" "$([ "$(has "$out" '예상 밖 열린 포트 1개')" = 1 ] && [ "$(has "$out" '· RB-01')" = 1 ] && echo 1 || echo 0)"
   out="$(FIT_SKIP=systemd FIT_OPS_PROJECT=$PROJECT bash infra/ops/verify-ops.sh 2>&1)" && rc=0 || rc=$?
   ok_if "예상 밖 포트가 열려 있으면 verify-ops.sh가 실패한다" "$([ "$rc" != 0 ] && [ "$(has "$out" 'FAIL  예상 밖에서 열린 포트가 있다')" = 1 ] && echo 1 || echo 0)"
   docker rm -f "$PROJECT-a-ports-extra" >/dev/null
