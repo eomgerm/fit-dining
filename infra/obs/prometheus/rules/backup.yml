@@ -1,0 +1,76 @@
+# 백업 알림(설계 8절, 9.2절). 지표는 계획 1D의 백업 스크립트가 /var/lib/fit/metrics/fit_backup.prom에 쓰고 node-exporter의 textfile collector가 읽는다.
+# 금고(B) 쪽 알림은 infra/ops의 규칙이다(A가 죽어도 B가 감지한다).
+groups:
+  - name: fit-backup
+    rules:
+      - alert: FitBackupPgStale
+        expr: time() - fit_backup_last_success_timestamp_seconds{kind="pg"} > 8 * 3600
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: Postgres 백업의 마지막 성공이 8시간을 넘었다(주기는 4시간)
+          description: 마지막 성공 후 {{ $value | humanizeDuration }}. journalctl -u fit-backup@pg 를 본다
+          runbook: RB-06
+
+      - alert: FitBackupPhotosStale
+        expr: time() - fit_backup_last_success_timestamp_seconds{kind="photos"} > 36 * 3600
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: 사진 백업의 마지막 성공이 36시간을 넘었다(주기는 하루)
+          description: 마지막 성공 후 {{ $value | humanizeDuration }}
+          runbook: RB-06
+
+      - alert: FitBackupCaddyStale
+        expr: time() - fit_backup_last_success_timestamp_seconds{kind="caddy"} > 9 * 86400
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: 인증서 볼륨 백업의 마지막 성공이 9일을 넘었다(주기는 일주일)
+          description: 마지막 성공 후 {{ $value | humanizeDuration }}
+          runbook: RB-05
+
+      - alert: FitBackupVerifyFailed
+        expr: fit_backup_last_verify_ok == 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: 마지막 덤프 복원 검증이 실패했다
+          description: 검증에 실패한 덤프는 B로 보내지 않는다(failed-verify-*로 남는다). 다음 실행이 다시 검증한다
+          runbook: RB-06
+
+      - alert: FitBackupVerifyStale
+        expr: time() - fit_backup_last_verify_timestamp_seconds > 36 * 3600
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: 덤프 복원 검증을 36시간 넘게 하지 않았다(주기는 하루)
+          description: 마지막 검증 후 {{ $value | humanizeDuration }}
+          runbook: RB-06
+
+      - alert: FitBackupOutboxStuck
+        expr: fit_backup_outbox_files > 0
+        for: 2h
+        labels: {severity: warning}
+        annotations:
+          summary: B로 보내지 못한 백업 파일이 2시간 넘게 쌓여 있다
+          description: 대기 파일 {{ $value | printf "%.0f" }}개. A에서 B로 SSH가 되는지, 호스트 키와 vault 키 등록을 본다
+          runbook: RB-06
+
+      - alert: FitBackupMetricMissing
+        expr: absent(fit_backup_last_success_timestamp_seconds{kind="pg"})
+        for: 1h
+        labels: {severity: warning}
+        annotations:
+          summary: 백업 지표(fit_backup.prom)가 없다
+          description: infra/backup/install.sh app 이 끝났는지, /var/lib/fit/metrics 마운트와 첫 백업을 본다
+          runbook: RB-06
+
+      - alert: FitVaultUnreachable
+        expr: probe_success{job="vault-ssh"} == 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: A에서 B({{ $labels.instance }})의 SSH 포트에 닿지 못한다
+          description: 백업 전송과 CI(verify 러너)가 영향을 받는다. B가 살아 있는지, 방화벽을 본다
+          runbook: RB-01

@@ -1,0 +1,308 @@
+{
+  "uid": "fit-host",
+  "title": "호스트·컨테이너",
+  "tags": [
+    "fit"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "CPU 사용률(5분)과 40% 기준선",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom-a"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 8,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * (1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])))",
+          "legendFormat": "사용률",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom-a"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "vector(40)",
+          "legendFormat": "기준선 40%",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom-a"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      },
+      "description": "설계 4.1절: vCPU당 baseline 40%"
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "메모리 가용률",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom-a"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 0,
+        "w": 8,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes",
+          "legendFormat": "가용",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom-a"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "스왑 사용률",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom-a"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 0,
+        "w": 8,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * (1 - node_memory_SwapFree_bytes / node_memory_SwapTotal_bytes)",
+          "legendFormat": "사용",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom-a"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "디스크 사용률(/)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom-a"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 8,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * (1 - node_filesystem_avail_bytes{mountpoint=\"/\", fstype!~\"tmpfs|overlay\"} / node_filesystem_size_bytes{mountpoint=\"/\", fstype!~\"tmpfs|overlay\"})",
+          "legendFormat": "사용",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom-a"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "로드 평균",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom-a"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 7,
+        "w": 8,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "node_load1",
+          "legendFormat": "1분",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom-a"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "node_load5",
+          "legendFormat": "5분",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom-a"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "컨테이너 재시작(1시간)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom-a"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 7,
+        "w": 8,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "changes(container_start_time_seconds{name!=\"\"}[1h])",
+          "legendFormat": "{{name}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom-a"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "컨테이너 메모리(working set)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom-a"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "container_memory_working_set_bytes{name!=\"\"}",
+          "legendFormat": "{{name}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom-a"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "컨테이너 메모리 한도 대비",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom-a"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 14,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * container_memory_working_set_bytes{name!=\"\"} / (container_spec_memory_limit_bytes{name!=\"\"} > 0)",
+          "legendFormat": "{{name}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom-a"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      }
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  }
+}

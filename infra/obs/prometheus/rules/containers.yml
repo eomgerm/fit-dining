@@ -1,0 +1,20 @@
+# 컨테이너 알림(설계 9.2절). cAdvisor의 name 라벨이 비어 있는 항목(cgroup 상위 단위)은 빼고 컨테이너만 본다.
+groups:
+  - name: fit-containers
+    rules:
+      - alert: FitContainerRestartLoop
+        expr: changes(container_start_time_seconds{name!=""}[10m]) >= 3
+        labels: {severity: critical}
+        annotations:
+          summary: 컨테이너 {{ $labels.name }}이(가) 10분에 3번 이상 다시 시작했다
+          description: 재시작 {{ $value | printf "%.0f" }}회(10분). 로그는 Dozzle로 본다
+          runbook: RB-03
+
+      - alert: FitContainerMemoryHigh
+        expr: container_memory_working_set_bytes{name!=""} / container_spec_memory_limit_bytes{name!=""} > 0.9 and container_spec_memory_limit_bytes{name!=""} > 0
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: 컨테이너 {{ $labels.name }}의 메모리가 한도의 90%를 넘었다
+          description: 한도 대비 사용 {{ $value | humanizePercentage }} (10분 이상)
+          runbook: RB-03

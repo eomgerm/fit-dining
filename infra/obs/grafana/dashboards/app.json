@@ -1,0 +1,325 @@
+{
+  "uid": "fit-app",
+  "title": "앱",
+  "tags": [
+    "fit"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "요청률",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom-a"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 8,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (env) (rate(http_server_requests_seconds_count[5m]))",
+          "legendFormat": "{{env}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom-a"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "5xx 비율",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom-a"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 0,
+        "w": 8,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (env) (rate(http_server_requests_seconds_count{status=~\"5..\"}[5m])) / sum by (env) (rate(http_server_requests_seconds_count[5m]))",
+          "legendFormat": "{{env}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom-a"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "p95 지연(검색 제외)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom-a"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 0,
+        "w": 8,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, env) (rate(http_server_requests_seconds_bucket{uri!~\"/api/v1/search.*|/actuator.*\"}[5m])))",
+          "legendFormat": "{{env}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom-a"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "검색 p95 지연",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom-a"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 8,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, env) (rate(http_server_requests_seconds_bucket{uri=~\"/api/v1/search.*\"}[5m])))",
+          "legendFormat": "{{env}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom-a"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "JVM 힙 사용",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom-a"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 7,
+        "w": 8,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (env, color) (jvm_memory_used_bytes{area=\"heap\"})",
+          "legendFormat": "{{env}} {{color}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom-a"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Hikari 연결",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom-a"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 7,
+        "w": 8,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (env, color) (hikaricp_connections_active)",
+          "legendFormat": "사용 {{env}} {{color}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom-a"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (env, color) (hikaricp_connections_pending)",
+          "legendFormat": "대기 {{env}} {{color}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom-a"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Modal 폴백 비율(15분)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom-a"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 8,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "fit:modal_fallback_ratio:rate15m",
+          "legendFormat": "{{env}} {{component}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom-a"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Modal 일일 예산 사용",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom-a"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 14,
+        "w": 8,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "modal_daily_budget_used_ratio",
+          "legendFormat": "{{env}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom-a"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "BE up(색별)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom-a"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 14,
+        "w": 8,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "up{job=\"be\"}",
+          "legendFormat": "{{env}} {{color}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom-a"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  }
+}

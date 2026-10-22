@@ -1,0 +1,177 @@
+# rules/host.yml 단위 시험. 알림마다 울리는 경우와 울리지 않는 경우를 함께 둔다. exp_annotations는 설명 문구가 제대로 만들어지는지도 본다.
+rule_files:
+  - ../rules/host.yml
+evaluation_interval: 1m
+
+tests:
+  # 가용 메모리 5%는 울리고 20%는 울리지 않는다
+  - interval: 1m
+    input_series:
+      - series: 'node_memory_MemAvailable_bytes{instance="a"}'
+        values: '5+0x12'
+      - series: 'node_memory_MemTotal_bytes{instance="a"}'
+        values: '100+0x12'
+      - series: 'node_memory_MemAvailable_bytes{instance="ok"}'
+        values: '20+0x12'
+      - series: 'node_memory_MemTotal_bytes{instance="ok"}'
+        values: '100+0x12'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: FitMemoryLow
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: FitMemoryLow
+        exp_alerts:
+          - exp_labels: {severity: critical, instance: a}
+            exp_annotations:
+              summary: 호스트 가용 메모리가 8% 미만이다
+              description: 가용 메모리 비율 5% (5분 이상)
+              runbook: RB-03
+
+  # 스왑 60% 사용은 울리고, 스왑이 없는 호스트(총량 0)는 울리지 않는다
+  - interval: 1m
+    input_series:
+      - series: 'node_memory_SwapFree_bytes{instance="a"}'
+        values: '40+0x15'
+      - series: 'node_memory_SwapTotal_bytes{instance="a"}'
+        values: '100+0x15'
+      - series: 'node_memory_SwapFree_bytes{instance="noswap"}'
+        values: '0+0x15'
+      - series: 'node_memory_SwapTotal_bytes{instance="noswap"}'
+        values: '0+0x15'
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: FitSwapHigh
+        exp_alerts:
+          - exp_labels: {severity: warning, instance: a}
+            exp_annotations:
+              summary: 스왑 사용량이 50%를 넘었다
+              description: 스왑 사용 비율 60% (10분 이상)
+              runbook: RB-03
+
+  # OOM 종료 카운터가 늘면 즉시 울리고, 늘지 않으면 울리지 않는다
+  - interval: 1m
+    input_series:
+      - series: 'node_vmstat_oom_kill{instance="a"}'
+        values: '0 0 0 1 1 1 1 1'
+      - series: 'node_vmstat_oom_kill{instance="ok"}'
+        values: '0 0 0 0 0 0 0 0'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: FitOomKill
+        exp_alerts:
+          - exp_labels: {severity: critical, instance: a}
+            exp_annotations:
+              summary: 커널이 프로세스를 OOM으로 종료했다
+              description: 최근 5분에 OOM 종료 1건. 컨테이너 한도의 OOM도 센다(구현 시 서버에서 확인)
+              runbook: RB-03
+
+  # 디스크: 85%는 경고만, 95%는 경고와 위험이 함께 울린다. tmpfs는 보지 않는다
+  - interval: 1m
+    input_series:
+      - series: 'node_filesystem_avail_bytes{instance="a", mountpoint="/", fstype="ext4", device="sda1"}'
+        values: '15+0x12'
+      - series: 'node_filesystem_size_bytes{instance="a", mountpoint="/", fstype="ext4", device="sda1"}'
+        values: '100+0x12'
+      - series: 'node_filesystem_avail_bytes{instance="b", mountpoint="/", fstype="ext4", device="sdb1"}'
+        values: '5+0x12'
+      - series: 'node_filesystem_size_bytes{instance="b", mountpoint="/", fstype="ext4", device="sdb1"}'
+        values: '100+0x12'
+      - series: 'node_filesystem_avail_bytes{instance="t", mountpoint="/", fstype="tmpfs", device="tmpfs"}'
+        values: '1+0x12'
+      - series: 'node_filesystem_size_bytes{instance="t", mountpoint="/", fstype="tmpfs", device="tmpfs"}'
+        values: '100+0x12'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: FitDiskUsageHigh
+        exp_alerts:
+          - exp_labels: {severity: warning, instance: a, mountpoint: /, fstype: ext4, device: sda1}
+            exp_annotations:
+              summary: 디스크 사용률이 80%를 넘었다
+              description: 루트 파일시스템 사용률 85%
+              runbook: RB-04
+          - exp_labels: {severity: warning, instance: b, mountpoint: /, fstype: ext4, device: sdb1}
+            exp_annotations:
+              summary: 디스크 사용률이 80%를 넘었다
+              description: 루트 파일시스템 사용률 95%
+              runbook: RB-04
+      - eval_time: 10m
+        alertname: FitDiskUsageCritical
+        exp_alerts:
+          - exp_labels: {severity: critical, instance: b, mountpoint: /, fstype: ext4, device: sdb1}
+            exp_annotations:
+              summary: 디스크 사용률이 90%를 넘었다
+              description: 루트 파일시스템 사용률 95%
+              runbook: RB-04
+
+  # 디스크 고갈 예측: 2씩 줄어드는 추세는 울리고 변하지 않는 값은 울리지 않는다
+  - interval: 10m
+    input_series:
+      - series: 'node_filesystem_avail_bytes{instance="a", mountpoint="/", fstype="ext4", device="sda1"}'
+        values: '2000-20x40'
+      - series: 'node_filesystem_avail_bytes{instance="flat", mountpoint="/", fstype="ext4", device="sdc1"}'
+        values: '2000+0x40'
+    alert_rule_test:
+      - eval_time: 360m
+        alertname: FitDiskFillingUp
+        exp_alerts:
+          - exp_labels: {severity: critical, instance: a, mountpoint: /, fstype: ext4, device: sda1}
+            exp_annotations:
+              summary: 이 속도면 24시간 안에 디스크가 가득 찬다
+              description: 최근 6시간 추세로 24시간 뒤 남는 공간이 0 미만이다
+              runbook: RB-04
+
+  # CPU: 코어 하나가 초당 0.5초만 쉬면 사용률 50%라 30분 알림과 2시간 알림이 모두 울린다
+  - interval: 1m
+    input_series:
+      - series: 'node_cpu_seconds_total{instance="a", cpu="0", mode="idle"}'
+        values: '0+30x200'
+    alert_rule_test:
+      - eval_time: 90m
+        alertname: FitCpuHigh30m
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: 30분 평균 CPU 사용률이 40%를 넘었다
+              description: 30분 평균 CPU 사용률 50%
+              runbook: RB-09
+      - eval_time: 150m
+        alertname: FitCpuHigh2h
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations:
+              summary: 2시간 평균 CPU 사용률이 40%를 넘었다(버스트 크레딧 소진 위험)
+              description: 2시간 평균 CPU 사용률 50%
+              runbook: RB-09
+
+  # CPU가 80% 놀면(사용률 20%) 울리지 않는다
+  - interval: 1m
+    input_series:
+      - series: 'node_cpu_seconds_total{instance="a", cpu="0", mode="idle"}'
+        values: '0+48x200'
+    alert_rule_test:
+      - eval_time: 90m
+        alertname: FitCpuHigh30m
+        exp_alerts: []
+      - eval_time: 150m
+        alertname: FitCpuHigh2h
+        exp_alerts: []
+
+  # 수집 대상이 5분 넘게 down이면 울린다. 다른 job과 살아 있는 대상은 울리지 않는다
+  - interval: 1m
+    input_series:
+      - series: 'up{job="node", instance="node-exporter:9100"}'
+        values: '0+0x12'
+      - series: 'up{job="cadvisor", instance="cadvisor:8080"}'
+        values: '1+0x12'
+      - series: 'up{job="be", instance="be-prod-green:8081", env="prod", color="green"}'
+        values: '0+0x12'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: FitScrapeTargetDown
+        exp_alerts:
+          - exp_labels: {severity: warning, job: node, instance: "node-exporter:9100"}
+            exp_annotations:
+              summary: 수집 대상 node이(가) 응답하지 않는다
+              description: "node(node-exporter:9100)의 up이 0이다. 이 대상의 알림은 조용해진다"
+              runbook: RB-01

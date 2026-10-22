@@ -1,0 +1,86 @@
+# 앱(BE) 알림(설계 9.2절). 지표 이름은 docs/infra/contracts/metrics.md의 계약이다(Spring Boot Micrometer 기본 이름과 12.1 #11).
+# 반드시 있어야 하는 지표(배치 heartbeat 등)는 absent() 알림을 둔다(설계 9.4절).
+groups:
+  - name: fit-app
+    rules:
+      # BE는 색마다 따로 긁는다. 환경의 모든 색이 down일 때만 서비스 다운이다(멈춘 이전 색은 up==0이 정상)
+      - alert: FitBeProdDown
+        expr: max by (env) (up{job="be", env="prod"}) == 0
+        for: 2m
+        labels: {severity: critical, env: prod}
+        annotations:
+          summary: prod BE가 모든 색에서 응답하지 않는다
+          description: be-prod-blue와 be-prod-green의 관리 포트(8081)를 2분 이상 긁지 못했다
+          runbook: RB-02
+
+      - alert: FitBeDevDown
+        expr: max by (env) (up{job="be", env="dev"}) == 0
+        for: 5m
+        labels: {severity: warning, env: dev}
+        annotations:
+          summary: dev BE가 응답하지 않는다
+          description: be-dev의 관리 포트(8081)를 5분 이상 긁지 못했다
+          runbook: RB-02
+
+      - alert: FitHttp5xxHigh
+        expr: |
+          sum by (env) (rate(http_server_requests_seconds_count{status=~"5.."}[5m]))
+            / sum by (env) (rate(http_server_requests_seconds_count[5m])) > 0.02
+          and sum by (env) (rate(http_server_requests_seconds_count[5m])) > 0.2
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.env }} BE의 5xx 비율이 2%를 넘었다"
+          description: 5xx 비율 {{ $value | humanizePercentage }}. 요청이 초당 0.2건 이상일 때만 센다
+          runbook: RB-02
+
+      # 검색 경로의 지연은 Modal(임베딩·리랭커)과 OpenSearch에 걸려 있어 기준이 느슨하다(추정, 실측 뒤 조정)
+      - alert: FitSearchLatencyHigh
+        expr: |
+          histogram_quantile(0.95, sum by (le, env) (rate(http_server_requests_seconds_bucket{uri=~"/api/v1/search.*"}[5m]))) > 4
+          and sum by (env) (rate(http_server_requests_seconds_count{uri=~"/api/v1/search.*"}[5m])) > 0.05
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.env }} 검색 p95 지연이 4초를 넘었다"
+          description: 검색 p95 {{ $value | humanizeDuration }}
+          runbook: RB-07
+
+      - alert: FitHttpLatencyHigh
+        expr: |
+          histogram_quantile(0.95, sum by (le, env) (rate(http_server_requests_seconds_bucket{uri!~"/api/v1/search.*|/actuator.*"}[5m]))) > 1
+          and sum by (env) (rate(http_server_requests_seconds_count{uri!~"/api/v1/search.*|/actuator.*"}[5m])) > 0.2
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.env }} BE p95 지연이 1초를 넘었다(검색 제외)"
+          description: p95 {{ $value | humanizeDuration }}
+          runbook: RB-02
+
+      # 04:00 KST 배치가 26시간 넘게 성공하지 않았다. 색이 둘이어도 가장 최근 값을 본다
+      - alert: FitBatchStale
+        expr: time() - max by (env) (batch_last_success_timestamp_seconds{env="prod"}) > 26 * 3600
+        for: 5m
+        labels: {severity: warning, env: prod}
+        annotations:
+          summary: 새벽 배치의 마지막 성공이 26시간을 넘었다
+          description: 마지막 성공 후 {{ $value | humanizeDuration }}
+          runbook: RB-07
+
+      - alert: FitBatchMetricMissing
+        expr: absent(batch_last_success_timestamp_seconds{env="prod"})
+        for: 15m
+        labels: {severity: warning, env: prod}
+        annotations:
+          summary: 배치 heartbeat 지표(batch_last_success_timestamp_seconds)가 없다
+          description: "prod BE가 이 지표를 시작부터 내야 한다(BE 계약 #11). 배포 전이라면 정상이다"
+          runbook: RB-07
+
+      - alert: FitHttpMetricMissing
+        expr: absent(http_server_requests_seconds_count{env="prod"})
+        for: 15m
+        labels: {severity: warning, env: prod}
+        annotations:
+          summary: prod BE의 HTTP 요청 지표가 없다
+          description: /actuator/prometheus를 긁지 못했거나 지표가 꺼져 있다. 배포 전이라면 정상이다
+          runbook: RB-02

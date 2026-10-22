@@ -1,0 +1,53 @@
+# Modal 호출 알림(설계 9.2절, 11.2절). 폴백은 사용자가 못 느끼는 실패라 알림이 필수다(A603 교훈).
+# 구성요소(component)는 embedding, reranker, llm이다. 지표 이름은 docs/infra/contracts/metrics.md의 계약이다(BE와 합의 전 제안).
+groups:
+  - name: fit-modal-recording
+    rules:
+      - record: fit:modal_calls:rate15m
+        expr: sum by (env) (rate(modal_embedding_calls_total[15m]))
+        labels: {component: embedding}
+      - record: fit:modal_calls:rate15m
+        expr: sum by (env) (rate(modal_reranker_calls_total[15m]))
+        labels: {component: reranker}
+      - record: fit:modal_calls:rate15m
+        expr: sum by (env) (rate(modal_llm_calls_total[15m]))
+        labels: {component: llm}
+      - record: fit:modal_fallback:rate15m
+        expr: sum by (env) (rate(modal_embedding_fallback_total[15m]))
+        labels: {component: embedding}
+      - record: fit:modal_fallback:rate15m
+        expr: sum by (env) (rate(modal_reranker_fallback_total[15m]))
+        labels: {component: reranker}
+      - record: fit:modal_fallback:rate15m
+        expr: sum by (env) (rate(modal_llm_fallback_total[15m]))
+        labels: {component: llm}
+      - record: fit:modal_fallback_ratio:rate15m
+        expr: fit:modal_fallback:rate15m / (fit:modal_calls:rate15m > 0)
+
+  - name: fit-modal
+    rules:
+      - alert: FitModalFallbackHigh
+        expr: fit:modal_fallback_ratio:rate15m > 0.3 and on (env, component) fit:modal_calls:rate15m > 0.01
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.env }} {{ $labels.component }} 호출의 폴백 비율이 30%를 넘었다"
+          description: 15분 폴백 비율 {{ $value | humanizePercentage }}. Modal 쪽 장애이거나 콜드 스타트 타임아웃일 수 있다
+          runbook: RB-11
+
+      - alert: FitModalBudgetHigh
+        expr: max by (env) (modal_daily_budget_used_ratio) > 0.8
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.env }}의 Modal 일일 호출 예산을 80% 썼다"
+          description: 예산 사용 {{ $value | humanizePercentage }}. 소진되면 키워드 폴백으로 내려간다
+          runbook: RB-11
+
+      - alert: FitModalMetricMissing
+        expr: absent(modal_daily_budget_used_ratio{env="prod"})
+        for: 15m
+        labels: {severity: warning, env: prod}
+        annotations:
+          summary: Modal 예산 지표(modal_daily_budget_used_ratio)가 없다
+          description: prod BE가 Redis 카운터를 이 지표로 내야 한다(BE 계약). 배포 전이라면 정상이다
+          runbook: RB-11

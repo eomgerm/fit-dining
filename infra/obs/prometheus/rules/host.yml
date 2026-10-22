@@ -1,0 +1,85 @@
+# 호스트 알림(설계 9.2절). 모든 알림은 runbook(설계 10.2절의 RB-번호)과 severity를 갖고 prometheus/tests/에 단위 시험이 있다(infra/ci/check_alerts.py가 검사한다).
+groups:
+  - name: fit-host
+    rules:
+      - alert: FitMemoryLow
+        expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.08
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: 호스트 가용 메모리가 8% 미만이다
+          description: 가용 메모리 비율 {{ $value | humanizePercentage }} (5분 이상)
+          runbook: RB-03
+
+      - alert: FitSwapHigh
+        expr: (1 - node_memory_SwapFree_bytes / node_memory_SwapTotal_bytes) > 0.5 and node_memory_SwapTotal_bytes > 0
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: 스왑 사용량이 50%를 넘었다
+          description: 스왑 사용 비율 {{ $value | humanizePercentage }} (10분 이상)
+          runbook: RB-03
+
+      - alert: FitOomKill
+        expr: increase(node_vmstat_oom_kill[5m]) > 0
+        labels: {severity: critical}
+        annotations:
+          summary: 커널이 프로세스를 OOM으로 종료했다
+          description: 최근 5분에 OOM 종료 {{ $value | printf "%.0f" }}건. 컨테이너 한도의 OOM도 센다(구현 시 서버에서 확인)
+          runbook: RB-03
+
+      - alert: FitDiskUsageHigh
+        expr: 1 - node_filesystem_avail_bytes{mountpoint="/", fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{mountpoint="/", fstype!~"tmpfs|overlay"} > 0.8
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: 디스크 사용률이 80%를 넘었다
+          description: 루트 파일시스템 사용률 {{ $value | humanizePercentage }}
+          runbook: RB-04
+
+      - alert: FitDiskUsageCritical
+        expr: 1 - node_filesystem_avail_bytes{mountpoint="/", fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{mountpoint="/", fstype!~"tmpfs|overlay"} > 0.9
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: 디스크 사용률이 90%를 넘었다
+          description: 루트 파일시스템 사용률 {{ $value | humanizePercentage }}
+          runbook: RB-04
+
+      - alert: FitDiskFillingUp
+        expr: predict_linear(node_filesystem_avail_bytes{mountpoint="/", fstype!~"tmpfs|overlay"}[6h], 24 * 3600) < 0
+        for: 30m
+        labels: {severity: critical}
+        annotations:
+          summary: 이 속도면 24시간 안에 디스크가 가득 찬다
+          description: 최근 6시간 추세로 24시간 뒤 남는 공간이 0 미만이다
+          runbook: RB-04
+
+      # 설계 4.1절: CPU 크레딧 때문에 vCPU당 baseline 40%가 기준선이다
+      - alert: FitCpuHigh30m
+        expr: 1 - avg(rate(node_cpu_seconds_total{mode="idle"}[30m])) > 0.4
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: 30분 평균 CPU 사용률이 40%를 넘었다
+          description: 30분 평균 CPU 사용률 {{ $value | humanizePercentage }}
+          runbook: RB-09
+
+      - alert: FitCpuHigh2h
+        expr: 1 - avg(rate(node_cpu_seconds_total{mode="idle"}[2h])) > 0.4
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: 2시간 평균 CPU 사용률이 40%를 넘었다(버스트 크레딧 소진 위험)
+          description: 2시간 평균 CPU 사용률 {{ $value | humanizePercentage }}
+          runbook: RB-09
+
+      # 관측 체계 자신: 수집 대상이 죽으면 다른 알림이 조용해진다
+      - alert: FitScrapeTargetDown
+        expr: up{job=~"prometheus|alertmanager|node|cadvisor|caddy|postgres|opensearch|blackbox"} == 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: 수집 대상 {{ $labels.job }}이(가) 응답하지 않는다
+          description: "{{ $labels.job }}({{ $labels.instance }})의 up이 0이다. 이 대상의 알림은 조용해진다"
+          runbook: RB-01

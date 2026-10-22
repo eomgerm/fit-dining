@@ -1,0 +1,75 @@
+# 서버 A의 Prometheus 설정(설계 9절). 규칙은 rules/, 단위 시험은 tests/다(promtool로 검사한다. infra/ci/check-prometheus.sh).
+# 보존 기간과 크기 상한(7일, 5GB)은 compose의 실행 인자다. B의 주소 같은 서버별 값은 obs-init이 /generated/targets에 만든다.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    site: A
+
+rule_files:
+  - rules/*.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: [alertmanager:9093]
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: [localhost:9090]
+
+  - job_name: alertmanager
+    static_configs:
+      - targets: [alertmanager:9093]
+
+  - job_name: node
+    static_configs:
+      - targets: [node-exporter:9100]
+
+  - job_name: cadvisor
+    static_configs:
+      - targets: [cadvisor:8080]
+
+  # 엣지 Caddy의 메트릭 리스너(설계 5.1절). net-obs 안에서만 닿는다
+  - job_name: caddy
+    static_configs:
+      - targets: [caddy:9180]
+
+  # BE의 관리 포트(설계 12.1 #1). 색마다 따로 긁어서 어느 색이 살아 있는지 본다. 멈춰 있는 색은 up==0이 정상이다
+  - job_name: be
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: [be-prod-blue:8081]
+        labels: {env: prod, color: blue}
+      - targets: [be-prod-green:8081]
+        labels: {env: prod, color: green}
+      - targets: [be-dev:8081]
+        labels: {env: dev, color: single}
+
+  - job_name: postgres
+    static_configs:
+      - targets: [postgres-exporter:9187]
+
+  - job_name: opensearch
+    static_configs:
+      - targets: [opensearch-exporter:9114]
+
+  - job_name: blackbox
+    static_configs:
+      - targets: [blackbox:9115]
+
+  # A에서 B의 TCP 22 프로브(설계 9.2절). 대상 B_IP:22는 obs-init이 file_sd 파일로 만든다
+  - job_name: vault-ssh
+    metrics_path: /probe
+    params:
+      module: [tcp_connect]
+    file_sd_configs:
+      - files: [/generated/targets/vault-ssh.yml]
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115

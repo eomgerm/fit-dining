@@ -32,6 +32,7 @@ make_env() {
     echo "FIT_MIGRATOR_PASSWORD=$(hex 12)"
     echo "FIT_PROD_APP_PASSWORD=$(hex 12)"
     echo "FIT_DEV_APP_PASSWORD=$(hex 12)"
+    echo "FIT_MONITOR_PASSWORD=$(hex 12)"
     echo "REDIS_PROD_PASSWORD=$(hex 12)"
     echo "REDIS_DEV_PASSWORD=$(hex 12)"
     echo "GARAGE_RPC_SECRET=$(hex 32)"
@@ -110,8 +111,9 @@ run_init_checks() {
   if [ "${FIT_TEST_OPENSEARCH:-0}" = 1 ]; then skip_os=0; fi
   out="$(FIT_VERIFY_SKIP_OPENSEARCH=$skip_os bash infra/data/verify-data.sh 2>&1)" && rc=0 || rc=$?
   printf '%s\n' "$out" >>"$OUT_ALL"
-  ok_if "verify-data.sh가 모두 통과한다" "$(is "$rc" 0)"
+  # 실패하면 출력의 끝이 아니라 FAIL 줄이 보이게 한다(어느 점검이 틀렸는지 알려고)
   if [ "$rc" != 0 ]; then out="$(grep '^FAIL' <<<"$out" || true)"; fi
+  ok_if "verify-data.sh가 모두 통과한다" "$(is "$rc" 0)"
   ok_if "net-data는 internal 망이다" "$(is "$(docker network inspect -f '{{.Internal}}' "${PREFIX}net-data")" true)"
 }
 
@@ -123,7 +125,7 @@ run_idempotent_checks() {
   run_script init-data.sh
   ok_if "다시 실행해도 성공한다" "$(is "$rc" 0)"
   ok_if "두 번째 실행은 Garage 레이아웃을 다시 적용하지 않는다" "$(is "$(has "$out" '레이아웃을 적용했다')" 0)"
-  ok_if "role은 3개뿐이다" "$(is "$(psql_admin -d postgres -c "SELECT count(*) FROM pg_roles WHERE rolname LIKE 'fit\\_%'")" 3)"
+  ok_if "role은 4개뿐이다(마이그레이터, prod 앱, dev 앱, 모니터링)" "$(is "$(psql_admin -d postgres -c "SELECT count(*) FROM pg_roles WHERE rolname LIKE 'fit\\_%'")" 4)"
   ok_if "DB는 2개뿐이다" "$(is "$(psql_admin -d postgres -c "SELECT count(*) FROM pg_database WHERE datname LIKE 'fit\\_%'")" 2)"
   ok_if "재실행이 기존 데이터를 건드리지 않는다(Postgres)" "$(is "$(pg_as fit_migrator "$FIT_MIGRATOR_PASSWORD" fit_prod 'SELECT id FROM keep_rows')" 7)"
   out="$(prod_s3 get fit-prod-photos keep.txt)"
@@ -157,6 +159,9 @@ run_privilege_checks() {
   ok_if "앱 role은 TRUNCATE하지 못한다" "$(fails pg_as fit_prod_app "$p" fit_prod 'TRUNCATE t_flow')"
   ok_if "dev 앱 role은 prod DB에 접속하지 못한다" "$(fails pg_as fit_dev_app "$d" fit_prod 'SELECT 1')"
   ok_if "prod 앱 role은 dev DB에 접속하지 못한다" "$(fails pg_as fit_prod_app "$p" fit_dev 'SELECT 1')"
+  ok_if "모니터링 role(fit_monitor)은 postgres DB의 통계를 읽는다" "$(succeeds pg_as fit_monitor "$FIT_MONITOR_PASSWORD" postgres 'SELECT count(*) FROM pg_stat_activity')"
+  ok_if "모니터링 role은 앱 DB에 접속하지 못한다" "$([ "$(fails pg_as fit_monitor "$FIT_MONITOR_PASSWORD" fit_prod 'SELECT 1')$(fails pg_as fit_monitor "$FIT_MONITOR_PASSWORD" fit_dev 'SELECT 1')" = 11 ] && echo 1 || echo 0)"
+  ok_if "모니터링 role은 테이블을 만들지 못한다" "$(fails pg_as fit_monitor "$FIT_MONITOR_PASSWORD" postgres 'CREATE TABLE monitor_denied (id int)')"
   psql_admin -d fit_prod -c 'CREATE TABLE t_super (id int)' >/dev/null
   ok_if "슈퍼유저가 만든 테이블은 재실행 전까지 앱 role이 못 읽는다" "$(fails pg_as fit_prod_app "$p" fit_prod 'SELECT * FROM t_super')"
   run_script ensure-databases.sh
@@ -224,7 +229,7 @@ run_postgres_checks() {
   ok_if "idle_in_transaction_session_timeout이 1분이다" "$(is "$(psql_admin -d postgres -c 'SHOW idle_in_transaction_session_timeout')" 1min)"
   ok_if "pgvector가 동작한다" "$(is "$(pg_as fit_migrator "$FIT_MIGRATOR_PASSWORD" fit_dev "SELECT '[1,2,3]'::vector <-> '[1,2,4]'::vector")" 1)"
   local k bad=0
-  for k in FIT_MIGRATOR_PASSWORD FIT_PROD_APP_PASSWORD FIT_DEV_APP_PASSWORD; do
+  for k in FIT_MIGRATOR_PASSWORD FIT_PROD_APP_PASSWORD FIT_DEV_APP_PASSWORD FIT_MONITOR_PASSWORD; do
     if docker logs "$(svc_container postgres)" 2>&1 | grep -qF "$(val "$k")"; then bad=1; fi
   done
   ok_if "role 비밀번호가 Postgres 로그에 남지 않는다" "$(is "$bad" 0)"
@@ -274,7 +279,7 @@ run_port_checks() {
 run_hygiene_checks() {
   echo "--- 비밀 값 노출"
   local k bad=0
-  for k in POSTGRES_PASSWORD FIT_MIGRATOR_PASSWORD FIT_PROD_APP_PASSWORD FIT_DEV_APP_PASSWORD REDIS_PROD_PASSWORD REDIS_DEV_PASSWORD GARAGE_RPC_SECRET GARAGE_ADMIN_TOKEN S3_PROD_SECRET_KEY S3_DEV_SECRET_KEY; do
+  for k in POSTGRES_PASSWORD FIT_MIGRATOR_PASSWORD FIT_PROD_APP_PASSWORD FIT_DEV_APP_PASSWORD FIT_MONITOR_PASSWORD REDIS_PROD_PASSWORD REDIS_DEV_PASSWORD GARAGE_RPC_SECRET GARAGE_ADMIN_TOKEN S3_PROD_SECRET_KEY S3_DEV_SECRET_KEY; do
     if [ "$(has "$(cat "$OUT_ALL")" "$(val "$k")")" = 1 ]; then
       bad=1
       echo "FAIL  $k 값이 스크립트 출력에 찍혔다"

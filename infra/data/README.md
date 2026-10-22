@@ -36,11 +36,13 @@ BE는 서비스 이름으로 접속한다(`postgres`, `redis-prod`, `redis-dev`,
 | Redis | `redis-prod`(자기 비밀번호) | `redis-dev`(자기 비밀번호) |
 | Garage | 버킷 `fit-prod-photos`, prod 전용 키 | 버킷 `fit-dev-photos`, dev 전용 키 |
 
+관측용 role `fit_monitor`(`pg_monitor` 멤버)는 postgres-exporter가 `postgres` DB에서 통계만 읽는 데 쓴다. `fit_prod`, `fit_dev`에는 접속하지 못한다. 비밀번호는 `FIT_MONITOR_PASSWORD`이고 `obs.env`의 같은 키와 같아야 한다.
+
 각 앱 role은 자기 DB에만 접속한다. 마이그레이터가 만드는 테이블과 시퀀스에는 앱 role의 DML 권한이 자동으로 붙는다. 초기화 스크립트를 다시 돌리면 다른 방법으로 만든 기존 테이블에도 같은 권한을 준다.
 
 ## data.env
 
-`/etc/fit/data.env`(root:docker 0640)에 12개 키가 있다. 키 목록과 소비자는 [env.md](../../docs/infra/contracts/env.md)의 `data` 그룹이고 예제는 `data.env.example`이다. 값 규칙은 스크립트가 검사하고 어긋나면 값을 찍지 않고 어떤 키가 틀렸는지만 알려 준다.
+`/etc/fit/data.env`(root:docker 0640)에 13개 키가 있다. 키 목록과 소비자는 [env.md](../../docs/infra/contracts/env.md)의 `data` 그룹이고 예제는 `data.env.example`이다. 값 규칙은 스크립트가 검사하고 어긋나면 값을 찍지 않고 어떤 키가 틀렸는지만 알려 준다.
 
 | 키 | 규칙 | 만드는 법 |
 |---|---|---|

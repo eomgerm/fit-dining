@@ -1,0 +1,114 @@
+# rules/data.yml 단위 시험
+rule_files:
+  - ../rules/data.yml
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'pg_up{instance="postgres-exporter:9187"}'
+        values: '1 1 1 0 0 0 0'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: FitPostgresDown
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: FitPostgresDown
+        exp_alerts:
+          - exp_labels: {severity: critical, instance: "postgres-exporter:9187"}
+            exp_annotations:
+              summary: exporter가 Postgres에 접속하지 못한다
+              description: pg_up이 0이다(Postgres 중지, fit_monitor 비밀번호 불일치, 연결 한도 초과 중 하나)
+              runbook: RB-06
+
+  # 연결 50개/60개(83%)는 울리고 30개는 울리지 않는다. 상태별 행을 모두 더한다
+  - interval: 1m
+    input_series:
+      - series: 'pg_settings_max_connections{instance="x"}'
+        values: '60+0x10'
+      - series: 'pg_stat_activity_count{datname="fit_prod", state="active"}'
+        values: '30+0x10'
+      - series: 'pg_stat_activity_count{datname="fit_prod", state="idle"}'
+        values: '20+0x10'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: FitPostgresConnectionsHigh
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: Postgres 연결이 최대 연결 수의 80%를 넘었다
+              description: 연결 사용 비율 83.33%(최대 60). Hikari 풀 크기와 누수를 본다
+              runbook: RB-06
+  - interval: 1m
+    input_series:
+      - series: 'pg_settings_max_connections{instance="x"}'
+        values: '60+0x10'
+      - series: 'pg_stat_activity_count{datname="fit_prod", state="active"}'
+        values: '10+0x10'
+      - series: 'pg_stat_activity_count{datname="fit_prod", state="idle"}'
+        values: '20+0x10'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: FitPostgresConnectionsHigh
+        exp_alerts: []
+
+  # OpenSearch가 응답하지 않으면(clusterinfo_up==0) 2분 뒤 울린다
+  - interval: 1m
+    input_series:
+      - series: 'elasticsearch_clusterinfo_up{url="http://opensearch:9200"}'
+        values: '1 1 0 0 0 0 0'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: FitOpensearchDown
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: FitOpensearchDown
+        exp_alerts:
+          - exp_labels: {severity: critical, url: "http://opensearch:9200"}
+            exp_annotations:
+              summary: exporter가 OpenSearch에 닿지 못한다
+              description: elasticsearch_clusterinfo_up이 0이다. 검색은 키워드 폴백으로 내려간다
+              runbook: RB-07
+
+  # red는 울리고 green·yellow는 울리지 않는다
+  - interval: 1m
+    input_series:
+      - series: 'elasticsearch_cluster_health_status{cluster="c", color="red"}'
+        values: '1+0x8'
+      - series: 'elasticsearch_cluster_health_status{cluster="c", color="green"}'
+        values: '0+0x8'
+      - series: 'elasticsearch_cluster_health_status{cluster="c", color="yellow"}'
+        values: '0+0x8'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: FitOpensearchRed
+        exp_alerts:
+          - exp_labels: {severity: critical, cluster: c, color: red}
+            exp_annotations:
+              summary: OpenSearch 클러스터 상태가 red다
+              description: 일부 인덱스의 주 샤드가 할당되지 않았다. Postgres에서 재색인한다
+              runbook: RB-07
+
+  # 힙 95%는 10분 뒤 울리고 50%는 울리지 않는다
+  - interval: 1m
+    input_series:
+      - series: 'elasticsearch_jvm_memory_used_bytes{area="heap", name="n"}'
+        values: '95+0x15'
+      - series: 'elasticsearch_jvm_memory_max_bytes{area="heap", name="n"}'
+        values: '100+0x15'
+      - series: 'elasticsearch_jvm_memory_used_bytes{area="non-heap", name="n"}'
+        values: '99+0x15'
+      - series: 'elasticsearch_jvm_memory_max_bytes{area="non-heap", name="n"}'
+        values: '100+0x15'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: FitOpensearchHeapHigh
+        exp_alerts: []
+      - eval_time: 14m
+        alertname: FitOpensearchHeapHigh
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: OpenSearch 힙 사용이 90%를 넘었다
+              description: 힙 사용 비율 95%(힙 768MB). k-NN 네이티브 메모리와 함께 본다
+              runbook: RB-07

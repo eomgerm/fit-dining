@@ -1,0 +1,5 @@
+# A의 blackbox 모듈. A에서는 B의 TCP 22 도달만 본다(설계 9.2절). 바깥에서 A를 보는 프로브는 B의 blackbox가 한다(infra/ops).
+modules:
+  tcp_connect:
+    prober: tcp
+    timeout: 5s

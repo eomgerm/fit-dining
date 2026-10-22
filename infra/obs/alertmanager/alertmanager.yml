@@ -1,0 +1,39 @@
+# 서버 A의 Alertmanager 설정(설계 9.4절). Mattermost 수신 웹훅은 Slack 호환이라 slack_configs로 보낸다. 웹훅 주소는 파일에서 읽는다(obs-init이 만든다).
+# 받는 곳은 둘이다: main(prod와 A 전체 알림)과 dev(env=dev인 알림). critical 알림은 main으로만 가고 더 자주 반복한다.
+templates:
+  - /etc/alertmanager/templates/*.tmpl
+
+route:
+  receiver: main
+  group_by: [alertname, site, env]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers: [env="dev"]
+      receiver: dev
+    - matchers: [severity="critical"]
+      receiver: main
+      repeat_interval: 1h
+
+# 같은 알림의 critical이 떠 있으면 warning은 보내지 않는다
+inhibit_rules:
+  - source_matchers: [severity="critical"]
+    target_matchers: [severity="warning"]
+    equal: [alertname, site, env]
+
+receivers:
+  - name: main
+    slack_configs:
+      - api_url_file: /generated/secrets/mattermost_url
+        send_resolved: true
+        title: '{{ template "fit.title" . }}'
+        text: '{{ template "fit.text" . }}'
+        color: '{{ template "fit.color" . }}'
+  - name: dev
+    slack_configs:
+      - api_url_file: /generated/secrets/mattermost_url_dev
+        send_resolved: true
+        title: '{{ template "fit.title" . }}'
+        text: '{{ template "fit.text" . }}'
+        color: '{{ template "fit.color" . }}'

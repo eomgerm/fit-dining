@@ -1,0 +1,209 @@
+# 서버 A의 관측 스택. 프로젝트 fit-obs다(설계 2.2절, 9절): prometheus, alertmanager, grafana, node-exporter, cadvisor, blackbox,
+# postgres-exporter, opensearch-exporter, dozzle. 값은 `docker compose --env-file /etc/fit/obs.env`로 읽는다(키는 docs/infra/contracts/env.md의 obs 그룹).
+# 호스트에 게시하는 포트는 127.0.0.1의 prometheus 9090, grafana 3000, dozzle 8888뿐이다(SSH 터널로 본다, 설계 13.1절).
+# 망(net-*)은 호스트에서 먼저 만들어 둔다(infra/host/networks.sh). prometheus는 BE의 관리 포트(8081)를 긁으려고 net-prod·net-dev에도 속하고
+# exporter 두 개는 DB를 보려고 net-data에도 속한다. 한도의 합은 설계 4.1절의 관측성 예산(1.4GB) 안이다.
+name: fit-obs
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
+
+services:
+  # 서버마다 다른 값(B의 주소, 웹훅)을 설정 파일로 만든다. 끝나면 종료하고, prometheus와 alertmanager는 이것이 성공해야 뜬다
+  obs-init:
+    image: python:3.12.15-slim
+    restart: "no"
+    user: "0"
+    network_mode: none
+    read_only: true
+    command: [python, /render.py]
+    environment:
+      B_IP: ${B_IP:?obs.env에 B_IP가 없다}
+      MATTERMOST_WEBHOOK_URL: ${MATTERMOST_WEBHOOK_URL:?obs.env에 MATTERMOST_WEBHOOK_URL이 없다}
+      MATTERMOST_WEBHOOK_URL_DEV: ${MATTERMOST_WEBHOOK_URL_DEV:?obs.env에 MATTERMOST_WEBHOOK_URL_DEV가 없다}
+    volumes:
+      - ./render.py:/render.py:ro
+      - generated:/generated
+    mem_limit: 64m
+    logging: *logging
+
+  prometheus:
+    image: prom/prometheus:v3.15.0
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+      - --storage.tsdb.retention.size=5GB
+      - --web.listen-address=0.0.0.0:9090
+    ports:
+      - 127.0.0.1:9090:9090
+    mem_limit: 512m
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/rules:/etc/prometheus/rules:ro
+      - generated:/generated:ro
+      - promdata:/prometheus
+    networks: [net-obs, net-prod, net-dev]
+    depends_on:
+      obs-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD, wget, -q, --spider, "http://localhost:9090/-/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+    logging: *logging
+
+  alertmanager:
+    image: prom/alertmanager:v0.34.1
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+      - --web.listen-address=0.0.0.0:9093
+    mem_limit: 64m
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./alertmanager/templates:/etc/alertmanager/templates:ro
+      - generated:/generated:ro
+      - amdata:/alertmanager
+    networks: [net-obs]
+    depends_on:
+      obs-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD, wget, -q, --spider, "http://localhost:9093/-/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+    logging: *logging
+
+  grafana:
+    image: grafana/grafana:12.4.12
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?obs.env에 GRAFANA_ADMIN_PASSWORD가 없다}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_SERVER_ROOT_URL: http://localhost:3000/
+    ports:
+      - 127.0.0.1:3000:3000
+    mem_limit: 256m
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafanadata:/var/lib/grafana
+    networks: [net-obs]
+    depends_on: [prometheus]
+    healthcheck:
+      test: [CMD-SHELL, "wget -q --spider http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+    logging: *logging
+
+  # 호스트의 디스크·메모리·CPU와 textfile 지표(백업 상태)를 읽는다. 호스트 루트는 읽기 전용으로 마운트한다
+  node-exporter:
+    image: prom/node-exporter:v1.12.1
+    restart: unless-stopped
+    pid: host
+    command:
+      - --path.rootfs=/host
+      - --collector.textfile.directory=/textfile
+      - --no-collector.ipvs
+      - --no-collector.wifi
+    mem_limit: 64m
+    volumes:
+      - /:/host:ro
+      - /var/lib/fit/metrics:/textfile:ro
+    networks: [net-obs]
+    logging: *logging
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.55.1
+    restart: unless-stopped
+    command:
+      - --housekeeping_interval=30s
+      - --docker_only=true
+      - --store_container_labels=false
+      - --whitelisted_container_labels=com.docker.compose.project,com.docker.compose.service
+    mem_limit: 192m
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks: [net-obs]
+    logging: *logging
+
+  # A에서 B의 TCP 22를 두드려 본다(설계 9.2절 "B 도달 불가"). 대상은 obs-init이 만든 file_sd 파일이다
+  blackbox:
+    image: prom/blackbox-exporter:v0.28.0
+    restart: unless-stopped
+    command: [--config.file=/etc/blackbox/blackbox.yml]
+    mem_limit: 64m
+    volumes:
+      - ./blackbox/blackbox.yml:/etc/blackbox/blackbox.yml:ro
+    networks: [net-obs]
+    logging: *logging
+
+  # 모니터링 전용 role(fit_monitor, pg_monitor 권한)로 읽는다. 비밀번호는 data.env의 FIT_MONITOR_PASSWORD와 같다
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.20.1
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_URI: postgres:5432/postgres?sslmode=disable
+      DATA_SOURCE_USER: fit_monitor
+      DATA_SOURCE_PASS: ${FIT_MONITOR_PASSWORD:?obs.env에 FIT_MONITOR_PASSWORD가 없다}
+    mem_limit: 64m
+    networks: [net-obs, net-data]
+    logging: *logging
+
+  opensearch-exporter:
+    image: quay.io/prometheuscommunity/elasticsearch-exporter:v1.11.0
+    restart: unless-stopped
+    command: [--es.uri=http://opensearch:9200]
+    mem_limit: 64m
+    networks: [net-obs, net-data]
+    logging: *logging
+
+  # 로그를 웹에서 본다. docker.sock을 읽기 전용으로 마운트하지만 소켓은 사실상 root 권한이라 127.0.0.1에만 열고 SSH 터널로 쓴다(설계 13.4절)
+  dozzle:
+    image: amir20/dozzle:v11.3.2
+    restart: unless-stopped
+    environment:
+      DOZZLE_NO_ANALYTICS: "true"
+    ports:
+      - 127.0.0.1:8888:8080
+    mem_limit: 64m
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [net-obs]
+    logging: *logging
+
+volumes:
+  generated:
+  promdata:
+  amdata:
+  grafanadata:
+
+networks:
+  net-obs:
+    name: ${FIT_NET_OBS:-net-obs}
+    external: true
+  net-prod:
+    name: ${FIT_NET_PROD:-net-prod}
+    external: true
+  net-dev:
+    name: ${FIT_NET_DEV:-net-dev}
+    external: true
+  net-data:
+    name: ${FIT_NET_DATA:-net-data}
+    external: true

@@ -40,6 +40,9 @@ for env in prod dev; do
 done
 ok_if "fit_migrator가 fit_prod에서 테이블을 만들 수 있다" "$(succeeds pg_as fit_migrator "$FIT_MIGRATOR_PASSWORD" fit_prod 'CREATE TEMP TABLE verify_ddl (id int)')"
 ok_if "dev 앱 role에 쿼리 시간 제한 30초가 걸려 있다" "$(succeeds pg_as fit_dev_app "$FIT_DEV_APP_PASSWORD" fit_dev "SELECT 1 WHERE current_setting('statement_timeout') = '30s'")"
+ok_if "fit_monitor가 postgres DB에서 통계(pg_stat_activity)를 읽는다" "$(succeeds pg_as fit_monitor "$FIT_MONITOR_PASSWORD" postgres 'SELECT count(*) FROM pg_stat_activity')"
+ok_if "fit_monitor는 fit_prod와 fit_dev에 접속하지 못한다" \
+  "$([ "$(fails pg_as fit_monitor "$FIT_MONITOR_PASSWORD" fit_prod 'SELECT 1')$(fails pg_as fit_monitor "$FIT_MONITOR_PASSWORD" fit_dev 'SELECT 1')" = 11 ] && echo 1 || echo 0)"
 pg_super() { docker exec -e "PGPASSWORD=$1" "$(svc_container postgres)" psql -h postgres -U postgres -d postgres -c 'SELECT 1'; }
 ok_if "슈퍼유저 postgres는 네트워크로 접속할 때 비밀번호를 쓴다" "$(succeeds pg_super "$POSTGRES_PASSWORD")"
 ok_if "틀린 비밀번호는 거부한다" "$(fails pg_super "wrong-$POSTGRES_PASSWORD")"

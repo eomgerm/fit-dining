@@ -1,0 +1,356 @@
+{
+  "uid": "fit-data",
+  "title": "데이터·백업",
+  "tags": [
+    "fit"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Postgres 연결",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom-a"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 8,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(pg_stat_activity_count)",
+          "legendFormat": "연결",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom-a"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "max(pg_settings_max_connections)",
+          "legendFormat": "최대",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom-a"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Postgres 상태(pg_up)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom-a"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 0,
+        "w": 8,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "pg_up",
+          "legendFormat": "pg_up",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom-a"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "DB 크기",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom-a"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 0,
+        "w": 8,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "pg_database_size_bytes{datname=~\"fit_.*\"}",
+          "legendFormat": "{{datname}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom-a"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "OpenSearch 클러스터 상태",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom-a"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 8,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "elasticsearch_cluster_health_status == 1",
+          "legendFormat": "{{color}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom-a"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "OpenSearch 힙 사용률",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom-a"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 7,
+        "w": 8,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * elasticsearch_jvm_memory_used_bytes{area=\"heap\"} / elasticsearch_jvm_memory_max_bytes{area=\"heap\"}",
+          "legendFormat": "{{name}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom-a"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "백업 나이(시간)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom-a"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 7,
+        "w": 8,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(time() - fit_backup_last_success_timestamp_seconds) / 3600",
+          "legendFormat": "{{kind}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom-a"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h"
+        },
+        "overrides": []
+      },
+      "description": "pg는 8시간, photos는 36시간, caddy는 9일이 알림 기준이다"
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "덤프 복원 검증 결과",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom-a"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 8,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "fit_backup_last_verify_ok",
+          "legendFormat": "1이면 통과",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom-a"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "금고로 보내지 못한 파일",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom-a"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 14,
+        "w": 8,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "fit_backup_outbox_files",
+          "legendFormat": "대기",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom-a"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "배치 마지막 성공 후(시간)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom-a"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 14,
+        "w": 8,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(time() - max by (env) (batch_last_success_timestamp_seconds)) / 3600",
+          "legendFormat": "{{env}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom-a"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h"
+        },
+        "overrides": []
+      },
+      "description": "26시간이 알림 기준이다"
+    },
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "B 도달(TCP 22)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom-a"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 8,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "probe_success{job=\"vault-ssh\"}",
+          "legendFormat": "{{instance}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom-a"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  }
+}

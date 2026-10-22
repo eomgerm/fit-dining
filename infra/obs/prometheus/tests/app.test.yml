@@ -1,0 +1,177 @@
+# rules/app.yml 단위 시험. 지표 이름은 docs/infra/contracts/metrics.md의 계약이다.
+rule_files:
+  - ../rules/app.yml
+evaluation_interval: 1m
+
+tests:
+  # prod는 두 색이 모두 down일 때만 다운이다. blue만 down(green 정상)이면 울리지 않는다
+  - interval: 1m
+    input_series:
+      - series: 'up{job="be", env="prod", color="blue", instance="be-prod-blue:8081"}'
+        values: '0+0x6'
+      - series: 'up{job="be", env="prod", color="green", instance="be-prod-green:8081"}'
+        values: '0+0x6'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: FitBeProdDown
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: FitBeProdDown
+        exp_alerts:
+          - exp_labels: {severity: critical, env: prod}
+            exp_annotations:
+              summary: prod BE가 모든 색에서 응답하지 않는다
+              description: be-prod-blue와 be-prod-green의 관리 포트(8081)를 2분 이상 긁지 못했다
+              runbook: RB-02
+  - interval: 1m
+    input_series:
+      - series: 'up{job="be", env="prod", color="blue", instance="be-prod-blue:8081"}'
+        values: '0+0x6'
+      - series: 'up{job="be", env="prod", color="green", instance="be-prod-green:8081"}'
+        values: '1+0x6'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: FitBeProdDown
+        exp_alerts: []
+
+  # dev는 5분 뒤 warning이고 env=dev 라벨을 달아 dev 수신자로 간다
+  - interval: 1m
+    input_series:
+      - series: 'up{job="be", env="dev", color="single", instance="be-dev:8081"}'
+        values: '0+0x8'
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: FitBeDevDown
+        exp_alerts:
+          - exp_labels: {severity: warning, env: dev}
+            exp_annotations:
+              summary: dev BE가 응답하지 않는다
+              description: be-dev의 관리 포트(8081)를 5분 이상 긁지 못했다
+              runbook: RB-02
+
+  # 5xx 비율: 초당 요청 1건 중 10%가 5xx면 울리고, 요청이 거의 없으면(0.1/s) 비율이 높아도 울리지 않는다
+  - interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_count{env="prod", color="blue", status="200", uri="/api/v1/x"}'
+        values: '0+54x15'
+      - series: 'http_server_requests_seconds_count{env="prod", color="blue", status="500", uri="/api/v1/x"}'
+        values: '0+6x15'
+      - series: 'http_server_requests_seconds_count{env="dev", color="single", status="200", uri="/api/v1/x"}'
+        values: '0+3x15'
+      - series: 'http_server_requests_seconds_count{env="dev", color="single", status="500", uri="/api/v1/x"}'
+        values: '0+3x15'
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: FitHttp5xxHigh
+        exp_alerts:
+          - exp_labels: {severity: warning, env: prod}
+            exp_annotations:
+              summary: prod BE의 5xx 비율이 2%를 넘었다
+              description: 5xx 비율 10%. 요청이 초당 0.2건 이상일 때만 센다
+              runbook: RB-02
+
+  # 검색 p95: 버킷이 모두 4초 넘는 곳에 몰리면 울린다. 같은 지연이어도 검색이 아닌 경로는 검색 알림이 아니라 일반 지연 알림이다
+  - interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_bucket{env="prod", uri="/api/v1/search", le="1"}'
+        values: '0+0x20'
+      - series: 'http_server_requests_seconds_bucket{env="prod", uri="/api/v1/search", le="5"}'
+        values: '0+60x20'
+      - series: 'http_server_requests_seconds_bucket{env="prod", uri="/api/v1/search", le="+Inf"}'
+        values: '0+60x20'
+      - series: 'http_server_requests_seconds_count{env="prod", uri="/api/v1/search"}'
+        values: '0+60x20'
+      - series: 'http_server_requests_seconds_bucket{env="prod", uri="/api/v1/reviews", le="0.5"}'
+        values: '0+0x20'
+      - series: 'http_server_requests_seconds_bucket{env="prod", uri="/api/v1/reviews", le="2.5"}'
+        values: '0+60x20'
+      - series: 'http_server_requests_seconds_bucket{env="prod", uri="/api/v1/reviews", le="+Inf"}'
+        values: '0+60x20'
+      - series: 'http_server_requests_seconds_count{env="prod", uri="/api/v1/reviews"}'
+        values: '0+60x20'
+    alert_rule_test:
+      - eval_time: 19m
+        alertname: FitSearchLatencyHigh
+        exp_alerts:
+          - exp_labels: {severity: warning, env: prod}
+            exp_annotations:
+              summary: prod 검색 p95 지연이 4초를 넘었다
+              description: 검색 p95 4.8s
+              runbook: RB-07
+      - eval_time: 19m
+        alertname: FitHttpLatencyHigh
+        exp_alerts:
+          - exp_labels: {severity: warning, env: prod}
+            exp_annotations:
+              summary: prod BE p95 지연이 1초를 넘었다(검색 제외)
+              description: p95 2.4s
+              runbook: RB-02
+
+  # 배치: 마지막 성공이 27시간 전이면 울리고 1시간 전이면 울리지 않는다. 색이 둘이면 더 최근 값을 본다
+  - interval: 1m
+    input_series:
+      - series: 'batch_last_success_timestamp_seconds{env="prod", color="blue"}'
+        values: '0+0x1700'
+      - series: 'batch_last_success_timestamp_seconds{env="prod", color="green"}'
+        values: '0+0x1700'
+    alert_rule_test:
+      - eval_time: 20h
+        alertname: FitBatchStale
+        exp_alerts: []
+      - eval_time: 28h
+        alertname: FitBatchStale
+        exp_alerts:
+          - exp_labels: {severity: warning, env: prod}
+            exp_annotations:
+              summary: 새벽 배치의 마지막 성공이 26시간을 넘었다
+              description: 마지막 성공 후 1d 4h 0m 0s
+              runbook: RB-07
+  - interval: 1m
+    input_series:
+      - series: 'batch_last_success_timestamp_seconds{env="prod", color="blue"}'
+        values: '0+0x1700'
+      - series: 'batch_last_success_timestamp_seconds{env="prod", color="green"}'
+        values: '0+60x1700'
+    alert_rule_test:
+      - eval_time: 28h
+        alertname: FitBatchStale
+        exp_alerts: []
+
+  # heartbeat 지표가 없으면 15분 뒤 울린다. 있으면 울리지 않는다
+  - interval: 1m
+    input_series:
+      - series: 'up{job="be", env="prod", color="blue"}'
+        values: '1+0x30'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: FitBatchMetricMissing
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: FitBatchMetricMissing
+        exp_alerts:
+          - exp_labels: {severity: warning, env: prod}
+            exp_annotations:
+              summary: 배치 heartbeat 지표(batch_last_success_timestamp_seconds)가 없다
+              description: "prod BE가 이 지표를 시작부터 내야 한다(BE 계약 #11). 배포 전이라면 정상이다"
+              runbook: RB-07
+      - eval_time: 20m
+        alertname: FitHttpMetricMissing
+        exp_alerts:
+          - exp_labels: {severity: warning, env: prod}
+            exp_annotations:
+              summary: prod BE의 HTTP 요청 지표가 없다
+              description: /actuator/prometheus를 긁지 못했거나 지표가 꺼져 있다. 배포 전이라면 정상이다
+              runbook: RB-02
+  - interval: 1m
+    input_series:
+      - series: 'batch_last_success_timestamp_seconds{env="prod", color="blue"}'
+        values: '0+0x30'
+      - series: 'http_server_requests_seconds_count{env="prod", color="blue", status="200", uri="/x"}'
+        values: '0+1x30'
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: FitBatchMetricMissing
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: FitHttpMetricMissing
+        exp_alerts: []

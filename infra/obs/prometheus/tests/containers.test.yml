@@ -1,0 +1,56 @@
+# rules/containers.yml 단위 시험
+rule_files:
+  - ../rules/containers.yml
+evaluation_interval: 1m
+
+tests:
+  # 10분에 3번 시작 시각이 바뀌면 재시작 반복이다. 시작 시각이 그대로면 울리지 않는다
+  - interval: 1m
+    input_series:
+      - series: 'container_start_time_seconds{name="be-prod-blue"}'
+        values: '100 100 200 200 300 300 400 400 400 400'
+      - series: 'container_start_time_seconds{name="caddy"}'
+        values: '100+0x9'
+      - series: 'container_start_time_seconds{name=""}'
+        values: '100 200 300 400 500 600 700 800 900 1000'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: FitContainerRestartLoop
+        exp_alerts:
+          - exp_labels: {severity: critical, name: be-prod-blue}
+            exp_annotations:
+              summary: 컨테이너 be-prod-blue이(가) 10분에 3번 이상 다시 시작했다
+              description: 재시작 3회(10분). 로그는 Dozzle로 본다
+              runbook: RB-03
+
+  # 한도의 95%를 10분 넘게 쓰면 울린다. 한도가 없는(0) 컨테이너와 name이 빈 항목은 보지 않는다
+  - interval: 1m
+    input_series:
+      - series: 'container_memory_working_set_bytes{name="be-prod-blue"}'
+        values: '95+0x15'
+      - series: 'container_spec_memory_limit_bytes{name="be-prod-blue"}'
+        values: '100+0x15'
+      - series: 'container_memory_working_set_bytes{name="nolimit"}'
+        values: '500+0x15'
+      - series: 'container_spec_memory_limit_bytes{name="nolimit"}'
+        values: '0+0x15'
+      - series: 'container_memory_working_set_bytes{name="fine"}'
+        values: '50+0x15'
+      - series: 'container_spec_memory_limit_bytes{name="fine"}'
+        values: '100+0x15'
+      - series: 'container_memory_working_set_bytes{name=""}'
+        values: '99+0x15'
+      - series: 'container_spec_memory_limit_bytes{name=""}'
+        values: '100+0x15'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: FitContainerMemoryHigh
+        exp_alerts: []
+      - eval_time: 14m
+        alertname: FitContainerMemoryHigh
+        exp_alerts:
+          - exp_labels: {severity: warning, name: be-prod-blue}
+            exp_annotations:
+              summary: 컨테이너 be-prod-blue의 메모리가 한도의 90%를 넘었다
+              description: 한도 대비 사용 95% (10분 이상)
+              runbook: RB-03

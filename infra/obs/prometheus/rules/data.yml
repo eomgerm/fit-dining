@@ -1,0 +1,48 @@
+# 데이터 서비스 알림(설계 9.2절). postgres-exporter와 OpenSearch exporter가 지표를 낸다.
+groups:
+  - name: fit-data
+    rules:
+      - alert: FitPostgresDown
+        expr: pg_up == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: exporter가 Postgres에 접속하지 못한다
+          description: pg_up이 0이다(Postgres 중지, fit_monitor 비밀번호 불일치, 연결 한도 초과 중 하나)
+          runbook: RB-06
+
+      - alert: FitPostgresConnectionsHigh
+        expr: sum(pg_stat_activity_count) / max(pg_settings_max_connections) > 0.8
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: Postgres 연결이 최대 연결 수의 80%를 넘었다
+          description: 연결 사용 비율 {{ $value | humanizePercentage }}(최대 60). Hikari 풀 크기와 누수를 본다
+          runbook: RB-06
+
+      - alert: FitOpensearchDown
+        expr: elasticsearch_clusterinfo_up == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: exporter가 OpenSearch에 닿지 못한다
+          description: elasticsearch_clusterinfo_up이 0이다. 검색은 키워드 폴백으로 내려간다
+          runbook: RB-07
+
+      - alert: FitOpensearchRed
+        expr: elasticsearch_cluster_health_status{color="red"} == 1
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: OpenSearch 클러스터 상태가 red다
+          description: 일부 인덱스의 주 샤드가 할당되지 않았다. Postgres에서 재색인한다
+          runbook: RB-07
+
+      - alert: FitOpensearchHeapHigh
+        expr: max(elasticsearch_jvm_memory_used_bytes{area="heap"} / elasticsearch_jvm_memory_max_bytes{area="heap"}) > 0.9
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: OpenSearch 힙 사용이 90%를 넘었다
+          description: 힙 사용 비율 {{ $value | humanizePercentage }}(힙 768MB). k-NN 네이티브 메모리와 함께 본다
+          runbook: RB-07

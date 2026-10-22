@@ -1,0 +1,149 @@
+# rules/backup.yml 단위 시험. 지표는 계획 1D의 백업 스크립트가 쓰는 fit_backup.prom이다.
+rule_files:
+  - ../rules/backup.yml
+evaluation_interval: 1m
+
+tests:
+  # pg 백업: 마지막 성공이 9시간 전이면 울리고 1시간 전이면 울리지 않는다. photos는 36시간이 기준이라 9시간 전은 괜찮다
+  - interval: 1m
+    input_series:
+      - series: 'fit_backup_last_success_timestamp_seconds{kind="pg"}'
+        values: '0+0x600'
+      - series: 'fit_backup_last_success_timestamp_seconds{kind="photos"}'
+        values: '0+0x600'
+      - series: 'fit_backup_last_success_timestamp_seconds{kind="caddy"}'
+        values: '0+0x600'
+    alert_rule_test:
+      - eval_time: 7h
+        alertname: FitBackupPgStale
+        exp_alerts: []
+      - eval_time: 9h
+        alertname: FitBackupPgStale
+        exp_alerts:
+          - exp_labels: {severity: warning, kind: pg}
+            exp_annotations:
+              summary: Postgres 백업의 마지막 성공이 8시간을 넘었다(주기는 4시간)
+              description: 마지막 성공 후 9h 0m 0s. journalctl -u fit-backup@pg 를 본다
+              runbook: RB-06
+      - eval_time: 9h
+        alertname: FitBackupPhotosStale
+        exp_alerts: []
+      - eval_time: 9h
+        alertname: FitBackupCaddyStale
+        exp_alerts: []
+  - interval: 1m
+    input_series:
+      - series: 'fit_backup_last_success_timestamp_seconds{kind="photos"}'
+        values: '0+0x2300'
+      - series: 'fit_backup_last_success_timestamp_seconds{kind="caddy"}'
+        values: '0+0x20000'
+    alert_rule_test:
+      - eval_time: 37h
+        alertname: FitBackupPhotosStale
+        exp_alerts:
+          - exp_labels: {severity: warning, kind: photos}
+            exp_annotations:
+              summary: 사진 백업의 마지막 성공이 36시간을 넘었다(주기는 하루)
+              description: 마지막 성공 후 1d 13h 0m 0s
+              runbook: RB-06
+      - eval_time: 10d
+        alertname: FitBackupCaddyStale
+        exp_alerts:
+          - exp_labels: {severity: warning, kind: caddy}
+            exp_annotations:
+              summary: 인증서 볼륨 백업의 마지막 성공이 9일을 넘었다(주기는 일주일)
+              description: 마지막 성공 후 10d 0h 0m 0s
+              runbook: RB-05
+
+  # 검증 결과 0은 5분 뒤 울리고 1은 울리지 않는다. 마지막 검증이 36시간 전이면 검증 정체 알림이 울린다
+  - interval: 1m
+    input_series:
+      - series: 'fit_backup_last_verify_ok'
+        values: '1 1 1 0 0 0 0 0 0 0 0'
+      - series: 'fit_backup_last_verify_timestamp_seconds'
+        values: '0+0x2300'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: FitBackupVerifyFailed
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: FitBackupVerifyFailed
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: 마지막 덤프 복원 검증이 실패했다
+              description: 검증에 실패한 덤프는 B로 보내지 않는다(failed-verify-*로 남는다). 다음 실행이 다시 검증한다
+              runbook: RB-06
+      - eval_time: 30h
+        alertname: FitBackupVerifyStale
+        exp_alerts: []
+      - eval_time: 37h
+        alertname: FitBackupVerifyStale
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: 덤프 복원 검증을 36시간 넘게 하지 않았다(주기는 하루)
+              description: 마지막 검증 후 1d 13h 0m 0s
+              runbook: RB-06
+
+  # 대기 파일이 2시간 넘게 남으면 울린다. 0이 되면 울리지 않는다
+  - interval: 1m
+    input_series:
+      - series: 'fit_backup_outbox_files'
+        values: '2+0x150'
+    alert_rule_test:
+      - eval_time: 100m
+        alertname: FitBackupOutboxStuck
+        exp_alerts: []
+      - eval_time: 130m
+        alertname: FitBackupOutboxStuck
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: B로 보내지 못한 백업 파일이 2시간 넘게 쌓여 있다
+              description: 대기 파일 2개. A에서 B로 SSH가 되는지, 호스트 키와 vault 키 등록을 본다
+              runbook: RB-06
+  - interval: 1m
+    input_series:
+      - series: 'fit_backup_outbox_files'
+        values: '0+0x150'
+    alert_rule_test:
+      - eval_time: 130m
+        alertname: FitBackupOutboxStuck
+        exp_alerts: []
+
+  # 백업 지표가 없으면 1시간 뒤 울린다
+  - interval: 1m
+    input_series:
+      - series: 'up{job="node"}'
+        values: '1+0x100'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: FitBackupMetricMissing
+        exp_alerts: []
+      - eval_time: 90m
+        alertname: FitBackupMetricMissing
+        exp_alerts:
+          - exp_labels: {severity: warning, kind: pg}
+            exp_annotations:
+              summary: 백업 지표(fit_backup.prom)가 없다
+              description: infra/backup/install.sh app 이 끝났는지, /var/lib/fit/metrics 마운트와 첫 백업을 본다
+              runbook: RB-06
+
+  # A에서 B의 22번 포트 프로브가 5분 넘게 실패하면 울린다
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="vault-ssh", instance="203.0.113.7:22", probe="vault-ssh"}'
+        values: '1 1 0 0 0 0 0 0 0 0'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: FitVaultUnreachable
+        exp_alerts: []
+      - eval_time: 9m
+        alertname: FitVaultUnreachable
+        exp_alerts:
+          - exp_labels: {severity: warning, job: vault-ssh, instance: "203.0.113.7:22", probe: vault-ssh}
+            exp_annotations:
+              summary: A에서 B(203.0.113.7:22)의 SSH 포트에 닿지 못한다
+              description: 백업 전송과 CI(verify 러너)가 영향을 받는다. B가 살아 있는지, 방화벽을 본다
+              runbook: RB-01
