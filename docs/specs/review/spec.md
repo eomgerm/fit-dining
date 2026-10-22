@@ -15,7 +15,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 2. Walking Skeleton은 방문일이 없고 작성일을 보인다. 1차 후속의 방문일은 KST 날짜이고 범위는 `오늘 - 1개월` 이상 `오늘` 이하이며 서버가 `Clock`으로 계산한다(D-4).
 3. 이유 태그는 1차 후속에서 붙는다. 태그는 공용 특징 코드를 참조하고(D-16), 문구와 업종별 노출은 PRD FR-10 초안을 임시 시드로 쓴다. 기획이 문구를 확정하면 시드만 바꾼다(D-5).
 4. 오류 응답, 입력 검증, 알 수 없는 속성 거부, null 필드 생략, 로그 규칙은 팀 BE 컨벤션(`be/docs/convention.md`)을 따른다. 오류는 리뷰 기능의 예외 처리 클래스가 ProblemDetail로 바꾸고, 형식 검증은 Bean Validation으로 한다(D-20).
-5. FE는 데이터를 브라우저에서 공통 API 클라이언트(`@/shared/api`)와 TanStack Query로 가져오고 서버 전용 기능을 쓰지 않는다. 상대 경로 `/api/v1/...`를 부르고, 로컬 `next dev`에서는 개발 서버 프록시가 BE로 넘긴다(D-25, 검색 D-58).
+5. FE는 데이터를 브라우저에서 공통 API 클라이언트(`@/shared/api`)와 TanStack Query로 가져오고 서버 전용 기능을 쓰지 않는다. 상대 경로 `/api/v1/...`를 부르고, 로컬 `next dev`에서는 개발 서버 프록시가 BE로 넘긴다(D-25, 검색 D-58). 화면은 공통 UI 컴포넌트(`@/shared/ui`)와 디자인 토큰으로 그린다(D-30).
 6. 장소 ID는 검색 spec과 같은 정수다. Walking Skeleton은 장소 존재를 확인하지 않는다. 1차 후속부터 장소의 존재 여부와 이름·업종·역은 장소 기능의 조회 인터페이스로 확인한다(D-21, D-22).
 7. 취향·장소 분석·검색 색인은 1차 후속부터 리뷰 테이블을 직접 조회해 변경을 가져간다(D-17). Walking Skeleton의 리뷰는 익명이고 이유 태그가 없어 취향 보정에 쓰이지 않는다(D-27).
 8. 위치 확인은 기기에서만 계산하며 BE API가 없다(D-12).
@@ -46,7 +46,7 @@ Walking Skeleton
 - [ ] AC-4: 목록은 `created_at` 내림차순(같으면 `review_id` 내림차순)이고 커서로 20건씩 다음 페이지를 받으며 페이지 사이에 중복이 없다. 항목은 `reviewId`, 작성 시각, 본문을 담고 `totalCount`는 삭제되지 않은 리뷰 수다. (D-24)
 - [ ] AC-5: 요청 본문에 정의되지 않은 속성(예: `userId`, `visitedAt`)이 있으면 400 ProblemDetail이다. 응답 JSON 키는 문서화된 필드를 벗어나지 않는다. (D-20)
 - [ ] AC-6: 리뷰 등록과 조회를 처리한 뒤(400 포함) BE 로그에 요청 본문과 리뷰 본문이 나타나지 않는다. (D-20)
-- [ ] AC-7: 장소 상세의 리뷰 탭은 리뷰 목록과 "방문 평가 남기기" 버튼을 보인다. 작성 화면은 본문 입력 하나이고, 본문이 500자를 넘거나 등록 요청이 처리 중이면 "등록하기"가 비활성이다. 등록에 성공하면 장소 상세의 리뷰 탭으로 돌아가 새 리뷰가 목록 맨 위에 보인다. 실패하면 화면에 오류 안내가 뜨고 입력이 남아 있다. 목록은 작성일을 KST 날짜로 보이고, 목록 끝에서 다음 페이지를 불러올 수 있다. (D-24, D-25)
+- [ ] AC-7: 장소 상세의 리뷰 탭은 리뷰 수, 리뷰 목록, "방문 평가 남기기" 버튼을 보인다. 리뷰가 없으면 빈 상태 안내를, 목록을 불러오지 못하면 "다시 시도" 버튼이 있는 안내를 보인다. 작성 화면은 본문 입력칸 하나이고, 입력칸은 500자까지만 받으며 글자 수(예: 44/500)를 보인다. 등록 요청이 처리 중이면 "등록하기"가 비활성이다. 등록에 성공하면 장소 상세의 리뷰 탭으로 돌아가 새 리뷰가 목록 맨 위에 보인다. 실패하면 화면에 오류 안내가 뜨고 입력이 남아 있다. 목록은 작성일을 KST 날짜로 보이고, 목록 끝에서 다음 페이지를 불러올 수 있다. (D-24, D-25, D-30)
 - [ ] AC-24: 리뷰는 메모리 Mock 저장소에 저장되고 `REVIEW_MOCK_ENABLED`가 꺼진 환경에서는 등록과 목록 모두 503 ProblemDetail이다. 전체 리뷰 수가 상한을 넘으면 가장 오래된 리뷰부터 목록과 `totalCount`에서 빠진다. 시드로 1번 Mock 장소에 리뷰 25건이 있다. (D-27)
 
 1차 후속
@@ -83,17 +83,18 @@ Walking Skeleton
 | `be/src/main/resources/application.yml#review` (`review.mock.enabled`), `be/.env.example` | modify | WS | D-27 |
 | `fe/src/app/place/review/page.tsx#ReviewWritePage` (1차에 2단계 흐름으로 바꾼다) | new | WS | D-25 |
 | `fe/src/app/place/page.tsx#PlaceDetailPage` (리뷰 탭, 검색 담당이 `ReviewSection`을 붙인다) | modify | WS | D-25 |
-| `fe/src/domains/review/ui/ReviewSection.tsx#ReviewSection` (목록과 "방문 평가 남기기" 버튼) | new | WS | D-24, D-25 |
-| `fe/src/domains/review/ui/SimpleReviewForm.tsx#SimpleReviewForm` (한 화면 폼) | new | WS | D-25 |
-| `fe/src/domains/review/api/reviewApi.ts#createReview` | new | WS | D-25 |
+| `fe/src/domains/review/ui/review-section.tsx#ReviewSection` (목록과 "방문 평가 남기기" 버튼) | new | WS | D-24, D-25, D-30 |
+| `fe/src/domains/review/ui/simple-review-form.tsx#SimpleReviewForm` (한 화면 폼) | new | WS | D-25, D-30 |
+| `fe/src/domains/review/api/review-api.ts#createReview` | new | WS | D-25 |
+| `fe/src/domains/review/model/review.ts#formatKstDate` | new | WS | D-24, D-25 |
 | `be/src/main/java/kr/co/fitdining/api/review/VisitDatePolicy.java#VisitDatePolicy` | new | 1차 | D-4 |
 | `be/src/main/java/kr/co/fitdining/api/review/ReasonTagRule.java#ReasonTagRule` | new | 1차 | D-5 |
 | `be/src/main/java/kr/co/fitdining/api/review/Review.java#Review` | new | 1차 | D-6, D-28 |
 | `be/src/main/java/kr/co/fitdining/api/review/store/JpaReviewStore.java#JpaReviewStore` | new | 1차 | D-27, D-28 |
 | `be/src/main/resources/db/migration/` (`reviews` 테이블과 중복 금지 인덱스, 태그·사진·신고·운영 테이블) | new | 1차 | D-21, D-28, D-5 |
-| `fe/src/domains/review/ui/ReviewForm.tsx#ReviewForm` | new | 1차 | D-5, D-25 |
-| `fe/src/domains/review/model/reviewTags.ts#selectTag` | new | 1차 | D-5 |
-| `fe/src/domains/review/model/nearbyCheck.ts#isNearby` | new | 1차 | D-12 |
+| `fe/src/domains/review/ui/review-form.tsx#ReviewForm` | new | 1차 | D-5, D-25, D-30 |
+| `fe/src/domains/review/model/review-tags.ts#selectTag` | new | 1차 | D-5 |
+| `fe/src/domains/review/model/nearby-check.ts#isNearby` | new | 1차 | D-12 |
 
 BE는 팀이 정한 루트 패키지 `kr.co.fitdining.api`(검색 D-32) 아래 `review`에 두고, DTO는 `review.dto`에 둔다(D-23). 모듈 경계 규칙이 정해지면 그에 맞춘다. FE는 master의 공통 구조(`app → domains → shared`)를 따라 리뷰 코드를 `src/domains/review`에 둔다. 장소 상세의 리뷰 탭은 Walking Skeleton부터 검색 담당이 `ReviewSection`을 붙여 만들고, 작성 화면(`src/app/place/review`)은 리뷰 담당이 만든다(D-25).
 
@@ -176,14 +177,15 @@ Walking Skeleton
 - **도메인 규칙** (example), AC-3: 본문의 빈 값·공백을 본문 없음으로 바꾸는 정규화를 순수 Java 단위 테스트로 확인한다.
 - **메모리 저장소** (example), AC-1, AC-4, AC-24: 저장, 정렬, 커서 페이지 경계(같은 `createdAt` 포함), 깨진 커서, 상한을 넘었을 때 오래된 리뷰 버리기를 `InMemoryReviewStore` 단위 테스트로 확인한다(D-29). 놓치는 것: DB 제약(1차 후속).
 - **컨트롤러 경계** (example), AC-1, AC-2, AC-3, AC-5, AC-6, AC-24: 검색 spec D-30처럼 `@WebMvcTest`에 실제 서비스와 메모리 저장소를 꽂아 Bean Validation(`placeId`의 문자·0·음수·`long` 범위 밖, 본문 500자·501자), 인증 없는 등록, ProblemDetail 상태 코드, 알 수 없는 속성 거부, 로그에 본문이 없음, 스위치가 꺼졌을 때 503을 확인한다. 잡는 것: 길이 경계.
-- **수동 확인** AC-7: 장소 상세의 리뷰 탭 → 작성 화면 → 등록 → 리뷰 탭으로 복귀해 목록 맨 위에 보이는지, 실패 때 입력이 남는지, 버튼을 연달아 눌러도 한 번만 등록되는지, 작성일이 KST 날짜로 보이는지 확인한다.
+- **FE 순수 로직과 정적 렌더** (example), AC-7: `src/domains/review/model`의 KST 날짜 변환(자정 경계)과 등록 요청 만들기(공백뿐이면 본문 없음)를 Vitest로 확인한다. 목록 항목, 빈 상태, 불러오기 실패 안내는 데이터 훅과 나눈 그리는 컴포넌트를 `renderToStaticMarkup`으로 확인한다(공통 UI 테스트와 같은 방식, D-30). 놓치는 것: 누르기·입력 같은 상호작용(수동 확인).
+- **수동 확인** AC-7: 장소 상세의 리뷰 탭 → 작성 화면 → 등록 → 리뷰 탭으로 복귀해 목록 맨 위에 보이는지, 실패 때 입력이 남는지, 버튼을 연달아 눌러도 한 번만 등록되는지, 작성일이 KST 날짜로 보이는지, 500자에서 더 입력되지 않는지 확인한다.
 
 1차 후속
 
 - **도메인 규칙** (example), AC-9, AC-12, AC-16: 방문일 정책은 고정 `Clock`으로 경계일과 KST 자정 전후를, 태그 규칙은 그룹(소음 축 4개 포함)·업종·개수 조합을, 금액은 경계값(0, 1,000,000, 1,000,001)을 단위 테스트로 확인한다.
 - **컨트롤러 경계** (example), AC-8, AC-10, AC-11, AC-16, AC-19: 인증 헤더 유무, 404, 403, 409를 `@WebMvcTest`로 확인한다.
 - **영속성** (example), AC-13, AC-17: 부분 유니크 위반의 409 변환, 동시 등록 두 건, 삭제 후 재작성은 H2로 재현되지 않아 Testcontainers의 PostgreSQL로 확인한다(D-29). `JpaReviewStore`가 메모리 저장소와 같은 정렬·커서 결과를 내는지도 함께 확인한다(D-27).
-- **FE 순수 로직** (example), AC-15, AC-22: `src/domains/review/model`의 태그 선택 함수(같은 그룹 비활성화, 소음 축 4개)와 근처 판정 함수를 Vitest(`pnpm test`)로 확인한다(검색 spec D-30 방식, D-25).
+- **FE 순수 로직** (example), AC-15, AC-22: `src/domains/review/model`의 태그 선택 함수(같은 그룹 비활성화, 소음 축 4개)와 근처 판정 함수를 Vitest(`pnpm test`)로 확인한다(검색 spec D-30 방식, D-25). 태그 칩 비활성 표시는 정적 렌더로 확인한다(D-30).
 - **사진** (manual), AC-18, AC-20: `infra/edge/test` 환경에서 Caddy를 거친 presigned 업로드(원본·썸네일)와 공개 읽기를 확인한다.
 - **수동 확인** AC-22, AC-23: Figma 흐름(상세 → 위치 확인·오늘 작성 여부 모달 → 1/2·2/2단계 → 상세로 복귀, 검색 상태 유지).
 
@@ -233,6 +235,9 @@ BE 팀 공통
 인프라 담당
 - BE는 브라우저가 쓰는 공개 호스트의 경로(`/fit-<env>-photos/`)로 presigned URL을 서명해야 한다(인프라 5.2절, 12.5절 #2). app env 계약에는 내부 주소 `S3_ENDPOINT`뿐인데 공개 호스트는 어떤 키로 받나요?
 - Garage 스파이크(인프라 7.4절)의 presigned URL 확인 결과는 언제 나오나요? 실패하면 저장소가 바뀐다(D-9).
+
+FE 공통 담당
+- 방문일 달력(7-03)과 사진 고르기·미리보기 칸은 공통 UI 컴포넌트로 만드나요, 리뷰 도메인에서 만드나요? 지금 `@/shared/ui`에는 없다(D-30).
 
 기획·디자인
 - 이유 태그 최종 문구는 언제 확정되나요? 그 전까지는 임시 시드로 진행한다(D-5).
