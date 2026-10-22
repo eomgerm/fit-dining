@@ -8,5 +8,6 @@ YAMLLINT_IMAGE=pipelinecomponents/yamllint:0.35.27
 GITLEAKS_IMAGE=zricethezav/gitleaks:v8.30.1
 CADDY_IMAGE=caddy:2.11.7
 PROMETHEUS_IMAGE=prom/prometheus:v3.15.0
+ALERTMANAGER_IMAGE=prom/alertmanager:v0.34.1
 DOCKER_CLI_IMAGE=docker:29.9.0-cli
 PYTHON_IMAGE=python:3.12.15-slim

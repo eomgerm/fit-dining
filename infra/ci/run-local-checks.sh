@@ -106,6 +106,7 @@ check_all() {
     run_step "env 형식" "$PY" infra/ci/check_env_files.py "${envs[@]}"
   fi
   run_step "env 계약 (표와 예제 파일)" "$PY" infra/ci/check_env_contract.py
+  run_step "알림 규칙과 대시보드 (이름, severity, runbook, 단위 시험)" "$PY" infra/ci/check_alerts.py
   run_step "ports (compose 프로젝트)" "$PY" infra/ci/check_compose_projects.py
   # MR의 병합 기준점은 origin/master다. 병합 커밋이 있으면 rebase로 없앤다.
   if git rev-parse --verify -q origin/master >/dev/null; then
@@ -123,6 +124,9 @@ check_all() {
     run_step "arch (엣지)" "$PY" infra/ci/images_arch.py --platform linux/arm64 --platform linux/amd64 --compose infra/edge/compose.edge.yml --compose infra/edge/test/compose.test.yml --env-file infra/edge/edge.env.example
     # 데이터 스택은 서버 A(x86)에서, 백업 시험 이미지는 개발자 PC에서 돈다
     run_step "arch (데이터, 백업 시험)" "$PY" infra/ci/images_arch.py --platform linux/arm64 --platform linux/amd64 --compose infra/data/compose.data.yml --env-file infra/data/data.env.example --dockerfile infra/backup/test/node/Dockerfile
+    # 관측 스택은 서버 A(x86)에서, 감시 스택은 서버 B(Arm)에서 돈다
+    run_step "arch (관측 A)" "$PY" infra/ci/images_arch.py --platform linux/arm64 --platform linux/amd64 --compose infra/obs/compose.obs.yml --env-file infra/obs/obs.env.example
+    run_step "arch (감시 B)" "$PY" infra/ci/images_arch.py --platform linux/arm64 --platform linux/amd64 --compose infra/ops/compose.ops.yml --env-file infra/ops/ops.env.example
   fi
   # 인프라 소유 파일만 엄격하게 본다. be·fe·ai는 각 팀 린트가 맡는다(스펙 6.3, 12.2). be의 Dockerfile은 오류만 막는다.
   check_tool shellcheck "$SHELLCHECK_IMAGE" 'infra/*.sh' -- shellcheck -x
@@ -130,6 +134,8 @@ check_all() {
   check_tool "hadolint(be)" "$HADOLINT_IMAGE" 'be/*Dockerfile*' -- hadolint --failure-threshold error
   check_tool yamllint "$YAMLLINT_IMAGE" 'infra/*.yml' 'infra/*.yaml' '.gitlab-ci.yml' '.yamllint.yaml' -- yamllint -c .yamllint.yaml
   run_step "caddy (fmt, validate)" drun "$CADDY_IMAGE" sh infra/ci/check-caddy.sh
+  run_step "prometheus (설정, 규칙 단위 시험)" drun "$PROMETHEUS_IMAGE" sh infra/ci/check-prometheus.sh
+  run_step "alertmanager (설정, 라우팅)" drun "$ALERTMANAGER_IMAGE" sh infra/ci/check-alertmanager.sh
   run_step "gitleaks" scan_secrets
 }
 
@@ -163,6 +169,11 @@ EOF
   printf '| `A_KEY` | app | O | 설명 |\n| `app` | `x.env.example` | 소비자 |\n' >"$d/contract.md"
   printf 'STRAY_KEY=1\n' >"$d/x.env.example"
   printf '{\n' >"$d/Caddyfile.bad"
+  # 알림 규칙: runbook과 단위 시험이 없고 이름이 Fit으로 시작하지 않는다. promtool, amtool: 문법이 틀린 규칙과 수신자가 없는 설정
+  mkdir -p "$d/alerts/infra/obs/prometheus/rules" "$d/alerts/infra/obs/prometheus/tests"
+  printf 'groups:\n  - name: x\n    rules:\n      - alert: NoRunbook\n        expr: up == 0\n        labels: {severity: warning}\n        annotations:\n          summary: s\n          description: d\n' >"$d/alerts/infra/obs/prometheus/rules/r.yml"
+  printf 'groups:\n  - name: x\n    rules:\n      - alert: FitBad\n        expr: up ==\n' >"$d/bad-rules.yml"
+  printf 'route:\n  receiver: nobody\n' >"$d/bad-am.yml"
   # 병합 커밋이 든 임시 저장소(커밋 identity는 이 저장소 설정을 건드리지 않게 -c로 준다)
   local g=(git -C "$d/hist" -c user.name=t -c user.email=t@t.t)
   git init -q -b main "$d/hist"
@@ -183,6 +194,9 @@ EOF
   expect_fail eol "$PY" infra/ci/check_eol.py "$d/crlf.yml"
   expect_fail env-contract "$PY" infra/ci/check_env_contract.py --contract "$d/contract.md" --root "$d"
   expect_fail caddy drun "$CADDY_IMAGE" caddy validate --config "$d/Caddyfile.bad" --adapter caddyfile
+  expect_fail alerts "$PY" infra/ci/check_alerts.py --root "$d/alerts"
+  expect_fail promtool drun "$PROMETHEUS_IMAGE" promtool check rules "$d/bad-rules.yml"
+  expect_fail amtool drun "$ALERTMANAGER_IMAGE" amtool check-config "$d/bad-am.yml"
   expect_fail history "$PY" infra/ci/check_linear_history.py --repo "$d/hist" --base start
 }
 

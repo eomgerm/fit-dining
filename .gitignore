@@ -28,6 +28,8 @@ id_rsa
 .tmp-gitleaks/
 .tmp-datatest/
 .tmp-backuptest/
+.tmp-obstest/
+.tmp-opstest/
 __pycache__/
 *.pyc
 .venv/

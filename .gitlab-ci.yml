@@ -28,6 +28,7 @@ variables:
   GITLEAKS_IMAGE: zricethezav/gitleaks:v8.30.1
   CADDY_IMAGE: caddy:2.11.7
   PROMETHEUS_IMAGE: prom/prometheus:v3.15.0
+  ALERTMANAGER_IMAGE: prom/alertmanager:v0.34.1
   DOCKER_CLI_IMAGE: docker:29.9.0-cli
   PYTHON_IMAGE: python:3.12.15-slim
 
@@ -46,6 +47,7 @@ lint:guards:
     - python3 infra/ci/check_eol.py
     - python3 infra/ci/check_compose_projects.py
     - python3 infra/ci/check_env_contract.py
+    - python3 infra/ci/check_alerts.py
     - |
       files=$(git ls-files 'infra/*.env.example')
       if [ -n "$files" ]; then python3 infra/ci/check_env_files.py $files; fi
@@ -62,6 +64,8 @@ lint:image-arch:
     - python3 infra/ci/images_arch.py --platform linux/arm64 --platform linux/amd64 --compose infra/local/compose.yml --env-file infra/local/local.env.example --dockerfile infra/local/opensearch/Dockerfile
     - python3 infra/ci/images_arch.py --platform linux/arm64 --platform linux/amd64 --compose infra/edge/compose.edge.yml --compose infra/edge/test/compose.test.yml --env-file infra/edge/edge.env.example
     - python3 infra/ci/images_arch.py --platform linux/arm64 --platform linux/amd64 --compose infra/data/compose.data.yml --env-file infra/data/data.env.example --dockerfile infra/backup/test/node/Dockerfile
+    - python3 infra/ci/images_arch.py --platform linux/arm64 --platform linux/amd64 --compose infra/obs/compose.obs.yml --env-file infra/obs/obs.env.example
+    - python3 infra/ci/images_arch.py --platform linux/arm64 --platform linux/amd64 --compose infra/ops/compose.ops.yml --env-file infra/ops/ops.env.example
   rules:
     - changes:
         - infra/ci/tool-images.sh
@@ -72,6 +76,8 @@ lint:image-arch:
         - infra/edge/test/compose.test.yml
         - infra/data/compose.data.yml
         - infra/backup/test/node/Dockerfile
+        - infra/obs/compose.obs.yml
+        - infra/ops/compose.ops.yml
 
 # 인프라 소유 파일만 엄격하게 검사한다. be·fe·ai는 각 팀 린트가 맡는다(스펙 6.3, 12.2).
 lint:shell:
@@ -96,6 +102,24 @@ lint:caddy:
     entrypoint: [""]
   script:
     - sh infra/ci/check-caddy.sh
+
+# 알림 규칙과 규칙 단위 시험(설계 9.4절). A(infra/obs)와 B(infra/ops)의 Prometheus 설정을 promtool로 검사한다
+lint:prometheus:
+  extends: .verify
+  image:
+    name: $PROMETHEUS_IMAGE
+    entrypoint: [""]
+  script:
+    - sh infra/ci/check-prometheus.sh
+
+# Alertmanager 설정과 라우팅(알림이 의도한 수신자로 가는지)을 amtool로 검사한다
+lint:alertmanager:
+  extends: .verify
+  image:
+    name: $ALERTMANAGER_IMAGE
+    entrypoint: [""]
+  script:
+    - sh infra/ci/check-alertmanager.sh
 
 lint:yaml:
   extends: .verify
