@@ -83,8 +83,11 @@ def host_rows(prom: Prom) -> list[tuple[str, str, str]]:
     else:
         swap = prom.scalar("1 - node_memory_SwapFree_bytes / node_memory_SwapTotal_bytes")
         rows.append(("스왑", f"{pct(swap)} 사용 (경고 50%)", OK if swap <= 0.5 else WARN) if swap is not None else ("스왑", "지표 없음", NONE))
-    cpu = prom.scalar('1 - avg(rate(node_cpu_seconds_total{mode="idle"}[24h]))')
-    rows.append(("CPU 24시간 평균", f"{pct(cpu)} (기준선 40%)", OK if cpu <= 0.4 else WARN) if cpu is not None else ("CPU 24시간 평균", "지표 없음", NONE))
+    # 24시간 창을 rate로 보면 데이터가 24시간보다 짧을 때 사용률이 부풀려진다. 5분 사용률의 평균을 쌓인 데이터만으로 낸다
+    cpu = prom.scalar('avg_over_time((1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m])))[24h:5m])')
+    full = prom.scalar('count(node_cpu_seconds_total{mode="idle"} offset 24h)') is not None
+    note = "기준선 40%" if full else "기준선 40%, 쌓인 데이터만"
+    rows.append(("CPU 24시간 평균", f"{pct(cpu)} ({note})", OK if cpu <= 0.4 else WARN) if cpu is not None else ("CPU 24시간 평균", "지표 없음", NONE))
     return rows
 
 
@@ -92,8 +95,11 @@ def backup_rows(prom: Prom) -> list[tuple[str, str, str]]:
     limits = {"pg": 8 * 3600, "photos": 36 * 3600, "caddy": 9 * 86400}
     rows: list[tuple[str, str, str]] = []
     ages = {m["kind"]: v for m, v in prom.query("time() - fit_backup_last_success_timestamp_seconds")}
+    never = {m["kind"] for m, _ in prom.query("fit_backup_last_success_timestamp_seconds == 0")}  # 0은 한 번도 성공한 적이 없다는 뜻이다
     for kind, limit in limits.items():
-        if kind in ages:
+        if kind in never:
+            rows.append((f"백업 {kind}", "아직 성공한 적이 없다", WARN))
+        elif kind in ages:
             rows.append((f"백업 {kind}", f"마지막 성공 {human_age(ages[kind])} (경고 {human_age(limit).replace(' 전', '')} 초과)", OK if ages[kind] <= limit else WARN))
         else:
             rows.append((f"백업 {kind}", "지표 없음", NONE))

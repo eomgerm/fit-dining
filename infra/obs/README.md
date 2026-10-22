@@ -61,6 +61,8 @@ Prometheus가 긁는 대상: prometheus, alertmanager, node, cadvisor, caddy(엣
 | `data.yml`(5) | Postgres 다운·연결 수, OpenSearch 다운·red·힙 |
 | `backup.yml`(8) | 백업 신선도(pg, photos, caddy), 복원 검증, outbox, 지표 누락, B 도달 불가 |
 
+CPU 알림(30분, 2시간)은 그 길이만큼 지표가 쌓인 뒤부터 본다. 쌓인 기간이 창보다 짧으면 rate가 창 길이로 나뉘어 사용률이 부풀려지기 때문이다(처음 설치한 직후의 오탐).
+
 받는 곳은 둘이다. dev 알림(`env=dev`)은 심각도와 관계없이 dev 수신자로, 그 밖은 main으로 간다. main의 critical은 1시간마다, 나머지는 4시간마다 다시 알린다. 같은 알림의 critical이 떠 있으면 warning은 보내지 않는다. 라우팅은 `alertmanager/routes.txt`의 시험 줄로 검사한다.
 
 메시지 모양(`alertmanager/templates/fit.tmpl`): 제목 `[FIRING:N] 알림이름 (site/env)`, 본문에 요약, 설명, `런북: RB-번호`. critical은 빨강, 그 밖은 노랑, 해소는 초록이다.
@@ -69,7 +71,7 @@ BE가 내는 지표의 이름은 [metrics.md](../../docs/infra/contracts/metrics
 
 ## 일일 점검 요약
 
-`daily-digest.py`가 매일 09:00(서버 시간대 Asia/Seoul)에 한 건을 올린다(설계 10.1절). 디스크, 메모리, 스왑, CPU 24시간 평균(기준선 40%), 백업 나이와 복원 검증, 5xx 건수, 새벽 배치, 알림 현황, prod·dev의 마지막 배포, 인증서 잔여일이다. 항목마다 정상(✅), 주의(⚠️), 값 없음(❔)을 붙이고 기준은 알림 규칙과 같다.
+`daily-digest.py`가 매일 09:00(서버 시간대 Asia/Seoul)에 한 건을 올린다(설계 10.1절). 디스크, 메모리, 스왑, CPU 24시간 평균(기준선 40%), 백업 나이와 복원 검증, 5xx 건수, 새벽 배치, 알림 현황, prod·dev의 마지막 배포, 인증서 잔여일이다. 항목마다 정상(✅), 주의(⚠️), 값 없음(❔)을 붙이고 기준은 알림 규칙과 같다. CPU 24시간 평균은 지표가 24시간보다 짧게 쌓였으면 쌓인 데이터만으로 평균을 내고 `쌓인 데이터만`이라고 적는다. 백업을 한 번도 하지 않은 종류는 `아직 성공한 적이 없다`(주의)로 나온다.
 
 - 인증서 잔여일은 서버 자신의 443에서 읽는다(`openssl s_client`). 호스트 이름은 `/etc/fit/edge.env`의 `PROD_HOST`, `DEV_HOST`만 읽는다.
 - Prometheus에 닿지 못하면 그 사실을 올리고 종료 코드 1로 끝난다. 웹훅으로 보내지 못해도 종료 코드 1이다(`systemctl status fit-daily-digest.service`로 보인다).

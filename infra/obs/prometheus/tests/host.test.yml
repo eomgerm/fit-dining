@@ -157,6 +157,19 @@ tests:
         alertname: FitCpuHigh2h
         exp_alerts: []
 
+  # 쌓인 데이터가 창보다 짧으면(첫 설치 직후) 사용률이 90%로 보여도 울리지 않는다. rate가 창 길이로 나뉘어 사용률이 부풀려지기 때문이다
+  - interval: 1m
+    input_series:
+      - series: 'node_cpu_seconds_total{instance="a", cpu="0", mode="idle"}'
+        values: '0+6x12'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: FitCpuHigh30m
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: FitCpuHigh2h
+        exp_alerts: []
+
   # 수집 대상이 5분 넘게 down이면 울린다. 다른 job과 살아 있는 대상은 울리지 않는다
   - interval: 1m
     input_series:

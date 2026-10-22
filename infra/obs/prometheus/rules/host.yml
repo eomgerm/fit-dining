@@ -56,8 +56,10 @@ groups:
           runbook: RB-04
 
       # 설계 4.1절: CPU 크레딧 때문에 vCPU당 baseline 40%가 기준선이다
+      # 쌓인 데이터가 창보다 짧으면 rate가 창 길이로 나뉘어 사용률이 부풀려진다(첫 설치 직후 오탐). 그래서 창만큼 데이터가 쌓였을 때만 본다
+      # (`offset`으로 창 길이 전의 지표가 있는지 확인한다)
       - alert: FitCpuHigh30m
-        expr: 1 - avg(rate(node_cpu_seconds_total{mode="idle"}[30m])) > 0.4
+        expr: 1 - avg(rate(node_cpu_seconds_total{mode="idle"}[30m])) > 0.4 and on() count(node_cpu_seconds_total{mode="idle"} offset 30m) > 0
         for: 5m
         labels: {severity: warning}
         annotations:
@@ -66,7 +68,7 @@ groups:
           runbook: RB-09
 
       - alert: FitCpuHigh2h
-        expr: 1 - avg(rate(node_cpu_seconds_total{mode="idle"}[2h])) > 0.4
+        expr: 1 - avg(rate(node_cpu_seconds_total{mode="idle"}[2h])) > 0.4 and on() count(node_cpu_seconds_total{mode="idle"} offset 2h) > 0
         for: 5m
         labels: {severity: critical}
         annotations:

@@ -317,6 +317,7 @@ run_digest_checks() {
   out="$(digest --dry-run)" && rc=0 || rc=$?
   ok_if "--dry-run은 종료 코드 0으로 끝나고 아무것도 올리지 않는다" "$([ "$rc" = 0 ] && [ "$(sink_count /hook "일일 점검")" = "$before" ] && echo 1 || echo 0)"
   ok_if "표에 디스크, 메모리, 스왑, CPU 24시간 평균 행이 있다" "$([ "$(has "$out" '| 디스크(/) |')" = 1 ] && [ "$(has "$out" '| 메모리 |')" = 1 ] && [ "$(has "$out" '| 스왑 |')" = 1 ] && [ "$(has "$out" '| CPU 24시간 평균 |')" = 1 ] && echo 1 || echo 0)"
+  ok_if "CPU는 데이터가 24시간보다 짧으면 '쌓인 데이터만'이라고 적는다(방금 올린 시험 스택이다)" "$([ "$(printf '%s\n' "$out" | grep -F '| CPU 24시간 평균 |' | grep -c '쌓인 데이터만')" = 1 ] && echo 1 || echo 0)"
   # CPU 행의 ✅와 ⚠️는 시험하는 PC의 부하에 달렸으므로 값이 나오는지만 본다
   ok_if "메모리와 CPU는 실제 값이 나온다(지표 없음이 아니다)" "$([ "$(has "$out" '| 메모리 | ✅ | 가용')" = 1 ] && [ "$(printf '%s\n' "$out" | grep -F '| CPU 24시간 평균 |' | grep -c '기준선 40%')" = 1 ] && echo 1 || echo 0)"
   ok_if "백업 행: pg, photos, caddy의 마지막 성공과 복원 검증 통과" "$([ "$(has "$out" '| 백업 pg | ✅ | 마지막 성공')" = 1 ] && [ "$(has "$out" '| 백업 photos | ✅ |')" = 1 ] && [ "$(has "$out" '| 백업 caddy | ✅ |')" = 1 ] && [ "$(has "$out" '| 백업 복원 검증 | ✅ | 마지막 검증 통과')" = 1 ] && echo 1 || echo 0)"
@@ -331,6 +332,11 @@ run_digest_checks() {
   sed -i 's/^fit_backup_last_verify_ok .*/fit_backup_last_verify_ok 0/' "$T/textfile/fit_backup.prom"
   ok_if "백업 복원 검증이 실패하면 요약에 주의로 나온다" "$(wait_for 90 digest_has '| 백업 복원 검증 | ⚠️ | 마지막 검증 실패' && echo 1 || echo 0)"
   sed -i 's/^fit_backup_last_verify_ok .*/fit_backup_last_verify_ok 1/' "$T/textfile/fit_backup.prom"
+  # 한 번도 백업하지 않았으면(지표 값 0) "20748일 전"이 아니라 한 번도 없다고 적는다
+  caddy_ts="$(sed -n 's/^fit_backup_last_success_timestamp_seconds{kind="caddy"} //p' "$T/textfile/fit_backup.prom")"
+  sed -i 's/^\(fit_backup_last_success_timestamp_seconds{kind="caddy"}\) .*/\1 0/' "$T/textfile/fit_backup.prom"
+  ok_if "백업을 한 번도 안 한 종류는 '아직 성공한 적이 없다'로 주의에 나온다" "$(wait_for 90 digest_has '| 백업 caddy | ⚠️ | 아직 성공한 적이 없다' && echo 1 || echo 0)"
+  sed -i "s/^\(fit_backup_last_success_timestamp_seconds{kind=\"caddy\"}\) .*/\1 $caddy_ts/" "$T/textfile/fit_backup.prom"
   # 실제로 올린다
   out="$(digest)" && rc=0 || rc=$?
   ok_if "올리면 종료 코드 0이고 main 수신자에 도착한다" "$([ "$rc" = 0 ] && wait_for 30 sink_has "/hook/$tok" "일일 점검" && echo 1 || echo 0)"
