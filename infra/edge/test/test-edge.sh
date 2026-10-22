@@ -64,7 +64,14 @@ up() {
   # caddy hash-password의 출력을 base64로 인코딩해 env에 둔다(원본의 $가 env 형식 규칙에 걸린다. Caddy는 base64 형태도 받는다)
   OPS_BASIC_AUTH_HASH="$(docker run --rm "$CADDY_IMAGE" caddy hash-password --plaintext "$OPS_PW" | tr -d '\r\n' | base64 | tr -d '\n')"
   export OPS_BASIC_AUTH_HASH
-  dc up -d --wait
+  # Windows의 Docker Desktop은 127.0.0.1 포트 게시가 가끔 실패한다(listen: The system detected an invalid pointer address).
+  # 시작하지 못한 컨테이너만 다시 시도한다(이미 뜬 것은 건드리지 않는다)
+  local try=1
+  until dc up -d --wait; do
+    [ "$try" -lt 8 ] || { echo "FAIL compose up이 ${try}번 모두 실패했다" >&2; return 1; }
+    try=$((try + 1))
+    sleep 3
+  done
   echo "엣지 시험 환경이 떴다: https://$PROD_HOST:$HTTPS_PORT (prod), https://$DEV_HOST:$HTTPS_PORT (dev)"
 }
 

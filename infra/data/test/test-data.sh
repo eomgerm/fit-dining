@@ -51,7 +51,14 @@ up() {
   bash infra/host/networks.sh
   local -a services=(postgres redis-prod redis-dev garage)
   if [ "${FIT_TEST_OPENSEARCH:-0}" = 1 ]; then services+=(opensearch); fi
-  dc up -d --build --wait --wait-timeout 300 "${services[@]}"
+  # Windows의 Docker Desktop은 127.0.0.1 포트 게시가 가끔 실패한다(listen: The system detected an invalid pointer address).
+  # 시작하지 못한 컨테이너만 다시 시도한다(이미 뜬 것은 건드리지 않는다)
+  local try=1
+  until dc up -d --build --wait --wait-timeout 300 "${services[@]}"; do
+    [ "$try" -lt 8 ] || { echo "FAIL compose up이 ${try}번 모두 실패했다" >&2; return 1; }
+    try=$((try + 1))
+    sleep 3
+  done
   echo "데이터 시험 환경이 떴다(프로젝트 $PROJECT)"
 }
 
