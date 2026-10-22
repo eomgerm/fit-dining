@@ -1,0 +1,43 @@
+# B의 blackbox 모듈 견본(설계 9.3절). ops-init(render.py)이 @@OPS_BASIC_AUTH_USER@@를 채워 /generated/blackbox.yml로 만든다.
+# 견본 그대로도 유효한 설정이라 CI가 형식을 검사한다. 인증서 검증은 켠 상태가 기본이다(시험에서만 render.py가 끈다).
+modules:
+  # A의 공개 주소가 HTTPS 200으로 응답한다
+  http_2xx:
+    prober: http
+    timeout: 10s
+    http:
+      method: GET
+      valid_status_codes: [200]
+      fail_if_not_ssl: true
+      preferred_ip_protocol: ip4
+      tls_config:
+        insecure_skip_verify: false
+
+  # 포트가 열려 있다
+  tcp_connect:
+    prober: tcp
+    timeout: 5s
+
+  # TLS 핸드셰이크를 하고 인증서 만료 시각(probe_ssl_earliest_cert_expiry)을 읽는다. 호스트마다 인증서가 따로라 prod와 dev를 모두 본다
+  tcp_tls:
+    prober: tcp
+    timeout: 10s
+    tcp:
+      tls: true
+      tls_config:
+        insecure_skip_verify: false
+
+  # A의 /_ops 경로(설계 5.2절): B의 IP와 basic auth를 모두 통과해야 200이다. 비밀번호는 파일에서 읽는다
+  http_ops:
+    prober: http
+    timeout: 10s
+    http:
+      method: GET
+      valid_status_codes: [200]
+      fail_if_not_ssl: true
+      preferred_ip_protocol: ip4
+      basic_auth:
+        username: "@@OPS_BASIC_AUTH_USER@@"
+        password_file: /generated/secrets/ops_password
+      tls_config:
+        insecure_skip_verify: false

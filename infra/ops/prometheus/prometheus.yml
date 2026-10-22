@@ -1,0 +1,49 @@
+# 서버 B의 Prometheus 설정(설계 9.3절). A를 밖에서 보는 프로브와 B 자신, 금고·포트 감사 지표(node-exporter의 textfile)를 본다.
+# 프로브 대상은 ops-init이 /generated/targets에 만든다(A의 주소는 서버마다 다르다). 규칙은 rules/, 단위 시험은 tests/다.
+# B의 알림은 모두 prod에 관한 것이라 env=prod를 외부 라벨로 둔다(Alertmanager가 prod 수신자로 보낸다).
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    site: B
+    env: prod
+
+rule_files:
+  - rules/*.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: [alertmanager-b:9093]
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: [localhost:9090]
+
+  - job_name: alertmanager
+    static_configs:
+      - targets: [alertmanager-b:9093]
+
+  - job_name: node
+    static_configs:
+      - targets: [node-exporter:9100]
+
+  - job_name: blackbox
+    static_configs:
+      - targets: [blackbox:9115]
+
+  # A를 밖에서 두드리는 프로브. 모듈은 대상 파일의 module 라벨이고 어떤 프로브인지는 probe 라벨이다(알림 규칙이 이 라벨로 고른다)
+  - job_name: a-probe
+    metrics_path: /probe
+    file_sd_configs:
+      - files: [/generated/targets/a-probes.yml]
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [module]
+        target_label: __param_module
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115

@@ -1,0 +1,30 @@
+# B 자신의 알림(설계 9.3절). B는 작은 서버(메모리 4GB)라 CI와 금고가 함께 쓴다.
+groups:
+  - name: fit-ops-host
+    rules:
+      - alert: FitOpsDiskHigh
+        expr: 1 - node_filesystem_avail_bytes{mountpoint="/", fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{mountpoint="/", fstype!~"tmpfs|overlay"} > 0.8
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: B의 디스크 사용률이 80%를 넘었다
+          description: 루트 파일시스템 사용률 {{ $value | humanizePercentage }}. CI 이미지 캐시와 금고 보관소를 본다
+          runbook: RB-04
+
+      - alert: FitOpsMemoryLow
+        expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.08
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: B의 가용 메모리가 8% 미만이다
+          description: 가용 메모리 비율 {{ $value | humanizePercentage }}. CI verify 작업이 한도를 넘었을 수 있다
+          runbook: RB-03
+
+      - alert: FitOpsScrapeTargetDown
+        expr: up{job=~"prometheus|alertmanager|node|blackbox"} == 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: B의 수집 대상 {{ $labels.job }}이(가) 응답하지 않는다
+          description: "{{ $labels.job }}({{ $labels.instance }})의 up이 0이다. 이 대상의 알림은 조용해진다"
+          runbook: RB-01

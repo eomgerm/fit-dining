@@ -1,0 +1,134 @@
+# rules/probes.yml 단위 시험
+rule_files:
+  - ../rules/probes.yml
+evaluation_interval: 1m
+
+tests:
+  # /healthz가 2분 넘게 실패하면 울리고, 잘 되는 프로브와 다른 프로브(tcp)는 울리지 않는다
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{probe="a-healthz", instance="https://fit.example.test/healthz", module="http_2xx"}'
+        values: '1 1 0 0 0 0 0 0'
+      - series: 'probe_success{probe="a-fe", instance="https://fit.example.test/", module="http_2xx"}'
+        values: '1+0x7'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: FitExternalDown
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: FitExternalDown
+        exp_alerts:
+          - exp_labels: {severity: critical, probe: a-healthz, instance: "https://fit.example.test/healthz", module: http_2xx}
+            exp_annotations:
+              summary: 밖에서 본 A가 응답하지 않는다(a-healthz)
+              description: "https://fit.example.test/healthz가 2분 넘게 200을 주지 않는다. A가 죽었거나 엣지(Caddy)·BE·FE에 문제가 있다"
+              runbook: RB-02
+
+  # 인증서: 남은 시간 10일은 경고만, 5일은 위험만, 20일은 울리지 않는다
+  - interval: 1m
+    input_series:
+      - series: 'probe_ssl_earliest_cert_expiry{probe="a-tls-prod", instance="fit.example.test:443"}'
+        values: '864000+0x10'
+      - series: 'probe_ssl_earliest_cert_expiry{probe="a-tls-dev", instance="dev.example.test:443"}'
+        values: '432000+0x10'
+      - series: 'probe_ssl_earliest_cert_expiry{probe="a-tls-old", instance="far.example.test:443"}'
+        values: '1728000+0x10'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: FitCertExpiringSoon
+        exp_alerts:
+          - exp_labels: {severity: warning, probe: a-tls-prod, instance: "fit.example.test:443"}
+            exp_annotations:
+              summary: 인증서가 14일 안에 만료된다(a-tls-prod)
+              description: 남은 시간 9d 23h 52m 0s. Caddy가 자동 갱신해야 하는 시점이 지났다
+              runbook: RB-05
+      - eval_time: 8m
+        alertname: FitCertExpiringCritical
+        exp_alerts:
+          - exp_labels: {severity: critical, probe: a-tls-dev, instance: "dev.example.test:443"}
+            exp_annotations:
+              summary: 인증서가 7일 안에 만료된다(a-tls-dev)
+              description: 남은 시간 4d 23h 52m 0s(음수면 이미 만료). 80번 포트와 DNS, 인증서 발급 한도를 본다
+              runbook: RB-05
+
+  # 이미 만료된 인증서(남은 시간이 음수)는 위험이다
+  - interval: 1m
+    input_series:
+      - series: 'probe_ssl_earliest_cert_expiry{probe="a-tls-prod", instance="fit.example.test:443"}'
+        values: '0+0x10'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: FitCertExpiringCritical
+        exp_alerts:
+          - exp_labels: {severity: critical, probe: a-tls-prod, instance: "fit.example.test:443"}
+            exp_annotations:
+              summary: 인증서가 7일 안에 만료된다(a-tls-prod)
+              description: 남은 시간 -8m 0s(음수면 이미 만료). 80번 포트와 DNS, 인증서 발급 한도를 본다
+              runbook: RB-05
+
+  # TLS 연결이 5분 넘게 실패하면 울린다
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{probe="a-tls-prod", instance="fit.example.test:443", module="tcp_tls"}'
+        values: '0+0x10'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: FitTlsProbeFailed
+        exp_alerts:
+          - exp_labels: {severity: warning, probe: a-tls-prod, instance: "fit.example.test:443", module: tcp_tls}
+            exp_annotations:
+              summary: 인증서 확인을 위한 TLS 연결이 실패한다(a-tls-prod)
+              description: "fit.example.test:443에 TLS로 접속하지 못한다. 만료일을 읽을 수 없다"
+              runbook: RB-05
+
+  # 80·443 TCP 프로브가 실패하면 울린다. 22번이나 다른 프로브는 이 알림이 아니다
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{probe="a-tcp-443", instance="fit.example.test:443", module="tcp_connect"}'
+        values: '1 1 0 0 0 0 0 0'
+      - series: 'probe_success{probe="a-tcp-80", instance="fit.example.test:80", module="tcp_connect"}'
+        values: '1+0x7'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: FitPortUnreachable
+        exp_alerts:
+          - exp_labels: {severity: critical, probe: a-tcp-443, instance: "fit.example.test:443", module: tcp_connect}
+            exp_annotations:
+              summary: A의 fit.example.test:443 포트에 닿지 못한다
+              description: 80(인증서 갱신과 301)과 443(서비스)은 항상 열려 있어야 한다. 방화벽과 ufw, Caddy를 본다
+              runbook: RB-01
+
+  # 감시 체계 감시: A의 Prometheus /_ops 프로브가 실패하면 울린다
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{probe="a-prometheus", instance="https://fit.example.test/_ops/prometheus/healthy", module="http_ops"}'
+        values: '1 1 0 0 0 0 0 0'
+      - series: 'probe_success{probe="a-alertmanager", instance="https://fit.example.test/_ops/alertmanager/healthy", module="http_ops"}'
+        values: '1+0x7'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: FitOpsWatcherDown
+        exp_alerts:
+          - exp_labels: {severity: critical, probe: a-prometheus, instance: "https://fit.example.test/_ops/prometheus/healthy", module: http_ops}
+            exp_annotations:
+              summary: A의 감시 체계(a-prometheus)가 응답하지 않는다
+              description: "https://fit.example.test/_ops/prometheus/healthy가 2분 넘게 200을 주지 않는다. A의 알림이 조용해졌을 수 있다. A에서 fit-obs를 본다"
+              runbook: RB-01
+
+  # 프로브 지표 자체가 없으면 15분 뒤 울린다
+  - interval: 1m
+    input_series:
+      - series: 'up{job="blackbox"}'
+        values: '1+0x30'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: FitProbeMetricMissing
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: FitProbeMetricMissing
+        exp_alerts:
+          - exp_labels: {severity: warning, probe: a-healthz}
+            exp_annotations:
+              summary: A 프로브 지표(probe_success)가 없다
+              description: ops-init이 대상 파일을 만들지 못했거나 blackbox가 죽었다. ops.env와 컨테이너를 본다
+              runbook: RB-01

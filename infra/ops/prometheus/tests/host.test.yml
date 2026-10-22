@@ -1,0 +1,60 @@
+# rules/host.yml 단위 시험(B 자신)
+rule_files:
+  - ../rules/host.yml
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'node_filesystem_avail_bytes{instance="b", mountpoint="/", fstype="ext4", device="sda1"}'
+        values: '15+0x12'
+      - series: 'node_filesystem_size_bytes{instance="b", mountpoint="/", fstype="ext4", device="sda1"}'
+        values: '100+0x12'
+      - series: 'node_filesystem_avail_bytes{instance="b", mountpoint="/", fstype="tmpfs", device="tmpfs"}'
+        values: '1+0x12'
+      - series: 'node_filesystem_size_bytes{instance="b", mountpoint="/", fstype="tmpfs", device="tmpfs"}'
+        values: '100+0x12'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: FitOpsDiskHigh
+        exp_alerts:
+          - exp_labels: {severity: warning, instance: b, mountpoint: /, fstype: ext4, device: sda1}
+            exp_annotations:
+              summary: B의 디스크 사용률이 80%를 넘었다
+              description: 루트 파일시스템 사용률 85%. CI 이미지 캐시와 금고 보관소를 본다
+              runbook: RB-04
+
+  - interval: 1m
+    input_series:
+      - series: 'node_memory_MemAvailable_bytes{instance="b"}'
+        values: '5+0x12'
+      - series: 'node_memory_MemTotal_bytes{instance="b"}'
+        values: '100+0x12'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: FitOpsMemoryLow
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: FitOpsMemoryLow
+        exp_alerts:
+          - exp_labels: {severity: warning, instance: b}
+            exp_annotations:
+              summary: B의 가용 메모리가 8% 미만이다
+              description: 가용 메모리 비율 5%. CI verify 작업이 한도를 넘었을 수 있다
+              runbook: RB-03
+
+  - interval: 1m
+    input_series:
+      - series: 'up{job="blackbox", instance="blackbox:9115"}'
+        values: '0+0x12'
+      - series: 'up{job="node", instance="node-exporter:9100"}'
+        values: '1+0x12'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: FitOpsScrapeTargetDown
+        exp_alerts:
+          - exp_labels: {severity: warning, job: blackbox, instance: "blackbox:9115"}
+            exp_annotations:
+              summary: B의 수집 대상 blackbox이(가) 응답하지 않는다
+              description: "blackbox(blackbox:9115)의 up이 0이다. 이 대상의 알림은 조용해진다"
+              runbook: RB-01

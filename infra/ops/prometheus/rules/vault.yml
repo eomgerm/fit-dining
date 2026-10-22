@@ -1,0 +1,85 @@
+# 백업 금고(B)와 포트 노출 감사 알림(설계 8절, 9.3절). 지표는 계획 1D의 vault-ingest.sh(fit_vault.prom)와 이 디렉터리의 port-audit.py(fit_portaudit_*.prom)가
+# /srv/vault/metrics에 쓰고 node-exporter의 textfile collector가 읽는다. A가 죽어도 B가 백업 수신 중단을 감지한다.
+groups:
+  - name: fit-vault
+    rules:
+      - alert: FitVaultStale
+        expr: time() - fit_vault_last_received_timestamp_seconds{kind="pg"} > 8 * 3600
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: 금고가 Postgres 백업을 8시간 넘게 받지 못했다(주기는 4시간)
+          description: 마지막 수신 후 {{ $value | humanizeDuration }}. A가 죽었거나 전송이 막혔거나 검증에서 격리됐다
+          runbook: RB-06
+
+      - alert: FitVaultRestoreCheckOverdue
+        expr: time() - fit_vault_last_restore_check_timestamp_seconds > 8 * 86400
+        for: 5m
+        labels: {severity: info}
+        annotations:
+          summary: 복원 리허설을 8일 넘게 하지 않았다(주 1회)
+          description: 마지막 리허설 후 {{ $value | humanizeDuration }}. infra/backup/restore-check.sh로 리허설하고 결과를 기록한다
+          runbook: RB-06
+
+      - alert: FitVaultQuarantine
+        expr: fit_vault_quarantined_files > 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: 금고에 격리된 파일이 있다
+          description: 격리 파일 {{ $value | printf "%.0f" }}개. 검증에 실패했거나 짝이 없는 파일이다. /srv/vault/store/quarantine을 본다
+          runbook: RB-06
+
+      - alert: FitVaultIngestFailing
+        expr: increase(fit_vault_ingest_failures_total[1h]) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: 금고가 최근 1시간에 받은 백업을 검증에서 거부했다
+          description: 검증 실패 {{ $value | printf "%.0f" }}건(1시간). A의 백업과 전송을 본다
+          runbook: RB-06
+
+      - alert: FitVaultIngestStale
+        expr: time() - fit_vault_ingest_last_run_timestamp_seconds > 3600
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: 금고의 ingest(10분 주기)가 1시간 넘게 돌지 않았다
+          description: 마지막 실행 후 {{ $value | humanizeDuration }}. systemctl status fit-vault-ingest.timer 를 본다
+          runbook: RB-06
+
+      - alert: FitVaultMetricMissing
+        expr: absent(fit_vault_last_received_timestamp_seconds{kind="pg"})
+        for: 30m
+        labels: {severity: warning}
+        annotations:
+          summary: 금고 지표(fit_vault.prom)가 없다
+          description: infra/backup/install.sh ops 와 vault-ingest 타이머, /srv/vault/metrics 마운트를 본다
+          runbook: RB-06
+
+  - name: fit-port-audit
+    rules:
+      - alert: FitPortExposed
+        expr: fit_portaudit_unexpected_ports > 0
+        labels: {severity: critical}
+        annotations:
+          summary: 밖에서 본 A에 22·80·443 말고 열린 포트가 있다({{ $labels.mode }} 스캔)
+          description: 예상 밖 열린 포트 {{ $value | printf "%.0f" }}개. fit_portaudit_port_open 지표의 port 라벨이 그 번호다. 컨테이너 게시와 ufw를 본다
+          runbook: RB-01
+
+      - alert: FitPortAuditStale
+        expr: time() - fit_portaudit_last_scan_timestamp_seconds{mode="quick"} > 3600 or time() - fit_portaudit_last_scan_timestamp_seconds{mode="full"} > 36 * 3600
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: 포트 노출 감사가 오래 돌지 않았다({{ $labels.mode }} 스캔)
+          description: 마지막 스캔 후 {{ $value | humanizeDuration }}(quick은 15분마다, full은 매일). systemctl status fit-port-audit-{{ $labels.mode }}.timer 를 본다
+          runbook: RB-01
+
+      - alert: FitPortAuditMissing
+        expr: absent(fit_portaudit_last_scan_timestamp_seconds{mode="quick"})
+        for: 30m
+        labels: {severity: warning}
+        annotations:
+          summary: 포트 노출 감사 지표(fit_portaudit_quick.prom)가 없다
+          description: infra/ops/install.sh 가 끝났는지, 타이머와 /srv/vault/metrics 마운트를 본다
+          runbook: RB-01

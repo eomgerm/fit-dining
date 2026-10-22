@@ -1,0 +1,15 @@
+{{ define "fit.title" -}}
+[{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }} ({{ .CommonLabels.site }}{{ with .CommonLabels.env }}/{{ . }}{{ end }})
+{{- end }}
+
+{{ define "fit.text" -}}
+{{ range .Alerts -}}
+*{{ .Labels.severity | toUpper }}* {{ .Annotations.summary }}
+{{ .Annotations.description }}
+런북: {{ .Annotations.runbook }}
+{{ end }}
+{{- end }}
+
+{{ define "fit.color" -}}
+{{ if eq .Status "resolved" }}good{{ else if eq .CommonLabels.severity "critical" }}danger{{ else }}warning{{ end }}
+{{- end }}

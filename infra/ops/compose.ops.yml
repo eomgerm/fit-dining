@@ -1,0 +1,118 @@
+# 서버 B의 감시 스택. 프로젝트 fit-ops다(설계 2.2절, 9.3절): prometheus-b, alertmanager-b, blackbox, node-exporter.
+# A가 죽어도 B가 A를 밖에서 보고 알린다(외부 접근, 인증서, 포트 도달성, 감시 체계 감시, 백업 금고). 값은 `docker compose --env-file /etc/fit/ops.env`로 읽는다.
+# 호스트에 게시하는 포트는 127.0.0.1의 prometheus-b 9090과 alertmanager-b 9093뿐이다(SSH 터널로 본다, 설계 13.1절).
+# 한도의 합은 설계 4.2절의 ops 스택 예산(0.4GB) 안이다. node-exporter는 금고의 지표 파일(/srv/vault/metrics, 포트 노출 감사 결과 포함)을 읽는다.
+name: fit-ops
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
+
+services:
+  # 서버마다 다른 값(A의 주소, /_ops 자격, 웹훅)을 설정 파일로 만든다. 끝나면 종료하고 prometheus-b, alertmanager-b, blackbox는 이것이 성공해야 뜬다
+  ops-init:
+    image: python:3.12.15-slim
+    restart: "no"
+    user: "0"
+    network_mode: none
+    read_only: true
+    command: [python, /render.py]
+    environment:
+      PROD_HOST: ${PROD_HOST:?ops.env에 PROD_HOST가 없다}
+      DEV_HOST: ${DEV_HOST:?ops.env에 DEV_HOST가 없다}
+      OPS_BASIC_AUTH_USER: ${OPS_BASIC_AUTH_USER:?ops.env에 OPS_BASIC_AUTH_USER가 없다}
+      OPS_BASIC_AUTH_PASSWORD: ${OPS_BASIC_AUTH_PASSWORD:?ops.env에 OPS_BASIC_AUTH_PASSWORD가 없다}
+      MATTERMOST_WEBHOOK_URL: ${MATTERMOST_WEBHOOK_URL:?ops.env에 MATTERMOST_WEBHOOK_URL이 없다}
+    volumes:
+      - ./render.py:/render.py:ro
+      - ./blackbox/blackbox.yml:/blackbox.yml:ro
+      - generated:/generated
+    mem_limit: 32m
+    logging: *logging
+
+  prometheus-b:
+    image: prom/prometheus:v3.15.0
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+      - --storage.tsdb.retention.size=2GB
+      - --web.listen-address=0.0.0.0:9090
+    ports:
+      - 127.0.0.1:9090:9090
+    mem_limit: 160m
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/rules:/etc/prometheus/rules:ro
+      - generated:/generated:ro
+      - promdata:/prometheus
+    depends_on:
+      ops-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD, wget, -q, --spider, "http://localhost:9090/-/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+    logging: *logging
+
+  alertmanager-b:
+    image: prom/alertmanager:v0.34.1
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+      - --web.listen-address=0.0.0.0:9093
+    ports:
+      - 127.0.0.1:9093:9093
+    mem_limit: 64m
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./alertmanager/templates:/etc/alertmanager/templates:ro
+      - generated:/generated:ro
+      - amdata:/alertmanager
+    depends_on:
+      ops-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD, wget, -q, --spider, "http://localhost:9093/-/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+    logging: *logging
+
+  # A를 밖에서 두드린다. 설정은 ops-init이 만든 /generated/blackbox.yml이다
+  blackbox:
+    image: prom/blackbox-exporter:v0.28.0
+    restart: unless-stopped
+    command: [--config.file=/generated/blackbox.yml]
+    mem_limit: 64m
+    volumes:
+      - generated:/generated:ro
+    depends_on:
+      ops-init:
+        condition: service_completed_successfully
+    logging: *logging
+
+  node-exporter:
+    image: prom/node-exporter:v1.12.1
+    restart: unless-stopped
+    pid: host
+    command:
+      - --path.rootfs=/host
+      - --collector.textfile.directory=/textfile
+      - --no-collector.ipvs
+      - --no-collector.wifi
+    mem_limit: 64m
+    volumes:
+      - /:/host:ro
+      - /srv/vault/metrics:/textfile:ro
+    logging: *logging
+
+volumes:
+  generated:
+  promdata:
+  amdata:

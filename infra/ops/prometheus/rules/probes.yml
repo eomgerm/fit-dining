@@ -1,0 +1,68 @@
+# B가 A를 밖에서 본다(설계 9.3절). 프로브는 blackbox가 하고 어떤 프로브인지는 probe 라벨이다(대상 파일은 infra/ops/render.py가 만든다).
+# 모든 알림은 runbook(설계 10.2절의 RB-번호)과 severity를 갖고 prometheus/tests/에 단위 시험이 있다(infra/ci/check_alerts.py가 검사한다).
+groups:
+  - name: fit-external
+    rules:
+      - alert: FitExternalDown
+        expr: probe_success{probe=~"a-healthz|a-fe"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: 밖에서 본 A가 응답하지 않는다({{ $labels.probe }})
+          description: "{{ $labels.instance }}가 2분 넘게 200을 주지 않는다. A가 죽었거나 엣지(Caddy)·BE·FE에 문제가 있다"
+          runbook: RB-02
+
+      - alert: FitCertExpiringSoon
+        expr: (probe_ssl_earliest_cert_expiry{probe=~"a-tls-.*"} - time()) < 14 * 86400 and (probe_ssl_earliest_cert_expiry{probe=~"a-tls-.*"} - time()) >= 7 * 86400
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: 인증서가 14일 안에 만료된다({{ $labels.probe }})
+          description: 남은 시간 {{ $value | humanizeDuration }}. Caddy가 자동 갱신해야 하는 시점이 지났다
+          runbook: RB-05
+
+      - alert: FitCertExpiringCritical
+        expr: (probe_ssl_earliest_cert_expiry{probe=~"a-tls-.*"} - time()) < 7 * 86400
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: 인증서가 7일 안에 만료된다({{ $labels.probe }})
+          description: 남은 시간 {{ $value | humanizeDuration }}(음수면 이미 만료). 80번 포트와 DNS, 인증서 발급 한도를 본다
+          runbook: RB-05
+
+      - alert: FitTlsProbeFailed
+        expr: probe_success{probe=~"a-tls-.*"} == 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: 인증서 확인을 위한 TLS 연결이 실패한다({{ $labels.probe }})
+          description: "{{ $labels.instance }}에 TLS로 접속하지 못한다. 만료일을 읽을 수 없다"
+          runbook: RB-05
+
+      - alert: FitPortUnreachable
+        expr: probe_success{probe=~"a-tcp-(80|443)"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: A의 {{ $labels.instance }} 포트에 닿지 못한다
+          description: 80(인증서 갱신과 301)과 443(서비스)은 항상 열려 있어야 한다. 방화벽과 ufw, Caddy를 본다
+          runbook: RB-01
+
+      # 감시 체계 감시: A의 Prometheus와 Alertmanager가 살아 있는지 /_ops 경로로 본다(B의 IP와 basic auth가 필요하다)
+      - alert: FitOpsWatcherDown
+        expr: probe_success{probe=~"a-prometheus|a-alertmanager"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: A의 감시 체계({{ $labels.probe }})가 응답하지 않는다
+          description: "{{ $labels.instance }}가 2분 넘게 200을 주지 않는다. A의 알림이 조용해졌을 수 있다. A에서 fit-obs를 본다"
+          runbook: RB-01
+
+      - alert: FitProbeMetricMissing
+        expr: absent(probe_success{probe="a-healthz"})
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: A 프로브 지표(probe_success)가 없다
+          description: ops-init이 대상 파일을 만들지 못했거나 blackbox가 죽었다. ops.env와 컨테이너를 본다
+          runbook: RB-01

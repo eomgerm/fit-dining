@@ -1,0 +1,177 @@
+# rules/vault.yml 단위 시험(금고와 포트 노출 감사)
+rule_files:
+  - ../rules/vault.yml
+evaluation_interval: 1m
+
+tests:
+  # 마지막 수신이 7시간 전이면 울리지 않고 9시간 전이면 울린다. photos 같은 다른 종류는 이 알림이 아니다
+  - interval: 1m
+    input_series:
+      - series: 'fit_vault_last_received_timestamp_seconds{kind="pg"}'
+        values: '0+0x600'
+      - series: 'fit_vault_last_received_timestamp_seconds{kind="photos"}'
+        values: '0+0x600'
+    alert_rule_test:
+      - eval_time: 7h
+        alertname: FitVaultStale
+        exp_alerts: []
+      - eval_time: 9h
+        alertname: FitVaultStale
+        exp_alerts:
+          - exp_labels: {severity: critical, kind: pg}
+            exp_annotations:
+              summary: 금고가 Postgres 백업을 8시간 넘게 받지 못했다(주기는 4시간)
+              description: 마지막 수신 후 9h 0m 0s. A가 죽었거나 전송이 막혔거나 검증에서 격리됐다
+              runbook: RB-06
+
+  # 복원 리허설이 9일 전이면 info다
+  - interval: 1m
+    input_series:
+      - series: 'fit_vault_last_restore_check_timestamp_seconds'
+        values: '0+0x13500'
+    alert_rule_test:
+      - eval_time: 7d
+        alertname: FitVaultRestoreCheckOverdue
+        exp_alerts: []
+      - eval_time: 9d
+        alertname: FitVaultRestoreCheckOverdue
+        exp_alerts:
+          - exp_labels: {severity: info}
+            exp_annotations:
+              summary: 복원 리허설을 8일 넘게 하지 않았다(주 1회)
+              description: 마지막 리허설 후 9d 0h 0m 0s. infra/backup/restore-check.sh로 리허설하고 결과를 기록한다
+              runbook: RB-06
+
+  # 격리 파일이 있으면 5분 뒤 울린다
+  - interval: 1m
+    input_series:
+      - series: 'fit_vault_quarantined_files'
+        values: '2+0x10'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: FitVaultQuarantine
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: 금고에 격리된 파일이 있다
+              description: 격리 파일 2개. 검증에 실패했거나 짝이 없는 파일이다. /srv/vault/store/quarantine을 본다
+              runbook: RB-06
+  - interval: 1m
+    input_series:
+      - series: 'fit_vault_quarantined_files'
+        values: '0+0x10'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: FitVaultQuarantine
+        exp_alerts: []
+
+  # 검증 실패 카운터가 1시간 안에 늘면 울린다. 그대로면 울리지 않는다
+  - interval: 1m
+    input_series:
+      - series: 'fit_vault_ingest_failures_total'
+        values: '0 0 0 1 1 1 1'
+      - series: 'fit_vault_ingest_failures_total{other="flat"}'
+        values: '5 5 5 5 5 5 5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: FitVaultIngestFailing
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: 금고가 최근 1시간에 받은 백업을 검증에서 거부했다
+              description: 검증 실패 1건(1시간). A의 백업과 전송을 본다
+              runbook: RB-06
+
+  # ingest가 1시간 넘게 안 돌면 울린다
+  - interval: 1m
+    input_series:
+      - series: 'fit_vault_ingest_last_run_timestamp_seconds'
+        values: '0+0x200'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: FitVaultIngestStale
+        exp_alerts: []
+      - eval_time: 90m
+        alertname: FitVaultIngestStale
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: 금고의 ingest(10분 주기)가 1시간 넘게 돌지 않았다
+              description: 마지막 실행 후 1h 30m 0s. systemctl status fit-vault-ingest.timer 를 본다
+              runbook: RB-06
+
+  # 금고 지표가 없으면 30분 뒤 울린다
+  - interval: 1m
+    input_series:
+      - series: 'up{job="node"}'
+        values: '1+0x60'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: FitVaultMetricMissing
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: FitVaultMetricMissing
+        exp_alerts:
+          - exp_labels: {severity: warning, kind: pg}
+            exp_annotations:
+              summary: 금고 지표(fit_vault.prom)가 없다
+              description: infra/backup/install.sh ops 와 vault-ingest 타이머, /srv/vault/metrics 마운트를 본다
+              runbook: RB-06
+
+  # 포트 노출 감사: 예상 밖 열린 포트가 있으면 즉시 울리고 0이면 울리지 않는다
+  - interval: 1m
+    input_series:
+      - series: 'fit_portaudit_unexpected_ports{mode="quick"}'
+        values: '0 0 1 1 1'
+      - series: 'fit_portaudit_unexpected_ports{mode="full"}'
+        values: '0+0x4'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: FitPortExposed
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: FitPortExposed
+        exp_alerts:
+          - exp_labels: {severity: critical, mode: quick}
+            exp_annotations:
+              summary: 밖에서 본 A에 22·80·443 말고 열린 포트가 있다(quick 스캔)
+              description: 예상 밖 열린 포트 1개. fit_portaudit_port_open 지표의 port 라벨이 그 번호다. 컨테이너 게시와 ufw를 본다
+              runbook: RB-01
+
+  # 포트 감사가 오래 안 돌면 울린다(quick 1시간, full 36시간)
+  - interval: 1m
+    input_series:
+      - series: 'fit_portaudit_last_scan_timestamp_seconds{mode="quick"}'
+        values: '0+0x200'
+      - series: 'fit_portaudit_last_scan_timestamp_seconds{mode="full"}'
+        values: '0+60x200'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: FitPortAuditStale
+        exp_alerts: []
+      - eval_time: 90m
+        alertname: FitPortAuditStale
+        exp_alerts:
+          - exp_labels: {severity: warning, mode: quick}
+            exp_annotations:
+              summary: 포트 노출 감사가 오래 돌지 않았다(quick 스캔)
+              description: 마지막 스캔 후 1h 30m 0s(quick은 15분마다, full은 매일). systemctl status fit-port-audit-quick.timer 를 본다
+              runbook: RB-01
+
+  # 포트 감사 지표가 없으면 30분 뒤 울린다
+  - interval: 1m
+    input_series:
+      - series: 'up{job="node"}'
+        values: '1+0x60'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: FitPortAuditMissing
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: FitPortAuditMissing
+        exp_alerts:
+          - exp_labels: {severity: warning, mode: quick}
+            exp_annotations:
+              summary: 포트 노출 감사 지표(fit_portaudit_quick.prom)가 없다
+              description: infra/ops/install.sh 가 끝났는지, 타이머와 /srv/vault/metrics 마운트를 본다
+              runbook: RB-01
