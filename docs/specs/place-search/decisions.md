@@ -144,7 +144,7 @@ Glossary: none · ADRs: none
 - Decision: FE가 네이버 지도 클라이언트 ID를 어떻게 얻는지(빌드 시점 `NEXT_PUBLIC_*` 환경변수, 런타임 설정 파일 등)는 보안 확인 후 정하며 미결이다. 이 기능은 키를 읽는 코드를 `PlaceMap.tsx` 안의 한 곳에 모으고, 값이 없으면 지도 영역을 비운다(D-13). 서버용 Client Secret은 브라우저로 내리지 않는다.
 
 ## D-30 검증 방식(자동완성 로직은 React와 분리해 테스트)
-- Status: settled
+- Status: superseded by D-68
 - Decision: BE는 엔드포인트 3개를 `@WebMvcTest`로 확인한다(Mock 시나리오 포함). FE는 Vitest만 추가해 근처 필터, 거리 계산, 자동완성 로직(디바운스, 취소, 늦은 응답 무시)을 단위 테스트한다. 자동완성 로직은 React와 무관한 모듈로 분리하고 훅은 그 모듈을 감싸는 얇은 껍데기로 두며, `jsdom`과 `@testing-library/react`는 추가하지 않는다. E2E는 하지 않는다.
 - Rejected: `jsdom`과 `@testing-library/react`로 훅을 직접 테스트 → 개발 의존성이 늘어난다.
 - Anchors: `fe/package.json#scripts` (modify) · `fe/src/lib/nearby.test.ts#nearby` (new)
@@ -211,7 +211,7 @@ Glossary: none · ADRs: none
 - Rejected: 좌표 서버 전송 → 위치정보법 신고 대상이 될 가능성(PRD D-03). 위치를 쓰지 않고 지역 안 상위 몇 개만 표시 → 팀이 기기 위치 사용을 택했다.
 
 ## D-43 FE 구조(팀 확인)
-- Status: settled
+- Status: superseded by D-66
 - Decision: UI 컴포넌트는 `src/app/components`, 화면이 아닌 로직(API 호출, DTO 타입, 근처 필터, 자동완성 로직과 훅)은 `src/lib`에 둔다. `features/` 폴더는 쓰지 않는다. 팀이 이 구조를 확인했다.
 - Rejected: `src/features/place-search` → 규칙이 없고, `src/app` 안 colocation이 Next 문서상 안전하며 파일 수가 적다.
 - Anchors: `fe/src/app/page.tsx#Home` (modify) · `fe/src/app/place/page.tsx#PlaceDetailPage` (new) · `fe/src/lib/placeApi.ts#searchPlaces` (new)
@@ -255,7 +255,7 @@ Glossary: none · ADRs: none
 - Rejected: 검색창 하나를 상태에 따라 새 검색과 후속으로 나눠 쓰기 → 디자인과 다르고 사용자가 헷갈린다.
 
 ## D-51 지도(네이버 웹 SDK, 순위 핀, 핀과 카드 연동)와 자동완성 디바운스
-- Status: settled
+- Status: superseded by D-70
 - Decision: 네이버 지도 웹 SDK(JavaScript v3)를 `PlaceMap` 한 컴포넌트에서만 `https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=<Client ID>`로 동적 로드한다(서브 모듈 없음). 키가 없거나 `window.navermap_authFailure`가 호출되면 지도 영역만 비우고 목록은 동작한다. "이 지역에서 검색"은 버튼을 눌렀을 때만 `map.getBounds()`를 읽는다. 핀과 카드에는 같은 순위 번호를 표시하고(디자인 5-04), 선택된 핀은 강조한다. 핀을 누르면 그 카드를 선택하고, 선택되지 않은 카드를 누르면 지도가 그 핀으로 이동하며 선택하고, 선택된 카드를 다시 누르면 장소 상세로 간다. 자동완성은 300ms 안팎 디바운스, 빈 입력 미요청, 이전 요청 취소, 늦게 온 응답 무시를 지킨다. 근거: 팀의 공식 지도 API 정리와 시험 페이지(`~/Desktop/A302/naver-map-official-api.md` §5.4, §5.6).
 - Rejected: 핀에 점수 표시 → 디자인은 순위 번호다. 근처 필터에 SDK의 `getDistance` 사용 → 지도 키가 없으면 쓸 수 없다. 결과에 맞춘 화면 맞춤(`fitBounds`) → 이번 범위에서 뺐다. geocoder 등 서브 모듈 → 필요 없고 검색어를 네이버로 보낸다.
 - Anchors: `fe/src/app/components/PlaceMap.tsx#PlaceMap` (new)
@@ -295,7 +295,7 @@ Glossary: none · ADRs: none
 - Anchors: `fe/src/app/config.json/route.ts#GET` (new)
 
 ## D-58 로컬에서 FE가 BE를 부르는 방법(개발 서버 전용 프록시)
-- Status: settled
+- Status: superseded by D-69
 - Decision: FE는 항상 상대 경로 `/api/v1/...`를 부른다. 운영에서는 Caddy가 `/api/*`를 BE로 보낸다. 로컬에서는 `next dev`일 때만 `next.config.ts`의 `rewrites`가 `/api/:path*`를 `BE_INTERNAL_URL`(인프라가 정한 FE 서버의 BE 주소 이름, 기본값 `http://localhost:8080`)로 넘긴다. 운영 빌드에는 rewrites가 없어 산출물에 `localhost`가 남지 않는다. BE는 CORS를 설정하지 않는다.
 - Rejected: 항상 켜는 rewrites와 `API_PROXY_TARGET` 이름 → 운영 빌드 산출물에 `localhost`가 남아 인프라의 산출물 검사에 걸리고, 인프라가 정한 이름과 다르다. BE CORS 허용 → 같은 출처를 유지하는 편이 단순하다.
 - Anchors: `fe/next.config.ts#nextConfig` (modify)
@@ -337,3 +337,74 @@ Glossary: none · ADRs: none
 - Status: settled
 - Decision: 리뷰 기능(S15P31A302-18)이 먼저 master에 올린 `be/.env.example`의 `SPRING_DATASOURCE_PASSWORD=REPLACE_ME`를 따른다. 개발자는 복사한 뒤 이 값을 `infra/local/.env`의 `FIT_DEV_APP_PASSWORD`로 바꾸며, 파일 주석에 이 방법을 적는다. `PLACE_MOCK_ENABLED=true`는 그대로 둔다.
 - Rejected: `infra/local` 예제와 같은 가짜 값(`local-app-password`)을 미리 넣기 → 팀이 정한 `REPLACE_ME` 표시(`docs/infra/contracts/env.md`의 "비밀이 아직 없다는 표시")와 어긋난다.
+
+## D-66 FE 구조는 팀 FE 구조(`app → domains → shared`)를 따른다
+- Status: settled
+- Decision: 팀이 S15P31A302-36에서 정한 FE 구조를 따른다. `src/app`에는 라우트와 레이아웃만 두고, 장소 검색과 상세는 도메인 `src/domains/place`에 `model`(타입과 순수 규칙, React와 fetch import 금지), `api`(`place-api.ts`의 BE 호출 함수와 `place-queries.ts`), `ui`(화면과 컴포넌트, 훅)로 나눈다. 도메인 안의 의존은 `ui → api → model` 방향만 쓴다. 도메인을 모르는 코드는 `src/shared`에 두며 `/config.json`을 받는 모듈은 `src/shared/lib/runtime-config.ts`다. 파일 이름은 kebab-case이고 테스트는 소스 옆 `*.test.ts(x)`이며 barrel 파일은 만들지 않는다. 같은 도메인 안은 상대 경로로, 그 밖은 `@/` 경로로 import한다(ESLint가 `src/domains`에서 `@/domains`를 막는다). BE 호출은 공통 `request`(`/api` 접두, timeout, `ApiError`)를 쓴다. DTO 타입은 처음에는 도메인 모델과 나누지 않고 `model`에 둔다.
+- Rejected: D-43의 `src/app/components`와 `src/lib` → 팀이 master에 다른 구조를 올리고 ESLint로 강제한다. `fetch` 직접 호출 → 공통 클라이언트가 오류와 timeout을 한 곳에서 다룬다.
+- Anchors: `fe/src/app/page.tsx#Home` (modify) · `fe/src/app/place/page.tsx#PlaceDetailPage` (new) · `fe/src/domains/place/api/place-api.ts#searchPlaces` (new) · `fe/src/shared/api/client.ts#request` (reuse)
+
+## D-67 서버 상태는 TanStack Query로, 화면 상태는 `model`의 store로 둔다
+- Status: settled
+- Decision: 세 API의 응답은 TanStack Query 캐시에 둔다. 쿼리 키와 `queryOptions`는 `place-queries.ts`에서만 만들고 `ui`는 `useQuery(placeQueries.detail(id))`처럼 그것을 넘겨 훅을 부른다. 자동완성은 300ms 늦춘 입력을 키로 하는 쿼리이고 Query가 넘기는 `signal`로 이전 요청을 취소하며 키가 바뀐 응답은 화면에 쓰지 않는다. 검색은 요청 기록 항목마다 무한 쿼리 하나(키에 항목 id)를 두고 `staleTime`과 `gcTime`을 무한으로 두어, "결과 보기"와 상세에서 돌아오기가 캐시로 동작한다. 첫 페이지는 성공했을 때만 기록에 넣기 위해 화면을 바꾸기 전에 받아 둔다. 재시도는 공통 `QueryClient` 기본값(5xx와 연결 실패만 두 번)을 따른다. 서버가 모르는 화면 상태(요청 기록의 메타 정보, 지금 보는 항목, 선택된 카드, 위치 결과, 지역 고정 상태, 장소별 최근 카드)는 React 없는 모듈 `src/domains/place/model/search-store.ts`에 두고, `ui`의 훅이 `useSyncExternalStore`로 화면에 잇는다. 캐시와 store 모두 메모리라 재로드하면 사라진다(보관 방식은 D-27대로 미결).
+- Rejected: store가 검색 페이지와 커서를 직접 들기 → 서버 상태가 Query 밖에 따로 생겨 팀 표준과 갈린다. `place-queries.ts`가 `usePlaceDetail` 같은 훅까지 내보내기 → 팀이 키와 `queryOptions`만 모으는 쪽을 골랐다. store를 `ui`에 두기 → React 없는 모듈이라 `model`의 import 규칙(React, fetch 금지)을 지키고, `model`에 두면 React 없이 테스트할 수 있다. 화면 상태를 `useState`로 두기 → 상세로 이동하면 검색 화면이 사라지며 상태가 함께 사라진다.
+- Anchors: `fe/src/domains/place/api/place-queries.ts#placeQueries` (new)
+
+## D-68 FE 테스트는 Vitest에 jsdom과 Testing Library를 더한다
+- Status: settled
+- Decision: 이미 들어온 Vitest에 개발 의존성 `jsdom`, `@testing-library/react`와 그 필수 동반 패키지 `@testing-library/dom`을 더한다. 순수 로직(근처 필터, 거리, 요청 본문, store)과 API 함수는 Node 환경에서, 훅(자동완성의 디바운스, 취소, 늦은 응답 무시)과 일부 화면은 jsdom 환경에서 렌더링해 테스트한다. `@/` 경로와 테스트 환경을 위한 Vitest 설정은 구현 때 정한다. E2E는 하지 않는다.
+- Rejected: jsdom 없이 훅을 React와 무관한 모듈로 떼어 테스트(D-30) → 사용자가 훅과 화면을 직접 테스트하기로 했다.
+- Anchors: `fe/package.json#devDependencies` (modify) · `fe/src/domains/place/model/nearby.test.ts#nearby` (new)
+
+## D-69 로컬에서 FE가 BE를 부르는 방법(이미 master에 있는 개발 서버 프록시)
+- Status: settled
+- Decision: FE는 항상 상대 경로 `/api/v1/...`를 부른다. 운영에서는 Caddy가 `/api/*`를 BE로 보낸다. 로컬에서는 `next dev`일 때만 `next.config.ts`의 `rewrites`가 `/api/:path*`를 `BE_INTERNAL_URL`(기본값 `http://localhost:8080`)로 넘긴다. 이 설정은 S15P31A302-36에서 master에 들어왔으므로 고치지 않고 그대로 쓴다. 운영 빌드에는 rewrites가 없어 산출물에 `localhost`가 남지 않는다. BE는 CORS를 설정하지 않는다.
+- Rejected: 항상 켜는 rewrites → 운영 빌드 산출물에 `localhost`가 남는다. BE CORS 허용 → 같은 출처를 유지하는 편이 단순하다.
+- Anchors: `fe/next.config.ts#nextConfig` (reuse)
+
+## D-70 지도(네이버 웹 SDK, 순위 핀, 핀과 카드 연동)와 자동완성 디바운스(`PlaceMap`은 `place` 도메인 ui)
+- Status: settled
+- Decision: D-51의 내용을 그대로 두고 `PlaceMap`의 위치만 D-66의 구조로 옮긴다. 네이버 지도 웹 SDK(JavaScript v3)를 `PlaceMap` 한 컴포넌트에서만 `https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=<Client ID>`로 동적 로드한다(서브 모듈 없음). 키가 없거나 `window.navermap_authFailure`가 호출되면 지도 영역만 비우고 목록은 동작한다. "이 지역에서 검색"은 버튼을 눌렀을 때만 `map.getBounds()`를 읽는다. 핀과 카드에는 같은 순위 번호를 표시하고(디자인 5-04), 선택된 핀은 강조한다. 핀을 누르면 그 카드를 선택하고, 선택되지 않은 카드를 누르면 지도가 그 핀으로 이동하며 선택하고, 선택된 카드를 다시 누르면 장소 상세로 간다. 자동완성은 300ms 안팎 디바운스, 빈 입력 미요청, 이전 요청 취소, 늦게 온 응답 무시를 지킨다. 근거: 팀의 공식 지도 API 정리와 시험 페이지(`~/Desktop/A302/naver-map-official-api.md` §5.4, §5.6).
+- Rejected: 핀에 점수 표시 → 디자인은 순위 번호다. 근처 필터에 SDK의 `getDistance` 사용 → 지도 키가 없으면 쓸 수 없다. 결과에 맞춘 화면 맞춤(`fitBounds`) → 이번 범위에서 뺐다. geocoder 등 서브 모듈 → 필요 없고 검색어를 네이버로 보낸다.
+- Anchors: `fe/src/domains/place/ui/place-map.tsx#PlaceMap` (new)
+
+## D-71 화면 스타일은 S15P31A302-35의 토큰과 `shared/ui`를 따른다
+- Status: settled
+- Decision: 화면의 색, 글자, radius, 그림자, 모션은 S15P31A302-35가 `fe/src/app/globals.css`에 둔 semantic 토큰만 쓰고, 그 작업의 ESLint 디자인 시스템 규칙(날색과 임의 값 금지, `shared/ui` 컴포넌트는 variant와 size로 모양을 고르고 `className`으로는 배치만 바꾼다)을 지킨다. `shared/ui`에 있는 것(Tabs, BottomSheet, Toast, EmptyState, Chip, Tag, Fab, IconButton, TextField, Icon, `skeleton` 유틸 등)은 그대로 쓴다. 모달 시트인 BottomSheet는 ⓘ 시트와 요청 기록에 쓰고, 지도 위에 늘 떠 있는 결과 패널(중간, 전체)은 모달이 아니므로 도메인 ui에서 만든다. `shared/ui`에 없는 장소 전용 모양(장소 카드, 지도 핀과 순위 배지, 핏 점수, 검색창, 메뉴 카드, 결과 패널)은 `src/domains/place/ui`에 토큰으로 만든다. 기준은 Figma 디자인 시스템 페이지(파일 `VC2HKXkesDRQjbLoqey1B5`, node `80:33933`)와 화면 5-xx, 6-xx이며 픽셀 단위 일치는 요구하지 않는다.
+- Rejected: 장소 전용 컴포넌트를 `shared/ui`에 추가 → 다른 도메인이 쓰지 않고 공통 UI 담당의 영역이다. 이 기능에서 토큰을 따로 정의 → -35의 토큰과 겹친다.
+- Anchors: `fe/src/shared/ui/layout/tabs.tsx#Tabs` (reuse) · `fe/src/shared/ui/overlay/bottom-sheet.tsx#BottomSheet` (reuse) · `fe/src/shared/ui/overlay/toast.tsx#useToast` (reuse)
+
+## D-72 화면 문구와 날짜·입력 규칙은 `model`의 순수 함수 파일로 둔다
+- Status: settled
+- Decision: D-66의 `model`(타입과 순수 규칙)에 `place-labels.ts`(업종, 영업 상태, 시설, 근거 출처의 한글 이름), `opening-hours.ts`(`Asia/Seoul` 기준 오늘 영업시간과 오늘 안내, 요일별 영업시간 문구), `highlight.ts`(자동완성의 입력 일치 부분 나누기), `place-id.ts`(상세 `?id` 검사)를 더한다. 모두 React와 fetch 없이 Node 환경 Vitest로 테스트한다. 요청 기록 줄의 업종 이름이 `search-store.ts`에서 필요해 한글 이름은 `model`에 둔다.
+- Rejected: `ui` 파일 안의 비공개 함수 → 화면을 렌더링해야만 경계값(시간대, 안전한 정수 범위)을 확인할 수 있다. `nearby.ts`나 `search-store.ts`에 합치기 → 두 파일의 역할(거리, 화면 상태)과 맞지 않는다.
+
+## D-73 결과 0건 응답은 결과 패널에 보여 준다
+- Status: settled
+- Decision: 첫 페이지 응답에 `emptyReason`이 있어도 성공한 요청이므로 요청 기록에 "결과 0곳"으로 쌓고 지금 보는 요청이 된다. 결과 패널은 카드 목록 대신 `emptyReason`의 원인과 수정 제안을 보여 주고, 패널 아래 후속 입력창과 "새 검색"은 그대로 둔다. D-50의 "결과가 없을 때의 위쪽 검색창"은 지금 보는 요청이 없을 때(처음, "새 검색" 뒤)를 말한다. 기준은 Figma 5-E05, 5-E06이다.
+- Rejected: 0건이면 위쪽 검색창으로 돌아가기 → 0건 결과를 후속 조건으로 좁히거나 넓힐 수 없고, 요청 기록의 "결과 0곳"과 맞지 않는다.
+
+## D-74 요청 기록의 이어 검색 표시에서 첫 번째 요청은 "첫 요청"이라고 쓴다
+- Status: settled
+- Decision: 기준 요청이 직전 요청이 아닐 때의 표시는 기준 요청이 1번째면 "첫 요청에서 이어 검색", 그 밖에는 "<n>번째 요청에서 이어 검색"이다(Figma 5-07).
+- Rejected: 모든 순서를 "<n>번째"로 쓰기 → "1번째"는 쉬운 한국어가 아니고 디자인과 다르다.
+
+## D-75 FE 환경변수 예제는 `fe/.env.example`에 둔다
+- Status: settled
+- Decision: `be/.env.example`처럼 `fe/.env.example`에 `NAVER_MAP_CLIENT_ID`(빈 값)와 선택 값 `APP_ENV`, `BE_INTERNAL_URL`을 설명과 함께 둔다. 개발자는 `fe/.env.local`로 복사해 채운다. `fe/.gitignore`의 `.env*`가 예제까지 막으므로 `!.env.example`을 더한다.
+- Rejected: 예제 없이 spec과 README에만 적기 → 새로 받은 사람이 지도 키 이름을 찾기 어렵다.
+
+## D-76 "이 지역에서 검색" 항목은 기준 요청의 문장을 그대로 쓴다
+- Status: settled
+- Decision: 요청 기록에서 "이 지역에서 검색"으로 쌓인 항목의 문장은 기준 요청의 문장 그대로이고 " (이 지역)"을 붙이지 않는다. 기준 요청은 그때 보던 요청이다. 같은 문장의 항목은 업종과 곳 수, 시각으로 구분한다.
+- Rejected: 기준 문장 뒤에 " (이 지역)"을 붙이기(처음 spec 27번) → 입력하지 않은 말이 문장에 섞이고, 연달아 누르면 "(이 지역) (이 지역)"이 쌓인다. 버튼이 동작했는지는 화면 전환과 기록 줄로 이미 알 수 있다.
+
+## D-77 "이 지역에서 검색" 버튼은 사용자가 지도를 움직인 뒤에만 보인다
+- Status: settled
+- Decision: 네이버 지도의 "현 지도에서 검색"처럼, 결과가 있을 때 사용자가 지도를 끌거나(`dragend`) 확대·축소한(`zoom_changed`) 뒤에만 버튼을 보인다. 버튼을 누르거나, 보는 결과가 바뀌거나(새 요청, "결과 보기"), "새 검색"을 누르면 다시 숨긴다. 카드 선택이나 "내 위치"로 지도를 `panTo`로 옮길 때는 보이지 않는다. 지도 영역은 D-70대로 버튼을 누를 때만 읽는다.
+- Rejected: 결과가 있으면 버튼을 늘 보이기 → 지도를 움직이지 않아도 떠 있어 같은 영역을 다시 검색하게 만든다. 지도 이동마다 자동으로 다시 검색 → D-70이 버튼을 누를 때만 지도 영역을 읽기로 했다.
+
+## D-78 요청 기록이 있으면 위쪽 검색창에도 요청 기록 버튼을 둔다
+- Status: settled
+- Decision: "새 검색"으로 위쪽 검색창에 돌아와도 이번 세션의 요청 기록은 남으므로, 기록이 하나 이상이면 위쪽 검색창 오른쪽에 요청 기록 버튼을 두어 같은 시트(5-07)를 연다. 기록이 없으면 버튼을 그리지 않는다.
+- Rejected: 결과 패널에만 요청 기록 버튼 두기 → "새 검색" 뒤에는 남아 있는 기록을 열 방법이 없다.
