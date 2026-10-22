@@ -19,8 +19,8 @@
 | `edge` | `infra/edge/edge.env.example` | 엣지 Caddy(`/etc/fit/edge.env`). compose가 `--env-file`로 읽는다 |
 | `data` | `infra/data/data.env.example` | 데이터 스택(`infra/data/compose.data.yml`)과 DB·버킷 초기화 스크립트(`/etc/fit/data.env`). 환경별 자격이 앱 env와 같아야 한다 |
 | `backup` | `infra/backup/backup.env.example` | A의 백업 스크립트와 타이머(`/etc/fit/backup.env`) |
-
-이 문서를 만든 계획 이후의 계획이 `obs`, `ops` 그룹을 같은 표에 더한다(design.md 13.2절의 파일 구분).
+| `obs` | `infra/obs/obs.env.example` | A의 관측 스택(`/etc/fit/obs.env`). compose가 `--env-file`로 읽고, 일일 점검 요약이 웹훅 주소를 읽는다 |
+| `ops` | `infra/ops/ops.env.example` | B의 감시 스택과 포트 노출 감사(`/etc/fit/ops.env`) |
 
 ## 키 목록
 
@@ -74,12 +74,20 @@
 | `POSTHOG_KEY` | fe | X | PostHog 공개 키. `/config.json`의 `posthogKey`로 나간다 |
 | `POSTHOG_HOST` | fe | X | PostHog 호스트. `/config.json`의 `posthogHost`로 나간다 |
 | `PUSH_PUBLIC_KEY` | fe | X | 웹 푸시 공개 키. `/config.json`의 `pushPublicKey`로 나간다 |
-| `PROD_HOST` | edge | O | prod 호스트명(예: `fit.<도메인>`). 호스트마다 인증서를 따로 받는다 |
-| `DEV_HOST` | edge | O | dev 호스트명(예: `dev.fit.<도메인>`). prod와 다른 호스트여야 쿠키·서비스 워커가 분리된다 |
+| `PROD_HOST` | edge, ops | O | prod 호스트명(예: `fit.<도메인>`). 호스트마다 인증서를 따로 받는다. ops에서는 B가 프로브하고 포트를 감사할 A의 주소다 |
+| `DEV_HOST` | edge, ops | O | dev 호스트명(예: `dev.fit.<도메인>`). prod와 다른 호스트여야 쿠키·서비스 워커가 분리된다. ops에서는 B가 인증서를 볼 A의 dev 주소다 |
 | `ACME_EMAIL` | edge | O | 인증서 발급 알림을 받을 이메일 |
 | `ACME_MODE` | edge | O | `staging`이면 staging CA만 쓴다. `production`이면 기본 이슈어(Let's Encrypt, ZeroSSL)를 쓴다 |
 | `HSTS_MODE` | edge | O | `off` 또는 `on`. 운영 인증서가 확정된 뒤에만 `on`으로 바꾼다 |
 | `DEV_GATE_KEY` | edge | O | dev 접근 키. `/?k=<키>`로 접속하면 쿠키를 받는다. 영문자·숫자·`_`·`-` 32자 이상, 비밀 |
+| `B_IP` | edge, obs | O | 서버 B의 공인 IP. edge에서는 `/_ops` 접근을 이 주소로 제한하고(`remote_ip`, CIDR도 된다), obs에서는 A가 B의 22번 포트를 프로브할 대상이다. 문서나 저장소에 적지 않는다 |
+| `OPS_BASIC_AUTH_USER` | edge, ops | O | A의 `/_ops` basic auth 사용자 이름. edge와 ops가 같아야 한다. 영문·숫자·`._-` 64자 이하 |
+| `OPS_BASIC_AUTH_HASH` | edge | O | `/_ops` basic auth 비밀번호의 해시. `caddy hash-password` 출력을 base64로 인코딩한다(원본의 `$`가 env 형식 규칙에 걸린다. Caddy는 base64 형태도 받는다). ops의 비밀번호와 짝이다 |
+| `OPS_BASIC_AUTH_PASSWORD` | ops | O | `/_ops` basic auth 비밀번호(평문). 영문·숫자·`._~-`만 쓴 16자 이상, 비밀 |
+| `MATTERMOST_WEBHOOK_URL` | obs, ops | O | 알림을 받을 Mattermost 수신 웹훅(`http(s)://`). obs에서는 prod와 A 전체 알림과 일일 점검 요약, ops에서는 B의 알림이 간다. 비밀 |
+| `MATTERMOST_WEBHOOK_URL_DEV` | obs | O | dev 알림을 받을 Mattermost 수신 웹훅(채널을 나눈다). 비밀 |
+| `GRAFANA_ADMIN_PASSWORD` | obs | O | Grafana admin 비밀번호. 비밀 |
+| `FIT_MONITOR_PASSWORD` | data, obs | O | `fit_monitor` 비밀번호(`pg_monitor` 권한. postgres_exporter가 통계를 읽는다). `data.env`와 `obs.env`의 값이 같아야 한다 |
 | `FIT_PROD_APP_PASSWORD` | data | O | `fit_prod_app` 비밀번호. `prod.env`의 `SPRING_DATASOURCE_PASSWORD`와 같아야 한다 |
 | `REDIS_PROD_PASSWORD` | data | O | `redis-prod` 비밀번호. `prod.env`의 `SPRING_DATA_REDIS_PASSWORD`와 같아야 한다 |
 | `REDIS_DEV_PASSWORD` | data | O | `redis-dev` 비밀번호. `dev.env`의 `SPRING_DATA_REDIS_PASSWORD`와 같아야 한다 |
@@ -104,6 +112,8 @@
 | `GARAGE_ADMIN_TOKEN` | local, data | O | Garage 관리 API 토큰 |
 
 로컬 그룹의 값은 개발용 가짜 값이다. 서버 값으로 쓰지 않는다.
+
+`obs`와 `ops` 그룹의 값은 시작 때 `obs-init`, `ops-init`(`render.py`)이 검사한다. 비었거나 `REPLACE_ME`이면 스택이 뜨지 않는다.
 
 `data` 그룹의 값 형식은 스크립트가 검사한다(`infra/data/lib.sh`, `init-garage.sh`). 비밀번호와 토큰(`*_PASSWORD`, `GARAGE_ADMIN_TOKEN`)은 영문·숫자·`._~-`만 쓴 16자 이상이고, `GARAGE_RPC_SECRET`과 `S3_*_SECRET_KEY`는 16진수 64자리, `S3_*_ACCESS_KEY`는 `GK` + 16진수 24자리다.
 

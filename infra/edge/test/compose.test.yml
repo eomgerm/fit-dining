@@ -109,12 +109,27 @@ services:
     healthcheck: *fe-health
     networks: [net-dev]
 
+  # A의 감시 체계 대역(/_ops 시험). 실제 서버에서는 fit-obs의 prometheus와 alertmanager가 net-obs에 있다
+  prometheus:
+    <<: *mock
+    command: [python, /mock/ops_mock.py, "9090", Prometheus]
+    networks: [net-obs]
+
+  alertmanager:
+    <<: *mock
+    command: [python, /mock/ops_mock.py, "9093", Alertmanager]
+    networks: [net-obs]
+
 volumes:
   web:
   state:
 
-# net-edge만 로컬 스택(garage가 있는 망)에 붙고, 나머지 망은 이 시험 프로젝트가 만든다
+# net-edge만 로컬 스택(garage가 있는 망)에 붙고, 나머지 망은 이 시험 프로젝트가 만든다.
+# net-obs는 부분망을 고정한다(B의 IP를 흉내 내는 시험 컨테이너에 고정 IP를 주려는 것이다)
 networks:
   net-prod: !override {}
   net-dev: !override {}
-  net-obs: !override {}
+  net-obs: !override
+    ipam:
+      config:
+        - subnet: 10.213.99.0/24

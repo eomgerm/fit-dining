@@ -82,9 +82,42 @@
 	}
 }
 
+# 감시 체계 감시(설계 5.2절). prod 호스트에서만 열리고, B의 IP(remote_ip)와 basic auth를 둘 다 통과해야 200이다.
+# 어느 하나라도 틀리면 404다(경로가 있다는 것도 알리지 않는다). 내부 /-/healthy만 노출하고 그 밖의 /_ops 경로는 없다.
+# basic_auth를 rewrite보다 앞에 두려고 route로 순서를 고정한다(그래야 오류 처리기가 원래 경로를 본다)
+(ops_route) {
+	@ops_{args[0]} {
+		path /_ops/{args[0]}/healthy
+		remote_ip {$B_IP}
+	}
+	handle @ops_{args[0]} {
+		route {
+			basic_auth {
+				{$OPS_BASIC_AUTH_USER} {$OPS_BASIC_AUTH_HASH}
+			}
+			rewrite * /-/healthy
+			reverse_proxy {args[1]}
+		}
+	}
+}
+
 # prod
 {$PROD_HOST} {
 	import common
+	import ops_route prometheus prometheus:9090
+	import ops_route alertmanager alertmanager:9093
+	@ops_other path /_ops /_ops/*
+	handle @ops_other {
+		respond 404
+	}
+	# basic auth 실패(401)는 404로 바꾼다. WWW-Authenticate 헤더도 지워 /_ops가 있다는 단서를 주지 않는다
+	handle_errors 401 {
+		@ops path /_ops/*
+		handle @ops {
+			header -WWW-Authenticate
+			respond 404
+		}
+	}
 	import env_routes prod
 }
 

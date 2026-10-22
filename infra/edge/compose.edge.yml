@@ -14,6 +14,9 @@ services:
       ACME_MODE: ${ACME_MODE:?edge.env에 ACME_MODE(staging 또는 production)가 없다}
       HSTS_MODE: ${HSTS_MODE:?edge.env에 HSTS_MODE(off 또는 on)가 없다}
       DEV_GATE_KEY: ${DEV_GATE_KEY:?edge.env에 DEV_GATE_KEY가 없다}
+      B_IP: ${B_IP:?edge.env에 B_IP가 없다}
+      OPS_BASIC_AUTH_USER: ${OPS_BASIC_AUTH_USER:?edge.env에 OPS_BASIC_AUTH_USER가 없다}
+      OPS_BASIC_AUTH_HASH: ${OPS_BASIC_AUTH_HASH:?edge.env에 OPS_BASIC_AUTH_HASH가 없다}
     ports:
       - "80:80"
       - "443:443"

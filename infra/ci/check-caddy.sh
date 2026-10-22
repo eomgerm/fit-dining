@@ -21,6 +21,10 @@ set -a
 # shellcheck source=/dev/null
 . infra/edge/edge.env.example
 set +a
+# 예제의 자리표시자(REPLACE_ME)는 Caddy가 받아들이지 않는다(B_IP는 IP여야 하고 해시는 bcrypt의 base64여야 한다). 문서용 IP와 즉석에서 만든 해시로 바꿔 검사한다
+B_IP=203.0.113.9
+OPS_BASIC_AUTH_HASH="$(caddy hash-password --plaintext check-only | base64 | tr -d '\n')"
+export B_IP OPS_BASIC_AUTH_HASH
 for mode in staging production; do
   for hsts in off on; do
     if ! ACME_MODE="$mode" HSTS_MODE="$hsts" caddy validate --config "$CONF/Caddyfile" --adapter caddyfile >/dev/null 2>&1; then

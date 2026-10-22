@@ -90,6 +90,15 @@ check_site() { # check_site 라벨 URL [curl 인자...]
 
 check_site prod "$PROD"
 
+# /_ops는 B의 IP와 basic auth가 있어야 열린다. 여기서(B가 아닌 곳에서) 부르면 자격이 있어도 404이고 /_ops가 있다는 단서(WWW-Authenticate)가 없다
+for p in /_ops/prometheus/healthy /_ops/alertmanager/healthy; do
+  fetch "$PROD$p"
+  expect "prod: $p 는 B 밖에서 404" "$(is "$STATUS" 404)"
+  expect "prod: $p 의 404는 WWW-Authenticate 헤더가 없다" "$(is "$(header_value www-authenticate)" "")"
+  fetch "$PROD$p" -u "x:y"
+  expect "prod: $p 는 자격을 줘도 B 밖에서는 404" "$(is "$STATUS" 404)"
+done
+
 if [ -n "$HTTP_URL" ]; then
   fetch "$HTTP_URL/"
   expect "http→https 리다이렉트(3xx)" "$(has "301 302 307 308" "$STATUS")"

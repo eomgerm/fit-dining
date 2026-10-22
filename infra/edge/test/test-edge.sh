@@ -39,6 +39,11 @@ export FIT_LOCAL_PROJECT="$LOCAL_PROJECT" FIT_LOCAL_ENV=infra/local/local.env.ex
 # prod와 dev는 호스트로 나뉜다. dev.localhost도 Caddy가 내부 CA로 인증서를 발급한다
 export PROD_HOST=localhost DEV_HOST=dev.localhost ACME_EMAIL=ops@example.test ACME_MODE=production HSTS_MODE=off DEV_GATE_KEY="$KEY"
 export FIT_NET_EDGE="${LOCAL_PROJECT}_default"
+# /_ops(설계 5.2절): B의 IP는 시험 망 net-obs(고정 부분망)의 고정 IP다. 비밀번호는 시험용 값이고 해시는 up에서 만든다(bcrypt는 매번 달라진다)
+OPS_PW="edge-test-ops-password-aaaaaaaa"
+OPS_B_IP=10.213.99.50
+OPS_OTHER_IP=10.213.99.51
+export B_IP="$OPS_B_IP" OPS_BASIC_AUTH_USER=opsuser OPS_BASIC_AUTH_HASH="${OPS_BASIC_AUTH_HASH:-placeholder}"
 export FIT_EDGE_TEST_HTTP_PORT="$HTTP_PORT" FIT_EDGE_TEST_HTTPS_PORT="$HTTPS_PORT"
 # edgectl.sh도 같은 인자로 compose를 부른다(서버에서 쓰는 reload 경로를 그대로 시험한다)
 export FIT_EDGE_COMPOSE_ARGS="-p $EDGE_PROJECT -f infra/edge/compose.edge.yml -f infra/edge/test/compose.test.yml"
@@ -56,6 +61,9 @@ up() {
   garage bucket info fit-prod-photos >/dev/null 2>&1 || garage bucket create fit-prod-photos >/dev/null
   garage bucket allow --read --write --owner fit-prod-photos --key "$S3_ACCESS_KEY" >/dev/null
   garage bucket website --allow fit-prod-photos >/dev/null
+  # caddy hash-password의 출력을 base64로 인코딩해 env에 둔다(원본의 $가 env 형식 규칙에 걸린다. Caddy는 base64 형태도 받는다)
+  OPS_BASIC_AUTH_HASH="$(docker run --rm "$CADDY_IMAGE" caddy hash-password --plaintext "$OPS_PW" | tr -d '\r\n' | base64 | tr -d '\n')"
+  export OPS_BASIC_AUTH_HASH
   dc up -d --wait
   echo "엣지 시험 환경이 떴다: https://$PROD_HOST:$HTTPS_PORT (prod), https://$DEV_HOST:$HTTPS_PORT (dev)"
 }
@@ -226,6 +234,40 @@ check_blue_green() {
   ok_if "전환: 모두 blue로 되돌렸다" "$(is "$(active_be)$(active_fe)" blueblue)"
 }
 
+# ops_get 클라이언트IP SNI호스트 경로 [사용자:비밀번호]: net-obs의 고정 IP를 가진 컨테이너에서 엣지의 /_ops를 부른다(B를 흉내 낸다)
+ops_get() {
+  local cip="$1" w ccaddy
+  shift
+  w="$(pwd -W 2>/dev/null || pwd)"
+  ccaddy="$(docker inspect -f "{{(index .NetworkSettings.Networks \"${EDGE_PROJECT}_net-obs\").IPAddress}}" "$(dc ps -q caddy)" | tr -d '\r\n')"
+  docker run --rm --network "${EDGE_PROJECT}_net-obs" --ip "$cip" -v "$w/infra/edge/test/ops_probe.py:/p.py:ro" "$PYTHON_IMAGE" python /p.py "$ccaddy" "$@"
+}
+
+check_ops_routes() {
+  local out svc p good="opsuser:$OPS_PW"
+  for svc in prometheus alertmanager; do
+    out="$(ops_get "$OPS_B_IP" "$PROD_HOST" "/_ops/$svc/healthy" "$good")"
+    ok_if "/_ops($svc): B의 IP와 올바른 자격이면 200이고 upstream의 /-/healthy 응답이다" "$(is "$(has "$out" '200 ')$(has "$out" 'is Healthy')" 11)"
+  done
+  out="$(ops_get "$OPS_B_IP" "$PROD_HOST" /_ops/prometheus/healthy "opsuser:wrong-password-aaaaaaaa")"
+  ok_if "/_ops: 틀린 비밀번호는 404이고 WWW-Authenticate가 없다" "$(has "$out" "404 www-authenticate=no body=''")"
+  out="$(ops_get "$OPS_B_IP" "$PROD_HOST" /_ops/prometheus/healthy "wrong:$OPS_PW")"
+  ok_if "/_ops: 틀린 사용자 이름은 404이고 WWW-Authenticate가 없다" "$(has "$out" "404 www-authenticate=no body=''")"
+  out="$(ops_get "$OPS_B_IP" "$PROD_HOST" /_ops/prometheus/healthy)"
+  ok_if "/_ops: 자격이 없으면 401이 아니라 404이고 WWW-Authenticate가 없다" "$(has "$out" "404 www-authenticate=no body=''")"
+  out="$(ops_get "$OPS_OTHER_IP" "$PROD_HOST" /_ops/prometheus/healthy "$good")"
+  ok_if "/_ops: 올바른 자격이어도 B의 IP가 아니면 404다" "$(has "$out" "404 www-authenticate=no body=''")"
+  ok_if "/_ops: 호스트(B의 IP가 아닌 곳)에서도 자격을 줘도 404다" "$(is "$(http_code -u "$good" "$PROD/_ops/prometheus/healthy")" 404)"
+  for p in /_ops /_ops/ /_ops/prometheus/ /_ops/prometheus/healthy/x /_ops/prometheus/-/healthy /_ops/prometheus/api/v1/targets /_ops/prometheus/metrics /_ops/alertmanager/api/v2/status; do
+    out="$(ops_get "$OPS_B_IP" "$PROD_HOST" "$p" "$good")"
+    ok_if "/_ops: B의 IP와 올바른 자격이어도 $p 는 없다(404, upstream에 닿지 않는다)" "$(has "$out" "404 www-authenticate=no body=''")"
+  done
+  out="$(ops_get "$OPS_B_IP" "$DEV_HOST" /_ops/prometheus/healthy "$good")"
+  ok_if "/_ops: dev 호스트에는 없다(404)" "$(has "$out" "404 www-authenticate=no body=''")"
+  if (unset B_IP; dc config >/dev/null 2>&1); then fail "/_ops: B_IP 없이도 compose가 설정을 만들었다"; else pass "/_ops: B_IP가 없으면 compose가 거부한다(조용히 열리지 않는다)"; fi
+  if (unset OPS_BASIC_AUTH_HASH; dc config >/dev/null 2>&1); then fail "/_ops: OPS_BASIC_AUTH_HASH 없이도 compose가 설정을 만들었다"; else pass "/_ops: OPS_BASIC_AUTH_HASH가 없으면 compose가 거부한다"; fi
+}
+
 check_internal_and_logs() {
   local logs
   ok_if "내부 리스너: dev의 FE 서버는 dev BE를 본다" "$(is "$(body "${GATE[@]}" "$DEV/ssr-probe" | sed -nE 's/^be=(.*)$/\1/p')" dev)"
@@ -255,6 +297,7 @@ verify() {
   check_photos
   check_static_pool
   check_streaming
+  check_ops_routes
   check_blue_green
   check_internal_and_logs
   if [ "$FAILED" -gt 0 ]; then

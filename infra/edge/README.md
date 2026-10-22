@@ -22,6 +22,7 @@
                      ├ /api/*, /healthz               ─→ BE(활성 색)
                      ├ /fit-<환경>-photos/*           ─→ garage S3 API(업로드)
                      ├ /photos/<환경>/confirmed/*     ─→ garage 웹 엔드포인트(읽기)
+                     ├ /_ops/prometheus|alertmanager/healthy ─→ A의 Prometheus·Alertmanager(prod 호스트만, B의 IP와 basic auth가 있어야 하고 아니면 404)
                      └ 그 외 전부                     ─→ FE(활성 색, Next.js SSR)
 FE 서버 ─ caddy:8081(prod), caddy:8082(dev) ─→ BE(활성 색)
 ```
@@ -38,8 +39,8 @@ FE 서버가 BE를 부를 때는 Caddy의 내부 리스너를 거친다(`BE_INTE
 | `state-sample/` | 활성 색 upstream 파일의 형식 견본(환경 × 서비스 네 개) |
 | `edge.env.example` | `/etc/fit/edge.env`의 키(계약은 [env.md](../../docs/infra/contracts/env.md)의 edge 그룹) |
 | `edgectl.sh` | 상태, 검사, reload |
-| `verify-edge.sh` | 라우팅, 캐시, 헤더, dev 게이트를 HTTP로 점검한다 |
-| `test/` | 노트북에서 엣지를 시험하는 환경(목 BE·FE, 시험용 풀, 로컬 스택의 garage) |
+| `verify-edge.sh` | 라우팅, 캐시, 헤더, dev 게이트, `/_ops`가 B 밖에서는 404인지를 HTTP로 점검한다 |
+| `test/` | 노트북에서 엣지를 시험하는 환경(목 BE·FE, 시험용 풀, 로컬 스택의 garage, `/_ops`용 감시 체계 대역과 B의 IP를 흉내 내는 프로브) |
 
 ## 바꿀 곳
 
@@ -50,6 +51,15 @@ FE 서버가 BE를 부를 때는 Caddy의 내부 리스너를 거친다(`BE_INTE
 | BE·FE 활성 색 전환 | `/srv/fit/state/upstream-<환경>-<be\|fe>.caddy`(배포 스크립트가 쓴다)와 `edgectl.sh reload` |
 | 인증서 단계, HSTS | `edge.env`의 `ACME_MODE`, `HSTS_MODE` |
 | dev 접근 키 교체 | `edge.env`의 `DEV_GATE_KEY`를 바꾸고 caddy 컨테이너를 다시 만든다(`docker compose up -d`) |
+| B의 IP, `/_ops` 자격 교체 | `edge.env`의 `B_IP`(CIDR도 된다), `OPS_BASIC_AUTH_USER`, `OPS_BASIC_AUTH_HASH`를 바꾸고 caddy 컨테이너를 다시 만든다. 자격은 B의 `ops.env`와 짝이다([ops/README.md](../ops/README.md)의 자격 만들기) |
+
+## /_ops (감시 체계 감시)
+
+prod 호스트의 `/_ops/prometheus/healthy`, `/_ops/alertmanager/healthy`만 열린다(Caddyfile의 `ops_route`). 요청은 내부 `/-/healthy`로 rewrite해 A의 Prometheus와 Alertmanager로 간다. 다른 `/_ops` 경로와 dev 호스트에는 없다.
+
+- B의 IP(`remote_ip`, TCP 상대 주소)와 basic auth를 둘 다 통과해야 200이다. 하나라도 틀리면 401이 아니라 404이고 `WWW-Authenticate` 헤더도 없다(경로가 있다는 단서를 주지 않는다).
+- `B_IP`, `OPS_BASIC_AUTH_USER`, `OPS_BASIC_AUTH_HASH`가 비어 있으면 compose가 거부한다(조용히 열리지 않는다).
+- 이 경로의 프로브는 B가 한다([ops/README.md](../ops/README.md)). A의 알림이 조용해졌는지 밖에서 보려는 것이다.
 
 ## 서버가 갖출 것
 
