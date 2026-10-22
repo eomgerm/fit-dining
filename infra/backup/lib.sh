@@ -133,10 +133,11 @@ meta_get() { sed -n "s/^$2=//p" "$1" | head -n 1; }
 
 # ---- 지표(Prometheus textfile 형식) ---------------------------------------------------
 # 1E의 node_exporter textfile collector가 이 디렉터리를 읽는다. 쓰다 만 파일이 보이지 않게 이름을 바꿔 넣는다
+# 지표는 비밀이 아니다. 호출한 쪽의 umask(vault-ingest.sh는 077)와 관계없이 644로 둔다(node-exporter는 nobody로 돈다)
 write_atomic() { # write_atomic 대상 < 내용
   local dest="$1"
   mkdir -p "$(dirname "$dest")"
-  cat >"$dest.part" && mv "$dest.part" "$dest"
+  cat >"$dest.part" && chmod 644 "$dest.part" && mv "$dest.part" "$dest"
 }
 state_get() { cat "$BACKUP_DIR/state/$1" 2>/dev/null || echo 0; }
 state_set() { mkdir -p "$BACKUP_DIR/state" && printf '%s\n' "$2" >"$BACKUP_DIR/state/$1"; }

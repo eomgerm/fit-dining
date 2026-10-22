@@ -417,6 +417,7 @@ run_ingest_checks() {
   ok_if "B에는 평문이 없다(보관소의 덤프에서 데이터가 보이지 않는다)" "$(is "$(qb "grep -c -a secret-note /srv/vault/store/pg/$f")" 0)"
   now="$(date +%s)"
   ok_if "지표: pg 마지막 수신 시각이 방금이다" "$([ "$(( now - $(metric b 'fit_vault_last_received_timestamp_seconds{kind="pg"}') ))" -lt 120 ] && echo 1 || echo 0)"
+  ok_if "지표 파일은 누구나 읽을 수 있다(644). vault-ingest.sh는 umask 077이지만 node-exporter는 nobody로 읽는다" "$(is "$(qb "stat -c %a /srv/vault/metrics/fit_vault.prom")" 644)"
   ok_if "지표: 보관 중인 pg 백업 수와 크기가 기록된다" "$([ "$(metric b 'fit_vault_backups{kind="pg"}')" -ge 3 ] && [ "$(metric b 'fit_vault_store_bytes{kind="pg"}')" -gt 0 ] && echo 1 || echo 0)"
   ok_if "지표: 격리와 실패는 0이다" "$([ "$(metric b fit_vault_quarantined_files)" = 0 ] && [ "$(metric b fit_vault_ingest_failures_total)" = 0 ] && echo 1 || echo 0)"
   # 손상된 전송: sha256이 다르다
