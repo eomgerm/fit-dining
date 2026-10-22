@@ -1,0 +1,41 @@
+# 시험용 덮어쓰기(infra/ops/test/test-ops.sh). 호스트 포트를 시험용으로 바꾸고, 알림 규칙과 Alertmanager 설정은 시험 사본을 쓴다.
+# 사본은 저장소 파일에서 sed로 만든다: 규칙의 for를 0s로(대기 시간 없이 바로 울리게), group_wait·group_interval을 짧게. 그 밖의 식과 라우팅은 같다.
+# 가짜 A, 웹훅 대역은 시험 망(FIT_OPSTEST_NET)에 있고 blackbox와 alertmanager-b가 그 망에 붙는다.
+# 가짜 A의 인증서는 Caddy 내부 CA가 만든 것이라 ops-init에 시험 전용 PROBE_INSECURE_TLS=1을 준다(운영 compose에는 없다).
+# FIT_OPSTEST_DIR, FIT_OPSTEST_NET은 시험 스크립트가 정한다.
+services:
+  ops-init:
+    environment:
+      PROBE_INSECURE_TLS: "1"
+
+  prometheus-b:
+    ports: !override
+      - 127.0.0.1:${FIT_OPSTEST_PROM_PORT:-19091}:9090
+    volumes: !override
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ${FIT_OPSTEST_DIR}/rules:/etc/prometheus/rules:ro
+      - generated:/generated:ro
+      - promdata:/prometheus
+
+  alertmanager-b:
+    ports: !override
+      - 127.0.0.1:${FIT_OPSTEST_AM_PORT:-19093}:9093
+    volumes: !override
+      - ${FIT_OPSTEST_DIR}/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./alertmanager/templates:/etc/alertmanager/templates:ro
+      - generated:/generated:ro
+      - amdata:/alertmanager
+    networks: [default, sim]
+
+  blackbox:
+    networks: [default, sim]
+
+  node-exporter:
+    volumes: !override
+      - /:/host:ro
+      - ${FIT_OPSTEST_DIR}/metrics:/textfile:ro
+
+networks:
+  sim:
+    external: true
+    name: ${FIT_OPSTEST_NET}
