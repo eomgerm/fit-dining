@@ -106,23 +106,32 @@ NODE_IMAGE=node:22.23.4-bookworm-slim
 - Create: `infra/ci/tests/test_check_fe_bundle.py`
 
 **Interfaces:**
-- Produces: `python3 infra/ci/check_fe_bundle.py <번들 디렉터리> --sha <커밋 SHA>`. 번들 디렉터리는 `standalone/`(Next가 만든 `.next/standalone` 그대로), `static/`(`.next/static`), 선택으로 `public/`을 가진다. 검사마다 `PASS`, `FAIL`을 한 줄로 찍고 하나라도 FAIL이면 종료 코드 1이다. 함수 `check_bundle(root: Path, sha: str) -> list[tuple[bool, str]]`를 시험이 직접 부른다.
+- Produces: `python3 infra/ci/check_fe_bundle.py <번들 디렉터리> --sha <커밋 SHA>`. 번들 디렉터리는 `standalone/`(Next가 만든 `.next/standalone` 그대로), `static/`(`.next/static`), 선택으로 `public/`을 가진다. 검사마다 `PASS`, `FAIL`, `WARN`, `SKIP`을 한 줄로 찍고 하나라도 FAIL이면 종료 코드 1이다. 함수 `check_bundle(root: Path, sha: str) -> list[tuple[str, str, str]]`(상태, 검사 이름, 설명)를 시험이 직접 부른다.
 
-검사 항목(설계 6.8절 P0):
+검사 항목(설계 6.8절 P0). **실제 Next 16 번들(2026-10-23, `fe/`를 임시 복사본에서 계약대로 패치해 빌드)에서 확인한 모양**을 따른다:
 
-1. `standalone/server.js`가 있다.
-2. `static/`에 파일이 하나 이상 있다(빈 번들 방지).
-3. `standalone/.next/BUILD_ID` 내용이 `--sha`와 같다(`generateBuildId`가 커밋 SHA, FE 계약 #1).
-4. `standalone/.next/images-manifest.json`의 `images.unoptimized`가 `true`다(없거나 `false`면 FAIL. FE 계약 #7).
-5. `standalone/node_modules` 아래 `*.node` 네이티브 모듈은 경로에 `/@img/sharp-`가 있는 것만 허용한다(B의 Arm 산출물에 다른 플랫폼 전용 모듈이 섞이면 x86에서 돌지 않는다).
-6. `standalone/server.js`, `standalone/.next/server/**`, `static/**`의 텍스트 파일에 `localhost`, `127.0.0.1`, `mock`(대소문자 무시)이 없다. 단, `node_modules` 안은 보지 않는다.
-7. `public/sw.js`와 `public/manifest.webmanifest`가 있으면 통과, 없으면 `SKIP`(FE 계약 #4는 팀 몫이라 막지 않는다).
+1. `server.js`: `standalone/server.js`가 있다.
+2. `static`: `static/`에 파일이 하나 이상 있다(빈 번들 방지).
+3. `build-id`: `standalone/.next/BUILD_ID`가 `--sha`와 같다(`generateBuildId`가 커밋 SHA, FE 계약 #1). 빈 값끼리는 같다고 보지 않는다(`DEPLOYMENT_VERSION`이 비어 빌드된 번들이 그대로 나가는 사고를 막는다).
+4. `deployment-id`: `standalone/.next/required-server-files.json`의 `config.deploymentId`가 `--sha`와 같다(FE 계약 #1). 빈 값 불가.
+5. `images-unoptimized`: 같은 파일의 `config.images.unoptimized`가 `true`다(FE 계약 #7). 이 Next 버전의 standalone에는 `images-manifest.json`이 들어 있지 않아서 설계 6.8절이 말한 그 파일 대신 `required-server-files.json`을 읽는다.
+6. `native-modules`: `standalone/node_modules` 아래 `*.node`는 경로에 `/@img/sharp-`가 있는 것만 허용한다(B의 Arm 산출물에 다른 플랫폼 전용 모듈이 섞이면 x86에서 돌지 않는다).
+7. `no-local-urls`: `standalone/server.js`, `standalone/.next/server/**`, `static/**`의 텍스트 파일에 `http(s)://localhost`, `127.0.0.1`, `0.0.0.0` **주소**가 없다. `node_modules`는 보지 않는다. 실제 번들에서 Next 런타임이 `hostname="localhost"` 비교, 템플릿으로 조립하는 `://localhost:` 주소, URL 파서 때문에 `localhost`라는 글자를 포함했다(오탐). 그래서 글자가 아니라 **스킴이 붙은 주소**만 실패로 본다.
+8. `mock-words`: 같은 범위에 `mock`이라는 글자가 있으면 **`WARN`**으로 드러내고 막지 않는다. 실제 FE 코드에 개발용 mock 스위치(`?mock=empty`, `X-Mock-Scenario` 헤더)가 있어 prod 번들에도 들어간다. 이것을 두는 것이 맞는지는 FE 팀이 판단한다(막으면 모든 빌드가 실패한다).
+9. `pwa-files`: `public/sw.js`와 `public/manifest.webmanifest`가 있으면 통과, 없으면 `SKIP`(FE 계약 #4는 팀 몫이라 막지 않는다. 지금 FE에는 둘 다 없다).
 
-- [ ] **Step 1: 실패하는 시험을 먼저 쓴다.** `test_check_fe_bundle.py`는 임시 디렉터리에 정상 번들(위 1~7을 만족)을 만드는 헬퍼 `make_bundle(tmp, sha)`를 두고, 항목마다 하나씩 망가뜨려 해당 줄만 FAIL인지 확인한다: 정상 → 전부 PASS, `server.js` 삭제, `static` 비움, BUILD_ID 불일치, `unoptimized: false`, `images-manifest.json` 없음, `@img/sharp-linux-x64/x.node`는 통과·`some-native/x.node`는 FAIL, `static/app.js`에 `http://localhost:3000`이 있으면 FAIL, `node_modules` 안의 `localhost`는 무시. 종료 코드 시험(`main()`이 정상 0, 하나라도 FAIL이면 1)도 쓴다.
+실제 번들에서 확인한 것(검사기를 돌린 결과: PASS 7, WARN 1(mock), SKIP 1(pwa), 종료 코드 0):
+
+- **계약대로 패치한 설정**(`output: "standalone"`, `images: { unoptimized: true }`, `generateBuildId`와 `deploymentId`를 `process.env.DEPLOYMENT_VERSION`으로)으로 빌드한 번들은 통과한다. 현재 `fe/next.config.ts`는 이 네 가지가 없어서 그대로는 `images-unoptimized`와 `deployment-id` 등이 FAIL이다(FE 팀 몫, 체크리스트).
+- standalone은 39MB, static은 3.0MB다. pnpm 때문에 `node_modules`가 **심볼릭 링크**(`next`, `react`, `react-dom`과 `.pnpm/`)다. 아티팩트 전달과 `COPY`(Task 3)에서 링크가 보존되는지 확인해야 한다.
+- 빌드(`pnpm install --frozen-lockfile`과 `pnpm build`)는 이 PC(x86)에서 3분 16초가 걸렸다. B(Arm, 2 vCPU, 메모리 4GB)에서는 더 걸릴 수 있어 서버에서 시간을 기록한다.
+
+- [ ] **Step 1: 실패하는 시험을 먼저 쓴다.** `test_check_fe_bundle.py`는 임시 디렉터리에 정상 번들을 만드는 헬퍼 `make_bundle(tmp, sha)`를 두고, 항목마다 하나씩 망가뜨려 해당 줄만 FAIL인지 확인한다(정상 → 전부 PASS, `server.js` 삭제, `static` 비움, BUILD_ID 불일치·빈 값, `deploymentId` 불일치·빈 값, `unoptimized` 값과 파일 상태, sharp가 아닌 `.node`, 로컬 주소, 프레임워크 런타임의 `localhost` 글자는 통과, `node_modules`와 바이너리는 무시, `mock`은 WARN, PWA 파일 없음은 SKIP, 출력에 파일 내용이 없음, 빈 `--sha` 거부, 종료 코드).
 - [ ] **Step 2:** `python3 -m unittest infra/ci/tests/test_check_fe_bundle.py -v`가 모듈이 없어서 실패한다.
-- [ ] **Step 3:** `check_fe_bundle.py`를 쓴다(표준 라이브러리만, 위 인터페이스 그대로. 텍스트 파일 판정은 앞 4KB에 NUL 바이트가 없고 UTF-8로 읽히는 것).
-- [ ] **Step 4:** 같은 시험이 통과한다. 검사를 일부러 하나 꺼서(예: 6번을 `return []`) 시험이 실패하는지 확인하고 되돌린다.
-- [ ] **Step 5:** 커밋 `:sparkles: feat(infra): FE 번들 산출물 검사(check_fe_bundle.py)와 시험 추가 (S15P31A302-19)`
+- [ ] **Step 3:** `check_fe_bundle.py`를 쓴다(표준 라이브러리만. 텍스트 파일 판정은 앞 4KB에 NUL 바이트가 없는 것).
+- [ ] **Step 4:** 같은 시험이 통과한다(20개). 검사를 일부러 하나씩 꺼서(`build-id`, `deployment-id`, 빈 값 거부, `static`, `pwa-files` 등 변이 11종) 시험이 실패하는지 확인한다. 바이트코드 캐시가 변이를 가리지 않게 `python -B`로 돌린다.
+- [ ] **Step 5:** 실제 `fe/`를 계약대로 패치한 임시 복사본에서 `next build`한 번들에 검사기를 돌려 위 결과가 나오는지 확인한다(리눅스 컨테이너 안에서. Windows의 `cp`는 심볼릭 링크를 만들지 못한다).
+- [ ] **Step 6:** 커밋 `:sparkles: feat(infra): FE 번들 산출물 검사(check_fe_bundle.py)와 시험 추가 (S15P31A302-19)`
 
 ---
 
