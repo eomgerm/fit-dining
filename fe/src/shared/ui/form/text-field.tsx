@@ -10,6 +10,8 @@ type TextFieldProps = Omit<Field.Control.Props, "className"> & {
   description?: ReactNode;
   // 있으면 빨간 테두리와 문구를 보여 준다. 도움말 대신 보인다
   error?: ReactNode;
+  // 별도로 표시한 오류 문구를 중복하지 않고 오류 테두리만 적용한다
+  invalid?: boolean;
   // 오른쪽 끝 단위(예: 원)
   suffix?: ReactNode;
   className?: string;
@@ -20,13 +22,14 @@ export function TextField({
   label,
   description,
   error,
+  invalid,
   suffix,
   className,
   ...props
 }: TextFieldProps) {
   return (
     <Field.Root
-      invalid={error ? true : undefined}
+      invalid={invalid ?? (error ? true : undefined)}
       className={cn("group flex flex-col gap-2", className)}
     >
       <Field.Label className="sr-only">{label}</Field.Label>
