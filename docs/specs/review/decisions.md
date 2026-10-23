@@ -58,6 +58,7 @@ Glossary: none · ADRs: none
 ## D-11 신고와 운영
 - Status: settled
 - Decision: 신고는 `(review_id, reporter_id)` 유니크로 한 번만, 본인 리뷰는 불가다. 사유는 광고·도배, 욕설·혐오·음란물, 장소와 무관한 내용, 기타이고 신고만으로 숨기지 않는다(FR-12). 신고 사유 시트(Figma 6-11)에서 "기타"를 누르면 설명 입력창이 나타나고, 설명은 선택 입력이다. 서버는 설명을 "기타"일 때만 받는다. 관리자 API는 신고 목록(최신순, 신고 수), 숨김·분석 제외·작성 차단과 각 해제를 제공하고, 각 동작은 같은 트랜잭션에 처리 기록(처리자, 시각, 동작)을 남긴다. 사유별 기본 처리는 권장 동작으로만 내려주고 담당자가 정한다.
+- 설명은 100자까지다. Figma 6-11이 "기타" 설명 입력창("어떤 점이 문제인지 적어 주세요 (선택)")과 글자 수 0/100을 그렸다. 서버도 100자를 넘으면 400이다(2026-10-23).
 
 ## D-12 위치 확인
 - Status: settled
@@ -77,21 +78,24 @@ Glossary: none · ADRs: none
 ## D-15 인증 방식
 - Status: settled
 - Decision: 1차 후속부터 리뷰 API는 `Authorization` 헤더의 JWT로 사용자를 식별한다. Walking Skeleton은 사용자를 식별하지 않고 인증 없이 등록한다(D-1). 쿠키 인증이 아니라 쓰기 요청에 CSRF 방어가 따로 필요 없다. FE는 리뷰 API를 부를 때 토큰을 헤더에 싣는다. 토큰 발급·저장·갱신은 회원 담당이 정한다. 인프라 설계도 JWT를 `Authorization` 헤더에 담는다고 보고 있지만(5.4절의 basic auth 기각, 12.5절 #10), BE 계약 #21과 프런트 계약 #9는 인증 쿠키(HttpOnly·Secure)를 전제로 적혀 있어 회원·인프라 담당과 맞춰야 한다.
+- 회원 담당의 로그인 브랜치(`docs/auth/01_login.md`)는 AT를 FE 메모리에 두고 `Authorization: Bearer`로 보내며, RT만 HttpOnly 쿠키(`Path=/api/auth`)에 둔다. 리뷰 API는 AT만 받으므로 이 결정과 맞고, 인증 쿠키는 갱신 경로에만 쓰여 BE 계약 #21·프런트 계약 #9와도 어긋나지 않는다. 남은 것은 머지 시점과 인터셉터 적용 방식이다(spec Open questions)(2026-10-23).
 - Rejected: HttpOnly 쿠키 → 쓰기 요청마다 CSRF 방어가 필요하다.
 
 ## D-16 특징 코드 공유
 - Status: settled
 - Decision: 리뷰 이유 태그, 온보딩 태그, 검색 `preferences`는 PRD §2의 L1~L4 모델을 따른 공용 특징 코드 목록 하나를 쓴다. 리뷰 `tags`는 그 코드를 참조하고 문구·sentiment·그룹·업종 노출은 리뷰가 관리한다. 목록을 누가 관리하는지는 미결이다.
+- AI 비교 spec(브랜치)이 AI 분석의 코드표(`features.py`, `QUIET`, `PURPOSE_GROUP` 등)를 공용 조건 코드로 쓴다. 리뷰 태그도 이 코드표를 참조하는 것을 기본안으로 두고, 그대로 써도 되는지와 공유 시점은 분석 담당에게 묻는다(spec Open questions)(2026-10-23).
 - Rejected: 리뷰 태그를 따로 관리 → 취향 보정과 검색이 리뷰 태그를 특징으로 다시 매핑해야 한다.
 
 ## D-17 리뷰 변경 전달 (Walking Skeleton)
-- Status: settled
+- Status: superseded by D-34
 - Decision: Walking Skeleton에서는 취향·장소 분석·검색 색인의 일괄 처리가 리뷰 테이블을 직접 조회해 변경을 가져간다. 리뷰는 삭제·숨김·분석 제외를 시각 컬럼으로 남기고(D-3) `updated_at`을 갱신해 일괄 처리가 상태와 변경 시점을 알 수 있게 한다. 이벤트나 아웃박스 같은 고도화는 이후에 정한다.
 - Rejected: 지금 아웃박스 이벤트 도입 → 공용 인프라가 필요하고 받는 쪽이 아직 없다.
 
 ## D-18 화면 기준과 재방문 의사
 - Status: settled
 - Decision: 화면은 Figma `핏다이닝` 파일의 UI/UX 페이지(장소 상세 6-03, 6-06~6-12, 방문 평가 7-01~7-06, 예외 상태 6-E03, 6-E06, 6-E07, 7-E01~7-E06)를 기준으로 한다. Walking Skeleton의 한 화면 작성 폼은 Figma에 없어 리뷰 담당이 간단히 만든다(D-25). 재방문 의사는 PRD FR-14대로 취향 추론과 추천에 쓰지 않는다. 7-04의 "앞으로 이 장소와 비슷한 곳을 찾아드릴게요" 문구는 이와 맞지 않아 문구만 바꾼다.
+- Figma 7-04 문구가 "비슷한 취향의 장소를 찾아드릴게요"로 바뀌었지만 여전히 재방문 의사를 추천에 쓴다는 뜻이라 문구를 바꿔야 하는 것은 그대로다(2026-10-23).
 - Rejected: 재방문 의사를 비슷한 장소 추천에 사용 → PRD FR-14와 충돌한다.
 
 ## D-19 Mock 장소의 리뷰
@@ -108,6 +112,7 @@ Glossary: none · ADRs: none
 ## D-21 장소 정보 조회(장소 ID는 정수)
 - Status: settled
 - Decision: 장소 ID는 검색 spec을 따라 정수다(검색 D-44, D-54: ERD의 `places.place_id` bigint, BE `Long`, JSON 숫자, FE `number`). `reviews.place_id`는 `BIGINT`이고 경로의 `placeId`는 양의 정수만 받는다. 숫자가 아니거나 0 이하이거나 `long` 범위를 넘으면 400이다. Walking Skeleton은 장소 존재를 확인하지 않는다. 목록은 `placeId`로만 조회하므로 없는 장소의 리뷰는 화면에 나오지 않는다. 1차 후속부터 리뷰는 장소의 존재 여부와 이름·업종·역을 장소 기능이 공개하는 조회 인터페이스로만 확인하고, 장소 테이블을 직접 조회하지 않는다. 인터페이스의 모양과 구현은 장소 담당이 정한다.
+- 장소 상세 API의 `PlaceService#getPlace(long)`가 이름·업종·역(`PlaceSummary`)을 돌려주고 Mock 장소도 통과한다. 다만 없는 장소의 `PlaceNotFoundException`은 장소 컨트롤러에만 걸린 `PlaceExceptionHandler`(`basePackageClasses = PlaceController.class`)가 404로 바꾸므로 리뷰에서 그대로 부르면 500이 된다. 무엇을 쓸지는 장소 담당에게 묻는다(spec Open questions)(2026-10-23).
 - Rejected: 문자열 ID(`p-001`) → 검색 spec과 ERD가 bigint로 정했다. `places` 테이블 직접 조회 → 장소 테이블 구조가 바뀌면 리뷰 코드도 고쳐야 한다.
 
 ## D-22 Mock 장소의 리뷰(Mock ID 정정)
@@ -150,6 +155,7 @@ Glossary: none · ADRs: none
 ## D-29 영속성 테스트 DB(1차 후속부터)
 - Status: settled
 - Decision: Walking Skeleton은 메모리 저장소라 저장, 정렬, 커서 경계, 상한을 순수 단위 테스트로 확인한다(D-27). 1차 후속의 `JpaReviewStore`와 마이그레이션(부분 유니크 인덱스와 409 변환 포함)은 Testcontainers로 띄운 PostgreSQL에 마이그레이션으로 스키마를 만들어 확인한다. 인프라 BE 계약 #13(제안 상태)이 Testcontainers를 쓰기로 했고, 부분 인덱스(`WHERE deleted_at IS NULL`)와 제약 위반 뒤의 트랜잭션 동작은 H2로 재현되지 않는다. 의존성 추가는 공용 `be/build.gradle`을 바꾸므로 1차 후속 전에 BE 팀과 합의한다(spec Open questions).
+- 방식은 인프라 BE 계약 #13으로 이미 정해졌으므로 따로 합의를 기다리지 않는다. 리뷰 담당이 1차 후속의 첫 영속성 MR에서 Testcontainers 의존성을 `be/build.gradle`에 넣고 BE 팀을 리뷰어로 두어 그 MR에서 합의를 받는다(2026-10-23).
 - Rejected: H2 → PostgreSQL 동작을 재현하지 못한다. 로컬 스택(`infra/local`)의 DB에 붙기 → 테스트 결과가 개발 데이터와 로컬 스택 실행 여부에 따라 달라진다.
 
 ## D-30 FE 화면은 공통 UI 컴포넌트와 디자인 시스템 규칙으로 만든다
@@ -175,3 +181,8 @@ Glossary: none · ADRs: none
 - Decision: 리뷰 시드(`classpath:mock/reviews.json`)를 장소 Mock 30곳 모두에 넣는다(D-27의 "1번 장소에 25건"을 넓힌다). 장소 카드가 "앱 리뷰"를 근거로 드는 항목(`scoreItems`의 `matched: true`)마다 `evidenceCount`만큼 그 내용을 말하는 리뷰를 두고, 추천 이유의 인용(`quoteSource` "앱 리뷰")은 그중 하나로 그대로 넣어 그 장소의 가장 최근 리뷰로 둔다. 근거가 없는(`matched: false`) 항목은 말하지 않는다. 장소 Mock이 "조용해요"(근거 있음)와 "조용한 곳"(근거 없음)을 함께 두는 곳은 앞쪽을 따른다. 여기에 메뉴 2개, 주의점, 일반 평 하나와 내용 없는 리뷰 1~2건을 더해 장소마다 7~21건이다. 1번 장소는 커서 페이지를 확인하도록 25건과 작성 시각을 그대로 두고 내용만 맞춘다. 작성 시각은 2026-09-02~10-20 사이에서 업종에 맞는 시간대(식당 11~20시, 카페 10~19시, 술집 19~23시 KST)다. 그래서 상세 화면의 추천 이유·핏 점수 설명과 리뷰 탭이 어긋나 보이지 않는다. 시드와 장소 Mock은 id와 내용으로만 맞춘 것이고, 장소 분석이 리뷰를 읽는 실제 연결은 1차 후속(D-17)이다. 장소 Mock이 바뀌면 시드도 다시 맞춘다.
 - Rejected: 1번·2번 장소에만 시드 → 나머지 28곳은 카드가 "앱 리뷰 n개가 근거"라고 하는데 리뷰 탭은 "리뷰 0"이다. 장소 Mock이 리뷰 저장소를 읽어 근거를 계산 → 장소 담당 코드를 바꾸는 일이고 1차 후속의 분석 연결과 겹친다. 시드와 장소 Mock을 테스트로 묶기 → 장소 담당이 Mock을 고칠 때마다 리뷰 테스트가 깨진다.
 - Anchors: `be/src/main/resources/mock/reviews.json` (modify)
+
+## D-34 리뷰 변경 전달(읽는 경로는 받는 쪽이 정한다)
+- Status: settled
+- Decision: 리뷰는 삭제·숨김·분석 제외를 시각 컬럼으로 남기고(D-28) 바뀔 때마다 `updated_at`을 갱신해, 읽는 쪽이 상태와 변경 시점을 알 수 있게 한다. 리뷰 기능이 책임지는 것은 여기까지다. 어떤 경로로 읽을지는 받는 쪽마다 정한다. 서버 안에서 도는 일괄 처리(검색 색인 등)는 리뷰 테이블을 직접 조회할 수 있다. 하지만 AI 분석·비교는 Modal에서 돌아 서버 내부망의 Postgres에 붙지 못하므로(AI 비교 spec 6절) 다른 경로가 필요하다. 그 경로(BE 조회 API, 정기 내보내기 등)와 필요한 필드·주기는 AI·인프라 담당과 정한다(spec Open questions). 이벤트나 아웃박스 같은 고도화는 이후에 정한다.
+- Rejected: 모든 일괄 처리가 리뷰 테이블을 직접 조회(D-17) → AI 서비스는 내부망 DB에 붙을 수 없다. 리뷰가 내보내기 API를 먼저 만들기 → 받는 쪽이 필요한 필드와 주기가 정해지지 않았다. 지금 아웃박스 이벤트 도입 → 공용 인프라가 필요하고 받는 쪽이 아직 없다.
