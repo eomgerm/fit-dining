@@ -69,7 +69,7 @@ Settings → CI/CD → General pipelines에서 설정한다.
 
 보호 브랜치에 직접 push해 보는 방식으로 시험하지 않는다. 설정이 틀렸다면 그 push가 실제로 반영되기 때문이다.
 
-- [ ] Branch rules 화면에서 `develop`, `master`의 Allowed to push and merge가 No one인지 읽는다.
+- [x] Branch rules 화면에서 `develop`, `master`의 Allowed to push and merge가 No one인지 읽는다(사용자 보고, 2026-10-23).
 - [ ] 설정 뒤 처음 병합되는 MR에서 병합 커밋이 생기지 않는지(`git log --graph`) 확인한다. 설정 전에 병합된 MR 1번은 merge commit으로 병합됐다.
 
 ## 2단계: 러너 등록과 병합 조건 강화 (M1)
@@ -91,7 +91,7 @@ Settings → CI/CD → General pipelines에서 설정한다.
 - [x] Merge checks의 **Pipelines must succeed**: 켬(사용자 보고, 2026-10-23). 켜면 MR 화면의 **Rebase without pipeline** 버튼이 사라진다. 같은 곳의 **Skipped pipelines are considered successful**은 켜지 않는다(켜면 버튼이 다시 나타나 검사하지 않은 SHA를 병합할 수 있다) (확인: GitLab 문서).
 - [x] B의 러너를 `sudo bash ~/host/runner.sh tune`으로 `concurrent 2`에 맞추고 `runner.sh status`가 PASS인지 확인한다(2026-10-23 적용. 러너가 서비스 재시작 없이 값을 다시 읽었고 잡이 두 슬롯에서 같이 돌았다).
 - [x] MR 파이프라인이 경로별로 가벼워졌다(`rules:changes`, 설계 6.3절). 항상 도는 잡이 3개(`lint:guards`, `lint:secrets`, `lint:history`)라 "Pipelines must succeed"가 파이프라인 없는 MR을 막는 일이 없다. **Skipped pipelines are considered successful**은 계속 켜지 않는다.
-- [ ] `master`보다 뒤처진 MR에서 Rebase 버튼만 보이고 Rebase without pipeline 버튼이 보이지 않는지 확인한다.
+- [x] `master`보다 뒤처진 MR에서 Rebase 버튼만 보이고 Rebase without pipeline 버튼이 보이지 않는지 확인한다(사용자 보고, 2026-10-23).
 - [x] Settings → CI/CD → General pipelines의 **Auto-cancel redundant pipelines**: 켬. 같은 브랜치에 새 커밋이 오면 이전 파이프라인의 verify 잡이 취소된다. 이미 켜져 있었다(사용자 보고, 2026-10-23). 배포 잡에는 `interruptible`을 두지 않아서 취소되지 않는다.
 
 ## 3단계: 배포 파이프라인 (스위치를 켜기 전후)
@@ -105,8 +105,8 @@ Settings → CI/CD → General pipelines에서 설정한다.
 - `deploy:prod`는 `master`에서만 나타나는 수동 잡이고, `fit-deploy` 러너는 Protected라 보호된 브랜치의 잡만 받는다.
 - `master`의 Allowed to merge는 Maintainers다(1단계). 보호 브랜치의 수동 잡은 그 브랜치에 병합·푸시 권한이 있는 사람만 누를 수 있다고 문서에 있다 (확인: GitLab 문서). 동작이 일관되지 않다는 이슈가 있어서 첫 prod 배포 전에 직접 확인한다.
 
-- [ ] Developer 역할 사용자가 `master` 파이프라인의 `deploy:prod`를 누를 수 없는지 확인한다(첫 prod 배포 전).
-- [ ] `develop`과 `master` 모두 Allowed to push and merge가 No one, Allowed to merge가 Maintainers인지 Branch rules 화면에서 읽는다. `develop`은 팀원이 만들었고 설정을 아직 읽지 않았다.
+- [x] Developer 역할 사용자가 `master` 파이프라인의 `deploy:prod`를 누를 수 없는지 확인한다(사용자 보고, 2026-10-23).
+- [x] `develop`과 `master` 모두 Allowed to push and merge가 No one, Allowed to merge가 Maintainers인지 Branch rules 화면에서 읽는다(사용자 보고, 2026-10-23).
 
 ### 배포 순서 보장 (첫 배포 파이프라인 뒤)
 
@@ -136,4 +136,5 @@ curl --fail --header "PRIVATE-TOKEN: $GITLAB_API_TOKEN" \
 | 1단계 완료 | 완료 (사용자 보고) | 2026-10-19 | 인프라 담당 |
 | 2단계 완료 (러너 online) | 러너 2개 online, MR 38 파이프라인 통과, Pipelines must succeed 켬, B의 `concurrent 2` 적용. Rebase 버튼 확인만 남음 | 2026-10-23 | 인프라 담당 |
 | 보호된 환경 (CE) | 불가 (Premium 이상, GitLab 문서). 위 3단계의 대체 확인이 남음 | 2026-10-23 | 문서 조사 |
-| 3단계 완료 (`oldest_first`) | | | |
+| 3단계의 환경 보호 대체 확인(Developer의 `deploy:prod` 불가, `develop`·`master` 보호, Rebase 버튼) | 모두 확인함(사용자 보고) | 2026-10-23 | 인프라 담당 |
+| 3단계 완료 (`oldest_first`) | 첫 배포 파이프라인이 생긴 뒤에 한다 | | |

@@ -16,6 +16,7 @@ B  vault-ingest.sh(10분마다) ── 이름·sha256·크기 검증 ───�
 - **금고는 쓰기 전용:** B의 `vault` 계정은 `rrsync -wo -no-del /srv/vault/incoming`만 실행할 수 있다(`restrict`, 선택적으로 `from=<A의 IP>`). A가 뚫려도 금고의 백업을 읽거나 지울 수 없고 셸도 열 수 없다.
 - **B가 다시 검증한다:** `incoming/`은 신뢰하지 않는다. `vault-ingest.sh`는 이름 형식을 보고 파일을 root만 쓰는 staging으로 옮긴 뒤 그 사본의 sha256과 크기를 `.meta`와 대조한다. 통과하면 `store/`, 아니면 `store/quarantine/`으로 간다. 심볼릭 링크는 따라가지 않는다.
 - **보관 정책:** 4시간 단위 백업은 48시간(`BACKUP_KEEP_HOURS`) 동안 모두 두고, 그보다 오래된 것은 한국 시간 기준 하루에 가장 늦은 1벌만 14일(`BACKUP_KEEP_DAYS`) 동안 둔다. 가장 최근 백업은 어떤 경우에도 지우지 않는다. A의 로컬 보관(`pg/`, `photos/`, `caddy/`)과 B의 `store/`에 같은 규칙을 쓴다.
+- **B의 `backup.env`는 없어도 된다.** 파일이 없으면 위 기본값(48시간, 14일)을 쓴다. B에서 `BACKUP_VAULT_HOST`는 쓰이지 않는다(A의 `push-vault.sh`만 요구한다). 보관 기간을 바꿀 때만 만들고, `install.sh ops`를 다시 실행하면 예제에서 `REPLACE_ME`가 든 파일이 만들어지므로 값을 채우지 않았다면 지워도 된다(2026-10-23에 B에서 지웠고 금고 수신 서비스가 정상으로 돌았다).
 - **마이그레이션 전 덤프:** `pg-backup.sh predeploy <환경> <sha>`가 평문 덤프를 `/srv/fit/predeploy/`에 둔다(환경별 최근 5개). 배포 스크립트가 마이그레이션 전에 부른다. 개인키가 서버에 없어 암호화하면 급할 때 복원할 수 없고, 이 덤프는 DB 볼륨과 같은 신뢰 범위에 있으며 B로 보내지 않는다.
 
 ## 처음 설정 (서버가 생긴 뒤, 순서대로)
