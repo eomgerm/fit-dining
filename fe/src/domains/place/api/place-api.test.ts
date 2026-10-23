@@ -27,7 +27,6 @@ beforeEach(() => {
       }),
   );
   vi.stubGlobal("fetch", fetchMock);
-  vi.stubGlobal("location", { search: "" });
 });
 
 afterEach(() => {
@@ -68,36 +67,17 @@ describe("searchPlaces", () => {
     expect(JSON.parse(sentBody())).toEqual({ query: "역삼 카페" });
   });
 
-  describe("?mock=empty", () => {
-    it("주소에 있으면 검색 요청에 X-Mock-Scenario: empty를 붙인다", async () => {
-      vi.stubGlobal("location", { search: "?mock=empty" });
+  it("주소에 ?mock=empty가 있어도 어떤 요청에도 X-Mock-Scenario를 붙이지 않는다", async () => {
+    vi.stubGlobal("location", { search: "?mock=empty" });
 
-      await searchPlaces({ query: "역삼 카페" });
-      await searchPlaces({ query: "역삼 카페", cursor: "MjA" });
+    await searchPlaces({ query: "역삼 카페" });
+    await searchPlaces({ query: "역삼 카페", cursor: "MjA" });
+    await suggestPlaces("역삼");
+    await getPlace(1);
 
-      expect(sentHeaders(0).get("X-Mock-Scenario")).toBe("empty");
-      expect(sentHeaders(1).get("X-Mock-Scenario")).toBe("empty");
-    });
-
-    it("주소에 없으면 붙이지 않는다", async () => {
-      vi.stubGlobal("location", { search: "?mock=other" });
-      await searchPlaces({ query: "역삼 카페" });
-      vi.stubGlobal("location", { search: "" });
-      await searchPlaces({ query: "역삼 카페" });
-
-      expect(sentHeaders(0).has("X-Mock-Scenario")).toBe(false);
-      expect(sentHeaders(1).has("X-Mock-Scenario")).toBe(false);
-    });
-
-    it("자동완성과 상세 요청에는 붙이지 않는다", async () => {
-      vi.stubGlobal("location", { search: "?mock=empty" });
-
-      await suggestPlaces("역삼");
-      await getPlace(1);
-
-      expect(sentHeaders(0).has("X-Mock-Scenario")).toBe(false);
-      expect(sentHeaders(1).has("X-Mock-Scenario")).toBe(false);
-    });
+    for (const call of [0, 1, 2, 3]) {
+      expect(sentHeaders(call).has("X-Mock-Scenario")).toBe(false);
+    }
   });
 
   it("기기 위치를 얻었어도 어떤 검색 요청 본문에도 그 좌표가 없다", async () => {
