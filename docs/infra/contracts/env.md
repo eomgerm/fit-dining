@@ -75,6 +75,7 @@
 | `POSTHOG_KEY` | fe | X | PostHog 공개 키. `/config.json`의 `posthogKey`로 나간다 |
 | `POSTHOG_HOST` | fe | X | PostHog 호스트. `/config.json`의 `posthogHost`로 나간다 |
 | `PUSH_PUBLIC_KEY` | fe | X | 웹 푸시 공개 키. `/config.json`의 `pushPublicKey`로 나간다 |
+| `NAVER_MAP_CLIENT_ID` | fe | X | 네이버 지도 Client ID(NCP 콘솔 Maps 애플리케이션의 인증 정보). 브라우저가 지도 스크립트를 받을 때 쓰는 공개 값이라 비밀이 아니고 `/config.json`의 `naverMapClientId`로 나간다. NCP 콘솔의 Web 서비스 URL에 그 환경의 호스트(`PROD_HOST`, `DEV_HOST`)를 등록해야 지도가 뜬다. 없으면 지도 영역만 비고 나머지 화면은 동작한다 |
 | `PROD_HOST` | edge, ops | O | prod 호스트명(예: `fit.<도메인>`). 호스트마다 인증서를 따로 받는다. ops에서는 B가 프로브하고 포트를 감사할 A의 주소다 |
 | `DEV_HOST` | edge, ops | O | dev 호스트명(예: `dev.fit.<도메인>`). prod와 다른 호스트여야 쿠키·서비스 워커가 분리된다. ops에서는 B가 인증서를 볼 A의 dev 주소다 |
 | `ACME_EMAIL` | edge | O | 인증서 발급 알림을 받을 이메일 |
@@ -128,5 +129,6 @@
 | `posthogKey` | X | PostHog 공개 키 |
 | `posthogHost` | X | PostHog 호스트 |
 | `pushPublicKey` | X | 웹 푸시 공개 키 |
+| `naverMapClientId` | X | 네이버 지도 Client ID |
 
-FE는 `APP_ENV`, `POSTHOG_KEY`, `POSTHOG_HOST`, `PUSH_PUBLIC_KEY`를 런타임에 읽어 위 키로 돌려준다(`fe` 그룹).
+FE는 `APP_ENV`, `POSTHOG_KEY`, `POSTHOG_HOST`, `PUSH_PUBLIC_KEY`, `NAVER_MAP_CLIENT_ID`를 런타임에 읽어 위 키로 돌려준다(`fe` 그룹).
