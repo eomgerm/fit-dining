@@ -38,6 +38,12 @@ management:
           # 외부 서비스(Modal 등)를 보면 외부 장애가 readiness를 흔들어 재시작 폭풍이 난다. DB만 본다.
           include: readinessState,db
 
+# 배포 이미지가 넣는 값(Dockerfile ENV). 로컬에서는 unknown이다.
+app:
+  version:
+    sha: ${APP_SHA:unknown}
+    built-at: ${APP_BUILT_AT:unknown}
+
 place:
   mock:
     enabled: ${PLACE_MOCK_ENABLED:false}
