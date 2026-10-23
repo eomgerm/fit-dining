@@ -32,10 +32,14 @@ def call_json[T](
     messages: list[dict],
     parse: Callable[[dict], T],
     *,
+    response_format: dict | None = None,
     timeout: float = 10.0,
     client: httpx.Client | None = None,
 ) -> T | None:
-    """응답 JSON을 `parse`로 검사해 돌려준다. 꺼져 있거나 두 번 실패하면 None."""
+    """응답 JSON을 `parse`로 검사해 돌려준다. 꺼져 있거나 두 번 실패하면 None.
+
+    `response_format`을 주지 않으면 JSON 모드(스키마 보장 없음)로 부른다.
+    """
     if os.environ.get("GMS_ENABLED") != "true":
         return None
     url = _endpoint(os.environ["GMS_BASE_URL"])
@@ -43,7 +47,7 @@ def call_json[T](
     body = {
         "model": MODEL,
         "temperature": 0,
-        "response_format": {"type": "json_object"},
+        "response_format": response_format or {"type": "json_object"},
         "messages": messages,
     }
     with nullcontext(client) if client else httpx.Client() as c:

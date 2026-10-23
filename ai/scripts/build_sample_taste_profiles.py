@@ -55,7 +55,7 @@ SAMPLES = [
 ]
 
 
-def fail(messages, parse):
+def fail(messages, parse, **_):
     """6번: GMS를 실제로 실패시키지 않고 해석 실패(None)를 재현한다."""
 
 

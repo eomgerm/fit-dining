@@ -1,24 +1,69 @@
 import pytest
 
 from fit_ai.features import FEATURES
-from fit_ai.taste.direct_input import build_messages, interpret, parse_items
+from fit_ai.taste.direct_input import (
+    RESPONSE_FORMAT,
+    build_messages,
+    interpret,
+    parse_items,
+)
 
 T0 = "2026-10-22T10:00:00+09:00"
 
 
-def item(quote, like=True, code=None, positive_text=None):
-    return {"quote": quote, "like": like, "code": code, "positive_text": positive_text}
+def item(quote, like=True, code=None, positive_text=None, kind="taste"):
+    return {
+        "quote": quote,
+        "kind": kind,
+        "like": like,
+        "code": code,
+        "positive_text": positive_text,
+    }
 
 
 def answering(*items):
     """GMS 대신 parse에 고정 응답을 넣는다."""
-    return lambda messages, parse: parse({"items": list(items)})
+    return lambda messages, parse, **_: parse({"items": list(items)})
 
 
-def test_prompt_lists_every_code_and_passes_text_as_user_message():
+def test_prompt_describes_every_code_and_passes_text_as_user_message():
     system, user = build_messages("조용한 곳")
-    assert all(code in system["content"] for code in FEATURES)
+    for f in FEATURES.values():
+        assert f.code in system["content"]
+        assert f.phrase in system["content"]
     assert user == {"role": "user", "content": "조용한 곳"}
+
+
+def test_interpret_requests_strict_schema_limited_to_code_table():
+    seen = {}
+
+    def call(messages, parse, **kw):
+        seen.update(kw)
+        return parse({"items": []})
+
+    interpret("조용한 곳", "u1", T0, call=call)
+    assert seen["response_format"] is RESPONSE_FORMAT
+    schema = RESPONSE_FORMAT["json_schema"]
+    assert schema["strict"] is True
+    item_props = schema["schema"]["properties"]["items"]["items"]["properties"]
+    assert item_props["code"]["enum"] == [*FEATURES, None]
+    assert item_props["kind"]["enum"] == ["taste", "facility", "quality", "budget"]
+
+
+@pytest.mark.parametrize(
+    ("kind", "like", "kept"),
+    [
+        ("taste", True, "주차 되는 곳"),
+        ("facility", True, None),
+        ("quality", True, None),
+        ("budget", True, None),
+        ("taste", False, None),
+    ],
+)
+def test_positive_text_kept_only_for_liked_taste(kind, like, kept):
+    text = "주차 되는 곳이면 좋겠어요"
+    resp = {"items": [item(text, like, positive_text="주차 되는 곳", kind=kind)]}
+    assert parse_items(resp, text)[0]["positive_text"] == kept
 
 
 def test_drops_quote_not_in_text_and_unknown_code():
@@ -92,7 +137,10 @@ def test_same_code_is_recorded_once_per_input():
 
 
 def test_failed_interpretation_returns_none():
-    assert interpret("한잔하는 곳", "u6", T0, call=lambda messages, parse: None) is None
+    assert (
+        interpret("한잔하는 곳", "u6", T0, call=lambda messages, parse, **_: None)
+        is None
+    )
 
 
 def test_rejects_text_over_100_chars():

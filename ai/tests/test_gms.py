@@ -55,6 +55,13 @@ def test_base_url_and_full_endpoint_reach_same_url(monkeypatch, base):
     assert body["messages"] == MESSAGES
 
 
+def test_sends_given_response_format():
+    fmt = {"type": "json_schema", "json_schema": {"name": "x", "strict": True}}
+    client, seen = client_with(completion('{"ok": 1}'))
+    gms.call_json(MESSAGES, lambda d: d, response_format=fmt, client=client)
+    assert json.loads(seen[0].content)["response_format"] == fmt
+
+
 def test_retries_once_after_http_error():
     client, seen = client_with(httpx.Response(500), completion('{"ok": 1}'))
     assert gms.call_json(MESSAGES, lambda d: d["ok"], client=client) == 1
