@@ -47,7 +47,7 @@ Walking Skeleton
 - [ ] AC-5: 요청 본문에 정의되지 않은 속성(예: `userId`, `visitedAt`)이 있으면 400 ProblemDetail이다. 응답 JSON 키는 문서화된 필드를 벗어나지 않는다. (D-20)
 - [ ] AC-6: 리뷰 등록과 조회를 처리한 뒤(400 포함) BE 로그에 요청 본문과 리뷰 본문이 나타나지 않는다. (D-20)
 - [ ] AC-7: 장소 상세의 리뷰 탭은 리뷰 수와 리뷰 목록을 보이고, 목록 끝이 보이면 다음 페이지를 받는다. 홈 탭은 리뷰 수와 최신 3건을 보이고, 리뷰가 있으면 머리글의 "전체 보기"로 리뷰 탭을 연다. 리뷰가 없으면 "리뷰 0"과 빈 상태 안내(6-E03)를, 목록을 불러오지 못하면 "다시 시도" 버튼이 있는 안내를 보인다. 목록은 작성일을 KST 날짜("10월 20일 작성")로 보인다. 작성 화면은 본문 입력칸 하나이고, 입력칸은 500자까지만 받으며 글자 수(예: 44/500)를 보인다. 등록 요청이 처리 중이면 "등록하기"가 비활성이다. 등록에 성공하면 "리뷰가 등록됐어요" 토스트가 뜨고 들어오기 전의 장소 상세(같은 탭)로 돌아가 새 리뷰가 리뷰 탭 맨 위와 홈 미리보기 첫 줄에 보이며, 상세의 "뒤로" 한 번이면 그 전 화면이다. 실패하면 화면에 오류 안내가 뜨고 입력이 남아 있다. (D-24, D-32)
-- [ ] AC-24: 리뷰는 메모리 Mock 저장소에 저장되고 `REVIEW_MOCK_ENABLED`가 꺼진 환경에서는 등록과 목록 모두 503 ProblemDetail이다. 전체 리뷰 수가 상한을 넘으면 가장 오래된 리뷰부터 목록과 `totalCount`에서 빠진다. 시드로 1번 Mock 장소에 리뷰 25건이 있다. (D-27)
+- [ ] AC-24: 리뷰는 메모리 Mock 저장소에 저장되고 `REVIEW_MOCK_ENABLED`가 꺼진 환경에서는 등록과 목록 모두 503 ProblemDetail이다. 전체 리뷰 수가 상한을 넘으면 가장 오래된 리뷰부터 목록과 `totalCount`에서 빠진다. 시드로 Mock 장소 30곳 모두에 리뷰가 있고, 1번 장소에는 25건이 있다. 장소 카드가 "앱 리뷰"로 드는 근거와 인용이 그 장소의 리뷰에 있다. (D-27, D-33)
 
 1차 후속
 
@@ -79,7 +79,7 @@ Walking Skeleton
 | `be/src/main/java/kr/co/fitdining/api/review/ReviewExceptionHandler.java#ReviewExceptionHandler` | new | WS | D-20 |
 | `be/src/main/java/kr/co/fitdining/api/review/dto/ReviewCreateRequest.java#ReviewCreateRequest` | new | WS | D-23 |
 | `be/src/main/java/kr/co/fitdining/api/review/dto/ReviewListResponse.java#ReviewListResponse` | new | WS | D-23, D-24 |
-| `be/src/main/resources/mock/reviews.json` (시드) | new | WS | D-27 |
+| `be/src/main/resources/mock/reviews.json` (시드, 장소 Mock 30곳의 근거에 맞춤) | new | WS | D-27, D-33 |
 | `be/src/main/resources/application.yml#review` (`review.mock.enabled`), `be/.env.example` | modify | WS | D-27 |
 | `fe/src/app/place/review/page.tsx#ReviewWritePage` (1차에 2단계 흐름으로 바꾼다) | new | WS | D-31 |
 | `fe/src/domains/place/ui/place-detail-screen.tsx#PlaceDetailSlots` (검색 담당의 상세 화면에 리뷰 탭과 세 자리의 렌더 함수 props를 연다) | modify | WS | D-32 |
