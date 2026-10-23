@@ -368,6 +368,12 @@ class JobsTest(unittest.TestCase):
         tsc = next(i for i, l in enumerate(lines) if "tsc --noEmit" in l)
         self.assertLess(typegen, tsc)
 
+    def test_shellcheck_runs_in_parallel_and_still_fails_when_any_file_fails(self):
+        # 한 프로세스로 57개를 검사하면 B에서 1분 26초였다. xargs -P는 한 배치라도 실패하면 종료 코드 123이라 오류를 놓치지 않는다
+        script = script_text("lint:shell")
+        self.assertRegex(script, r"xargs -0 -r -P [2-9] -n \d+ shellcheck -x")
+        self.assertIn("find infra -type f -name '*.sh' -print0", script)
+
     def test_lint_guards_installs_pyyaml_for_this_file(self):
         self.assertIn("py3-yaml", "\n".join(effective("lint:guards")["before_script"]))
 

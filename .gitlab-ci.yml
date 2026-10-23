@@ -99,7 +99,9 @@ lint:shell:
   extends: .verify
   image: $SHELLCHECK_IMAGE
   script:
-    - find infra -type f -name '*.sh' -print0 | xargs -0 -r shellcheck -x
+    # 스크립트 57개를 한 프로세스로 검사하면 B(vCPU 2개)에서 1분 26초 걸렸다. 8개씩 나눠 2개 프로세스로 돌린다(job의 CPU 상한이 2다).
+    # 하나라도 실패하면 xargs가 종료 코드 123을 돌려줘 잡이 실패한다
+    - find infra -type f -name '*.sh' -print0 | xargs -0 -r -P 2 -n 8 shellcheck -x
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
