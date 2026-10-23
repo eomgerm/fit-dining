@@ -256,7 +256,7 @@ getent hosts <도메인>
 
 1. 스왑 4GB
 2. 컨테이너 OOM과 메모리 80% 알림(9절)
-3. 배포·CI 직렬화(GitLab `resource_group`, 러너 `concurrent 1`)
+3. 배포·CI 직렬화(GitLab `resource_group`, 배포 러너 `concurrent 1`)
 4. 비상안: dev 스택(be-dev·fe-dev, 약 1.4GB)을 일시 중지
 
 CPU는 dev 컨테이너에 `cpus` 상한을, prod에는 `cpu_shares` 우선순위를 준다. 빌드의 자원 상한 방법(buildx docker-container driver의 자원 옵션 또는 cgroup)은 구현 시 검증한다 (미확인).
@@ -400,7 +400,7 @@ Caddy 컨테이너(`caddy:2.x`, 구현 시 최신 2.x를 핀)가 A의 80·443만
 
 | 러너 | 호스트 | executor | 비고 |
 |---|---|---|---|
-| `fit-verify` (태그 `verify`) | B (Arm) | docker + docker.sock | job 메모리 2.0GB, cpus 2, `concurrent 1`. B에는 prod 컨테이너·볼륨·시크릿이 없어 CI 사고가 서비스에 닿지 않는다 |
+| `fit-verify` (태그 `verify`) | B (Arm) | docker + docker.sock | job 메모리 2.0GB, cpus 2, `concurrent 2`(메모리를 많이 쓰는 Gradle·Node 잡은 `resource_group: verify-heavy`로 한 번에 하나만 돌아서 나머지 하나는 가벼운 lint가 쓴다. `runner.sh tune`). B에는 prod 컨테이너·볼륨·시크릿이 없어 CI 사고가 서비스에 닿지 않는다 |
 | `fit-deploy` (태그 `deploy`) | A (x86) | shell, `gitlab-runner` ∈ docker 그룹 | protected 브랜치(develop·master)만, `concurrent 1`. 이미지 조립(`COPY`)과 배포만 한다. jar와 PWA 번들은 verify 단계(B)가 만든 아티팩트를 쓴다 |
 | `fit-verify-x86` (필요 시) | A | docker | BE·프런트 의존성에 arm64 빌드가 없을 때만 추가. 야간 위주 |
 
@@ -423,12 +423,13 @@ Caddy 컨테이너(`caddy:2.x`, 구현 시 최신 2.x를 핀)가 A의 80·443만
 
 ### 6.3 파이프라인 `.gitlab-ci.yml`
 
-단계는 `verify` → `build` → `deploy` → `smoke` 순서다. `verify`는 B에서, 나머지는 A의 deploy 러너에서 돈다. 변경 감지는 쓰지 않는다. 레지스트리 조회가 필요한 `lint:image-arch`와 MR에서만 의미 있는 `lint:migrations`와 `lint:history`만 조건부로 돌고, 나머지는 항상 전체를 실행한다.
+단계는 `verify` → `build` → `deploy` → `smoke` 순서다. `verify`는 B에서, 나머지는 A의 deploy 러너에서 돈다. **MR 파이프라인은 바뀐 경로에 해당하는 잡만 돌린다**(`rules:changes`. MR 파이프라인은 대상 브랜치와의 차이로 판단한다). `develop`과 `master` 파이프라인은 항상 전체를 돌린다(배포할 결과물과 병합 뒤 전체 검증이 필요하다). `lint:guards`, `lint:secrets`, `lint:history`는 경로와 상관없이 모든 MR에서 돈다. "Pipelines must succeed"는 파이프라인이 없는 MR을 병합하지 못하게 하므로 어떤 파일만 바꿔도 잡이 하나는 있어야 하기 때문이다. 모든 잡의 `changes`에는 `.gitlab-ci.yml`이 들어 있어서 CI 설정을 바꾸면 전부 다시 검증한다. `lint:image-arch`(레지스트리 조회)는 핀이나 이미지 참조가 바뀔 때만, `lint:migrations`와 `lint:history`는 MR에서만 돈다. 각 잡이 보는 경로는 `.gitlab-ci.yml`의 `rules`에 있고 `test_pipeline_structure.py`가 경로별로 어떤 잡이 도는지 검사한다.
 
 | 잡 | 단계 | 내용 |
 |---|---|---|
 | `lint:*` | verify | 아래 목록 |
-| `be:test` | verify | Gradle 테스트와 `bootJar` 빌드(`sh ./gradlew`: 래퍼가 git에서 실행 권한이 없다). 지금 BE 시험은 DB에 붙어야 뜨므로(`ApiApplicationTests`) dev·prod와 같은 pgvector를 잡의 서비스 컨테이너로 붙인다(접속 값은 그 잡 안에서만 쓰는 값이다). Testcontainers를 쓰게 되면 최신 버전이어야 한다. jar를 아티팩트로 넘긴다. jar 크기가 GitLab 아티팩트 상한을 넘으면 B에서 A로 `rsync`한다(상한은 미확인) |
+| `be:test` | verify | Gradle 테스트(`sh ./gradlew test`: 래퍼가 git에서 실행 권한이 없다). 지금 BE 시험은 DB에 붙어야 뜨므로(`ApiApplicationTests`) dev·prod와 같은 pgvector를 잡의 서비스 컨테이너로 붙인다(접속 값은 그 잡 안에서만 쓰는 값이다). Testcontainers를 쓰게 되면 최신 버전이어야 한다. JUnit 보고서를 MR에 보인다(실패해도 올린다). jar는 만들지 않는다. MR마다 55MB를 GitLab으로 올리면 느리고, 서버가 흔들릴 때(2026-10-23, 502) 테스트까지 같이 실패한다 |
+| `be:build` | verify | 스위치를 켠 `develop`·`master`에서만 돈다. `be:test`가 끝난 뒤 `bootJar -x test`로 배포할 jar를 만들어 아티팩트로 넘긴다(DB가 필요 없다). jar 크기가 GitLab 아티팩트 상한을 넘으면 B에서 A로 `rsync`한다(상한은 미확인) |
 | `fe:test` | verify | 린트, `next typegen`(Next 16의 전역 타입을 만든다. 없으면 `tsc`가 실패한다), 타입 검사, 단위 테스트(`fe/`). verify 러너(B)에서 Node 이미지(핀, arm64 지원)로 실행 |
 | `fe:build` | verify | 같은 Node 이미지로 `next build`(standalone)를 **한 번만** 하고(환경 값은 번들에 넣지 않는다, 6.8절) 커밋 SHA를 `DEPLOYMENT_VERSION`으로 넘겨 빌드 ID와 `deploymentId`로 쓴다. FE 번들(`standalone`, `static`, `public`)을 GitLab 아티팩트로 넘긴다 |
 | `fe:bundle-check` | verify | `infra/ci/check_fe_bundle.py`로 번들 산출물을 검사한다(서버 파일, 정적 자산, 빌드 ID와 `deploymentId`가 SHA와 같음, 이미지 최적화 꺼짐, `sharp` 외 네이티브 모듈 없음, `localhost` 주소 없음. mock 글자는 경고, PWA 파일 없음은 건너뜀). 실패하면 `build:images`가 돌지 않는다 |
@@ -437,7 +438,7 @@ Caddy 컨테이너(`caddy:2.x`, 구현 시 최신 2.x를 핀)가 A의 80·443만
 | `deploy:prod` | deploy | master에서 수동(`environment: prod`, `resource_group: prod`). `allow_failure: false`라 사람이 누를 때까지 파이프라인이 멈춘다(`when: manual`만 두면 안 눌러도 통과한 것처럼 보인다) |
 | `smoke:dev`, `smoke:prod` | smoke | 환경별로 배포 뒤에 돈다(`smoke.sh <env> --sha <SHA>`). `--resolve`로 서버 내부 경유 확인. 검색 1건을 호출해 폴백 사용 여부를 확인한다(Modal 연동 누락이 폴백에 가려지지 않게, BE 계약 #17). 콜드 스타트를 감안한 타임아웃을 둔다. FE는 `/`가 200이고 `/config.json`에 필수 키가 모두 있는지 확인한다 |
 
-**배포 스위치:** `.gitlab-ci.yml`의 변수 `FIT_CD_ENABLED`(기본 `"false"`)가 꺼져 있으면 `fe:build`부터 `smoke`까지는 파이프라인에 나타나지 않고 `be:test`와 `fe:test`만 모든 파이프라인(`develop`, `master`, MR)에서 돈다. 켜면 `develop`은 `smoke:dev`까지, `master`는 수동 `deploy:prod`와 `smoke:prod`까지, MR은 verify 잡(`fe:build`, `fe:bundle-check` 포함)까지 나타난다. 켜는 일은 MR 한 줄이라 기록이 남고, 구조 시험(`test_pipeline_structure.py`)의 기본값 시험도 함께 바꿔야 해서 실수로 켜지 못한다. BE·FE가 서비스 계약(12.1, 12.5절)을 이행하기 전에 `fe:bundle-check`가 모든 MR을 막는 일을 피하려는 것이다. 켜기 전에 끝나야 할 일은 [계획 1C-3의 계약 이행 체크리스트](plans/2026-10-23-plan-1c3-ci-pipeline.md)에 있다.
+**배포 스위치:** `.gitlab-ci.yml`의 변수 `FIT_CD_ENABLED`(기본 `"false"`)가 꺼져 있으면 `fe:build`부터 `smoke`까지는 파이프라인에 나타나지 않고 `be:test`와 `fe:test`만 모든 파이프라인(`develop`, `master`, MR)에서 돈다. 켜면 `develop`은 `smoke:dev`까지, `master`는 수동 `deploy:prod`와 `smoke:prod`까지, MR은 검사 잡(`fe:build`, `fe:bundle-check` 포함, 바뀐 경로에 한해)까지 나타난다. jar를 만드는 `be:build`는 MR에 나타나지 않는다. 켜는 일은 MR 한 줄이라 기록이 남고, 구조 시험(`test_pipeline_structure.py`)의 기본값 시험도 함께 바꿔야 해서 실수로 켜지 못한다. BE·FE가 서비스 계약(12.1, 12.5절)을 이행하기 전에 `fe:bundle-check`가 모든 MR을 막는 일을 피하려는 것이다. 켜기 전에 끝나야 할 일은 [계획 1C-3의 계약 이행 체크리스트](plans/2026-10-23-plan-1c3-ci-pipeline.md)에 있다.
 
 **`lint:*` 잡**
 
@@ -732,7 +733,7 @@ Grafana는 팀원에게 viewer 계정을 준다. A503에서는 SSH 보유자만 
 - 병합 커밋(3-way merge)은 쓰지 않는다. 브랜치는 `git rebase origin/master`로 최신화하고 `git pull --rebase`로 당겨받는다. 로컬에서는 lefthook의 `pre-merge-commit`이, MR에서는 CI의 `lint:history`가 병합 커밋을 막는다. GitLab의 fast-forward 병합은 병합 커밋이 든 브랜치도 받아주므로 이 검사가 필요하다.
 - merge train은 쓰지 않는다. Premium·Ultimate 기능이고 fast-forward와 완전히 호환되지 않는다 (확인: GitLab 문서).
 - 병합 권한자는 준비된 MR을 먼저 올라온 순서로 하나씩 병합한다. 대기가 길면 변경이 작은 MR부터 병합한다.
-- verify 러너가 B 한 대(`concurrent 1`)라 MR이 몰리면 큐가 길어진다. 파이프라인에는 시간 상한(`timeout`, 예: 30분, 제안값)을 둔다.
+- verify 러너가 B 한 대라 MR이 몰리면 큐가 길어진다. 그래서 MR 파이프라인은 바뀐 경로의 잡만 돌리고(6.3절), 무거운 잡만 줄을 세우고 가벼운 잡은 동시에 돌린다(`concurrent 2`). 파이프라인에는 시간 상한(`timeout`, 예: 30분, 제안값)을 둔다.
 - 마이그레이션 번호가 겹치는 MR은 앞선 MR이 병합된 뒤 rebase하면 `lint:migrations`가 `duplicate-version`으로 잡는다(6.5절). 새 번호는 rebase한 뒤 다시 붙인다.
 
 **인프라 경로 변경**

@@ -80,15 +80,17 @@ Settings → CI/CD → General pipelines에서 설정한다.
 
 | 러너 | Tags | Run untagged | Protected | 호스트·executor |
 |---|---|---|---|---|
-| `fit-verify` | `verify` | 끔 | 끔 | B, docker(+ docker.sock), `concurrent 1` |
+| `fit-verify` | `verify` | 끔 | 끔 | B, docker(+ docker.sock), `concurrent 2` |
 | `fit-deploy` | `deploy` | 끔 | 켬 | A, shell, `concurrent 1` |
 
-세부 값(job 메모리, cpus, `gitlab-runner` 사용자의 docker 그룹)은 설계 6.1절이다.
+세부 값(job 메모리, cpus, `gitlab-runner` 사용자의 docker 그룹)은 설계 6.1절이다. B의 `concurrent`는 처음 등록하면 `runner.sh register`가 2로 맞추고, 이미 1로 등록된 러너는 토큰 없이 `sudo bash ~/host/runner.sh tune`으로 바꾼다(서비스를 재시작하지 않는다). 메모리를 많이 쓰는 잡은 `resource_group: verify-heavy`로 한 번에 하나만 돌아서 4GB를 넘지 않는다.
 
 - [x] 두 러너를 만들고 화면에 한 번만 보이는 인증 토큰(`glrt-`로 시작)을 호스트의 `gitlab-runner register`에 입력한다. 토큰은 호스트의 `config.toml`에만 남긴다. 두 서버에서 `runner.sh status`가 PASS다(2026-10-23).
 - [x] Runners 목록에서 두 러너가 online인지 확인한다. 임시 verify 러너(이 PC의 Docker)는 지웠다(사용자 보고, 2026-10-23).
 - [x] MR 파이프라인에서 `lint:*` 잡이 verify 러너에서 통과하는지 확인한다(MR 38의 파이프라인 #238229 통과, 2026-10-23).
 - [x] Merge checks의 **Pipelines must succeed**: 켬(사용자 보고, 2026-10-23). 켜면 MR 화면의 **Rebase without pipeline** 버튼이 사라진다. 같은 곳의 **Skipped pipelines are considered successful**은 켜지 않는다(켜면 버튼이 다시 나타나 검사하지 않은 SHA를 병합할 수 있다) (확인: GitLab 문서).
+- [ ] B의 러너를 `sudo bash ~/host/runner.sh tune`으로 `concurrent 2`에 맞추고 `runner.sh status`가 PASS인지 확인한다.
+- [x] MR 파이프라인이 경로별로 가벼워졌다(`rules:changes`, 설계 6.3절). 항상 도는 잡이 3개(`lint:guards`, `lint:secrets`, `lint:history`)라 "Pipelines must succeed"가 파이프라인 없는 MR을 막는 일이 없다. **Skipped pipelines are considered successful**은 계속 켜지 않는다.
 - [ ] `master`보다 뒤처진 MR에서 Rebase 버튼만 보이고 Rebase without pipeline 버튼이 보이지 않는지 확인한다.
 - [x] Settings → CI/CD → General pipelines의 **Auto-cancel redundant pipelines**: 켬. 같은 브랜치에 새 커밋이 오면 이전 파이프라인의 verify 잡이 취소된다. 이미 켜져 있었다(사용자 보고, 2026-10-23). 배포 잡에는 `interruptible`을 두지 않아서 취소되지 않는다.
 

@@ -18,7 +18,7 @@
 | 2 | `infra/ci/check_fe_bundle.py`와 단위 시험 | 빈 번들이나 `localhost`·mock 값이 박힌 번들을 배포함(A503의 6회 연속 사고), x86에서 못 도는 네이티브 모듈이 섞임 |
 | 3 | `infra/app/Dockerfile.be`, `Dockerfile.fe`, `infra/ci/build-images.sh`와 컨테이너 시험 | 이미지가 root로 돔, 멀티스테이지로 A에서 빌드해 CPU 크레딧을 씀, 같은 SHA를 다시 조립함 |
 | 4 | 호스트 권한 변경(`bootstrap.sh`, `verify-host.sh`) | deploy 러너가 상태 디렉터리에 쓰지 못해 첫 배포가 실패함 |
-| 5 | `.gitlab-ci.yml`의 잡 9개와 구조 시험 | 배포 잡이 보호 안 된 브랜치에서 돎, prod가 자동으로 나감, 같은 환경의 배포가 겹침, 새 푸시에 배포가 중간에 취소됨 |
+| 5 | `.gitlab-ci.yml`의 잡 10개와 구조 시험 | 배포 잡이 보호 안 된 브랜치에서 돎, prod가 자동으로 나감, 같은 환경의 배포가 겹침, 새 푸시에 배포가 중간에 취소됨 |
 | 6 | 문서 동기화, 계약 이행 체크리스트, 서버 적용 절차 | 스위치를 켜기 전에 무엇이 되어 있어야 하는지 모름 |
 
 이 계획은 **파이프라인과 그 부품**만 만든다. 서버에서 러너를 등록하는 일(토큰은 사람이 입력)과 스위치를 켜는 일은 아래 "서버 적용 절차"에 있다. BE·FE 코드를 계약에 맞추는 일은 각 팀의 몫이고 이 계획은 그 목록과 확인 방법을 준다.
@@ -46,7 +46,7 @@
 
 | 경로 | 구분 | 책임 |
 |---|---|---|
-| `.gitlab-ci.yml` | 수정 | 변수(스위치와 핀), 잡 9개: `be:test`, `fe:test`, `fe:build`, `fe:bundle-check`, `build:images`, `deploy:dev`, `deploy:prod`, `smoke:dev`, `smoke:prod` |
+| `.gitlab-ci.yml` | 수정 | 변수(스위치와 핀), 잡 10개: `be:test`, `fe:test`, `be:build`, `fe:build`, `fe:bundle-check`, `build:images`, `deploy:dev`, `deploy:prod`, `smoke:dev`, `smoke:prod` |
 | `infra/ci/tool-images.sh` | 수정 | `JDK_IMAGE`, `JRE_IMAGE`, `NODE_IMAGE` 핀 추가(단일 출처) |
 | `infra/ci/check_fe_bundle.py` | 신규 | FE 번들 산출물 검사(설계 6.8절 P0) |
 | `infra/ci/tests/test_check_fe_bundle.py` | 신규 | 위 검사의 단위 시험(임시 디렉터리 번들) |
@@ -231,13 +231,27 @@ be:test:
     paths: [.gradle/caches, .gradle/wrapper]
   script:
     - cd be
-    - sh ./gradlew --no-daemon test bootJar   # gradlew는 git에서 실행 권한이 없다(100644)
+    - sh ./gradlew --no-daemon test   # gradlew는 git에서 실행 권한이 없다(100644). jar는 be:build가 만든다
+  artifacts:
+    when: always
+    expire_in: 1 week
+    reports:
+      junit: be/build/test-results/test/*.xml
+
+be:build:   # 스위치를 켠 develop·master에서만. MR마다 55MB jar를 올리지 않는다(아래 "MR 경량화")
+  extends: .verify
+  image: $JDK_IMAGE
+  resource_group: verify-heavy
+  rules:
+    - if: $FIT_CD_ENABLED == "true" && $CI_PIPELINE_SOURCE != "merge_request_event"
+  needs: [be:test]
+  script:
+    - cd be
+    - sh ./gradlew --no-daemon bootJar -x test
     - ls -l build/libs
   artifacts:
     expire_in: 1 day
     paths: [be/build/libs/*.jar]
-    reports:
-      junit: be/build/test-results/test/*.xml
 
 fe:test:
   extends: .verify
@@ -356,7 +370,7 @@ smoke:prod:
 
 구조 시험(`test_pipeline_structure.py`, PyYAML)의 규칙:
 
-1. 위 잡 9개가 모두 있다.
+1. 위 잡 10개가 모두 있다.
 2. `build:images`, `deploy:*`, `smoke:*`는 `tags: [deploy]`이고 다른 잡은 기본(verify) 태그를 쓴다.
 3. 배포 잡(`deploy:*`)에는 `environment`와 `resource_group`이 있고 이름이 환경과 같다.
 4. `deploy:prod`의 규칙은 `when: manual`이고 브랜치가 `master`다. `deploy:dev`는 `develop`이다. 둘 다 `FIT_CD_ENABLED`를 조건에 포함한다.
@@ -371,6 +385,9 @@ smoke:prod:
 13. `be:test`는 `sh ./gradlew`로 부른다(`be/gradlew`가 git에서 100644라 직접 부르면 Permission denied) 그리고 DB 서비스(`$PGVECTOR_IMAGE`, 별칭 `postgres`)와 짝이 맞는 `SPRING_DATASOURCE_*` 값을 갖는다.
 14. `fe:test`는 `next typegen`을 `tsc --noEmit`보다 먼저 돌린다.
 15. 규칙을 평가하는 해석기 자체의 시험(`==`, `!=`, `&&`, `||`, 괄호, 없는 변수는 null, 모르는 문법은 오류)을 둔다. `=~` 같은 문법이 규칙에 들어오면 시험이 추측하지 않고 실패한다.
+16. `be:test`는 jar를 만들지도 아티팩트로 올리지도 않는다. `be:build`는 `bootJar -x test`이고 `be:test`를 기다리며 DB 서비스가 없고 MR에는 나타나지 않는다.
+17. `resource_group: verify-heavy`는 `be:test`, `fe:test`, `be:build`, `fe:build`에만 있다.
+18. `rules:changes`(glob)까지 평가해서 MR의 바뀐 경로별로 도는 잡을 검사한다(문서만, FE만, BE만, 마이그레이션, 인프라 셸·Caddy·Dockerfile·관측·B 감시, CI 설정, 번들 검사 스크립트만 바꾼 경우). 어떤 경로를 바꿔도 `lint:guards`, `lint:secrets`, `lint:history`는 돌아 MR 파이프라인이 비지 않는다. `develop`·`master`는 경로와 상관없이 전체를 돌린다. 경로 필터가 있는 모든 잡의 `changes`에 `.gitlab-ci.yml`이 있다. 어떤 변경에서도 `needs`는 그 파이프라인에 있는 잡만 가리킨다.
 
 - [ ] **Step 1:** 시험을 먼저 쓰고 실패하는 것을 본다.
 - [ ] **Step 2:** 잡을 더하고 시험이 통과한다. `lint:guards`가 `py3-yaml`을 설치한다. yamllint도 통과한다.
@@ -451,11 +468,37 @@ smoke:prod:
 - `corepack`이 `packageManager`의 pnpm(11.20.0)을 내려받는 데 B의 외부 접근이 필요하다. 막혀 있으면 pnpm을 이미지에 넣는 후속이 필요하다.
 - 실제 BE·FE 이미지의 준비 시간과 메모리(1C-2에서도 목 이미지로만 확인했다).
 
+## MR 경량화 (2026-10-23)
+
+MR 40의 첫 파이프라인에서 `be:test`는 B에서 테스트와 jar 생성을 1분 10초 만에 끝냈지만, 55MB jar를 GitLab에 올리다 502로 실패했다(GitLab이 내려가 있던 시간대였고 다시 돌리니 통과했다). 이 jar는 스위치를 켠 뒤 `build:images`만 쓴다. 또 B의 verify 러너가 `concurrent 1`이라 MR 파이프라인의 잡이 한 줄로 서서 돌고, MR이 몰리면 서로 기다린다. 목표는 코드 양이나 MR 수와 상관없이 MR의 CI가 빨리 끝나 병합이 막히지 않게 하는 것이다.
+
+| 바꾼 것 | 효과 | 안전장치 |
+|---|---|---|
+| MR 파이프라인은 바뀐 경로의 잡만 돈다(`rules:changes`) | 문서나 FE만 바꾼 MR이 Gradle, Node, 다른 린터를 기다리지 않는다 | `develop`·`master`는 항상 전체. 모든 필터에 `.gitlab-ci.yml`. 항상 도는 잡 3개(`lint:guards`, `lint:secrets`, `lint:history`)가 있어 파이프라인이 비지 않는다("Pipelines must succeed"는 파이프라인이 없는 MR을 병합하지 못하게 한다. 확인: GitLab 문서) |
+| jar를 `be:build`로 분리(스위치를 켠 `develop`·`master`에서만) | MR마다 55MB를 올리지 않는다. 서버가 흔들려도 테스트가 업로드 때문에 실패하지 않는다 | `be:build`는 `be:test`가 통과해야 돈다(`needs`). 시험이 MR에 `be:build`가 나타나지 않는 것을 검사한다 |
+| 무거운 잡만 `resource_group: verify-heavy` | B의 메모리(4GB) 안에서 Gradle과 Node가 겹치지 않는다 | 시험이 이 그룹이 그 네 잡에만 있는 것을 검사한다 |
+| B의 러너를 `concurrent 2`로(`runner.sh tune`) | 가벼운 린터가 무거운 잡 뒤에서 기다리지 않는다 | A의 deploy 러너는 1로 고정한다(같은 환경의 배포가 겹치면 안 된다). `tune`은 서비스를 재시작하지 않아 돌고 있는 잡이 끊기지 않는다 |
+| `be:test`의 JUnit 보고서를 `when: always`로 올린다 | 실패한 시험을 MR 화면에서 바로 본다 | 보고서는 작다 |
+
+시험과 확인:
+
+- `test_pipeline_structure.py`가 `rules:changes`를 평가하는 해석기로 경로별 파이프라인을 검사한다(위 규칙 16~18). `.gitlab-ci.yml`을 일부러 망가뜨린 변이 17개(`be:build`가 MR에서 돎, 항상 도는 잡에 경로 필터, `lint:prometheus`에서 B의 경로 제거, `fe:build`의 `optional` 제거 등)를 모두 잡았다.
+- `runner.sh`는 컨테이너 시험(`tune`의 값, 멱등, 권한 600, 역할별 값, 잘못된 값 거부, `concurrent` 줄이 없을 때)을 통과했다.
+- `be:test`와 `be:build`의 줄은 이 PC에서 DB를 붙여 돌려 확인했다. 테스트만 돌리면 jar가 없고(JUnit 보고서 26개), `bootJar -x test`는 DB와 환경변수 없이 같은 jar(55,926,698바이트)를 만든다.
+
+서버에서 할 일: 머지한 뒤 B에 새 `runner.sh`를 올리고 `sudo bash ~/host/runner.sh tune`을 한 번 실행한다(`status`가 `concurrent가 2이다`로 PASS). 지금 B는 `concurrent 1`이라 새 `status`는 FAIL로 안내한다.
+
+다음에 볼 것(실측이 필요하다): GitLab의 Jobs 화면에서 잡별 소요 시간을 보고 남은 큰 비용을 정한다. 후보는 세 가지다.
+
+- `fe:test`가 잡마다 만드는 pnpm 스토어 캐시(581MB)를 MR 파이프라인에서는 읽기만 하게 하기(`policy: pull`).
+- 스위치를 켠 뒤 MR마다 올라가는 FE 번들(42MB): `fe:build`와 `fe:bundle-check`를 한 잡으로 합치고 번들은 `develop`·`master`에서만 올리기.
+- Gradle 빌드 캐시(`--build-cache`).
+
 ## 검증 결과 (2026-10-23, 이 PC)
 
 | 무엇을 | 결과 |
 |---|---|
-| 단위 시험(`python -m unittest discover -s infra/ci/tests`) | 209개 통과(2개는 POSIX 전용이라 Windows에서 건너뛴다. Linux 컨테이너에서는 전부 돈다) |
+| 단위 시험(`python -m unittest discover -s infra/ci/tests`) | 225개 통과(2개는 POSIX 전용이라 Windows에서 건너뛴다. Linux 컨테이너에서는 전부 돈다. CI의 `lint:guards`와 같은 alpine 이미지에서도 통과) |
 | `bash infra/ci/run-local-checks.sh` | 통과(20개 PASS·OK, `hadolint(be)` 한 개는 대상 파일이 없어 건너뜀) |
 | `bash infra/ci/run-local-checks.sh --self-test` | 통과(13개. 검사가 나쁜 입력을 거부한다) |
 | `bash infra/ci/test/test-images.sh` | 통과(22개) |

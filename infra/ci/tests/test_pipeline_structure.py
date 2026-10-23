@@ -13,7 +13,8 @@ ROOT = Path(__file__).resolve().parents[3]
 CI = yaml.safe_load((ROOT / ".gitlab-ci.yml").read_text(encoding="utf-8"))
 
 RESERVED = {"stages", "workflow", "default", "variables", "include", "image", "services", "cache", "before_script", "after_script"}
-VERIFY_JOBS = ["be:test", "fe:test", "fe:build", "fe:bundle-check"]
+VERIFY_JOBS = ["be:test", "fe:test", "be:build", "fe:build", "fe:bundle-check"]
+ALWAYS_IN_MR = {"lint:guards", "lint:secrets", "lint:history"}  # 경로와 상관없이 모든 MR에서 도는 잡. MR에 파이프라인이 없으면 병합할 수 없다
 DEPLOY_TAGGED = ["build:images", "deploy:dev", "deploy:prod", "smoke:dev", "smoke:prod"]
 NEW_JOBS = VERIFY_JOBS + DEPLOY_TAGGED
 PROTECTED = {"develop", "master"}
@@ -105,22 +106,60 @@ def effective(name: str) -> dict:
     return merged
 
 
-def first_match(rules: list, variables: dict):
+def glob_to_regex(pattern: str) -> re.Pattern:
+    """GitLab `rules:changes`의 glob(`*`은 /를 넘지 않고 `**`는 디렉터리를 넘는다, `{a,b}`, 점 파일 포함)을 정규식으로 바꾼다."""
+    i, out = 0, ""
+    while i < len(pattern):
+        if pattern.startswith("**/", i):
+            out += "(?:.*/)?"
+            i += 3
+            continue
+        if pattern.startswith("**", i):
+            out += ".*"
+            i += 2
+            continue
+        c = pattern[i]
+        if c == "*":
+            out += "[^/]*"
+        elif c == "?":
+            out += "[^/]"
+        elif c == "{":
+            j = pattern.index("}", i)
+            out += "(?:" + "|".join(re.escape(x) for x in pattern[i + 1:j].split(",")) + ")"
+            i = j
+        else:
+            out += re.escape(c)
+        i += 1
+    return re.compile(out + r"\Z")
+
+
+def paths_match(patterns, changed) -> bool:
+    if changed is None:  # 바뀐 파일을 모르면(브랜치 파이프라인 등) 맞는 것으로 본다
+        return True
+    if isinstance(patterns, dict):
+        patterns = patterns["paths"]
+    regexes = [glob_to_regex(p) for p in patterns]
+    return any(r.match(f) for f in changed for r in regexes)
+
+
+def first_match(rules: list, variables: dict, changed=None):
     for rule in rules:
         if "if" in rule and not evaluate(rule["if"], variables):
-            continue  # changes만 있는 규칙은 맞는 것으로 본다(보수적)
+            continue
+        if "changes" in rule and not paths_match(rule["changes"], changed):
+            continue
         return rule.get("when", "on_success")
     return None
 
 
-def pipeline(variables: dict) -> dict[str, str]:
-    """{잡 이름: when}. 파이프라인이 만들어지지 않으면 빈 사전이다."""
+def pipeline(variables: dict, changed=None) -> dict[str, str]:
+    """{잡 이름: when}. 파이프라인이 만들어지지 않으면 빈 사전이다. changed는 MR이 바꾼 파일(None이면 모른다)."""
     if first_match(CI["workflow"]["rules"], variables) in (None, "never"):
         return {}
     out: dict[str, str] = {}
     for name in job_names():
         job = effective(name)
-        when = first_match(job["rules"], variables) if "rules" in job else "on_success"
+        when = first_match(job["rules"], variables, changed) if "rules" in job else "on_success"
         if when not in (None, "never"):
             out[name] = when
     return out
@@ -179,9 +218,10 @@ class EvaluatorTest(unittest.TestCase):
 
 
 class JobsTest(unittest.TestCase):
-    def test_the_nine_jobs_exist(self):
+    def test_the_ten_jobs_exist(self):
         for name in NEW_JOBS:
             self.assertIn(name, CI, name)
+        self.assertEqual(len(NEW_JOBS), 10)
 
     def test_deploy_stage_jobs_use_the_deploy_runner_and_the_rest_use_verify(self):
         for name in job_names():
@@ -192,7 +232,7 @@ class JobsTest(unittest.TestCase):
                 self.assertEqual(tags, ["verify"], name)
 
     def test_stages(self):
-        want = {"be:test": "verify", "fe:test": "verify", "fe:build": "verify", "fe:bundle-check": "verify",
+        want = {"be:test": "verify", "fe:test": "verify", "be:build": "verify", "fe:build": "verify", "fe:bundle-check": "verify",
                 "build:images": "build", "deploy:dev": "deploy", "deploy:prod": "deploy", "smoke:dev": "smoke", "smoke:prod": "smoke"}
         for name, stage in want.items():
             self.assertEqual(effective(name).get("stage"), stage, name)
@@ -248,10 +288,10 @@ class JobsTest(unittest.TestCase):
             self.assertIn(m.group(1), CI["variables"], name)
 
     def test_artifacts_carry_the_jar_and_the_bundle(self):
-        self.assertIn("be/build/libs/*.jar", effective("be:test")["artifacts"]["paths"])
+        self.assertIn("be/build/libs/*.jar", effective("be:build")["artifacts"]["paths"])
         self.assertIn("fe-bundle/", effective("fe:build")["artifacts"]["paths"])
         build_needs = effective("build:images")["needs"]
-        self.assertIn({"job": "be:test", "artifacts": True}, build_needs)
+        self.assertIn({"job": "be:build", "artifacts": True}, build_needs)
         self.assertIn({"job": "fe:build", "artifacts": True}, build_needs)
         self.assertIn("fe:bundle-check", build_needs)
         self.assertIn({"job": "fe:build", "artifacts": True}, effective("fe:bundle-check")["needs"])
@@ -270,9 +310,47 @@ class JobsTest(unittest.TestCase):
                 self.assertTrue((ROOT / path).exists(), f"{name}: {path}")
 
     def test_gradle_runs_through_sh_because_the_wrapper_is_not_executable_in_git(self):
-        script = effective("be:test")["script"]
-        self.assertTrue(any(line.startswith("sh ./gradlew") or line.startswith("sh gradlew") for line in script), script)
-        self.assertFalse(any(line.startswith("./gradlew") for line in script), script)
+        for name in ("be:test", "be:build"):
+            script = effective(name)["script"]
+            self.assertTrue(any(line.startswith("sh ./gradlew") or line.startswith("sh gradlew") for line in script), script)
+            self.assertFalse(any(line.startswith("./gradlew") for line in script), script)
+
+    def test_the_jar_is_built_apart_from_the_tests_and_never_uploaded_by_the_test_job(self):
+        # MR마다 55MB jar를 GitLab에 올리면 느리고 서버가 흔들릴 때 테스트까지 같이 실패한다(2026-10-23, 502). jar는 배포할 때만 만든다
+        test, build = effective("be:test"), effective("be:build")
+        self.assertNotIn("bootJar", script_text("be:test"))
+        self.assertNotIn("paths", test.get("artifacts", {}))
+        self.assertIn("bootJar -x test", script_text("be:build"))
+        self.assertIn("be:test", build["needs"])
+        self.assertNotIn("services", build)  # -x test라 DB가 필요 없다
+
+    def test_heavy_jobs_share_one_resource_group_so_two_of_them_never_run_at_once(self):
+        # B(메모리 4GB)의 러너는 동시에 둘을 돌린다. 메모리를 많이 쓰는 잡끼리만 줄을 세워 가벼운 lint 잡이 기다리지 않게 한다
+        for name in ("be:test", "fe:test", "be:build", "fe:build"):
+            self.assertEqual(effective(name).get("resource_group"), "verify-heavy", name)
+        for name in job_names():
+            if name not in ("be:test", "fe:test", "be:build", "fe:build"):
+                self.assertNotEqual(effective(name).get("resource_group"), "verify-heavy", name)
+
+    def test_path_filtered_jobs_rerun_when_the_ci_config_changes_and_branches_run_everything(self):
+        filtered = []
+        for name in job_names():
+            rules = effective(name).get("rules") or []
+            mr_rules = [r for r in rules if "changes" in r and "merge_request_event" in r.get("if", "") and "!=" not in r.get("if", "")]
+            if not mr_rules:
+                continue
+            filtered.append(name)
+            for rule in mr_rules:
+                self.assertIn(".gitlab-ci.yml", rule["changes"], f"{name}: CI 설정을 바꾸면 이 잡도 다시 돌아야 한다")
+            if name != "lint:migrations":  # 이 잡은 MR 전용이다
+                on_branches = [r for r in rules if '$CI_PIPELINE_SOURCE != "merge_request_event"' in r.get("if", "") and "changes" not in r]
+                self.assertTrue(on_branches, f"{name}: develop·master에서는 경로와 상관없이 항상 돈다")
+        self.assertGreaterEqual(len(filtered), 8)
+
+    def test_the_always_on_jobs_have_no_path_filter(self):
+        for name in ALWAYS_IN_MR:
+            for rule in effective(name).get("rules") or []:
+                self.assertNotIn("changes", rule, name)
 
     def test_be_tests_get_a_database_like_the_one_dev_runs(self):
         # ApiApplicationTests.contextLoads는 JPA가 DB에 붙어야 뜬다(2026-10-23 DB 없이 돌려 165개 중 이 하나가 실패했다)
@@ -317,8 +395,8 @@ class PipelineContentsTest(unittest.TestCase):
         self.assertEqual(sorted(jobs), sorted(VERIFY_JOBS + ["build:images", "deploy:prod", "smoke:prod"]))
         self.assertEqual(jobs["deploy:prod"], "manual")
 
-    def test_switch_on_mr_runs_only_the_verify_jobs(self):
-        self.assertEqual(sorted(self.new_jobs("mr", "true")), sorted(VERIFY_JOBS))
+    def test_switch_on_mr_runs_the_checks_but_never_builds_the_jar(self):
+        self.assertEqual(sorted(self.new_jobs("mr", "true")), sorted(set(VERIFY_JOBS) - {"be:build"}))
 
     def test_deploy_stage_jobs_never_appear_outside_protected_branches(self):
         for kind in KINDS:
@@ -343,6 +421,99 @@ class PipelineContentsTest(unittest.TestCase):
                             self.assertIn(target, present, label)
                         if target in present:
                             self.assertLessEqual(order[effective(target)["stage"]], order[effective(name)["stage"]], label)
+
+
+class GlobTest(unittest.TestCase):
+    def matches(self, pattern, path):
+        return bool(glob_to_regex(pattern).match(path))
+
+    def test_star_stays_inside_a_directory_and_double_star_crosses_them(self):
+        self.assertTrue(self.matches("be/**/*", "be/src/main/java/X.java"))
+        self.assertTrue(self.matches("be/**/*", "be/gradlew"))
+        self.assertFalse(self.matches("be/**/*", "fe/src/x.ts"))
+        self.assertTrue(self.matches("infra/**/*.sh", "infra/deploy/deploy.sh"))
+        self.assertTrue(self.matches("infra/**/*.sh", "infra/x.sh"))
+        self.assertFalse(self.matches("infra/**/*.sh", "infra/deploy/README.md"))
+        self.assertFalse(self.matches("infra/*.sh", "infra/deploy/deploy.sh"))
+
+    def test_dockerfile_patterns_and_dot_files(self):
+        for path in ("infra/app/Dockerfile", "infra/app/Dockerfile.fe", "be/x/api.Dockerfile", "Dockerfile"):
+            self.assertTrue(any(self.matches(p, path) for p in ("**/Dockerfile", "**/Dockerfile.*", "**/*.Dockerfile")), path)
+        self.assertTrue(self.matches(".gitlab-ci.yml", ".gitlab-ci.yml"))
+        self.assertFalse(self.matches(".gitlab-ci.yml", "x/.gitlab-ci.yml"))
+        self.assertTrue(self.matches("infra/**/*", "infra/.hidden/x"))
+
+    def test_an_unknown_change_set_matches_everything_and_an_empty_one_nothing(self):
+        self.assertTrue(paths_match(["fe/**/*"], None))
+        self.assertFalse(paths_match(["fe/**/*"], []))
+
+
+class MrPathTest(unittest.TestCase):
+    """MR 파이프라인이 바뀐 경로만 돌리는지. develop·master는 항상 전체다."""
+
+    def mr(self, changed, switch=None):
+        return set(pipeline(context("mr", switch), changed))
+
+    def test_docs_only_runs_just_the_always_on_jobs(self):
+        self.assertEqual(self.mr(["docs/infra/design.md"]), ALWAYS_IN_MR)
+        self.assertEqual(self.mr(["README.md"]), ALWAYS_IN_MR)
+
+    def test_fe_only_runs_the_fe_test_and_nothing_from_be_or_infra(self):
+        self.assertEqual(self.mr(["fe/src/app/page.tsx"]), ALWAYS_IN_MR | {"fe:test"})
+        self.assertEqual(self.mr(["fe/src/app/page.tsx"], "true"), ALWAYS_IN_MR | {"fe:test", "fe:build", "fe:bundle-check"})
+
+    def test_be_only_runs_the_be_test_and_the_migration_check_only_for_migrations(self):
+        self.assertEqual(self.mr(["be/src/main/java/kr/co/fitdining/api/X.java"]), ALWAYS_IN_MR | {"be:test"})
+        self.assertEqual(self.mr(["be/src/main/resources/db/migration/V2__x.sql"]), ALWAYS_IN_MR | {"be:test", "lint:migrations"})
+
+    def test_infra_changes_run_only_the_linters_that_read_those_files(self):
+        self.assertEqual(self.mr(["infra/deploy/deploy.sh"]), ALWAYS_IN_MR | {"lint:shell"})
+        self.assertEqual(self.mr(["infra/edge/Caddyfile"]), ALWAYS_IN_MR | {"lint:caddy"})
+        self.assertEqual(self.mr(["infra/app/Dockerfile.fe"]), ALWAYS_IN_MR | {"lint:docker"})
+        self.assertEqual(
+            self.mr(["infra/obs/compose.obs.yml"]),
+            ALWAYS_IN_MR | {"lint:yaml", "lint:prometheus", "lint:alertmanager", "lint:image-arch"},
+        )
+        # A의 관측(infra/obs)과 B의 감시(infra/ops)는 같은 두 린터가 본다. 어느 쪽만 바꿔도 돌아야 한다
+        for path in ("infra/ops/alertmanager/alertmanager.yml", "infra/obs/alertmanager/alertmanager.yml"):
+            self.assertEqual(self.mr([path]), ALWAYS_IN_MR | {"lint:yaml", "lint:prometheus", "lint:alertmanager"}, path)
+
+    def test_changing_the_ci_config_reruns_everything_that_can_run_in_an_mr(self):
+        everything = set(pipeline(context("mr", "true"), None)) - {"lint:image-arch"}
+        self.assertEqual(self.mr([".gitlab-ci.yml"], "true"), everything)
+
+    def test_a_bundle_check_script_change_runs_the_bundle_jobs_without_the_fe_test(self):
+        got = self.mr(["infra/ci/check_fe_bundle.py"], "true")
+        self.assertIn("fe:build", got)
+        self.assertIn("fe:bundle-check", got)
+        self.assertNotIn("fe:test", got)
+
+    def test_an_mr_pipeline_is_never_empty_whatever_changed(self):
+        samples = [[], ["README.md"], ["docs/a.md"], ["fe/a.ts"], ["be/a.java"], ["infra/ci/tests/test_x.py"], ["ai/main.py"], ["some/new/dir/file.txt"]]
+        for changed in samples:
+            for switch in (None, "true"):
+                got = self.mr(changed, switch)
+                self.assertTrue(ALWAYS_IN_MR <= got, f"{changed}: {got}")
+
+    def test_branch_pipelines_run_every_path_filtered_job_regardless_of_paths(self):
+        for kind in ("develop", "master"):
+            got = set(pipeline(context(kind), []))
+            for name in ("be:test", "fe:test", "lint:shell", "lint:docker", "lint:caddy", "lint:prometheus", "lint:alertmanager", "lint:yaml", "lint:guards", "lint:secrets"):
+                self.assertIn(name, got, f"{kind}: {name}")
+
+    def test_needs_stay_valid_for_every_kind_of_change(self):
+        # 존재하지 않는 잡을 기다리면 GitLab이 파이프라인 생성을 거부한다
+        samples = [[], ["docs/a.md"], ["fe/a.ts"], ["be/a.java"], ["infra/ci/check_fe_bundle.py"], ["infra/ci/tool-images.sh"], [".gitlab-ci.yml"], ["infra/deploy/deploy.sh"]]
+        for kind in ("mr", "develop", "master"):
+            for switch in (None, "true"):
+                for changed in samples:
+                    present = pipeline(context(kind, switch), changed)
+                    for name in present:
+                        for need in effective(name).get("needs", []):
+                            target = need["job"] if isinstance(need, dict) else need
+                            optional = isinstance(need, dict) and need.get("optional")
+                            if not optional:
+                                self.assertIn(target, present, f"{kind}/{switch}/{changed}: {name} -> {target}")
 
 
 if __name__ == "__main__":

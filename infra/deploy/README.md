@@ -18,7 +18,7 @@ CI가 아닌 곳에서 `deploy.sh`를 직접 실행하려면 `SKIP_VERIFY=<사�
 
 ## CI에서 배포하기
 
-`.gitlab-ci.yml`이 위 스크립트를 부른다(설계 6.3절). `develop`에 병합하면 `build:images` → `deploy:dev` → `smoke:dev`가 돌고, `master`에서는 `build:images` → 수동 `deploy:prod` → `smoke:prod`다. 배포 단계(`fe:build`부터 `smoke`까지)는 변수 `FIT_CD_ENABLED`가 `"true"`일 때만 나타난다. 기본은 꺼짐이고 켜기 전에 끝나야 할 일은 [계획 1C-3의 체크리스트](../../docs/infra/plans/2026-10-23-plan-1c3-ci-pipeline.md)에 있다.
+`.gitlab-ci.yml`이 위 스크립트를 부른다(설계 6.3절). `develop`에 병합하면 `be:build`와 `fe:build`가 jar와 번들을 만들고 `build:images` → `deploy:dev` → `smoke:dev`가 돌고, `master`에서는 같은 이미지로 수동 `deploy:prod` → `smoke:prod`다. 배포 단계(`be:build`, `fe:build`부터 `smoke`까지)는 변수 `FIT_CD_ENABLED`가 `"true"`일 때만 나타난다. MR 파이프라인은 바뀐 경로의 검사만 돌려 빠르게 끝나고(jar는 만들지 않는다), `develop`·`master`는 항상 전체를 돌린다(설계 6.3절). 기본은 꺼짐이고 켜기 전에 끝나야 할 일은 [계획 1C-3의 체크리스트](../../docs/infra/plans/2026-10-23-plan-1c3-ci-pipeline.md)에 있다.
 
 - 잡은 서버 A의 `fit-deploy` 러너(shell, 보호된 브랜치만)에서 돌고 `gitlab-runner` 계정이 docker 그룹이라 `deploy.sh`를 그대로 실행한다. `/srv/fit/state`와 `/srv/fit/web`은 `root:docker 2775`여야 쓸 수 있다(`infra/host/bootstrap.sh`가 만든다).
 - 배포 잡은 전체 clone(`GIT_DEPTH: "0"`)을 쓴다. 얕은 clone이면 `preflight.sh`의 다운그레이드 가드와 마이그레이션 비교가 틀린다.
