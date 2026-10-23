@@ -1,0 +1,50 @@
+[project]
+name = "fit-ai"
+version = "0.1.0"
+description = "핏다이닝 AI: 취향·가게 분석과 비교"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "httpx>=0.28.1",
+    "numpy>=2.5.4",
+    "sentence-transformers>=6.2.0",
+]
+
+[project.optional-dependencies]
+# GPU는 `uv sync --extra cu128`. PyPI 기본 빌드(CUDA 13)는 드라이버가 CUDA 12.8까지인 GPU 서버에서 돌지 않는다
+cpu = ["torch"]
+cu128 = ["torch"]
+
+[build-system]
+requires = ["uv_build>=0.13.4,<0.14.0"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.17.1",
+]
+
+[tool.uv]
+conflicts = [[{ extra = "cpu" }, { extra = "cu128" }]]
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cpu", extra = "cpu" },
+    { index = "pytorch-cu128", extra = "cu128" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.ruff.lint]
+extend-select = ["I", "UP", "B"]
