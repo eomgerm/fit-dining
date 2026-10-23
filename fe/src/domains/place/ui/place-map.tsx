@@ -52,7 +52,8 @@ declare global {
 const DEFAULT_CENTER = YEOKSAM_STATION;
 const DEFAULT_ZOOM = 15;
 const PIN_SIZE = 28;
-const SELECTED_PIN_SIZE = 36;
+const SELECTED_PIN_SIZE = 40;
+const LOCATION_PIN_SIZE = 32;
 
 let scriptPromise: Promise<NaverMaps> | undefined;
 let authFailed = false;
@@ -80,19 +81,42 @@ function loadNaverMaps(clientId: string) {
   return scriptPromise;
 }
 
-// 순위가 없으면 번호 없는 핀이다(정보 탭의 위치 지도)
+// 물방울 핀(와이어프레임 fd-pin-selected). 한 모서리만 작게 둥근 정사각형을 -45도 돌려 그 모서리가 아래를 향한다.
+// 안쪽 내용은 다시 45도 돌려 바로 세운다. 기준점은 아래 끝(중심에서 한 변/√2 아래, 모서리가 둥근 만큼 조금 위)이다
+function dropPin(
+  naver: NaverMaps,
+  size: number,
+  sizeClass: string,
+  inner: string,
+) {
+  return {
+    content: `<div class="flex ${sizeClass} -rotate-45 items-center justify-center rounded-full rounded-bl-xs bg-primary text-title-sm text-on-primary shadow-pin"><span class="flex rotate-45 items-center justify-center">${inner}</span></div>`,
+    anchor: new naver.Point(
+      size / 2,
+      Math.round(size / 2 + size / Math.SQRT2) - 2,
+    ),
+  };
+}
+
+// 선택된 핀은 순위 번호가 든 물방울, 나머지는 순위 번호가 든 흰 원이다.
+// 순위가 없으면(정보 탭의 위치 지도) 가운데에 흰 원이 든 조금 작은 물방울이다
 function pinIcon(
   naver: NaverMaps,
   rank: number | undefined,
   selected: boolean,
 ) {
-  const size = selected ? SELECTED_PIN_SIZE : PIN_SIZE;
-  const className = selected
-    ? "flex size-9 items-center justify-center rounded-full bg-primary text-label-md text-on-primary shadow-pin"
-    : "flex size-7 items-center justify-center rounded-full border border-icon-subtle bg-surface text-label-sm text-ink shadow-1";
+  if (rank === undefined) {
+    return dropPin(
+      naver,
+      LOCATION_PIN_SIZE,
+      "size-8",
+      '<span class="size-3 rounded-full bg-surface"></span>',
+    );
+  }
+  if (selected) return dropPin(naver, SELECTED_PIN_SIZE, "size-10", `${rank}`);
   return {
-    content: `<div class="${className}">${rank ?? ""}</div>`,
-    anchor: new naver.Point(size / 2, size / 2),
+    content: `<div class="flex size-7 items-center justify-center rounded-full border border-icon-subtle bg-surface text-label-sm text-ink shadow-1">${rank}</div>`,
+    anchor: new naver.Point(PIN_SIZE / 2, PIN_SIZE / 2),
   };
 }
 
