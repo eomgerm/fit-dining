@@ -89,7 +89,7 @@ Settings → CI/CD → General pipelines에서 설정한다.
 - [x] Runners 목록에서 두 러너가 online인지 확인한다. 임시 verify 러너(이 PC의 Docker)는 지웠다(사용자 보고, 2026-10-23).
 - [x] MR 파이프라인에서 `lint:*` 잡이 verify 러너에서 통과하는지 확인한다(MR 38의 파이프라인 #238229 통과, 2026-10-23).
 - [x] Merge checks의 **Pipelines must succeed**: 켬(사용자 보고, 2026-10-23). 켜면 MR 화면의 **Rebase without pipeline** 버튼이 사라진다. 같은 곳의 **Skipped pipelines are considered successful**은 켜지 않는다(켜면 버튼이 다시 나타나 검사하지 않은 SHA를 병합할 수 있다) (확인: GitLab 문서).
-- [ ] B의 러너를 `sudo bash ~/host/runner.sh tune`으로 `concurrent 2`에 맞추고 `runner.sh status`가 PASS인지 확인한다.
+- [x] B의 러너를 `sudo bash ~/host/runner.sh tune`으로 `concurrent 2`에 맞추고 `runner.sh status`가 PASS인지 확인한다(2026-10-23 적용. 러너가 서비스 재시작 없이 값을 다시 읽었고 잡이 두 슬롯에서 같이 돌았다).
 - [x] MR 파이프라인이 경로별로 가벼워졌다(`rules:changes`, 설계 6.3절). 항상 도는 잡이 3개(`lint:guards`, `lint:secrets`, `lint:history`)라 "Pipelines must succeed"가 파이프라인 없는 MR을 막는 일이 없다. **Skipped pipelines are considered successful**은 계속 켜지 않는다.
 - [ ] `master`보다 뒤처진 MR에서 Rebase 버튼만 보이고 Rebase without pipeline 버튼이 보이지 않는지 확인한다.
 - [x] Settings → CI/CD → General pipelines의 **Auto-cancel redundant pipelines**: 켬. 같은 브랜치에 새 커밋이 오면 이전 파이프라인의 verify 잡이 취소된다. 이미 켜져 있었다(사용자 보고, 2026-10-23). 배포 잡에는 `interruptible`을 두지 않아서 취소되지 않는다.
@@ -134,6 +134,6 @@ curl --fail --header "PRIVATE-TOKEN: $GITLAB_API_TOKEN" \
 | 승인 규칙·CODEOWNERS 사용 가능 (#25) | 불가 (CE, 설정 화면에 항목 없음) | 2026-10-19 | 인프라 담당 |
 | API 토큰 권한 (#25) | | | |
 | 1단계 완료 | 완료 (사용자 보고) | 2026-10-19 | 인프라 담당 |
-| 2단계 완료 (러너 online) | 러너 2개 online, MR 38 파이프라인 통과, Pipelines must succeed 켬. Rebase 버튼 확인만 남음 | 2026-10-23 | 인프라 담당 |
+| 2단계 완료 (러너 online) | 러너 2개 online, MR 38 파이프라인 통과, Pipelines must succeed 켬, B의 `concurrent 2` 적용. Rebase 버튼 확인만 남음 | 2026-10-23 | 인프라 담당 |
 | 보호된 환경 (CE) | 불가 (Premium 이상, GitLab 문서). 위 3단계의 대체 확인이 남음 | 2026-10-23 | 문서 조사 |
 | 3단계 완료 (`oldest_first`) | | | |

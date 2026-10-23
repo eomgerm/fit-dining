@@ -486,7 +486,9 @@ MR 40의 첫 파이프라인에서 `be:test`는 B에서 테스트와 jar 생성�
 - `runner.sh`는 컨테이너 시험(`tune`의 값, 멱등, 권한 600, 역할별 값, 잘못된 값 거부, `concurrent` 줄이 없을 때)을 통과했다.
 - `be:test`와 `be:build`의 줄은 이 PC에서 DB를 붙여 돌려 확인했다. 테스트만 돌리면 jar가 없고(JUnit 보고서 26개), `bootJar -x test`는 DB와 환경변수 없이 같은 jar(55,926,698바이트)를 만든다.
 
-서버에서 할 일: 머지한 뒤 B에 새 `runner.sh`를 올리고 `sudo bash ~/host/runner.sh tune`을 한 번 실행한다(`status`가 `concurrent가 2이다`로 PASS). 지금 B는 `concurrent 1`이라 새 `status`는 FAIL로 안내한다.
+서버 B 적용(2026-10-23, 끝났다): 새 `runner.sh`를 `~/host/`에 올리고 `sudo bash ~/host/runner.sh tune`을 실행했다. `concurrent`가 1에서 2로 바뀌었고 `status`가 PASS다. 러너 로그에 `Configuration loaded builds=1 max_builds=2`가 찍혀 서비스 재시작 없이 값을 다시 읽었고(돌고 있던 잡은 끊기지 않았다) 잡이 `concurrent-0`과 `concurrent-1` 슬롯에서 같이 돌았다. 되돌리려면 `FIT_RUNNER_CONCURRENT=1`로 `tune`을 다시 실행한다.
+
+잡별 실측 시간(MR 40의 전체 실행, B, 성공한 실행): `lint:shell` 1분 26초, `be:test` 58초, `lint:image-arch` 56초, `fe:test` 55초, `lint:prometheus` 34초, 나머지 린터 9개는 3~8초(`lint:guards` 8초, `lint:secrets` 8초, `lint:migrations` 5초, `lint:caddy`·`lint:alertmanager`·`lint:yaml`·`lint:history` 4초, `lint:docker` 3초). 합계는 약 5분 29초다. 경량화 뒤 MR 종류별 잡 시간 합계는 이 값으로 추정하면 문서만 바꾸면 약 20초, FE만 약 1분 15초, BE만 약 1분 20초, 인프라 셸만 약 1분 45초다(전체 실행은 약 5분 30초). 실제 파이프라인 전체 시간은 경량화 뒤의 MR로 확인한다. `be:test`와 `fe:test`는 이미 1분 안팎이라 캐시 최적화는 급하지 않다. 남은 가장 큰 단일 잡은 `lint:shell`이다(스크립트 57개를 한 프로세스로 검사한다. 이 PC에서 같은 이미지로 재 보니 15.6초가 `xargs -P 2`에서 9.1초, `-P 4`에서 6.3초이고 틀린 스크립트가 있을 때 종료 코드는 순차와 같이 0이 아니다).
 
 다음에 볼 것(실측이 필요하다): GitLab의 Jobs 화면에서 잡별 소요 시간을 보고 남은 큰 비용을 정한다. 후보는 세 가지다.
 
