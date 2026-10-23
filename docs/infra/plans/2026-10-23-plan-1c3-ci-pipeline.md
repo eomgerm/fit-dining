@@ -140,24 +140,31 @@ NODE_IMAGE=node:22.23.4-bookworm-slim
 **Files:**
 - Create: `infra/app/Dockerfile.be`, `infra/app/Dockerfile.fe`
 - Create: `infra/ci/build-images.sh`
-- Create: `infra/ci/test/test-images.sh`
+- Create: `infra/ci/test/test-images.sh`(노트북에서 부르는 진입점), `infra/ci/test/images-in-container.sh`(컨테이너 안의 시험 본문)
+- Modify: `infra/ci/tests/test_tool_images_sync.py`(Dockerfile의 기본 베이스가 핀과 같은지 검사)
 
 **Interfaces:**
 - Consumes: `JRE_IMAGE`, `NODE_IMAGE`(Task 1).
-- Produces: `bash infra/ci/build-images.sh <sha>`. 환경변수 `FIT_BE_JAR_DIR`(기본 `be/build/libs`), `FIT_FE_BUNDLE_DIR`(기본 `fe-bundle`), `FIT_BE_IMAGE`(기본 `be`), `FIT_FE_IMAGE`(기본 `fe`)는 compose와 같은 이름이다. 결과는 이미지 `<FIT_BE_IMAGE>:<sha>`, `<FIT_FE_IMAGE>:<sha>`. 이미 있으면 `재사용: be:<sha>`를 찍고 건너뛴다. jar가 없거나 둘 이상이면(`*-plain.jar` 제외) 실패한다.
+- Produces: `bash infra/ci/build-images.sh <sha>`(소문자 16진수 7~64자). 환경변수 `FIT_BE_JAR_DIR`(기본 `be/build/libs`), `FIT_FE_BUNDLE_DIR`(기본 `fe-bundle`), `FIT_BE_IMAGE`(기본 `be`), `FIT_FE_IMAGE`(기본 `fe`)는 compose와 같은 이름이다. 결과는 이미지 `<FIT_BE_IMAGE>:<sha>`, `<FIT_FE_IMAGE>:<sha>`. 이미 있는 이미지는 `재사용: <이름>`을 찍고 건너뛴다. **조립 전에 필요한 입력(jar, 번들)을 모두 검사해서** 하나라도 잘못되면 어느 이미지도 만들지 않는다(한쪽만 새 SHA가 되는 상태를 막는다). jar가 없거나 둘 이상이면(`*-plain.jar` 제외), 번들에 `standalone/server.js`나 `static/`이 없으면 실패한다.
 
 이미지 계약:
 
-- **BE**(`Dockerfile.be`): `ARG BASE_IMAGE=<JRE 핀>`, 사용자 `app`(uid 10001), `COPY app.jar /app/app.jar`, `ENV APP_SHA=<sha> APP_BUILT_AT=<UTC ISO8601>`(BE의 `/api/v1/version`이 읽는 값의 **제안**이다. BE 팀과 이름을 확정한다), `EXPOSE 8080 8081`, `ENTRYPOINT ["java", "-jar", "/app/app.jar"]`(인자는 그대로 전달된다. 마이그레이션 컨테이너가 `SPRING_PROFILES_ACTIVE=migrate`로 같은 이미지를 쓴다). JVM 플래그는 compose의 `JAVA_TOOL_OPTIONS`가 준다.
-- **FE**(`Dockerfile.fe`): `ARG BASE_IMAGE=<NODE 핀>`, `WORKDIR /app`, `COPY standalone/ /app/`, `COPY static/ /app/.next/static/`, `COPY public/ /app/public/`(없으면 빈 디렉터리), `ENV NODE_ENV=production PORT=3000 HOSTNAME=0.0.0.0`, 사용자 `node`, `CMD ["node", "server.js"]`. `.next/cache`는 compose가 tmpfs로 준다.
-- 두 Dockerfile의 `BASE_IMAGE` 기본값은 hadolint가 핀을 요구해서 핀 값을 직접 적는다. `build-images.sh`는 `tool-images.sh`의 값을 `--build-arg`로 넘기고, `test_tool_images_sync.py`에 두 Dockerfile 기본값이 `tool-images.sh`와 같은지 검사를 더한다.
+- **BE**(`Dockerfile.be`): 베이스 JRE(핀), 비root 사용자 uid 10001, `COPY app.jar /app/app.jar`, `ENV APP_SHA`, `APP_BUILT_AT`(UTC ISO8601. BE의 `/api/v1/version`이 읽는 값의 **제안**이다. BE 팀과 이름을 확정한다), 라벨 `org.opencontainers.image.revision`과 `created`, `EXPOSE 8080 8081`, `ENTRYPOINT ["java", "-jar", "/app/app.jar"]`(인자는 그대로 전달된다. 마이그레이션 컨테이너가 `SPRING_PROFILES_ACTIVE=migrate`로 같은 이미지를 쓴다). JVM 플래그와 시간대는 compose의 환경변수가 준다.
+- **FE**(`Dockerfile.fe`): 베이스 Node(핀), `WORKDIR /app`, `COPY standalone/ /app/`, `COPY static/ /app/.next/static/`(배포 스크립트가 풀에 쌓는 위치), `COPY public/ /app/public/`(없는 번들에는 `build-images.sh`가 빈 `public/`을 만들어 `COPY`가 실패하지 않게 한다), `ENV NODE_ENV=production PORT=3000 HOSTNAME=0.0.0.0`, 비root 사용자 1000:1000(node), `CMD ["node", "server.js"]`. `.next/cache`는 compose가 tmpfs로 준다.
+- 두 Dockerfile의 `BASE_IMAGE` 기본값은 hadolint가 핀을 요구해서 핀 값을 직접 적는다. `build-images.sh`는 `tool-images.sh`의 값을 `--build-arg`로 넘기고, `test_tool_images_sync.py`가 두 기본값이 핀과 같은지 검사한다.
+- `USER`는 숫자 uid로 쓴다(hadolint DL3066이 이름은 막는다. `infra/`는 정보 수준까지 막는다).
 
-- [ ] **Step 1: 시험 스크립트를 먼저 쓴다.** `test-images.sh`는 임시 디렉터리에 가짜 jar(`be-0.0.1.jar`와 `be-0.0.1-plain.jar`), 가짜 FE 번들(`standalone/server.js`는 `/fe-healthz`에 200을 주는 작은 Node 서버, `static/chunks/a.js`, `public/sw.js`)을 만들고, `FIT_BE_IMAGE=fit-citest-be FIT_FE_IMAGE=fit-citest-fe`로 `build-images.sh`를 실행해 확인한다: 두 이미지가 `<sha>` 태그로 생긴다 / 다시 실행하면 `재사용`이 찍히고 이미지 ID가 그대로다 / BE 이미지는 사용자 `app`이고 `/app/app.jar`가 있으며 `APP_SHA`가 sha다 / `-plain.jar`만 있거나 jar가 둘이면 실패한다 / FE 이미지를 compose와 같은 조건(`--read-only --tmpfs /app/.next/cache --tmpfs /tmp`, 사용자 `node`)으로 띄우면 `/fe-healthz`가 200이고 `/app/.next/static/chunks/a.js`가 있다 / 시험이 만든 이미지와 컨테이너는 끝에 모두 지운다(`down`). 사용법은 다른 시험과 같게 `up`/`run`/`down`이 아니라 한 번에 돌리는 `bash test-images.sh`다.
+시험은 **docker CLI 컨테이너에 호스트의 `docker.sock`을 연결**해 그 안에서 돈다(`test-images.sh`가 `DOCKER_CLI_IMAGE`로 띄움). 리눅스 파일시스템에서 가짜 jar와 pnpm처럼 `node_modules`가 심볼릭 링크인 가짜 FE 번들을 만들고 호스트 데몬에 이미지를 조립한다. CI의 deploy 러너와 같은 모양이고 Windows의 NTFS 심볼릭 링크 한계(Git Bash의 `cp`가 링크를 만들지 못한다)를 피한다.
+
+- [ ] **Step 1: 시험을 먼저 쓴다.** 확인 항목: jar 없음·plain만·둘 이상, 번들에 `server.js` 없음, SHA 모양이 아니거나 없음은 모두 거부하고 **이미지가 하나도 생기지 않는다** / 조립 성공 / 같은 SHA를 다시 부르면 둘 다 재사용하고 이미지 ID가 그대로 / BE: uid 10001, `/app/app.jar`가 입력과 같음, `APP_SHA`와 `APP_BUILT_AT`, ENTRYPOINT, `java -version`이 핀한 21.0.12, 커밋 라벨 / FE: 사용자 node, `/app/.next/static`과 `/app/public`, `node_modules`의 심볼릭 링크 보존(링크를 따라 모듈이 로드됨), compose와 같은 조건(`--read-only --tmpfs /app/.next/cache --tmpfs /tmp`)에서 compose의 healthcheck 명령 그대로 `/fe-healthz` 200, `public/`이 없는 번들도 조립 / 끝에 시험이 만든 이미지와 컨테이너를 모두 지운다.
 - [ ] **Step 2:** 실행해 스크립트가 없어서 실패하는 것을 본다.
 - [ ] **Step 3:** 두 Dockerfile과 `build-images.sh`를 쓴다(`set -euo pipefail`, 값 비출력, jar 선택은 `find`로 `*.jar`에서 `*-plain.jar`를 뺀 것이 정확히 하나일 때만).
-- [ ] **Step 4:** `bash infra/ci/test/test-images.sh`가 통과한다. hadolint와 shellcheck(`run-local-checks.sh`)도 통과한다.
-- [ ] **Step 5:** 변이 시험 한 번: `Dockerfile.fe`에서 `USER node`를 지우면 시험이 실패하는지 확인하고 되돌린다.
-- [ ] **Step 6:** 커밋 `:sparkles: feat(infra): BE·FE 이미지 Dockerfile과 조립 스크립트(build-images.sh), 컨테이너 시험 추가 (S15P31A302-19)`
+- [ ] **Step 4:** `bash infra/ci/test/test-images.sh`가 통과한다(22개). hadolint(엄격)와 shellcheck가 통과한다.
+- [ ] **Step 5:** 변이 시험: `Dockerfile.fe`에서 `USER`를 지우면, `COPY static/`을 지우면 시험이 실패하는지, Dockerfile의 기본 베이스를 바꾸면 동기화 시험이 실패하는지 확인하고 되돌린다.
+- [ ] **Step 6:** 실제 FE 번들(Task 2의 계약대로 패치한 빌드)로 이미지를 조립해 compose와 같은 조건(읽기 전용, tmpfs, 비root)에서 띄워 본다.
+- [ ] **Step 7:** 커밋 `:sparkles: feat(infra): BE·FE 이미지 Dockerfile과 조립 스크립트(build-images.sh), 컨테이너 시험 추가 (S15P31A302-19)`
+
+실제 번들로 확인한 것(2026-10-23, 이 PC): 이미지 크기 387MB. 읽기 전용 루트와 tmpfs, 비root(node)에서 `/`가 200, `/config.json`이 200(`{"env":"dev"}`), `/place`가 200이고 런타임 오류 로그가 없다. HTML에 `data-dpl-id`로 `deploymentId`가 들어 있다. **`/fe-healthz`는 404**다(FE 계약 #6을 FE가 아직 이행하지 않았다. compose의 healthcheck가 이 경로를 쓰므로 FE 팀이 만들기 전에는 배포가 준비 완료로 넘어가지 못한다).
 
 ---
 

@@ -1,0 +1,18 @@
+# FE 이미지(설계 6.3절, 6.8절, FE 계약 #1). verify 단계(B)가 만든 Next.js standalone 번들을 COPY만 한다.
+# 빌드 컨텍스트는 fe-bundle/(standalone/, static/, public/)다. 조립은 infra/ci/build-images.sh가 한다.
+# 베이스 이미지 핀은 infra/ci/tool-images.sh의 NODE_IMAGE와 같다(tests/test_tool_images_sync.py가 검사한다).
+# 루트 파일시스템은 읽기 전용이고 .next/cache만 tmpfs로 쓴다(compose.app.yml). 정적 자산은 배포 스크립트가 /app/.next/static에서 풀로 옮긴다.
+ARG BASE_IMAGE=node:22.23.4-bookworm-slim
+FROM ${BASE_IMAGE}
+
+ARG SHA
+LABEL org.opencontainers.image.revision=${SHA}
+ENV NODE_ENV=production PORT=3000 HOSTNAME=0.0.0.0 NEXT_TELEMETRY_DISABLED=1
+
+WORKDIR /app
+COPY standalone/ /app/
+COPY static/ /app/.next/static/
+COPY public/ /app/public/
+USER 1000:1000
+EXPOSE 3000
+CMD ["node", "server.js"]
