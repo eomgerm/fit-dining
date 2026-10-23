@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { TextButton } from "@/shared/ui/button/text-button";
 import { InfoRow } from "@/shared/ui/display/info-row";
@@ -44,11 +44,14 @@ export function HomeTab({
   now,
   onShowInfo,
   onShowMenu,
+  reviews,
 }: TabProps & {
   card?: PlaceCard;
   now: Date;
   onShowInfo: () => void;
   onShowMenu: () => void;
+  // 맨 아래 리뷰 미리보기. app이 리뷰 도메인으로 채운다
+  reviews?: ReactNode;
 }) {
   const [weekOpen, setWeekOpen] = useState(false);
   const today = todayHours(detail.hours, now);
@@ -137,6 +140,7 @@ export function HomeTab({
           </div>
         </section>
       )}
+      {reviews}
     </div>
   );
 }

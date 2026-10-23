@@ -13,7 +13,10 @@ import { createQueryClient } from "@/shared/api/query-client";
 
 import type { PlaceCard, PlaceDetail } from "../model/place-types";
 import { createSearchStore, type SearchStore } from "../model/search-store";
-import { PlaceDetailScreen } from "./place-detail-screen";
+import {
+  PlaceDetailScreen,
+  type PlaceDetailSlots,
+} from "./place-detail-screen";
 
 const params = vi.hoisted(() => ({ id: "1" as string | null }));
 vi.mock("next/navigation", () => ({
@@ -105,22 +108,52 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function renderDetail() {
+function renderDetail(slots?: PlaceDetailSlots) {
   return render(
     <QueryClientProvider client={createQueryClient()}>
-      <PlaceDetailScreen />
+      <PlaceDetailScreen slots={slots} />
     </QueryClientProvider>,
   );
 }
 
+// 리뷰 도메인 대신 자리만 확인하는 가짜 내용. 실제로는 app/place가 리뷰 컴포넌트로 채운다
+const reviewSlots: PlaceDetailSlots = {
+  homeReviews: (placeId, showReviews) => (
+    <button type="button" onClick={showReviews}>
+      리뷰 미리보기 {placeId}
+    </button>
+  ),
+  reviewTab: (placeId) => <p>리뷰 목록 {placeId}</p>,
+  bottomAction: (placeId) => (
+    <a href={`/write?id=${placeId}`}>방문 평가 남기기</a>
+  ),
+};
+
 describe("PlaceDetailScreen", () => {
-  it("홈, 메뉴, 정보 탭을 보여 주고 리뷰 탭은 없다", async () => {
+  it("리뷰 자리를 넘기지 않으면 홈, 메뉴, 정보 탭만 있고 하단 막대가 없다", async () => {
     renderDetail();
 
     await screen.findByRole("heading", { name: "카페 온담" });
     const tabs = screen.getAllByRole("tab").map((tab) => tab.textContent);
     expect(tabs).toEqual(["홈", "메뉴", "정보"]);
-    expect(screen.queryByText(/리뷰 \d/)).toBeNull();
+    expect(screen.queryByText("방문 평가 남기기")).toBeNull();
+  });
+
+  it("리뷰 자리를 넘기면 리뷰 탭, 홈 미리보기, 하단 버튼이 생기고 미리보기에서 리뷰 탭을 연다", async () => {
+    renderDetail(reviewSlots);
+
+    await screen.findByRole("heading", { name: "카페 온담" });
+    const tabs = screen.getAllByRole("tab").map((tab) => tab.textContent);
+    expect(tabs).toEqual(["홈", "메뉴", "리뷰", "정보"]);
+    expect(screen.getByRole("link", { name: "방문 평가 남기기" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "리뷰 미리보기 1" }));
+    expect(
+      screen.getByRole("tab", { name: "리뷰" }).getAttribute("aria-selected"),
+    ).toBe("true");
+    expect(
+      within(screen.getByRole("tabpanel")).getByText("리뷰 목록 1"),
+    ).toBeTruthy();
   });
 
   it("검색 카드가 있으면 핏 점수, ⓘ 시트, AI 추천 이유, 주의점을 보여 준다", async () => {

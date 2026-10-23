@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { isApiError } from "@/shared/api/api-error";
 import { IconButton } from "@/shared/ui/button/icon-button";
@@ -12,6 +12,7 @@ import { Tag } from "@/shared/ui/display/tag";
 import { ChevronLeftIcon } from "@/shared/ui/icon/icons/chevron-left";
 import { InfoIcon } from "@/shared/ui/icon/icons/info";
 import { PinOffIcon } from "@/shared/ui/icon/icons/pin-off";
+import { BottomBar } from "@/shared/ui/layout/bottom-bar";
 import { Tab, TabList, TabPanel, Tabs } from "@/shared/ui/layout/tabs";
 import { TopBar } from "@/shared/ui/layout/top-bar";
 
@@ -31,15 +32,29 @@ import { ScoreSheet } from "./score-sheet";
 import { useHere } from "./use-search-store";
 import { useStoredCard } from "./use-stored-card";
 
-type DetailTab = "home" | "menu" | "info";
+type DetailTab = "home" | "menu" | "review" | "info";
+
+// 리뷰가 들어갈 자리. 도메인끼리는 import하지 않으므로 app이 리뷰 도메인으로 채운다(리뷰 D-32)
+export type PlaceDetailSlots = {
+  // 홈 탭 맨 아래. showReviews는 리뷰 탭으로 바꾼다
+  homeReviews?: (placeId: number, showReviews: () => void) => ReactNode;
+  // 리뷰 탭 내용. 있을 때만 리뷰 탭이 생긴다
+  reviewTab?: (placeId: number) => ReactNode;
+  // 하단 막대 안의 버튼("방문 평가 남기기")
+  bottomAction?: (placeId: number) => ReactNode;
+};
 
 // 장소 상세(6-01, 6-02, 6-04, 6-05). ?id가 올바른 정수일 때만 요청한다
-export function PlaceDetailScreen() {
+export function PlaceDetailScreen({ slots }: { slots?: PlaceDetailSlots }) {
   const id = parsePlaceId(useSearchParams().get("id"));
   return (
     <main className="flex min-h-dvh flex-col bg-surface-warm">
       <BackBar />
-      {id === undefined ? <NotFound /> : <PlaceDetailContent id={id} />}
+      {id === undefined ? (
+        <NotFound />
+      ) : (
+        <PlaceDetailContent id={id} slots={slots} />
+      )}
     </main>
   );
 }
@@ -69,7 +84,13 @@ function NotFound() {
   );
 }
 
-function PlaceDetailContent({ id }: { id: number }) {
+function PlaceDetailContent({
+  id,
+  slots,
+}: {
+  id: number;
+  slots?: PlaceDetailSlots;
+}) {
   const query = useQuery(placeQueries.detail(id));
   const card = useStoredCard(id);
 
@@ -93,15 +114,17 @@ function PlaceDetailContent({ id }: { id: number }) {
       </p>
     );
   }
-  return <PlaceDetailView detail={query.data} card={card} />;
+  return <PlaceDetailView detail={query.data} card={card} slots={slots} />;
 }
 
 function PlaceDetailView({
   detail,
   card,
+  slots,
 }: {
   detail: PlaceDetail;
   card?: PlaceCard;
+  slots?: PlaceDetailSlots;
 }) {
   const here = useHere();
   const [now] = useState(() => new Date());
@@ -159,6 +182,7 @@ function PlaceDetailView({
         <TabList className="sticky top-14 z-10">
           <Tab value="home">홈</Tab>
           <Tab value="menu">메뉴</Tab>
+          {slots?.reviewTab && <Tab value="review">리뷰</Tab>}
           <Tab value="info">정보</Tab>
         </TabList>
         <TabPanel value="home">
@@ -169,15 +193,23 @@ function PlaceDetailView({
             now={now}
             onShowInfo={() => setTab("info")}
             onShowMenu={() => setTab("menu")}
+            reviews={slots?.homeReviews?.(place.id, () => setTab("review"))}
           />
         </TabPanel>
         <TabPanel value="menu">
           <MenuTab detail={detail} here={here} />
         </TabPanel>
+        {slots?.reviewTab && (
+          <TabPanel value="review">{slots.reviewTab(place.id)}</TabPanel>
+        )}
         <TabPanel value="info">
           <InfoTab detail={detail} here={here} />
         </TabPanel>
       </Tabs>
+
+      {slots?.bottomAction && (
+        <BottomBar variant="divider">{slots.bottomAction(place.id)}</BottomBar>
+      )}
 
       {card && (
         <ScoreSheet card={card} open={scoreOpen} onOpenChange={setScoreOpen} />
