@@ -12,6 +12,7 @@ import {
 import { cn } from "@/shared/lib/cn";
 import { loadRuntimeConfig } from "@/shared/lib/runtime-config";
 
+import { YEOKSAM_STATION } from "../model/nearby";
 import type { LatLng, MapBounds } from "../model/place-types";
 
 // 네이버 지도 웹 SDK(JavaScript v3)에서 쓰는 부분만 적은 타입
@@ -48,7 +49,7 @@ declare global {
 }
 
 // 역삼역. 결과에 맞춰 화면을 옮기지 않으므로(fitBounds 없음) 처음 중심이다
-const DEFAULT_CENTER = { lat: 37.5006, lng: 127.0364 };
+const DEFAULT_CENTER = YEOKSAM_STATION;
 const DEFAULT_ZOOM = 15;
 const PIN_SIZE = 28;
 const SELECTED_PIN_SIZE = 36;

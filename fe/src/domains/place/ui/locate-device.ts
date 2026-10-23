@@ -33,4 +33,36 @@ export async function locateDevice() {
   }
 }
 
+async function geolocationPermission() {
+  try {
+    const { state } = await navigator.permissions.query({
+      name: "geolocation",
+    });
+    return state;
+  } catch {
+    return undefined;
+  }
+}
+
+export type OpenLocationResult = "located" | "failed" | "denied" | "skipped";
+
+// 화면을 열 때 한 번. 권한이 이미 허용이면 묻지 않고 위치를 받고, 그 밖에는 요청하지 않는다.
+// 페이지 세션에 한 번만 확인해 상세에서 돌아와도 다시 알리지 않는다
+export async function locateIfGranted(): Promise<OpenLocationResult> {
+  const { openLocationChecked, location } = searchStore.getSnapshot();
+  if (openLocationChecked) return "skipped";
+  searchStore.markOpenLocationChecked();
+  if (location.status !== "idle") return "skipped";
+
+  const permission = await geolocationPermission();
+  if (permission === "denied") return "denied";
+  if (permission !== "granted") return "skipped";
+  // 권한을 확인하는 사이 "내 위치" 버튼으로 이미 시도했으면 다시 받지 않는다
+  if (searchStore.getSnapshot().location.status !== "idle") return "skipped";
+  return (await locateDevice()) ? "located" : "failed";
+}
+
 export const LOCATION_FAILED_MESSAGE = "위치를 확인할 수 없어요";
+
+export const LOCATION_DENIED_MESSAGE =
+  "위치 권한이 꺼져 있어요. 브라우저 설정에서 허용해 주세요";

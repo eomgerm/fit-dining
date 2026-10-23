@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { distanceMeters, filterNearby, formatDistance } from "./nearby";
+import {
+  distanceMeters,
+  filterNearby,
+  formatDistance,
+  NEARBY_PICK_LIMIT,
+  pickNearby,
+  YEOKSAM_STATION,
+} from "./nearby";
 import type { PlaceCard } from "./place-types";
 
 // 역삼역 근처. 위도 0.001도는 약 111m다
@@ -78,6 +85,31 @@ describe("nearby", () => {
       const outside = cardAt(2, here.lat + 0.0091, here.lng); // 약 1012m
 
       expect(filterNearby([inside, outside], here)).toEqual([inside]);
+    });
+  });
+
+  describe("pickNearby", () => {
+    it(`반경 안의 항목을 순서대로 앞에서 ${NEARBY_PICK_LIMIT}곳까지 고른다`, () => {
+      const far = cardAt(100, here.lat + 0.02, here.lng);
+      const near = Array.from({ length: NEARBY_PICK_LIMIT + 2 }, (_, index) =>
+        cardAt(index + 1, here.lat, here.lng),
+      );
+
+      const picked = pickNearby([far, ...near], here);
+
+      expect(picked.map(({ place }) => place.id)).toEqual(
+        near.slice(0, NEARBY_PICK_LIMIT).map(({ place }) => place.id),
+      );
+    });
+
+    it("역삼역을 기준 지점으로 쓸 수 있다", () => {
+      const station = cardAt(1, YEOKSAM_STATION.lat, YEOKSAM_STATION.lng);
+      const gangnam = cardAt(2, 37.4979, 127.0276); // 역삼역에서 약 830m
+      const seolleung = cardAt(3, 37.5045, 127.049); // 역삼역에서 약 1.2km
+
+      expect(
+        pickNearby([station, gangnam, seolleung], YEOKSAM_STATION),
+      ).toEqual([station, gangnam]);
     });
   });
 });

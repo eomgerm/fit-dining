@@ -5,6 +5,12 @@ const EARTH_RADIUS_M = 6_371_000;
 // 근처 검색 반경. 최종 값은 미정이라 임시값이다(spec Open questions)
 export const NEARBY_RADIUS_M = 1000;
 
+// 기기 위치가 없을 때 첫 화면 주변 카드의 기준 지점이자 지도의 처음 중심
+export const YEOKSAM_STATION: LatLng = { lat: 37.5006, lng: 127.0364 };
+
+// 첫 화면 주변 카드의 최대 개수
+export const NEARBY_PICK_LIMIT = 10;
+
 const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
 
 // haversine. 지도 SDK의 getDistance는 키가 없으면 쓸 수 없어 직접 계산한다
@@ -32,4 +38,9 @@ export function filterNearby(
   radiusM = NEARBY_RADIUS_M,
 ) {
   return cards.filter((card) => distanceMeters(here, card.place) <= radiusM);
+}
+
+// 첫 화면 주변 카드. 근처 응답을 기준 지점에서 반경 안으로 거른 앞의 몇 곳
+export function pickNearby(cards: PlaceCard[], origin: LatLng) {
+  return filterNearby(cards, origin).slice(0, NEARBY_PICK_LIMIT);
 }

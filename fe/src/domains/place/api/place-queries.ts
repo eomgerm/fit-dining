@@ -1,7 +1,7 @@
 import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 
 import type { PlaceSearchRequest } from "../model/place-types";
-import { nextPageRequest } from "../model/search-request";
+import { nearbyRequest, nextPageRequest } from "../model/search-request";
 import { getPlace, searchPlaces, suggestPlaces } from "./place-api";
 
 // 장소 쿼리 키와 queryOptions는 여기서만 만든다. ui는 useQuery(placeQueries.detail(id))처럼 넘겨 쓴다
@@ -25,6 +25,15 @@ export const placeQueries = {
         ),
       initialPageParam: undefined as string | undefined,
       getNextPageParam: (lastPage) => lastPage.nextCursor,
+      staleTime: Infinity,
+      gcTime: Infinity,
+    }),
+
+  // 첫 화면 주변 카드. 요청 기록 항목이 아니라 키가 따로이고, 페이지 세션 동안 다시 받지 않는다
+  nearby: () =>
+    queryOptions({
+      queryKey: ["places", "nearby"],
+      queryFn: ({ signal }) => searchPlaces(nearbyRequest(), signal),
       staleTime: Infinity,
       gcTime: Infinity,
     }),

@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import type { MapBounds } from "./place-types";
 import {
   followUpRequest,
+  NEARBY_QUERY,
+  nearbyRequest,
   newSearchRequest,
   nextPageRequest,
   regionRequest,
@@ -50,6 +52,13 @@ describe("followUpRequest", () => {
     expect(
       followUpRequest("더 조용하게", { conditions: {} }, bounds).mapBounds,
     ).toEqual(bounds);
+  });
+});
+
+describe("nearbyRequest", () => {
+  it("'근처'가 든 고정 문장만 담고 좌표도 지도 영역도 담지 않는다", () => {
+    expect(nearbyRequest()).toEqual({ query: NEARBY_QUERY });
+    expect(NEARBY_QUERY).toContain("근처");
   });
 });
 

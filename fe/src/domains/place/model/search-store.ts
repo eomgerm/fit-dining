@@ -40,6 +40,8 @@ export type SearchState = {
   regionLocked: boolean;
   // 상세 화면이 핏 점수와 추천 이유를 꺼내 쓴다
   latestCards: ReadonlyMap<number, PlaceCard>;
+  // 화면을 열 때의 위치 권한 확인을 이번 페이지 세션에 이미 했는지. 상세에서 돌아와도 다시 하지 않는다
+  openLocationChecked: boolean;
 };
 
 type AddEntryInput = {
@@ -56,6 +58,7 @@ export function createSearchStore(now: () => number = Date.now) {
     location: { status: "idle" },
     regionLocked: false,
     latestCards: new Map(),
+    openLocationChecked: false,
   };
   const listeners = new Set<() => void>();
 
@@ -132,6 +135,10 @@ export function createSearchStore(now: () => number = Date.now) {
 
     lockRegion() {
       update({ regionLocked: true });
+    },
+
+    markOpenLocationChecked() {
+      update({ openLocationChecked: true });
     },
   };
 }

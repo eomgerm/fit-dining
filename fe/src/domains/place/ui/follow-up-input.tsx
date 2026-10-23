@@ -12,7 +12,8 @@ type FollowUpInputProps = {
   inputRef?: Ref<HTMLInputElement>;
   // 후속 조건. 공백뿐인 입력은 부르지 않는다. 보낸 뒤 입력을 비운다
   onSubmit: (input: string) => void;
-  onOpenHistory: () => void;
+  // 최근 검색 시트를 연다
+  onOpenRecent: () => void;
   disabled?: boolean;
 };
 
@@ -20,7 +21,7 @@ type FollowUpInputProps = {
 export function FollowUpInput({
   inputRef,
   onSubmit,
-  onOpenHistory,
+  onOpenRecent,
   disabled,
 }: FollowUpInputProps) {
   const [input, setInput] = useState("");
@@ -46,7 +47,7 @@ export function FollowUpInput({
         onChange={(event) => setInput(event.target.value)}
         className="min-w-0 flex-1 bg-transparent text-body-md text-ink outline-none placeholder:text-ink-subtle"
       />
-      <IconButton label="요청 기록" onClick={onOpenHistory}>
+      <IconButton label="최근 검색" onClick={onOpenRecent}>
         <HistoryIcon size="md" className="text-icon" />
       </IconButton>
       <button

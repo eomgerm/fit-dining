@@ -16,6 +16,7 @@ import type { RuntimeConfig } from "@/shared/lib/runtime-config";
 import { ToastProvider } from "@/shared/ui/overlay/toast";
 
 import type { PlaceCard, PlaceSearchResponse } from "../model/place-types";
+import { NEARBY_QUERY } from "../model/search-request";
 import { createSearchStore, type SearchStore } from "../model/search-store";
 import { SearchScreen } from "./search-screen";
 
@@ -61,18 +62,21 @@ function card(id: number): PlaceCard {
   };
 }
 
+// 사용자가 보낸 검색 요청 본문. 첫 화면 주변 카드 요청은 nearbyBodies에 따로 모은다
 let searchBodies: Record<string, unknown>[];
+let nearbyBodies: Record<string, unknown>[];
 
 // 첫 요청은 conditions {area: "역삼"}, 후속 조건이면 changeSummary가 있다
 function stubApi() {
   searchBodies = [];
+  nearbyBodies = [];
   vi.stubGlobal(
     "fetch",
     vi.fn<typeof fetch>(async (input, init) => {
       const url = String(input);
       if (url.startsWith("/api/v1/places/suggest")) return Response.json([]);
       const body = JSON.parse(String(init?.body));
-      searchBodies.push(body);
+      (body.query === NEARBY_QUERY ? nearbyBodies : searchBodies).push(body);
       const followUp = body.previousConditions !== undefined;
       if (body.query.includes("근처")) {
         // 1번은 역삼역 바로 앞, 3번은 약 2km 떨어진 곳
@@ -147,6 +151,13 @@ beforeEach(() => {
       disconnect() {}
     },
   );
+  // 첫 화면 주변 카드의 Carousel(Embla)이 부른다. jsdom에는 없다
+  vi.stubGlobal("matchMedia", () => ({
+    matches: false,
+    addEventListener() {},
+    removeEventListener() {},
+  }));
+  localStorage.clear();
 });
 
 afterEach(() => {
@@ -221,6 +232,54 @@ function stubNaverMaps({ Marker }: { Marker?: unknown } = {}) {
     );
   return { created, fire };
 }
+
+// 화면을 열 때 보는 위치 권한과 기기 위치. permission이 없으면 Permissions API가 없는 브라우저다
+function stubLocation({
+  permission,
+  position,
+}: {
+  permission?: PermissionState;
+  position?: { lat: number; lng: number };
+}) {
+  const getCurrentPosition = vi.fn(
+    (success: PositionCallback, error: PositionErrorCallback) =>
+      position
+        ? success({
+            coords: { latitude: position.lat, longitude: position.lng },
+          } as GeolocationPosition)
+        : error({ code: 1 } as GeolocationPositionError),
+  );
+  vi.stubGlobal("navigator", {
+    geolocation: { getCurrentPosition },
+    ...(permission && {
+      permissions: { query: async () => ({ state: permission }) },
+    }),
+  });
+  return getCurrentPosition;
+}
+
+// 첫 화면 주변 카드 요청에만 다른 항목을 돌려준다
+function stubNearbyItems(items: PlaceCard[]) {
+  const original = globalThis.fetch;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn<typeof fetch>(async (input, init) => {
+      if (init?.body && JSON.parse(String(init.body)).query === NEARBY_QUERY) {
+        await original(input, init);
+        return Response.json({
+          conditions: {},
+          nearby: true,
+          totalCount: items.length,
+          items,
+        } satisfies PlaceSearchResponse);
+      }
+      return original(input, init);
+    }),
+  );
+}
+
+const nearbyList = () =>
+  screen.findByRole("region", { name: "주변 추천 장소" });
 
 function stubGeolocationDenied() {
   vi.stubGlobal("navigator", {
@@ -363,6 +422,49 @@ describe("SearchScreen", () => {
       });
     });
 
+    describe("첫 화면", () => {
+      it("위치 권한이 이미 허용이면 열 때 위치를 받아 지도를 그 위치로 옮기고, 그 위치 기준 주변 카드를 보인다", async () => {
+        const getCurrentPosition = stubLocation({
+          permission: "granted",
+          position: { lat: 37.5, lng: 127.03 },
+        });
+        renderScreen();
+        await waitFor(() => expect(mapState()).toBe("ready"));
+
+        await waitFor(() => expect(map.created[0].panTo).toHaveBeenCalled());
+        expect(getCurrentPosition).toHaveBeenCalledTimes(1);
+        const list = await nearbyList();
+        await waitFor(() =>
+          expect(within(list).getByText(/· 0m$/)).toBeTruthy(),
+        );
+        expect(within(list).getByText("장소 1")).toBeTruthy();
+        expect(within(list).queryByText("장소 3")).toBeNull();
+        expect(within(list).queryByText(/역삼역/)).toBeNull();
+      });
+
+      it("가운데가 아닌 카드를 누르면 선택하고 지도를 옮기며, 선택된 카드를 누르면 상세로 간다", async () => {
+        stubNearbyItems([card(1), card(2)]);
+        renderScreen();
+        await waitFor(() => expect(mapState()).toBe("ready"));
+        const list = await nearbyList();
+        const [first, second] = await within(list).findAllByRole("button", {
+          pressed: undefined,
+        });
+        expect(first.getAttribute("aria-pressed")).toBe("true");
+        map.created[0].panTo.mockClear();
+
+        fireEvent.click(second);
+
+        expect(second.getAttribute("aria-pressed")).toBe("true");
+        expect(first.getAttribute("aria-pressed")).toBe("false");
+        expect(map.created[0].panTo).toHaveBeenCalled();
+        expect(push).not.toHaveBeenCalled();
+
+        fireEvent.click(second);
+        expect(push).toHaveBeenCalledWith("/place?id=2");
+      });
+    });
+
     it("화면 크기가 바뀌면 바깥 지도 영역의 크기로 setSize를 부른다", async () => {
       const observed: { target: Element; callback: ResizeObserverCallback }[] =
         [];
@@ -382,8 +484,11 @@ describe("SearchScreen", () => {
 
       // SDK는 안쪽 div에 px 크기를 박으므로 CSS로 크기가 정해지는 바깥을 봐야 한다
       const wrapper = document.querySelector("[data-map-state]");
-      expect(observed.map(({ target }) => target)).toEqual([wrapper]);
-      observed[0].callback(
+      const mapObserved = observed.filter(({ target }) =>
+        wrapper?.contains(target),
+      );
+      expect(mapObserved.map(({ target }) => target)).toEqual([wrapper]);
+      mapObserved[0].callback(
         [{ contentRect: { width: 390, height: 422 } } as ResizeObserverEntry],
         {} as ResizeObserver,
       );
@@ -747,6 +852,183 @@ describe("SearchScreen", () => {
         expect(within(list).getAllByRole("listitem")).toHaveLength(3),
       );
       expect(screen.queryByText("다음 장소를 불러오지 못했어요")).toBeNull();
+    });
+  });
+
+  describe("첫 화면", () => {
+    it("결과가 없으면 아래 검색창이, 결과가 있으면 결과 목록 아래 후속 입력창이 있다", async () => {
+      renderScreen();
+      const bar = screen.getByRole("textbox", { name: "장소 검색" });
+      expect(bar.getAttribute("placeholder")).toBe(
+        "분위기나 목적을 말해 보세요",
+      );
+      expect(screen.queryByRole("textbox", { name: "후속 조건" })).toBeNull();
+
+      const list = await newSearch("역삼 카페");
+
+      expect(screen.queryByRole("textbox", { name: "장소 검색" })).toBeNull();
+      const input = screen.getByRole("textbox", { name: "후속 조건" });
+      expect(
+        list.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+
+    it("위치가 없으면 역삼역 기준 주변 카드를 보이고, 그 요청은 문장만 보내며 기록에 쌓지 않는다", async () => {
+      renderScreen();
+
+      const list = await nearbyList();
+
+      expect(within(list).getByText("장소 1")).toBeTruthy();
+      expect(within(list).getByText(/· 역삼역 \d+m$/)).toBeTruthy();
+      expect(within(list).queryByText("장소 3")).toBeNull();
+      expect(nearbyBodies).toEqual([{ query: NEARBY_QUERY }]);
+      expect(searchBodies).toEqual([]);
+      expect(stores.current.getSnapshot().entries).toEqual([]);
+      // 상세 화면이 핏 점수와 추천 이유를 쓸 수 있게 둔다
+      expect(stores.current.getSnapshot().latestCards.has(1)).toBe(true);
+
+      fireEvent.click(within(list).getByRole("button", { pressed: true }));
+      expect(push).toHaveBeenCalledWith("/place?id=1");
+    });
+
+    it("결과를 보는 동안에는 주변 카드가 없고 '새 검색'을 누르면 다시 보인다", async () => {
+      renderScreen();
+      await nearbyList();
+
+      await newSearch("역삼 카페");
+      expect(
+        screen.queryByRole("region", { name: "주변 추천 장소" }),
+      ).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: "새 검색" }));
+      expect(await nearbyList()).toBeTruthy();
+      expect(nearbyBodies).toHaveLength(1);
+    });
+
+    it("위치 권한이 아직 정해지지 않았으면 열 때 위치를 묻지 않는다", async () => {
+      const getCurrentPosition = stubLocation({ permission: "prompt" });
+      renderScreen();
+
+      await nearbyList();
+
+      expect(getCurrentPosition).not.toHaveBeenCalled();
+      expect(stores.current.getSnapshot().location).toEqual({ status: "idle" });
+    });
+
+    it("위치 권한이 꺼져 있으면 열 때 한 번만 알리고 위치를 묻지 않는다", async () => {
+      const getCurrentPosition = stubLocation({ permission: "denied" });
+      renderScreen();
+
+      expect(
+        await screen.findByText(
+          "위치 권한이 꺼져 있어요. 브라우저 설정에서 허용해 주세요",
+        ),
+      ).toBeTruthy();
+      expect(getCurrentPosition).not.toHaveBeenCalled();
+
+      // 상세에 갔다가 돌아온 것처럼 다시 그린다
+      cleanup();
+      renderScreen();
+      await nearbyList();
+      expect(
+        screen.queryByText(
+          "위치 권한이 꺼져 있어요. 브라우저 설정에서 허용해 주세요",
+        ),
+      ).toBeNull();
+    });
+
+    it.each(["저장한 장소", "내 정보"])(
+      "'%s' 버튼은 첫 화면과 결과 화면에서 '준비 중이에요'를 띄운다",
+      async (name) => {
+        renderScreen();
+        fireEvent.click(screen.getByRole("button", { name }));
+        expect(await screen.findByText("준비 중이에요")).toBeTruthy();
+
+        await newSearch("역삼 카페");
+        expect(screen.getByRole("button", { name })).toBeTruthy();
+      },
+    );
+
+    describe("최근 검색", () => {
+      async function openRecent() {
+        fireEvent.click(screen.getByRole("button", { name: "최근 검색" }));
+        return screen.findByRole("dialog", { name: "최근 검색" });
+      }
+
+      it("기록이 없으면 빈 안내를 보인다", async () => {
+        renderScreen();
+
+        const sheet = await openRecent();
+
+        expect(
+          within(sheet).getByText(
+            "아직 검색한 요청이 없어요. 원하는 분위기나 목적을 말해 보세요.",
+          ),
+        ).toBeTruthy();
+      });
+
+      it("새 검색의 문장만 남아 다시 열어도 보이고, 누르면 그 문장으로 새 검색을 보낸다", async () => {
+        renderScreen();
+        await newSearch("역삼 카페");
+        await followUp("더 조용하게");
+
+        // 재로드처럼 화면 상태를 비우고 다시 연다
+        cleanup();
+        stores.current = createSearchStore();
+        renderScreen();
+        const sheet = await openRecent();
+
+        expect(within(sheet).queryByText("더 조용하게")).toBeNull();
+        expect(
+          within(sheet).getByText(/^오늘 오[전후] \d+:\d\d$/),
+        ).toBeTruthy();
+        fireEvent.click(
+          within(sheet).getByRole("button", { name: /역삼 카페/ }),
+        );
+
+        await waitFor(() =>
+          expect(
+            screen.getByRole("heading", { name: "“역삼 카페”" }),
+          ).toBeTruthy(),
+        );
+        expect(searchBodies.at(-1)).toEqual({ query: "역삼 카페" });
+        expect(stores.current.getSnapshot().entries).toHaveLength(1);
+      });
+
+      it("결과를 보는 중에 고르면 지금 보는 요청을 비우고 새 검색으로 보낸다", async () => {
+        renderScreen();
+        await newSearch("역삼 카페");
+        await followUp("더 조용하게");
+
+        const sheet = await openRecent();
+        fireEvent.click(
+          within(sheet).getByRole("button", { name: /역삼 카페/ }),
+        );
+
+        await waitFor(() =>
+          expect(stores.current.getSnapshot().entries).toHaveLength(3),
+        );
+        expect(searchBodies.at(-1)).toEqual({ query: "역삼 카페" });
+        expect(stores.current.getSnapshot().entries[2].kind).toBe("new");
+        expect(screen.queryByText(/^추가 조건 ·/)).toBeNull();
+      });
+
+      it("기기 저장소를 쓸 수 없어도 검색은 동작하고 목록은 비어 있다", async () => {
+        vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+          throw new DOMException("QuotaExceededError");
+        });
+        renderScreen();
+
+        await newSearch("역삼 카페");
+        const sheet = await openRecent();
+
+        expect(
+          within(sheet).getByText(
+            "아직 검색한 요청이 없어요. 원하는 분위기나 목적을 말해 보세요.",
+          ),
+        ).toBeTruthy();
+        vi.restoreAllMocks();
+      });
     });
   });
 });

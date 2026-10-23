@@ -36,6 +36,14 @@ export function followUpRequest(
   };
 }
 
+// 첫 화면 주변 카드의 고정 문장. "근처"가 있어 근처 응답(후보 전체, 커서 없음)이 온다
+export const NEARBY_QUERY = "근처 맛집";
+
+// 첫 화면 주변 카드 요청. 문장만 보내고 좌표도 지도 영역도 담지 않는다
+export function nearbyRequest(): PlaceSearchRequest {
+  return { query: NEARBY_QUERY };
+}
+
 export function nextPageRequest(
   first: PlaceSearchRequest,
   cursor: string,
