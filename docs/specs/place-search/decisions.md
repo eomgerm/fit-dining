@@ -405,7 +405,7 @@ Glossary: none · ADRs: none
 - Rejected: 결과가 있으면 버튼을 늘 보이기 → 지도를 움직이지 않아도 떠 있어 같은 영역을 다시 검색하게 만든다. 지도 이동마다 자동으로 다시 검색 → D-70이 버튼을 누를 때만 지도 영역을 읽기로 했다.
 
 ## D-78 요청 기록이 있으면 위쪽 검색창에도 요청 기록 버튼을 둔다
-- Status: settled
+- Status: superseded by D-84
 - Decision: "새 검색"으로 위쪽 검색창에 돌아와도 이번 세션의 요청 기록은 남으므로, 기록이 하나 이상이면 위쪽 검색창 오른쪽에 요청 기록 버튼을 두어 같은 시트(5-07)를 연다. 기록이 없으면 버튼을 그리지 않는다.
 - Rejected: 결과 패널에만 요청 기록 버튼 두기 → "새 검색" 뒤에는 남아 있는 기록을 열 방법이 없다.
 
@@ -413,3 +413,44 @@ Glossary: none · ADRs: none
 - Status: settled
 - Decision: "결과 보기"나 상세에서 돌아오기로 예전 검색 결과를 다시 보여 줄 때, 카드의 영업 상태(`openStatus`)는 BE가 그 검색 시각 기준으로 계산한 값 그대로 보여 준다. 그래서 탭을 오래 켜 두면 실제와 다를 수 있다(예: 오후 2시 결과를 밤 11시에 다시 보면 "영업 중"). 정확한 영업 상태는 상세 화면이 들어갈 때마다 새로 받는 값으로 확인한다. 검색 결과 캐시와 요청 기록은 메모리에만 있고 개수 상한이 없으며 재로드하면 사라진다.
 - Rejected: 오래된 결과에서 영업 상태를 숨기기, "오후 2:10 기준"처럼 기준 시각 표시, 오래된 결과를 다시 검색하기 → 검색 기록 보관 방식(D-27)과 서버 저장이 정해진 뒤 함께 정한다. 카드에는 영업시간이 없어 FE가 상태를 다시 계산할 수 없다.
+
+## D-80 범위 추가(와이어프레임의 첫 화면)
+- Status: settled
+- Decision: D-49의 범위에 Jira S15P31A302-42(와이어프레임과 다른 디자인 수정)의 첫 화면을 더한다. 기준은 와이어프레임 `~/Desktop/핏다이닝 디자인 v1/project/`의 `Start.dc.html`(첫 화면과 주변 추천 카드), `StartRecent.dc.html`과 `StartRecentEmpty.dc.html`(최근 검색 시트), `StartNoLoc.dc.html`(위치가 없을 때), `Typing.dc.html`(아래 검색창의 자동완성), `Results.dc.html`(결과 화면의 지도 위 버튼)이다. 이 화면들에서 와이어프레임과 Figma가 다르면 와이어프레임을 따른다. 그 밖의 화면은 D-49대로 Figma를 따른다.
+- Rejected: "내 주변 추천" 라벨 → 사용자가 이번에는 빼기로 했다. 위치 권한 안내 화면(`Location`, `LocationPrompt`), 앱 설치 안내(`StartInstall*`), 지난 결과 보기(`PastResult`, 5-08) → 온보딩과 결과 보관 방식(D-27)이 정해지지 않았다.
+
+## D-81 첫 화면의 검색창은 화면 아래에 떠 있다
+- Status: settled
+- Decision: D-50의 "위쪽 검색창"(지금 보는 요청이 없을 때의 새 검색 입력, D-73)을 지도 위 화면 아래쪽에 떠 있는 검색창으로 옮긴다. 문구는 "분위기나 목적을 말해 보세요"이고 오른쪽에 최근 검색 버튼(D-84)과 추천받기 버튼(위쪽 화살표)이 있다. 자동완성 후보는 검색창 바로 위에 열리며 순서는 응답 그대로다. 결과가 있을 때는 지금처럼 결과 패널 아래의 후속 입력창이 화면 맨 아래에 있고 결과 목록은 그 위에 있다. 새 검색과 후속 조건의 구분(D-50)은 바꾸지 않는다.
+- Rejected: 위쪽 검색창 유지 → 와이어프레임은 첫 화면과 결과 화면 모두 입력을 화면 아래 같은 자리에 둔다. 자동완성 후보를 검색창 아래에 열기 → 화면 아래라 자리가 없고 키보드에 가린다.
+- Anchors: `fe/src/domains/place/ui/search-bar.tsx#SearchBar` (modify) · `fe/src/domains/place/ui/search-screen.tsx#SearchScreen` (modify)
+
+## D-82 첫 화면의 주변 추천 카드는 근처 검색으로 채운다
+- Status: settled
+- Decision: 지금 보는 요청이 없고 검색 중이 아닐 때, 검색창 위에 주변 장소 카드를 가로로 넘기는 목록(`shared/ui`의 `Carousel`)으로 보여 주고 지도에는 같은 순위 번호의 핀을 찍는다. 데이터는 검색 API에 고정 문장 "근처 맛집"을 보내 받은 근처 응답(D-52: 후보 전체, 커서 없음)을 기준 지점에서 반경(D-52의 FE 상수) 안으로 거른 앞의 10곳이다. 기준 지점은 기기 위치가 있으면 그 위치, 없으면 역삼역이다(D-83). 이 요청 본문은 `query`만 담고 좌표와 `mapBounds`를 담지 않으며 요청 기록에 쌓지 않는다. 받은 카드는 장소별 최근 카드에 둬서 상세 화면이 핏 점수와 추천 이유를 쓴다. 카드는 위쪽 사진(없으면 자리표시), 순위, 이름, 업종 · 거리 · 영업 상태, 핏 점수, 라벨 2개이고 주의점은 없다. 가운데 카드가 선택된 카드다. 카드를 넘기면 그 카드를 선택하고 지도를 그 핀으로 옮긴다(`panTo`). 핀이나 가운데가 아닌 카드를 누르면 그 카드로 넘긴다. 선택된 카드를 누르면 상세로 간다. 반경 안에 장소가 없거나 요청이 실패하면 카드 목록을 그리지 않는다.
+- Rejected: 지도 영역(`mapBounds`)으로 검색 → 내 위치 중심의 영역이라 대략의 위치가 서버로 간다. 주변 추천 전용 BE API → BE와 Mock 계약이 늘고 AI 파트 계약이 정해지지 않았다. 요청 기록에 쌓기 → 사용자가 보낸 요청이 아니다.
+- Anchors: `fe/src/domains/place/ui/nearby-carousel.tsx#NearbyCarousel` (new) · `fe/src/domains/place/model/search-request.ts#nearbyRequest` (new) · `fe/src/shared/ui/display/carousel.tsx#Carousel` (reuse)
+
+## D-83 위치 권한이 이미 허용이면 화면을 열 때 위치를 받는다
+- Status: settled
+- Decision: D-52에 더한다. 검색 화면을 열 때 아직 위치를 시도한 적이 없고 `navigator.permissions.query({ name: "geolocation" })`의 결과가 `granted`이면 위치를 받는다. 이때 브라우저는 묻지 않는다. `prompt`, `denied`이거나 Permissions API가 없거나 실패하면 요청하지 않으며, 권한을 묻는 때는 D-52대로 "내 위치" 버튼과 근처 응답뿐이다. 위치를 얻으면 자동이든 버튼이든 지도를 그 위치로 옮긴다. 위치가 없을 때 첫 화면의 주변 카드는 역삼역(위도 37.5006, 경도 127.0364, 지도 기본 중심)을 기준 지점으로 거르고 거리를 "역삼역 350m"처럼 보인다. 이 표시는 주변 카드에만 쓰고, 다른 곳은 D-52대로 위치가 없으면 거리를 숨긴다. 화면을 열 때 권한이 `denied`이면 "위치 권한이 꺼져 있어요. 브라우저 설정에서 허용해 주세요"를 페이지 세션에 한 번 알린다. 위치 실패의 알림과 `mapBounds` 규칙은 D-52 그대로다. 첫 화면의 "내 위치" 버튼은 주변 카드 바로 위 오른쪽(카드가 없으면 검색창 위 오른쪽)에 둔다.
+- Rejected: 첫 진입 때 바로 권한 묻기 → D-52가 버튼 방식을 택했다. 위치가 없으면 주변 카드 숨기기 → 사용자가 역삼역 기준을 골랐다(와이어프레임 `StartNoLoc`).
+- Anchors: `fe/src/domains/place/ui/locate-device.ts#locateIfGranted` (new)
+
+## D-84 최근 검색은 기기에 문장만 저장한다
+- Status: settled
+- Decision: 첫 화면 검색창과 후속 입력창의 최근 검색 버튼은 "최근 검색" 시트를 연다. 성공한 새 검색(첫 페이지 응답을 받은 `new` 항목)의 문장을 시각과 함께 `localStorage`에 저장해 재로드와 다음 접속 뒤에도 보인다. 기기 밖으로는 보내지 않는다. 목록은 최신순이고, 앞뒤 공백을 뺀 문장이 같으면 하나만 남겨 맨 위로 올리며, 최대 10개다. 후속 조건과 "이 지역에서 검색"은 저장하지 않는다. 각 줄은 문장과 시각("오늘 오후 2:10", 다른 날은 "10월 14일")이다. 줄을 누르면 시트를 닫고 "새 검색"처럼 지금 보는 요청과 지역 고정을 비운 뒤 그 문장으로 새 검색을 보낸다. 목록이 비면 "아직 검색한 요청이 없어요. 원하는 분위기나 목적을 말해 보세요."를 보인다. 저장소를 읽거나 쓰지 못하면 빈 목록으로 두고 검색은 그대로 동작한다. 결과는 저장하지 않는다(D-27은 그대로 미결). 이번 세션의 요청 기록(5-07)은 결과 패널 머리글의 "요청 기록"으로 연다. 목록 규칙과 날짜 문구는 `model`의 순수 함수로, 저장소 읽기와 쓰기는 `ui`의 훅으로 둔다.
+- Rejected: 첫 화면 검색창의 요청 기록 버튼(D-78) → 와이어프레임은 그 자리에 최근 검색을 둔다. 이번 세션의 요청 기록을 그대로 열기 → 재로드하면 사라져 지난날 검색을 볼 수 없다. 지난 결과까지 저장해 다시 보기(5-08, `PastResult`) → 결과 보관 방식(D-27)과 서버 저장이 정해지지 않았다.
+- Anchors: `fe/src/domains/place/model/recent-searches.ts#addRecentSearch` (new) · `fe/src/domains/place/ui/use-recent-searches.ts#useRecentSearches` (new) · `fe/src/domains/place/ui/recent-search-sheet.tsx#RecentSearchSheet` (new)
+
+## D-85 지도 위 "저장한 장소"와 "내 정보" 버튼은 준비 중 토스트를 띄운다
+- Status: settled
+- Decision: 첫 화면과 결과 화면의 지도 오른쪽 위에 "저장한 장소"(북마크 아이콘)와 "내 정보"(사람 아이콘) `Fab`을 세로로 둔다. 연결할 화면이 아직 없으므로 누르면 "준비 중이에요" 토스트를 띄운다. 저장 화면과 내 정보 화면이 생기면 그 화면으로 이동하도록 바꾼다. 결과 패널이 전체 상태면 패널에 가려 보이지 않는다. 공유 버튼은 그리지 않는다.
+- Rejected: 눌러도 아무 일이 없는 버튼 → 사용자가 고장으로 여기고, 화면 낭독기가 반응 없는 버튼을 읽는다. 아직 없는 경로로 이동 → 404가 나고 로그인 담당(S15P31A302-38)과 경로를 정하지 않았다.
+- Anchors: `fe/src/shared/ui/button/fab.tsx#Fab` (reuse)
+
+## D-86 장소 상세는 리뷰 자리 세 곳을 연다
+- Status: settled
+- Decision: D-49가 그리지 않기로 한 리뷰 탭(6-03), 홈 탭의 리뷰 미리보기(6-01), 하단의 "방문 평가 남기기"는 리뷰 담당이 붙인다(review spec D-32). `PlaceDetailScreen`은 렌더 함수 props `slots`(`homeReviews`, `reviewTab`, `bottomAction`)를 받는다. `reviewTab`이 있으면 탭은 홈, 메뉴, 리뷰, 정보 순서다. `homeReviews`는 홈 탭 맨 아래에 그리며 리뷰 탭으로 바꾸는 함수를 받는다. `bottomAction`은 하단 막대(`BottomBar`)에 그린다. 자리를 받지 않으면 홈, 메뉴, 정보 탭만 있고 하단 막대가 없다. 자리는 `src/app/place/place-detail-with-reviews.tsx`가 채우며, 장소 도메인은 리뷰 도메인을 import하지 않는다(D-66).
+- Rejected: 장소 상세가 리뷰 컴포넌트를 직접 import → ESLint 의존 방향 규칙에 걸린다(D-66).
+- Anchors: `fe/src/domains/place/ui/place-detail-screen.tsx#PlaceDetailScreen` (modify) · `fe/src/app/place/place-detail-with-reviews.tsx#PlaceDetailWithReviews` (reuse)
