@@ -15,6 +15,23 @@ spring:
     deserialization:
       fail-on-unknown-properties: true
 
+management:
+  server:
+    # 관리 경로는 공개 포트(8080)가 아니라 8081에서만 열고 프록시하지 않는다. 배포 스크립트와 모니터링이 컨테이너 안쪽 주소로 부른다.
+    port: 8081
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        readiness:
+          # 외부 서비스(Modal 등)를 보면 외부 장애가 readiness를 흔들어 재시작 폭풍이 난다. DB만 본다.
+          include: readinessState,db
+
 place:
   mock:
     enabled: ${PLACE_MOCK_ENABLED:false}
