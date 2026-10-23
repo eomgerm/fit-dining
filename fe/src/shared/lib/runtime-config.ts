@@ -1,6 +1,9 @@
 // GET /config.json(src/app/config.json/route.ts)이 돌려주는 실행 환경 값
 export type RuntimeConfig = {
   env: string;
+  posthogKey?: string;
+  posthogHost?: string;
+  pushPublicKey?: string;
   naverMapClientId?: string;
 };
 
