@@ -453,7 +453,7 @@ smoke:prod:
 ## 서버 적용 절차 (구현 MR이 병합된 뒤)
 
 1. **러너 등록**(사람, 끝났다 2026-10-23): GitLab에서 `fit-verify`(태그 `verify`, untagged 끔, Protected 끔), `fit-deploy`(태그 `deploy`, untagged 끔, Protected 켬)를 만들고 각 서버에서 `sudo bash ~/host/runner.sh register`로 토큰을 숨김 입력한다. `status`가 PASS이고 Runners 목록에서 online이다. 임시 verify 러너(이 PC의 Docker)는 지운다.
-2. **A에 권한 반영:** 코드를 갱신하고 `sudo ROLE=app FIT_PEER_IP=<B의 IP> bash ~/host/bootstrap.sh`로 디렉터리 권한을 적용한다. 이어서 이미 있는 파일의 그룹을 맞춘다: `sudo chgrp -R docker /srv/fit/state /srv/fit/web && sudo chmod -R g+rwX /srv/fit/state /srv/fit/web`. `verify-host.sh`가 통과한다.
+2. **A에 권한 반영**(끝났다 2026-10-23): 코드를 갱신하고 `sudo ROLE=app FIT_PEER_IP=<B의 IP> bash ~/host/bootstrap.sh`로 디렉터리 권한을 적용한다. 이어서 이미 있는 파일의 그룹을 맞춘다: `sudo chgrp -R docker /srv/fit/state /srv/fit/web && sudo chmod -R g+rwX /srv/fit/state /srv/fit/web`. `verify-host.sh`가 통과한다. 실제로는 먼저 새 코드의 `verify-host.sh`를 읽기 전용으로 돌려 실패가 이 두 디렉터리 하나뿐인 것을 확인한 뒤(나머지 호스트 설정은 설계와 같았다), 전체 `bootstrap.sh`를 다시 돌리지 않고 같은 효과의 좁은 명령(`install -d -m 2775 -o root -g docker`, `chgrp -R docker`, `chmod -R g+rwX`)으로 적용했다. 적용 뒤 `verify-host.sh`는 "호스트 정상"이고 Caddy는 healthy다. A의 `~/host`에 있던 옛 `bootstrap.sh`는 `755 root:root`로 되돌릴 수 있어서 새 코드로 갱신했다. 이후 `bootstrap.sh`가 바뀌면 `~/host`를 같이 갱신한다.
 3. **verify 확인:** MR을 올려 `be:test`, `fe:test`가 B의 러너에서 도는 것을 본다(스위치가 꺼진 채로). 아티팩트 크기와 실행 시간(B의 메모리 4GB 안에서 Gradle이 끝나는지)을 기록한다.
 4. **GitLab 프로젝트 설정:** `gitlab-setup.md` 3단계(환경 보호는 CE에서 쓸 수 없으므로 대체 확인: Developer가 `deploy:prod`를 못 누르는지, `develop`과 `master`의 보호 설정. 그리고 `process_mode`를 `oldest_first`로). "Prevent outdated deployment jobs" 등은 1단계에서 끝났다.
 5. **계약 체크리스트가 끝나면** 스위치를 켜는 MR(`FIT_CD_ENABLED: "true"`와 구조 시험의 기본값 시험을 함께 바꾼다)을 올리고 `develop`에 병합해 dev 첫 배포를 지켜본다. 실패하면 `rollback.sh`와 알림을 확인한다.
