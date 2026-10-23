@@ -502,3 +502,9 @@ Glossary: none · ADRs: none
 - Decision: D-85와 같은 방식으로, 상세 사진 위 오른쪽의 "공유"와 하단 막대의 "저장"(북마크 테두리 버튼)을 그리고 누르면 "준비 중이에요" 토스트를 띄운다. 기능이 생기면 동작만 바꾼다. D-85의 "공유 버튼은 그리지 않는다"는 이 결정으로 바뀐다.
 - Rejected: 그리지 않기 → 와이어프레임에 있고, 사용자가 D-85와 같이 두기로 했다.
 - Anchors: `fe/src/shared/ui/button/fab.tsx#Fab` (reuse)
+
+## D-95 FE는 `?mock=empty`를 읽지 않고 `X-Mock-Scenario`를 보내지 않는다
+- Status: settled
+- Decision: D-63 가운데 "FE는 주소창의 `?mock=empty`를 읽어 이 헤더를 붙인다"만 이 결정으로 바뀐다. `place-api.ts`는 검색 요청에 `X-Mock-Scenario`를 붙이지 않고, 결과 없음 화면은 FE 테스트가 가짜 응답으로 확인한다. BE Mock은 그대로 헤더를 읽으므로 BE 테스트와 직접 호출(curl 등)로는 `empty` 시나리오를 계속 쓴다. 배포 번들에 개발용 mock 스위치가 들어가 인프라의 번들 검사(`mock-words`)가 WARN을 내기 때문이다(`docs/infra/plans/2026-10-23-plan-1c3-ci-pipeline.md` FE 체크리스트 4).
+- Rejected: `/config.json`의 `env`가 dev일 때만 헤더 붙이기 → 코드가 번들에 남아 WARN이 그대로이고, 런타임 설정을 기다리는 분기가 검색 요청에 생긴다.
+- Anchors: `fe/src/domains/place/api/place-api.ts#searchPlaces` (modify)

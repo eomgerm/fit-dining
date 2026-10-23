@@ -51,7 +51,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 30. 카드는 순위 번호, 사진(없으면 자리표시), 이름, 업종 · 거리(위치가 있을 때) · 영업 상태 문구(영업 중, 곧 마감, 브레이크타임, 영업 종료; `UNKNOWN`이면 생략), 라벨 2개, 주의점, 핏 점수를 보여 준다. 순위 번호는 지금 보이는 목록에서의 순서(1부터, 다음 페이지에서도 이어짐, 근처 필터 뒤 다시 매김)다(D-70, D-64).
 31. FE의 빈 입력 판정은 앞뒤 공백을 제거한 뒤 한다. 공백뿐인 입력은 자동완성과 검색 모두 요청하지 않는다(D-70, D-10).
 32. 자동완성은 앞뒤 공백을 뺀 입력을 300ms 늦춘 값을 쿼리 키로 쓴다. 입력이 바뀌면 300ms를 다시 기다리고, 늦춘 값이 바뀌어 새 요청을 보내면 이전 요청을 Query가 넘긴 `signal`로 취소한다. 입력이 비면 기다리지 않고 후보 목록을 비우며 진행 중인 요청도 취소한다. 지금 키가 아닌 요청의 응답은 화면에 쓰지 않는다. 후보 줄은 이름, 업종 · 거리(위치가 있을 때) · "메뉴: <matchedMenu>"(있을 때)이고, 이름과 메뉴에서 입력과 같은 부분을 강조한다. `PLACE` 후보를 고르면 `/place?id=<id>`로 이동한다. 후보 상자는 응답의 `ACTION` 항목을 응답 안 위치와 상관없이 맨 위(강조 배경, 원 안의 반짝이 아이콘, ›)에 두고 `PLACE` 항목(원 안의 핀 아이콘)은 응답 순서대로 그 아래에 둔다(`model/suggestions.ts`의 `actionFirst`). 후보가 보이는 동안(검색창에 초점이 있고 공백을 뺀 입력이 있을 때) 지도 위에 어두운 막을 깔아 주변 카드와 지도 버튼을 가리고, 막을 누르면 검색창 초점을 풀어 후보를 닫는다. 검색창은 초점이 있으면 테두리를 강조하고, 입력이 있으면 최근 검색 버튼 대신 "입력 지우기"(✕) 버튼을 두며 누르면 입력을 비우고 검색창에 초점을 둔다(D-70, D-64, D-67, D-87).
-33. `place-api.ts`는 공통 `request`로 BE를 부른다. `?mock=empty`는 `place-api.ts`가 검색 호출(커서 요청 포함)마다 `window.location.search`에서 읽어 `X-Mock-Scenario: empty`를 붙인다. 테스트는 `vi.stubGlobal`로 `location`을 바꾼다. 오류(`ApiError`의 http, network, timeout)는 한 줄의 일반 오류 문구로 보여 주고, 재시도는 공통 `QueryClient` 기본값(5xx와 연결 실패만 두 번)을 따른다(D-63, D-68, D-66, D-67).
+33. `place-api.ts`는 공통 `request`로 BE를 부른다. 주소의 `?mock=empty`를 읽지 않고 어떤 요청에도 `X-Mock-Scenario`를 붙이지 않는다(D-95). 오류(`ApiError`의 http, network, timeout)는 한 줄의 일반 오류 문구로 보여 주고, 재시도는 공통 `QueryClient` 기본값(5xx와 연결 실패만 두 번)을 따른다(D-63, D-68, D-66, D-67).
 34. 화면 문구는 쉬운 한국어다. `fe/src/app/layout.tsx`의 `metadata`를 서비스 이름("Fit Dining")으로 바꾼다(`lang="ko"`와 Pretendard는 S15P31A302-35에서 들어왔다). 지도 위 "저장한 장소"와 "내 정보" 버튼은 56번, 상세의 "공유"와 "저장" 버튼은 58번, "방문 평가 남기기"는 45번(리뷰 자리)을 따른다(D-66, D-49, D-85, D-86, D-94).
 
 ### FE 지도와 위치
@@ -98,7 +98,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 3. **후속 조건과 요청 기록 (5-06, 5-07)**: 패널 아래 입력창에 "더 조용하게"를 보내면 직전 응답의 `conditions`가 `previousConditions`로 나가고 "요청하신 조건을 반영했어요" 배너와 "추가 조건 · 더 조용하게" 칩이 보인다. 요청 기록에서 첫 요청의 "여기서 이어 검색"을 누른 뒤 "카페 말고 식당"을 보내면 첫 요청의 `conditions`가 기준이 된다(D-50).
 4. **근처 검색과 내 위치**: "근처 카페"를 보내면 응답이 `nearby: true`와 후보 전체로 오고, 브라우저가 위치 권한을 물은 뒤 현재 위치로 반경을 걸러 보여 준다. 지도의 "내 위치"를 누르면 언제든 위치를 받아 거리를 표시한다. 위치는 서버로 나가지 않는다(D-52).
 5. **핀과 카드, 장소 상세 (6-01~6-05)**: 핀을 누르면 그 카드가 선택되고, 다른 카드를 누르면 지도가 그 핀으로 이동한다. 선택된 카드를 다시 누르면 `/place?id=…`로 가서 `GET /api/v1/places/{id}`로 사진, 영업시간, 메뉴, 시설을 가져온다. 추천 이유와 핏 점수 설명은 검색에서 받은 카드의 값을 쓴다(D-66, D-70, D-64).
-6. **개발자가 결과 없음 화면을 볼 때**: 주소를 `localhost:3000/?mock=empty`로 열고 평소처럼 검색하면 결과 없음 화면이 나온다(D-63).
+6. **개발자가 결과 없음 응답을 볼 때**: BE Mock에 `X-Mock-Scenario: empty` 헤더를 붙여 검색을 직접 부르면(curl 등) 결과 없음 응답이 온다. FE의 결과 없음 화면은 테스트가 가짜 응답으로 확인한다(D-63, D-95).
 7. **첫 화면 (와이어프레임 Start, StartNoLoc)**: 위치 권한을 이미 허용한 사용자가 `/`를 열면 지도가 내 위치로 옮겨 가고, 아래 검색창 위에 "카페 온담 · 카페 · 350m · 영업 중" 같은 주변 카드가 가로로 넘어가며 지도에 1, 2, 3… 핀이 찍힌다. 권한을 허용하지 않은 사용자에게는 같은 카드가 "역삼역 350m" 기준으로 보인다. 오른쪽 위의 북마크와 사람 버튼은 "준비 중이에요"를 띄운다(D-82, D-83, D-85).
 8. **최근 검색 (와이어프레임 StartRecent)**: 어제 "역삼에서 조용히 대화하기 좋은 카페"를 검색한 사용자가 오늘 다시 열어 검색창의 기록 아이콘을 누르면 "최근 검색" 시트에 그 문장과 "10월 22일"이 보이고, 누르면 어제 받은 결과가 "10월 22일 결과 · “역삼에서 조용히 대화하기 좋은 카페”"로 다시 받지 않고 보인다. "이 조건으로 다시 검색"을 누르면 그 문장으로 새 검색이 나간다(D-91, D-90).
 
@@ -120,7 +120,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 - [x] AC-14: 컨트롤러와 `PlaceService`는 `PlaceSearchEngine`의 반환값을 가공하거나 검증하지 않고 그대로 응답한다. 다른 `PlaceSearchEngine` 구현으로 바꿔도 컨트롤러와 `PlaceService`는 수정할 필요가 없다. (D-62, D-64, D-56)
 - [x] AC-15: 자동완성은 입력이 멈춘 뒤 300ms 뒤에 한 번만 요청하고, 입력이 비면 요청하지 않으며, 새 요청을 보내면 이전 요청을 취소하고, 늦게 도착한 응답은 화면에 반영하지 않는다. (D-70)
 - [x] AC-16: FE가 만드는 검색 요청 본문에는 기기 위치를 얻었어도 그 좌표가 어떤 필드에도 들어가지 않는다. 검색 대상 지역인 `mapBounds`는 좌표 금지의 예외이며, 사용자가 "이 지역에서 검색"을 눌렀거나 위치를 얻지 못한 것이 확인된 뒤에만 담는다. 근처 응답이 오고 위치를 얻으면 FE는 현재 위치와 반경으로 항목을 걸러 낸다. (D-41, D-52)
-- [x] AC-17: 주소에 `?mock=empty`가 있으면 FE의 검색 요청에 `X-Mock-Scenario: empty` 헤더가 붙고, 없으면 붙지 않는다. (D-63)
+- [ ] AC-17: 주소에 `?mock=empty`가 있어도 FE의 검색, 자동완성, 상세 요청에 `X-Mock-Scenario` 헤더가 붙지 않는다. (D-95)
 - [x] AC-18: `/config.json`에 지도 키가 없거나 그 요청이 실패하거나 인증이 실패하면(`navermap_authFailure`) 지도 영역은 비어 있고 카드 목록, 후속 조건, 요청 기록은 정상 동작한다. (D-70, D-57)
 - [x] AC-19: 선택된 카드를 다시 누르면 `/place?id=…`로 이동해 상세가 표시되고, 뒤로 가면 기존 결과, 선택된 카드, 요청 기록이 유지된다(보관 방식은 미결이며 어떤 방식이든 이 동작이 목표다). (D-49, D-66, D-35, D-27)
 - [x] AC-20: 장소 데이터는 브라우저의 `fetch`로 `/api/v1/...`를 불러 가져온다. Server Actions나 Route Handler로 장소 데이터를 가져오지 않는다. (D-38)
@@ -167,6 +167,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 | `fe/src/app/page.tsx#Home` | modify | D-66 |
 | `fe/src/app/place/page.tsx#PlaceDetailPage` | new | D-66 |
 | `fe/src/domains/place/api/place-api.ts#searchPlaces` | new | D-66 |
+| `fe/src/domains/place/api/place-api.ts#searchPlaces` | modify | D-95 |
 | `fe/src/domains/place/api/place-queries.ts#placeQueries` | new | D-67 |
 | `fe/src/domains/place/ui/place-map.tsx#PlaceMap` | new | D-70 |
 | `fe/package.json#devDependencies` | modify | D-68 |
@@ -274,7 +275,7 @@ src/domains/place/             의존은 ui → api → model 방향만
   model/search-threads.ts      thread 모양, 요청 더하기(appendTurn), 목록 정렬, 형식 검사, 시각 문구 (D-91)
   model/suggestions.ts         자동완성 후보 순서(actionFirst: ACTION을 맨 위로) (D-87)
   api/place-api.ts             suggestPlaces(q, signal), searchPlaces(request, signal), getPlace(id, signal)
-                               공통 request를 쓰고, 검색 호출에 ?mock=empty가 있으면 X-Mock-Scenario 헤더를 붙인다
+                               공통 request를 쓴다. X-Mock-Scenario 헤더는 보내지 않는다 (D-95)
   api/place-queries.ts         placeQueries.suggest(q), placeQueries.search(entryId, request), placeQueries.detail(id)
                                쿼리 키와 queryOptions는 여기서만 만든다. ui는 useQuery 등에 이것을 넘긴다
   ui/use-suggest.ts            300ms 늦춘 입력으로 placeQueries.suggest를 부르는 훅
@@ -318,7 +319,7 @@ GET /config.json  : { env: "dev" | "prod", naverMapClientId?: string }, Cache-Co
 - **FE 순수 로직** (example), AC-16, AC-26, AC-27: Node 환경의 Vitest. 근처 필터와 거리 표시(haversine, 반경 이하 포함, "350m"과 "1.2km" 경계)는 `fe/src/domains/place/model/nearby.test.ts`에서, 요청 본문 생성 함수는 새 검색, 후속(기준 요청의 `conditions`), 커서, "이 지역에서 검색", "여기서 이어 검색"의 본문과 좌표 미포함을, `search-store`는 기록 쌓기(커서는 새 항목이 아님, 실패는 쌓지 않음), "결과 보기", 칩의 기준 요청 사슬을 확인한다. 잡는 것: 거리 계산 오류, 잘못된 후속 기준, 기록 규칙 위반. 놓치는 것: 화면과의 연결. Prior art: `fe/src/shared/api/client.test.ts`.
 - **FE 훅** (example), AC-15: jsdom 환경에서 `renderHook`, 가짜 타이머, `QueryClientProvider`, 가짜 `fetch`로 `use-suggest`의 요청 횟수(300ms 뒤 한 번), 빈 입력 미요청, 이전 요청 취소(`signal` 중단), 늦은 응답 무시를 확인한다. 잡는 것: 요청 폭주, 오래된 후보 표시. 놓치는 것: 실제 브라우저 입력기(한글 조합) 동작.
 - **FE 설정 라우트** (example), AC-30: Vitest에서 `process.env`를 바꿔 가며 `route.ts`의 `GET`을 직접 호출해 돌려주는 키가 `env`, `naverMapClientId`뿐인지, 값이 없으면 생략되는지 확인한다. 잡는 것: 환경변수 누출, 키 이름 오타. 놓치는 것: 빌드 때 미리 렌더링되는지(수동 확인).
-- **FE API 함수** (example), AC-16, AC-17: `fetch`를 가짜로 바꿔 `place-api.ts`가 보내는 요청 본문에 기기 좌표가 없는지, `?mock=empty`일 때만 헤더가 붙는지 확인한다. 잡는 것: 위치 누출, 헤더 오작동. 놓치는 것: 실제 BE와의 통합. Prior art: `fe/src/shared/api/client.test.ts`.
+- **FE API 함수** (example), AC-16, AC-17: `fetch`를 가짜로 바꿔 `place-api.ts`가 보내는 요청 본문에 기기 좌표가 없는지, 주소에 `?mock=empty`가 있어도 `X-Mock-Scenario` 헤더가 붙지 않는지 확인한다. 잡는 것: 위치 누출, 개발용 헤더가 배포에서 나가는 것. 놓치는 것: 실제 BE와의 통합. Prior art: `fe/src/shared/api/client.test.ts`.
 - **FE 화면** (example), AC-18, AC-29: jsdom 환경에서 화면 컴포넌트를 렌더링한다. 검색 화면은 `/config.json`에 키가 없거나 요청이 실패하면 지도 영역이 비고 카드 목록이 보이는지, 상세 화면은 store에 카드가 있을 때 핏 점수, AI 추천 이유, 주의점이 보이고 없을 때 숨는지, 리뷰 자리를 받지 않으면 탭이 셋이고 받으면 리뷰 탭과 하단 막대가 생기는지 확인한다. 잡는 것: 조건부 렌더링 실수. 놓치는 것: 실제 지도 SDK와 레이아웃.
 - **FE 첫 화면** (example), AC-31, AC-32, AC-33, AC-34, AC-35: jsdom 환경에서 검색 화면을 렌더링한다. 가짜 `navigator.permissions`와 `geolocation`으로 권한이 `granted`일 때만 열 때 위치를 받는지, 주변 카드 요청 본문이 `query`뿐이고 요청 기록에 쌓이지 않는지, 반경 거르기와 "역삼역 <거리>", 검색창 위치(결과 전후), 상단 버튼의 토스트, 최근 검색 시트의 줄과 누른 뒤의 새 검색을 확인한다. `recent-searches.ts`의 합치기, 상한, 시각 문구는 Node 환경에서 확인한다. 잡는 것: 위치 자동 요청 조건, 좌표 누출, 저장 규칙 위반. 놓치는 것: 실제 브라우저 권한 창과 Carousel의 손가락 넘기기(수동).
 - **FE 검색 흐름과 상세 모양** (example), AC-27, AC-34, AC-36, AC-37, AC-38, AC-39, AC-40, AC-41: jsdom 환경에서 검색 화면과 상세 화면을 렌더링한다. 후보 순서(`actionFirst`는 Node 환경에서도)와 어두운 막, 입력 지우기, 가짜 타이머로 단계 문구 바뀜, 요청 기록 펼침과 접기, 과거 결과 화면을 열 때 검색 요청 수가 늘지 않는지와 다시 검색 뒤 기록, 새 검색과 후속 조건의 thread 쌓기, 재로드 뒤 thread 열기와 이어 검색, 깨진 저장 값 무시(`search-threads.ts`는 Node 환경에서도), 상세의 공유와 저장 토스트, 근거 부족 안내, 주소 복사, 정보 탭을 열 때만 지도가 생기는지 확인한다. 잡는 것: 순서 규칙, 스냅샷이 다시 받아지는 실수, 기록 규칙 위반, 조건부 렌더링 실수. 놓치는 것: 와이어프레임과의 모양 차이(수동).
