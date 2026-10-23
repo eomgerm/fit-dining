@@ -192,8 +192,9 @@ setup_accounts_and_dirs() {
   put_file "$TMP/role" /etc/fit/role 644
   if [ "$ROLE" = app ]; then
     ensure_dir /srv/fit 755 root:root
-    ensure_dir /srv/fit/state 755 root:root
-    ensure_dir /srv/fit/web 755 root:root
+    # deploy 러너(gitlab-runner, docker 그룹)가 상태 파일과 정적 자산 풀을 쓴다. setgid라 새 파일도 docker 그룹이고, Caddy는 others로 읽기만 한다
+    ensure_dir /srv/fit/state 2775 root:docker
+    ensure_dir /srv/fit/web 2775 root:docker
     ensure_dir /srv/fit/backups 700 root:root
     ensure_user fit-dev /usr/sbin/nologin
     ensure_dir /home/fit-dev/.ssh 700 fit-dev:fit-dev

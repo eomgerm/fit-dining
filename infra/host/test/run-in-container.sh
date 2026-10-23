@@ -119,6 +119,8 @@ break_and_fix "/etc/fit 권한" "chmod 755 /etc/fit" "/etc/fit이 root:docker 75
 break_and_fix "자동 재부팅 켜기" "printf 'Unattended-Upgrade::Automatic-Reboot \"true\";\n' >/etc/apt/apt.conf.d/99zz-test" "자동 재부팅은 꺼져 있다" "rm -f /etc/apt/apt.conf.d/99zz-test"
 if [ "$ROLE" = app ]; then
   break_and_fix "fit-dev 터널 제한 해제" "sed -i '/PermitOpen/d' /etc/ssh/sshd_config.d/10-fit.conf" "fit-dev는 터널만 된다"
+  break_and_fix "상태 디렉터리 모드" "chmod 755 /srv/fit/state" "/srv/fit/state, web이 root:docker 2775다"
+  break_and_fix "정적 자산 디렉터리 그룹" "chgrp root /srv/fit/web" "/srv/fit/state, web이 root:docker 2775다"
 else
   break_and_fix "vault 전달 허용" "sed -i 's/AllowTcpForwarding no/AllowTcpForwarding yes/' /etc/ssh/sshd_config.d/10-fit.conf" "vault는 전달·TTY·사용자 rc가 막혀 있다"
 fi

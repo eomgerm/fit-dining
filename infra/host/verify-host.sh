@@ -102,7 +102,7 @@ check_dirs_and_accounts() {
   ok_if "/etc/fit/keys가 root 700이다" "$(file_is /etc/fit/keys 700 root:root)"
   ok_if "/etc/fit/role이 역할과 같다" "$(is "$(cat /etc/fit/role 2>/dev/null)" "$ROLE")"
   if [ "$ROLE" = app ]; then
-    ok_if "/srv/fit/state, web이 있다" "$(is "$(file_is /srv/fit/state 755 root:root)$(file_is /srv/fit/web 755 root:root)" 11)"
+    ok_if "/srv/fit/state, web이 root:docker 2775다(deploy 러너가 쓴다)" "$(is "$(file_is /srv/fit/state 2775 root:docker)$(file_is /srv/fit/web 2775 root:docker)" 11)"
     ok_if "/srv/fit/backups가 root 700이다" "$(file_is /srv/fit/backups 700 root:root)"
     ok_if "fit-dev 계정은 셸이 없다" "$(is "$(getent passwd fit-dev | cut -d: -f7)" /usr/sbin/nologin)"
     ok_if "fit-dev의 authorized_keys가 있고 권한이 맞다" "$(is "$(file_is /home/fit-dev/.ssh 700 fit-dev:fit-dev)$(file_is /home/fit-dev/.ssh/authorized_keys 600 fit-dev:fit-dev)" 11)"
