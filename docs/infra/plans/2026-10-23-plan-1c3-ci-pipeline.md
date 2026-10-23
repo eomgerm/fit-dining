@@ -431,7 +431,7 @@ smoke:prod:
 |---|---|---|---|
 | 1 | `GET /healthz`(상태만, 내부 정보 없음) — 계약 #2 | `curl`로 200 | 소스에 없음 |
 | 2 | `GET /api/v1/version` → `{sha, builtAt}`. 이미지에 박힌 `APP_SHA`, `APP_BUILT_AT`를 읽는다(이름은 제안, 팀과 확정) — 계약 #3 | `smoke.sh`가 새 SHA인지 본다 | 소스에 없음 |
-| 3 | 관리 포트 8081과 `/actuator/health/readiness`, `/actuator/prometheus` — 계약 #1 | `deploy.sh` readiness | 소스에 없음(`application.yml`에 `management` 설정이 없다) |
+| 3 | 관리 포트 8081과 `/actuator/health/readiness`, `/actuator/prometheus` — 계약 #1 | `deploy.sh` readiness | **이행됨**(2026-10-23, 인프라가 직접). `application.yml`의 `management`(포트 8081, 노출은 health와 prometheus뿐, readiness는 `readinessState,db`)와 `micrometer-registry-prometheus` 의존성. 시험 `ManagementEndpointsTest`. 배포와 같은 JRE 이미지로 실제 서버를 띄워 확인했다: readiness가 11초에 `UP`, 8080에서는 `/actuator/*`가 404, DB를 멈추면 readiness 503이고 liveness는 200 |
 | 4 | `server.shutdown=graceful`, 종료 대기 30초 — 계약 #4 | 롤백 시험 | 소스에 없음 |
 | 5 | `SPRING_PROFILES_ACTIVE=migrate`면 웹 서버 없이 마이그레이션 후 종료 — 계약 #9 | 마이그레이션 컨테이너가 0으로 끝남 | `application-migrate.yml`에 웹 서버 없음과 Flyway 켬이 있다. 종료 코드는 첫 dev 배포에서 확인 |
 | 6 | `X-Fallback` 헤더(폴백 응답) — 계약 #17 | `FIT_SMOKE_SEARCH_PATH`를 주면 `smoke.sh`가 확인 | 소스에 없음 |
