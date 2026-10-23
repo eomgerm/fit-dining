@@ -31,6 +31,9 @@ variables:
   ALERTMANAGER_IMAGE: prom/alertmanager:v0.34.1
   DOCKER_CLI_IMAGE: docker:29.9.0-cli
   PYTHON_IMAGE: python:3.12.15-slim
+  JDK_IMAGE: eclipse-temurin:21.0.12_8-jdk-noble
+  JRE_IMAGE: eclipse-temurin:21.0.12_8-jre-noble
+  NODE_IMAGE: node:22.23.4-bookworm-slim
 
 # interruptible은 verify 잡에만 둔다. deploy 잡이 새 푸시에 자동 취소되면 전환 도중에 끊긴다.
 .verify:
