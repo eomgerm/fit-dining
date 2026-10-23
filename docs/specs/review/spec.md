@@ -7,7 +7,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 
 회원은 다녀온 장소를 이유 태그로 평가하고, 그 평가가 장소의 공개 리뷰가 되기를 원한다. 리뷰는 게시물이면서 취향 보정(FR-14)과 장소 근거의 원본 데이터라서, 작성·수정·삭제·숨김이 공개 목록에는 즉시 반영되어야 한다(PRD FR-10, FR-11, FR-12).
 
-이 spec은 Jira S15P31A302-18([Full] 리뷰)의 BE·FE를 다룬다. Walking Skeleton(31 리뷰 작성, 32 리뷰 확인)은 누구나 쓰는 익명 댓글 수준으로 줄여 본문만으로 쓰고 장소별로 읽는 데까지만 만들고, 로그인·방문일·이유 태그를 비롯한 나머지는 1차 후속에서 붙인다(D-1). 화면은 Figma `핏다이닝` 파일의 UI/UX 페이지(장소 상세 6-xx, 방문 평가 7-xx와 각 예외 상태)를 따르되, 리뷰 목록은 Walking Skeleton부터 장소 상세의 리뷰 탭(6-03)과 홈 탭 미리보기(6-01)에 보이고(검색 담당이 리뷰 담당의 컴포넌트를 붙인다), Walking Skeleton의 작성 화면은 Figma에 없는 한 화면 폼이다(D-31, D-18). 다른 담당과 함께 정해야 하는 항목은 결정하지 않고 Open questions에 둔다.
+이 spec은 Jira S15P31A302-18([Full] 리뷰)의 BE·FE를 다룬다. Walking Skeleton(31 리뷰 작성, 32 리뷰 확인)은 누구나 쓰는 익명 댓글 수준으로 줄여 본문만으로 쓰고 장소별로 읽는 데까지만 만들고, 로그인·방문일·이유 태그를 비롯한 나머지는 1차 후속에서 붙인다(D-1). 화면은 Figma `핏다이닝` 파일의 UI/UX 페이지(장소 상세 6-xx, 방문 평가 7-xx와 각 예외 상태)를 따르되, 리뷰 목록은 Walking Skeleton부터 장소 상세의 리뷰 탭(6-03)과 홈 탭 미리보기(6-01)에 보이고(검색 담당이 만든 장소 상세 화면의 리뷰 자리에 리뷰 담당이 리뷰 컴포넌트를 붙인다), Walking Skeleton의 작성 화면은 Figma에 없는 한 화면 폼이다(D-32, D-18). 다른 담당과 함께 정해야 하는 항목은 결정하지 않고 Open questions에 둔다.
 
 ## Assumptions
 
@@ -25,8 +25,8 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 
 Walking Skeleton
 
-1. **리뷰 목록**: 장소 상세의 홈 탭은 "리뷰 12 ›" 아래 최신 3건을 보이고, 제목을 누르면 리뷰 탭이 열린다. 리뷰 탭은 `GET /api/v1/places/{placeId}/reviews`로 첫 페이지와 `totalCount`를 받아 작성일과 본문을 최신순으로 그리고, 목록 끝이 보이면 다음 페이지를 커서로 받는다(D-24, D-31).
-2. **작성**: 장소 상세 하단 막대의 "방문 평가 남기기"를 누르면 로그인 없이 작성 화면(`/place/review?id=`)이 열린다. 본문을 입력하고(비워도 된다) "등록하기"를 누르면 `POST /api/v1/places/{placeId}/reviews`가 한 번 나가고, 성공하면 "리뷰가 등록됐어요" 토스트와 함께 장소 상세의 리뷰 탭으로 돌아가 새 리뷰가 목록 맨 위에 보인다(D-6, D-31).
+1. **리뷰 목록**: 장소 상세의 홈 탭은 "리뷰 12" 아래 최신 3건을 보이고, 머리글의 "전체 보기"를 누르면 리뷰 탭이 열린다. 리뷰 탭은 `GET /api/v1/places/{placeId}/reviews`로 첫 페이지와 `totalCount`를 받아 작성일과 본문을 최신순으로 그리고, 목록 끝이 보이면 다음 페이지를 커서로 받는다(D-24, D-32).
+2. **작성**: 장소 상세 하단 막대의 "방문 평가 남기기"를 누르면 로그인 없이 작성 화면(`/place/review?id=`)이 열린다. 본문을 입력하고(비워도 된다) "등록하기"를 누르면 `POST /api/v1/places/{placeId}/reviews`가 한 번 나가고, 성공하면 "리뷰가 등록됐어요" 토스트와 함께 들어오기 전의 장소 상세로 돌아가 새 리뷰가 리뷰 탭 맨 위와 홈 미리보기 첫 줄에 보인다(D-6, D-32).
 
 1차 후속
 
@@ -46,7 +46,7 @@ Walking Skeleton
 - [ ] AC-4: 목록은 `created_at` 내림차순(같으면 `review_id` 내림차순)이고 커서로 20건씩 다음 페이지를 받으며 페이지 사이에 중복이 없다. 항목은 `reviewId`, 작성 시각, 본문을 담고 `totalCount`는 삭제되지 않은 리뷰 수다. (D-24)
 - [ ] AC-5: 요청 본문에 정의되지 않은 속성(예: `userId`, `visitedAt`)이 있으면 400 ProblemDetail이다. 응답 JSON 키는 문서화된 필드를 벗어나지 않는다. (D-20)
 - [ ] AC-6: 리뷰 등록과 조회를 처리한 뒤(400 포함) BE 로그에 요청 본문과 리뷰 본문이 나타나지 않는다. (D-20)
-- [ ] AC-7: 장소 상세의 리뷰 탭은 리뷰 수와 리뷰 목록을 보이고, 목록 끝이 보이면 다음 페이지를 받는다. 홈 탭은 리뷰 수와 최신 3건을 보이고 제목이 리뷰 탭으로 가는 링크다. 리뷰가 없으면 "리뷰 0"과 빈 상태 안내(6-E03)를, 목록을 불러오지 못하면 "다시 시도" 버튼이 있는 안내를 보인다. 목록은 작성일을 KST 날짜("10월 20일 작성")로 보인다. 작성 화면은 본문 입력칸 하나이고, 입력칸은 500자까지만 받으며 글자 수(예: 44/500)를 보인다. 등록 요청이 처리 중이면 "등록하기"가 비활성이다. 등록에 성공하면 "리뷰가 등록됐어요" 토스트가 뜨고 장소 상세의 리뷰 탭으로 돌아가 새 리뷰가 목록 맨 위에 보인다(7-06). 실패하면 화면에 오류 안내가 뜨고 입력이 남아 있다. (D-24, D-31)
+- [ ] AC-7: 장소 상세의 리뷰 탭은 리뷰 수와 리뷰 목록을 보이고, 목록 끝이 보이면 다음 페이지를 받는다. 홈 탭은 리뷰 수와 최신 3건을 보이고, 리뷰가 있으면 머리글의 "전체 보기"로 리뷰 탭을 연다. 리뷰가 없으면 "리뷰 0"과 빈 상태 안내(6-E03)를, 목록을 불러오지 못하면 "다시 시도" 버튼이 있는 안내를 보인다. 목록은 작성일을 KST 날짜("10월 20일 작성")로 보인다. 작성 화면은 본문 입력칸 하나이고, 입력칸은 500자까지만 받으며 글자 수(예: 44/500)를 보인다. 등록 요청이 처리 중이면 "등록하기"가 비활성이다. 등록에 성공하면 "리뷰가 등록됐어요" 토스트가 뜨고 들어오기 전의 장소 상세(같은 탭)로 돌아가 새 리뷰가 리뷰 탭 맨 위와 홈 미리보기 첫 줄에 보이며, 상세의 "뒤로" 한 번이면 그 전 화면이다. 실패하면 화면에 오류 안내가 뜨고 입력이 남아 있다. (D-24, D-32)
 - [ ] AC-24: 리뷰는 메모리 Mock 저장소에 저장되고 `REVIEW_MOCK_ENABLED`가 꺼진 환경에서는 등록과 목록 모두 503 ProblemDetail이다. 전체 리뷰 수가 상한을 넘으면 가장 오래된 리뷰부터 목록과 `totalCount`에서 빠진다. 시드로 1번 Mock 장소에 리뷰 25건이 있다. (D-27)
 
 1차 후속
@@ -82,8 +82,9 @@ Walking Skeleton
 | `be/src/main/resources/mock/reviews.json` (시드) | new | WS | D-27 |
 | `be/src/main/resources/application.yml#review` (`review.mock.enabled`), `be/.env.example` | modify | WS | D-27 |
 | `fe/src/app/place/review/page.tsx#ReviewWritePage` (1차에 2단계 흐름으로 바꾼다) | new | WS | D-31 |
-| `fe/src/app/place/page.tsx#PlaceDetailPage` (검색 담당이 리뷰 탭, 홈 미리보기, 하단 버튼을 붙인다) | modify | WS | D-31 |
-| `fe/src/domains/review/ui/review-section.tsx#ReviewSection` (리뷰 탭 목록, `previewHref`를 주면 홈 탭 미리보기) | new | WS | D-24, D-31 |
+| `fe/src/domains/place/ui/place-detail-screen.tsx#PlaceDetailSlots` (검색 담당의 상세 화면에 리뷰 탭과 세 자리의 렌더 함수 props를 연다) | modify | WS | D-32 |
+| `fe/src/app/place/place-detail-with-reviews.tsx#PlaceDetailWithReviews` (세 자리를 리뷰 컴포넌트로 채운다. `app/place/page.tsx`가 그린다) | new | WS | D-32 |
+| `fe/src/domains/review/ui/review-section.tsx#ReviewSection` (리뷰 탭 목록, `onShowAll`을 주면 홈 탭 미리보기) | new | WS | D-24, D-32 |
 | `fe/src/domains/review/ui/simple-review-form.tsx#SimpleReviewForm` (한 화면 폼) | new | WS | D-31 |
 | `fe/src/domains/review/api/review-api.ts#createReview` | new | WS | D-31 |
 | `fe/src/domains/review/model/review.ts#reviewWriteHref` | new | WS | D-31 |
@@ -96,7 +97,7 @@ Walking Skeleton
 | `fe/src/domains/review/model/review-tags.ts#selectTag` | new | 1차 | D-5 |
 | `fe/src/domains/review/model/nearby-check.ts#isNearby` | new | 1차 | D-12 |
 
-BE는 팀이 정한 루트 패키지 `kr.co.fitdining.api`(검색 D-32) 아래 `review`에 두고, DTO는 `review.dto`에 둔다(D-23). 모듈 경계 규칙이 정해지면 그에 맞춘다. FE는 master의 공통 구조(`app → domains → shared`)를 따라 리뷰 코드를 `src/domains/review`에 둔다. 장소 상세는 Walking Skeleton부터 검색 담당이 `ReviewSection`(리뷰 탭, `previewHref`를 주면 홈 탭 미리보기)과 `reviewWriteHref`(하단 버튼)를 붙여 만들고, 작성 화면(`src/app/place/review`)은 리뷰 담당이 만든다(D-31).
+BE는 팀이 정한 루트 패키지 `kr.co.fitdining.api`(검색 D-32) 아래 `review`에 두고, DTO는 `review.dto`에 둔다(D-23). 모듈 경계 규칙이 정해지면 그에 맞춘다. FE는 master의 공통 구조(`app → domains → shared`)를 따라 리뷰 코드를 `src/domains/review`에 둔다. 장소 상세는 검색 담당이 만들고(`src/domains/place`), 리뷰 담당이 상세 화면에 리뷰 자리 세 곳(`slots`)을 렌더 함수 props로 열어 `src/app/place/place-detail-with-reviews.tsx`에서 `ReviewSection`(리뷰 탭, `onShowAll`을 주면 홈 탭 미리보기)과 `reviewWriteHref`(하단 버튼)로 채운다. 도메인끼리는 import하지 않기 때문이다. 작성 화면(`src/app/place/review`)은 리뷰 담당이 만든다(D-32).
 
 ## Interfaces
 
@@ -177,8 +178,8 @@ Walking Skeleton
 - **도메인 규칙** (example), AC-3: 본문의 빈 값·공백을 본문 없음으로 바꾸는 정규화를 순수 Java 단위 테스트로 확인한다.
 - **메모리 저장소** (example), AC-1, AC-4, AC-24: 저장, 정렬, 커서 페이지 경계(같은 `createdAt` 포함), 깨진 커서, 상한을 넘었을 때 오래된 리뷰 버리기를 `InMemoryReviewStore` 단위 테스트로 확인한다(D-29). 놓치는 것: DB 제약(1차 후속).
 - **컨트롤러 경계** (example), AC-1, AC-2, AC-3, AC-5, AC-6, AC-24: 검색 spec D-30처럼 `@WebMvcTest`에 실제 서비스와 메모리 저장소를 꽂아 Bean Validation(`placeId`의 문자·0·음수·`long` 범위 밖, 본문 500자·501자), 인증 없는 등록, ProblemDetail 상태 코드, 알 수 없는 속성 거부, 로그에 본문이 없음, 스위치가 꺼졌을 때 503을 확인한다. 잡는 것: 길이 경계.
-- **FE 순수 로직과 정적 렌더** (example), AC-7: `src/domains/review/model`의 KST 날짜 변환(자정 경계)과 등록 요청 만들기(공백뿐이면 본문 없음)를 Vitest로 확인한다. 목록 항목, 홈 미리보기 3건과 제목 링크, 빈 상태, 불러오기 실패 안내는 데이터 훅과 나눈 그리는 컴포넌트를 `renderToStaticMarkup`으로 확인한다(공통 UI 테스트와 같은 방식, D-31). 놓치는 것: 누르기·입력·스크롤 같은 상호작용(수동 확인).
-- **수동 확인** AC-7: 장소 상세 하단 버튼 → 작성 화면 → 등록 → 토스트와 함께 리뷰 탭으로 복귀해 목록 맨 위에 보이는지, 홈 탭 미리보기도 바뀌는지, 목록 끝까지 스크롤하면 다음 페이지가 붙는지, 실패 때 입력이 남는지, 버튼을 연달아 눌러도 한 번만 등록되는지, 500자에서 더 입력되지 않는지 확인한다.
+- **FE 순수 로직과 정적 렌더** (example), AC-7: `src/domains/review/model`의 KST 날짜 변환(자정 경계)과 등록 요청 만들기(공백뿐이면 본문 없음)를 Vitest로 확인한다. 목록 항목, 홈 미리보기 3건과 "전체 보기", 빈 상태, 불러오기 실패 안내는 데이터 훅과 나눈 그리는 컴포넌트를 `renderToStaticMarkup`으로 확인한다(공통 UI 테스트와 같은 방식, D-31, D-32). 놓치는 것: 누르기·입력·스크롤 같은 상호작용(수동 확인).
+- **수동 확인** AC-7: 장소 상세 하단 버튼 → 작성 화면 → 등록 → 토스트와 함께 들어오기 전 탭으로 복귀해 새 리뷰가 리뷰 탭 맨 위와 홈 미리보기 첫 줄에 보이는지, 상세의 "뒤로" 한 번에 검색 결과로 가는지, 홈 미리보기의 "전체 보기"가 리뷰 탭을 여는지, 목록 끝까지 스크롤하면 다음 페이지가 붙는지, 실패 때 입력이 남는지, 버튼을 연달아 눌러도 한 번만 등록되는지, 500자에서 더 입력되지 않는지 확인한다.
 
 1차 후속
 
@@ -252,7 +253,7 @@ FE 공통 담당
 ### 리뷰 담당이 준비할 것
 
 - Walking Skeleton 전: Figma에 없는 한 화면 작성 폼을 간단히 그린다(D-31).
-- Walking Skeleton: 리뷰 BE 엔드포인트와 리뷰 FE를 검색 담당에게 넘긴다. 검색 담당이 장소 상세에 붙인다(D-31).
+- Walking Skeleton: 장소 상세 화면(검색 담당, 2026-10-23 master 병합)에 리뷰 담당이 리뷰 탭, 홈 미리보기, 하단 버튼을 붙인다. 같은 MR에서 상세 화면 테스트의 "리뷰 탭은 없다"를 고치고 검색 담당을 리뷰어로 둔다(D-32).
 - Walking Skeleton 뒤 1차 선행 작업: 다른 담당을 기다리지 않는 부분을 1차 작성 화면(`/place/review?id=`)에서 먼저 만든다. 방문일 정책(`Clock`, 범위), 재방문 의사·1인당 금액 입력, 근처 판정 함수와 7-E02, 닫기 확인(7-E03), 등록 실패 구분(7-E05, 7-E06)이 해당한다. 태그, 7-E01과 409, 사진은 각 질문이 풀린 뒤에 붙인다(D-4, D-6, D-12, D-31).
 - 1차 후속 전: 임시 태그 시드 표(특징 코드, 문구, sentiment, 동시 선택 불가 그룹, 화면 묶음, 업종 노출)를 Figma 7-01·7-02 문구와 PRD FR-10 초안으로 만든다(D-5, AC-11, AC-12, AC-15).
 - 1차 후속 전: Figma에 없는 화면(숨김 처리된 내 리뷰 표시, 작성 차단 안내)을 추가한다.
