@@ -19,6 +19,9 @@ default:
 
 variables:
   GIT_DEPTH: "20"
+  # 배포 스위치. "true"면 fe:build부터 smoke까지 파이프라인에 나타난다. 켜기 전에 docs/infra/plans/2026-10-23-plan-1c3-ci-pipeline.md의
+  # "계약 이행 체크리스트"가 모두 끝나 있어야 한다. 바꾸는 일은 MR로 하고 infra/ci/tests/test_pipeline_structure.py의 기본값 시험도 함께 바꾼다.
+  FIT_CD_ENABLED: "false"
   # 도구 이미지 핀. infra/ci/tool-images.sh와 같아야 한다(tests/test_tool_images_sync.py가 검사한다).
   # 러너가 docker executor라 job 컨테이너 안에서 `docker run -v $PWD`로 도구 컨테이너를 띄울 수 없다
   # (워크스페이스가 호스트 경로가 아니다). 그래서 도구마다 job image를 따로 쓴다.
@@ -34,6 +37,8 @@ variables:
   JDK_IMAGE: eclipse-temurin:21.0.12_8-jdk-noble
   JRE_IMAGE: eclipse-temurin:21.0.12_8-jre-noble
   NODE_IMAGE: node:22.23.4-bookworm-slim
+  # be:test가 붙는 DB. dev와 prod가 쓰는 이미지와 같아야 한다(infra/data/compose.data.yml)
+  PGVECTOR_IMAGE: pgvector/pgvector:0.8.7-pg16
 
 # interruptible은 verify 잡에만 둔다. deploy 잡이 새 푸시에 자동 취소되면 전환 도중에 끊긴다.
 .verify:
@@ -44,7 +49,7 @@ lint:guards:
   extends: .verify
   image: $DOCKER_CLI_IMAGE
   before_script:
-    - apk add --no-cache python3 git
+    - apk add --no-cache python3 git py3-yaml
   script:
     - python3 -m unittest discover -s infra/ci/tests -v
     - python3 infra/ci/check_eol.py
@@ -166,3 +171,186 @@ lint:history:
     - python3 infra/ci/check_linear_history.py
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+# ---- BE·FE 테스트, 이미지 조립, 배포, 스모크 (계획 1C-3) ----
+# be:test와 fe:test는 모든 파이프라인에서 돈다. 나머지는 FIT_CD_ENABLED가 "true"일 때만 나타난다.
+# verify 단계는 B의 fit-verify 러너(MR 코드를 돌린다, 서버 비밀이 없다)에서, build·deploy·smoke 단계는 A의 fit-deploy 러너
+# (보호된 브랜치의 코드만, docker 그룹이라 root와 같은 권한)에서 돈다. 구조 규칙은 infra/ci/tests/test_pipeline_structure.py가 검사한다.
+.cd-enabled: &cd_enabled
+  if: $FIT_CD_ENABLED == "true"
+
+be:test:
+  extends: .verify
+  image: $JDK_IMAGE
+  services:
+    - name: $PGVECTOR_IMAGE
+      alias: postgres
+  variables:
+    GRADLE_USER_HOME: $CI_PROJECT_DIR/.gradle
+    GRADLE_OPTS: -Xmx768m -Dorg.gradle.daemon=false
+    # 아래 DB 값은 이 job의 서비스에서만 쓴다(서버 값이 아니고 비밀도 아니다). ApiApplicationTests가 DB에 붙어야 뜬다
+    POSTGRES_DB: fit_dev
+    POSTGRES_USER: fit_dev_app
+    POSTGRES_PASSWORD: citest
+    SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/fit_dev
+    SPRING_DATASOURCE_USERNAME: fit_dev_app
+    SPRING_DATASOURCE_PASSWORD: citest
+  cache:
+    key:
+      files:
+        - be/build.gradle
+        - be/gradle/wrapper/gradle-wrapper.properties
+    paths:
+      - .gradle/caches
+      - .gradle/wrapper
+  script:
+    # gradlew는 git에서 실행 권한이 없어서 sh로 부른다
+    - cd be
+    - sh ./gradlew --no-daemon test bootJar
+    - ls -l build/libs
+  artifacts:
+    expire_in: 1 day
+    paths:
+      - be/build/libs/*.jar
+    reports:
+      junit: be/build/test-results/test/*.xml
+
+fe:test:
+  extends: .verify
+  image: $NODE_IMAGE
+  variables:
+    NODE_OPTIONS: --max-old-space-size=1536
+    npm_config_store_dir: $CI_PROJECT_DIR/.pnpm-store
+  cache:
+    key:
+      files:
+        - fe/pnpm-lock.yaml
+    paths:
+      - .pnpm-store
+  script:
+    - corepack enable
+    - cd fe
+    - pnpm install --frozen-lockfile
+    - pnpm lint
+    # Next 16의 LayoutProps 같은 전역 타입은 typegen이나 build가 만든다. 먼저 만들지 않으면 tsc가 실패한다
+    - pnpm exec next typegen
+    - pnpm exec tsc --noEmit
+    - pnpm test
+
+fe:build:
+  extends: .verify
+  image: $NODE_IMAGE
+  rules:
+    - *cd_enabled
+  needs:
+    - fe:test
+  variables:
+    NODE_OPTIONS: --max-old-space-size=1536
+    npm_config_store_dir: $CI_PROJECT_DIR/.pnpm-store
+  cache:
+    key:
+      files:
+        - fe/pnpm-lock.yaml
+    paths:
+      - .pnpm-store
+    policy: pull
+  script:
+    - corepack enable
+    - cd fe
+    - pnpm install --frozen-lockfile
+    - DEPLOYMENT_VERSION="$CI_COMMIT_SHA" pnpm build
+    - mkdir -p ../fe-bundle
+    - cp -r .next/standalone ../fe-bundle/standalone
+    - cp -r .next/static ../fe-bundle/static
+    - if [ -d public ]; then cp -r public ../fe-bundle/public; fi
+    - du -sh ../fe-bundle
+  artifacts:
+    expire_in: 1 day
+    paths:
+      - fe-bundle/
+
+fe:bundle-check:
+  extends: .verify
+  image: $PYTHON_IMAGE
+  rules:
+    - *cd_enabled
+  needs:
+    - job: fe:build
+      artifacts: true
+  script:
+    - python3 infra/ci/check_fe_bundle.py fe-bundle --sha "$CI_COMMIT_SHA"
+
+build:images:
+  stage: build
+  tags:
+    - deploy
+  rules:
+    - if: $FIT_CD_ENABLED == "true" && ($CI_COMMIT_BRANCH == "develop" || $CI_COMMIT_BRANCH == "master")
+  needs:
+    - job: be:test
+      artifacts: true
+    - job: fe:build
+      artifacts: true
+    - fe:bundle-check
+  script:
+    - bash infra/ci/build-images.sh "$CI_COMMIT_SHA"
+
+deploy:dev:
+  stage: deploy
+  tags:
+    - deploy
+  rules:
+    - if: $FIT_CD_ENABLED == "true" && $CI_COMMIT_BRANCH == "develop"
+  needs:
+    - build:images
+  environment:
+    name: dev
+  resource_group: dev
+  timeout: 20m
+  variables:
+    # 얕은 clone이면 지금 배포된 커밋이 범위 밖일 때 다운그레이드 가드(merge-base)와 마이그레이션 비교(git diff)가 틀린다
+    GIT_DEPTH: "0"
+  script:
+    - bash infra/deploy/deploy.sh dev "$CI_COMMIT_SHA"
+
+deploy:prod:
+  stage: deploy
+  tags:
+    - deploy
+  rules:
+    - if: $FIT_CD_ENABLED == "true" && $CI_COMMIT_BRANCH == "master"
+      when: manual
+  # when: manual은 allow_failure가 기본 true라서 안 눌러도 파이프라인이 통과한 것처럼 보인다. prod는 사람이 누를 때까지 멈춰 둔다
+  allow_failure: false
+  needs:
+    - build:images
+  environment:
+    name: prod
+  resource_group: prod
+  timeout: 20m
+  variables:
+    GIT_DEPTH: "0"
+  script:
+    - bash infra/deploy/deploy.sh prod "$CI_COMMIT_SHA"
+
+smoke:dev:
+  stage: smoke
+  tags:
+    - deploy
+  rules:
+    - if: $FIT_CD_ENABLED == "true" && $CI_COMMIT_BRANCH == "develop"
+  needs:
+    - deploy:dev
+  script:
+    - bash infra/deploy/smoke.sh dev --sha "$CI_COMMIT_SHA"
+
+smoke:prod:
+  stage: smoke
+  tags:
+    - deploy
+  rules:
+    - if: $FIT_CD_ENABLED == "true" && $CI_COMMIT_BRANCH == "master"
+  needs:
+    - deploy:prod
+  script:
+    - bash infra/deploy/smoke.sh prod --sha "$CI_COMMIT_SHA"

@@ -15,3 +15,5 @@ PYTHON_IMAGE=python:3.12.15-slim
 JDK_IMAGE=eclipse-temurin:21.0.12_8-jdk-noble
 JRE_IMAGE=eclipse-temurin:21.0.12_8-jre-noble
 NODE_IMAGE=node:22.23.4-bookworm-slim
+# be:test가 붙는 DB(dev와 prod가 쓰는 이미지와 같다. infra/data/compose.data.yml)
+PGVECTOR_IMAGE=pgvector/pgvector:0.8.7-pg16

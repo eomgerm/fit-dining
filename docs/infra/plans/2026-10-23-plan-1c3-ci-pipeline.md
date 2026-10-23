@@ -194,6 +194,7 @@ NODE_IMAGE=node:22.23.4-bookworm-slim
 - Modify: `.gitlab-ci.yml`
 - Create: `infra/ci/tests/test_pipeline_structure.py`
 - Modify: `.gitlab-ci.yml`의 `lint:guards`(`apk add --no-cache python3 git py3-yaml`)
+- Modify: `infra/ci/tool-images.sh`(`PGVECTOR_IMAGE`)와 `infra/ci/tests/test_tool_images_sync.py`(그 핀이 데이터 스택과 같은지)
 
 **Interfaces:**
 - Consumes: Task 1의 핀, Task 2의 `check_fe_bundle.py`, Task 3의 `build-images.sh`, 1C-2의 `deploy.sh`, `smoke.sh`.
@@ -212,16 +213,25 @@ variables:
 be:test:
   extends: .verify
   image: $JDK_IMAGE
+  services:
+    - name: $PGVECTOR_IMAGE   # dev·prod와 같은 DB. ApiApplicationTests가 DB에 붙어야 뜬다
+      alias: postgres
   variables:
     GRADLE_USER_HOME: $CI_PROJECT_DIR/.gradle
     GRADLE_OPTS: -Xmx768m -Dorg.gradle.daemon=false
+    POSTGRES_DB: fit_dev            # 이 job의 서비스에서만 쓰는 값(서버 값도 비밀도 아니다)
+    POSTGRES_USER: fit_dev_app
+    POSTGRES_PASSWORD: citest
+    SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/fit_dev
+    SPRING_DATASOURCE_USERNAME: fit_dev_app
+    SPRING_DATASOURCE_PASSWORD: citest
   cache:
     key:
       files: [be/build.gradle, be/gradle/wrapper/gradle-wrapper.properties]
     paths: [.gradle/caches, .gradle/wrapper]
   script:
     - cd be
-    - ./gradlew --no-daemon test bootJar
+    - sh ./gradlew --no-daemon test bootJar   # gradlew는 git에서 실행 권한이 없다(100644)
     - ls -l build/libs
   artifacts:
     expire_in: 1 day
@@ -244,6 +254,7 @@ fe:test:
     - cd fe
     - pnpm install --frozen-lockfile
     - pnpm lint
+    - pnpm exec next typegen   # Next 16의 LayoutProps 같은 전역 타입을 만든다. 없으면 tsc가 실패한다
     - pnpm exec tsc --noEmit
     - pnpm test
 
@@ -300,6 +311,8 @@ deploy:dev:
     name: dev
   resource_group: dev
   timeout: 20m
+  variables:
+    GIT_DEPTH: "0"   # 얕은 clone이면 다운그레이드 가드(merge-base)와 마이그레이션 비교(git diff)가 틀린다
   script:
     - bash infra/deploy/deploy.sh dev "$CI_COMMIT_SHA"
 
@@ -309,11 +322,14 @@ deploy:prod:
   rules:
     - if: $FIT_CD_ENABLED == "true" && $CI_COMMIT_BRANCH == "master"
       when: manual
+  allow_failure: false   # manual의 기본은 true라 안 눌러도 통과한 것처럼 보인다. prod는 사람이 누를 때까지 멈춘다
   needs: [build:images]
   environment:
     name: prod
   resource_group: prod
   timeout: 20m
+  variables:
+    GIT_DEPTH: "0"
   script:
     - bash infra/deploy/deploy.sh prod "$CI_COMMIT_SHA"
 
@@ -350,12 +366,27 @@ smoke:prod:
 8. 모든 `image:`가 `$..._IMAGE` 변수를 쓴다(기존 동기화 시험과 같은 규칙. 새 변수가 모두 정의돼 있다).
 9. `be:test` 아티팩트가 `be/build/libs/*.jar`를 포함하고 `fe:build` 아티팩트가 `fe-bundle/`를 포함한다.
 10. 스위치 기본값이 `"false"`다(켜는 MR이 이 시험도 함께 바꾸게 해서 실수로 켜지 않는다).
+11. `deploy:prod`는 `allow_failure: false`다(`when: manual`만 두면 누르지 않아도 파이프라인이 통과한 것처럼 보인다).
+12. `deploy:dev`와 `deploy:prod`는 `GIT_DEPTH: "0"`이다(얕은 clone이면 `preflight.sh`의 다운그레이드 가드와 `migrations_changed`가 틀린다).
+13. `be:test`는 `sh ./gradlew`로 부른다(`be/gradlew`가 git에서 100644라 직접 부르면 Permission denied) 그리고 DB 서비스(`$PGVECTOR_IMAGE`, 별칭 `postgres`)와 짝이 맞는 `SPRING_DATASOURCE_*` 값을 갖는다.
+14. `fe:test`는 `next typegen`을 `tsc --noEmit`보다 먼저 돌린다.
+15. 규칙을 평가하는 해석기 자체의 시험(`==`, `!=`, `&&`, `||`, 괄호, 없는 변수는 null, 모르는 문법은 오류)을 둔다. `=~` 같은 문법이 규칙에 들어오면 시험이 추측하지 않고 실패한다.
 
 - [ ] **Step 1:** 시험을 먼저 쓰고 실패하는 것을 본다.
 - [ ] **Step 2:** 잡을 더하고 시험이 통과한다. `lint:guards`가 `py3-yaml`을 설치한다. yamllint도 통과한다.
 - [ ] **Step 3:** 변이 시험: `deploy:prod`에서 `when: manual`을 지우면 시험이 잡는지, `deploy:dev`에 `interruptible: true`를 붙이면 잡는지, 스위치를 `"true"`로 바꾸면 잡는지 확인하고 되돌린다.
 - [ ] **Step 4:** 가능하면 로컬에서 실제 파이프라인을 한 번 돌려 본다(`gitlab-ci-local`은 쓰지 않는다. 대신 MR을 올려 `be:test`와 `fe:test`가 verify 러너에서 도는 것을 확인한다. 러너가 등록돼 있어야 한다).
 - [ ] **Step 5:** 커밋 `:sparkles: feat(infra): CI에 BE·FE 테스트, 이미지 조립, 배포, 스모크 잡 추가(배포는 스위치로 끈다) (S15P31A302-19)`
+
+실제로 돌려 본 것(2026-10-23, 이 PC, CI와 같은 이미지. YAML의 `script:` 줄을 그대로 뽑아 돌렸다):
+
+- **`fe:test`:** `pnpm lint` 통과, `pnpm test` 259개 통과. `tsc --noEmit`은 `next typegen` 없이는 `LayoutProps`를 찾지 못해 실패했고 typegen 뒤에는 통과했다. `packageManager`(pnpm 11.20.0)대로 corepack이 받는다.
+- **`be:test`:** DB 없이 `gradlew test`는 165개 중 `ApiApplicationTests.contextLoads` 1개가 Hibernate 방언 감지(DB 접속)에서 실패했다. pgvector 서비스와 같은 환경변수를 주면 165개가 모두 통과하고 `bootJar`가 jar 하나(55MB)를 만든다. `be/gradlew`는 git에서 100644라 `./gradlew`로 부르면 CI에서 Permission denied가 난다.
+- **`fe:build` → `fe:bundle-check` → `build:images`:** FE 팀 브랜치(`fe/chore/deploy-config-S15P31A302-44`, 아직 `develop`에 없다)의 소스와 위 jar로 돌렸다. 번들 42MB, 검사 전부 PASS(`mock-words` WARN, `pwa-files` SKIP은 막지 않는 항목), 이미지는 BE 509MB(uid 10001, 비root)와 FE 387MB. pnpm 스토어가 `.pnpm-store`(프로젝트 안)에 생겨 캐시 경로가 맞다. 현재 `develop`의 FE에는 standalone 설정이 없어서 스위치를 켜면 `fe:build`가 실패한다(계약 이행 체크리스트의 FE 항목).
+- Windows Git Bash에서는 `build-images.sh`의 `mktemp` 경로(`/tmp/...`)를 Docker가 찾지 못해, docker.sock을 연 Linux 컨테이너에서 돌렸다. 서버 A(Linux)에는 없는 문제다.
+- 구조 시험은 변이 20개(예: `deploy:prod`의 `when: manual` 제거, `deploy:dev`에 `interruptible`, 스위치 `"true"`, `gradlew`를 `sh` 없이, `next typegen` 제거, DB 서비스 제거, `GIT_DEPTH` 제거, 브랜치 제한 제거)를 모두 잡았다.
+- gitleaks가 이미 커밋한 시험 값 두 곳(`test_envset.py`의 가짜 비밀 값, `test-deploy.sh`의 bcrypt 해시)을 잡았다. MR 파이프라인의 `lint:secrets`는 커밋 이력까지 보므로(`gitleaks git`) 새 커밋으로는 고칠 수 없어서 해당 커밋에 fixup으로 합쳤다. 시험 값은 낮은 엔트로피로 쓰거나 실행할 때 만든다(`test-deploy.sh`의 해시는 `up`이 `caddy hash-password`로 만든다).
+- **아직 못 본 것:** GitLab에서 실제로 돈 파이프라인(B의 메모리 4GB 안에서 Gradle, B의 corepack 외부 접근, 서비스 컨테이너 기동), `deploy:*`와 `smoke:*`(서버 A에서만), `allow_failure: false`인 manual 잡이 파이프라인에 어떻게 보이는지.
 
 ---
 

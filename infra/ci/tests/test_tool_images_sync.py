@@ -38,6 +38,12 @@ class ToolImagesSyncTest(unittest.TestCase):
         used = set(USED_VAR_RE.findall(self.ci_text))
         self.assertTrue(used <= set(self.ci), f"정의되지 않은 변수: {used - set(self.ci)}")
 
+    def test_ci_database_image_is_the_one_the_data_stack_and_local_stack_run(self):
+        # be:test가 붙는 DB는 dev와 prod가 쓰는 이미지와 같아야 한다(다른 버전으로 통과한 시험은 의미가 없다)
+        for compose in ("infra/data/compose.data.yml", "infra/local/compose.yml"):
+            text = (ROOT / compose).read_text(encoding="utf-8")
+            self.assertIn(f"image: {self.sh['PGVECTOR_IMAGE']}\n", text, compose)
+
     def test_app_dockerfile_base_defaults_match_the_pins(self):
         # hadolint가 FROM의 태그를 요구해서 Dockerfile에 핀 값을 직접 적는다. build-images.sh는 tool-images.sh의 값을 --build-arg로 넘기므로
         # 기본값이 어긋나도 이미지는 핀대로 만들어지지만, 같은 값으로 두어야 읽는 사람이 속지 않는다
