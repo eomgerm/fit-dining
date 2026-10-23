@@ -28,6 +28,7 @@
 | `verify-host.sh` | 읽기만 하는 점검. PASS, FAIL, SKIP만 출력하고 IP·키 값은 찍지 않는다 |
 | `networks.sh` | 서버 A의 공유 Docker 망 여섯 개(`net-edge`, `net-prod`, `net-dev`, `net-data`(internal), `net-obs`, `net-dbaccess`). bootstrap이 부르고 직접 실행해도 된다 |
 | `runner.sh` | GitLab Runner 설치와 등록(`install`, `register`, `status`). 아래 CI 러너 절 |
+| `envset.py` | `/etc/fit/*.env`에 환경변수를 넣고 바꾸고 지우는 도구. 아래 환경변수 넣기 절 |
 | `docker-prune.sh` | 주 1회 정리. A는 `be`·`fe`의 SHA 태그 최근 5개만 남기고, B는 7일 넘게 쓰지 않은 이미지를 지운다. 볼륨은 지우지 않는다 |
 | `conf/` | 설치될 설정: SSH 하드닝(`sshd-*.conf`), sysctl, `daemon-*.json`, fail2ban, 자동 업데이트, systemd 유닛 |
 | `test/` | 노트북 시험(Ubuntu 컨테이너와 이 PC의 Docker) |
@@ -46,6 +47,28 @@ bash ~/host/runner.sh status           # 읽기 전용 점검(PASS, FAIL, SKIP)
 - **러너 만들기:** 등록 전에 GitLab에서 만든다(Settings -> CI/CD -> Runners -> Create project runner. Maintainer 권한). `fit-verify`는 태그 `verify`, Run untagged 끔, Protected 끔. `fit-deploy`는 태그 `deploy`, Run untagged 끔, Protected 켬. 화면에 한 번만 보이는 인증 토큰(`glrt-`로 시작)을 `register`가 숨김 입력으로 받는다. 토큰은 채팅, 문서, 저장소에 붙이지 않고 이 서버의 `config.toml`(권한 600)에만 남는다. 토큰은 명령 인자가 아니라 환경변수로만 넘기고 등록 출력은 버린다.
 - **register:** `concurrent 1`로 맞춘다. B는 job 메모리 2GB, CPU 2개, docker.sock을 job에 연다. 이미 등록돼 있으면 건드리지 않는다(`FIT_RUNNER_REREGISTER=1`이면 다시 등록한다. GitLab에서 옛 러너도 지운다).
 - 환경변수: `FIT_RUNNER_URL`(기본 `https://lab.ssafy.com`), `FIT_RUNNER_ROLE_FILE`, `FIT_RUNNER_CONFIG`, `FIT_SKIP=systemd`(시험용).
+
+## 환경변수 넣기 (envset.py)
+
+`/etc/fit/*.env`에 키를 넣고, 바꾸고, 지우고, 상태를 본다. 어떤 키든 되고 값은 화면, 셸 기록, 명령 인자, 출력 어디에도 남지 않는다(출력은 키 이름과 글자 수뿐이다). 서버에는 파일 하나(`envset.py`)와 계약 표(`env.md`)를 `~/host/`에 두고 쓴다.
+
+```bash
+sudo python3 ~/host/envset.py list                                      # 이 서버의 env 파일, 키 개수, REPLACE_ME 개수
+sudo python3 ~/host/envset.py status fe-prod                            # 계약의 필수 키와 형식 점검(파일 이름을 빼면 전부)
+sudo python3 ~/host/envset.py set fe-prod,fe-dev NAVER_MAP_CLIENT_ID=abc123   # 비밀이 아닌 값은 바로 준다
+sudo python3 ~/host/envset.py set prod,dev MODAL_KEY MODAL_SECRET       # 키 이름만 주면 숨김 입력(비밀은 이 방식만 된다)
+sudo python3 ~/host/envset.py unset dev REVIEW_MOCK_ENABLED             # 키를 지운다
+```
+
+- **파일 이름:** 서버 A는 `prod`, `dev`, `fe-prod`, `fe-dev`, `migrate-prod`, `migrate-dev`, `data`, `edge`, `obs`, `backup`, 서버 B는 `ops`다. 쉼표로 여러 파일에 같은 값을 한 번에 넣는다. 목록 밖의 이름이나 경로는 받지 않고, 없는 파일을 새로 만들지도 않는다.
+- **비밀 판별:** 키 이름에 `KEY`, `SECRET`, `PASSWORD`, `TOKEN`, `HASH`, `WEBHOOK`이 단어로 들어 있으면 비밀이다. 비밀은 `KEY=VALUE`로 줄 수 없다(셸 기록과 프로세스 목록에 남는다). 입력을 비우면 그 키는 건너뛴다.
+- **형식 검사:** `check_env_files.py`와 같은 규칙이다(공백, 따옴표, `#`, `$`, 백슬래시, 백틱, 보이지 않는 글자 금지. `$`가 필요한 값은 base64). `REPLACE_ME`도 거부한다. `*_BASE_URL`은 끝의 `/`를 지우고 `http(s)://`로 시작해야 한다. 하나라도 어긋나면 어느 파일에도 쓰지 않는다.
+- **덮어쓰기:** 이미 값이 있는 키를 바꿀 때는 파일마다 묻는다(`--yes`로 생략). `unset`도 묻는다. 필수 키를 지우면 경고한다.
+- **쓰는 방식:** 같은 디렉터리의 임시 파일에 쓰고 바꿔 끼운다. 모드와 소유자(`root:docker 640`)는 그대로다. 다른 줄은 건드리지 않는다.
+- **계약 안내:** 키가 계약 표(그룹)에 없으면 알려 준다. 계약 MR을 먼저 올린다. `status`는 필수 키가 비었거나 `REPLACE_ME`인지 보여 준다.
+- **적용:** 파일만 바뀐다. 실행 중인 컨테이너에는 파일별 안내(`적용(...)`)대로 반영한다. BE·FE는 컨테이너를 만들 때 읽으므로 같은 SHA를 다시 배포한다.
+- **서버에 올리기:** `scp infra/host/envset.py docs/infra/contracts/env.md <서버>:~/host/`. 계약 표를 못 찾으면 필수 키 안내만 건너뛴다. 환경변수: `FIT_ENV_DIR`(기본 `/etc/fit`), `FIT_ENV_CONTRACT`.
+- **시험:** `python -m unittest infra/ci/tests/test_envset.py`. `check_env_files.py`와 규칙이 같은지, 값이 출력에 새지 않는지, 실패하면 아무것도 쓰지 않는지를 본다.
 
 ## bootstrap의 안전장치
 

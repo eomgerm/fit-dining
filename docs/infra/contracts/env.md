@@ -8,6 +8,7 @@
 - 자리표시자: 예제의 `REPLACE_ME`는 비밀이 아직 없다는 표시다. BE는 이 값이나 비어 있는 값으로는 기동을 거부한다(BE 계약 #8).
 - `$`가 필요한 값(bcrypt 해시 등)은 base64로 인코딩해 둔다(design.md 13.2절).
 - `*_BASE_URL` 값은 끝에 `/`를 붙이지 않는다(예: `https://gms.ssafy.io/gmsapi`).
+- 서버의 `/etc/fit/*.env`에 값을 넣고 바꾸는 도구는 `infra/host/envset.py`다(사용법은 [infra/host/README.md](../../../infra/host/README.md)). 위 형식과 `*_BASE_URL` 규칙을 지키고, 이 표에 없는 키를 넣으면 알려 준다.
 
 ## 파일 대응
 
