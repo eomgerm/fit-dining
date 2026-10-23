@@ -27,7 +27,7 @@
 | `bootstrap.sh` | 적용 스크립트(`ROLE=app\|ops`). A는 `/srv/fit/state`, `/srv/fit/web`을 `root:docker 2775`로 만든다(setgid라 deploy 러너(`gitlab-runner`, docker 그룹)가 쓴 파일도 docker 그룹이 되고, Caddy는 others로 읽기만 한다). 이미 있는 파일의 그룹은 서버에서 한 번 맞춘다(`chgrp -R docker /srv/fit/state /srv/fit/web && chmod -R g+rwX /srv/fit/state /srv/fit/web`) |
 | `verify-host.sh` | 읽기만 하는 점검. PASS, FAIL, SKIP만 출력하고 IP·키 값은 찍지 않는다 |
 | `networks.sh` | 서버 A의 공유 Docker 망 여섯 개(`net-edge`, `net-prod`, `net-dev`, `net-data`(internal), `net-obs`, `net-dbaccess`). bootstrap이 부르고 직접 실행해도 된다 |
-| `runner.sh` | GitLab Runner 설치와 등록(`install`, `register`, `status`). 아래 CI 러너 절 |
+| `runner.sh` | GitLab Runner 설치와 등록(`install`, `register`, `tune`, `status`). 아래 CI 러너 절 |
 | `envset.py` | `/etc/fit/*.env`에 환경변수를 넣고 바꾸고 지우는 도구. 아래 환경변수 넣기 절 |
 | `docker-prune.sh` | 주 1회 정리. A는 `be`·`fe`의 SHA 태그 최근 5개만 남기고, B는 7일 넘게 쓰지 않은 이미지를 지운다. 볼륨은 지우지 않는다 |
 | `conf/` | 설치될 설정: SSH 하드닝(`sshd-*.conf`), sysctl, `daemon-*.json`, fail2ban, 자동 업데이트, systemd 유닛 |
@@ -40,14 +40,16 @@
 ```bash
 sudo bash ~/host/runner.sh install     # 패키지, 키, 고정, docker 그룹. 토큰이 필요 없다
 sudo bash ~/host/runner.sh register    # 토큰을 숨김 입력으로 받아 등록한다
+sudo bash ~/host/runner.sh tune        # 이미 등록된 러너의 동시 실행 수를 역할에 맞춘다(토큰 불필요, 재시작 없음)
 bash ~/host/runner.sh status           # 읽기 전용 점검(PASS, FAIL, SKIP)
 ```
 
 - **install:** GitLab 저장소 서명 키를 받아 지문(`F640 3F65 44A3 8863 DAA0 B6E0 3F01 618A 5131 2F3F`)이 코드에 고정한 값과 같을 때만 쓴다. `gitlab-runner`와 `gitlab-runner-helper-images`를 **18.11.4-1**로 고정하고(GitLab 서버 CE 18.11.5와 같은 마이너 버전. 서버를 올리면 `RUNNER_VERSION`도 올린다) `apt hold`로 자동 업데이트가 올리지 못하게 한다. `gitlab-runner` 계정을 docker 그룹에 넣는다(root와 같은 권한이다. 설계 6.1절).
 - **러너 만들기:** 등록 전에 GitLab에서 만든다(Settings -> CI/CD -> Runners -> Create project runner. Maintainer 권한). `fit-verify`는 태그 `verify`, Run untagged 끔, Protected 끔. `fit-deploy`는 태그 `deploy`, Run untagged 끔, Protected 켬. 화면에 한 번만 보이는 인증 토큰(`glrt-`로 시작)을 `register`가 숨김 입력으로 받는다. 토큰은 채팅, 문서, 저장소에 붙이지 않고 이 서버의 `config.toml`(권한 600)에만 남는다. 토큰은 명령 인자가 아니라 환경변수로만 넘기고 등록 출력은 버린다.
-- **register:** `concurrent 1`로 맞춘다. B는 job 메모리 2GB, CPU 2개, docker.sock을 job에 연다. 이미 등록돼 있으면 건드리지 않는다(`FIT_RUNNER_REREGISTER=1`이면 다시 등록한다. GitLab에서 옛 러너도 지운다).
+- **register:** 동시 실행 수(`concurrent`)를 역할에 맞춘다(B의 `fit-verify` 2, A의 `fit-deploy` 1). B는 job 메모리 2GB, CPU 2개, docker.sock을 job에 연다. 이미 등록돼 있으면 건드리지 않는다(`FIT_RUNNER_REREGISTER=1`이면 다시 등록한다. GitLab에서 옛 러너도 지운다).
+- **tune:** 이미 등록된 러너의 `concurrent`만 역할에 맞춘다. 토큰이 필요 없고 서비스를 재시작하지 않는다(러너가 `config.toml`을 몇 초마다 다시 읽어 돌고 있는 job이 끊기지 않는다). `FIT_RUNNER_CONCURRENT`(1에서 4)로 B의 값을 바꿀 수 있고 A는 무엇을 줘도 1이다. B에서 가벼운 린터가 무거운 잡(Gradle, Node) 뒤에 줄을 서지 않게 하려는 것이다. 무거운 잡끼리는 `.gitlab-ci.yml`의 `resource_group: verify-heavy`가 한 번에 하나로 묶는다. `status`는 `concurrent`가 역할의 값과 다르면 `tune`을 안내하며 실패한다.
 - 환경변수: `FIT_RUNNER_URL`(기본 `https://lab.ssafy.com`), `FIT_RUNNER_ROLE_FILE`, `FIT_RUNNER_CONFIG`, `FIT_SKIP=systemd`(시험용).
-- **러너가 도는 잡:** `fit-verify`(B, 태그 `verify`)는 `lint:*`, `be:test`, `fe:test`, `fe:build`, `fe:bundle-check`를, `fit-deploy`(A, 태그 `deploy`)는 `build:images`, `deploy:*`, `smoke:*`를 받는다(`.gitlab-ci.yml`, 설계 6.3절, [infra/deploy/README.md](../deploy/README.md)). `fit-deploy`가 `deploy.sh`를 돌려면 `/srv/fit/state`, `/srv/fit/web`이 `root:docker 2775`여야 한다(bootstrap이 만든다).
+- **러너가 도는 잡:** `fit-verify`(B, 태그 `verify`)는 `lint:*`, `be:test`, `fe:test`, `be:build`, `fe:build`, `fe:bundle-check`를(MR에서는 바뀐 경로의 잡만 돈다), `fit-deploy`(A, 태그 `deploy`)는 `build:images`, `deploy:*`, `smoke:*`를 받는다(`.gitlab-ci.yml`, 설계 6.3절, [infra/deploy/README.md](../deploy/README.md)). `fit-deploy`가 `deploy.sh`를 돌려면 `/srv/fit/state`, `/srv/fit/web`이 `root:docker 2775`여야 한다(bootstrap이 만든다).
 
 ## 환경변수 넣기 (envset.py)
 

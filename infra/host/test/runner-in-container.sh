@@ -29,7 +29,7 @@ out="$(run install)"; rc=$?
 ok_if "docker 그룹이 없으면 install을 거부한다(bootstrap이 먼저다)" "$([ "$rc" != 0 ] && [ "$(has "$out" 'docker 그룹이 없다')" = 1 ] && echo 1 || echo 0)"
 groupadd docker
 out="$(run bogus)"; rc=$?
-ok_if "모르는 명령은 거부한다" "$([ "$rc" != 0 ] && [ "$(has "$out" '사용: runner.sh install | register | status')" = 1 ] && echo 1 || echo 0)"
+ok_if "모르는 명령은 거부한다" "$([ "$rc" != 0 ] && [ "$(has "$out" '사용: runner.sh install | register | tune | status')" = 1 ] && echo 1 || echo 0)"
 
 echo "--- install(서버 A 역할)"
 out="$(run install)"; rc=$?
@@ -75,6 +75,41 @@ echo "--- 서버 B 역할은 러너 이름이 fit-verify다"
 echo ops >/etc/fit/role
 out="$(run status)"
 ok_if "ops 서버는 fit-verify를 안내한다" "$(has "$out" 'SKIP  러너 fit-verify이 아직 등록돼 있지 않다')"
+out="$(run tune)"; rc=$?
+ok_if "등록 전에는 tune을 거부한다" "$([ "$rc" != 0 ] && [ "$(has "$out" '러너 fit-verify이 등록돼 있지 않다')" = 1 ] && echo 1 || echo 0)"
+
+echo "--- tune: 역할에 맞는 동시 실행 수(진짜 등록 없이 config.toml로 확인한다)"
+mkdir -p /etc/gitlab-runner
+write_config() { printf 'concurrent = %s\n[[runners]]\n  name = "%s"\n  url = "https://lab.ssafy.com"\n' "$1" "$2" >/etc/gitlab-runner/config.toml; chmod 600 /etc/gitlab-runner/config.toml; }
+concurrent_now() { sed -n 's/^concurrent[[:space:]]*=[[:space:]]*\([0-9]*\).*/\1/p' /etc/gitlab-runner/config.toml; }
+write_config 1 fit-verify
+out="$(run status)"; rc=$?
+ok_if "B(fit-verify)에 concurrent가 1이면 status가 실패하고 tune을 안내한다" "$([ "$rc" != 0 ] && [ "$(has "$out" 'FAIL  concurrent가 2이 아니다(sudo bash infra/host/runner.sh tune)')" = 1 ] && echo 1 || echo 0)"
+out="$(run tune)"; rc=$?
+ok_if "tune이 B의 concurrent를 2로 바꾸고 서비스는 재시작하지 않는다고 알린다" "$([ "$rc" = 0 ] && [ "$(concurrent_now)" = 2 ] && [ "$(has "$out" '변경 1건')" = 1 ] && [ "$(has "$out" '재시작하지 않았다')" = 1 ] && echo 1 || echo 0)"
+ok_if "config.toml 권한이 600으로 남는다" "$([ "$(stat -c %a /etc/gitlab-runner/config.toml)" = 600 ] && echo 1 || echo 0)"
+ok_if "러너 항목은 그대로다" "$([ "$(grep -c 'name = "fit-verify"' /etc/gitlab-runner/config.toml)" = 1 ] && echo 1 || echo 0)"
+out="$(run tune)"; rc=$?
+ok_if "다시 실행하면 변경이 없다(멱등)" "$([ "$rc" = 0 ] && [ "$(has "$out" '변경 0건')" = 1 ] && [ "$(has "$out" '이미 2이다')" = 1 ] && echo 1 || echo 0)"
+out="$(run status)"; rc=$?
+ok_if "tune 뒤에는 status가 concurrent를 PASS로 보고한다" "$([ "$rc" = 0 ] && [ "$(has "$out" 'PASS  concurrent가 2이다')" = 1 ] && echo 1 || echo 0)"
+out="$(FIT_RUNNER_CONCURRENT=3 run tune)"; rc=$?
+ok_if "FIT_RUNNER_CONCURRENT로 B의 값을 바꿀 수 있다" "$([ "$rc" = 0 ] && [ "$(concurrent_now)" = 3 ] && echo 1 || echo 0)"
+for bad in 0 5 abc '2;touch /tmp/injected'; do
+  out="$(FIT_RUNNER_CONCURRENT="$bad" run tune)"; rc=$?
+  ok_if "FIT_RUNNER_CONCURRENT=$bad는 거부하고 config를 바꾸지 않는다" "$([ "$rc" != 0 ] && [ "$(has "$out" '1에서 4 사이')" = 1 ] && [ "$(concurrent_now)" = 3 ] && [ ! -e /tmp/injected ] && echo 1 || echo 0)"
+done
+echo app >/etc/fit/role
+write_config 5 fit-deploy
+out="$(FIT_RUNNER_CONCURRENT=3 run tune)"; rc=$?
+ok_if "A(fit-deploy)는 무엇을 줘도 1이다(같은 환경의 배포가 겹치면 안 된다)" "$([ "$rc" = 0 ] && [ "$(concurrent_now)" = 1 ] && echo 1 || echo 0)"
+out="$(run status)"; rc=$?
+ok_if "A는 concurrent 1이 PASS다" "$([ "$rc" = 0 ] && [ "$(has "$out" 'PASS  concurrent가 1이다')" = 1 ] && echo 1 || echo 0)"
+printf 'check_interval = 3\n[[runners]]\n  name = "fit-deploy"\n' >/etc/gitlab-runner/config.toml
+chmod 644 /etc/gitlab-runner/config.toml
+out="$(run tune)"; rc=$?
+ok_if "concurrent 줄이 없으면 만들고 권한을 600으로 맞춘다" "$([ "$rc" = 0 ] && [ "$(concurrent_now)" = 1 ] && [ "$(stat -c %a /etc/gitlab-runner/config.toml)" = 600 ] && echo 1 || echo 0)"
+echo ops >/etc/fit/role
 
 echo
 if [ "$FAILED" = 0 ]; then echo "러너 시험 통과"; else echo "$FAILED개 실패"; exit 1; fi
