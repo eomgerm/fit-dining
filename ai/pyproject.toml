@@ -20,6 +20,8 @@ build-backend = "uv_build"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# tests/는 소스 구조를 따른다. 폴더가 달라도 같은 파일 이름을 쓸 수 있게 importlib로 불러온다
+addopts = ["--import-mode=importlib"]
 
 [dependency-groups]
 dev = [

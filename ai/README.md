@@ -16,6 +16,28 @@ uv run ruff check --fix . && uv run ruff format .
 
 임베딩 모델(`dragonkue/snowflake-arctic-embed-l-v2.0-ko`)은 처음 쓸 때 Hugging Face 캐시로 내려받습니다.
 
+## 구조
+
+uv 프로젝트 하나(`fit-ai`)에 라이브러리 패키지 `fit_ai`와 그것을 가져다 쓰는 앱을 함께 둡니다. 폴더는 처음 쓸 때 만듭니다.
+
+```
+ai/
+├─ src/fit_ai/   # 라이브러리. 공유 모듈(features, embedding, gms)과 기능별 하위 패키지
+│  ├─ taste/     #   취향 분석(S15P31A302-39)
+│  ├─ place/     #   가게 특징 분석(S15P31A302-40)
+│  └─ match/     #   취향-가게 비교(S15P31A302-41)
+├─ server/       # AI 서버 앱. fit_ai를 import한다
+├─ scripts/      # 실행 진입점: 샘플 생성, 배치, 적재
+├─ experiments/  # 측정·비교 실험. 제품 코드(fit_ai, server)는 여기를 import하지 않는다
+├─ samples/      # 작은 산출물
+├─ data/         # 원본 데이터. 리뷰 작성자 정보가 있어 git이 무시한다
+└─ tests/        # src/fit_ai와 server의 구조를 그대로 따른다(tests/taste/ 등)
+```
+
+- `fit_ai`는 `server`, `scripts`, `experiments`를 import하지 않습니다. 의존은 앱에서 라이브러리 방향으로만 흐릅니다.
+- 같은 모델로 만드는 벡터는 서버와 배치 모두 `fit_ai.embedding`을 거칩니다. 질의·문서 인코딩 규칙을 한 곳에 둡니다.
+- 모듈 사이의 경계(41은 `taste` 내부가 아니라 프로필 JSON만 읽는다 등)는 `docs/specs/`의 각 스펙을 따릅니다.
+
 ## 취향 프로필 샘플 만들기
 
 ```bash
