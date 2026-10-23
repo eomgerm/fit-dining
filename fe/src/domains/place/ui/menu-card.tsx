@@ -23,19 +23,17 @@ export function MenuCard({ menu }: { menu: Menu }) {
   );
 }
 
-// 메뉴 탭의 한 줄. 가격이 없으면 생략한다
+// 메뉴 탭의 한 줄(와이어프레임 DetailMenu). 사진, 굵은 이름, 오른쪽 가격. 가격이 없으면 생략한다
 export function MenuRow({ menu }: { menu: Menu }) {
   return (
-    <div className="flex items-center gap-3 py-3">
+    <div className="flex items-center gap-3.5 py-3">
       <PlacePhoto src={menu.photoUrl} className="size-16 shrink-0 rounded-md" />
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="text-body-md text-ink">{menu.name}</span>
-        {menu.price !== undefined && (
-          <span className="text-label-md text-ink">
-            {formatPrice(menu.price)}
-          </span>
-        )}
-      </div>
+      <span className="min-w-0 flex-1 text-title-sm text-ink">{menu.name}</span>
+      {menu.price !== undefined && (
+        <span className="shrink-0 text-body-md text-ink">
+          {formatPrice(menu.price)}
+        </span>
+      )}
     </div>
   );
 }

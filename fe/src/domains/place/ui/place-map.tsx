@@ -80,13 +80,18 @@ function loadNaverMaps(clientId: string) {
   return scriptPromise;
 }
 
-function pinIcon(naver: NaverMaps, rank: number, selected: boolean) {
+// 순위가 없으면 번호 없는 핀이다(정보 탭의 위치 지도)
+function pinIcon(
+  naver: NaverMaps,
+  rank: number | undefined,
+  selected: boolean,
+) {
   const size = selected ? SELECTED_PIN_SIZE : PIN_SIZE;
   const className = selected
     ? "flex size-9 items-center justify-center rounded-full bg-primary text-label-md text-on-primary shadow-pin"
     : "flex size-7 items-center justify-center rounded-full border border-icon-subtle bg-surface text-label-sm text-ink shadow-1";
   return {
-    content: `<div class="${className}">${rank}</div>`,
+    content: `<div class="${className}">${rank ?? ""}</div>`,
     anchor: new naver.Point(size / 2, size / 2),
   };
 }
@@ -101,7 +106,7 @@ function ignoreSdkError(call: () => void) {
   } catch {}
 }
 
-export type MapPin = LatLng & { id: number; rank: number };
+export type MapPin = LatLng & { id: number; rank?: number };
 
 export type PlaceMapHandle = {
   // 지도가 없으면 undefined
@@ -114,6 +119,8 @@ type PlaceMapProps = {
   pins: MapPin[];
   selectedId?: number;
   myLocation?: LatLng;
+  // 처음 중심. 없으면 역삼역이다
+  center?: LatLng;
   onPinClick: (id: number) => void;
   // 사용자가 지도를 끌거나 확대·축소했을 때. panTo 같은 코드의 이동으로는 부르지 않는다
   onUserMove?: () => void;
@@ -129,6 +136,7 @@ export function PlaceMap({
   pins,
   selectedId,
   myLocation,
+  center,
   onPinClick,
   onUserMove,
   onReadyChange,
@@ -138,8 +146,10 @@ export function PlaceMap({
   const containerRef = useRef<HTMLDivElement>(null);
   const [loaded, setLoaded] = useState<{ naver: NaverMaps; map: NaverMap }>();
   const [failed, setFailed] = useState(false);
+  // 처음 중심은 지도를 만들 때 한 번만 쓴다
+  const initialCenter = useRef(center ?? DEFAULT_CENTER);
   const markersRef = useRef(
-    new Map<number, { marker: NaverMarker; rank: number; zIndex: number }>(),
+    new Map<number, { marker: NaverMarker; rank?: number; zIndex: number }>(),
   );
   // 인증이 실패하면 SDK 내부 값이 비어 어떤 호출이든 던지므로, 그 뒤에는 SDK를 부르지 않는다
   const active = failed ? undefined : loaded;
@@ -160,7 +170,10 @@ export function PlaceMap({
         if (cancelled || !containerRef.current) return;
         if (authFailed) throw new Error("지도 인증에 실패했습니다");
         map = new naver.Map(containerRef.current, {
-          center: new naver.LatLng(DEFAULT_CENTER.lat, DEFAULT_CENTER.lng),
+          center: new naver.LatLng(
+            initialCenter.current.lat,
+            initialCenter.current.lng,
+          ),
           zoom: DEFAULT_ZOOM,
         });
         setLoaded({ naver, map });
@@ -237,7 +250,7 @@ export function PlaceMap({
       const pins = currentPins();
       for (const { id, rank, lat, lng } of pins) {
         // 앞 순위 핀이 위에 그려진다
-        const zIndex = pins.length - rank;
+        const zIndex = pins.length - (rank ?? 0);
         const marker = new naver.Marker({
           position: new naver.LatLng(lat, lng),
           map,
@@ -322,7 +335,8 @@ export function PlaceMap({
       aria-hidden={!ready}
       className={cn(
         "isolate overflow-hidden bg-map-bg",
-        failed && "invisible",
+        // 지도를 쓸 수 없으면 자리를 차지하지 않는다(정보 탭의 위치 지도도 접힌다)
+        failed && "hidden",
         className,
       )}
     >

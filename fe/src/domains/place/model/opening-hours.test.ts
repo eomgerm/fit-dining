@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { hoursText, seoulNow, todayHours, todayNotice } from "./opening-hours";
+import {
+  hoursNotes,
+  hoursText,
+  seoulNow,
+  todayHours,
+  todayNotice,
+} from "./opening-hours";
 import type { DayCode, Hours } from "./place-types";
 
 // 2026-10-22는 목요일이다. 한국 시각 = UTC + 9
@@ -80,11 +86,30 @@ describe("todayNotice", () => {
 });
 
 describe("hoursText", () => {
-  it("영업시간을 '11:00 - 22:00'으로 보여 준다", () => {
-    expect(hoursText(day("MON"))).toBe("11:00 - 22:00");
+  it("영업시간을 '11:00 – 22:00'으로 보여 준다", () => {
+    expect(hoursText(day("MON"))).toBe("11:00 – 22:00");
   });
 
   it("휴무일은 '휴무'다", () => {
     expect(hoursText(day("MON", { closed: true }))).toBe("휴무");
+  });
+});
+
+describe("hoursNotes", () => {
+  it("브레이크타임과 라스트오더를 한 줄씩 보여 준다", () => {
+    expect(hoursNotes(day("MON"))).toEqual([
+      "15:00 – 17:00 브레이크타임",
+      "14:30, 21:00 라스트오더",
+    ]);
+  });
+
+  it("없는 줄은 빼고, 휴무일은 아무 줄도 없다", () => {
+    expect(
+      hoursNotes(day("MON", { breakStart: undefined, breakEnd: undefined })),
+    ).toEqual(["14:30, 21:00 라스트오더"]);
+    expect(hoursNotes(day("MON", { lastOrders: [] }))).toEqual([
+      "15:00 – 17:00 브레이크타임",
+    ]);
+    expect(hoursNotes(day("MON", { closed: true }))).toEqual([]);
   });
 });

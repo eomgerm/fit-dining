@@ -53,8 +53,21 @@ export function todayNotice(hours: Hours[], status: OpenStatus, now: Date) {
   }
 }
 
-// "11:00 - 22:00" 또는 "휴무"
+// "11:00 – 22:00" 또는 "휴무"(와이어프레임의 시각 범위 표기)
 export function hoursText(hours: Hours) {
   if (hours.closed || !hours.open || !hours.close) return "휴무";
-  return `${hours.open} - ${hours.close}`;
+  return `${hours.open} – ${hours.close}`;
+}
+
+// 요일별 표의 덧붙는 줄. "15:00 – 16:00 브레이크타임", "14:30, 21:30 라스트오더". 휴무일이면 없다
+export function hoursNotes(hours: Hours) {
+  if (hours.closed) return [];
+  const notes: string[] = [];
+  if (hours.breakStart && hours.breakEnd) {
+    notes.push(`${hours.breakStart} – ${hours.breakEnd} 브레이크타임`);
+  }
+  if (hours.lastOrders.length > 0) {
+    notes.push(`${hours.lastOrders.join(", ")} 라스트오더`);
+  }
+  return notes;
 }

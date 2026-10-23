@@ -3,6 +3,7 @@ import type {
   EvidenceSource,
   Facility,
   OpenStatus,
+  ScoreItem,
 } from "./place-types";
 
 // 화면에 보이는 한글 이름. 순서는 동점일 때의 우선순위이기도 하다(식당, 카페, 술집)
@@ -36,4 +37,14 @@ export const EVIDENCE_LABELS: Record<EvidenceSource, string> = {
 // "요청 · 조용해요"
 export function evidenceText(source: EvidenceSource, label: string) {
   return `${EVIDENCE_LABELS[source]} · ${label}`;
+}
+
+// 홈 탭 추천 이유 아래의 근거 부족 안내. 점수에 넣지 못한(matched가 아닌) 항목마다 하나다
+export function missingEvidenceNotes(items: ScoreItem[]) {
+  return items
+    .filter(({ matched }) => !matched)
+    .map(
+      ({ source, label }) =>
+        `이 장소는 ‘${label}’ ${source === "PREFERENCE" ? "취향을" : "요청을"} 확인할 근거가 부족해요`,
+    );
 }

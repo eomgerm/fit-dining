@@ -5,11 +5,14 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
   within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createQueryClient } from "@/shared/api/query-client";
+import type { RuntimeConfig } from "@/shared/lib/runtime-config";
+import { ToastProvider } from "@/shared/ui/overlay/toast";
 
 import type { PlaceCard, PlaceDetail } from "../model/place-types";
 import { createSearchStore, type SearchStore } from "../model/search-store";
@@ -23,6 +26,18 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ back: vi.fn() }),
   useSearchParams: () =>
     new URLSearchParams(params.id ? { id: params.id } : {}),
+}));
+
+// 정보 탭 위치 지도가 지도 키를 읽는다. 기본은 키가 없어 지도 자리가 접힌다
+const config = vi.hoisted(() => ({
+  value: undefined as RuntimeConfig | undefined,
+  load: vi.fn(),
+}));
+vi.mock("@/shared/lib/runtime-config", () => ({
+  loadRuntimeConfig: async () => {
+    config.load();
+    return config.value;
+  },
 }));
 
 const stores = vi.hoisted(() => ({
@@ -95,6 +110,7 @@ let fetchMock: ReturnType<typeof vi.fn<typeof fetch>>;
 beforeEach(() => {
   params.id = "1";
   stores.current = createSearchStore();
+  config.load.mockClear();
   fetchMock = vi.fn<typeof fetch>(async (input) =>
     String(input) === "/api/v1/places/1"
       ? Response.json(detail)
@@ -111,7 +127,9 @@ afterEach(() => {
 function renderDetail(slots?: PlaceDetailSlots) {
   return render(
     <QueryClientProvider client={createQueryClient()}>
-      <PlaceDetailScreen slots={slots} />
+      <ToastProvider>
+        <PlaceDetailScreen slots={slots} />
+      </ToastProvider>
     </QueryClientProvider>,
   );
 }
@@ -130,12 +148,13 @@ const reviewSlots: PlaceDetailSlots = {
 };
 
 describe("PlaceDetailScreen", () => {
-  it("리뷰 자리를 넘기지 않으면 홈, 메뉴, 정보 탭만 있고 하단 막대가 없다", async () => {
+  it("리뷰 자리를 넘기지 않으면 홈, 메뉴, 정보 탭만 있고 하단 막대에는 저장 버튼만 있다", async () => {
     renderDetail();
 
     await screen.findByRole("heading", { name: "카페 온담" });
     const tabs = screen.getAllByRole("tab").map((tab) => tab.textContent);
     expect(tabs).toEqual(["홈", "메뉴", "정보"]);
+    expect(screen.getByRole("button", { name: "저장" })).toBeTruthy();
     expect(screen.queryByText("방문 평가 남기기")).toBeNull();
   });
 
@@ -168,8 +187,14 @@ describe("PlaceDetailScreen", () => {
       screen.getByText("조용히 대화하기 좋다는 리뷰가 많아요"),
     ).toBeTruthy();
     expect(screen.getByText("주말 오후에는 대기가 길어요")).toBeTruthy();
+    // 점수에 넣지 못한 항목의 근거 부족 안내
+    expect(
+      screen.getByText("이 장소는 ‘가성비’ 취향을 확인할 근거가 부족해요"),
+    ).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "핏 점수 설명" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "핏 점수 84, 설명 보기" }),
+    );
     const sheet = await screen.findByRole("dialog", { name: "핏 점수 84" });
     expect(within(sheet).getByText("요청 · 조용해요")).toBeTruthy();
     expect(within(sheet).getByText("앱 리뷰 3개가 근거예요")).toBeTruthy();
@@ -184,7 +209,8 @@ describe("PlaceDetailScreen", () => {
 
     await screen.findByRole("heading", { name: "카페 온담" });
     expect(screen.queryByText("핏 점수")).toBeNull();
-    expect(screen.queryByRole("button", { name: "핏 점수 설명" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /핏 점수/ })).toBeNull();
+    expect(screen.queryByText(/근거가 부족해요/)).toBeNull();
     expect(screen.queryByText("AI 추천 이유")).toBeNull();
     expect(screen.queryByText("주말 오후에는 대기가 길어요")).toBeNull();
     expect(screen.getByText("서울 강남구 테헤란로 1")).toBeTruthy();
@@ -202,6 +228,64 @@ describe("PlaceDetailScreen", () => {
     fireEvent.click(screen.getByRole("tab", { name: "정보" }));
     expect(await screen.findByText("무선 인터넷")).toBeTruthy();
     expect(screen.getByText("주차")).toBeTruthy();
+    // 오늘 줄은 "<요일> · 오늘", 라스트오더는 줄을 덧붙인다
+    expect(screen.getByRole("rowheader", { name: / · 오늘$/ })).toBeTruthy();
+    expect(screen.getAllByText("21:30 라스트오더")).toHaveLength(7);
+    expect(screen.getAllByText("10:00 – 22:00")).toHaveLength(7);
+  });
+
+  it("홈 탭의 영업시간 줄은 오늘 시간이고 펼치면 요일별 표가 나온다", async () => {
+    renderDetail();
+    await screen.findByRole("heading", { name: "카페 온담" });
+
+    const row = screen.getByRole("button", { name: "요일별 영업시간 보기" });
+    expect(row.textContent).toContain("오늘 10:00 – 22:00");
+    expect(screen.queryByRole("table")).toBeNull();
+
+    fireEvent.click(row);
+    expect(screen.getByRole("table")).toBeTruthy();
+  });
+
+  it.each(["공유", "저장"])(
+    "'%s' 버튼은 '준비 중이에요'를 띄운다",
+    async (name) => {
+      renderDetail();
+      await screen.findByRole("heading", { name: "카페 온담" });
+
+      fireEvent.click(screen.getByRole("button", { name }));
+
+      expect(await screen.findByText("준비 중이에요")).toBeTruthy();
+    },
+  );
+
+  it("정보 탭의 '주소 복사'는 주소를 클립보드에 넣고 알린다", async () => {
+    const writeText = vi.fn(async () => {});
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+    renderDetail();
+    await screen.findByRole("heading", { name: "카페 온담" });
+
+    fireEvent.click(screen.getByRole("tab", { name: "정보" }));
+    fireEvent.click(await screen.findByRole("button", { name: "주소 복사" }));
+
+    expect(writeText).toHaveBeenCalledWith("서울 강남구 테헤란로 1");
+    expect(await screen.findByText("주소를 복사했어요")).toBeTruthy();
+  });
+
+  it("위치 지도는 정보 탭을 열 때만 만들고, 지도 키가 없으면 자리를 차지하지 않는다", async () => {
+    renderDetail();
+    await screen.findByRole("heading", { name: "카페 온담" });
+    fireEvent.click(screen.getByRole("tab", { name: "메뉴" }));
+    expect(config.load).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("tab", { name: "정보" }));
+
+    const map = () => document.querySelector("[data-map-state]");
+    await waitFor(() =>
+      expect(map()?.getAttribute("data-map-state")).toBe("empty"),
+    );
+    expect(config.load).toHaveBeenCalledTimes(1);
+    expect(map()?.classList.contains("hidden")).toBe(true);
+    expect(screen.getByText("서울 강남구 테헤란로 1")).toBeTruthy();
   });
 
   it.each(["0", "abc", "9007199254740992", null])(
