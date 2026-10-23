@@ -5,6 +5,7 @@
 # 하나라도 FAIL이면 종료 코드 1이다. 임계값은 환경변수로 바꾼다: FIT_MIN_DISK_GB(5), FIT_MIN_MEM_MB(prod 2560, dev 512),
 # 현재 여유 메모리를 직접 줄 때 FIT_MEM_AVAILABLE_MB, 마이그레이션 전 덤프 스크립트 FIT_PREDEPLOY_DUMP,
 # 파일 권한 점검을 건너뛸 때 FIT_SKIP_PERM=1(권한 비트가 없는 NTFS의 시험용. 서버에서는 쓰지 않는다).
+# 필수 키 표의 위치는 FIT_ENV_CONTRACT(기본 docs/infra/contracts/env.md. 시험이 바꾼다). 읽지 못하면 env 점검이 실패한다.
 set -uo pipefail
 # shellcheck source=infra/deploy/lib.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
@@ -28,7 +29,9 @@ succeeds() { if "$@" >/dev/null 2>&1; then echo 1; else echo 0; fi; }
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-# 계약 표(docs/infra/contracts/env.md)에서 그룹의 필수 키를 한 줄에 하나씩 뽑는다
+# 계약 표(docs/infra/contracts/env.md)에서 그룹의 필수 키를 한 줄에 하나씩 뽑는다. 파일이 없으면 awk가 실패해 빈 목록이 되고,
+# 호출하는 쪽(check_env_file)이 빈 목록을 실패로 본다(빈 목록으로 점검이 통과하는 가짜 PASS를 막는다. 저장소 일부만 복사한 서버에서 실제로 났다)
+CONTRACT="${FIT_ENV_CONTRACT:-$ROOT_DIR/docs/infra/contracts/env.md}"
 required_keys() {
   awk -F'|' -v g="$1" '
     $2 ~ /^ *`[A-Z][A-Z0-9_]*` *$/ {
@@ -36,7 +39,7 @@ required_keys() {
       flag = $4; gsub(/ /, "", flag)
       n = split($3, a, ",")
       for (i = 1; i <= n; i++) { x = a[i]; gsub(/ /, "", x); if (x == g && flag == "O") print k }
-    }' "$ROOT_DIR/docs/infra/contracts/env.md"
+    }' "$CONTRACT"
 }
 
 check_env_file() { # check_env_file 파일 그룹
@@ -53,7 +56,11 @@ check_env_file() { # check_env_file 파일 그룹
   fi
   ok_if "$name: APP_ENV가 $ENVN이다" "$(succeeds grep -qx "APP_ENV=$ENVN" "$f")"
   ok_if "$name: 자리표시자(REPLACE_ME)가 남아 있지 않다" "$([ "$(grep -c 'REPLACE_ME' "$f")" = 0 ] && echo 1 || echo 0)"
-  required_keys "$group" >"$TMP/required.$group"
+  # 그룹의 필수 키는 하나 이상이다. 못 읽었거나 비어 있으면 점검이 의미가 없으니 실패한다
+  if ! required_keys "$group" >"$TMP/required.$group" 2>/dev/null || [ ! -s "$TMP/required.$group" ]; then
+    fail "$name: 계약 문서(${CONTRACT#"$ROOT_DIR"/})에서 그룹 $group의 필수 키를 읽지 못했다(파일이 있는지, 키 표 형식이 그대로인지 확인한다)"
+    return
+  fi
   if PY="$(find_python)"; then
     ok_if "$name: 형식과 필수 키(그룹 $group)가 맞다" \
       "$(succeeds "$PY" "$(native_path "$ROOT_DIR/infra/ci/check_env_files.py")" "$(native_path "$f")" --required "$(native_path "$TMP/required.$group")")"

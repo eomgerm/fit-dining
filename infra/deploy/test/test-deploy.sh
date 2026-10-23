@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 배포 스크립트를 노트북에서 시험한다(설계 10.5절). 실제 Caddy와 목 BE·FE 이미지로 서버 A를 흉내 낸다.
 #   bash infra/deploy/test/test-deploy.sh up     # 가짜 서버 디렉터리, 공유 망, 엣지, 시험용 저장소와 목 이미지를 만든다
-#   bash infra/deploy/test/test-deploy.sh run    # 배포·롤백·실패 복구·기동 시나리오를 돌린다
+#   bash infra/deploy/test/test-deploy.sh run [구역...]   # 배포·롤백·실패 복구·기동 시나리오를 돌린다. 구역: unit guard prod dev fit_up hygiene(없으면 전부)
 #   bash infra/deploy/test/test-deploy.sh down   # 시험이 만든 컨테이너, 이미지, 망, 디렉터리를 지운다
 # 필요한 것: docker compose(2.24 이상), curl, git, python 3.9 이상. 시험용 이름은 접두사 fit-deploytest로 시작한다.
 # 시험용 서버는 저장소 안의 .tmp-deploytest/에 있다(env 파일, 상태, 정적 자산 풀, 시험용 git 저장소).
@@ -27,6 +27,11 @@ export FIT_BE_IMAGE=fit-deploytest/be FIT_FE_IMAGE=fit-deploytest/fe FIT_EDGE_PR
 export FIT_EDGE_COMPOSE_ARGS="-p $FIT_EDGE_PROJECT -f $W/infra/edge/compose.edge.yml -f $W/infra/deploy/test/compose.sim-edge.yml"
 export FIT_DEPLOY_TEST_HTTPS_PORT="$HTTPS_PORT"
 export PROD_HOST=localhost DEV_HOST=dev.localhost ACME_EMAIL=ops@example.test ACME_MODE=production HSTS_MODE=off DEV_GATE_KEY="$KEY"
+# 엣지 compose가 /_ops 자격(B_IP, 사용자, bcrypt 해시)을 필수로 요구한다(계획 1E). 이 시험은 /_ops를 쓰지 않지만 Caddy가 설정을 읽을 수 있게 유효한 값을 준다.
+# 해시는 up이 `caddy hash-password`로 만들어 $T/ops-hash에 두고 다른 하위 명령은 그 파일을 읽는다(저장소에 해시를 적으면 시크릿 검사에 걸린다)
+OPS_BASIC_AUTH_HASH=ops-hash-is-made-by-up
+if [ -f "$T/ops-hash" ]; then OPS_BASIC_AUTH_HASH="$(cat "$T/ops-hash")"; fi
+export B_IP=10.213.99.50 OPS_BASIC_AUTH_USER=opsuser OPS_BASIC_AUTH_HASH
 export FIT_EDGE_ENV="$T/etc/edge.env" FIT_SMOKE_PORT="$HTTPS_PORT" FIT_SMOKE_INSECURE=1 FIT_SMOKE_RETRIES=3
 export FIT_SMOKE_SEARCH_PATH="/api/v1/search?q=a"
 export FIT_DRAIN_SECONDS=1 FIT_BE_READY_TIMEOUT=40 FIT_FE_READY_TIMEOUT=30
@@ -105,6 +110,11 @@ build_images() { # build_images sha BE모드 FE모드
 up() {
   down >/dev/null 2>&1 || true
   mkdir -p "$T/state" "$T/web" "$T/backups"
+  # shellcheck source=infra/ci/tool-images.sh
+  . infra/ci/tool-images.sh
+  OPS_BASIC_AUTH_HASH="$(docker run --rm "$CADDY_IMAGE" caddy hash-password --plaintext testpw | tr -d '\r\n' | base64 | tr -d '\n')"
+  export OPS_BASIC_AUTH_HASH
+  printf '%s' "$OPS_BASIC_AUTH_HASH" >"$T/ops-hash"
   make_repo
   make_envs
   # shellcheck source=/dev/null
@@ -112,7 +122,13 @@ up() {
   bash infra/host/networks.sh
   # 엣지의 첫 상태 파일은 견본 그대로다(prod는 blue, dev는 be-dev·fe-dev를 가리킨다)
   cp infra/edge/state-sample/upstream-*.caddy "$T/state/"
-  dc_edge up -d --wait
+  # Docker Desktop이 127.0.0.1 포트 게시에 가끔 실패한다(listen ... invalid pointer address). 시작하지 못한 컨테이너만 다시 시도한다
+  local try=1
+  until dc_edge up -d --wait; do
+    [ "$try" -lt 8 ] || { echo "FAIL compose up이 ${try}번 모두 실패했다" >&2; return 1; }
+    try=$((try + 1))
+    sleep 3
+  done
   build_images "$C1" ok ok
   build_images "$C2" ok ok
   build_images "$C3" unready ok
@@ -245,6 +261,14 @@ run_guard_checks() {
   out="$(bash infra/deploy/preflight.sh prod "$C1" 2>&1)" && rc=0 || rc=$?
   ok_if "필수 키가 빠지면 사전 점검이 실패한다" "$([ "$rc" = 1 ] && [ "$(has "$out" 'FAIL  prod.env: 형식과 필수 키')" = 1 ] && echo 1 || echo 0)"
   cp "$T/prod.env.bak" "$T/etc/prod.env"
+  # 계약 문서(필수 키 표)를 못 읽으면 빈 필수 키 목록으로 가짜 PASS가 나던 결함(서버에 docs/가 없는 복사본에서 드러났다)
+  out="$(FIT_ENV_CONTRACT="$T/no-such-contract.md" bash infra/deploy/preflight.sh prod "$C1" 2>&1)" && rc=0 || rc=$?
+  ok_if "계약 문서가 없으면 필수 키 점검이 가짜로 통과하지 않고 실패한다" "$([ "$rc" = 1 ] && [ "$(has "$out" 'FAIL  prod.env: 계약 문서')" = 1 ] && [ "$(has "$out" 'PASS  prod.env: 형식과 필수 키')" = 0 ] && echo 1 || echo 0)"
+  : >"$T/empty-contract.md"
+  out="$(FIT_ENV_CONTRACT="$T/empty-contract.md" bash infra/deploy/preflight.sh prod "$C1" 2>&1)" && rc=0 || rc=$?
+  ok_if "계약 문서에 필수 키 표가 없어도(그룹의 필수 키가 하나도 안 읽혀도) 실패한다" "$([ "$rc" = 1 ] && [ "$(has "$out" 'FAIL  prod.env: 계약 문서')" = 1 ] && [ "$(has "$out" 'FAIL  fe-prod.env: 계약 문서')" = 1 ] && echo 1 || echo 0)"
+  out="$(FIT_ENV_CONTRACT="$T/no-such-contract.md" bash infra/deploy/preflight.sh prod "$C1" 2>&1)" && rc=0 || rc=$?
+  ok_if "계약 문서 오류 메시지는 어떤 파일을 봤는지 알려 준다" "$([ "$(has "$out" 'no-such-contract.md')" = 1 ] && echo 1 || echo 0)"
   rm -f "$T/prod.env.bak"
   cp "$T/etc/fe-prod.env" "$T/fe-prod.env.bak"
   sed -i 's/^BE_INTERNAL_URL=.*/BE_INTERNAL_URL=http:\/\/caddy:8082/' "$T/etc/fe-prod.env"
@@ -402,12 +426,14 @@ run() {
   echo $! >"$T/sink.pid"
   sleep 1
   set +e
-  run_unit_checks
-  run_guard_checks
-  run_prod_checks
-  run_dev_checks
-  run_fit_up_checks
-  run_hygiene_checks
+  # 구역을 주면 그것만 돈다(prod, dev, fit_up은 앞 구역이 만든 상태에 기대므로 처음부터 이어서 줘야 한다. guard는 단독으로 된다)
+  local zones=" ${*:-unit guard prod dev fit_up hygiene} "
+  case "$zones" in *" unit "*) run_unit_checks ;; esac
+  case "$zones" in *" guard "*) run_guard_checks ;; esac
+  case "$zones" in *" prod "*) run_prod_checks ;; esac
+  case "$zones" in *" dev "*) run_dev_checks ;; esac
+  case "$zones" in *" fit_up "*) run_fit_up_checks ;; esac
+  case "$zones" in *" hygiene "*) run_hygiene_checks ;; esac
   set -e
   kill "$(cat "$T/sink.pid")" >/dev/null 2>&1 || true
   if [ "$FAILED" -gt 0 ]; then
@@ -419,10 +445,10 @@ run() {
 
 case "${1:-}" in
   up) up ;;
-  run) run ;;
+  run) shift; run "$@" ;;
   down) down ;;
   *)
-    echo "사용: bash infra/deploy/test/test-deploy.sh up | run | down" >&2
+    echo "사용: bash infra/deploy/test/test-deploy.sh up | run [구역...] | down" >&2
     exit 2
     ;;
 esac

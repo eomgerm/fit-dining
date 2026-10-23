@@ -73,13 +73,15 @@ dev는 같은 흐름이지만 색이 없어서 교체하고, 확인에 실패하
 | `FIT_FORCE_MIGRATE=1` | | 마이그레이션 파일이 안 바뀌어도 마이그레이션을 실행한다 |
 | `FIT_SMOKE_SEARCH_PATH` | 없음 | 검색 1건을 호출해 `X-Fallback` 헤더가 없는지 본다(예: `/api/v1/search?q=김치`). 없으면 건너뛴다 |
 | `FIT_DATA_COMPOSE`, `FIT_OBS_COMPOSE` | `infra/data/compose.data.yml`, `infra/obs/compose.obs.yml` | `fit-up.sh`가 올릴 data·obs compose 파일. 파일이 없으면 건너뛴다(시험이 없는 파일을 가리킨다) |
+| `FIT_ENV_CONTRACT` | `docs/infra/contracts/env.md` | 사전 점검이 필수 키 표를 읽는 파일. 읽지 못하면 env 점검이 통과하지 않고 실패한다(저장소 일부만 복사한 서버에서 가짜 통과가 난 적이 있다) |
 | `FIT_ENV_DIR`, `FIT_STATE_DIR`, `FIT_WEB_DIR`, `FIT_REPO_DIR`, `FIT_EDGE_PROJECT`, `FIT_NET_PROD`·`FIT_NET_DEV`·`FIT_NET_DATA` | `/etc/fit`, `/srv/fit/state`, `/srv/fit/web`, 저장소 루트, `fit-edge`, 망 이름 | 시험 환경이 바꾼다 |
 
 ## 노트북에서 시험하기
 
 ```bash
 bash infra/deploy/test/test-deploy.sh up     # 가짜 서버(공유 망, 엣지, 목 이미지, 시험용 저장소)
-bash infra/deploy/test/test-deploy.sh run    # 배포·롤백·실패 복구·fit-up 시나리오
+bash infra/deploy/test/test-deploy.sh run    # 배포·롤백·실패 복구·fit-up 시나리오 전부
+bash infra/deploy/test/test-deploy.sh run guard   # 구역만 골라 돌린다(unit guard prod dev fit_up hygiene, 여러 개 가능)
 bash infra/deploy/test/test-deploy.sh down   # 시험이 만든 것을 모두 지운다
 ```
 
