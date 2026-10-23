@@ -65,19 +65,23 @@ describe("ReviewListView", () => {
     expect(html).toContain("&lt;b&gt;굵게&lt;/b&gt;");
   });
 
-  it("headerHref가 있으면 제목 전체가 그 주소로 가는 링크다(홈 미리보기)", () => {
-    const html = render({
-      totalCount: 12,
-      items,
-      headerHref: "/place?id=1&tab=review",
-    });
-    expect(html).toMatch(
-      /<a [^>]*href="\/place\?id=1&amp;tab=review"[^>]*>리뷰<span[^>]*>12<\/span>/,
+  it("onShowAll이 있으면 머리글에 전체 보기 버튼을 둔다(홈 미리보기)", () => {
+    const html = render({ totalCount: 12, items, onShowAll: noop });
+    expect(html).toMatch(/<button[^>]*>전체 보기<\/button>/);
+    expect(html).not.toContain("<a ");
+  });
+
+  it("onShowAll이 있어도 리뷰가 없거나 불러오는 중이면 전체 보기를 숨긴다", () => {
+    expect(render({ totalCount: 0, onShowAll: noop })).not.toContain(
+      "전체 보기",
+    );
+    expect(render({ status: "pending", onShowAll: noop })).not.toContain(
+      "전체 보기",
     );
   });
 
-  it("headerHref가 없으면 제목은 링크가 아니다(리뷰 탭)", () => {
-    expect(render({ totalCount: 2, items })).not.toContain("<a ");
+  it("onShowAll이 없으면 전체 보기가 없다(리뷰 탭)", () => {
+    expect(render({ totalCount: 2, items })).not.toContain("전체 보기");
   });
 
   it("다음 페이지를 받는 중이면 자리 표시 한 줄을 더 보인다", () => {

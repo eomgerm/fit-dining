@@ -10,21 +10,21 @@ import { ReviewListView } from "./review-list-view";
 
 type ReviewSectionProps = {
   placeId: number;
-  // 있으면 홈 탭 미리보기(Figma 6-01)다. 최신 3건만 보이고, 제목 "리뷰 12 ›"이 이 주소로 가는 링크다.
-  // 보통 같은 장소 상세의 리뷰 탭(?id=<placeId>&tab=review). 없으면 리뷰 탭 전체 목록(6-03)이다
-  previewHref?: string;
+  // 있으면 홈 탭 미리보기(Figma 6-01)다. 최신 3건만 보이고, 머리글의 "전체 보기"가 이 함수를 부른다.
+  // 장소 상세가 리뷰 탭으로 바꾸는 함수를 넘긴다. 없으면 리뷰 탭 전체 목록(6-03)이다
+  onShowAll?: () => void;
   // 폭·바깥 여백 같은 배치용 클래스
   className?: string;
 };
 
 // 장소 상세의 리뷰 섹션. 장소 상세는 리뷰 탭과 홈 탭에 넣기만 한다.
 //   리뷰 탭: <ReviewSection placeId={id} />          목록 끝이 보이면 다음 페이지를 받는다
-//   홈 탭:   <ReviewSection placeId={id} previewHref={리뷰 탭 주소} />
+//   홈 탭:   <ReviewSection placeId={id} onShowAll={() => 리뷰 탭으로} />
 // 두 자리가 같은 쿼리를 써서 탭을 오가도 목록을 다시 받지 않는다.
-// "방문 평가 남기기"는 장소 상세의 하단 막대가 reviewWriteHref로 연결한다(D-31)
+// "방문 평가 남기기"는 장소 상세의 하단 막대가 reviewWriteHref로 연결한다(D-32)
 export function ReviewSection({
   placeId,
-  previewHref,
+  onShowAll,
   className,
 }: ReviewSectionProps) {
   const {
@@ -38,7 +38,7 @@ export function ReviewSection({
   } = useReviewList(placeId);
   const endRef = useOnVisible(() => fetchNextPage());
   const pages = data?.pages ?? [];
-  const isPreview = previewHref !== undefined;
+  const isPreview = onShowAll !== undefined;
   const items = isPreview
     ? (pages[0]?.items.slice(0, PREVIEW_SIZE) ?? [])
     : pages.flatMap((page) => page.items);
@@ -49,7 +49,7 @@ export function ReviewSection({
       status={data ? "success" : status}
       totalCount={pages.at(-1)?.totalCount}
       items={items}
-      headerHref={previewHref}
+      onShowAll={onShowAll}
       skeletonRows={isPreview ? PREVIEW_SIZE : 5}
       onRetry={() => refetch()}
       {...(!isPreview && {
@@ -59,8 +59,9 @@ export function ReviewSection({
         onRetryNextPage: () => fetchNextPage(),
         endRef,
       })}
-      // Figma 여백: 리뷰 탭은 위 16·아래 28, 홈 미리보기는 위아래 28
-      className={cn(isPreview ? "py-7" : "pt-4 pb-7", className)}
+      // 장소 상세의 여백을 따른다: 리뷰 탭은 메뉴·정보 탭처럼 px-4 py-6,
+      // 홈 미리보기는 홈 탭이 다른 섹션과 함께 감싸므로 바깥 여백이 없다(D-32)
+      className={cn(!isPreview && "px-4 py-6", className)}
     />
   );
 }

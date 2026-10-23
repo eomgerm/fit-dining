@@ -5,7 +5,10 @@ import { TextButton } from "@/shared/ui/button/text-button";
 import { EmptyState } from "@/shared/ui/display/empty-state";
 import { ChatIcon } from "@/shared/ui/icon/icons/chat";
 import { WifiOffIcon } from "@/shared/ui/icon/icons/wifi-off";
-import { SectionHeader } from "@/shared/ui/layout/section-header";
+import {
+  SectionHeader,
+  SectionHeaderAction,
+} from "@/shared/ui/layout/section-header";
 import { cn } from "@/shared/lib/cn";
 
 import { formatKstDate, type ReviewItem } from "../model/review";
@@ -15,8 +18,8 @@ export type ReviewListViewProps = {
   // 불러온 뒤에만 있다
   totalCount?: number;
   items: ReviewItem[];
-  // 있으면 제목 "리뷰 12 ›" 전체가 이 주소로 가는 링크다(홈 탭 미리보기)
-  headerHref?: string;
+  // 있으면 머리글 오른쪽에 "전체 보기"를 둔다(홈 탭 미리보기). 리뷰가 없으면 숨긴다
+  onShowAll?: () => void;
   // 처음 불러오는 중에 보일 자리 표시 줄 수
   skeletonRows?: number;
   onRetry: () => void;
@@ -31,12 +34,12 @@ export type ReviewListViewProps = {
 };
 
 // 리뷰 탭(6-03)과 홈 탭 미리보기(6-01)가 함께 쓰는 목록 화면.
-// 데이터 훅과 나눠 상태별 모양을 정적으로 확인한다(D-31)
+// 데이터 훅과 나눠 상태별 모양을 정적으로 확인한다(D-31, D-32)
 export function ReviewListView({
   status,
   totalCount,
   items,
-  headerHref,
+  onShowAll,
   skeletonRows = 3,
   onRetry,
   hasNextPage = false,
@@ -47,13 +50,21 @@ export function ReviewListView({
   className,
 }: ReviewListViewProps) {
   return (
-    <section aria-label="리뷰" className={cn("flex flex-col px-5", className)}>
+    <section aria-label="리뷰" className={cn("flex flex-col", className)}>
       <SectionHeader
         title="리뷰"
         count={status === "success" ? totalCount : undefined}
-        href={headerHref}
+        action={
+          onShowAll &&
+          status === "success" &&
+          items.length > 0 && (
+            <SectionHeaderAction onClick={onShowAll}>
+              전체 보기
+            </SectionHeaderAction>
+          )
+        }
       />
-      <div className={headerHref ? "mt-3" : "mt-1"}>
+      <div className={onShowAll ? "mt-3" : "mt-1"}>
         {status === "pending" && <ReviewListSkeleton rows={skeletonRows} />}
         {status === "error" && (
           <EmptyState
