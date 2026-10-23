@@ -116,7 +116,10 @@ def parse_items(resp: dict, text: str) -> list[dict]:
     for raw in resp["items"]:
         it = _check(raw)
         quote, like, code = it["quote"], it["like"], it["code"]
-        if quote not in text or (code is not None and code not in FEATURES):
+        # 빈 구절은 어떤 원문에도 들어 있어 대조를 통과하므로 따로 버린다
+        if not quote.strip() or quote not in text:
+            continue
+        if code is not None and code not in FEATURES:
             continue
         if code and not like:
             feature = FEATURES[code]

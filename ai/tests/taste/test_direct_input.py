@@ -77,6 +77,12 @@ def test_drops_quote_not_in_text_and_unknown_code():
     assert parse_items(resp, text) == []
 
 
+@pytest.mark.parametrize("quote", ["", " "])
+def test_drops_blank_quote(quote):
+    text = "시끄럽지 않은 데가 좋아요"
+    assert parse_items({"items": [item(quote, code="FOOD_SPICY")]}, text) == []
+
+
 def test_disliked_pole_becomes_liked_opposite_pole():
     text = "활기찬 데 싫어요"
     assert parse_items({"items": [item(text, False, "LIVELY")]}, text) == [
