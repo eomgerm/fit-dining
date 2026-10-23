@@ -65,7 +65,7 @@ sudo python3 ~/host/envset.py unset dev REVIEW_MOCK_ENABLED             # 키를
 - **형식 검사:** `check_env_files.py`와 같은 규칙이다(공백, 따옴표, `#`, `$`, 백슬래시, 백틱, 보이지 않는 글자 금지. `$`가 필요한 값은 base64). `REPLACE_ME`도 거부한다. `*_BASE_URL`은 끝의 `/`를 지우고 `http(s)://`로 시작해야 한다. 하나라도 어긋나면 어느 파일에도 쓰지 않는다.
 - **덮어쓰기:** 이미 값이 있는 키를 바꿀 때는 파일마다 묻는다(`--yes`로 생략). `unset`도 묻는다. 필수 키를 지우면 경고한다.
 - **쓰는 방식:** 같은 디렉터리의 임시 파일에 쓰고 바꿔 끼운다. 모드와 소유자(`root:docker 640`)는 그대로다. 다른 줄은 건드리지 않는다.
-- **계약 안내:** 키가 계약 표(그룹)에 없으면 알려 준다. 계약 MR을 먼저 올린다. `status`는 필수 키가 비었거나 `REPLACE_ME`인지 보여 준다.
+- **계약 안내:** 키가 계약 표(그룹)에 없으면 알려 준다. 계약 MR을 먼저 올린다. `status`는 필수 키가 비었거나 `REPLACE_ME`인지, 이미 들어 있는 `*_BASE_URL`이 규칙(끝에 `/` 없음, `http(s)://`로 시작)을 지키는지 보여 준다.
 - **적용:** 파일만 바뀐다. 실행 중인 컨테이너에는 파일별 안내(`적용(...)`)대로 반영한다. BE·FE는 컨테이너를 만들 때 읽으므로 같은 SHA를 다시 배포한다.
 - **서버에 올리기:** `scp infra/host/envset.py docs/infra/contracts/env.md <서버>:~/host/`. 계약 표를 못 찾으면 필수 키 안내만 건너뛴다. 환경변수: `FIT_ENV_DIR`(기본 `/etc/fit`), `FIT_ENV_CONTRACT`.
 - **시험:** `python -m unittest infra/ci/tests/test_envset.py`. `check_env_files.py`와 규칙이 같은지, 값이 출력에 새지 않는지, 실패하면 아무것도 쓰지 않는지를 본다.

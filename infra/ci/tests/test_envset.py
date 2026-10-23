@@ -299,6 +299,16 @@ class StatusTest(EnvsetCase):
         self.assertEqual(rc, 1)
         self.assertIn("FAIL  형식: 1줄 not-key-value", out)
 
+    def test_base_url_that_breaks_the_contract_is_a_warning_without_the_value(self):
+        self.write("prod", "APP_ENV=prod\nMODAL_BASE_URL=https://gms.example/gmsapi/\nGMS_BASE_URL=gms.example/api\nOK_BASE_URL=https://ok.example/api\nEMPTY_BASE_URL=\n")
+        rc, out, _ = self.run_cli("status", "prod")
+        self.assertIn("WARN  MODAL_BASE_URL: 끝에 /가 있다", out)
+        self.assertIn("WARN  GMS_BASE_URL: http:// 또는 https://로 시작해야 한다", out)
+        for fine in ("OK_BASE_URL", "EMPTY_BASE_URL"):
+            self.assertNotIn(f"{fine}: 끝에", out)
+            self.assertNotIn(f"{fine}: http", out)
+        self.assertNotIn("gms.example", out)
+
     def test_optional_placeholder_is_a_failure_like_in_preflight(self):
         self.write("fe-prod", "APP_ENV=prod\nNODE_ENV=production\nNAVER_MAP_CLIENT_ID=REPLACE_ME\n")
         rc, out, _ = self.run_cli("status", "fe-prod")

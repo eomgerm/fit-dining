@@ -85,6 +85,15 @@ def check_value(key: str, value: str) -> tuple[str, str | None]:
     return value, None
 
 
+def base_url_warning(key: str, value: str) -> str | None:
+    """이미 파일에 있는 *_BASE_URL이 계약(끝에 /가 없고 http(s)://로 시작)에 맞는지. 값은 문구에 넣지 않는다."""
+    if not key.endswith("_BASE_URL") or value == "" or "REPLACE_ME" in value:
+        return None
+    if value.endswith("/"):
+        return "끝에 /가 있다(계약: 붙이지 않는다). set으로 다시 넣으면 지운다"
+    return check_value(key, value)[1]
+
+
 def parse_values(text: str) -> dict[str, str]:
     """{키: 값}. 같은 키가 여러 번이면 첫 줄이다."""
     out: dict[str, str] = {}
@@ -373,6 +382,10 @@ def cmd_status(args: argparse.Namespace) -> int:
         for ln, rule in format_issues(text):
             print(f"FAIL  형식: {ln}줄 {rule}" if ln else f"FAIL  형식: {rule}")
             failed += 1
+        for key, value in values.items():
+            warning = base_url_warning(key, value)
+            if warning:
+                print(f"WARN  {key}: {warning}")
         spec = contract.get(group) if contract else None
         if spec is None:
             print("SKIP  계약 표를 찾지 못했거나 이 그룹이 없어 필수 키는 점검하지 않았다")
