@@ -16,6 +16,14 @@ uv run ruff check --fix . && uv run ruff format .
 
 임베딩 모델(`dragonkue/snowflake-arctic-embed-l-v2.0-ko`)은 처음 쓸 때 Hugging Face 캐시로 내려받습니다.
 
+## 취향 프로필 샘플 만들기
+
+```bash
+uv run --env-file .env python scripts/build_sample_taste_profiles.py
+```
+
+`samples/taste/`에 `profiles.json`(샘플 사용자 7명)과 `code_vectors.json`을 만듭니다. `GMS_ENABLED`가 `true`가 아니면 직접 입력은 해석 대기(`like: null`)로 남습니다. 규칙은 `docs/specs/taste-profile/spec.md`에 있습니다.
+
 ## GPU로 돌리기
 
 기본 `uv sync`는 PyPI의 torch를 씁니다(Windows는 CPU, Linux는 CUDA 13 빌드). GPU를 쓰려면 CUDA 12.8 빌드를 고릅니다. 드라이버가 CUDA 12.8 이상이면 됩니다(`nvidia-smi` 오른쪽 위 `CUDA Version`).
