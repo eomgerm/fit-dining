@@ -1,0 +1,121 @@
+// @vitest-environment jsdom
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { ApiError } from "@/shared/api/api-error";
+import { ToastProvider } from "@/shared/ui/overlay/toast";
+import SignupEmailPage from "./page";
+
+const mocks = vi.hoisted(() => ({ signup: vi.fn(), replace: vi.fn() }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: mocks.replace }),
+}));
+vi.mock("@/domains/auth/api/auth-client", () => ({ signup: mocks.signup }));
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+afterEach(cleanup);
+function form() {
+  render(
+    <ToastProvider>
+      <SignupEmailPage />
+    </ToastProvider>,
+  );
+  fireEvent.change(screen.getByLabelText("이메일"), {
+    target: { value: "new@example.com" },
+  });
+  fireEvent.change(screen.getByLabelText("비밀번호"), {
+    target: { value: "password1" },
+  });
+  fireEvent.change(screen.getByLabelText("비밀번호 확인"), {
+    target: { value: "password1" },
+  });
+  fireEvent.change(screen.getByLabelText("닉네임"), {
+    target: { value: "새이름" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "다음" }));
+}
+it("requires all agreements, submits once, and navigates home", async () => {
+  let complete!: () => void;
+  mocks.signup.mockImplementation(
+    () =>
+      new Promise<void>((resolve) => {
+        complete = resolve;
+      }),
+  );
+  form();
+  const submit = await screen.findByRole("button", {
+    name: "동의하고 시작하기",
+  });
+  expect(submit.hasAttribute("disabled")).toBe(true);
+  fireEvent.click(screen.getByRole("checkbox", { name: "전체 동의" }));
+  fireEvent.click(submit);
+  fireEvent.click(submit);
+  expect(mocks.signup).toHaveBeenCalledTimes(1);
+  expect(mocks.signup).toHaveBeenCalledWith({
+    email: "new@example.com",
+    password: "password1",
+    nickname: "새이름",
+    agreements: { ageOver14: true, terms: true, privacy: true },
+  });
+  complete();
+  await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/"));
+});
+it("closes the sheet and shows duplicate email beside its field", async () => {
+  mocks.signup.mockRejectedValue(
+    new ApiError("http", "conflict", {
+      status: 409,
+      problem: { status: 409, type: "urn:fitdining:auth:email-taken" },
+    }),
+  );
+  form();
+  await screen.findByRole("button", { name: "동의하고 시작하기" });
+  fireEvent.click(screen.getByRole("checkbox", { name: "전체 동의" }));
+  fireEvent.click(screen.getByRole("button", { name: "동의하고 시작하기" }));
+  expect(
+    await screen.findByText("이미 가입한 이메일이에요. 로그인해 주세요."),
+  ).toBeTruthy();
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(screen.getByLabelText("이메일").getAttribute("aria-invalid")).toBe(
+    "true",
+  );
+  expect(mocks.replace).not.toHaveBeenCalled();
+  expect(
+    screen.getByRole("link", { name: "로그인하기" }).getAttribute("href"),
+  ).toBe("/login");
+  fireEvent.change(screen.getByLabelText("이메일"), {
+    target: { value: "changed@example.com" },
+  });
+  expect(screen.queryByRole("link", { name: "로그인하기" })).toBeNull();
+});
+it("does not show the login link for a field error containing duplicate wording", async () => {
+  mocks.signup.mockRejectedValue(
+    new ApiError("http", "bad input", {
+      status: 400,
+      problem: {
+        status: 400,
+        errors: [
+          { field: "email", reason: "이미 가입 안내와 무관한 검증 오류" },
+        ],
+      },
+    }),
+  );
+  form();
+  await screen.findByRole("button", { name: "동의하고 시작하기" });
+  fireEvent.click(screen.getByRole("checkbox", { name: "전체 동의" }));
+  fireEvent.click(screen.getByRole("button", { name: "동의하고 시작하기" }));
+  await screen.findByText("이미 가입 안내와 무관한 검증 오류");
+  expect(screen.queryByRole("link", { name: "로그인하기" })).toBeNull();
+});
+it("shows a preparation toast when viewing terms", async () => {
+  form();
+  await screen.findByRole("button", { name: "동의하고 시작하기" });
+  fireEvent.click(screen.getAllByRole("button", { name: "보기" })[0]);
+  expect(await screen.findByText("약관 본문은 준비 중이에요.")).toBeTruthy();
+  expect(mocks.signup).not.toHaveBeenCalled();
+});

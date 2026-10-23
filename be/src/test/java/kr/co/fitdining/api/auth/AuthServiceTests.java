@@ -52,6 +52,7 @@ class AuthServiceTests extends PostgresTestSupport {
     @Autowired AuthCleanup cleanup;
     @Autowired AuthUserRepository users;
     @Autowired EntityManagerFactory entityManagerFactory;
+    @Autowired org.springframework.core.env.Environment environment;
     JdbcTemplate jdbc;
 
     @DynamicPropertySource static void properties(DynamicPropertyRegistry registry) throws Exception {
@@ -74,21 +75,206 @@ class AuthServiceTests extends PostgresTestSupport {
         for (String table : List.of("auth_refresh_tokens", "auth_security_events", "auth_login_attempts", "auth_users")) {
             jdbc.update("delete from " + table);
         }
-        users.saveAndFlush(new AuthUser("user-1", "demo", passwords.hash("example-test-password"), clock.instant()));
+        users.saveAndFlush(new AuthUser("user-1", "demo@example.com", "demo", passwords.hash("example-test-password1"), clock.instant(), "2026-10-23"));
     }
 
-    AuthUseCases.Issued login() { return auth.login("demo", "example-test-password", "ip"); }
+    AuthUseCases.Issued login() { return auth.login("demo@example.com", "example-test-password1", "ip"); }
     void unauthorized(org.junit.jupiter.api.function.Executable work) {
         assertEquals(401, assertThrows(AuthFailure.class, work).status());
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"login", "signup"})
+    @DisplayName("시도 제한_신뢰 프록시의 서로 다른 사용자_주소별로 독립 집계")
+    void attempts_trustedProxy_countsEachForwardedClientSeparately(String action) throws Exception {
+        String first = NativeForwardedHeadersTests.resolve("172.18.0.5", "203.0.113.10", "https", 8080).address();
+        String second = NativeForwardedHeadersTests.resolve("172.18.0.5", "203.0.113.11", "https", 8080).address();
+        int rejected = action.equals("login") ? 401 : 409;
+        for (int i = 0; i < 20; i++) assertEquals(rejected, attempt(action, first));
+        assertEquals(429, attempt(action, first));
+        assertEquals(rejected, attempt(action, second));
+        assertEquals(20, attemptCount(first, action));
+        assertEquals(1, attemptCount(second, action));
+        assertEquals(0, attemptCount("172.18.0.5", action));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"login", "signup"})
+    @DisplayName("시도 제한_비신뢰 연결의 전달 헤더 위조_연결 주소로 집계")
+    void attempts_untrustedPeer_cannotEvadeLimitWithForwardedHeaders(String action) throws Exception {
+        int rejected = action.equals("login") ? 401 : 409;
+        for (int i = 0; i < 20; i++) {
+            String address = NativeForwardedHeadersTests.resolve("198.51.100.7", "203.0.113." + (i + 1), "https", 8080).address();
+            assertEquals(rejected, attempt(action, address));
+        }
+        String address = NativeForwardedHeadersTests.resolve("198.51.100.7", "203.0.113.99", "https", 8080).address();
+        assertEquals(429, attempt(action, address));
+        assertEquals(20, attemptCount("198.51.100.7", action));
+        assertEquals(0, attemptCount("203.0.113.99", action));
+    }
+
+    private int attempt(String action, String remoteAddress) throws Exception {
+        var mvc = org.springframework.test.web.servlet.setup.MockMvcBuilders
+                .standaloneSetup(new kr.co.fitdining.api.auth.presentation.AuthController(auth, false, clock))
+                .setControllerAdvice(new kr.co.fitdining.api.auth.presentation.AuthExceptionHandler(environment)).build();
+        String body = action.equals("login")
+                ? "{\"email\":\"demo@example.com\",\"password\":\"wrong\"}"
+                : """
+                    {"email":"demo@example.com","password":"password1","nickname":"new",
+                     "agreements":{"ageOver14":true,"terms":true,"privacy":true}}
+                    """;
+        return mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/auth/" + action)
+                .header("Origin", "http://localhost:3000").contentType("application/json").content(body)
+                .with(request -> { request.setRemoteAddr(remoteAddress); return request; }))
+                .andReturn().getResponse().getStatus();
+    }
+
+    private int attemptCount(String address, String action) {
+        return jdbc.queryForObject("select count(*) from auth_login_attempts where address=? and action=?", Integer.class, address, action);
+    }
+
+    @Test @DisplayName("가입_이메일 정규화와 약관 저장_즉시 로그인과 갱신 허용")
+    void signup_normalizedAccount_persistsAgreementsAndIssuesSession() {
+        var issued = auth.signup(" New@Example.COM ", "password1", " 새이름 ", "signup-ip");
+        var user = users.findByEmail("new@example.com").orElseThrow();
+        assertEquals("새이름", user.getNickname());
+        assertEquals(clock.instant(), user.getAgeConfirmedAt());
+        assertEquals(clock.instant(), user.getTermsAgreedAt());
+        assertEquals(clock.instant(), user.getPrivacyAgreedAt());
+        assertEquals("2026-10-23", user.getTermsVersion());
+        assertNotEquals("password1", user.getPasswordHash());
+        assertEquals("새이름", issued.identity().nickname());
+        assertEquals("새이름", auth.refresh(issued.refreshToken()).identity().nickname());
+        assertEquals("새이름", auth.login(" NEW@example.com ", "password1", "login-ip").identity().nickname());
+        assertEquals(new AuthUseCases.Profile("새이름", "new@example.com"), auth.me(user.getId()));
+    }
+
+    @Test @DisplayName("가입_이메일과 닉네임 중복_타입별 409 반환")
+    void signup_duplicateFields_returnsDistinctConflictTypes() {
+        var email = assertThrows(AuthFailure.class, () -> auth.signup(" DEMO@EXAMPLE.COM ", "password1", "new", "ip"));
+        assertEquals(409, email.status());
+        assertEquals("urn:fitdining:auth:email-taken", email.type().toString());
+        var nickname = assertThrows(AuthFailure.class, () -> auth.signup("new@example.com", "password1", " DEMO ", "ip"));
+        assertEquals(409, nickname.status());
+        assertEquals("urn:fitdining:auth:nickname-taken", nickname.type().toString());
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({"pairσ,pairς", "pairK,pairk"})
+    @DisplayName("닉네임_유니코드 대소문자_사전 검사와 DB 유니크 판정 일치")
+    void signup_unicodeNickname_matchesDatabaseUniqueConstraint(String first, String second) {
+        auth.signup("first@example.com", "password1", first, "first-ip");
+        boolean same = jdbc.queryForObject("select lower(?) = lower(?)", Boolean.class, first, second);
+        assertEquals(same, users.existsByNickname(second));
+        Runnable insert = () -> jdbc.update("insert into auth_users(id,email,nickname,password_hash,created_at,"
+                + "age_confirmed_at,terms_agreed_at,privacy_agreed_at,terms_version) "
+                + "select 'probe','probe@example.com',?,password_hash,created_at,age_confirmed_at,"
+                + "terms_agreed_at,privacy_agreed_at,terms_version from auth_users where email='first@example.com'", second);
+        if (same) {
+            assertThrows(org.springframework.dao.DataIntegrityViolationException.class, insert::run);
+            var failure = assertThrows(AuthFailure.class, () -> auth.signup("second@example.com", "password1", second, "second-ip"));
+            assertEquals(409, failure.status());
+            assertEquals("urn:fitdining:auth:nickname-taken", failure.type().toString());
+        } else {
+            assertDoesNotThrow(insert::run);
+            jdbc.update("delete from auth_users where id='probe'");
+            assertNotNull(auth.signup("second@example.com", "password1", second, "second-ip"));
+        }
+    }
+
+    @Test @DisplayName("닉네임_켈빈 기호 동시 가입 경합_유니크 위반을 409로 변환")
+    void signup_unicodeNicknameRace_returnsConflictInsteadOfUnavailable() throws Exception {
+        passwords.hashEntered = new CountDownLatch(2);
+        passwords.hashRelease = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            Callable<Integer> first = () -> signupStatus("first@example.com", "pairK");
+            Callable<Integer> second = () -> signupStatus("second@example.com", "pairk");
+            var a = executor.submit(first);
+            var b = executor.submit(second);
+            try { assertTrue(passwords.hashEntered.await(5, TimeUnit.SECONDS)); }
+            finally { passwords.hashRelease.countDown(); }
+            boolean same = jdbc.queryForObject("select lower('pairK') = lower('pairk')", Boolean.class);
+            var statuses = new java.util.ArrayList<>(List.of(a.get(10, TimeUnit.SECONDS), b.get(10, TimeUnit.SECONDS)));
+            statuses.sort(Integer::compareTo);
+            assertEquals(same ? List.of(201, 409) : List.of(201, 201), statuses);
+        } finally { passwords.hashEntered = null; passwords.hashRelease = null; }
+    }
+
+    private int signupStatus(String email, String nickname) {
+        try { auth.signup(email, "password1", nickname, email); return 201; }
+        catch (AuthFailure failure) {
+            assertEquals("urn:fitdining:auth:nickname-taken", failure.type().toString());
+            return failure.status();
+        }
+    }
+
+    @Test @DisplayName("가입과 로그인_유니코드 바깥 공백_같은 계정으로 정규화")
+    void signup_unicodeWhitespace_normalizesAccountAndLogin() {
+        auth.signup("\u00a0\u3000 NEW@Example.com\u3000\u00a0", "password1", "\u00a0\u3000 새이름\u3000\u00a0", "unicode-ip");
+        assertEquals("새이름", users.findByEmail("new@example.com").orElseThrow().getNickname());
+        assertEquals("새이름", auth.login("\u00a0NEW@example.com\u3000", "password1", "unicode-login").identity().nickname());
+    }
+
+    @Test @DisplayName("가입_동시 INSERT 경합_한 요청만 성공하고 개인정보 없이 409")
+    @org.junit.jupiter.api.extension.ExtendWith(org.springframework.boot.test.system.OutputCaptureExtension.class)
+    void signup_concurrentInsert_onlyOneSucceeds(org.springframework.boot.test.system.CapturedOutput output) throws Exception {
+        // Hash gate ensures both requests passed prechecks before either INSERT starts.
+        passwords.hashEntered = new CountDownLatch(2);
+        passwords.hashRelease = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            Callable<Integer> work = () -> {
+                try { auth.signup("race@example.com", "password1", "race", "race-ip"); return 201; }
+                catch (AuthFailure failure) { return failure.status(); }
+            };
+            var a = executor.submit(work);
+            var b = executor.submit(work);
+            try { assertTrue(passwords.hashEntered.await(5, TimeUnit.SECONDS)); }
+            finally { passwords.hashRelease.countDown(); }
+            var results = new java.util.ArrayList<>(List.of(a.get(10, TimeUnit.SECONDS), b.get(10, TimeUnit.SECONDS)));
+            results.sort(Integer::compareTo);
+            assertEquals(List.of(201, 409), results);
+            assertEquals(1, jdbc.queryForObject("select count(*) from auth_users where email='race@example.com'", Integer.class));
+            assertEquals(1, jdbc.queryForObject("select count(*) from auth_refresh_tokens", Integer.class));
+            assertFalse(output.getAll().contains("race@example.com"));
+        } finally { passwords.hashEntered = null; passwords.hashRelease = null; }
+    }
+
+    @Test @DisplayName("가입_시도 제한_로그인 제한과 독립적으로 429")
+    void signup_attemptLimit_isIndependentOfLogin() {
+        for (int i = 0; i < 20; i++) assertEquals(409, assertThrows(AuthFailure.class,
+                () -> auth.signup("demo@example.com", "password1", "new", "ip")).status());
+        assertEquals(429, assertThrows(AuthFailure.class,
+                () -> auth.signup("new@example.com", "password1", "new", "ip")).status());
+        assertNotNull(login());
+        clock.advance(900);
+        assertNotNull(auth.signup("new@example.com", "password1", "new", "ip"));
+    }
+
+    @Test @DisplayName("JWT_최소 페이로드_AT와 RT에 허용된 키만 포함")
+    void tokens_minimalPayload_containsOnlySpecifiedClaims() throws Exception {
+        var issued = login();
+        assertEquals(java.util.Set.of("iss", "aud", "sub", "iat", "exp", "token_type"),
+                com.nimbusds.jwt.SignedJWT.parse(issued.accessToken()).getJWTClaimsSet().getClaims().keySet());
+        assertEquals(java.util.Set.of("iss", "aud", "sub", "jti", "iat", "exp", "token_type"),
+                com.nimbusds.jwt.SignedJWT.parse(issued.refreshToken()).getJWTClaimsSet().getClaims().keySet());
+    }
+
+    @Test @DisplayName("로그아웃_RT 없음과 잘못된 용도_멱등 처리하고 유효 세션 보존")
+    void logout_invalidCookie_isIdempotentWithoutRevokingOtherFamily() {
+        var issued = login();
+        assertDoesNotThrow(() -> auth.logout(null));
+        assertDoesNotThrow(() -> auth.logout("invalid"));
+        assertDoesNotThrow(() -> auth.logout(issued.accessToken()));
+        assertNotNull(auth.refresh(issued.refreshToken()));
     }
 
     @Test @DisplayName("로그아웃_두 묶음 중 하나 폐기_RT만 차단하고 AT 유지")
     void logout_twoFamilies_revokesRefreshButKeepsAccessUntilExpiry() {
         var first = login();
         var second = login();
-        auth.logout(auth.authenticate(first.accessToken()));
+        auth.logout(first.refreshToken());
         unauthorized(() -> auth.refresh(first.refreshToken()));
-        assertEquals("demo", auth.authenticate(first.accessToken()).username());
+        assertEquals("user-1", auth.authenticate(first.accessToken()).userId());
         assertNotNull(auth.refresh(second.refreshToken()));
         clock.advance(1800);
         assertEquals(AuthFailure.ACCESS_TOKEN_EXPIRED,
@@ -128,9 +314,9 @@ class AuthServiceTests extends PostgresTestSupport {
         unauthorized(() -> auth.authenticate(first.refreshToken()));
         unauthorized(() -> auth.refresh(first.accessToken()));
         long now = clock.instant().getEpochSecond();
-        String at = codec.encode(new TokenCodec.Token("user-1", "demo", "new-family", "unknown", "access", now, now + 100, now + 1000));
+        String at = codec.encode(new TokenCodec.Token("user-1", null, "access", now, now + 100));
         assertNotNull(auth.authenticate(at));
-        String rt = codec.encode(new TokenCodec.Token("user-1", "demo", "new-family", "unknown", "refresh", now, now + 1000, now + 1000));
+        String rt = codec.encode(new TokenCodec.Token("user-1", "unknown", "refresh", now, now + 1000));
         unauthorized(() -> auth.refresh(rt));
     }
 
@@ -170,7 +356,7 @@ class AuthServiceTests extends PostgresTestSupport {
         var first = login();
         var current = auth.refresh(first.refreshToken());
         runConcurrentRevokers(first.identity().sessionId(),
-                () -> auth.logout(current.identity()),
+                () -> auth.logout(current.refreshToken()),
                 () -> unauthorized(() -> auth.refresh(first.refreshToken())));
         assertEquals(1, jdbc.queryForObject("select count(*) from auth_security_events", Integer.class));
         assertEquals(0, jdbc.queryForObject("select count(*) from auth_refresh_tokens where revoked_at is null", Integer.class));
@@ -180,7 +366,7 @@ class AuthServiceTests extends PostgresTestSupport {
     void refresh_replayAfterLogout_preservesOriginalRevocationReasonAndTime() {
         var first = login();
         var current = auth.refresh(first.refreshToken());
-        auth.logout(current.identity());
+        auth.logout(current.refreshToken());
         var revoked = jdbc.queryForList("select jti,revoked_at,revoke_reason from auth_refresh_tokens order by jti");
         clock.advance(10);
         for (int i = 0; i < 3; i++) unauthorized(() -> auth.refresh(first.refreshToken()));
@@ -224,8 +410,8 @@ class AuthServiceTests extends PostgresTestSupport {
 
     @Test @DisplayName("로그인_느린 비밀번호 검사_트랜잭션 없이 다른 묶음 갱신 허용")
     void login_slowBcrypt_doesNotBlockOtherRefresh() throws Exception {
-        users.saveAndFlush(new AuthUser("user-2", "other", passwords.hash("example-test-password"), clock.instant()));
-        var first = auth.login("other", "example-test-password", "other-ip");
+        users.saveAndFlush(new AuthUser("user-2", "other@example.com", "other", passwords.hash("example-test-password1"), clock.instant(), "2026-10-23"));
+        var first = auth.login("other@example.com", "example-test-password1", "other-ip");
         passwords.entered = new CountDownLatch(1);
         passwords.release = new CountDownLatch(1);
         try (var executor = Executors.newFixedThreadPool(2)) {
@@ -279,9 +465,9 @@ class AuthServiceTests extends PostgresTestSupport {
         for (int i = 0; i < 3; i++) {
             jdbc.update("insert into auth_security_events(family_id,created_at,type,reuse_count) values (?,?,?,?)",
                     "old", java.sql.Timestamp.from(clock.instant().minusSeconds(91*86400)), "REFRESH_REUSE", 1);
-            jdbc.update("insert into auth_login_attempts(address,created_at) values (?,?)", "old", java.sql.Timestamp.from(clock.instant().minusSeconds(901)));
+            jdbc.update("insert into auth_login_attempts(address,action,created_at) values (?,'login',?)", "old", java.sql.Timestamp.from(clock.instant().minusSeconds(901)));
         }
-        jdbc.update("insert into auth_login_attempts(address,created_at) values (?,?)", "boundary", java.sql.Timestamp.from(clock.instant().minusSeconds(900)));
+        jdbc.update("insert into auth_login_attempts(address,action,created_at) values (?,'login',?)", "boundary", java.sql.Timestamp.from(clock.instant().minusSeconds(900)));
         cleanup.clean();
         assertEquals(0, jdbc.queryForObject("select count(*) from auth_refresh_tokens", Integer.class));
         assertEquals(1, jdbc.queryForObject("select count(*) from auth_security_events where family_id=?", Integer.class, first.identity().sessionId()));
@@ -294,7 +480,7 @@ class AuthServiceTests extends PostgresTestSupport {
     void persistence_issueAndReseed_neverStoresRawCredentialsOrOverwritesPassword() {
         var first = login();
         String oldHash = users.findById("user-1").orElseThrow().getPasswordHash();
-        transactions.seedUser("demo", passwords.hash("another-test-password"));
+        transactions.seedUser("demo@example.com", "demo", passwords.hash("another-test-password"));
         assertEquals(oldHash, users.findById("user-1").orElseThrow().getPasswordHash());
         assertEquals(1, jdbc.queryForObject("select count(*) from auth_refresh_tokens", Integer.class));
         for (String table : List.of("auth_users", "auth_refresh_tokens", "auth_security_events", "auth_login_attempts")) {
@@ -360,8 +546,15 @@ class AuthServiceTests extends PostgresTestSupport {
         final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder(4);
         volatile CountDownLatch entered;
         volatile CountDownLatch release;
+        volatile CountDownLatch hashEntered;
+        volatile CountDownLatch hashRelease;
         @Override public String hash(String password) {
             assertFalse(TransactionSynchronizationManager.isActualTransactionActive());
+            if (hashEntered != null) {
+                hashEntered.countDown();
+                try { assertTrue(hashRelease.await(8, TimeUnit.SECONDS)); }
+                catch (InterruptedException e) { Thread.currentThread().interrupt(); throw new IllegalStateException(e); }
+            }
             return encoder.encode(password);
         }
         @Override public boolean matches(String password, String hash) {

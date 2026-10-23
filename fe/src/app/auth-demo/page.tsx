@@ -78,7 +78,7 @@ export default function AuthDemoPage() {
       <div className="mt-10 mb-7">
         <p className="mb-3 text-label-sm text-primary-strong">MY ACCOUNT</p>
         <h1 className="text-headline-lg">
-          반가워요{session ? `, ${session.username}님` : ""}.
+          반가워요{session ? `, ${session.nickname}님` : ""}.
         </h1>
         <p className="mt-3 text-body-sm text-ink-muted">
           로그인한 계정과 현재 세션을 확인할 수 있어요.
@@ -89,7 +89,7 @@ export default function AuthDemoPage() {
           <div className="py-4">
             <dt className="mb-1.5 text-caption-sm text-ink-muted">사용자</dt>
             <dd className="text-body-sm wrap-anywhere tabular-nums">
-              {session.username}
+              {session.nickname}
             </dd>
           </div>
           <div className="py-4">

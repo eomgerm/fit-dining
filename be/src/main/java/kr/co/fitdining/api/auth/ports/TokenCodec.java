@@ -1,42 +1,29 @@
 package kr.co.fitdining.api.auth.ports;
 
-/** Signing/verification boundary. Token records are transient, not database entities. */
+/** Signing/verification boundary. Records are transient and never persisted. */
 public interface TokenCodec {
-    /**
-     * @param token non-secret claims to sign
-     * @return serialized JWT, never persisted
-     */
+    /** @param token claims to sign @return serialized JWT */
     String encode(Token token);
     /**
-     * @param value serialized JWT supplied by the client
+     * @param value serialized JWT
      * @param expectedType access or refresh
      * @return verified claims
      * @throws kr.co.fitdining.api.auth.domain.AuthFailure if verification fails
      */
     Claims decode(String value, String expectedType);
-
     /**
-     * @param userId user identifier
-     * @param username public account name
-     * @param sessionId refresh family identifier (legacy API name)
-     * @param jti token identifier
+     * @param userId subject
+     * @param jti RT identifier; null for AT
      * @param type access or refresh
-     * @param createdAt issued time in epoch seconds
-     * @param expiresAt token expiry in epoch seconds
-     * @param sessionExpiresAt absolute family expiry in epoch seconds
+     * @param createdAt issued epoch second
+     * @param expiresAt expiry epoch second
      */
-    record Token(String userId, String username, String sessionId, String jti, String type,
-            long createdAt, long expiresAt, long sessionExpiresAt) {}
-
+    record Token(String userId, String jti, String type, long createdAt, long expiresAt) {}
     /**
-     * @param userId user identifier
-     * @param username public account name
-     * @param sessionId refresh family identifier (legacy API name)
-     * @param jti token identifier
-     * @param type verified token type
-     * @param expiresAt token expiry in epoch seconds
-     * @param sessionExpiresAt absolute family expiry in epoch seconds
+     * @param userId subject
+     * @param jti RT identifier; null for AT
+     * @param type verified type
+     * @param expiresAt expiry epoch second
      */
-    record Claims(String userId, String username, String sessionId, String jti, String type,
-            long expiresAt, long sessionExpiresAt) {}
+    record Claims(String userId, String jti, String type, long expiresAt) {}
 }

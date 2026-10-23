@@ -1,3 +1,8 @@
+server:
+  # BE는 호스트에 게시하지 않으며, Caddy·FE의 net-prod/net-dev Docker 사설 대역은 Tomcat 기본 신뢰 대역에 포함된다.
+  forward-headers-strategy: native
+  shutdown: graceful
+
 spring:
   application:
     name: api
@@ -7,6 +12,10 @@ spring:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://127.0.0.1:15432/fit_dev}
     username: ${SPRING_DATASOURCE_USERNAME:fit_dev_app}
     password: ${SPRING_DATASOURCE_PASSWORD}
+    hikari:
+      data-source-properties:
+        # Constraint errors may otherwise include email/nickname values in driver exceptions.
+        logServerErrorDetail: false
   flyway:
     # 웹 앱은 DML 전용 계정으로 접속하므로 마이그레이션을 실행하지 않는다.
     enabled: false
@@ -21,9 +30,6 @@ spring:
   lifecycle:
     # compose의 stop_grace_period(40s)보다 짧아야 처리 중인 요청을 마치고 내려간다(BE 계약 #4).
     timeout-per-shutdown-phase: 30s
-
-server:
-  shutdown: graceful
 
 management:
   server:
@@ -57,6 +63,7 @@ review:
     enabled: ${REVIEW_MOCK_ENABLED:false}
 
 auth:
+  terms-version: ${AUTH_TERMS_VERSION:2026-10-23}
   jwt-secret: ${JWT_SECRET}
   frontend-origin: ${AUTH_FRONTEND_ORIGIN}
   cookie-secure: ${AUTH_COOKIE_SECURE}

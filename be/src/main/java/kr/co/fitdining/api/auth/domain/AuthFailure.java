@@ -8,7 +8,7 @@ public class AuthFailure extends RuntimeException {
     private final URI type;
     public AuthFailure(String message) { this(message, 401); }
     public AuthFailure(String message, int status) { this(message, status, null); }
-    private AuthFailure(String message, int status, URI type) {
+    public AuthFailure(String message, int status, URI type) {
         super(message); this.status = status; this.type = type;
     }
     public static AuthFailure accessExpired() {

@@ -7,7 +7,7 @@ const load = () => {
 };
 const value = (token = "at-1", expires = Date.now() / 1000 + 1800) => ({
   accessToken: token,
-  username: "demo",
+  nickname: "demo",
   sessionId: "sid-1",
   accessExpiresAt: expires,
   sessionExpiresAt: Date.now() / 1000 + 86400,
@@ -119,24 +119,22 @@ test("revoked sessions never automatically refresh and discard the access token"
   }
 });
 
-test("logout refreshes an expired AT inside its cookie lock then clears memory", async () => {
+test("logout uses only its cookie even with expired AT then clears memory", async () => {
   const calls: string[] = [];
-  const env = environment(async (url) => {
+  const env = environment(async (url, options) => {
     const path = new URL(url, "http://localhost:3000").pathname;
     calls.push(path);
     if (url.endsWith("/login")) return json(value("old", 0));
     if (url.endsWith("/refresh")) return json(value("new"));
+    assert.equal(options.headers, undefined);
+    assert.equal(options.credentials, "include");
     return new Response(null, { status: 204 });
   });
   try {
     const auth = await load();
     await auth.login("demo", "password");
     await auth.logout();
-    assert.deepEqual(calls, [
-      "/api/auth/login",
-      "/api/auth/refresh",
-      "/api/auth/logout",
-    ]);
+    assert.deepEqual(calls, ["/api/auth/login", "/api/auth/logout"]);
     assert.equal(auth.getSession(), null);
     assert.equal(env.messages.length, 2);
   } finally {
@@ -144,7 +142,23 @@ test("logout refreshes an expired AT inside its cookie lock then clears memory",
   }
 });
 
-test("failed refresh during logout clears a stale local session", async () => {
+test("logout without a memory session does not refresh", async () => {
+  const calls: string[] = [];
+  const env = environment(async (url) => {
+    calls.push(url);
+    return new Response(null, { status: 204 });
+  });
+  try {
+    const auth = await load();
+    await auth.logout();
+    assert.deepEqual(calls, ["/api/auth/logout"]);
+    assert.equal(auth.getSession(), null);
+  } finally {
+    env.reset();
+  }
+});
+
+test("failed logout clears stale local session on unauthorized", async () => {
   const env = environment(async (url) =>
     url.endsWith("/login")
       ? json(value("old", 0))
@@ -155,6 +169,58 @@ test("failed refresh during logout clears a stale local session", async () => {
     await auth.login("demo", "password");
     await assert.rejects(auth.logout(), { status: 401 });
     assert.equal(auth.getSession(), null);
+  } finally {
+    env.reset();
+  }
+});
+
+test("signup normalizes inputs, stores nickname and broadcasts under cookie lock", async () => {
+  const env = environment(async (url, options) => {
+    assert.equal(url, "/api/auth/signup");
+    assert.equal(options.credentials, "include");
+    assert.deepEqual(JSON.parse(String(options.body)), {
+      email: "new@example.com",
+      password: "password1",
+      nickname: "new",
+      agreements: { ageOver14: true, terms: true, privacy: true },
+    });
+    return json({ ...value(), nickname: "new" }, 201);
+  });
+  try {
+    const auth = await load();
+    await auth.signup({
+      email: " NEW@Example.com ",
+      password: "password1",
+      nickname: " new ",
+      agreements: { ageOver14: true, terms: true, privacy: true },
+    });
+    assert.equal(auth.getSession()?.nickname, "new");
+    assert.deepEqual(env.messages, ["session-changed"]);
+  } finally {
+    env.reset();
+  }
+});
+
+test("signup failure preserves current session and does not broadcast", async () => {
+  const env = environment(async (url) =>
+    url.endsWith("/login")
+      ? json(value())
+      : json({ type: "urn:fitdining:auth:email-taken", status: 409 }, 409),
+  );
+  try {
+    const auth = await load();
+    await auth.login("demo@example.com", "password1");
+    await assert.rejects(
+      auth.signup({
+        email: "demo@example.com",
+        password: "password1",
+        nickname: "new",
+        agreements: { ageOver14: true, terms: true, privacy: true },
+      }),
+      { status: 409 },
+    );
+    assert.equal(auth.getSession()?.nickname, "demo");
+    assert.equal(env.messages.length, 1);
   } finally {
     env.reset();
   }

@@ -16,6 +16,41 @@ class ApiApplicationTests extends PostgresTestSupport {
     @Value("${local.server.port}") int port;
     final HttpClient client = HttpClient.newHttpClient();
     final JsonMapper mapper = JsonMapper.builder().build();
+
+    @Test @org.junit.jupiter.api.DisplayName("회원가입_정상 요청과 중복_201 쿠키 발급 및 409 타입 반환")
+    void signup_validAndDuplicateAccount_returnsSessionAndConflict() throws Exception {
+        String body = """
+                {"email":" Signup@Example.com ","password":"password123","nickname":"가입테스트",
+                 "agreements":{"ageOver14":true,"terms":true,"privacy":true}}
+                """;
+        var signup = request("POST", "/signup", body, "http://localhost:3000", null, null);
+        assertEquals(201, signup.statusCode(), signup.body());
+        var session = mapper.readTree(signup.body());
+        assertEquals("가입테스트", session.get("nickname").asString());
+        assertTrue(session.has("sessionId"));
+        assertTrue(session.has("accessExpiresAt"));
+        assertTrue(session.has("sessionExpiresAt"));
+        String cookie = signup.headers().firstValue("set-cookie").orElseThrow();
+        assertTrue(cookie.contains("HttpOnly"));
+        assertTrue(cookie.contains("SameSite=Strict"));
+        assertTrue(cookie.contains("Path=/api/auth"));
+        var profile = request("GET", "/me", null, null, session.get("accessToken").asString(), null);
+        assertEquals("signup@example.com", mapper.readTree(profile.body()).get("email").asString());
+        var duplicate = request("POST", "/signup", body, "http://localhost:3000", null, null);
+        assertEquals(409, duplicate.statusCode());
+        assertEquals("urn:fitdining:auth:email-taken", mapper.readTree(duplicate.body()).get("type").asString());
+        var nickname = request("POST", "/signup", body.replace("Signup@Example.com", "other@example.com"), "http://localhost:3000", null, null);
+        assertEquals(409, nickname.statusCode());
+        assertEquals("urn:fitdining:auth:nickname-taken", mapper.readTree(nickname.body()).get("type").asString());
+        String rt = cookie.split(";", 2)[0];
+        var logout = request("POST", "/logout", null, "http://localhost:3000", null, rt);
+        assertEquals(204, logout.statusCode());
+        assertTrue(logout.headers().firstValue("set-cookie").orElseThrow().contains("Max-Age=0"));
+        assertEquals(401, request("POST", "/refresh", null, "http://localhost:3000", null, rt).statusCode());
+        assertEquals(204, request("POST", "/logout", null, "http://localhost:3000", null, null).statusCode());
+        assertEquals(204, request("POST", "/logout", null, "http://localhost:3000", null, "fitdining_rt=invalid").statusCode());
+        assertEquals(200, request("POST", "/login", "{\"email\":\"SIGNUP@example.com\",\"password\":\"password123\"}", "http://localhost:3000", null, null).statusCode());
+    }
     @DynamicPropertySource static void properties(DynamicPropertyRegistry registry) throws Exception {
         migrate();
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
@@ -26,8 +61,9 @@ class ApiApplicationTests extends PostgresTestSupport {
         registry.add("AUTH_COOKIE_SECURE", () -> "false");
         registry.add("place.mock.enabled", () -> "true");
         registry.add("review.mock.enabled", () -> "true");
-        registry.add("AUTH_DEMO_USERNAME", () -> "demo");
-        registry.add("AUTH_DEMO_PASSWORD", () -> "example-test-password");
+        registry.add("AUTH_DEMO_EMAIL", () -> "demo@example.com");
+        registry.add("AUTH_DEMO_NICKNAME", () -> "demo");
+        registry.add("AUTH_DEMO_PASSWORD", () -> "example-test-password1");
     }
     HttpResponse<String> request(String method, String path, String body, String origin, String token, String cookie) throws Exception {
         var builder = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/auth" + path));
@@ -39,7 +75,7 @@ class ApiApplicationTests extends PostgresTestSupport {
         return client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
     }
     @Test @org.junit.jupiter.api.DisplayName("인증_쿠키 회전과 재사용_RT 폐기 후 AT 유지") void auth_cookieRotationAndReplay_revokesRefreshButKeepsAccess() throws Exception {
-        String body = "{\"username\":\"demo\",\"password\":\"example-test-password\"}";
+        String body = "{\"email\":\"demo@example.com\",\"password\":\"example-test-password1\"}";
         assertEquals(403, request("POST", "/login", body, null, null, null).statusCode());
         assertEquals(403, request("POST", "/login", body, "https://untrusted.example", null, null).statusCode());
         var missing = request("GET", "/me", null, null, null, null);
@@ -65,7 +101,7 @@ class ApiApplicationTests extends PostgresTestSupport {
         assertEquals(200, request("GET", "/protected", null, null, newAt, null).statusCode());
         var again = request("POST", "/login", body, "http://localhost:3000", null, null);
         String freshAt = mapper.readTree(again.body()).get("accessToken").asString();
-        assertEquals(204, request("POST", "/logout", null, "http://localhost:3000", freshAt, null).statusCode());
+        assertEquals(204, request("POST", "/logout", null, "http://localhost:3000", null, again.headers().firstValue("set-cookie").orElseThrow().split(";", 2)[0]).statusCode());
         assertEquals(200, request("GET", "/me", null, null, freshAt, null).statusCode());
     }
     @Test @org.junit.jupiter.api.DisplayName("공개 API_인증 활성화_토큰 없이 장소 리뷰 처리")

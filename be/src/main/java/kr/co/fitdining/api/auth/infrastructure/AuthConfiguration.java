@@ -39,14 +39,14 @@ public class AuthConfiguration {
     }
     @Bean ApplicationRunner seedDemoUser(AuthSettings settings, PasswordHasher passwords, AuthTransactions transactions) {
         return args -> {
-            if (settings.demoUsername() == null) return;
+            if (settings.demoEmail() == null) return;
             String hash = passwords.hash(settings.demoPassword());
             try {
-                transactions.seedUser(settings.demoUsername(), hash);
+                transactions.seedUser(settings.demoEmail(), settings.demoNickname(), hash);
             } catch (DataIntegrityViolationException conflict) {
-                // Another web instance may have inserted the same unique username during startup.
+                // Another web instance may have inserted the same unique email during startup.
                 // Verify that the expected account exists; unrelated constraint failures must still fail startup.
-                if (!transactions.demoUserExists(settings.demoUsername())) throw conflict;
+                if (!transactions.demoUserExists(settings.demoEmail())) throw conflict;
             }
         };
     }

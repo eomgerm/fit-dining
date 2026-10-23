@@ -14,9 +14,9 @@ export function BottomSheet({ title, children, ...props }: BottomSheetProps) {
   return (
     <Drawer.Root {...props}>
       <Drawer.Portal>
-        <Drawer.Backdrop className="fixed inset-0 bg-scrim transition-opacity duration-320 ease-enter data-ending-style:opacity-0 data-ending-style:duration-220 data-ending-style:ease-exit data-starting-style:opacity-0 data-swiping:duration-0" />
+        <Drawer.Backdrop className="fixed inset-0 bg-scrim transition-opacity duration-320 ease-enter data-ending-style:opacity-0 data-ending-style:duration-220 data-ending-style:ease-exit data-starting-style:opacity-0 data-swiping:duration-0 motion-reduce:duration-120 motion-reduce:data-ending-style:duration-120" />
         <Drawer.Viewport className="fixed inset-0 flex items-end">
-          <Drawer.Popup className="flex max-h-4/5 w-full translate-y-(--drawer-swipe-movement-y) flex-col rounded-t-xl bg-surface px-5 pb-5 shadow-sheet transition-transform duration-320 ease-enter outline-none data-ending-style:translate-y-full data-ending-style:duration-220 data-ending-style:ease-exit data-starting-style:translate-y-full data-swiping:duration-0 data-swiping:select-none motion-reduce:transition-opacity motion-reduce:data-ending-style:translate-y-0 motion-reduce:data-ending-style:opacity-0 motion-reduce:data-starting-style:translate-y-0 motion-reduce:data-starting-style:opacity-0">
+          <Drawer.Popup className="flex max-h-4/5 w-full translate-y-(--drawer-swipe-movement-y) flex-col rounded-t-xl bg-surface px-5 pb-5 shadow-sheet transition-transform duration-320 ease-enter outline-none data-ending-style:translate-y-full data-ending-style:duration-220 data-ending-style:ease-exit data-starting-style:translate-y-full data-swiping:duration-0 data-swiping:select-none motion-reduce:transition-opacity motion-reduce:duration-120 motion-reduce:data-ending-style:translate-y-0 motion-reduce:data-ending-style:opacity-0 motion-reduce:data-ending-style:duration-120 motion-reduce:data-starting-style:translate-y-0 motion-reduce:data-starting-style:opacity-0">
             <div className="mx-auto mt-2 h-1 w-9 shrink-0 rounded-full bg-line-strong" />
             <Drawer.Content className="mt-3 flex min-h-0 flex-col overflow-y-auto overscroll-contain">
               <Drawer.Title className="text-title-lg text-ink">

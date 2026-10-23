@@ -2,7 +2,7 @@
 
 export type AuthSession = {
   accessToken: string;
-  username: string;
+  nickname: string;
   sessionId: string;
   accessExpiresAt: number;
   sessionExpiresAt: number;
@@ -74,12 +74,34 @@ async function send<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
   return body as T;
 }
-export async function login(username: string, password: string) {
+export async function login(email: string, password: string) {
   return browserLock(async () => {
     const next = await send<AuthSession>("/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
+    });
+    update(next);
+    channel?.postMessage("session-changed");
+    return next;
+  });
+}
+export type SignupRequest = {
+  email: string;
+  password: string;
+  nickname: string;
+  agreements: { ageOver14: boolean; terms: boolean; privacy: boolean };
+};
+export async function signup(body: SignupRequest) {
+  return browserLock(async () => {
+    const next = await send<AuthSession>("/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...body,
+        email: body.email.trim().toLowerCase(),
+        nickname: body.nickname.trim(),
+      }),
     });
     update(next);
     channel?.postMessage("session-changed");
@@ -135,15 +157,8 @@ export async function authenticated<T>(
 export async function logout() {
   return browserLock(async () => {
     try {
-      // Read the current session inside the same lock that owns the RT cookie.
-      let current = session;
-      if (!current || current.accessExpiresAt <= Date.now() / 1000) {
-        current = await send<AuthSession>("/refresh", { method: "POST" });
-        update(current);
-      }
       await send<void>("/logout", {
         method: "POST",
-        headers: { Authorization: `Bearer ${current.accessToken}` },
       });
       update(null);
       channel?.postMessage("session-changed");

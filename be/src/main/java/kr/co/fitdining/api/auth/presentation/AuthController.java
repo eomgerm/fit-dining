@@ -37,35 +37,52 @@ public class AuthController {
         this.auth = auth; this.secure = secure; this.clock = clock;
     }
     /**
-     * @param username required account name, at most 100 characters
+     * @param email required email, at most 254 characters
      * @param password required password; UTF-8 byte limit is validated by the service
      */
-    public record LoginRequest(@NotBlank @Size(max = 100) String username, @NotEmpty String password) {}
-    public record TokenResponse(String accessToken, String username, String sessionId, long accessExpiresAt, long sessionExpiresAt) {}
+    public record LoginRequest(@NotBlank @Size(max = 254) String email, @NotEmpty String password) {
+        public LoginRequest {
+            email = email == null ? null : kr.co.fitdining.api.auth.application.AuthService.normalizeEmail(email);
+        }
+    }
+    /**
+     * @param accessToken signed AT
+     * @param nickname current public name
+     * @param sessionId refresh family identifier
+     * @param accessExpiresAt AT expiry in epoch seconds
+     * @param sessionExpiresAt absolute family expiry in epoch seconds
+     */
+    public record TokenResponse(String accessToken, String nickname, String sessionId, long accessExpiresAt, long sessionExpiresAt) {}
     @PostMapping("/login")
     public TokenResponse login(@Valid @RequestBody LoginRequest body, HttpServletRequest request, HttpServletResponse response) {
-        return issued(auth.login(body.username(), body.password(), request.getRemoteAddr()), response);
+        return issued(auth.login(body.email(), body.password(), request.getRemoteAddr()), response);
+    }
+    @PostMapping("/signup")
+    public ResponseEntity<TokenResponse> signup(@Valid @RequestBody SignupRequest body,
+            HttpServletRequest request, HttpServletResponse response) {
+        return ResponseEntity.status(201).body(issued(auth.signup(body.email(), body.password(),
+                body.nickname(), request.getRemoteAddr()), response));
     }
     @PostMapping("/refresh")
     public TokenResponse refresh(@CookieValue(name = COOKIE, required = false) String token, HttpServletResponse response) {
         return issued(auth.refresh(token), response);
     }
     @PostMapping("/logout")
-    public ResponseEntity<Void> logout(@RequestAttribute("auth.identity") Identity identity, HttpServletResponse response) {
-        auth.logout(identity); clearCookie(response, secure);
+    public ResponseEntity<Void> logout(@CookieValue(name = COOKIE, required = false) String token, HttpServletResponse response) {
+        auth.logout(token); clearCookie(response, secure);
         return ResponseEntity.noContent().build();
     }
     @GetMapping("/me")
-    public Identity me(@RequestAttribute("auth.identity") Identity identity) { return identity; }
+    public AuthUseCases.Profile me(@RequestAttribute("auth.identity") Identity identity) { return auth.me(identity.userId()); }
     @GetMapping("/protected")
     public Map<String, String> protectedResource(@RequestAttribute("auth.identity") Identity identity) {
-        return Map.of("message", "인증에 성공했습니다.", "username", identity.username());
+        return Map.of("message", "인증에 성공했습니다.", "userId", identity.userId());
     }
     private TokenResponse issued(Issued issued, HttpServletResponse response) {
         Identity identity = issued.identity();
         response.addHeader(HttpHeaders.SET_COOKIE, cookie(issued.refreshToken(), secure,
                 Math.max(0, identity.sessionExpiresAt() - clock.instant().getEpochSecond())).toString());
-        return new TokenResponse(issued.accessToken(), identity.username(), identity.sessionId(),
+        return new TokenResponse(issued.accessToken(), identity.nickname(), identity.sessionId(),
                 identity.accessExpiresAt(), identity.sessionExpiresAt());
     }
     static ResponseCookie cookie(String value, boolean secure, long age) {

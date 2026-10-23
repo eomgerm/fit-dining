@@ -23,13 +23,13 @@ public class AuthService implements AuthUseCases {
     private final String authDummyHash;
 
     @Override
-    public Issued login(String username, String password, String address) {
-        if (username == null || username.isBlank() || username.length() > 100 || password == null
+    public Issued login(String email, String password, String address) {
+        if (email == null || normalizeEmail(email).isBlank() || normalizeEmail(email).length() > 254 || password == null
                 || password.isEmpty() || password.getBytes(StandardCharsets.UTF_8).length > 72) {
             throw new AuthFailure("입력 형식을 확인해주세요.", 400);
         }
-        if (!transactions.recordAttempt(address)) throw new AuthFailure("잠시 후 다시 시도해주세요.", 429);
-        AuthUser user = users.findByUsername(username).orElse(null);
+        if (!transactions.recordAttempt(address, "login")) throw new AuthFailure("잠시 후 다시 시도해주세요.", 429);
+        AuthUser user = users.findByEmail(normalizeEmail(email)).orElse(null);
         boolean matches = passwords.matches(password, user == null ? authDummyHash : user.getPasswordHash());
         if (user == null || !matches) throw new AuthFailure("인증을 확인해주세요.");
         return transactions.login(user);
@@ -50,10 +50,38 @@ public class AuthService implements AuthUseCases {
     @Override
     public Identity authenticate(String value) {
         TokenCodec.Claims claims = codec.decode(value, "access");
-        return new Identity(claims.userId(), claims.username(), claims.sessionId(),
-                claims.expiresAt(), claims.sessionExpiresAt());
+        return new Identity(claims.userId(), null, null, claims.expiresAt(), 0);
     }
 
     @Override
-    public void logout(Identity identity) { transactions.logout(identity); }
+    public void logout(String value) {
+        TokenCodec.Claims claims;
+        try { claims = codec.decode(value, "refresh"); }
+        catch (AuthFailure invalid) { return; }
+        transactions.logout(claims);
+    }
+
+    @Override
+    public Profile me(String userId) {
+        AuthUser user = users.findById(userId).orElseThrow(() -> new AuthFailure("인증을 확인해주세요."));
+        return new Profile(user.getNickname(), user.getEmail());
+    }
+
+    @Override
+    public Issued signup(String email, String password, String nickname, String address) {
+        if (!transactions.recordAttempt(address, "signup")) throw new AuthFailure("잠시 후 다시 시도해주세요.", 429);
+        String normalized = normalizeEmail(email);
+        String name = kr.co.fitdining.api.auth.domain.AuthText.strip(nickname);
+        if (users.findByEmail(normalized).isPresent()) throw new kr.co.fitdining.api.auth.domain.SignupConflict("email");
+        if (users.existsByNickname(name)) throw new kr.co.fitdining.api.auth.domain.SignupConflict("nickname");
+        String hash = passwords.hash(password);
+        try { return transactions.signup(normalized, name, hash); }
+        catch (org.springframework.dao.DataIntegrityViolationException conflict) {
+            if (users.findByEmail(normalized).isPresent()) throw new kr.co.fitdining.api.auth.domain.SignupConflict("email");
+            if (users.existsByNickname(name)) throw new kr.co.fitdining.api.auth.domain.SignupConflict("nickname");
+            throw conflict;
+        }
+    }
+
+    public static String normalizeEmail(String email) { return kr.co.fitdining.api.auth.domain.AuthText.strip(email).toLowerCase(java.util.Locale.ROOT); }
 }

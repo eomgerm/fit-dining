@@ -24,6 +24,74 @@ class AuthHttpTests {
     @Autowired MockMvc mvc;
     @MockitoBean AuthUseCases auth;
 
+    @Test @DisplayName("가입_규칙 위반_필드별 400 오류")
+    void signup_invalidFields_returnsFieldErrors() throws Exception {
+        mvc.perform(post("/api/auth/signup").header("Origin", "http://localhost:3000")
+                .contentType("application/json").content("""
+                    {"email":"invalid","password":"short","nickname":"a",
+                     "agreements":{"ageOver14":true,"terms":true,"privacy":true}}
+                    """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[*].field", org.hamcrest.Matchers.containsInAnyOrder("email", "password", "nickname")));
+        verifyNoInteractions(auth);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {
+        "null", "{}", "{\"ageOver14\":false,\"terms\":true,\"privacy\":true}",
+        "{\"ageOver14\":true,\"terms\":false,\"privacy\":true}",
+        "{\"ageOver14\":true,\"terms\":true,\"privacy\":false}"})
+    @DisplayName("가입_약관 누락과 미동의_400 오류")
+    void signup_missingAgreement_returnsBadRequest(String agreements) throws Exception {
+        mvc.perform(post("/api/auth/signup").header("Origin", "http://localhost:3000")
+                .contentType("application/json").content("{\"email\":\"new@example.com\",\"password\":\"password1\",\"nickname\":\"new\",\"agreements\":" + agreements + "}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.errors").isArray());
+        verifyNoInteractions(auth);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"en-US", "ko-KR", "fr-FR"})
+    @DisplayName("가입_약관 누락과 미동의_로캘과 무관한 고정 오류 문구")
+    void signup_invalidAgreements_returnsStableReasons(String locale) throws Exception {
+        mvc.perform(post("/api/auth/signup").header("Origin", "http://localhost:3000").header("Accept-Language", locale)
+                .contentType("application/json").content("""
+                    {"email":"new@example.com","password":"password1","nickname":"new",
+                     "agreements":{"ageOver14":false,"terms":null}}
+                    """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[*].reason", org.hamcrest.Matchers.containsInAnyOrder(
+                        "만 14세 이상 확인에 동의해 주세요.", "서비스 이용약관에 동의해 주세요.", "개인정보 수집·이용에 동의해 주세요.")));
+        verifyNoInteractions(auth);
+    }
+
+    @Test @DisplayName("가입_약관 객체 누락_고정 오류 문구")
+    void signup_missingAgreementObject_returnsStableReason() throws Exception {
+        mvc.perform(post("/api/auth/signup").header("Origin", "http://localhost:3000").header("Accept-Language", "en-US")
+                .contentType("application/json").content("""
+                    {"email":"new@example.com","password":"password1","nickname":"new"}
+                    """))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.errors[0].reason").value("필수 약관에 모두 동의해 주세요."));
+        verifyNoInteractions(auth);
+    }
+
+    @Test @DisplayName("가입_시도 제한_429와 Retry-After")
+    void signup_rateLimited_returnsRetryAfter() throws Exception {
+        when(auth.signup(any(), any(), any(), any())).thenThrow(new AuthFailure("limited", 429));
+        mvc.perform(post("/api/auth/signup").header("Origin", "http://localhost:3000")
+                .contentType("application/json").content("""
+                    {"email":"new@example.com","password":"password1","nickname":"new",
+                     "agreements":{"ageOver14":true,"terms":true,"privacy":true}}
+                    """))
+                .andExpect(status().isTooManyRequests()).andExpect(header().string("Retry-After", "900"));
+    }
+
+    @Test @DisplayName("로그아웃_다른 Origin_쿠키 인증 전에 403")
+    void logout_untrustedOrigin_returnsForbidden() throws Exception {
+        mvc.perform(post("/api/auth/logout").header("Origin", "http://evil.example"))
+                .andExpect(status().isForbidden());
+        verifyNoInteractions(auth);
+    }
+
     @Test @DisplayName("인터셉터_AT 만료_401 type 전달")
     void authenticate_expiredAccess_returnsExpiryType() throws Exception {
         when(auth.authenticate("expired")).thenThrow(AuthFailure.accessExpired());
@@ -43,7 +111,7 @@ class AuthHttpTests {
     @Test @DisplayName("로그인_시도 제한_Retry-After 유지")
     void login_rateLimited_returnsRetryAfter() throws Exception {
         when(auth.login(any(), any(), any())).thenThrow(new AuthFailure("internal reason",429));
-        mvc.perform(post("/api/auth/login").header("Origin", "http://localhost:3000").contentType("application/json").content("{\"username\":\"demo\",\"password\":\"test-password\"}"))
+        mvc.perform(post("/api/auth/login").header("Origin", "http://localhost:3000").contentType("application/json").content("{\"email\":\"demo@example.com\",\"password\":\"test-password\"}"))
                 .andExpect(status().isTooManyRequests()).andExpect(header().string("Retry-After", "900"));
     }
     @Test @DisplayName("인터셉터_DB 장애_503 일반 문구")
@@ -59,7 +127,7 @@ class AuthHttpTests {
     }
     @Test @DisplayName("인터셉터_다른 Origin_403 일반 문구")
     void login_untrustedOrigin_returnsForbidden() throws Exception {
-        mvc.perform(post("/api/auth/login").header("Origin", "https://untrusted.example").contentType("application/json").content("{\"username\":\"demo\",\"password\":\"test-password\"}"))
+        mvc.perform(post("/api/auth/login").header("Origin", "https://untrusted.example").contentType("application/json").content("{\"email\":\"demo@example.com\",\"password\":\"test-password\"}"))
                 .andExpect(status().isForbidden()).andExpect(content().contentTypeCompatibleWith("application/problem+json"));
         verifyNoInteractions(auth);
     }

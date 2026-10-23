@@ -27,7 +27,7 @@ public class AuthWebConfiguration implements WebMvcConfigurer {
     }
     @Override public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(new HandlerInterceptor() {
-            private final Set<String> protectedPaths = Set.of("/api/auth/logout", "/api/auth/me", "/api/auth/protected");
+            private final Set<String> protectedPaths = Set.of("/api/auth/me", "/api/auth/protected");
             @Override public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
                 if (!(handler instanceof HandlerMethod method)
                         || !AuthController.class.isAssignableFrom(method.getBeanType())) return true;

@@ -40,31 +40,26 @@ public final class NimbusTokenCodec implements TokenCodec {
     }
     @Override public String encode(Token token) {
         var claims = JwtClaimsSet.builder().issuer(ISSUER).audience(List.of(AUDIENCE))
-                .subject(token.userId()).id(token.jti()).claim("sid", token.sessionId())
-                .claim("username", token.username()).claim("family_exp", token.sessionExpiresAt())
+                .subject(token.userId())
                 .claim("token_type", token.type()).issuedAt(Instant.ofEpochSecond(token.createdAt()))
-                .expiresAt(Instant.ofEpochSecond(token.expiresAt())).build();
-        return encoder.encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims)).getTokenValue();
+                .expiresAt(Instant.ofEpochSecond(token.expiresAt()));
+        if ("refresh".equals(token.type())) claims.id(token.jti());
+        return encoder.encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims.build())).getTokenValue();
     }
     @Override public Claims decode(String value, String expectedType) {
         if (value == null || value.isBlank() || value.length() > 8192) throw invalid();
         try {
             Jwt jwt = decoder.decode(value);
-            String sid = jwt.getClaimAsString("sid");
             String type = jwt.getClaimAsString("token_type");
-            String username = jwt.getClaimAsString("username");
-            Number familyExpiry = jwt.getClaim("family_exp");
             long now = clock.instant().getEpochSecond();
-            if (blank(username) || familyExpiry == null || !expectedType.equals(type) || blank(jwt.getSubject()) || blank(jwt.getId()) || blank(sid)
+            if (!expectedType.equals(type) || blank(jwt.getSubject()) || ("refresh".equals(type) && blank(jwt.getId()))
                     || jwt.getIssuedAt() == null || jwt.getExpiresAt() == null
                     || jwt.getIssuedAt().getEpochSecond() > now
                     || !jwt.getExpiresAt().isAfter(jwt.getIssuedAt())
-                    || familyExpiry.longValue() < jwt.getExpiresAt().getEpochSecond()
                     || (jwt.getNotBefore() != null && jwt.getNotBefore().getEpochSecond() > now)) throw invalid();
             if (jwt.getExpiresAt().getEpochSecond() <= now)
                 throw expectedType.equals("access") ? AuthFailure.accessExpired() : new AuthFailure("토큰이 만료되었습니다.");
-            return new Claims(jwt.getSubject(), username, sid, jwt.getId(), type,
-                    jwt.getExpiresAt().getEpochSecond(), familyExpiry.longValue());
+            return new Claims(jwt.getSubject(), jwt.getId(), type, jwt.getExpiresAt().getEpochSecond());
         } catch (AuthFailure e) { throw e; }
         catch (RuntimeException e) { throw invalid(); }
     }

@@ -35,13 +35,22 @@ public class AuthExceptionHandler {
                 switch (failure.status()) {
                     case 400 -> "입력 형식을 확인해주세요.";
                     case 403 -> "허용되지 않은 요청 출처입니다.";
+                    case 409 -> "이미 사용 중인 계정 정보입니다.";
                     case 429 -> "잠시 후 다시 시도해주세요.";
                     default -> "인증을 확인해주세요.";
                 });
         if (failure.type() != null) problem.setType(failure.type());
         return response(problem);
     }
-    @ExceptionHandler({HttpMessageNotReadableException.class, MethodArgumentNotValidException.class})
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ProblemDetail> invalidFields(MethodArgumentNotValidException failure) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "입력 형식을 확인해주세요.");
+        problem.setProperty("errors", failure.getBindingResult().getFieldErrors().stream()
+                .map(error -> java.util.Map.of("field", error.getField(), "reason",
+                        error.getDefaultMessage() == null ? "입력 형식을 확인해 주세요." : error.getDefaultMessage())).toList());
+        return response(problem);
+    }
+    @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ProblemDetail> malformed() {
         return response(ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "입력 형식을 확인해주세요."));
     }

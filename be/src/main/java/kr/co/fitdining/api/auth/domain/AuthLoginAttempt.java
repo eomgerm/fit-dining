@@ -23,10 +23,13 @@ public class AuthLoginAttempt {
     @Column(nullable = false)
     private String address;
     @Column(nullable = false)
+    private String action;
+    @Column(nullable = false)
     private Instant createdAt;
 
-    public AuthLoginAttempt(String address, Instant createdAt) {
+    public AuthLoginAttempt(String address, String action, Instant createdAt) {
         this.address = address;
+        this.action = action;
         this.createdAt = createdAt;
     }
 }

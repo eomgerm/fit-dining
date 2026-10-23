@@ -17,16 +17,31 @@ import lombok.NoArgsConstructor;
 public class AuthUser {
     @Id
     private String id;
-    @Column(nullable = false, unique = true, length = 100)
-    private String username;
+    @Column(nullable = false, unique = true, length = 254)
+    private String email;
+    @Column(nullable = false, length = 15)
+    private String nickname;
+    @Column(nullable = false)
+    private Instant ageConfirmedAt;
+    @Column(nullable = false)
+    private Instant termsAgreedAt;
+    @Column(nullable = false)
+    private Instant privacyAgreedAt;
+    @Column(nullable = false)
+    private String termsVersion;
     @Column(nullable = false)
     private String passwordHash;
     @Column(nullable = false)
     private Instant createdAt;
 
-    public AuthUser(String id, String username, String passwordHash, Instant createdAt) {
+    public AuthUser(String id, String email, String nickname, String passwordHash, Instant createdAt, String termsVersion) {
         this.id = id;
-        this.username = username;
+        this.email = email;
+        this.nickname = nickname;
+        this.ageConfirmedAt = createdAt;
+        this.termsAgreedAt = createdAt;
+        this.privacyAgreedAt = createdAt;
+        this.termsVersion = termsVersion;
         this.passwordHash = passwordHash;
         this.createdAt = createdAt;
     }

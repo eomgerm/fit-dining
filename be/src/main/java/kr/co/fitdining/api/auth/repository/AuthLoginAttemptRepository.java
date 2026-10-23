@@ -12,7 +12,7 @@ public interface AuthLoginAttemptRepository extends JpaRepository<AuthLoginAttem
     @Query(value = "select 1 from pg_advisory_xact_lock(hashtextextended(:address, 0))", nativeQuery = true)
     Integer lockAddress(@Param("address") String address);
 
-    long countByAddressAndCreatedAtAfter(String address, Instant cutoff);
+    long countByAddressAndActionAndCreatedAtAfter(String address, String action, Instant cutoff);
 
     @Modifying
     @Query(value = "delete from auth_login_attempts where id in (select id from auth_login_attempts "

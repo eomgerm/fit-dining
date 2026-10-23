@@ -16,7 +16,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [busy, setBusy] = useState(true);
   const [message, setMessage] = useState("");
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [invalid, setInvalid] = useState(false);
@@ -51,7 +51,7 @@ export default function LoginPage() {
     setInvalid(false);
     setNotice("");
     try {
-      await login(String(data.get("username")), String(data.get("password")));
+      await login(String(data.get("email")), String(data.get("password")));
       form.reset();
       setPassword("");
       router.replace("/auth-demo");
@@ -92,22 +92,23 @@ export default function LoginPage() {
       </div>
       <form className="flex flex-col gap-3" onSubmit={submit} aria-busy={busy}>
         <TextField
-          label="이메일 또는 아이디"
-          id="username"
-          name="username"
-          placeholder="이메일 또는 아이디"
-          autoComplete="username"
+          label="이메일"
+          id="email"
+          name="email"
+          placeholder="이메일"
+          type="email"
+          autoComplete="email"
           autoCapitalize="none"
           spellCheck={false}
-          maxLength={100}
+          maxLength={254}
           required
           disabled={busy}
-          value={username}
+          value={email}
           invalid={invalid}
           aria-invalid={invalid}
           aria-describedby={invalid ? "login-error" : undefined}
           onChange={(event) => {
-            setUsername(event.target.value);
+            setEmail(event.target.value);
             setInvalid(false);
             setMessage("");
           }}
@@ -164,6 +165,11 @@ export default function LoginPage() {
           )}
           {busy ? "로그인 확인 중" : "로그인"}
         </Button>
+        <div className="flex justify-center">
+          <TextButton render={<Link href="/signup" />}>
+            이메일로 가입하기
+          </TextButton>
+        </div>
         <div className="flex justify-center">
           <TextButton
             type="button"

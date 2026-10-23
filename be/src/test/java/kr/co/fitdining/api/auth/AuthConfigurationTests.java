@@ -46,10 +46,16 @@ class AuthConfigurationTests {
         runner(valid()).run(context -> assertThat(context).hasNotFailed());
     }
     @Test @DisplayName("설정_데모 사용자만 지정_기동 거부") void startup_partialDemoCredentials_fails() {
-        var values=valid(); values.put("AUTH_DEMO_USERNAME", "demo"); runner(values).run(context -> assertThat(context).hasFailed());
+        var values=valid(); values.put("AUTH_DEMO_EMAIL", "demo"); runner(values).run(context -> assertThat(context).hasFailed());
     }
     @Test @DisplayName("설정_짧은 데모 비밀번호_기동 거부") void startup_shortDemoPassword_fails() {
-        var values=valid(); values.put("AUTH_DEMO_USERNAME", "demo"); values.put("AUTH_DEMO_PASSWORD", "short");
+        var values=valid(); values.put("AUTH_DEMO_EMAIL", "demo@example.com"); values.put("AUTH_DEMO_PASSWORD", "short");
+        values.put("AUTH_DEMO_NICKNAME", "demo");
         runner(values).run(context -> assertThat(context).hasFailed());
+    }
+    @Test @DisplayName("설정_정상 데모 계정 세 값_기동 허용") void startup_completeDemoAccount_succeeds() {
+        var values=valid(); values.put("AUTH_DEMO_EMAIL", "DEMO@example.com");
+        values.put("AUTH_DEMO_PASSWORD", "password123"); values.put("AUTH_DEMO_NICKNAME", "demo");
+        runner(values).run(context -> assertThat(context).hasNotFailed());
     }
 }
