@@ -48,6 +48,8 @@
 | `S3_SECRET_KEY` | app, local | O | 비밀 |
 | `S3_PATH_STYLE` | app | O | `true`. Garage는 path-style을 쓴다 |
 | `JWT_SECRET` | app | O | 비밀. 서명 방식은 BE 팀이 정한다 |
+| `AUTH_FRONTEND_ORIGIN` | app | O | 인증 API(`/api/auth/**`)의 POST가 우리 화면에서 온 것인지 가르는 기준 출처(CSRF 방어). 브라우저가 붙이는 `Origin` 헤더와 정확히 같아야 하므로 경로와 끝 `/` 없이 `https://호스트`만 쓴다. prod는 `https://<PROD_HOST>`, dev는 `https://<DEV_HOST>`이고 둘 다 443이라 포트를 붙이지 않는다. 환경마다 달라 기본값이 없고, 값이 형식에 맞지 않으면 BE가 기동을 거부한다(BE 계약 #8). 로컬 개발은 이 계약 밖이고 `be/.env`에서 `http://localhost:3000`을 쓴다 |
+| `AUTH_COOKIE_SECURE` | app | O | RT 쿠키의 `Secure` 속성 여부(`true` 또는 `false`). dev와 prod 서버는 Caddy 뒤 HTTPS라 둘 다 `true`다. 로컬(`http://localhost`)만 `false`다. 기본값이 없고 `true`·`false`가 아닌 값은 BE가 기동을 거부한다(BE 계약 #8, 쿠키는 #21) |
 | `MODAL_BASE_URL` | app | O | Modal 엔드포인트의 기준 URL. 환경별 앱이 다르다 |
 | `MODAL_KEY` | app | O | `Modal-Key` 헤더 값. 비밀 |
 | `MODAL_SECRET` | app | O | `Modal-Secret` 헤더 값. 비밀 |
