@@ -1,0 +1,78 @@
+package kr.co.fitdining.api.auth.presentation;
+
+import java.time.Clock;
+import java.time.Duration;
+import java.util.Map;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.Size;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestAttribute;
+import org.springframework.web.bind.annotation.CookieValue;
+import kr.co.fitdining.api.auth.ports.AuthUseCases;
+import kr.co.fitdining.api.auth.ports.AuthUseCases.Identity;
+import kr.co.fitdining.api.auth.ports.AuthUseCases.Issued;
+
+@RestController
+@ConditionalOnWebApplication
+@RequestMapping("/api/auth")
+public class AuthController {
+    public static final String COOKIE = "fitdining_rt";
+    private final AuthUseCases auth;
+    private final boolean secure;
+    private final Clock clock;
+    public AuthController(AuthUseCases auth, @Value("${auth.cookie-secure}") boolean secure, Clock clock) {
+        this.auth = auth; this.secure = secure; this.clock = clock;
+    }
+    /**
+     * @param username required account name, at most 100 characters
+     * @param password required password; UTF-8 byte limit is validated by the service
+     */
+    public record LoginRequest(@NotBlank @Size(max = 100) String username, @NotEmpty String password) {}
+    public record TokenResponse(String accessToken, String username, String sessionId, long accessExpiresAt, long sessionExpiresAt) {}
+    @PostMapping("/login")
+    public TokenResponse login(@Valid @RequestBody LoginRequest body, HttpServletRequest request, HttpServletResponse response) {
+        return issued(auth.login(body.username(), body.password(), request.getRemoteAddr()), response);
+    }
+    @PostMapping("/refresh")
+    public TokenResponse refresh(@CookieValue(name = COOKIE, required = false) String token, HttpServletResponse response) {
+        return issued(auth.refresh(token), response);
+    }
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logout(@RequestAttribute("auth.identity") Identity identity, HttpServletResponse response) {
+        auth.logout(identity); clearCookie(response, secure);
+        return ResponseEntity.noContent().build();
+    }
+    @GetMapping("/me")
+    public Identity me(@RequestAttribute("auth.identity") Identity identity) { return identity; }
+    @GetMapping("/protected")
+    public Map<String, String> protectedResource(@RequestAttribute("auth.identity") Identity identity) {
+        return Map.of("message", "인증에 성공했습니다.", "username", identity.username());
+    }
+    private TokenResponse issued(Issued issued, HttpServletResponse response) {
+        Identity identity = issued.identity();
+        response.addHeader(HttpHeaders.SET_COOKIE, cookie(issued.refreshToken(), secure,
+                Math.max(0, identity.sessionExpiresAt() - clock.instant().getEpochSecond())).toString());
+        return new TokenResponse(issued.accessToken(), identity.username(), identity.sessionId(),
+                identity.accessExpiresAt(), identity.sessionExpiresAt());
+    }
+    static ResponseCookie cookie(String value, boolean secure, long age) {
+        return ResponseCookie.from(COOKIE, value).httpOnly(true).secure(secure).sameSite("Strict")
+                .path("/api/auth").maxAge(Duration.ofSeconds(age)).build();
+    }
+    static void clearCookie(HttpServletResponse response, boolean secure) {
+        response.addHeader(HttpHeaders.SET_COOKIE, cookie("", secure, 0).toString());
+    }
+}

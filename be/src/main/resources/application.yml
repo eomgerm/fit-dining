@@ -10,6 +10,10 @@ spring:
   flyway:
     # 웹 앱은 DML 전용 계정으로 접속하므로 마이그레이션을 실행하지 않는다.
     enabled: false
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
   jackson:
     default-property-inclusion: non_null
     deserialization:
@@ -51,3 +55,14 @@ place:
 review:
   mock:
     enabled: ${REVIEW_MOCK_ENABLED:false}
+
+auth:
+  jwt-secret: ${JWT_SECRET}
+  frontend-origin: ${AUTH_FRONTEND_ORIGIN}
+  cookie-secure: ${AUTH_COOKIE_SECURE}
+  cleanup:
+    interval: PT10M
+    token-retention: P7D
+    event-retention: P90D
+    attempt-retention: PT15M
+    batch-size: 1000
