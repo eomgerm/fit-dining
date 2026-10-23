@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 
 class EnvContractValidatorTest {
@@ -198,15 +199,17 @@ class EnvContractValidatorTest {
 	@Test
 	@DisplayName("기동_계약을어기면_DB에접속하기전에기동을거부한다")
 	void run_contractViolated_failsBeforeContext() {
-		// 등록(spring.factories)까지 확인한다. 존재하지 않는 호스트라 검사를 지나치면 DB 접속에서 다른 예외가 난다.
+		// 등록(spring.factories)까지 확인한다. 값은 명령줄 인자로 넘긴다. CI처럼 OS 환경변수에 SPRING_DATASOURCE_URL이 있으면
+		// 우선순위가 낮은 기본 속성(properties())은 가려진다. 검사를 지나치더라도 포트를 잡지 않게 웹 서버는 끈다.
 		SpringApplicationBuilder app = new SpringApplicationBuilder(ApiApplication.class)
-				.properties(
-						"APP_ENV=dev",
-						"SPRING_DATASOURCE_URL=jdbc:postgresql://no-such-host:5432/fit_prod",
-						"SPRING_DATASOURCE_USERNAME=fit_dev_app",
-						"SPRING_DATASOURCE_PASSWORD=secret-value");
+				.web(WebApplicationType.NONE);
+		String[] args = {
+				"--APP_ENV=dev",
+				"--SPRING_DATASOURCE_URL=jdbc:postgresql://no-such-host:5432/fit_prod",
+				"--SPRING_DATASOURCE_USERNAME=fit_dev_app",
+				"--SPRING_DATASOURCE_PASSWORD=secret-value"};
 
-		assertThatThrownBy(() -> app.run())
+		assertThatThrownBy(() -> app.run(args))
 				.isInstanceOf(IllegalStateException.class)
 				.hasMessageContaining("환경변수 계약")
 				.hasMessageContaining("fit_prod");
