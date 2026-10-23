@@ -10,6 +10,7 @@ import { EmptyState } from "@/shared/ui/display/empty-state";
 import { Note } from "@/shared/ui/display/note";
 import { Tag } from "@/shared/ui/display/tag";
 import { ChevronDownIcon } from "@/shared/ui/icon/icons/chevron-down";
+import { ChevronUpIcon } from "@/shared/ui/icon/icons/chevron-up";
 import { MapIcon } from "@/shared/ui/icon/icons/map";
 import { PlusIcon } from "@/shared/ui/icon/icons/plus";
 import { RequestHistoryIcon } from "@/shared/ui/icon/icons/request-history";
@@ -22,8 +23,10 @@ import type {
   PlaceSearchResponse,
 } from "../model/place-types";
 import { PlaceCard, PlaceCardSkeleton } from "./place-card";
+import { SearchSteps } from "./search-steps";
 
-export type PanelState = "middle" | "full";
+// 중간(5-04), 전체(5-05), 요청 기록 펼침(와이어프레임 RequestHistory)
+export type PanelState = "middle" | "full" | "history";
 
 // 손잡이를 이만큼 끌면 상태를 바꾼다
 const DRAG_THRESHOLD_PX = 30;
@@ -48,7 +51,10 @@ type ResultPanelProps = {
   loadMoreFailed: boolean;
   onCardPress: (card: PlaceCardData) => void;
   onNewSearch: () => void;
-  onOpenHistory: () => void;
+  // 요청 기록을 펼치거나 접는다
+  onToggleHistory: () => void;
+  // 요청 기록을 펼쳤을 때 결과 목록 자리에 그린다
+  history: ReactNode;
   // 오류 문구 한 줄
   message?: ReactNode;
   // 패널 아래 고정되는 후속 입력창
@@ -75,29 +81,34 @@ export function ResultPanel({
   loadMoreFailed,
   onCardPress,
   onNewSearch,
-  onOpenHistory,
+  onToggleHistory,
+  history,
   message,
   footer,
   edge,
 }: ResultPanelProps) {
   const dragStartY = useRef<number | undefined>(undefined);
   const full = state === "full";
+  const historyOpen = state === "history";
 
   return (
     <section
       aria-label="추천 결과"
       className={cn(
         "absolute inset-x-0 bottom-0 flex flex-col bg-surface shadow-sheet transition-all duration-320 ease-enter",
-        full ? "h-full" : "h-3/5 rounded-t-xl",
+        full && "h-full",
+        state === "middle" && "h-3/5 rounded-t-xl",
+        // 지도 위 버튼(저장한 장소, 내 정보) 아래까지 펼친다
+        historyOpen && "top-30 rounded-t-xl",
       )}
     >
-      {!full && edge && (
+      {state === "middle" && edge && (
         <div className="absolute right-4 bottom-full mb-3">{edge}</div>
       )}
       <button
         type="button"
-        aria-label={full ? "패널 줄이기" : "패널 펼치기"}
-        onClick={() => onStateChange(full ? "middle" : "full")}
+        aria-label={state === "middle" ? "패널 펼치기" : "패널 줄이기"}
+        onClick={() => onStateChange(state === "middle" ? "full" : "middle")}
         onPointerDown={(event) => (dragStartY.current = event.clientY)}
         onPointerUp={(event) => {
           if (dragStartY.current === undefined) return;
@@ -114,12 +125,19 @@ export function ResultPanel({
       <div className="flex shrink-0 items-center justify-between px-4">
         <button
           type="button"
-          onClick={onOpenHistory}
+          aria-expanded={historyOpen}
+          onClick={onToggleHistory}
           className="-ml-1 flex h-11 items-center gap-1.5 px-1 text-label-md text-ink"
         >
-          <RequestHistoryIcon size="md" className="text-icon" />
+          {!historyOpen && (
+            <RequestHistoryIcon size="md" className="text-icon" />
+          )}
           요청 기록
-          <ChevronDownIcon size="sm" className="text-icon" />
+          {historyOpen ? (
+            <ChevronUpIcon size="sm" className="text-icon" />
+          ) : (
+            <ChevronDownIcon size="sm" className="text-icon" />
+          )}
         </button>
         <button
           type="button"
@@ -130,35 +148,39 @@ export function ResultPanel({
         </button>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-4">
-        {!searching && firstPage?.changeSummary && (
-          <Badge icon={<SparkleIcon size="sm" />} className="self-start">
-            {firstPage.changeSummary}
-          </Badge>
-        )}
-        <h2 className="text-title-md text-ink">“{sentence}”</h2>
-        {!searching && chips.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {chips.map((chip, index) => (
-              <Tag key={index}>추가 조건 · {chip}</Tag>
-            ))}
-          </div>
-        )}
-        {message}
-        <Results
-          searching={searching}
-          firstPage={firstPage}
-          cards={cards}
-          selectedId={selectedId}
-          here={here}
-          locating={locating}
-          unfilteredNearby={unfilteredNearby}
-          hasNextPage={hasNextPage}
-          onLoadMore={onLoadMore}
-          loadMoreFailed={loadMoreFailed}
-          onCardPress={onCardPress}
-        />
-      </div>
+      {historyOpen ? (
+        <div className="min-h-0 flex-1 overflow-y-auto pb-4">{history}</div>
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-4">
+          {!searching && firstPage?.changeSummary && (
+            <Badge icon={<SparkleIcon size="sm" />} className="self-start">
+              {firstPage.changeSummary}
+            </Badge>
+          )}
+          <h2 className="text-title-md text-ink">“{sentence}”</h2>
+          {!searching && chips.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {chips.map((chip, index) => (
+                <Tag key={index}>추가 조건 · {chip}</Tag>
+              ))}
+            </div>
+          )}
+          {message}
+          <PanelResults
+            searching={searching}
+            firstPage={firstPage}
+            cards={cards}
+            selectedId={selectedId}
+            here={here}
+            locating={locating}
+            unfilteredNearby={unfilteredNearby}
+            hasNextPage={hasNextPage}
+            onLoadMore={onLoadMore}
+            loadMoreFailed={loadMoreFailed}
+            onCardPress={onCardPress}
+          />
+        </div>
+      )}
 
       {full && (
         <Button
@@ -176,7 +198,8 @@ export function ResultPanel({
   );
 }
 
-function Results({
+// 결과 목록. 과거 결과 화면도 다음 페이지 없이 같은 목록을 쓴다
+export function PanelResults({
   searching,
   firstPage,
   cards,
@@ -205,7 +228,7 @@ function Results({
   if (searching) {
     return (
       <div aria-busy className="flex flex-col gap-3">
-        <p className="text-body-sm text-ink-muted">주변 장소를 찾는 중</p>
+        <SearchSteps />
         <PlaceCardSkeleton />
         <PlaceCardSkeleton />
         <PlaceCardSkeleton />

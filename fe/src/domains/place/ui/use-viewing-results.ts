@@ -19,16 +19,32 @@ const NO_ENTRY: HistoryEntry = {
   at: 0,
 };
 
-// 지금 보는 요청의 결과. 첫 페이지는 기록에 넣기 전에 캐시에 받아 두었으므로 여기서는 캐시를 읽고,
-// 다음 페이지만 새로 받는다. 근처 응답이면 위치를 얻은 뒤 반경으로 거른다
+// 지금 보는 요청의 결과. 다음 페이지를 이어 받는다
 export function useViewingResults() {
-  const { entries, viewingId, location } = useSearchStore();
-  const toast = useToast();
+  const { entries, viewingId } = useSearchStore();
   const viewing = entries.find(({ id }) => id === viewingId);
-  const entry = viewing ?? NO_ENTRY;
+  return { viewing, ...useEntryResults(viewing, { loadMore: true }) };
+}
+
+// 과거 결과 화면의 결과. 그때 받아 둔 페이지만 보이고 더 부르지 않는다(spec 57번)
+export function usePastResults() {
+  const { entries, pastId } = useSearchStore();
+  const past = entries.find(({ id }) => id === pastId);
+  return { past, ...useEntryResults(past, { loadMore: false }) };
+}
+
+// 한 요청 기록 항목의 결과. 첫 페이지는 기록에 넣기 전에(다시 연 thread면 저장한 응답으로) 캐시에 받아 두었으므로
+// 여기서는 캐시를 읽고, loadMore일 때만 다음 페이지를 새로 받는다. 근처 응답이면 위치를 얻은 뒤 반경으로 거른다
+function useEntryResults(
+  target: HistoryEntry | undefined,
+  { loadMore: canLoadMore }: { loadMore: boolean },
+) {
+  const { location } = useSearchStore();
+  const toast = useToast();
+  const entry = target ?? NO_ENTRY;
   const query = useInfiniteQuery({
     ...placeQueries.search(entry.id, entry.request),
-    enabled: Boolean(viewing),
+    enabled: Boolean(target),
   });
 
   const pages = query.data?.pages ?? [];
@@ -39,7 +55,7 @@ export function useViewingResults() {
   // 다음 페이지의 카드도 상세 화면이 쓸 수 있게 둔다. 받은 그때만 기록해야
   // 예전 요청을 다시 볼 때 더 최근에 받은 카드를 덮어쓰지 않는다
   function loadMore() {
-    if (query.isFetchingNextPage) return;
+    if (!canLoadMore || query.isFetchingNextPage) return;
     const pageCount = pages.length;
     query.fetchNextPage().then(({ data }) => {
       if (data && data.pages.length > pageCount) {
@@ -67,14 +83,13 @@ export function useViewingResults() {
       : allCards;
 
   return {
-    viewing,
     firstPage,
     // 지금 보이는 카드. 순위 번호는 이 목록의 순서다
     cards: locating ? [] : cards,
     locating,
     // 근처 응답인데 위치를 얻지 못해 거르지 않고 보여 줄 때
     unfilteredNearby: nearby && location.status === "failed",
-    hasNextPage: query.hasNextPage,
+    hasNextPage: canLoadMore && query.hasNextPage,
     loadMore,
     // 다음 페이지를 받지 못했을 때. 다시 누를 때까지 더 부르지 않는다
     loadMoreFailed: query.isFetchNextPageError,

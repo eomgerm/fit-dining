@@ -2,6 +2,7 @@
 
 import { useState, type Ref } from "react";
 
+import { cn } from "@/shared/lib/cn";
 import { IconButton } from "@/shared/ui/button/icon-button";
 import { ArrowUpIcon } from "@/shared/ui/icon/icons/arrow-up";
 import { HistoryIcon } from "@/shared/ui/icon/icons/history";
@@ -35,7 +36,11 @@ export function FollowUpInput({
         onSubmit(input);
         setInput("");
       }}
-      className="flex h-13 items-center gap-1 rounded-md border border-line-strong bg-surface pr-1 pl-4"
+      // 검색 중에는 흐리게 막고 최근 검색 버튼을 숨긴다(와이어프레임 Loading)
+      className={cn(
+        "flex h-13 items-center gap-1 rounded-md border border-line-strong bg-surface pr-1 pl-4",
+        disabled && "opacity-60",
+      )}
     >
       <input
         ref={inputRef}
@@ -44,12 +49,15 @@ export function FollowUpInput({
         maxLength={QUERY_MAX_LENGTH}
         enterKeyHint="send"
         value={input}
+        disabled={disabled}
         onChange={(event) => setInput(event.target.value)}
         className="min-w-0 flex-1 bg-transparent text-body-md text-ink outline-none placeholder:text-ink-subtle"
       />
-      <IconButton label="최근 검색" onClick={onOpenRecent}>
-        <HistoryIcon size="md" className="text-icon" />
-      </IconButton>
+      {!disabled && (
+        <IconButton label="최근 검색" onClick={onOpenRecent}>
+          <HistoryIcon size="md" className="text-icon" />
+        </IconButton>
+      )}
       <button
         type="submit"
         aria-label="보내기"

@@ -201,7 +201,7 @@ describe("createSearchStore", () => {
     expect(store.getSnapshot().latestCards.get(2)).toEqual(card(2));
   });
 
-  it("'새 검색'은 지금 보는 요청, 선택, 지역 고정을 비우고 기록은 남긴다", () => {
+  it("첫 새 검색이 thread를 열고, 그 뒤의 요청은 같은 thread에 쌓인다", () => {
     const { store } = setup();
     store.addEntry({
       id: "a",
@@ -209,17 +209,119 @@ describe("createSearchStore", () => {
       request: { query: "역삼 카페" },
       response: response(),
     });
+    const { threadId } = store.getSnapshot();
+    store.addEntry({
+      id: "b",
+      kind: "followUp",
+      baseId: "a",
+      request: { query: "더 조용하게", previousConditions: {} },
+      response: response(),
+    });
+
+    expect(threadId).toMatch(/^thread-/);
+    expect(store.getSnapshot().threadId).toBe(threadId);
+    expect(store.getSnapshot().entries.map(({ id }) => id)).toEqual(["a", "b"]);
+  });
+
+  it("'새 검색'은 지금 thread를 닫아 기록, 보는 요청, 선택, 지역 고정을 비우고 다음 새 검색은 새 thread를 연다", () => {
+    const { store } = setup();
+    store.addEntry({
+      id: "a",
+      kind: "new",
+      request: { query: "역삼 카페" },
+      response: response(),
+    });
+    const first = store.getSnapshot().threadId;
     store.select(1);
     store.lockRegion();
 
     store.startNewSearch();
 
     expect(store.getSnapshot()).toMatchObject({
+      threadId: undefined,
+      entries: [],
       viewingId: undefined,
       selectedPlaceId: undefined,
       regionLocked: false,
     });
-    expect(store.getSnapshot().entries).toHaveLength(1);
+    store.addEntry({
+      id: "b",
+      kind: "new",
+      request: { query: "강남 술집" },
+      response: response(),
+    });
+    expect(store.getSnapshot().threadId).not.toBe(first);
+  });
+
+  it("다시 연 thread는 그때 시각의 요청들을 기록으로 두고 마지막 요청을 지금 보는 요청으로 둔다", () => {
+    const { store } = setup();
+    store.lockRegion();
+
+    store.openThread("thread-old", [
+      {
+        id: "a",
+        kind: "new",
+        at: 100,
+        request: { query: "역삼 카페" },
+        response: response(),
+      },
+      {
+        id: "b",
+        kind: "followUp",
+        baseId: "a",
+        at: 200,
+        request: { query: "더 조용하게" },
+        response: response(),
+      },
+    ]);
+
+    expect(store.getSnapshot()).toMatchObject({
+      threadId: "thread-old",
+      viewingId: "b",
+      regionLocked: false,
+    });
+    expect(
+      store.getSnapshot().entries.map(({ sentence, at }) => [sentence, at]),
+    ).toEqual([
+      ["역삼 카페", 100],
+      ["더 조용하게", 200],
+    ]);
+  });
+
+  it("과거 결과 화면은 지금 보는 요청을 바꾸지 않고, 새 요청이 쌓이면 닫힌다", () => {
+    const { store } = setup();
+    store.addEntry({
+      id: "a",
+      kind: "new",
+      request: { query: "역삼 카페" },
+      response: response(),
+    });
+    store.addEntry({
+      id: "b",
+      kind: "followUp",
+      baseId: "a",
+      request: { query: "더 조용하게" },
+      response: response(),
+    });
+    store.select(1);
+
+    store.openPast("a");
+    expect(store.getSnapshot()).toMatchObject({
+      pastId: "a",
+      viewingId: "b",
+      selectedPlaceId: undefined,
+    });
+
+    store.addEntry({
+      id: "c",
+      kind: "new",
+      request: { query: "역삼 카페" },
+      response: response(),
+    });
+    expect(store.getSnapshot()).toMatchObject({
+      pastId: undefined,
+      viewingId: "c",
+    });
   });
 
   it("위치 결과를 두고, 바뀔 때마다 구독자에게 알린다", () => {

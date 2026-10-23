@@ -30,8 +30,9 @@ import {
   searchStore,
   type EntryKind,
 } from "../model/search-store";
+import { appendTurn } from "../model/search-threads";
 import { FollowUpInput } from "./follow-up-input";
-import { HistorySheet } from "./history-sheet";
+import { HistoryTimeline } from "./history-timeline";
 import {
   LOCATION_DENIED_MESSAGE,
   LOCATION_FAILED_MESSAGE,
@@ -39,15 +40,16 @@ import {
   locateIfGranted,
 } from "./locate-device";
 import { NearbyCarousel } from "./nearby-carousel";
+import { PastResultView } from "./past-result-view";
 import { placeCardElementId } from "./place-card";
 import { PlaceMap, type PlaceMapHandle } from "./place-map";
 import { RecentSearchSheet } from "./recent-search-sheet";
 import { ResultPanel, type PanelState } from "./result-panel";
 import { SearchBar } from "./search-bar";
+import { getThread, saveThread } from "./thread-storage";
 import { useNearbyPicks } from "./use-nearby-picks";
-import { recordRecentSearch } from "./use-recent-searches";
 import { useHere, useSearchStore } from "./use-search-store";
-import { useViewingResults } from "./use-viewing-results";
+import { usePastResults, useViewingResults } from "./use-viewing-results";
 
 type SearchInput = {
   kind: EntryKind;
@@ -63,26 +65,31 @@ export function SearchScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const toast = useToast();
-  const { entries, selectedPlaceId } = useSearchStore();
+  const { threadId, entries, selectedPlaceId } = useSearchStore();
   const results = useViewingResults();
   const { viewing } = results;
+  const pastResults = usePastResults();
+  const { past } = pastResults;
   const here = useHere();
 
   const mapRef = useRef<PlaceMapHandle>(null);
   const followUpRef = useRef<HTMLInputElement>(null);
-  const focusFollowUp = useRef(false);
   const [mapReady, setMapReady] = useState(false);
   const [panel, setPanel] = useState<PanelState>("middle");
-  const [historyOpen, setHistoryOpen] = useState(false);
+  // 요청 기록을 접으면 펼치기 전 상태로 돌아간다
+  const panelBeforeHistory = useRef<PanelState>("middle");
   const [recentOpen, setRecentOpen] = useState(false);
+  // "여기서 이어 검색" 뒤 후속 입력창에 초점을 두라는 요청. 입력창이 다시 켜진 뒤에 옮긴다
+  const [focusRequest, setFocusRequest] = useState(0);
   // 사용자가 지도를 움직였는지. "이 지역에서 검색" 버튼은 그 뒤에만 보이고, 보는 결과가 바뀌면 숨는다
   const [mapMoved, setMapMoved] = useState(false);
-  // 검색 중에 "새 검색"이나 "결과 보기"를 누르면 올린다. 그 전에 보낸 요청의 결과는 버린다
+  // 검색 중에 "새 검색"이나 다른 결과로 바꾸면 올린다. 그 전에 보낸 요청의 결과는 버린다
   const searchGeneration = useRef(0);
   // 지도를 마지막으로 옮겨 준 기기 위치. 새 위치를 얻을 때만 지도를 옮긴다
   const centeredOn = useRef<LatLng | undefined>(undefined);
 
-  // 첫 페이지를 받은 뒤에만 기록에 넣고 화면을 바꾼다. 실패한 요청은 쌓지 않는다
+  // 첫 페이지를 받은 뒤에만 기록에 넣고 화면을 바꾼다. 실패한 요청은 쌓지 않는다.
+  // 쌓은 요청은 그때 받은 첫 페이지와 함께 지금 thread에 저장한다
   const search = useMutation({
     mutationFn: async ({ kind, baseId, request }: SearchInput) => {
       const generation = searchGeneration.current;
@@ -97,14 +104,27 @@ export function SearchScreen() {
           });
           return;
         }
-        searchStore.addEntry({
+        const response = data.pages[0];
+        const entry = searchStore.addEntry({
           id,
           kind,
           baseId,
           request,
-          response: data.pages[0],
+          response,
         });
-        if (kind === "new") recordRecentSearch(request.query);
+        const thread = searchStore.getSnapshot().threadId;
+        if (thread) {
+          saveThread(
+            appendTurn(getThread(thread), thread, {
+              id,
+              kind,
+              ...(baseId && { baseId }),
+              at: entry.at,
+              request,
+              response,
+            }),
+          );
+        }
       } catch (error) {
         queryClient.removeQueries({ queryKey: options.queryKey, exact: true });
         throw error;
@@ -114,7 +134,8 @@ export function SearchScreen() {
 
   const searching = search.isPending;
   const showPanel = Boolean(viewing) || searching;
-  const nearby = useNearbyPicks(!showPanel);
+  const firstScreen = !showPanel && !past;
+  const nearby = useNearbyPicks(firstScreen);
   // 가운데 카드가 선택된 카드다. 고른 적이 없으면 첫 카드
   const selectedNearbyId = nearby.cards.some(
     ({ place }) => place.id === selectedPlaceId,
@@ -139,6 +160,10 @@ export function SearchScreen() {
     centeredOn.current = here;
     mapRef.current?.panTo(here);
   }, [mapReady, here]);
+
+  useEffect(() => {
+    if (focusRequest > 0 && !searching) followUpRef.current?.focus();
+  }, [focusRequest, searching]);
 
   function run(input: SearchInput) {
     setPanel("middle");
@@ -184,27 +209,64 @@ export function SearchScreen() {
     setMapMoved(false);
   }
 
+  // 지금 thread를 닫는다. 다음 새 검색이 새 thread를 연다
   function handleStartOver() {
     abandonSearch();
     searchStore.startNewSearch();
+    setPanel("middle");
   }
 
-  // 최근 검색의 문장은 "새 검색"을 누른 것처럼 비운 뒤 새 검색으로 보낸다
-  function handlePickRecent(sentence: string) {
-    setRecentOpen(false);
-    handleStartOver();
-    handleNewSearch(sentence);
+  function handleToggleHistory() {
+    if (panel === "history") {
+      setPanel(panelBeforeHistory.current);
+      return;
+    }
+    panelBeforeHistory.current = panel;
+    setPanel("history");
   }
 
+  // "결과 보기". 지금 보는 요청은 그대로 두고 그때 결과의 과거 결과 화면을 연다
   function handleView(entryId: string) {
     abandonSearch();
-    searchStore.view(entryId);
-    setHistoryOpen(false);
+    searchStore.openPast(entryId);
   }
 
   function handleContinue(entryId: string) {
-    focusFollowUp.current = true;
-    handleView(entryId);
+    abandonSearch();
+    searchStore.view(entryId);
+    setPanel(panelBeforeHistory.current);
+    setFocusRequest((count) => count + 1);
+  }
+
+  function handleBackFromPast() {
+    searchStore.closePast();
+    setPanel("history");
+  }
+
+  // 그 요청 본문을 그대로 같은 종류와 기준 요청으로 다시 보낸다. 지금 thread 끝에 쌓인다
+  function handleRepeatPast() {
+    if (!past) return;
+    searchStore.closePast();
+    run({ kind: past.kind, baseId: past.baseId, request: past.request });
+  }
+
+  // 최근 검색에서 고른 thread로 바꾼다. 저장한 첫 페이지를 캐시에 넣어 다시 받지 않는다
+  function handleOpenThread(id: string) {
+    setRecentOpen(false);
+    const thread = getThread(id);
+    if (!thread || id === threadId) return;
+    abandonSearch();
+    for (const turn of thread.turns) {
+      const { queryKey } = placeQueries.search(turn.id, turn.request);
+      if (!queryClient.getQueryData(queryKey)) {
+        queryClient.setQueryData(queryKey, {
+          pages: [turn.response],
+          pageParams: [undefined],
+        });
+      }
+    }
+    searchStore.openThread(thread.id, thread.turns);
+    setPanel("middle");
   }
 
   // 처음 누르면 지도를 그 핀으로 옮기고 선택한다. 선택된 카드를 다시 누르면 상세로 간다
@@ -235,7 +297,11 @@ export function SearchScreen() {
     if (!(await locateDevice())) toast(LOCATION_FAILED_MESSAGE);
   }
 
-  const pinCards = showPanel ? results.cards : nearby.cards;
+  const pinCards = past
+    ? pastResults.cards
+    : showPanel
+      ? results.cards
+      : nearby.cards;
   const errorLine = search.isError && (
     <p role="alert" className="text-body-sm text-danger">
       {ERROR_MESSAGE}
@@ -253,7 +319,7 @@ export function SearchScreen() {
         ref={mapRef}
         // 패널이 있으면 지도를 패널 위쪽에 맞춰 지도 중심과 핀이 가려지지 않게 한다(조금 겹친다)
         className={
-          showPanel ? "absolute inset-x-0 top-0 h-1/2" : "absolute inset-0"
+          firstScreen ? "absolute inset-0" : "absolute inset-x-0 top-0 h-1/2"
         }
         pins={pinCards.map(({ place }, index) => ({
           id: place.id,
@@ -261,14 +327,14 @@ export function SearchScreen() {
           lat: place.lat,
           lng: place.lng,
         }))}
-        selectedId={showPanel ? selectedPlaceId : selectedNearbyId}
+        selectedId={firstScreen ? selectedNearbyId : selectedPlaceId}
         myLocation={here}
         onPinClick={handlePinClick}
         onUserMove={() => setMapMoved(true)}
         onReadyChange={setMapReady}
       />
 
-      {(!showPanel || panel === "middle") && (
+      {(firstScreen || past || panel !== "full") && (
         <div className="absolute top-4 right-4 flex flex-col gap-2">
           <Fab label="저장한 장소" onClick={() => toast(NOT_READY_MESSAGE)}>
             <BookmarkIcon className="text-icon" />
@@ -279,18 +345,37 @@ export function SearchScreen() {
         </div>
       )}
 
-      {mapReady && mapMoved && viewing && !searching && panel === "middle" && (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleRegionSearch}
-          className="absolute top-4 left-1/2 -translate-x-1/2"
-        >
-          <RefreshIcon size="sm" className="mr-1" />이 지역에서 검색
-        </Button>
-      )}
+      {mapReady &&
+        mapMoved &&
+        viewing &&
+        !past &&
+        !searching &&
+        panel === "middle" && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRegionSearch}
+            className="absolute top-4 left-1/2 -translate-x-1/2"
+          >
+            <RefreshIcon size="sm" className="mr-1" />이 지역에서 검색
+          </Button>
+        )}
 
-      {showPanel ? (
+      {past ? (
+        <PastResultView
+          past={past}
+          firstPage={pastResults.firstPage}
+          cards={pastResults.cards}
+          selectedId={selectedPlaceId}
+          here={here}
+          locating={pastResults.locating}
+          unfilteredNearby={pastResults.unfilteredNearby}
+          onCardPress={handleCardPress}
+          onBack={handleBackFromPast}
+          onRepeat={handleRepeatPast}
+          edge={myLocationButton}
+        />
+      ) : showPanel ? (
         <ResultPanel
           state={panel}
           onStateChange={setPanel}
@@ -312,7 +397,10 @@ export function SearchScreen() {
           loadMoreFailed={results.loadMoreFailed}
           onCardPress={handleCardPress}
           onNewSearch={handleStartOver}
-          onOpenHistory={() => setHistoryOpen(true)}
+          onToggleHistory={handleToggleHistory}
+          history={
+            <HistoryTimeline onView={handleView} onContinue={handleContinue} />
+          }
           message={errorLine}
           edge={myLocationButton}
           footer={
@@ -350,21 +438,11 @@ export function SearchScreen() {
         </div>
       )}
 
-      <HistorySheet
-        open={historyOpen}
-        onOpenChange={setHistoryOpen}
-        onOpenChangeComplete={(open) => {
-          if (open || !focusFollowUp.current) return;
-          focusFollowUp.current = false;
-          followUpRef.current?.focus();
-        }}
-        onView={handleView}
-        onContinue={handleContinue}
-      />
       <RecentSearchSheet
         open={recentOpen}
         onOpenChange={setRecentOpen}
-        onPick={handlePickRecent}
+        currentThreadId={threadId}
+        onPick={handleOpenThread}
       />
     </main>
   );

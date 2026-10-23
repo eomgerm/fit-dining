@@ -9,11 +9,12 @@ import type {
 import type { LocationState } from "./search-request";
 
 // 서버가 모르는 검색 화면 상태. 검색 응답(페이지와 커서)은 TanStack Query 캐시에 항목 id별로 있고,
-// 여기에는 요청 기록의 메타 정보만 둔다. 메모리에만 있어 재로드하면 사라진다(보관 방식은 미결)
+// 여기에는 지금 thread의 요청 기록 메타 정보와 화면 상태만 둔다. 메모리에만 있어 재로드하면 사라진다.
+// thread 자체는 thread-storage가 기기에 저장한다(spec 53번)
 
 export type EntryKind = "new" | "followUp" | "region";
 
-// 요청 기록(5-07)의 한 줄. 성공한 첫 페이지 요청 하나다
+// 요청 기록(5-07)의 한 줄. 지금 thread에서 성공한 첫 페이지 요청 하나다
 export type HistoryEntry = {
   id: string;
   kind: EntryKind;
@@ -32,8 +33,13 @@ export type HistoryEntry = {
 };
 
 export type SearchState = {
+  // 지금 thread. 첫 새 검색이 성공하면 생기고 "새 검색"을 누르면 닫힌다
+  threadId?: string;
+  // 지금 thread의 요청 기록
   entries: HistoryEntry[];
   viewingId?: string;
+  // 열린 과거 결과 화면의 항목. 지금 보는 요청은 바꾸지 않는다
+  pastId?: string;
   selectedPlaceId?: number;
   location: LocationState;
   // "이 지역에서 검색"을 누른 뒤 "새 검색" 전까지 켜져 있다
@@ -51,6 +57,33 @@ type AddEntryInput = {
   request: PlaceSearchRequest;
   response: PlaceSearchResponse;
 };
+
+// 다시 여는 thread의 요청. 시각은 그때 값이다
+type RestoredEntryInput = AddEntryInput & { at: number };
+
+// "이 지역에서 검색"도 기준 요청의 문장을 그대로 다시 보내므로 문장은 늘 요청의 query다
+function toEntry({
+  id,
+  kind,
+  baseId,
+  request,
+  response,
+  at,
+}: RestoredEntryInput): HistoryEntry {
+  const entry: HistoryEntry = {
+    id,
+    kind,
+    sentence: request.query,
+    request,
+    conditions: response.conditions,
+    totalCount: response.totalCount,
+    at,
+    ...(baseId && { baseId }),
+  };
+  const category = dominantCategory(response.items);
+  if (category) entry.category = category;
+  return entry;
+}
 
 export function createSearchStore(now: () => number = Date.now) {
   let state: SearchState = {
@@ -83,27 +116,32 @@ export function createSearchStore(now: () => number = Date.now) {
       };
     },
 
+    // 지금 thread 끝에 쌓는다. thread가 없으면(첫 화면의 새 검색) 새 thread를 연다
     addEntry(input: AddEntryInput) {
-      const { id, kind, baseId, request, response } = input;
-      // "이 지역에서 검색"도 기준 요청의 문장을 그대로 다시 보내므로 문장은 늘 요청의 query다
-      const entry: HistoryEntry = {
-        id,
-        kind,
-        sentence: request.query,
-        request,
-        conditions: response.conditions,
-        totalCount: response.totalCount,
-        at: now(),
-        ...(baseId && { baseId }),
-      };
-      const category = dominantCategory(response.items);
-      if (category) entry.category = category;
-
+      const entry = toEntry({ ...input, at: now() });
       update({
+        threadId: state.threadId ?? nextThreadId(),
         entries: [...state.entries, entry],
-        viewingId: id,
+        viewingId: entry.id,
+        pastId: undefined,
         selectedPlaceId: undefined,
-        latestCards: withCards(response.items),
+        latestCards: withCards(input.response.items),
+      });
+      return entry;
+    },
+
+    // 최근 검색에서 고른 thread로 바꾼다. 마지막 요청이 지금 보는 요청이 된다
+    openThread(threadId: string, turns: RestoredEntryInput[]) {
+      const entries = turns.map(toEntry);
+      const last = turns[turns.length - 1];
+      update({
+        threadId,
+        entries,
+        viewingId: last?.id,
+        pastId: undefined,
+        selectedPlaceId: undefined,
+        regionLocked: false,
+        latestCards: last ? withCards(last.response.items) : state.latestCards,
       });
     },
 
@@ -112,14 +150,27 @@ export function createSearchStore(now: () => number = Date.now) {
       update({ latestCards: withCards(cards) });
     },
 
-    // "결과 보기", "여기서 이어 검색"
+    // "여기서 이어 검색"
     view(id: string) {
-      update({ viewingId: id, selectedPlaceId: undefined });
+      update({ viewingId: id, pastId: undefined, selectedPlaceId: undefined });
     },
 
+    // "결과 보기"의 과거 결과 화면. 지금 보는 요청은 그대로다
+    openPast(id: string) {
+      update({ pastId: id, selectedPlaceId: undefined });
+    },
+
+    closePast() {
+      update({ pastId: undefined, selectedPlaceId: undefined });
+    },
+
+    // 지금 thread를 닫는다. 다음 새 검색이 새 thread를 연다
     startNewSearch() {
       update({
+        threadId: undefined,
+        entries: [],
         viewingId: undefined,
+        pastId: undefined,
         selectedPlaceId: undefined,
         regionLocked: false,
       });
@@ -147,12 +198,13 @@ export type SearchStore = ReturnType<typeof createSearchStore>;
 
 export const searchStore = createSearchStore();
 
-let entryCount = 0;
-
-// 첫 페이지를 받기 전에 쿼리 키를 정하려고 미리 id를 만든다
+// 첫 페이지를 받기 전에 쿼리 키를 정하려고 미리 id를 만든다. 다시 연 thread의 id와 겹치지 않게 무작위다
 export function nextEntryId() {
-  entryCount += 1;
-  return `entry-${entryCount}`;
+  return `entry-${crypto.randomUUID()}`;
+}
+
+function nextThreadId() {
+  return `thread-${crypto.randomUUID()}`;
 }
 
 const CATEGORY_ORDER = Object.keys(CATEGORY_LABELS) as CategoryGroup[];

@@ -1,17 +1,22 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 
+import { cn } from "@/shared/lib/cn";
 import { IconButton } from "@/shared/ui/button/icon-button";
 import { ArrowUpIcon } from "@/shared/ui/icon/icons/arrow-up";
+import { ChevronRightIcon } from "@/shared/ui/icon/icons/chevron-right";
+import { ClearIcon } from "@/shared/ui/icon/icons/clear";
 import { HistoryIcon } from "@/shared/ui/icon/icons/history";
+import { PinIcon } from "@/shared/ui/icon/icons/pin";
 import { SearchIcon } from "@/shared/ui/icon/icons/search";
-import { SparklesIcon } from "@/shared/ui/icon/icons/sparkles";
+import { SparkleIcon } from "@/shared/ui/icon/icons/sparkle";
 
 import { highlightParts } from "../model/highlight";
 import type { PlaceSuggestion } from "../model/place-types";
 import { QUERY_MAX_LENGTH } from "../model/search-request";
+import { actionFirst } from "../model/suggestions";
 import { PlaceMeta } from "./place-parts";
 import { useHere } from "./use-search-store";
 import { useSuggest } from "./use-suggest";
@@ -26,7 +31,8 @@ type SearchBarProps = {
   message?: ReactNode;
 };
 
-// 결과가 없을 때 화면 아래쪽에 떠 있는 검색창(5-01, 와이어프레임 Start). 입력하는 동안 자동완성 후보를 검색창 위에 보여 준다
+// 결과가 없을 때 화면 아래쪽에 떠 있는 검색창(5-01, 와이어프레임 Start, Typing).
+// 입력하는 동안 자동완성 후보를 검색창 위에 띄우고 그 뒤 화면을 어둡게 가린다
 export function SearchBar({
   onSearch,
   disabled,
@@ -34,10 +40,14 @@ export function SearchBar({
   message,
 }: SearchBarProps) {
   const router = useRouter();
+  const inputRef = useRef<HTMLInputElement>(null);
   const [input, setInput] = useState("");
-  const suggestions = useSuggest(input);
+  const [focused, setFocused] = useState(false);
+  const suggestions = actionFirst(useSuggest(input));
   const here = useHere();
   const empty = !input.trim();
+  // 초점이 있고 입력이 있는 동안. 막을 누르면 초점이 풀려 닫힌다
+  const typing = focused && !empty && !disabled;
 
   function submit() {
     if (!disabled && !empty) onSearch(input);
@@ -53,6 +63,15 @@ export function SearchBar({
 
   return (
     <div className="relative flex flex-col gap-2">
+      {typing && (
+        <div
+          aria-hidden
+          data-testid="search-scrim"
+          // 검색창보다 앞에 그려 주변 카드와 지도 버튼만 가린다
+          onPointerDown={() => inputRef.current?.blur()}
+          className="fixed inset-0 bg-scrim"
+        />
+      )}
       {message}
       <form
         role="search"
@@ -60,10 +79,14 @@ export function SearchBar({
           event.preventDefault();
           submit();
         }}
-        className="flex h-13 items-center gap-1 rounded-md bg-surface pr-1 pl-3.5 shadow-2"
+        className={cn(
+          "relative flex h-13 items-center gap-1 rounded-md bg-surface pr-1 pl-3.5 shadow-2",
+          focused && "ring-2 ring-primary-strong",
+        )}
       >
         <SearchIcon size="md" className="mr-1 text-icon" />
         <input
+          ref={inputRef}
           aria-label="장소 검색"
           placeholder="분위기나 목적을 말해 보세요"
           maxLength={QUERY_MAX_LENGTH}
@@ -71,11 +94,27 @@ export function SearchBar({
           value={input}
           disabled={disabled}
           onChange={(event) => setInput(event.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           className="min-w-0 flex-1 bg-transparent text-body-md text-ink outline-none placeholder:text-ink-subtle"
         />
-        <IconButton label="최근 검색" onClick={onOpenRecent}>
-          <HistoryIcon size="md" className="text-icon" />
-        </IconButton>
+        {empty ? (
+          <IconButton label="최근 검색" onClick={onOpenRecent}>
+            <HistoryIcon size="md" className="text-icon" />
+          </IconButton>
+        ) : (
+          <IconButton
+            label="입력 지우기"
+            // 누르는 동안 초점이 검색창을 떠나지 않게 한다
+            onPointerDown={(event) => event.preventDefault()}
+            onClick={() => {
+              setInput("");
+              inputRef.current?.focus();
+            }}
+          >
+            <ClearIcon size="md" className="text-ink-subtle" />
+          </IconButton>
+        )}
         <button
           type="submit"
           aria-label="추천받기"
@@ -85,11 +124,11 @@ export function SearchBar({
           <ArrowUpIcon size="md" />
         </button>
       </form>
-      {suggestions.length > 0 && !disabled && (
+      {typing && suggestions.length > 0 && (
         <ul
           aria-label="검색 추천"
           // 화면 아래 검색창이라 후보는 검색창 바로 위에 띄운다
-          className="absolute inset-x-0 bottom-full mb-2 flex flex-col overflow-hidden rounded-md bg-surface py-1 shadow-2"
+          className="absolute inset-x-0 bottom-full mb-2 flex flex-col divide-y divide-line overflow-hidden rounded-lg bg-surface shadow-3"
         >
           {suggestions.map((suggestion) => (
             <li
@@ -101,8 +140,13 @@ export function SearchBar({
             >
               <button
                 type="button"
+                // 누르는 동안 초점이 풀려 후보가 먼저 닫히지 않게 한다
+                onPointerDown={(event) => event.preventDefault()}
                 onClick={() => pick(suggestion)}
-                className="flex w-full items-center gap-3 px-4 py-2.5 text-left active:bg-surface-sunken"
+                className={cn(
+                  "flex min-h-15 w-full items-center gap-3 px-4 py-2.5 text-left active:bg-surface-sunken",
+                  suggestion.type === "ACTION" && "bg-surface-warm",
+                )}
               >
                 {suggestion.type === "PLACE" ? (
                   <PlaceSuggestionRow
@@ -112,10 +156,13 @@ export function SearchBar({
                   />
                 ) : (
                   <>
-                    <SparklesIcon size="md" className="text-primary" />
-                    <span className="text-label-md text-primary-strong">
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary-soft text-primary">
+                      <SparkleIcon size="md" />
+                    </span>
+                    <span className="flex-1 text-title-sm text-ink">
                       {suggestion.label}
                     </span>
+                    <ChevronRightIcon size="md" className="text-icon" />
                   </>
                 )}
               </button>
@@ -139,7 +186,9 @@ function PlaceSuggestionRow({
   const { place, matchedMenu } = suggestion;
   return (
     <>
-      <SearchIcon size="md" className="text-icon-subtle" />
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-surface-sunken text-ink-muted">
+        <PinIcon size="md" />
+      </span>
       <span className="flex min-w-0 flex-col gap-0.5">
         <span className="truncate text-body-md text-ink">
           <Highlighted text={place.name} input={input} />

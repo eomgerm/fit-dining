@@ -133,6 +133,14 @@ async function followUp(text: string) {
   );
 }
 
+// 결과 패널 머리글의 "요청 기록"으로 패널 안에 펼친다
+async function openHistory() {
+  fireEvent.click(screen.getByRole("button", { name: "요청 기록" }));
+  return screen.findByRole("list", { name: "요청 기록" });
+}
+
+const pastView = () => screen.findByRole("region", { name: "과거 결과" });
+
 beforeEach(() => {
   stores.current = createSearchStore();
   stubApi();
@@ -406,15 +414,16 @@ describe("SearchScreen", () => {
         expect(regionButton()).toBeNull();
 
         map.fire("dragend");
+        const history = await openHistory();
+        expect(regionButton()).toBeNull();
         fireEvent.click(
-          screen.getAllByRole("button", { name: "요청 기록" })[0],
+          within(history).getAllByRole("button", { name: "결과 보기" })[0],
         );
-        const sheet = await screen.findByRole("dialog", { name: "요청 기록" });
-        fireEvent.click(
-          within(sheet).getAllByRole("button", { name: "결과 보기" })[0],
-        );
-        await waitFor(() => expect(regionButton()).toBeNull());
+        await pastView();
+        map.fire("dragend");
+        expect(regionButton()).toBeNull();
 
+        fireEvent.click(screen.getByRole("button", { name: "현재 검색으로" }));
         map.fire("dragend");
         fireEvent.click(screen.getByRole("button", { name: "새 검색" }));
         await newSearch("강남 술집");
@@ -588,44 +597,111 @@ describe("SearchScreen", () => {
     expect(searchBodies.at(-1)).toEqual({ query: "강남 술집" });
   });
 
-  it("요청 기록의 '결과 보기'는 네트워크 없이 그 결과를 보여 주고, '여기서 이어 검색' 뒤 후속은 그 요청의 conditions를 보낸다", async () => {
+  it("요청 기록은 결과 패널 안에 펼치고 다시 누르면 결과 목록으로 돌아온다", async () => {
+    renderScreen();
+    await newSearch("역삼 카페");
+    await followUp("더 조용하게");
+
+    const history = await openHistory();
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByRole("list", { name: "추천 장소" })).toBeNull();
+    expect(screen.getByRole("textbox", { name: "후속 조건" })).toBeTruthy();
+    expect(within(history).getByText("역삼 카페")).toBeTruthy();
+    expect(within(history).getByText("보는 중")).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: "요청 기록" })
+        .getAttribute("aria-expanded"),
+    ).toBe("true");
+
+    fireEvent.click(screen.getByRole("button", { name: "요청 기록" }));
+    expect(screen.queryByRole("list", { name: "요청 기록" })).toBeNull();
+    expect(screen.getByRole("list", { name: "추천 장소" })).toBeTruthy();
+  });
+
+  it("'결과 보기'는 네트워크 없이 그때 결과를 과거 결과 화면으로 보이고 지금 보는 요청은 그대로다", async () => {
     renderScreen();
     await newSearch("역삼 카페");
     await followUp("더 조용하게");
     const requestCount = searchBodies.length;
+    const viewing = stores.current.getSnapshot().viewingId;
 
-    fireEvent.click(screen.getAllByRole("button", { name: "요청 기록" })[0]);
-    const sheet = await screen.findByRole("dialog", { name: "요청 기록" });
-    expect(within(sheet).getByText("역삼 카페")).toBeTruthy();
-    expect(within(sheet).getByText("보는 중")).toBeTruthy();
-    fireEvent.click(within(sheet).getByRole("button", { name: "결과 보기" }));
+    const history = await openHistory();
+    fireEvent.click(within(history).getByRole("button", { name: "결과 보기" }));
+
+    const past = await pastView();
+    expect(within(past).getByText(/결과 · “역삼 카페”$/)).toBeTruthy();
+    expect(
+      within(
+        within(past).getByRole("list", { name: "추천 장소" }),
+      ).getAllByRole("listitem"),
+    ).toHaveLength(2);
+    expect(screen.queryByRole("textbox", { name: "후속 조건" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "새 검색" })).toBeNull();
+    expect(searchBodies).toHaveLength(requestCount);
+    expect(stores.current.getSnapshot().viewingId).toBe(viewing);
+
+    fireEvent.click(screen.getByRole("button", { name: "현재 검색으로" }));
+    expect(await screen.findByRole("list", { name: "요청 기록" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "과거 결과" })).toBeNull();
+  });
+
+  it("'이 조건으로 다시 검색'은 같은 요청 본문을 보내 thread 끝에 쌓고 원래 요청은 그대로 둔다", async () => {
+    renderScreen();
+    await newSearch("역삼 카페");
+    await followUp("더 조용하게");
+    await followUp("카페 말고 식당");
+
+    const history = await openHistory();
+    // 지금 보는 항목(셋째)에는 버튼이 없어, 둘째 "더 조용하게" 항목의 버튼이다
+    fireEvent.click(
+      within(history).getAllByRole("button", { name: "결과 보기" })[1],
+    );
+    const past = await pastView();
+    fireEvent.click(
+      within(past).getByRole("button", { name: "이 조건으로 다시 검색" }),
+    );
+
+    await waitFor(() =>
+      expect(stores.current.getSnapshot().entries).toHaveLength(4),
+    );
+    expect(searchBodies.at(-1)).toEqual(searchBodies[1]);
+    const [first, second, , repeated] = stores.current.getSnapshot().entries;
+    expect(repeated).toMatchObject({
+      kind: "followUp",
+      baseId: first.id,
+      sentence: "더 조용하게",
+    });
+    expect(stores.current.getSnapshot().viewingId).toBe(repeated.id);
+    expect(second.sentence).toBe("더 조용하게");
+    expect(screen.queryByRole("region", { name: "과거 결과" })).toBeNull();
+  });
+
+  it("'여기서 이어 검색'은 그 요청을 지금 보는 요청으로 바꾸고 후속 입력창에 초점을 두며, 후속은 그 요청의 conditions를 보낸다", async () => {
+    renderScreen();
+    await newSearch("역삼 카페");
+    await followUp("더 조용하게");
+
+    const history = await openHistory();
+    fireEvent.click(
+      within(history).getByRole("button", { name: "여기서 이어 검색" }),
+    );
 
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "“역삼 카페”" })).toBeTruthy(),
     );
-    expect(
-      within(screen.getByRole("list", { name: "추천 장소" })).getAllByRole(
-        "listitem",
-      ),
-    ).toHaveLength(2);
-    expect(searchBodies).toHaveLength(requestCount);
-
-    fireEvent.click(screen.getAllByRole("button", { name: "요청 기록" })[0]);
-    const reopened = await screen.findByRole("dialog", { name: "요청 기록" });
-    // 지금 보는 항목(첫 요청)에는 버튼이 없어, 버튼은 후속 "더 조용하게" 항목의 것 하나다
-    fireEvent.click(
-      within(reopened).getByRole("button", { name: "여기서 이어 검색" }),
-    );
+    expect(screen.queryByRole("list", { name: "요청 기록" })).toBeNull();
     await waitFor(() =>
-      expect(
-        screen.getByRole("heading", { name: "“더 조용하게”" }),
-      ).toBeTruthy(),
+      expect(document.activeElement).toBe(
+        screen.getByRole("textbox", { name: "후속 조건" }),
+      ),
     );
     await followUp("카페 말고 식당");
 
     expect(searchBodies.at(-1)).toEqual({
       query: "카페 말고 식당",
-      previousConditions: { area: "역삼", quiet: true },
+      previousConditions: { area: "역삼" },
     });
   });
 
@@ -713,8 +789,28 @@ describe("SearchScreen", () => {
         target: { value: text },
       });
       fireEvent.click(screen.getByRole("button", { name: "보내기" }));
-      await screen.findByText("주변 장소를 찾는 중");
+      await screen.findByText("요청을 이해하는 중");
     }
+
+    it("첫 페이지를 받는 동안 단계 문구를 차례로 바꾸고 후속 입력창을 막는다", async () => {
+      renderScreen();
+      await newSearch("역삼 카페");
+      const held = holdSearches();
+      await startFollowUp("더 조용하게");
+
+      const input = screen.getByRole("textbox", { name: "후속 조건" });
+      expect(input.hasAttribute("disabled")).toBe(true);
+      expect(screen.queryByRole("button", { name: "최근 검색" })).toBeNull();
+      expect(
+        await screen.findByText("주변 장소를 찾는 중", {}, { timeout: 2500 }),
+      ).toBeTruthy();
+      expect(
+        await screen.findByText("취향과 맞춰 보는 중", {}, { timeout: 2500 }),
+      ).toBeTruthy();
+
+      held[0]();
+      await waitFor(() => expect(input.hasAttribute("disabled")).toBe(false));
+    });
 
     it("'새 검색'을 누르면 진행 중이던 요청의 결과가 늦게 와도 화면과 기록을 바꾸지 않는다", async () => {
       renderScreen();
@@ -729,7 +825,8 @@ describe("SearchScreen", () => {
 
       expect(screen.getByRole("textbox", { name: "장소 검색" })).toBeTruthy();
       expect(screen.queryByRole("list", { name: "추천 장소" })).toBeNull();
-      expect(stores.current.getSnapshot().entries).toHaveLength(1);
+      // "새 검색"이 thread를 닫아 기록이 비고, 늦게 온 결과는 쌓이지 않는다
+      expect(stores.current.getSnapshot().entries).toHaveLength(0);
     });
 
     it("'결과 보기'를 누르면 진행 중이던 요청의 결과가 늦게 와도 고른 결과를 유지한다", async () => {
@@ -740,14 +837,17 @@ describe("SearchScreen", () => {
       await startFollowUp("카페 말고 식당");
       await waitFor(() => expect(held).toHaveLength(1));
 
-      fireEvent.click(screen.getAllByRole("button", { name: "요청 기록" })[0]);
-      const sheet = await screen.findByRole("dialog", { name: "요청 기록" });
-      fireEvent.click(within(sheet).getByRole("button", { name: "결과 보기" }));
+      const history = await openHistory();
+      fireEvent.click(
+        within(history).getAllByRole("button", { name: "결과 보기" })[0],
+      );
       held[0]();
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       expect(stores.current.getSnapshot().entries).toHaveLength(2);
-      expect(screen.getByRole("heading", { name: "“역삼 카페”" })).toBeTruthy();
+      expect(
+        within(await pastView()).getByText(/결과 · “역삼 카페”$/),
+      ).toBeTruthy();
     });
   });
 
@@ -811,14 +911,17 @@ describe("SearchScreen", () => {
       await followUp("더 조용하게");
       expect(stores.current.getSnapshot().latestCards.get(3)?.score).toBe(99);
 
-      fireEvent.click(screen.getAllByRole("button", { name: "요청 기록" })[0]);
-      const sheet = await screen.findByRole("dialog", { name: "요청 기록" });
-      fireEvent.click(within(sheet).getByRole("button", { name: "결과 보기" }));
-      await waitFor(() =>
-        expect(
-          screen.getByRole("heading", { name: "“역삼 카페”" }),
-        ).toBeTruthy(),
+      const history = await openHistory();
+      fireEvent.click(
+        within(history).getByRole("button", { name: "결과 보기" }),
       );
+      const past = await pastView();
+      // 과거 결과는 그때 받아 둔 두 페이지를 보이고 더 부르지 않는다
+      expect(
+        within(
+          within(past).getByRole("list", { name: "추천 장소" }),
+        ).getAllByRole("listitem"),
+      ).toHaveLength(3);
 
       expect(stores.current.getSnapshot().latestCards.get(3)?.score).toBe(99);
     });
@@ -937,6 +1040,54 @@ describe("SearchScreen", () => {
       ).toBeNull();
     });
 
+    it("자동완성은 '이 조건으로 추천받기'를 맨 위에 두고, 후보가 보이는 동안 막을 깔며 막을 누르면 닫히고, 입력을 지울 수 있다", async () => {
+      const original = globalThis.fetch;
+      const suggestion = (id: number) => ({
+        type: "PLACE",
+        place: card(id).place,
+      });
+      vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>(async (input, init) =>
+          String(input).startsWith("/api/v1/places/suggest")
+            ? Response.json([
+                suggestion(1),
+                suggestion(2),
+                { type: "ACTION", label: "이 조건으로 추천받기" },
+              ])
+            : original(input, init),
+        ),
+      );
+      renderScreen();
+      const bar = screen.getByRole("textbox", { name: "장소 검색" });
+
+      fireEvent.focus(bar);
+      fireEvent.change(bar, { target: { value: "장소" } });
+      const list = await screen.findByRole("list", { name: "검색 추천" });
+
+      expect(
+        within(list)
+          .getAllByRole("button")
+          .map((row) => row.textContent),
+      ).toEqual([
+        "이 조건으로 추천받기",
+        expect.stringContaining("장소 1"),
+        expect.stringContaining("장소 2"),
+      ]);
+      expect(screen.getByTestId("search-scrim")).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "최근 검색" })).toBeNull();
+
+      fireEvent.pointerDown(screen.getByTestId("search-scrim"));
+      fireEvent.blur(bar);
+      expect(screen.queryByRole("list", { name: "검색 추천" })).toBeNull();
+      expect(screen.queryByTestId("search-scrim")).toBeNull();
+      expect(bar).toHaveProperty("value", "장소");
+
+      fireEvent.click(screen.getByRole("button", { name: "입력 지우기" }));
+      expect(bar).toHaveProperty("value", "");
+      expect(screen.getByRole("button", { name: "최근 검색" })).toBeTruthy();
+    });
+
     it.each(["저장한 장소", "내 정보"])(
       "'%s' 버튼은 첫 화면과 결과 화면에서 '준비 중이에요'를 띄운다",
       async (name) => {
@@ -967,10 +1118,11 @@ describe("SearchScreen", () => {
         ).toBeTruthy();
       });
 
-      it("새 검색의 문장만 남아 다시 열어도 보이고, 누르면 그 문장으로 새 검색을 보낸다", async () => {
+      it("새 검색과 후속 조건은 한 thread로 남아, 재로드 뒤 고르면 네트워크 없이 마지막 결과와 요청 기록이 보이고 이어서 검색한다", async () => {
         renderScreen();
         await newSearch("역삼 카페");
         await followUp("더 조용하게");
+        const requestCount = searchBodies.length;
 
         // 재로드처럼 화면 상태를 비우고 다시 연다
         cleanup();
@@ -978,10 +1130,61 @@ describe("SearchScreen", () => {
         renderScreen();
         const sheet = await openRecent();
 
-        expect(within(sheet).queryByText("더 조용하게")).toBeNull();
+        const rows = within(sheet).getAllByRole("button");
+        expect(rows).toHaveLength(1);
+        expect(within(rows[0]).getByText("역삼 카페")).toBeTruthy();
         expect(
-          within(sheet).getByText(/^오늘 오[전후] \d+:\d\d$/),
+          within(rows[0]).getByText(/^오늘 오[전후] \d+:\d\d$/),
         ).toBeTruthy();
+        fireEvent.click(rows[0]);
+
+        await waitFor(() =>
+          expect(
+            screen.getByRole("heading", { name: "“더 조용하게”" }),
+          ).toBeTruthy(),
+        );
+        expect(searchBodies).toHaveLength(requestCount);
+        const history = await openHistory();
+        expect(within(history).getAllByRole("listitem")).toHaveLength(2);
+        fireEvent.click(screen.getByRole("button", { name: "요청 기록" }));
+
+        await followUp("카페 말고 식당");
+        expect(searchBodies.at(-1)).toEqual({
+          query: "카페 말고 식당",
+          previousConditions: { area: "역삼", quiet: true },
+        });
+        const reopened = await openRecent();
+        expect(within(reopened).getAllByRole("button")).toHaveLength(1);
+        expect(within(reopened).getByText("보는 중")).toBeTruthy();
+      });
+
+      it("'새 검색' 뒤의 검색은 새 thread가 되어 목록 맨 위에 '보는 중'으로 보이고, 요청 기록에는 그 thread만 보인다", async () => {
+        renderScreen();
+        await newSearch("역삼 카페");
+        await followUp("더 조용하게");
+        fireEvent.click(screen.getByRole("button", { name: "새 검색" }));
+        await newSearch("강남 술집");
+
+        const history = await openHistory();
+        expect(within(history).getAllByRole("listitem")).toHaveLength(1);
+        expect(within(history).getByText("강남 술집")).toBeTruthy();
+        fireEvent.click(screen.getByRole("button", { name: "요청 기록" }));
+
+        const sheet = await openRecent();
+        const rows = within(sheet).getAllByRole("button");
+        expect(rows.map((row) => row.textContent)).toEqual([
+          expect.stringMatching(/^강남 술집보는 중/),
+          expect.stringMatching(/^역삼 카페오늘/),
+        ]);
+      });
+
+      it("다른 thread를 고르면 그 thread로 바뀐다", async () => {
+        renderScreen();
+        await newSearch("역삼 카페");
+        fireEvent.click(screen.getByRole("button", { name: "새 검색" }));
+        await newSearch("강남 술집");
+
+        const sheet = await openRecent();
         fireEvent.click(
           within(sheet).getByRole("button", { name: /역삼 카페/ }),
         );
@@ -991,26 +1194,22 @@ describe("SearchScreen", () => {
             screen.getByRole("heading", { name: "“역삼 카페”" }),
           ).toBeTruthy(),
         );
-        expect(searchBodies.at(-1)).toEqual({ query: "역삼 카페" });
         expect(stores.current.getSnapshot().entries).toHaveLength(1);
       });
 
-      it("결과를 보는 중에 고르면 지금 보는 요청을 비우고 새 검색으로 보낸다", async () => {
+      it("저장된 값이 깨져 있어도 목록이 비고 검색은 동작한다", async () => {
+        localStorage.setItem("fit-dining:search-threads", "{");
         renderScreen();
-        await newSearch("역삼 카페");
-        await followUp("더 조용하게");
 
         const sheet = await openRecent();
-        fireEvent.click(
-          within(sheet).getByRole("button", { name: /역삼 카페/ }),
-        );
-
-        await waitFor(() =>
-          expect(stores.current.getSnapshot().entries).toHaveLength(3),
-        );
-        expect(searchBodies.at(-1)).toEqual({ query: "역삼 카페" });
-        expect(stores.current.getSnapshot().entries[2].kind).toBe("new");
-        expect(screen.queryByText(/^추가 조건 ·/)).toBeNull();
+        expect(
+          within(sheet).getByText(
+            "아직 검색한 요청이 없어요. 원하는 분위기나 목적을 말해 보세요.",
+          ),
+        ).toBeTruthy();
+        fireEvent.keyDown(sheet, { key: "Escape" });
+        await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+        await newSearch("역삼 카페");
       });
 
       it("기기 저장소를 쓸 수 없어도 검색은 동작하고 목록은 비어 있다", async () => {
