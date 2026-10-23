@@ -27,9 +27,25 @@
 | `bootstrap.sh` | 적용 스크립트(`ROLE=app\|ops`) |
 | `verify-host.sh` | 읽기만 하는 점검. PASS, FAIL, SKIP만 출력하고 IP·키 값은 찍지 않는다 |
 | `networks.sh` | 서버 A의 공유 Docker 망 여섯 개(`net-edge`, `net-prod`, `net-dev`, `net-data`(internal), `net-obs`, `net-dbaccess`). bootstrap이 부르고 직접 실행해도 된다 |
+| `runner.sh` | GitLab Runner 설치와 등록(`install`, `register`, `status`). 아래 CI 러너 절 |
 | `docker-prune.sh` | 주 1회 정리. A는 `be`·`fe`의 SHA 태그 최근 5개만 남기고, B는 7일 넘게 쓰지 않은 이미지를 지운다. 볼륨은 지우지 않는다 |
 | `conf/` | 설치될 설정: SSH 하드닝(`sshd-*.conf`), sysctl, `daemon-*.json`, fail2ban, 자동 업데이트, systemd 유닛 |
 | `test/` | 노트북 시험(Ubuntu 컨테이너와 이 PC의 Docker) |
+
+## CI 러너 (runner.sh)
+
+서버마다 러너 하나를 둔다(설계 6.1절): A는 `fit-deploy`(shell executor, 보호된 브랜치의 job만), B는 `fit-verify`(docker executor + docker.sock). 서버의 역할은 `/etc/fit/role`에서 읽는다. bootstrap이 끝난 서버에서 한다.
+
+```bash
+sudo bash ~/host/runner.sh install     # 패키지, 키, 고정, docker 그룹. 토큰이 필요 없다
+sudo bash ~/host/runner.sh register    # 토큰을 숨김 입력으로 받아 등록한다
+bash ~/host/runner.sh status           # 읽기 전용 점검(PASS, FAIL, SKIP)
+```
+
+- **install:** GitLab 저장소 서명 키를 받아 지문(`F640 3F65 44A3 8863 DAA0 B6E0 3F01 618A 5131 2F3F`)이 코드에 고정한 값과 같을 때만 쓴다. `gitlab-runner`와 `gitlab-runner-helper-images`를 **18.11.4-1**로 고정하고(GitLab 서버 CE 18.11.5와 같은 마이너 버전. 서버를 올리면 `RUNNER_VERSION`도 올린다) `apt hold`로 자동 업데이트가 올리지 못하게 한다. `gitlab-runner` 계정을 docker 그룹에 넣는다(root와 같은 권한이다. 설계 6.1절).
+- **러너 만들기:** 등록 전에 GitLab에서 만든다(Settings -> CI/CD -> Runners -> Create project runner. Maintainer 권한). `fit-verify`는 태그 `verify`, Run untagged 끔, Protected 끔. `fit-deploy`는 태그 `deploy`, Run untagged 끔, Protected 켬. 화면에 한 번만 보이는 인증 토큰(`glrt-`로 시작)을 `register`가 숨김 입력으로 받는다. 토큰은 채팅, 문서, 저장소에 붙이지 않고 이 서버의 `config.toml`(권한 600)에만 남는다. 토큰은 명령 인자가 아니라 환경변수로만 넘기고 등록 출력은 버린다.
+- **register:** `concurrent 1`로 맞춘다. B는 job 메모리 2GB, CPU 2개, docker.sock을 job에 연다. 이미 등록돼 있으면 건드리지 않는다(`FIT_RUNNER_REREGISTER=1`이면 다시 등록한다. GitLab에서 옛 러너도 지운다).
+- 환경변수: `FIT_RUNNER_URL`(기본 `https://lab.ssafy.com`), `FIT_RUNNER_ROLE_FILE`, `FIT_RUNNER_CONFIG`, `FIT_SKIP=systemd`(시험용).
 
 ## bootstrap의 안전장치
 
@@ -54,6 +70,7 @@
 bash infra/host/test/test-host.sh          # Ubuntu 24.04 컨테이너에서 app과 ops
 bash infra/host/test/test-host.sh all      # 24.04와 22.04 모두
 bash infra/host/test/test-host.sh prune    # docker-prune.sh와 networks.sh를 이 PC의 Docker로
+bash infra/host/test/test-runner.sh        # runner.sh를 Ubuntu 컨테이너에서(실제 GitLab Runner 저장소로 설치. all은 22.04도)
 ```
 
 점검 출력을 전부 보려면 `FIT_TEST_VERBOSE=1`을 준다. 컨테이너 시험은 Docker Engine 설치까지 실제로 하고, 설정을 하나씩 망가뜨려 verify-host가 잡는지와 bootstrap이 고치는지를 확인한다. 컨테이너에는 systemd와 Docker 데몬이 없고 커널 설정은 호스트와 공유되므로 `FIT_SKIP`으로 해당 단계만 건너뛴다.
