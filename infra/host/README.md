@@ -47,6 +47,7 @@ bash ~/host/runner.sh status           # 읽기 전용 점검(PASS, FAIL, SKIP)
 - **러너 만들기:** 등록 전에 GitLab에서 만든다(Settings -> CI/CD -> Runners -> Create project runner. Maintainer 권한). `fit-verify`는 태그 `verify`, Run untagged 끔, Protected 끔. `fit-deploy`는 태그 `deploy`, Run untagged 끔, Protected 켬. 화면에 한 번만 보이는 인증 토큰(`glrt-`로 시작)을 `register`가 숨김 입력으로 받는다. 토큰은 채팅, 문서, 저장소에 붙이지 않고 이 서버의 `config.toml`(권한 600)에만 남는다. 토큰은 명령 인자가 아니라 환경변수로만 넘기고 등록 출력은 버린다.
 - **register:** `concurrent 1`로 맞춘다. B는 job 메모리 2GB, CPU 2개, docker.sock을 job에 연다. 이미 등록돼 있으면 건드리지 않는다(`FIT_RUNNER_REREGISTER=1`이면 다시 등록한다. GitLab에서 옛 러너도 지운다).
 - 환경변수: `FIT_RUNNER_URL`(기본 `https://lab.ssafy.com`), `FIT_RUNNER_ROLE_FILE`, `FIT_RUNNER_CONFIG`, `FIT_SKIP=systemd`(시험용).
+- **러너가 도는 잡:** `fit-verify`(B, 태그 `verify`)는 `lint:*`, `be:test`, `fe:test`, `fe:build`, `fe:bundle-check`를, `fit-deploy`(A, 태그 `deploy`)는 `build:images`, `deploy:*`, `smoke:*`를 받는다(`.gitlab-ci.yml`, 설계 6.3절, [infra/deploy/README.md](../deploy/README.md)). `fit-deploy`가 `deploy.sh`를 돌려면 `/srv/fit/state`, `/srv/fit/web`이 `root:docker 2775`여야 한다(bootstrap이 만든다).
 
 ## 환경변수 넣기 (envset.py)
 

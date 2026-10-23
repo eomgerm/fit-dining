@@ -16,6 +16,19 @@
 
 CI가 아닌 곳에서 `deploy.sh`를 직접 실행하려면 `SKIP_VERIFY=<사유>`를 줘야 한다(CI의 verify 단계를 건너뛰는 긴급 배포, RB-02b). 사유는 이력에 남는다. `rollback.sh`는 긴급 복구라 사유가 필요 없다.
 
+## CI에서 배포하기
+
+`.gitlab-ci.yml`이 위 스크립트를 부른다(설계 6.3절). `develop`에 병합하면 `build:images` → `deploy:dev` → `smoke:dev`가 돌고, `master`에서는 `build:images` → 수동 `deploy:prod` → `smoke:prod`다. 배포 단계(`fe:build`부터 `smoke`까지)는 변수 `FIT_CD_ENABLED`가 `"true"`일 때만 나타난다. 기본은 꺼짐이고 켜기 전에 끝나야 할 일은 [계획 1C-3의 체크리스트](../../docs/infra/plans/2026-10-23-plan-1c3-ci-pipeline.md)에 있다.
+
+- 잡은 서버 A의 `fit-deploy` 러너(shell, 보호된 브랜치만)에서 돌고 `gitlab-runner` 계정이 docker 그룹이라 `deploy.sh`를 그대로 실행한다. `/srv/fit/state`와 `/srv/fit/web`은 `root:docker 2775`여야 쓸 수 있다(`infra/host/bootstrap.sh`가 만든다).
+- 배포 잡은 전체 clone(`GIT_DEPTH: "0"`)을 쓴다. 얕은 clone이면 `preflight.sh`의 다운그레이드 가드와 마이그레이션 비교가 틀린다.
+- prod는 사람이 `master`의 최신 파이프라인에서 `deploy:prod`를 눌러야 한다(누를 때까지 파이프라인이 멈춘다).
+- 같은 SHA를 다시 배포하려면 그 파이프라인의 배포 잡을 **Retry**한다(이미지는 있으면 다시 조립하지 않는다). 이미 더 새로운 SHA가 배포돼 있으면 다운그레이드 가드가 거부한다.
+
+## env 파일을 바꾼 뒤 반영하기
+
+BE·FE 컨테이너는 만들어질 때 `env_file`을 한 번만 읽는다. `/etc/fit/<env>.env`나 `fe-<env>.env`를 바꿔도 떠 있는 컨테이너는 그대로이고 `docker restart`도 다시 읽지 않는다. 배포한 적이 있으면 같은 SHA를 다시 배포한다(prod는 반대 색을 새 값으로 띄워 전환하므로 끊기지 않고, dev는 컨테이너를 교체하는 동안 잠깐 끊긴다). 아직 배포한 적이 없으면 첫 배포에 반영된다. 값을 넣고 점검하는 도구는 [infra/host/envset.py](../host/README.md)다.
+
 ## 배포가 하는 일 (prod)
 
 1. `preflight.sh`: env 파일(권한, `APP_ENV`, 자리표시자, 필수 키), FE의 `BE_INTERNAL_URL`이 이 환경의 엣지 내부 리스너(prod `caddy:8081`, dev `caddy:8082`)인지, compose 설정, 공유 망과 엣지, 디스크와 메모리 여유, 이미지와 커밋, **다운그레이드 가드**(현재 배포된 커밋의 후손이거나 같은 커밋만 허용), 마이그레이션이 있으면 사전 덤프 스크립트

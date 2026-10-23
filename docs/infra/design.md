@@ -419,6 +419,7 @@ Caddy 컨테이너(`caddy:2.x`, 구현 시 최신 2.x를 핀)가 A의 80·443만
 - 프로젝트 설정 "Prevent outdated deployment jobs"를 켠다. 같은 환경에서 더 최근에 시작한 배포가 있으면 오래된 배포 잡은 실패로 처리된다 (확인). 기준은 커밋 시각이 아니라 잡 시작 시각이다. 그래서 오래된 파이프라인의 수동 prod 배포를 먼저 누르면 새 파이프라인의 수동 배포가 막힌다. prod 수동 배포는 항상 master의 최신 파이프라인에서 누른다.
 - "Allow job retries for rollback deployments"는 기본이 켜져 있고 (확인), GitLab 문서는 민감한 프로젝트에서 끄라고 권한다. prod는 재시도 대신 `rollback.sh`로 되돌리므로 끈다.
 - `deploy.sh`에도 다운그레이드 가드가 있다(6.4절).
+- 보호된 환경(protected environments)은 Premium 이상의 기능이라 이 서버(CE)에서는 쓸 수 없다 (확인: GitLab 문서). prod 배포를 누를 수 있는 사람은 `master`의 병합 권한(Maintainer)과 Protected 러너(`fit-deploy`는 보호된 브랜치의 잡만 받는다)로 좁힌다. 보호 브랜치의 수동 잡은 그 브랜치에 병합·푸시 권한이 있는 사람만 누를 수 있다고 문서에 있지만 동작이 일관되지 않다는 보고가 있어서 (확인: GitLab 문서와 이슈), 첫 prod 배포 전에 권한이 없는 사용자가 누를 수 없는지 직접 확인한다.
 
 ### 6.3 파이프라인 `.gitlab-ci.yml`
 
@@ -427,17 +428,20 @@ Caddy 컨테이너(`caddy:2.x`, 구현 시 최신 2.x를 핀)가 A의 80·443만
 | 잡 | 단계 | 내용 |
 |---|---|---|
 | `lint:*` | verify | 아래 목록 |
-| `be:test` | verify | Gradle 테스트(Testcontainers, 최신 버전 필수)와 `bootJar` 빌드. jar를 아티팩트로 넘긴다. jar 크기가 GitLab 아티팩트 상한을 넘으면 B에서 A로 `rsync`한다(상한은 미확인) |
-| `fe:test` | verify | 린트, 타입 검사, 단위 테스트(`fe/`). verify 러너(B)에서 Node 이미지(핀, arm64 지원)로 실행 |
-| `fe:build` | verify | 같은 Node 이미지로 `next build`(standalone)를 **한 번만** 하고(환경 값은 번들에 넣지 않는다, 6.8절) 산출물 검사를 거쳐 FE 번들(`standalone`, `static`)을 GitLab 아티팩트로 넘긴다 |
-| `build:images` | build | `<서비스>:<SHA>`(be, fe) 로컬 조립. verify 단계가 만든 jar와 FE 번들을 `COPY`한다(BE 계약 #20, FE 계약 #1). 레지스트리는 없다. 이미 있으면 재사용한다(MR을 fast-forward로 병합하므로 SHA가 그대로라 다시 조립하지 않는다) |
-| `deploy:dev` | deploy | develop 푸시 시 자동(`environment: dev`) |
-| `deploy:prod` | deploy | master에서 수동(`environment: prod`) |
-| `smoke:public` | smoke | 배포 후 `--resolve`로 서버 내부 경유 확인. 검색 1건을 호출해 폴백 사용 여부를 확인한다(Modal 연동 누락이 폴백에 가려지지 않게, BE 계약 #17). 콜드 스타트를 감안한 타임아웃을 둔다. FE는 `/`가 200이고 `/config.json`에 필수 키가 모두 있는지 확인한다 |
+| `be:test` | verify | Gradle 테스트와 `bootJar` 빌드(`sh ./gradlew`: 래퍼가 git에서 실행 권한이 없다). 지금 BE 시험은 DB에 붙어야 뜨므로(`ApiApplicationTests`) dev·prod와 같은 pgvector를 잡의 서비스 컨테이너로 붙인다(접속 값은 그 잡 안에서만 쓰는 값이다). Testcontainers를 쓰게 되면 최신 버전이어야 한다. jar를 아티팩트로 넘긴다. jar 크기가 GitLab 아티팩트 상한을 넘으면 B에서 A로 `rsync`한다(상한은 미확인) |
+| `fe:test` | verify | 린트, `next typegen`(Next 16의 전역 타입을 만든다. 없으면 `tsc`가 실패한다), 타입 검사, 단위 테스트(`fe/`). verify 러너(B)에서 Node 이미지(핀, arm64 지원)로 실행 |
+| `fe:build` | verify | 같은 Node 이미지로 `next build`(standalone)를 **한 번만** 하고(환경 값은 번들에 넣지 않는다, 6.8절) 커밋 SHA를 `DEPLOYMENT_VERSION`으로 넘겨 빌드 ID와 `deploymentId`로 쓴다. FE 번들(`standalone`, `static`, `public`)을 GitLab 아티팩트로 넘긴다 |
+| `fe:bundle-check` | verify | `infra/ci/check_fe_bundle.py`로 번들 산출물을 검사한다(서버 파일, 정적 자산, 빌드 ID와 `deploymentId`가 SHA와 같음, 이미지 최적화 꺼짐, `sharp` 외 네이티브 모듈 없음, `localhost` 주소 없음. mock 글자는 경고, PWA 파일 없음은 건너뜀). 실패하면 `build:images`가 돌지 않는다 |
+| `build:images` | build | `<서비스>:<SHA>`(be, fe) 로컬 조립(`infra/ci/build-images.sh`). verify 단계가 만든 jar와 FE 번들을 `COPY`한다(BE 계약 #20, FE 계약 #1). 레지스트리는 없다. 이미 있으면 재사용한다(MR을 fast-forward로 병합하므로 SHA가 그대로라 다시 조립하지 않는다). `develop`과 `master`에서만 돈다 |
+| `deploy:dev` | deploy | develop 푸시 시 자동(`environment: dev`, `resource_group: dev`). 전체 clone(`GIT_DEPTH: "0"`)을 쓴다. 얕은 clone이면 다운그레이드 가드와 마이그레이션 비교가 틀린다 |
+| `deploy:prod` | deploy | master에서 수동(`environment: prod`, `resource_group: prod`). `allow_failure: false`라 사람이 누를 때까지 파이프라인이 멈춘다(`when: manual`만 두면 안 눌러도 통과한 것처럼 보인다) |
+| `smoke:dev`, `smoke:prod` | smoke | 환경별로 배포 뒤에 돈다(`smoke.sh <env> --sha <SHA>`). `--resolve`로 서버 내부 경유 확인. 검색 1건을 호출해 폴백 사용 여부를 확인한다(Modal 연동 누락이 폴백에 가려지지 않게, BE 계약 #17). 콜드 스타트를 감안한 타임아웃을 둔다. FE는 `/`가 200이고 `/config.json`에 필수 키가 모두 있는지 확인한다 |
+
+**배포 스위치:** `.gitlab-ci.yml`의 변수 `FIT_CD_ENABLED`(기본 `"false"`)가 꺼져 있으면 `fe:build`부터 `smoke`까지는 파이프라인에 나타나지 않고 `be:test`와 `fe:test`만 모든 파이프라인(`develop`, `master`, MR)에서 돈다. 켜면 `develop`은 `smoke:dev`까지, `master`는 수동 `deploy:prod`와 `smoke:prod`까지, MR은 verify 잡(`fe:build`, `fe:bundle-check` 포함)까지 나타난다. 켜는 일은 MR 한 줄이라 기록이 남고, 구조 시험(`test_pipeline_structure.py`)의 기본값 시험도 함께 바꿔야 해서 실수로 켜지 못한다. BE·FE가 서비스 계약(12.1, 12.5절)을 이행하기 전에 `fe:bundle-check`가 모든 MR을 막는 일을 피하려는 것이다. 켜기 전에 끝나야 할 일은 [계획 1C-3의 계약 이행 체크리스트](plans/2026-10-23-plan-1c3-ci-pipeline.md)에 있다.
 
 **`lint:*` 잡**
 
-- `lint:guards`: 단위 테스트, CRLF, `infra/`의 env 예제 형식, env 계약과 예제 파일의 키 일치, 포트 규칙
+- `lint:guards`: 단위 테스트(`.gitlab-ci.yml`의 구조 시험 포함: 파이프라인마다 어떤 잡이 나타나는지, 태그, 스위치 기본값), CRLF, `infra/`의 env 예제 형식, env 계약과 예제 파일의 키 일치, 포트 규칙
 - `lint:image-arch`: 도구 이미지 핀, 로컬 스택, 엣지, 데이터 스택, 백업 시험 이미지가 바뀔 때만 돈다
 - `lint:shell`, `lint:docker`, `lint:yaml`: `infra/`와 루트 설정만 엄격하게 본다. be의 Dockerfile은 오류 수준만 막는다. 다른 팀 코드는 각자의 잡이 맡는다
 - `lint:secrets`: 저장소 전체와 MR 커밋 이력
@@ -688,7 +692,7 @@ Grafana는 팀원에게 viewer 계정을 준다. A503에서는 SSH 보유자만 
 
 - **병합 방식:** MR은 fast-forward로 병합한다(프로젝트 설정). 병합 커밋이 새 SHA를 만들면 dev에서 검증한 이미지·번들과 prod가 달라진다. `develop → master`가 fast-forward가 되려면 master에 develop에 없는 커밋이 없어야 하므로 핫픽스도 반드시 develop을 거친다.
 - **동결(11/04 이후):** 기능 MR은 받지 않는다. develop·master의 병합 권한을 인프라 담당과 지정한 리뷰어로 좁힌다.
-- **핫픽스 순서:** `hotfix` 타입 브랜치(10.8절) → develop MR(dev 자동 배포, `smoke:public` 통과) → `develop → master` fast-forward MR → 인프라 담당이 `deploy:prod`를 수동 실행 → smoke와 `rollback.sh` 준비 상태 확인 → Mattermost 공지.
+- **핫픽스 순서:** `hotfix` 타입 브랜치(10.8절) → develop MR(dev 자동 배포, `smoke:dev` 통과) → `develop → master` fast-forward MR → 인프라 담당이 `deploy:prod`를 수동 실행 → smoke와 `rollback.sh` 준비 상태 확인 → Mattermost 공지.
 - **승인:** 2인(인프라 담당과 해당 영역 담당). 배포는 공지한 시간대에 한다. 장애 중에는 사후 승인을 허용하고 사유를 남긴다(RB-02b 포함).
 
 ### 10.7 첫 공개 준비 (11/02까지)
@@ -813,6 +817,8 @@ BE·AI·프런트 팀과 M1 전에 합의한다. 합의되면 `docs/infra/contra
 
 ### 12.1 BE (Spring Boot, Java 21)
 
+이행 상태와 인프라가 확인하는 방법은 [계획 1C-3의 계약 이행 체크리스트](plans/2026-10-23-plan-1c3-ci-pipeline.md)에 있다. 배포 스위치(6.3절)는 이 표가 이행된 뒤에 켠다.
+
 | # | 항목 | 요구 | 이유 |
 |---|---|---|---|
 | 1 | 관리 포트 | `management.server.port=8081`. `/actuator/health/readiness`(DB에만 의존), `/actuator/health/liveness`, `/actuator/prometheus`. 공개 경로로 프록시하지 않는다 | readiness가 외부 의존 장애에 흔들리면 재시작 폭풍(A503 교훈) |
@@ -866,7 +872,7 @@ AI 팀과 M1 전에 합의한다. FastAPI는 Modal에서 돌고 A·B에는 AI �
 
 ### 12.5 프런트(Next.js SSR)
 
-프런트 팀과 M1 전에 합의한다. 합의되면 `docs/infra/contracts/`로 분리한다.
+프런트 팀과 M1 전에 합의한다. 합의되면 `docs/infra/contracts/`로 분리한다. 이행 상태와 확인 방법은 [계획 1C-3의 계약 이행 체크리스트](plans/2026-10-23-plan-1c3-ci-pipeline.md)에 있다(`fe:bundle-check`가 번들로 확인한다).
 
 | # | 항목 | 요구 | 이유 |
 |---|---|---|---|

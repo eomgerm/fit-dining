@@ -28,9 +28,9 @@
 - `.gitlab-ci.yml`에는 `lint:*` 잡 12개뿐이다. `be:test`, `fe:test`, `fe:build`, `build:images`, `deploy`, `smoke`가 없다.
 - `be/`와 `fe/`에는 Dockerfile이 없다(저장소 전체에 있는 것은 인프라의 시험용과 로컬 OpenSearch뿐). BE 계약 #20은 "CI가 만든 jar를 `COPY`만 한다"고 정하지만 누가 파일을 두는지는 정하지 않았다.
 - BE는 Gradle 래퍼와 Spring Boot 4.1.1, Java 21이다. `/healthz`와 `/api/v1/version`이 소스에 없다(BE 계약 #2, #3).
-- FE는 pnpm 11.13.0(`packageManager`)이고 `lint`, `test`(vitest) 스크립트가 있다. `next.config.ts`에는 `output: 'standalone'`, `generateBuildId`/`deploymentId`, `images.unoptimized`가 없고 `/fe-healthz` 라우트도 없다(FE 계약 #1, #6, #7). `/config.json` 라우트는 있다.
+- FE는 pnpm 11.20.0(`packageManager`)이고 `lint`, `test`(vitest) 스크립트가 있다. 이 계획을 쓸 때 `develop`의 `next.config.ts`에는 `output: 'standalone'`, `generateBuildId`/`deploymentId`, `images.unoptimized`가 없고 `/fe-healthz` 라우트도 없었다(FE 계약 #1, #6, #7). FE 팀의 `fe/chore/deploy-config-S15P31A302-44`가 이 넷을 구현해 같은 날 `develop`에 병합됐다(`57dbd30`). `/config.json` 라우트는 있다.
 - 서버 A의 `/srv/fit/state`와 `/srv/fit/web`은 `root:root 755`다. `deploy.sh`는 거기에 상태 파일과 정적 자산 풀을 쓰는데 deploy 러너(`gitlab-runner`, docker 그룹)는 쓰지 못한다. `/etc/fit/*.env`는 `root:docker 640`, `/srv/fit/predeploy`는 `root:docker 2770`이라 읽기와 덤프는 된다.
-- 러너는 두 서버에 설치만 돼 있고(`infra/host/runner.sh`) GitLab에 등록돼 있지 않다.
+- 러너 두 개(B의 `fit-verify`, A의 `fit-deploy`)는 `infra/host/runner.sh`로 설치하고 GitLab에 등록해 online이다(2026-10-23). 임시 verify 러너는 지웠다.
 
 ## 결정과 근거
 
@@ -164,7 +164,7 @@ NODE_IMAGE=node:22.23.4-bookworm-slim
 - [ ] **Step 6:** 실제 FE 번들(Task 2의 계약대로 패치한 빌드)로 이미지를 조립해 compose와 같은 조건(읽기 전용, tmpfs, 비root)에서 띄워 본다.
 - [ ] **Step 7:** 커밋 `:sparkles: feat(infra): BE·FE 이미지 Dockerfile과 조립 스크립트(build-images.sh), 컨테이너 시험 추가 (S15P31A302-19)`
 
-실제 번들로 확인한 것(2026-10-23, 이 PC): 이미지 크기 387MB. 읽기 전용 루트와 tmpfs, 비root(node)에서 `/`가 200, `/config.json`이 200(`{"env":"dev"}`), `/place`가 200이고 런타임 오류 로그가 없다. HTML에 `data-dpl-id`로 `deploymentId`가 들어 있다. **`/fe-healthz`는 404**다(FE 계약 #6을 FE가 아직 이행하지 않았다. compose의 healthcheck가 이 경로를 쓰므로 FE 팀이 만들기 전에는 배포가 준비 완료로 넘어가지 못한다).
+실제 번들로 확인한 것(2026-10-23, 이 PC): 이미지 크기 387MB. 읽기 전용 루트와 tmpfs, 비root(node)에서 `/`가 200, `/config.json`이 200(`{"env":"dev"}`), `/place`가 200이고 런타임 오류 로그가 없다. HTML에 `data-dpl-id`로 `deploymentId`가 들어 있다. **`/fe-healthz`는 404**였다(그때는 FE 계약 #6을 FE가 이행하지 않았다. compose의 healthcheck가 이 경로를 쓴다). FE 팀이 같은 날 만들어 `develop`에 병합했다(`57dbd30`).
 
 ---
 
@@ -382,7 +382,7 @@ smoke:prod:
 
 - **`fe:test`:** `pnpm lint` 통과, `pnpm test` 259개 통과. `tsc --noEmit`은 `next typegen` 없이는 `LayoutProps`를 찾지 못해 실패했고 typegen 뒤에는 통과했다. `packageManager`(pnpm 11.20.0)대로 corepack이 받는다.
 - **`be:test`:** DB 없이 `gradlew test`는 165개 중 `ApiApplicationTests.contextLoads` 1개가 Hibernate 방언 감지(DB 접속)에서 실패했다. pgvector 서비스와 같은 환경변수를 주면 165개가 모두 통과하고 `bootJar`가 jar 하나(55MB)를 만든다. `be/gradlew`는 git에서 100644라 `./gradlew`로 부르면 CI에서 Permission denied가 난다.
-- **`fe:build` → `fe:bundle-check` → `build:images`:** FE 팀 브랜치(`fe/chore/deploy-config-S15P31A302-44`, 아직 `develop`에 없다)의 소스와 위 jar로 돌렸다. 번들 42MB, 검사 전부 PASS(`mock-words` WARN, `pwa-files` SKIP은 막지 않는 항목), 이미지는 BE 509MB(uid 10001, 비root)와 FE 387MB. pnpm 스토어가 `.pnpm-store`(프로젝트 안)에 생겨 캐시 경로가 맞다. 현재 `develop`의 FE에는 standalone 설정이 없어서 스위치를 켜면 `fe:build`가 실패한다(계약 이행 체크리스트의 FE 항목).
+- **`fe:build` → `fe:bundle-check` → `build:images`:** FE 팀 브랜치(`fe/chore/deploy-config-S15P31A302-44`)의 소스와 위 jar로 돌렸고, 그 브랜치가 `develop`에 병합된 뒤(`57dbd30`)에는 `origin/develop`의 FE 소스로 다시 돌렸다. 둘 다 같다: `fe:test` 통과(26개 파일, 267개 시험), 번들 42MB, 검사 전부 PASS(`mock-words` WARN, `pwa-files` SKIP은 막지 않는 항목), 이미지는 BE 509MB(uid 10001, 비root)와 FE 387MB. pnpm 스토어가 `.pnpm-store`(프로젝트 안)에 생겨 캐시 경로가 맞다. 그래서 FE 쪽은 스위치를 켜도 `fe:build`가 실패하지 않는다. 스위치를 막는 것은 BE 계약 항목이다(아래 체크리스트).
 - Windows Git Bash에서는 `build-images.sh`의 `mktemp` 경로(`/tmp/...`)를 Docker가 찾지 못해, docker.sock을 연 Linux 컨테이너에서 돌렸다. 서버 A(Linux)에는 없는 문제다.
 - 구조 시험은 변이 20개(예: `deploy:prod`의 `when: manual` 제거, `deploy:dev`에 `interruptible`, 스위치 `"true"`, `gradlew`를 `sh` 없이, `next typegen` 제거, DB 서비스 제거, `GIT_DEPTH` 제거, 브랜치 제한 제거)를 모두 잡았다.
 - gitleaks가 이미 커밋한 시험 값 두 곳(`test_envset.py`의 가짜 비밀 값, `test-deploy.sh`의 bcrypt 해시)을 잡았다. MR 파이프라인의 `lint:secrets`는 커밋 이력까지 보므로(`gitleaks git`) 새 커밋으로는 고칠 수 없어서 해당 커밋에 fixup으로 합쳤다. 시험 값은 낮은 엔트로피로 쓰거나 실행할 때 만든다(`test-deploy.sh`의 해시는 `up`이 `caddy hash-password`로 만든다).
@@ -395,7 +395,7 @@ smoke:prod:
 **Files:**
 - Modify: `docs/infra/gitlab-setup.md`(3단계 추가), `docs/infra/design.md`(6.3절 표, 12절에 계약 이행 상태), `infra/deploy/README.md`, `infra/host/README.md`
 
-- [ ] **Step 1:** `gitlab-setup.md`에 3단계(배포 파이프라인)를 쓴다. 프로젝트 설정: **Prevent outdated deployment jobs** 켬, **Allow job retries for rollback deployments** 끔, 환경 `dev`·`prod`에 보호(prod 배포 승인자는 Maintainer), `resource_group`의 `process_mode`를 `oldest_first`로 바꾸는 API 호출(개인 액세스 토큰은 호출하는 사람이 자기 터미널에서만 쓰고 채팅에 붙이지 않는다. 명령은 문서에 쓰되 토큰은 `read -s`로 받는다). 보호 브랜치(`develop`, `master`)에 push는 아무도 못 하고 MR만 허용하는 규칙이 이미 있는지 확인한다.
+- [ ] **Step 1:** `gitlab-setup.md`에 3단계(배포 파이프라인)를 쓴다. 프로젝트 설정: **Prevent outdated deployment jobs** 켬, **Allow job retries for rollback deployments** 끔(둘 다 1단계에서 끝났다), 환경 보호는 Premium 이상 기능이라 CE에서 쓸 수 없으므로 대체(보호 브랜치와 Protected 러너, 첫 prod 배포 전에 Developer가 `deploy:prod`를 못 누르는지 확인)를 적는다, `resource_group`의 `process_mode`를 `oldest_first`로 바꾸는 API 호출(개인 액세스 토큰은 호출하는 사람이 자기 터미널에서만 쓰고 채팅에 붙이지 않는다. 명령은 문서에 쓰되 토큰은 `read -s`로 받는다). 보호 브랜치(`develop`, `master`)에 push는 아무도 못 하고 MR만 허용하는 규칙이 이미 있는지 확인한다.
 - [ ] **Step 2:** 설계 6.3절 표를 현재와 맞춘다: `fe:bundle-check` 추가, `smoke:public`을 `smoke:dev`·`smoke:prod`로, 스위치 설명, 12.1절과 12.5절에 계약 이행 상태 표(아래 체크리스트)를 연결한다.
 - [ ] **Step 3:** `bash infra/ci/run-local-checks.sh`와 `--self-test`가 통과한다. 이 계획의 시험(`test-images.sh`, `test-host.sh`, 단위 시험)이 통과한다.
 - [ ] **Step 4:** 커밋 `:memo: docs(infra): CI 배포 파이프라인 설정과 계약 이행 체크리스트 문서화 (S15P31A302-19)`
@@ -408,33 +408,37 @@ smoke:prod:
 
 **BE 팀**
 
-| # | 항목 | 확인 방법 |
-|---|---|---|
-| 1 | `GET /healthz`(상태만, 내부 정보 없음) — 계약 #2 | `curl`로 200 |
-| 2 | `GET /api/v1/version` → `{sha, builtAt}`. 이미지에 박힌 `APP_SHA`, `APP_BUILT_AT`를 읽는다(이름은 제안, 팀과 확정) — 계약 #3 | `smoke.sh`가 새 SHA인지 본다 |
-| 3 | 관리 포트 8081과 `/actuator/health/readiness`, `/actuator/prometheus` — 계약 #1 | `deploy.sh` readiness |
-| 4 | `server.shutdown=graceful`, 종료 대기 30초 — 계약 #4 | 롤백 시험 |
-| 5 | `SPRING_PROFILES_ACTIVE=migrate`면 웹 서버 없이 마이그레이션 후 종료 — 계약 #9 | 마이그레이션 컨테이너가 0으로 끝남 |
-| 6 | `X-Fallback` 헤더(폴백 응답) — 계약 #17 | `FIT_SMOKE_SEARCH_PATH`를 주면 `smoke.sh`가 확인 |
-| 7 | 부팅 시 env 검증(`REPLACE_ME`, 환경 불일치 거부) — 계약 #8 | prod.env의 자리표시자로 기동이 거부되는지 |
+현황 열은 2026-10-23에 `develop` 기준 소스(`be/src/main`)를 찾아본 결과다. 이행하면 팀이 갱신한다.
+
+| # | 항목 | 확인 방법 | 현황 |
+|---|---|---|---|
+| 1 | `GET /healthz`(상태만, 내부 정보 없음) — 계약 #2 | `curl`로 200 | 소스에 없음 |
+| 2 | `GET /api/v1/version` → `{sha, builtAt}`. 이미지에 박힌 `APP_SHA`, `APP_BUILT_AT`를 읽는다(이름은 제안, 팀과 확정) — 계약 #3 | `smoke.sh`가 새 SHA인지 본다 | 소스에 없음 |
+| 3 | 관리 포트 8081과 `/actuator/health/readiness`, `/actuator/prometheus` — 계약 #1 | `deploy.sh` readiness | 소스에 없음(`application.yml`에 `management` 설정이 없다) |
+| 4 | `server.shutdown=graceful`, 종료 대기 30초 — 계약 #4 | 롤백 시험 | 소스에 없음 |
+| 5 | `SPRING_PROFILES_ACTIVE=migrate`면 웹 서버 없이 마이그레이션 후 종료 — 계약 #9 | 마이그레이션 컨테이너가 0으로 끝남 | `application-migrate.yml`에 웹 서버 없음과 Flyway 켬이 있다. 종료 코드는 첫 dev 배포에서 확인 |
+| 6 | `X-Fallback` 헤더(폴백 응답) — 계약 #17 | `FIT_SMOKE_SEARCH_PATH`를 주면 `smoke.sh`가 확인 | 소스에 없음 |
+| 7 | 부팅 시 env 검증(`REPLACE_ME`, 환경 불일치 거부) — 계약 #8 | prod.env의 자리표시자로 기동이 거부되는지 | 소스에 없음 |
 
 **FE 팀**
 
-| # | 항목 | 확인 방법 |
-|---|---|---|
-| 1 | `next.config.ts`에 `output: 'standalone'`, `generateBuildId`와 `deploymentId`를 `DEPLOYMENT_VERSION`(커밋 SHA)으로 — 계약 #1 | `fe:bundle-check`(BUILD_ID) |
-| 2 | `images.unoptimized: true` 또는 커스텀 로더 — 계약 #7 | `fe:bundle-check`(images-manifest) |
-| 3 | `GET /fe-healthz`(200, 의존성 상태 안 봄) — 계약 #6 | FE 컨테이너 healthcheck |
-| 4 | 번들에 `localhost`·mock 값이 없음 — 계약 #3 | `fe:bundle-check` |
-| 5 | `/config.json`이 env에서 읽은 공개 값을 돌려주고 키 목록이 `contracts/env.md`에 있음 — 계약 #3 | `smoke.sh` |
-| 6 | `pnpm lint`, `pnpm exec tsc --noEmit`, `pnpm test`가 통과 | `fe:test` |
+현황 열은 2026-10-23에 확인한 결과다. 1~3은 FE 팀의 `fe/chore/deploy-config-S15P31A302-44`가 구현했고 `develop`에 병합됐다(`57dbd30`). `origin/develop`의 소스로 `fe:build`와 `fe:bundle-check`를 돌려 PASS를 확인했다.
+
+| # | 항목 | 확인 방법 | 현황 |
+|---|---|---|---|
+| 1 | `next.config.ts`에 `output: 'standalone'`, `generateBuildId`와 `deploymentId`를 `DEPLOYMENT_VERSION`(커밋 SHA)으로 — 계약 #1 | `fe:bundle-check`(build-id, deployment-id) | 이행됨(`develop`). 번들 검사 PASS |
+| 2 | `images.unoptimized: true` 또는 커스텀 로더 — 계약 #7 | `fe:bundle-check`(images-unoptimized) | 이행됨(`develop`). PASS |
+| 3 | `GET /fe-healthz`(200, 의존성 상태 안 봄) — 계약 #6 | FE 컨테이너 healthcheck | 이행됨(`develop`). 라우트가 있다 |
+| 4 | 번들에 `localhost`·mock 값이 없음 — 계약 #3 | `fe:bundle-check` | `localhost` 주소는 없음(PASS). mock이라는 글자는 번들에 있어 WARN이다. 개발용 mock 스위치가 배포 번들에 들어간 것인지 FE 팀이 확인한다 |
+| 5 | `/config.json`이 env에서 읽은 공개 값을 돌려주고 키 목록이 `contracts/env.md`에 있음 — 계약 #3 | `smoke.sh` | 라우트가 있고 `env`, `naverMapClientId`와 PostHog·푸시 공개 키(값이 있을 때)를 돌려준다. `APP_ENV`가 없거나 `dev`·`prod`가 아니면 500이다. 키는 `contracts/env.md`에 있다. PWA 파일(`public/sw.js`, `manifest.webmanifest`)은 아직 없다(계약 #4, 건너뜀) |
+| 6 | `pnpm lint`, `pnpm exec next typegen`, `pnpm exec tsc --noEmit`, `pnpm test`가 통과 | `fe:test` | 통과(lint, tsc, 259개 시험) |
 
 ## 서버 적용 절차 (구현 MR이 병합된 뒤)
 
-1. **러너 등록**(사람): GitLab에서 `fit-verify`(태그 `verify`, untagged 끔, Protected 끔), `fit-deploy`(태그 `deploy`, untagged 끔, Protected 켬)를 만들고 각 서버에서 `sudo bash ~/host/runner.sh register`로 토큰을 숨김 입력한다. `status`가 PASS이고 Runners 목록에서 online이다. 임시 verify 러너(이 PC의 Docker)는 지운다.
+1. **러너 등록**(사람, 끝났다 2026-10-23): GitLab에서 `fit-verify`(태그 `verify`, untagged 끔, Protected 끔), `fit-deploy`(태그 `deploy`, untagged 끔, Protected 켬)를 만들고 각 서버에서 `sudo bash ~/host/runner.sh register`로 토큰을 숨김 입력한다. `status`가 PASS이고 Runners 목록에서 online이다. 임시 verify 러너(이 PC의 Docker)는 지운다.
 2. **A에 권한 반영:** 코드를 갱신하고 `sudo ROLE=app FIT_PEER_IP=<B의 IP> bash ~/host/bootstrap.sh`로 디렉터리 권한을 적용한다. 이어서 이미 있는 파일의 그룹을 맞춘다: `sudo chgrp -R docker /srv/fit/state /srv/fit/web && sudo chmod -R g+rwX /srv/fit/state /srv/fit/web`. `verify-host.sh`가 통과한다.
 3. **verify 확인:** MR을 올려 `be:test`, `fe:test`가 B의 러너에서 도는 것을 본다(스위치가 꺼진 채로). 아티팩트 크기와 실행 시간(B의 메모리 4GB 안에서 Gradle이 끝나는지)을 기록한다.
-4. **GitLab 프로젝트 설정:** `gitlab-setup.md` 3단계(Prevent outdated deployment jobs 등).
+4. **GitLab 프로젝트 설정:** `gitlab-setup.md` 3단계(환경 보호는 CE에서 쓸 수 없으므로 대체 확인: Developer가 `deploy:prod`를 못 누르는지, `develop`과 `master`의 보호 설정. 그리고 `process_mode`를 `oldest_first`로). "Prevent outdated deployment jobs" 등은 1단계에서 끝났다.
 5. **계약 체크리스트가 끝나면** 스위치를 켜는 MR(`FIT_CD_ENABLED: "true"`와 구조 시험의 기본값 시험을 함께 바꾼다)을 올리고 `develop`에 병합해 dev 첫 배포를 지켜본다. 실패하면 `rollback.sh`와 알림을 확인한다.
 6. dev가 안정된 뒤 `develop → master` MR을 병합하고 `deploy:prod`를 수동으로 누른다.
 
@@ -444,8 +448,24 @@ smoke:prod:
 - GitLab CE 아티팩트 최대 크기(jar, FE 번들)와 SSAFY 인스턴스의 만료 정책.
 - `fit-deploy` 러너(shell executor)가 `gitlab-runner` 사용자로 `deploy.sh`를 돌 때의 권한 전체(`docker` 그룹, `/etc/fit` 읽기, 상태 디렉터리 쓰기, `edgectl.sh reload`). 호스트 권한 변경은 컨테이너 시험으로 모드만 확인한다.
 - 진짜 토큰으로 `runner.sh register`가 동작하는지(첫 등록에서 확인).
-- `corepack`이 `pnpm@11.13.0`을 내려받는 데 B의 외부 접근이 필요하다. 막혀 있으면 pnpm을 이미지에 넣는 후속이 필요하다.
+- `corepack`이 `packageManager`의 pnpm(11.20.0)을 내려받는 데 B의 외부 접근이 필요하다. 막혀 있으면 pnpm을 이미지에 넣는 후속이 필요하다.
 - 실제 BE·FE 이미지의 준비 시간과 메모리(1C-2에서도 목 이미지로만 확인했다).
+
+## 검증 결과 (2026-10-23, 이 PC)
+
+| 무엇을 | 결과 |
+|---|---|
+| 단위 시험(`python -m unittest discover -s infra/ci/tests`) | 209개 통과(2개는 POSIX 전용이라 Windows에서 건너뛴다. Linux 컨테이너에서는 전부 돈다) |
+| `bash infra/ci/run-local-checks.sh` | 통과(20개 PASS·OK, `hadolint(be)` 한 개는 대상 파일이 없어 건너뜀) |
+| `bash infra/ci/run-local-checks.sh --self-test` | 통과(13개. 검사가 나쁜 입력을 거부한다) |
+| `bash infra/ci/test/test-images.sh` | 통과(22개) |
+| shellcheck(`infra/` 전체), hadolint(`infra/`의 Dockerfile), yamllint | 통과 |
+| gitleaks | 작업 폴더는 gitignore된 `*.pem` 두 개(로컬 파일, CI 체크아웃에는 없다)만 나온다. 커밋 이력(`6444fa4..HEAD`) 9커밋은 발견 없음 |
+| 호스트 시험(`test-host.sh`) | Ubuntu 24.04의 app·ops, 22.04의 app 통과(새 시험 4개 포함) |
+| 배포 시험(`test-deploy.sh up`, `run`, `down`) | 통과 |
+| 잡의 `script:` 줄을 그대로 실행 | `fe:test`의 줄(lint, typegen, tsc, 시험)과 `be:test`의 줄(DB 서비스 포함, 165개)을 돌렸다. `fe:build`, `fe:bundle-check`, `build:images`는 `origin/develop`(`57dbd30`)의 FE 소스와 실제 jar로 돌려 통과했다(`fe:test`는 267개). 위 Task 5 절에 자세히 있다 |
+
+이 PC에서 확인하지 못한 것은 위 "아직 확인하지 못한 것"과 Task 5 절 끝의 목록이다. 특히 GitLab에서 실제로 돈 파이프라인과 서버 A에서만 도는 `deploy:*`, `smoke:*`는 구현 MR을 올리고 서버 적용 절차를 한 뒤에 본다.
 
 ## 후속 계획
 

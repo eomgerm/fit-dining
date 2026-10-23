@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 배포한 서비스를 엣지(Caddy)를 거쳐 확인한다(설계 6.3절 smoke:public, 6.4절 5단계). 서버 안에서 돌린다.
+# 배포한 서비스를 엣지(Caddy)를 거쳐 확인한다(설계 6.3절 smoke:dev·smoke:prod, 6.4절 5단계). 서버 안에서 돌린다.
 #   bash infra/deploy/smoke.sh <prod|dev> [--sha SHA] [--only be|fe]
 # 점검마다 PASS, FAIL, SKIP만 출력하고 dev 게이트 키는 출력하지 않는다. 하나라도 FAIL이면 종료 코드 1이다.
 # 주소는 /etc/fit/edge.env의 PROD_HOST·DEV_HOST로 만들고(https://<호스트>) 서버 자신(127.0.0.1)으로 연결한다.
