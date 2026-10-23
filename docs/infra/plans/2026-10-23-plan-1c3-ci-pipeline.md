@@ -488,13 +488,22 @@ MR 40의 첫 파이프라인에서 `be:test`는 B에서 테스트와 jar 생성�
 
 서버 B 적용(2026-10-23, 끝났다): 새 `runner.sh`를 `~/host/`에 올리고 `sudo bash ~/host/runner.sh tune`을 실행했다. `concurrent`가 1에서 2로 바뀌었고 `status`가 PASS다. 러너 로그에 `Configuration loaded builds=1 max_builds=2`가 찍혀 서비스 재시작 없이 값을 다시 읽었고(돌고 있던 잡은 끊기지 않았다) 잡이 `concurrent-0`과 `concurrent-1` 슬롯에서 같이 돌았다. 되돌리려면 `FIT_RUNNER_CONCURRENT=1`로 `tune`을 다시 실행한다.
 
-잡별 실측 시간(MR 40의 전체 실행, B, 성공한 실행): `lint:shell` 1분 26초, `be:test` 58초, `lint:image-arch` 56초, `fe:test` 55초, `lint:prometheus` 34초, 나머지 린터 9개는 3~8초(`lint:guards` 8초, `lint:secrets` 8초, `lint:migrations` 5초, `lint:caddy`·`lint:alertmanager`·`lint:yaml`·`lint:history` 4초, `lint:docker` 3초). 합계는 약 5분 29초다. 경량화 뒤 MR 종류별 잡 시간 합계는 이 값으로 추정하면 문서만 바꾸면 약 20초, FE만 약 1분 15초, BE만 약 1분 20초, 인프라 셸만 약 1분 45초다(전체 실행은 약 5분 30초). 실제 파이프라인 전체 시간은 경량화 뒤의 MR로 확인한다. `be:test`와 `fe:test`는 이미 1분 안팎이라 캐시 최적화는 급하지 않다. 남은 가장 큰 단일 잡은 `lint:shell`이다(스크립트 57개를 한 프로세스로 검사한다. 이 PC에서 같은 이미지로 재 보니 15.6초가 `xargs -P 2`에서 9.1초, `-P 4`에서 6.3초이고 틀린 스크립트가 있을 때 종료 코드는 순차와 같이 0이 아니다).
+잡별 실측 시간(MR 40의 전체 실행, B, 성공한 실행): `lint:shell` 1분 26초, `be:test` 58초, `lint:image-arch` 56초, `fe:test` 55초, `lint:prometheus` 34초, 나머지 린터 9개는 3~8초(`lint:guards` 8초, `lint:secrets` 8초, `lint:migrations` 5초, `lint:caddy`·`lint:alertmanager`·`lint:yaml`·`lint:history` 4초, `lint:docker` 3초). 합계는 약 5분 29초다. 경량화 뒤 MR 종류별 잡 시간 합계는 이 값으로 추정하면 문서만 바꾸면 약 20초, FE만 약 1분 15초, BE만 약 1분 20초, 인프라 셸만 약 1분 45초다(전체 실행은 약 5분 30초). 실제 파이프라인 전체 시간은 경량화 뒤의 MR로 확인한다. `be:test`와 `fe:test`는 이미 1분 안팎이라 캐시 최적화는 급하지 않다. 남은 가장 큰 단일 잡은 `lint:shell`이다(스크립트 57개를 한 프로세스로 검사한다). 이 PC에서 같은 이미지로 재 보니 15.6초가 `xargs -P 2`에서 9.1초, `-P 4`에서 6.3초였고 틀린 스크립트가 있을 때 종료 코드는 순차와 같이 0이 아니다. **그러나 B에서는 병렬화(`-P 2`)가 B가 한가할 때만 효과가 있다.** B에서 러너와 같은 제한(`--cpus 2 --memory 2g`)으로 직접 잰 값은 아래와 같고, MR 42의 파이프라인에서 `lint:shell`이 1분 29초(병렬화 전 1분 26초)였던 것은 다른 잡이 CPU를 쓰는 중이었기 때문이다.
+
+| B에서 `lint:shell`을 돌릴 때 | `xargs -P 2 -n 8` | 한 프로세스 |
+|---|---|---|
+| 다른 잡이 CPU를 안 씀 | 44.9초 | 87.8초 |
+| 다른 잡이 CPU 1개를 씀 | 85.5초 | 85.2초 |
+| 다른 잡이 CPU 2개를 다 씀 | 145.9초 | 125.1초 |
+
+B는 vCPU 2개(Neoverse-N1)이고 이미지는 arm64 그대로다(에뮬레이션이 아니다). 비용의 정체는 shellcheck가 B에서 쓰는 CPU 약 85초분이라 병렬화로는 줄지 않는다. 러너가 `concurrent 2`이므로 다른 슬롯에서 CPU를 쓰는 잡이 있는 것이 보통이고, 그때 `-P 2`는 해롭지는 않지만(한 프로세스와 같다. 두 슬롯이 다 CPU를 쓰면 오히려 조금 느리다) 이득도 없다. 시간을 줄이려면 일의 양을 줄여야 한다(아래 후보).
 
 다음에 볼 것(실측이 필요하다): GitLab의 Jobs 화면에서 잡별 소요 시간을 보고 남은 큰 비용을 정한다. 후보는 세 가지다.
 
 - `fe:test`가 잡마다 만드는 pnpm 스토어 캐시(581MB)를 MR 파이프라인에서는 읽기만 하게 하기(`policy: pull`).
 - 스위치를 켠 뒤 MR마다 올라가는 FE 번들(42MB): `fe:build`와 `fe:bundle-check`를 한 잡으로 합치고 번들은 `develop`·`master`에서만 올리기.
 - Gradle 빌드 캐시(`--build-cache`).
+- `lint:shell`은 MR에서 바뀐 셸 스크립트만 검사한다(`git diff`로 고르고, 다른 스크립트가 `source`하는 공유 라이브러리가 바뀌면 전체를 검사한다. `develop`·`master`는 항상 전체). 검사 시간이 파일 수에 비례하므로(추정) 스크립트 몇 개를 바꾸는 MR은 1분 25초에서 수 초로 줄 수 있다. 대신 바뀐 파일에 의존하는 스크립트의 경고가 병합 뒤 `develop` 파이프라인에서야 잡힐 수 있고, 변경 파일을 고르는 스크립트와 시험이 늘어난다. 인프라 셸을 바꾸는 MR이 자주 기다리게 될 때 한다.
 
 ## 검증 결과 (2026-10-23, 이 PC)
 
