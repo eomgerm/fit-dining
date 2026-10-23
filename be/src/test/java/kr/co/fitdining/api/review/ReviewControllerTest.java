@@ -40,7 +40,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * 실제 서비스와 메모리 저장소(시드 포함)로 리뷰 API를 확인한다. 시드는 1번 장소 25건, 2번 장소 1건이다.
+ * 실제 서비스와 메모리 저장소(시드 포함)로 리뷰 API를 확인한다. 시드는 장소 Mock 1~30번에 있고 1번 장소는 25건이다.
  * 등록 테스트는 컨텍스트의 저장소를 함께 쓰므로 테스트마다 시드에 없는 새 장소 id를 쓴다.
  */
 @WebMvcTest(controllers = ReviewController.class, properties = "review.mock.enabled=true")

@@ -2,12 +2,12 @@
   "reviews": [
     {
       "placeId": 1,
-      "description": "점심시간에도 자리가 넉넉했어요.",
+      "description": "점심시간에 갔더니 20분쯤 기다렸어요.",
       "createdAt": "2026-09-26T03:00:00Z"
     },
     {
       "placeId": 1,
-      "description": "국물이 진하고 양이 많아요.",
+      "description": "양지 쌀국수 국물이 진하고 고기가 부드러워요.",
       "createdAt": "2026-09-27T08:00:00Z"
     },
     {
@@ -21,12 +21,12 @@
     },
     {
       "placeId": 1,
-      "description": "혼밥하기 편한 자리가 있어요.",
+      "description": "가격 대비 양도 맛도 좋아요.",
       "createdAt": "2026-09-30T05:00:00Z"
     },
     {
       "placeId": 1,
-      "description": "주말 저녁에는 조금 기다렸어요.",
+      "description": "친구랑 오래 이야기하다 왔어요.",
       "createdAt": "2026-10-01T10:00:00Z"
     },
     {
@@ -40,17 +40,17 @@
     },
     {
       "placeId": 1,
-      "description": "가격 대비 만족스러워요.",
+      "description": "점심 가격이 부담 없어요.",
       "createdAt": "2026-10-04T07:00:00Z"
     },
     {
       "placeId": 1,
-      "description": "창가 자리가 밝아서 좋았어요.",
+      "description": "곱빼기 안 시켜도 양이 충분해요.",
       "createdAt": "2026-10-05T03:00:00Z"
     },
     {
       "placeId": 1,
-      "description": "회사 동료들과 점심 먹기 좋아요.",
+      "description": "테이블 간격이 넓어서 대화하기 편했어요.",
       "createdAt": "2026-10-06T08:00:00Z"
     },
     {
@@ -69,17 +69,17 @@
     },
     {
       "placeId": 1,
-      "description": "음악 소리가 크지 않아 대화하기 좋았어요.",
+      "description": "이 가격에 이 정도면 만족해요.",
       "createdAt": "2026-10-10T10:00:00Z"
     },
     {
       "placeId": 1,
-      "description": "월남쌈 세트를 추천해요.",
+      "description": "짜조가 바삭하고 고소해요.",
       "createdAt": "2026-10-11T06:00:00Z"
     },
     {
       "placeId": 1,
-      "description": "비 오는 날 생각나는 맛이에요.",
+      "description": "비 오는 날 생각나는 국물이에요.",
       "createdAt": "2026-10-12T11:00:00Z"
     },
     {
@@ -88,42 +88,2066 @@
     },
     {
       "placeId": 1,
-      "description": "테이블 간격이 넓은 편이에요.",
+      "description": "둘이서 나눠 먹어도 될 만큼 양이 많아요.",
       "createdAt": "2026-10-14T03:00:00Z"
     },
     {
       "placeId": 1,
-      "description": "주문하고 금방 나왔어요.",
+      "description": "역에서 가까워 찾기 쉬워요.",
       "createdAt": "2026-10-15T08:00:00Z"
     },
     {
       "placeId": 1,
-      "description": "디저트로 연유 커피를 마셨어요.",
+      "description": "가격이 착해서 회사 동료들과 자주 와요.",
       "createdAt": "2026-10-16T04:00:00Z"
     },
     {
       "placeId": 1,
-      "description": "역에서 가까워 찾기 쉬워요.",
       "createdAt": "2026-10-17T09:00:00Z"
     },
     {
       "placeId": 1,
+      "description": "창가 자리가 밝아서 좋았어요.",
       "createdAt": "2026-10-18T05:00:00Z"
     },
     {
       "placeId": 1,
-      "description": "재방문 의사 있어요.",
+      "description": "분짜 소스가 새콤달콤해서 맛있어요.",
       "createdAt": "2026-10-19T10:00:00Z"
     },
     {
       "placeId": 1,
-      "description": "점심 피크 직전에 가면 조용해요.",
+      "description": "대화하기 좋아요. 다음에도 오고 싶어요.",
       "createdAt": "2026-10-20T06:00:00Z"
     },
     {
       "placeId": 2,
-      "description": "분위기가 좋아서 대화하기 편했어요.",
-      "createdAt": "2026-10-19T10:30:00Z"
+      "description": "1인 메뉴가 있어서 혼밥하기 좋아요.",
+      "createdAt": "2026-09-06T08:20:00Z"
+    },
+    {
+      "placeId": 2,
+      "description": "주차 공간이 좁아서 대중교통을 추천해요.",
+      "createdAt": "2026-09-11T05:10:00Z"
+    },
+    {
+      "placeId": 2,
+      "description": "혼자 점심 먹으러 자주 와요.",
+      "createdAt": "2026-09-16T02:00:00Z"
+    },
+    {
+      "placeId": 2,
+      "description": "양지 쌀국수 추천해요.",
+      "createdAt": "2026-09-21T09:50:00Z"
+    },
+    {
+      "placeId": 2,
+      "description": "매장이 깔끔해요.",
+      "createdAt": "2026-09-26T06:40:00Z"
+    },
+    {
+      "placeId": 2,
+      "createdAt": "2026-10-01T03:30:00Z"
+    },
+    {
+      "placeId": 2,
+      "description": "바 자리가 있어서 혼밥하기 좋아요.",
+      "createdAt": "2026-10-06T10:20:00Z"
+    },
+    {
+      "placeId": 2,
+      "description": "에그 베네딕트 또 시키고 싶어요.",
+      "createdAt": "2026-10-11T07:10:00Z"
+    },
+    {
+      "placeId": 2,
+      "description": "혼밥하기 좋아요. 다음에도 오고 싶어요.",
+      "createdAt": "2026-10-16T04:00:00Z"
+    },
+    {
+      "placeId": 3,
+      "description": "오후에 해가 잘 들어서 사진이 잘 나와요.",
+      "createdAt": "2026-09-07T06:50:00Z"
+    },
+    {
+      "placeId": 3,
+      "description": "케이크가 촉촉하고 많이 달지 않아요.",
+      "createdAt": "2026-09-10T03:40:00Z"
+    },
+    {
+      "placeId": 3,
+      "description": "햇살 들어오는 창가 자리가 좋아요.",
+      "createdAt": "2026-09-13T10:30:00Z"
+    },
+    {
+      "placeId": 3,
+      "description": "디저트가 맛있어서 또 왔어요.",
+      "createdAt": "2026-09-16T07:20:00Z"
+    },
+    {
+      "placeId": 3,
+      "description": "주말에는 사람이 많아서 조금 시끄러웠어요.",
+      "createdAt": "2026-09-19T04:10:00Z"
+    },
+    {
+      "placeId": 3,
+      "createdAt": "2026-09-22T01:00:00Z"
+    },
+    {
+      "placeId": 3,
+      "description": "창이 커서 낮에 오면 밝아요.",
+      "createdAt": "2026-09-25T08:50:00Z"
+    },
+    {
+      "placeId": 3,
+      "description": "구움과자가 맛있어요.",
+      "createdAt": "2026-09-28T05:40:00Z"
+    },
+    {
+      "placeId": 3,
+      "description": "카페 라테 주문했는데 만족해요.",
+      "createdAt": "2026-10-01T02:30:00Z"
+    },
+    {
+      "placeId": 3,
+      "description": "재방문 의사 있어요.",
+      "createdAt": "2026-10-04T09:20:00Z"
+    },
+    {
+      "placeId": 3,
+      "description": "채광이 좋아서 기분이 좋아져요.",
+      "createdAt": "2026-10-07T06:10:00Z"
+    },
+    {
+      "placeId": 3,
+      "createdAt": "2026-10-10T03:00:00Z"
+    },
+    {
+      "placeId": 3,
+      "description": "커피보다 디저트가 더 기억에 남아요.",
+      "createdAt": "2026-10-13T10:50:00Z"
+    },
+    {
+      "placeId": 3,
+      "description": "아메리카노 추천해요.",
+      "createdAt": "2026-10-16T07:40:00Z"
+    },
+    {
+      "placeId": 3,
+      "description": "디저트가 맛있어요. 다음에도 오고 싶어요.",
+      "createdAt": "2026-10-19T04:30:00Z"
+    },
+    {
+      "placeId": 4,
+      "description": "주변이 조용해서 통화하기도 괜찮았어요.",
+      "createdAt": "2026-09-02T02:30:00Z"
+    },
+    {
+      "placeId": 4,
+      "description": "조용해서 마음이 편해져요.",
+      "createdAt": "2026-09-07T09:20:00Z"
+    },
+    {
+      "placeId": 4,
+      "description": "혼자 생각 정리하기 좋은 곳이에요.",
+      "createdAt": "2026-09-12T06:10:00Z"
+    },
+    {
+      "placeId": 4,
+      "description": "공부하는 사람이 많아서 조용한 편이에요.",
+      "createdAt": "2026-09-17T03:00:00Z"
+    },
+    {
+      "placeId": 4,
+      "description": "콜드브루 또 시키고 싶어요.",
+      "createdAt": "2026-09-22T10:50:00Z"
+    },
+    {
+      "placeId": 4,
+      "description": "친구 추천으로 왔는데 만족해요.",
+      "createdAt": "2026-09-27T07:40:00Z"
+    },
+    {
+      "placeId": 4,
+      "createdAt": "2026-10-02T04:30:00Z"
+    },
+    {
+      "placeId": 4,
+      "description": "말소리가 크지 않아 차분해요.",
+      "createdAt": "2026-10-07T01:20:00Z"
+    },
+    {
+      "placeId": 4,
+      "description": "핸드드립 주문했는데 만족해요.",
+      "createdAt": "2026-10-12T08:10:00Z"
+    },
+    {
+      "placeId": 4,
+      "description": "조용해요. 다음에도 오고 싶어요.",
+      "createdAt": "2026-10-17T05:00:00Z"
+    },
+    {
+      "placeId": 5,
+      "description": "1인석이 있어서 혼자 먹기 편해요.",
+      "createdAt": "2026-09-08T09:50:00Z"
+    },
+    {
+      "placeId": 5,
+      "description": "혼밥 장소로 추천해요.",
+      "createdAt": "2026-09-11T06:40:00Z"
+    },
+    {
+      "placeId": 5,
+      "description": "카운터 자리에서 혼자 먹기 좋아요.",
+      "createdAt": "2026-09-14T03:30:00Z"
+    },
+    {
+      "placeId": 5,
+      "description": "회사 근처라 혼자 점심 먹을 때 와요.",
+      "createdAt": "2026-09-17T10:20:00Z"
+    },
+    {
+      "placeId": 5,
+      "description": "점심시간에 갔더니 조금 기다렸어요.",
+      "createdAt": "2026-09-20T07:10:00Z"
+    },
+    {
+      "placeId": 5,
+      "createdAt": "2026-09-23T04:00:00Z"
+    },
+    {
+      "placeId": 5,
+      "description": "바쁠 때 오기 좋아요. 금방 나와요.",
+      "createdAt": "2026-09-26T11:50:00Z"
+    },
+    {
+      "placeId": 5,
+      "description": "키오스크로 주문해서 혼자 오기 부담 없어요.",
+      "createdAt": "2026-09-29T08:40:00Z"
+    },
+    {
+      "placeId": 5,
+      "description": "된장찌개 추천해요.",
+      "createdAt": "2026-10-02T05:30:00Z"
+    },
+    {
+      "placeId": 5,
+      "description": "사장님이 친절하세요.",
+      "createdAt": "2026-10-05T02:20:00Z"
+    },
+    {
+      "placeId": 5,
+      "description": "점심시간에도 음식이 빨리 나와요.",
+      "createdAt": "2026-10-08T09:10:00Z"
+    },
+    {
+      "placeId": 5,
+      "createdAt": "2026-10-11T06:00:00Z"
+    },
+    {
+      "placeId": 5,
+      "description": "혼자 온 손님이 많아서 편했어요.",
+      "createdAt": "2026-10-14T03:50:00Z"
+    },
+    {
+      "placeId": 5,
+      "description": "한우 등심 또 시키고 싶어요.",
+      "createdAt": "2026-10-17T10:40:00Z"
+    },
+    {
+      "placeId": 5,
+      "description": "혼밥하기 좋아요. 다음에도 오고 싶어요.",
+      "createdAt": "2026-10-20T07:30:00Z"
+    },
+    {
+      "placeId": 6,
+      "description": "플레이리스트가 취향이에요.",
+      "createdAt": "2026-09-14T12:50:00Z"
+    },
+    {
+      "placeId": 6,
+      "description": "음악 선곡이 좋아요.",
+      "createdAt": "2026-09-16T14:40:00Z"
+    },
+    {
+      "placeId": 6,
+      "description": "주말에는 라이브 공연도 있어요.",
+      "createdAt": "2026-09-18T11:30:00Z"
+    },
+    {
+      "placeId": 6,
+      "description": "가성비 좋아요.",
+      "createdAt": "2026-09-20T13:20:00Z"
+    },
+    {
+      "placeId": 6,
+      "description": "오래된 팝송이 나와서 반가웠어요.",
+      "createdAt": "2026-09-22T10:10:00Z"
+    },
+    {
+      "placeId": 6,
+      "description": "근처에서 이 가격이면 괜찮은 편이에요.",
+      "createdAt": "2026-09-24T12:00:00Z"
+    },
+    {
+      "placeId": 6,
+      "description": "음악 듣는 재미가 있어요.",
+      "createdAt": "2026-09-26T14:50:00Z"
+    },
+    {
+      "placeId": 6,
+      "description": "주차 공간이 좁아서 대중교통을 추천해요.",
+      "createdAt": "2026-09-28T11:40:00Z"
+    },
+    {
+      "placeId": 6,
+      "createdAt": "2026-09-30T13:30:00Z"
+    },
+    {
+      "placeId": 6,
+      "description": "가격이 부담 없어서 자주 와요.",
+      "createdAt": "2026-10-02T10:20:00Z"
+    },
+    {
+      "placeId": 6,
+      "description": "신청곡도 틀어 줘요.",
+      "createdAt": "2026-10-04T12:10:00Z"
+    },
+    {
+      "placeId": 6,
+      "description": "모히토 주문했는데 만족해요.",
+      "createdAt": "2026-10-06T14:00:00Z"
+    },
+    {
+      "placeId": 6,
+      "description": "직원분들이 친절해요.",
+      "createdAt": "2026-10-08T11:50:00Z"
+    },
+    {
+      "placeId": 6,
+      "description": "가격 대비 양도 맛도 좋아요.",
+      "createdAt": "2026-10-10T13:40:00Z"
+    },
+    {
+      "placeId": 6,
+      "createdAt": "2026-10-12T10:30:00Z"
+    },
+    {
+      "placeId": 6,
+      "description": "스피커 소리가 좋아요.",
+      "createdAt": "2026-10-14T12:20:00Z"
+    },
+    {
+      "placeId": 6,
+      "description": "하이볼 추천해요.",
+      "createdAt": "2026-10-16T14:10:00Z"
+    },
+    {
+      "placeId": 6,
+      "description": "음악이 좋아요. 다음에도 오고 싶어요.",
+      "createdAt": "2026-10-18T11:00:00Z"
+    },
+    {
+      "placeId": 7,
+      "description": "공부하는 사람이 많아서 조용한 편이에요.",
+      "createdAt": "2026-09-10T02:30:00Z"
+    },
+    {
+      "placeId": 7,
+      "description": "말소리가 크지 않아 차분해요.",
+      "createdAt": "2026-09-12T09:20:00Z"
+    },
+    {
+      "placeId": 7,
+      "description": "조용히 작업하기 좋은 곳이에요.",
+      "createdAt": "2026-09-14T06:10:00Z"
+    },
+    {
+      "placeId": 7,
+      "description": "음악 소리가 작아서 집중이 잘 돼요.",
+      "createdAt": "2026-09-16T03:00:00Z"
+    },
+    {
+      "placeId": 7,
+      "description": "몇 시간 있어도 눈치 주지 않아요.",
+      "createdAt": "2026-09-18T10:50:00Z"
+    },
+    {
+      "placeId": 7,
+      "description": "평일 오후에는 정말 조용해요.",
+      "createdAt": "2026-09-20T07:40:00Z"
+    },
+    {
+      "placeId": 7,
+      "description": "의자가 편해서 오래 있어도 괜찮아요.",
+      "createdAt": "2026-09-22T04:30:00Z"
+    },
+    {
+      "placeId": 7,
+      "description": "조용해서 책 읽기 좋아요.",
+      "createdAt": "2026-09-24T01:20:00Z"
+    },
+    {
+      "placeId": 7,
+      "description": "주말에는 사람이 많아서 조금 시끄러웠어요.",
+      "createdAt": "2026-09-26T08:10:00Z"
+    },
+    {
+      "placeId": 7,
+      "createdAt": "2026-09-28T05:00:00Z"
+    },
+    {
+      "placeId": 7,
+      "description": "콘센트가 많아서 노트북 작업하기 좋아요.",
+      "createdAt": "2026-09-30T02:50:00Z"
+    },
+    {
+      "placeId": 7,
+      "description": "주변이 조용해서 통화하기도 괜찮았어요.",
+      "createdAt": "2026-10-02T09:40:00Z"
+    },
+    {
+      "placeId": 7,
+      "description": "얼그레이 또 시키고 싶어요.",
+      "createdAt": "2026-10-04T06:30:00Z"
+    },
+    {
+      "placeId": 7,
+      "description": "역에서 가까워 찾기 쉬워요.",
+      "createdAt": "2026-10-06T03:20:00Z"
+    },
+    {
+      "placeId": 7,
+      "description": "와이파이가 빨라서 작업하기 좋아요.",
+      "createdAt": "2026-10-08T10:10:00Z"
+    },
+    {
+      "placeId": 7,
+      "createdAt": "2026-10-10T07:00:00Z"
+    },
+    {
+      "placeId": 7,
+      "description": "조용해서 마음이 편해져요.",
+      "createdAt": "2026-10-12T04:50:00Z"
+    },
+    {
+      "placeId": 7,
+      "description": "아메리카노 주문했는데 만족해요.",
+      "createdAt": "2026-10-14T01:40:00Z"
+    },
+    {
+      "placeId": 7,
+      "description": "조용해요. 다음에도 오고 싶어요.",
+      "createdAt": "2026-10-16T08:30:00Z"
+    },
+    {
+      "placeId": 8,
+      "description": "키오스크로 주문해서 혼자 오기 부담 없어요.",
+      "createdAt": "2026-09-07T02:20:00Z"
+    },
+    {
+      "placeId": 8,
+      "description": "혼자 온 손님이 많아서 편했어요.",
+      "createdAt": "2026-09-10T09:10:00Z"
+    },
+    {
+      "placeId": 8,
+      "description": "1인 메뉴가 있어서 혼밥하기 좋아요.",
+      "createdAt": "2026-09-13T06:00:00Z"
+    },
+    {
+      "placeId": 8,
+      "description": "혼자 점심 먹으러 자주 와요.",
+      "createdAt": "2026-09-16T03:50:00Z"
+    },
+    {
+      "placeId": 8,
+      "description": "바 자리가 있어서 혼밥하기 좋아요.",
+      "createdAt": "2026-09-19T10:40:00Z"
+    },
+    {
+      "placeId": 8,
+      "createdAt": "2026-09-22T07:30:00Z"
+    },
+    {
+      "placeId": 8,
+      "description": "혼자 와도 눈치 안 보여요.",
+      "createdAt": "2026-09-25T04:20:00Z"
+    },
+    {
+      "placeId": 8,
+      "description": "1인석이 있어서 혼자 먹기 편해요.",
+      "createdAt": "2026-09-28T11:10:00Z"
+    },
+    {
+      "placeId": 8,
+      "description": "혼밥 장소로 추천해요.",
+      "createdAt": "2026-10-01T08:00:00Z"
+    },
+    {
+      "placeId": 8,
+      "description": "안심 돈카츠 추천해요.",
+      "createdAt": "2026-10-04T05:50:00Z"
+    },
+    {
+      "placeId": 8,
+      "description": "매장이 깔끔해요.",
+      "createdAt": "2026-10-07T02:40:00Z"
+    },
+    {
+      "placeId": 8,
+      "createdAt": "2026-10-10T09:30:00Z"
+    },
+    {
+      "placeId": 8,
+      "description": "카운터 자리에서 혼자 먹기 좋아요.",
+      "createdAt": "2026-10-13T06:20:00Z"
+    },
+    {
+      "placeId": 8,
+      "description": "등심 돈카츠 또 시키고 싶어요.",
+      "createdAt": "2026-10-16T03:10:00Z"
+    },
+    {
+      "placeId": 8,
+      "description": "혼밥하기 좋아요. 다음에도 오고 싶어요.",
+      "createdAt": "2026-10-19T10:00:00Z"
+    },
+    {
+      "placeId": 9,
+      "description": "가족 모임으로 다녀왔어요.",
+      "createdAt": "2026-09-11T05:30:00Z"
+    },
+    {
+      "placeId": 9,
+      "description": "룸이 있어서 회식 자리로 좋아요.",
+      "createdAt": "2026-09-13T02:20:00Z"
+    },
+    {
+      "placeId": 9,
+      "description": "단체로 가도 음식이 한꺼번에 나와요.",
+      "createdAt": "2026-09-15T09:10:00Z"
+    },
+    {
+      "placeId": 9,
+      "description": "큰 테이블이 있어서 모임하기 좋아요.",
+      "createdAt": "2026-09-17T06:00:00Z"
+    },
+    {
+      "placeId": 9,
+      "description": "팀 점심으로 자주 가요.",
+      "createdAt": "2026-09-19T03:50:00Z"
+    },
+    {
+      "placeId": 9,
+      "description": "예약하고 가면 단체로 편하게 앉을 수 있어요.",
+      "createdAt": "2026-09-21T10:40:00Z"
+    },
+    {
+      "placeId": 9,
+      "description": "열 명이 가도 자리가 있었어요.",
+      "createdAt": "2026-09-23T07:30:00Z"
+    },
+    {
+      "placeId": 9,
+      "description": "단체석이 있어서 회식하기 좋아요.",
+      "createdAt": "2026-09-25T04:20:00Z"
+    },
+    {
+      "placeId": 9,
+      "description": "점심시간에 갔더니 조금 기다렸어요.",
+      "createdAt": "2026-09-27T11:10:00Z"
+    },
+    {
+      "placeId": 9,
+      "createdAt": "2026-09-29T08:00:00Z"
+    },
+    {
+      "placeId": 9,
+      "description": "재료가 신선한 게 느껴져요.",
+      "createdAt": "2026-10-01T05:50:00Z"
+    },
+    {
+      "placeId": 9,
+      "description": "단체 메뉴 구성이 알차요.",
+      "createdAt": "2026-10-03T02:40:00Z"
+    },
+    {
+      "placeId": 9,
+      "description": "까르보나라 주문했는데 만족해요.",
+      "createdAt": "2026-10-05T09:30:00Z"
+    },
+    {
+      "placeId": 9,
+      "description": "재방문 의사 있어요.",
+      "createdAt": "2026-10-07T06:20:00Z"
+    },
+    {
+      "placeId": 9,
+      "description": "채소가 아삭하고 신선해요.",
+      "createdAt": "2026-10-09T03:10:00Z"
+    },
+    {
+      "placeId": 9,
+      "createdAt": "2026-10-11T10:00:00Z"
+    },
+    {
+      "placeId": 9,
+      "description": "동기 모임 장소로 추천해요.",
+      "createdAt": "2026-10-13T07:50:00Z"
+    },
+    {
+      "placeId": 9,
+      "description": "봉골레 추천해요.",
+      "createdAt": "2026-10-15T04:40:00Z"
+    },
+    {
+      "placeId": 9,
+      "description": "단체로 가기 좋아요. 다음에도 오고 싶어요.",
+      "createdAt": "2026-10-17T11:30:00Z"
+    },
+    {
+      "placeId": 10,
+      "description": "주차 공간이 좁아서 대중교통을 추천해요.",
+      "createdAt": "2026-09-08T11:10:00Z"
+    },
+    {
+      "placeId": 10,
+      "description": "인테리어가 예뻐요.",
+      "createdAt": "2026-09-14T13:00:00Z"
+    },
+    {
+      "placeId": 10,
+      "description": "하우스 와인 또 시키고 싶어요.",
+      "createdAt": "2026-09-20T10:50:00Z"
+    },
+    {
+      "placeId": 10,
+      "description": "친구 추천으로 왔는데 만족해요.",
+      "createdAt": "2026-09-26T12:40:00Z"
+    },
+    {
+      "placeId": 10,
+      "createdAt": "2026-10-02T14:30:00Z"
+    },
+    {
+      "placeId": 10,
+      "description": "데이트하기 좋은 분위기예요.",
+      "createdAt": "2026-10-08T11:20:00Z"
+    },
+    {
+      "placeId": 10,
+      "description": "하이볼 주문했는데 만족해요.",
+      "createdAt": "2026-10-14T13:10:00Z"
+    },
+    {
+      "placeId": 10,
+      "description": "분위기가 좋아요. 다음에도 오고 싶어요.",
+      "createdAt": "2026-10-20T10:00:00Z"
+    },
+    {
+      "placeId": 11,
+      "description": "가성비 좋아요.",
+      "createdAt": "2026-09-14T03:20:00Z"
+    },
+    {
+      "placeId": 11,
+      "description": "2층까지 있어서 자리가 넉넉해요.",
+      "createdAt": "2026-09-16T10:10:00Z"
+    },
+    {
+      "placeId": 11,
+      "description": "근처에서 이 가격이면 괜찮은 편이에요.",
+      "createdAt": "2026-09-18T07:00:00Z"
+    },
+    {
+      "placeId": 11,
+      "description": "테이블이 커서 노트북 펴기 좋아요.",
+      "createdAt": "2026-09-20T04:50:00Z"
+    },
+    {
+      "placeId": 11,
+      "description": "커피 맛이 진하고 깔끔해요.",
+      "createdAt": "2026-09-22T01:40:00Z"
+    },
+    {
+      "placeId": 11,
+      "description": "주말에는 사람이 많아서 조금 시끄러웠어요.",
+      "createdAt": "2026-09-24T08:30:00Z"
+    },
+    {
+      "placeId": 11,
+      "description": "가격이 부담 없어서 자주 와요.",
+      "createdAt": "2026-09-26T05:20:00Z"
+    },
+    {
+      "placeId": 11,
+      "description": "자리가 넓어서 여럿이 와도 편해요.",
+      "createdAt": "2026-09-28T02:10:00Z"
+    },
+    {
+      "placeId": 11,
+      "createdAt": "2026-09-30T09:00:00Z"
+    },
+    {
+      "placeId": 11,
+      "description": "라테가 부드러워요.",
+      "createdAt": "2026-10-02T06:50:00Z"
+    },
+    {
+      "placeId": 11,
+      "description": "크루아상 추천해요.",
+      "createdAt": "2026-10-04T03:40:00Z"
+    },
+    {
+      "placeId": 11,
+      "description": "사장님이 친절하세요.",
+      "createdAt": "2026-10-06T10:30:00Z"
+    },
+    {
+      "placeId": 11,
+      "description": "가격 대비 양도 맛도 좋아요.",
+      "createdAt": "2026-10-08T07:20:00Z"
+    },
+    {
+      "placeId": 11,
+      "description": "좌석 간격이 넓어요.",
+      "createdAt": "2026-10-10T04:10:00Z"
+    },
+    {
+      "placeId": 11,
+      "createdAt": "2026-10-12T01:00:00Z"
+    },
+    {
+      "placeId": 11,
+      "description": "원두를 고를 수 있어서 좋아요.",
+      "createdAt": "2026-10-14T08:50:00Z"
+    },
+    {
+      "placeId": 11,
+      "description": "소금빵 또 시키고 싶어요.",
+      "createdAt": "2026-10-16T05:40:00Z"
+    },
+    {
+      "placeId": 11,
+      "description": "커피가 맛있어요. 다음에도 오고 싶어요.",
+      "createdAt": "2026-10-18T02:30:00Z"
+    },
+    {
+      "placeId": 12,
+      "description": "큰 테이블이 있어서 모임하기 좋아요.",
+      "createdAt": "2026-09-06T08:20:00Z"
+    },
+    {
+      "placeId": 12,
+      "description": "팀 점심으로 자주 가요.",
+      "createdAt": "2026-09-11T05:10:00Z"
+    },
+    {
+      "placeId": 12,
+      "description": "예약하고 가면 단체로 편하게 앉을 수 있어요.",
+      "createdAt": "2026-09-16T02:00:00Z"
+    },
+    {
+      "placeId": 12,
+      "description": "순대국밥 주문했는데 만족해요.",
+      "createdAt": "2026-09-21T09:50:00Z"
+    },
+    {
+      "placeId": 12,
+      "description": "직원분들이 친절해요.",
+      "createdAt": "2026-09-26T06:40:00Z"
+    },
+    {
+      "placeId": 12,
+      "createdAt": "2026-10-01T03:30:00Z"
+    },
+    {
+      "placeId": 12,
+      "description": "열 명이 가도 자리가 있었어요.",
+      "createdAt": "2026-10-06T10:20:00Z"
+    },
+    {
+      "placeId": 12,
+      "description": "돼지국밥 추천해요.",
+      "createdAt": "2026-10-11T07:10:00Z"
+    },
+    {
+      "placeId": 12,
+      "description": "단체로 가기 좋아요. 다음에도 오고 싶어요.",
+      "createdAt": "2026-10-16T04:00:00Z"
+    },
+    {
+      "placeId": 13,
+      "description": "부모님 모시고 와서 편하게 이야기 나눴어요.",
+      "createdAt": "2026-09-10T04:40:00Z"
+    },
+    {
+      "placeId": 13,
+      "description": "점심 먹으면서 회의하기 좋았어요.",
+      "createdAt": "2026-09-13T11:30:00Z"
+    },
+    {
+      "placeId": 13,
+      "description": "모임 자리로 괜찮아요. 서로 말이 잘 들려요.",
+      "createdAt": "2026-09-16T08:20:00Z"
+    },
+    {
+      "placeId": 13,
+      "description": "점심시간에 갔더니 조금 기다렸어요.",
+      "createdAt": "2026-09-19T05:10:00Z"
+    },
+    {
+      "placeId": 13,
+      "createdAt": "2026-09-22T02:00:00Z"
+    },
+    {
+      "placeId": 13,
+      "description": "둘이서 나눠 먹어도 될 만큼 양이 많아요.",
+      "createdAt": "2026-09-25T09:50:00Z"
+    },
+    {
+      "placeId": 13,
+      "description": "옆 테이블 소리가 잘 안 들려서 대화하기 좋아요.",
+      "createdAt": "2026-09-28T06:40:00Z"
+    },
+    {
+      "placeId": 13,
+      "description": "저녁 오마카세 또 시키고 싶어요.",
+      "createdAt": "2026-10-01T03:30:00Z"
+    },
+    {
+      "placeId": 13,
+      "description": "역에서 가까워 찾기 쉬워요.",
+      "createdAt": "2026-10-04T10:20:00Z"
+    },
+    {
+      "placeId": 13,
+      "description": "곱빼기 안 시켜도 충분해요.",
+      "createdAt": "2026-10-07T07:10:00Z"
+    },
+    {
+      "placeId": 13,
+      "createdAt": "2026-10-10T04:00:00Z"
+    },
+    {
+      "placeId": 13,
+      "description": "친구랑 오래 이야기하다 왔어요.",
+      "createdAt": "2026-10-13T11:50:00Z"
+    },
+    {
+      "placeId": 13,
+      "description": "점심 오마카세 주문했는데 만족해요.",
+      "createdAt": "2026-10-16T08:40:00Z"
+    },
+    {
+      "placeId": 13,
+      "description": "대화하기 좋아요. 다음에도 오고 싶어요.",
+      "createdAt": "2026-10-19T05:30:00Z"
+    },
+    {
+      "placeId": 14,
+      "description": "에스프레소가 진하고 맛있어요.",
+      "createdAt": "2026-09-03T08:50:00Z"
+    },
+    {
+      "placeId": 14,
+      "description": "드립 커피가 깔끔해요.",
+      "createdAt": "2026-09-07T05:40:00Z"
+    },
+    {
+      "placeId": 14,
+      "description": "커피가 맛있어서 매일 들러요.",
+      "createdAt": "2026-09-11T02:30:00Z"
+    },
+    {
+      "placeId": 14,
+      "description": "커피 향이 좋아요.",
+      "createdAt": "2026-09-15T09:20:00Z"
+    },
+    {
+      "placeId": 14,
+      "description": "주차 공간이 좁아서 대중교통을 추천해요.",
+      "createdAt": "2026-09-19T06:10:00Z"
+    },
+    {
+      "placeId": 14,
+      "description": "아이스 커피도 맛이 진해요.",
+      "createdAt": "2026-09-23T03:00:00Z"
+    },
+    {
+      "placeId": 14,
+      "description": "말차 라테 추천해요.",
+      "createdAt": "2026-09-27T10:50:00Z"
+    },
+    {
+      "placeId": 14,
+      "description": "매장이 깔끔해요.",
+      "createdAt": "2026-10-01T07:40:00Z"
+    },
+    {
+      "placeId": 14,
+      "createdAt": "2026-10-05T04:30:00Z"
+    },
+    {
+      "placeId": 14,
+      "description": "원두를 따로 사 갈 만큼 맛있어요.",
+      "createdAt": "2026-10-09T01:20:00Z"
+    },
+    {
+      "placeId": 14,
+      "description": "아메리카노 또 시키고 싶어요.",
+      "createdAt": "2026-10-13T08:10:00Z"
+    },
+    {
+      "placeId": 14,
+      "description": "커피가 맛있어요. 다음에도 오고 싶어요.",
+      "createdAt": "2026-10-17T05:00:00Z"
+    },
+    {
+      "placeId": 15,
+      "description": "주말에는 라이브 공연도 있어요.",
+      "createdAt": "2026-09-16T11:20:00Z"
+    },
+    {
+      "placeId": 15,
+      "description": "오래된 팝송이 나와서 반가웠어요.",
+      "createdAt": "2026-09-18T13:10:00Z"
+    },
+    {
+      "placeId": 15,
+      "description": "음악 듣는 재미가 있어요.",
+      "createdAt": "2026-09-20T10:00:00Z"
+    },
+    {
+      "placeId": 15,
+      "description": "야근하고 들르기 좋아요.",
+      "createdAt": "2026-09-22T12:50:00Z"
+    },
+    {
+      "placeId": 15,
+      "description": "신청곡도 틀어 줘요.",
+      "createdAt": "2026-09-24T14:40:00Z"
+    },
+    {
+      "placeId": 15,
+      "description": "자정 넘어서도 영업해서 좋아요.",
+      "createdAt": "2026-09-26T11:30:00Z"
+    },
+    {
+      "placeId": 15,
+      "description": "스피커 소리가 좋아요.",
+      "createdAt": "2026-09-28T13:20:00Z"
+    },
+    {
+      "placeId": 15,
+      "description": "주말에는 사람이 많아서 조금 시끄러웠어요.",
+      "createdAt": "2026-09-30T10:10:00Z"
+    },
+    {
+      "placeId": 15,
+      "createdAt": "2026-10-02T12:00:00Z"
+    },
+    {
+      "placeId": 15,
+      "description": "늦게까지 열어서 2차로 가기 좋아요.",
+      "createdAt": "2026-10-04T14:50:00Z"
+    },
+    {
+      "placeId": 15,
+      "description": "음악 덕분에 분위기가 좋아요.",
+      "createdAt": "2026-10-06T11:40:00Z"
+    },
+    {
+      "placeId": 15,
+      "description": "IPA 주문했는데 만족해요.",
+      "createdAt": "2026-10-08T13:30:00Z"
+    },
+    {
+      "placeId": 15,
+      "description": "재방문 의사 있어요.",
+      "createdAt": "2026-10-10T10:20:00Z"
+    },
+    {
+      "placeId": 15,
+      "description": "늦은 시간에도 주문이 돼요.",
+      "createdAt": "2026-10-12T12:10:00Z"
+    },
+    {
+      "placeId": 15,
+      "createdAt": "2026-10-14T14:00:00Z"
+    },
+    {
+      "placeId": 15,
+      "description": "노래가 좋아서 계속 있고 싶었어요.",
+      "createdAt": "2026-10-16T11:50:00Z"
+    },
+    {
+      "placeId": 15,
+      "description": "생맥주 추천해요.",
+      "createdAt": "2026-10-18T13:40:00Z"
+    },
+    {
+      "placeId": 15,
+      "description": "음악이 좋아요. 다음에도 오고 싶어요.",
+      "createdAt": "2026-10-20T10:30:00Z"
+    },
+    {
+      "placeId": 16,
+      "description": "음악 소리가 크지 않아서 이야기 나누기 좋아요.",
+      "createdAt": "2026-09-14T09:50:00Z"
+    },
+    {
+      "placeId": 16,
+      "description": "테이블 간격이 넓어서 대화하기 편했어요.",
+      "createdAt": "2026-09-16T06:40:00Z"
+    },
+    {
+      "placeId": 16,
+      "description": "소개팅 자리로도 무난해요.",
+      "createdAt": "2026-09-18T03:30:00Z"
+    },
+    {
+      "placeId": 16,
+      "description": "오랜만에 만난 친구랑 수다 떨기 좋았어요.",
+      "createdAt": "2026-09-20T10:20:00Z"
+    },
+    {
+      "placeId": 16,
+      "description": "가성비 좋아요.",
+      "createdAt": "2026-09-22T07:10:00Z"
+    },
+    {
+      "placeId": 16,
+      "description": "직장 동료랑 이야기 나누기 좋은 곳이에요.",
+      "createdAt": "2026-09-24T04:00:00Z"
+    },
+    {
+      "placeId": 16,
+      "description": "근처에서 이 가격이면 괜찮은 편이에요.",
+      "createdAt": "2026-09-26T11:50:00Z"
+    },
+    {
+      "placeId": 16,
+      "description": "칸막이 자리가 있어서 대화하기 좋아요.",
+      "createdAt": "2026-09-28T08:40:00Z"
+    },
+    {
+      "placeId": 16,
+      "createdAt": "2026-09-30T05:30:00Z"
+    },
+    {
+      "placeId": 16,
+      "description": "가격이 부담 없어서 자주 와요.",
+      "createdAt": "2026-10-02T02:20:00Z"
+    },
+    {
+      "placeId": 16,
+      "description": "부모님 모시고 와서 편하게 이야기 나눴어요.",
+      "createdAt": "2026-10-04T09:10:00Z"
+    },
+    {
+      "placeId": 16,
+      "description": "짬뽕 또 시키고 싶어요.",
+      "createdAt": "2026-10-06T06:00:00Z"
+    },
+    {
+      "placeId": 16,
+      "description": "친구 추천으로 왔는데 만족해요.",
+      "createdAt": "2026-10-08T03:50:00Z"
+    },
+    {
+      "placeId": 16,
+      "description": "가격 대비 양도 맛도 좋아요.",
+      "createdAt": "2026-10-10T10:40:00Z"
+    },
+    {
+      "placeId": 16,
+      "createdAt": "2026-10-12T07:30:00Z"
+    },
+    {
+      "placeId": 16,
+      "description": "점심 먹으면서 회의하기 좋았어요.",
+      "createdAt": "2026-10-14T04:20:00Z"
+    },
+    {
+      "placeId": 16,
+      "description": "짜장면 주문했는데 만족해요.",
+      "createdAt": "2026-10-16T11:10:00Z"
+    },
+    {
+      "placeId": 16,
+      "description": "대화하기 좋아요. 다음에도 오고 싶어요.",
+      "createdAt": "2026-10-18T08:00:00Z"
+    },
+    {
+      "placeId": 17,
+      "description": "안주가 금방 나와요.",
+      "createdAt": "2026-09-12T13:20:00Z"
+    },
+    {
+      "placeId": 17,
+      "description": "안주 메뉴가 다양해요.",
+      "createdAt": "2026-09-14T10:10:00Z"
+    },
+    {
+      "placeId": 17,
+      "description": "칵테일보다 안주가 더 기억에 남아요.",
+      "createdAt": "2026-09-16T12:00:00Z"
+    },
+    {
+      "placeId": 17,
+      "description": "나초가 바삭하고 맛있어요.",
+      "createdAt": "2026-09-18T14:50:00Z"
+    },
+    {
+      "placeId": 17,
+      "description": "안주 맛집이에요.",
+      "createdAt": "2026-09-20T11:40:00Z"
+    },
+    {
+      "placeId": 17,
+      "description": "안주 하나하나 정성이 느껴져요.",
+      "createdAt": "2026-09-22T13:30:00Z"
+    },
+    {
+      "placeId": 17,
+      "description": "배고플 때 와도 안주로 충분해요.",
+      "createdAt": "2026-09-24T10:20:00Z"
+    },
+    {
+      "placeId": 17,
+      "description": "점심시간에 갔더니 조금 기다렸어요.",
+      "createdAt": "2026-09-26T12:10:00Z"
+    },
+    {
+      "placeId": 17,
+      "createdAt": "2026-09-28T14:00:00Z"
+    },
+    {
+      "placeId": 17,
+      "description": "바 자리가 있어서 혼술하기 좋아요.",
+      "createdAt": "2026-09-30T11:50:00Z"
+    },
+    {
+      "placeId": 17,
+      "description": "안주가 술이랑 잘 어울려요.",
+      "createdAt": "2026-10-02T13:40:00Z"
+    },
+    {
+      "placeId": 17,
+      "description": "올드 패션드 추천해요.",
+      "createdAt": "2026-10-04T10:30:00Z"
+    },
+    {
+      "placeId": 17,
+      "description": "사장님이 친절하세요.",
+      "createdAt": "2026-10-06T12:20:00Z"
+    },
+    {
+      "placeId": 17,
+      "description": "혼자 와도 바텐더분이 편하게 대해 줘요.",
+      "createdAt": "2026-10-08T14:10:00Z"
+    },
+    {
+      "placeId": 17,
+      "createdAt": "2026-10-10T11:00:00Z"
+    },
+    {
+      "placeId": 17,
+      "description": "안주 때문에 또 오고 싶어요.",
+      "createdAt": "2026-10-12T13:50:00Z"
+    },
+    {
+      "placeId": 17,
+      "description": "진토닉 또 시키고 싶어요.",
+      "createdAt": "2026-10-14T10:40:00Z"
+    },
+    {
+      "placeId": 17,
+      "description": "안주가 맛있어요. 다음에도 오고 싶어요.",
+      "createdAt": "2026-10-16T12:30:00Z"
+    },
+    {
+      "placeId": 18,
+      "description": "단체로 가도 음식이 한꺼번에 나와요.",
+      "createdAt": "2026-09-17T08:40:00Z"
+    },
+    {
+      "placeId": 18,
+      "description": "큰 테이블이 있어서 모임하기 좋아요.",
+      "createdAt": "2026-09-19T05:30:00Z"
+    },
+    {
+      "placeId": 18,
+      "description": "팀 점심으로 자주 가요.",
+      "createdAt": "2026-09-21T02:20:00Z"
+    },
+    {
+      "placeId": 18,
+      "description": "예약하고 가면 단체로 편하게 앉을 수 있어요.",
+      "createdAt": "2026-09-23T09:10:00Z"
+    },
+    {
+      "placeId": 18,
+      "description": "열 명이 가도 자리가 있었어요.",
+      "createdAt": "2026-09-25T06:00:00Z"
+    },
+    {
+      "placeId": 18,
+      "description": "단체석이 있어서 회식하기 좋아요.",
+      "createdAt": "2026-09-27T03:50:00Z"
+    },
+    {
+      "placeId": 18,
+      "description": "단체 메뉴 구성이 알차요.",
+      "createdAt": "2026-09-29T10:40:00Z"
+    },
+    {
+      "placeId": 18,
+      "createdAt": "2026-10-01T07:30:00Z"
+    },
+    {
+      "placeId": 18,
+      "description": "동기 모임 장소로 추천해요.",
+      "createdAt": "2026-10-03T04:20:00Z"
+    },
+    {
+      "placeId": 18,
+      "description": "주차 공간이 좁아서 대중교통을 추천해요.",
+      "createdAt": "2026-10-05T11:10:00Z"
+    },
+    {
+      "placeId": 18,
+      "description": "인원이 많아도 직원분들이 잘 챙겨 줘요.",
+      "createdAt": "2026-10-07T08:00:00Z"
+    },
+    {
+      "placeId": 18,
+      "description": "에그 베네딕트 주문했는데 만족해요.",
+      "createdAt": "2026-10-09T05:50:00Z"
+    },
+    {
+      "placeId": 18,
+      "description": "직원분들이 친절해요.",
+      "createdAt": "2026-10-11T02:40:00Z"
+    },
+    {
+      "placeId": 18,
+      "createdAt": "2026-10-13T09:30:00Z"
+    },
+    {
+      "placeId": 18,
+      "description": "가족 모임으로 다녀왔어요.",
+      "createdAt": "2026-10-15T06:20:00Z"
+    },
+    {
+      "placeId": 18,
+      "description": "프렌치 토스트 추천해요.",
+      "createdAt": "2026-10-17T03:10:00Z"
+    },
+    {
+      "placeId": 18,
+      "description": "단체로 가기 좋아요. 다음에도 오고 싶어요.",
+      "createdAt": "2026-10-19T10:00:00Z"
+    },
+    {
+      "placeId": 19,
+      "description": "몇 시간 있어도 눈치 주지 않아요.",
+      "createdAt": "2026-09-03T03:20:00Z"
+    },
+    {
+      "placeId": 19,
+      "description": "의자가 편해서 오래 있어도 괜찮아요.",
+      "createdAt": "2026-09-07T10:10:00Z"
+    },
+    {
+      "placeId": 19,
+      "description": "주말에는 사람이 많아서 조금 시끄러웠어요.",
+      "createdAt": "2026-09-11T07:00:00Z"
+    },
+    {
+      "placeId": 19,
+      "description": "콘센트가 많아서 노트북 작업하기 좋아요.",
+      "createdAt": "2026-09-15T04:50:00Z"
+    },
+    {
+      "placeId": 19,
+      "description": "음악 소리가 작아서 집중이 잘 돼요.",
+      "createdAt": "2026-09-19T01:40:00Z"
+    },
+    {
+      "placeId": 19,
+      "description": "유자차 또 시키고 싶어요.",
+      "createdAt": "2026-09-23T08:30:00Z"
+    },
+    {
+      "placeId": 19,
+      "description": "역에서 가까워 찾기 쉬워요.",
+      "createdAt": "2026-09-27T05:20:00Z"
+    },
+    {
+      "placeId": 19,
+      "description": "와이파이가 빨라서 작업하기 좋아요.",
+      "createdAt": "2026-10-01T02:10:00Z"
+    },
+    {
+      "placeId": 19,
+      "createdAt": "2026-10-05T09:00:00Z"
+    },
+    {
+      "placeId": 19,
+      "description": "평일 오후에는 정말 조용해요.",
+      "createdAt": "2026-10-09T06:50:00Z"
+    },
+    {
+      "placeId": 19,
+      "description": "플랫 화이트 주문했는데 만족해요.",
+      "createdAt": "2026-10-13T03:40:00Z"
+    },
+    {
+      "placeId": 19,
+      "description": "조용해요. 다음에도 오고 싶어요.",
+      "createdAt": "2026-10-17T10:30:00Z"
+    },
+    {
+      "placeId": 20,
+      "description": "바 자리가 있어서 혼밥하기 좋아요.",
+      "createdAt": "2026-09-08T03:10:00Z"
+    },
+    {
+      "placeId": 20,
+      "description": "혼자 와도 눈치 안 보여요.",
+      "createdAt": "2026-09-14T10:00:00Z"
+    },
+    {
+      "placeId": 20,
+      "description": "연어 포케 추천해요.",
+      "createdAt": "2026-09-20T07:50:00Z"
+    },
+    {
+      "placeId": 20,
+      "description": "매장이 깔끔해요.",
+      "createdAt": "2026-09-26T04:40:00Z"
+    },
+    {
+      "placeId": 20,
+      "createdAt": "2026-10-02T11:30:00Z"
+    },
+    {
+      "placeId": 20,
+      "description": "1인석이 있어서 혼자 먹기 편해요.",
+      "createdAt": "2026-10-08T08:20:00Z"
+    },
+    {
+      "placeId": 20,
+      "description": "닭가슴살 샐러드 또 시키고 싶어요.",
+      "createdAt": "2026-10-14T05:10:00Z"
+    },
+    {
+      "placeId": 20,
+      "description": "혼밥하기 좋아요. 다음에도 오고 싶어요.",
+      "createdAt": "2026-10-20T02:00:00Z"
+    },
+    {
+      "placeId": 21,
+      "description": "가성비 좋아요.",
+      "createdAt": "2026-09-16T14:10:00Z"
+    },
+    {
+      "placeId": 21,
+      "description": "음악 소리가 적당해서 분위기가 살아요.",
+      "createdAt": "2026-09-18T11:00:00Z"
+    },
+    {
+      "placeId": 21,
+      "description": "근처에서 이 가격이면 괜찮은 편이에요.",
+      "createdAt": "2026-09-20T13:50:00Z"
+    },
+    {
+      "placeId": 21,
+      "description": "플레이리스트가 취향이에요.",
+      "createdAt": "2026-09-22T10:40:00Z"
+    },
+    {
+      "placeId": 21,
+      "description": "점심시간에 갔더니 조금 기다렸어요.",
+      "createdAt": "2026-09-24T12:30:00Z"
+    },
+    {
+      "placeId": 21,
+      "description": "가격이 부담 없어서 자주 와요.",
+      "createdAt": "2026-09-26T14:20:00Z"
+    },
+    {
+      "placeId": 21,
+      "description": "야근하고 들르기 좋아요.",
+      "createdAt": "2026-09-28T11:10:00Z"
+    },
+    {
+      "placeId": 21,
+      "createdAt": "2026-09-30T13:00:00Z"
+    },
+    {
+      "placeId": 21,
+      "description": "음악 선곡이 좋아요.",
+      "createdAt": "2026-10-02T10:50:00Z"
+    },
+    {
+      "placeId": 21,
+      "description": "보틀 와인 주문했는데 만족해요.",
+      "createdAt": "2026-10-04T12:40:00Z"
+    },
+    {
+      "placeId": 21,
+      "description": "재방문 의사 있어요.",
+      "createdAt": "2026-10-06T14:30:00Z"
+    },
+    {
+      "placeId": 21,
+      "description": "가격 대비 양도 맛도 좋아요.",
+      "createdAt": "2026-10-08T11:20:00Z"
+    },
+    {
+      "placeId": 21,
+      "description": "자정 넘어서도 영업해서 좋아요.",
+      "createdAt": "2026-10-10T13:10:00Z"
+    },
+    {
+      "placeId": 21,
+      "createdAt": "2026-10-12T10:00:00Z"
+    },
+    {
+      "placeId": 21,
+      "description": "주말에는 라이브 공연도 있어요.",
+      "createdAt": "2026-10-14T12:50:00Z"
+    },
+    {
+      "placeId": 21,
+      "description": "글라스 와인 추천해요.",
+      "createdAt": "2026-10-16T14:40:00Z"
+    },
+    {
+      "placeId": 21,
+      "description": "음악이 좋아요. 다음에도 오고 싶어요.",
+      "createdAt": "2026-10-18T11:30:00Z"
+    },
+    {
+      "placeId": 22,
+      "description": "주변이 조용해서 통화하기도 괜찮았어요.",
+      "createdAt": "2026-09-06T03:40:00Z"
+    },
+    {
+      "placeId": 22,
+      "description": "조용해서 마음이 편해져요.",
+      "createdAt": "2026-09-10T10:30:00Z"
+    },
+    {
+      "placeId": 22,
+      "description": "혼자 생각 정리하기 좋은 곳이에요.",
+      "createdAt": "2026-09-14T07:20:00Z"
+    },
+    {
+      "placeId": 22,
+      "description": "주차 공간이 좁아서 대중교통을 추천해요.",
+      "createdAt": "2026-09-18T04:10:00Z"
+    },
+    {
+      "placeId": 22,
+      "description": "공부하는 사람이 많아서 조용한 편이에요.",
+      "createdAt": "2026-09-22T01:00:00Z"
+    },
+    {
+      "placeId": 22,
+      "description": "핸드드립 또 시키고 싶어요.",
+      "createdAt": "2026-09-26T08:50:00Z"
+    },
+    {
+      "placeId": 22,
+      "description": "친구 추천으로 왔는데 만족해요.",
+      "createdAt": "2026-09-30T05:40:00Z"
+    },
+    {
+      "placeId": 22,
+      "createdAt": "2026-10-04T02:30:00Z"
+    },
+    {
+      "placeId": 22,
+      "description": "말소리가 크지 않아 차분해요.",
+      "createdAt": "2026-10-08T09:20:00Z"
+    },
+    {
+      "placeId": 22,
+      "description": "에스프레소 주문했는데 만족해요.",
+      "createdAt": "2026-10-12T06:10:00Z"
+    },
+    {
+      "placeId": 22,
+      "description": "조용해요. 다음에도 오고 싶어요.",
+      "createdAt": "2026-10-16T03:00:00Z"
+    },
+    {
+      "placeId": 23,
+      "description": "카운터 자리에서 혼자 먹기 좋아요.",
+      "createdAt": "2026-09-17T03:10:00Z"
+    },
+    {
+      "placeId": 23,
+      "description": "회사 근처라 혼자 점심 먹을 때 와요.",
+      "createdAt": "2026-09-19T10:00:00Z"
+    },
+    {
+      "placeId": 23,
+      "description": "바쁠 때 오기 좋아요. 금방 나와요.",
+      "createdAt": "2026-09-21T07:50:00Z"
+    },
+    {
+      "placeId": 23,
+      "description": "키오스크로 주문해서 혼자 오기 부담 없어요.",
+      "createdAt": "2026-09-23T04:40:00Z"
+    },
+    {
+      "placeId": 23,
+      "description": "점심시간에도 음식이 빨리 나와요.",
+      "createdAt": "2026-09-25T11:30:00Z"
+    },
+    {
+      "placeId": 23,
+      "description": "혼자 온 손님이 많아서 편했어요.",
+      "createdAt": "2026-09-27T08:20:00Z"
+    },
+    {
+      "placeId": 23,
+      "description": "주말에는 사람이 많아서 조금 시끄러웠어요.",
+      "createdAt": "2026-09-29T05:10:00Z"
+    },
+    {
+      "placeId": 23,
+      "createdAt": "2026-10-01T02:00:00Z"
+    },
+    {
+      "placeId": 23,
+      "description": "주문하고 금방 나왔어요.",
+      "createdAt": "2026-10-03T09:50:00Z"
+    },
+    {
+      "placeId": 23,
+      "description": "1인 메뉴가 있어서 혼밥하기 좋아요.",
+      "createdAt": "2026-10-05T06:40:00Z"
+    },
+    {
+      "placeId": 23,
+      "description": "왕만두 추천해요.",
+      "createdAt": "2026-10-07T03:30:00Z"
+    },
+    {
+      "placeId": 23,
+      "description": "사장님이 친절하세요.",
+      "createdAt": "2026-10-09T10:20:00Z"
+    },
+    {
+      "placeId": 23,
+      "description": "기다리는 시간이 짧아요.",
+      "createdAt": "2026-10-11T07:10:00Z"
+    },
+    {
+      "placeId": 23,
+      "createdAt": "2026-10-13T04:00:00Z"
+    },
+    {
+      "placeId": 23,
+      "description": "혼자 점심 먹으러 자주 와요.",
+      "createdAt": "2026-10-15T11:50:00Z"
+    },
+    {
+      "placeId": 23,
+      "description": "바지락 칼국수 또 시키고 싶어요.",
+      "createdAt": "2026-10-17T08:40:00Z"
+    },
+    {
+      "placeId": 23,
+      "description": "혼밥하기 좋아요. 다음에도 오고 싶어요.",
+      "createdAt": "2026-10-19T05:30:00Z"
+    },
+    {
+      "placeId": 24,
+      "description": "음악 듣는 재미가 있어요.",
+      "createdAt": "2026-09-03T12:50:00Z"
+    },
+    {
+      "placeId": 24,
+      "description": "신청곡도 틀어 줘요.",
+      "createdAt": "2026-09-07T14:40:00Z"
+    },
+    {
+      "placeId": 24,
+      "description": "스피커 소리가 좋아요.",
+      "createdAt": "2026-09-11T11:30:00Z"
+    },
+    {
+      "placeId": 24,
+      "description": "음악 덕분에 분위기가 좋아요.",
+      "createdAt": "2026-09-15T13:20:00Z"
+    },
+    {
+      "placeId": 24,
+      "description": "노래가 좋아서 계속 있고 싶었어요.",
+      "createdAt": "2026-09-19T10:10:00Z"
+    },
+    {
+      "placeId": 24,
+      "description": "재즈가 나와서 좋았어요.",
+      "createdAt": "2026-09-23T12:00:00Z"
+    },
+    {
+      "placeId": 24,
+      "description": "모둠 꼬치 주문했는데 만족해요.",
+      "createdAt": "2026-09-27T14:50:00Z"
+    },
+    {
+      "placeId": 24,
+      "description": "직원분들이 친절해요.",
+      "createdAt": "2026-10-01T11:40:00Z"
+    },
+    {
+      "placeId": 24,
+      "createdAt": "2026-10-05T13:30:00Z"
+    },
+    {
+      "placeId": 24,
+      "description": "음악 소리가 적당해서 분위기가 살아요.",
+      "createdAt": "2026-10-09T10:20:00Z"
+    },
+    {
+      "placeId": 24,
+      "description": "준마이 사케 추천해요.",
+      "createdAt": "2026-10-13T12:10:00Z"
+    },
+    {
+      "placeId": 24,
+      "description": "음악이 좋아요. 다음에도 오고 싶어요.",
+      "createdAt": "2026-10-17T14:00:00Z"
+    },
+    {
+      "placeId": 25,
+      "description": "소개팅 자리로도 무난해요.",
+      "createdAt": "2026-09-18T05:10:00Z"
+    },
+    {
+      "placeId": 25,
+      "description": "오랜만에 만난 친구랑 수다 떨기 좋았어요.",
+      "createdAt": "2026-09-20T02:00:00Z"
+    },
+    {
+      "placeId": 25,
+      "description": "직장 동료랑 이야기 나누기 좋은 곳이에요.",
+      "createdAt": "2026-09-22T09:50:00Z"
+    },
+    {
+      "placeId": 25,
+      "description": "칸막이 자리가 있어서 대화하기 좋아요.",
+      "createdAt": "2026-09-24T06:40:00Z"
+    },
+    {
+      "placeId": 25,
+      "description": "부모님 모시고 와서 편하게 이야기 나눴어요.",
+      "createdAt": "2026-09-26T03:30:00Z"
+    },
+    {
+      "placeId": 25,
+      "description": "점심 먹으면서 회의하기 좋았어요.",
+      "createdAt": "2026-09-28T10:20:00Z"
+    },
+    {
+      "placeId": 25,
+      "description": "점심시간에 갔더니 조금 기다렸어요.",
+      "createdAt": "2026-09-30T07:10:00Z"
+    },
+    {
+      "placeId": 25,
+      "createdAt": "2026-10-02T04:00:00Z"
+    },
+    {
+      "placeId": 25,
+      "description": "둘이서 나눠 먹어도 될 만큼 양이 많아요.",
+      "createdAt": "2026-10-04T11:50:00Z"
+    },
+    {
+      "placeId": 25,
+      "description": "모임 자리로 괜찮아요. 서로 말이 잘 들려요.",
+      "createdAt": "2026-10-06T08:40:00Z"
+    },
+    {
+      "placeId": 25,
+      "description": "두부 스테이크 또 시키고 싶어요.",
+      "createdAt": "2026-10-08T05:30:00Z"
+    },
+    {
+      "placeId": 25,
+      "description": "역에서 가까워 찾기 쉬워요.",
+      "createdAt": "2026-10-10T02:20:00Z"
+    },
+    {
+      "placeId": 25,
+      "description": "곱빼기 안 시켜도 충분해요.",
+      "createdAt": "2026-10-12T09:10:00Z"
+    },
+    {
+      "placeId": 25,
+      "createdAt": "2026-10-14T06:00:00Z"
+    },
+    {
+      "placeId": 25,
+      "description": "옆 테이블 소리가 잘 안 들려서 대화하기 좋아요.",
+      "createdAt": "2026-10-16T03:50:00Z"
+    },
+    {
+      "placeId": 25,
+      "description": "버섯 리조또 주문했는데 만족해요.",
+      "createdAt": "2026-10-18T10:40:00Z"
+    },
+    {
+      "placeId": 25,
+      "description": "대화하기 좋아요. 다음에도 오고 싶어요.",
+      "createdAt": "2026-10-20T07:30:00Z"
+    },
+    {
+      "placeId": 26,
+      "description": "원두를 따로 사 갈 만큼 맛있어요.",
+      "createdAt": "2026-09-10T04:10:00Z"
+    },
+    {
+      "placeId": 26,
+      "description": "커피 맛이 진하고 깔끔해요.",
+      "createdAt": "2026-09-12T01:00:00Z"
+    },
+    {
+      "placeId": 26,
+      "description": "라테가 부드러워요.",
+      "createdAt": "2026-09-14T08:50:00Z"
+    },
+    {
+      "placeId": 26,
+      "description": "원두를 고를 수 있어서 좋아요.",
+      "createdAt": "2026-09-16T05:40:00Z"
+    },
+    {
+      "placeId": 26,
+      "description": "커피가 고소하고 산미가 적당해요.",
+      "createdAt": "2026-09-18T02:30:00Z"
+    },
+    {
+      "placeId": 26,
+      "description": "가성비 좋아요.",
+      "createdAt": "2026-09-20T09:20:00Z"
+    },
+    {
+      "placeId": 26,
+      "description": "에스프레소가 진하고 맛있어요.",
+      "createdAt": "2026-09-22T06:10:00Z"
+    },
+    {
+      "placeId": 26,
+      "description": "근처에서 이 가격이면 괜찮은 편이에요.",
+      "createdAt": "2026-09-24T03:00:00Z"
+    },
+    {
+      "placeId": 26,
+      "description": "드립 커피가 깔끔해요.",
+      "createdAt": "2026-09-26T10:50:00Z"
+    },
+    {
+      "placeId": 26,
+      "description": "주차 공간이 좁아서 대중교통을 추천해요.",
+      "createdAt": "2026-09-28T07:40:00Z"
+    },
+    {
+      "placeId": 26,
+      "createdAt": "2026-09-30T04:30:00Z"
+    },
+    {
+      "placeId": 26,
+      "description": "가격이 부담 없어서 자주 와요.",
+      "createdAt": "2026-10-02T01:20:00Z"
+    },
+    {
+      "placeId": 26,
+      "description": "커피가 맛있어서 매일 들러요.",
+      "createdAt": "2026-10-04T08:10:00Z"
+    },
+    {
+      "placeId": 26,
+      "description": "자몽 에이드 추천해요.",
+      "createdAt": "2026-10-06T05:00:00Z"
+    },
+    {
+      "placeId": 26,
+      "description": "매장이 깔끔해요.",
+      "createdAt": "2026-10-08T02:50:00Z"
+    },
+    {
+      "placeId": 26,
+      "description": "가격 대비 양도 맛도 좋아요.",
+      "createdAt": "2026-10-10T09:40:00Z"
+    },
+    {
+      "placeId": 26,
+      "createdAt": "2026-10-12T06:30:00Z"
+    },
+    {
+      "placeId": 26,
+      "description": "커피 향이 좋아요.",
+      "createdAt": "2026-10-14T03:20:00Z"
+    },
+    {
+      "placeId": 26,
+      "description": "아메리카노 또 시키고 싶어요.",
+      "createdAt": "2026-10-16T10:10:00Z"
+    },
+    {
+      "placeId": 26,
+      "description": "커피가 맛있어요. 다음에도 오고 싶어요.",
+      "createdAt": "2026-10-18T07:00:00Z"
+    },
+    {
+      "placeId": 27,
+      "description": "재즈가 나와서 좋았어요.",
+      "createdAt": "2026-09-06T12:50:00Z"
+    },
+    {
+      "placeId": 27,
+      "description": "음악 소리가 적당해서 분위기가 살아요.",
+      "createdAt": "2026-09-08T14:40:00Z"
+    },
+    {
+      "placeId": 27,
+      "description": "플레이리스트가 취향이에요.",
+      "createdAt": "2026-09-10T11:30:00Z"
+    },
+    {
+      "placeId": 27,
+      "description": "음악 선곡이 좋아요.",
+      "createdAt": "2026-09-12T13:20:00Z"
+    },
+    {
+      "placeId": 27,
+      "description": "주말에는 라이브 공연도 있어요.",
+      "createdAt": "2026-09-14T10:10:00Z"
+    },
+    {
+      "placeId": 27,
+      "description": "오래된 팝송이 나와서 반가웠어요.",
+      "createdAt": "2026-09-16T12:00:00Z"
+    },
+    {
+      "placeId": 27,
+      "description": "야근하고 들르기 좋아요.",
+      "createdAt": "2026-09-18T14:50:00Z"
+    },
+    {
+      "placeId": 27,
+      "description": "음악 듣는 재미가 있어요.",
+      "createdAt": "2026-09-20T11:40:00Z"
+    },
+    {
+      "placeId": 27,
+      "description": "자정 넘어서도 영업해서 좋아요.",
+      "createdAt": "2026-09-22T13:30:00Z"
+    },
+    {
+      "placeId": 27,
+      "description": "신청곡도 틀어 줘요.",
+      "createdAt": "2026-09-24T10:20:00Z"
+    },
+    {
+      "placeId": 27,
+      "description": "주말에는 사람이 많아서 조금 시끄러웠어요.",
+      "createdAt": "2026-09-26T12:10:00Z"
+    },
+    {
+      "placeId": 27,
+      "createdAt": "2026-09-28T14:00:00Z"
+    },
+    {
+      "placeId": 27,
+      "description": "늦게까지 열어서 2차로 가기 좋아요.",
+      "createdAt": "2026-09-30T11:50:00Z"
+    },
+    {
+      "placeId": 27,
+      "description": "스피커 소리가 좋아요.",
+      "createdAt": "2026-10-02T13:40:00Z"
+    },
+    {
+      "placeId": 27,
+      "description": "피시 앤 칩스 주문했는데 만족해요.",
+      "createdAt": "2026-10-04T10:30:00Z"
+    },
+    {
+      "placeId": 27,
+      "description": "재방문 의사 있어요.",
+      "createdAt": "2026-10-06T12:20:00Z"
+    },
+    {
+      "placeId": 27,
+      "description": "늦은 시간에도 주문이 돼요.",
+      "createdAt": "2026-10-08T14:10:00Z"
+    },
+    {
+      "placeId": 27,
+      "createdAt": "2026-10-10T11:00:00Z"
+    },
+    {
+      "placeId": 27,
+      "description": "음악 덕분에 분위기가 좋아요.",
+      "createdAt": "2026-10-12T13:50:00Z"
+    },
+    {
+      "placeId": 27,
+      "description": "흑맥주 추천해요.",
+      "createdAt": "2026-10-14T10:40:00Z"
+    },
+    {
+      "placeId": 27,
+      "description": "음악이 좋아요. 다음에도 오고 싶어요.",
+      "createdAt": "2026-10-16T12:30:00Z"
+    },
+    {
+      "placeId": 28,
+      "description": "칸막이 자리가 있어서 대화하기 좋아요.",
+      "createdAt": "2026-09-07T08:00:00Z"
+    },
+    {
+      "placeId": 28,
+      "description": "볶음밥 또 시키고 싶어요.",
+      "createdAt": "2026-09-14T05:50:00Z"
+    },
+    {
+      "placeId": 28,
+      "description": "친구 추천으로 왔는데 만족해요.",
+      "createdAt": "2026-09-21T02:40:00Z"
+    },
+    {
+      "placeId": 28,
+      "createdAt": "2026-09-28T09:30:00Z"
+    },
+    {
+      "placeId": 28,
+      "description": "부모님 모시고 와서 편하게 이야기 나눴어요.",
+      "createdAt": "2026-10-05T06:20:00Z"
+    },
+    {
+      "placeId": 28,
+      "description": "차돌 쌀국수 주문했는데 만족해요.",
+      "createdAt": "2026-10-12T03:10:00Z"
+    },
+    {
+      "placeId": 28,
+      "description": "대화하기 좋아요. 다음에도 오고 싶어요.",
+      "createdAt": "2026-10-19T10:00:00Z"
+    },
+    {
+      "placeId": 29,
+      "description": "원두를 고를 수 있어서 좋아요.",
+      "createdAt": "2026-09-07T10:10:00Z"
+    },
+    {
+      "placeId": 29,
+      "description": "점심시간에 갔더니 조금 기다렸어요.",
+      "createdAt": "2026-09-11T07:00:00Z"
+    },
+    {
+      "placeId": 29,
+      "description": "2층까지 있어서 자리가 넉넉해요.",
+      "createdAt": "2026-09-15T04:50:00Z"
+    },
+    {
+      "placeId": 29,
+      "description": "커피가 고소하고 산미가 적당해요.",
+      "createdAt": "2026-09-19T01:40:00Z"
+    },
+    {
+      "placeId": 29,
+      "description": "캐모마일 추천해요.",
+      "createdAt": "2026-09-23T08:30:00Z"
+    },
+    {
+      "placeId": 29,
+      "description": "사장님이 친절하세요.",
+      "createdAt": "2026-09-27T05:20:00Z"
+    },
+    {
+      "placeId": 29,
+      "description": "테이블이 커서 노트북 펴기 좋아요.",
+      "createdAt": "2026-10-01T02:10:00Z"
+    },
+    {
+      "placeId": 29,
+      "createdAt": "2026-10-05T09:00:00Z"
+    },
+    {
+      "placeId": 29,
+      "description": "에스프레소가 진하고 맛있어요.",
+      "createdAt": "2026-10-09T06:50:00Z"
+    },
+    {
+      "placeId": 29,
+      "description": "아메리카노 또 시키고 싶어요.",
+      "createdAt": "2026-10-13T03:40:00Z"
+    },
+    {
+      "placeId": 29,
+      "description": "커피가 맛있어요. 다음에도 오고 싶어요.",
+      "createdAt": "2026-10-17T10:30:00Z"
+    },
+    {
+      "placeId": 30,
+      "description": "단체석이 있어서 회식하기 좋아요.",
+      "createdAt": "2026-09-05T09:30:00Z"
+    },
+    {
+      "placeId": 30,
+      "description": "단체 메뉴 구성이 알차요.",
+      "createdAt": "2026-09-10T06:20:00Z"
+    },
+    {
+      "placeId": 30,
+      "description": "주차 공간이 좁아서 대중교통을 추천해요.",
+      "createdAt": "2026-09-15T03:10:00Z"
+    },
+    {
+      "placeId": 30,
+      "description": "동기 모임 장소로 추천해요.",
+      "createdAt": "2026-09-20T10:00:00Z"
+    },
+    {
+      "placeId": 30,
+      "description": "생선구이 정식 주문했는데 만족해요.",
+      "createdAt": "2026-09-25T07:50:00Z"
+    },
+    {
+      "placeId": 30,
+      "description": "직원분들이 친절해요.",
+      "createdAt": "2026-09-30T04:40:00Z"
+    },
+    {
+      "placeId": 30,
+      "createdAt": "2026-10-05T11:30:00Z"
+    },
+    {
+      "placeId": 30,
+      "description": "인원이 많아도 직원분들이 잘 챙겨 줘요.",
+      "createdAt": "2026-10-10T08:20:00Z"
+    },
+    {
+      "placeId": 30,
+      "description": "불고기 정식 추천해요.",
+      "createdAt": "2026-10-15T05:10:00Z"
+    },
+    {
+      "placeId": 30,
+      "description": "단체로 가기 좋아요. 다음에도 오고 싶어요.",
+      "createdAt": "2026-10-20T02:00:00Z"
     }
   ]
 }
