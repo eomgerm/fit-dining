@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.io.IOException;
+import kr.co.fitdining.api.support.PostgresTestSupport;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -30,12 +31,12 @@ import org.springframework.test.web.servlet.MockMvc;
  * <p>이 시험은 서버를 띄우지 않고 MockMvc로 확인한다. 관리 포트가 다르면 MockMvc에서는 관리 경로가 열리지 않으므로 시험에서만
  * 포트를 같게 두고, 운영 값인 8081은 {@code application.yml}을 읽어 따로 확인한다. 일부 Windows PC(WSL의 Hyper-V 방화벽 등)에서는
  * 서버 소켓의 {@code listen}이 무작위로 실패해 실제 서버를 띄우는 시험이 흔들리므로 소켓을 쓰지 않는다. 관리 포트로만 열리는 것은
- * 실제 서버를 띄워 따로 확인한다. readiness가 DB를 보므로 {@code ApiApplicationTests}처럼 DB가 있어야 한다.
+ * 실제 서버를 띄워 따로 확인한다. readiness가 사용하는 DB는 공통 Testcontainers 기반에서 제공한다.
  */
 @SpringBootTest(properties = {"management.server.port=8080", "management.prometheus.metrics.export.enabled=true"})
 @AutoConfigureMockMvc
 @DisplayName("관리 경로")
-class ManagementEndpointsTest {
+class ManagementEndpointsTest extends PostgresTestSupport {
 
 	@Autowired
 	private MockMvc mockMvc;

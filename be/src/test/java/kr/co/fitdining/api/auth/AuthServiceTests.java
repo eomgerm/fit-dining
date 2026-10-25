@@ -3,6 +3,7 @@ package kr.co.fitdining.api.auth;
 import static org.junit.jupiter.api.Assertions.*;
 
 import jakarta.persistence.EntityManagerFactory;
+import java.sql.DriverManager;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -15,6 +16,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import kr.co.fitdining.api.ApiApplication;
+import kr.co.fitdining.api.support.PostgresTestSupport;
 import kr.co.fitdining.api.auth.application.AuthCleanup;
 import kr.co.fitdining.api.auth.application.AuthTransactions;
 import kr.co.fitdining.api.auth.domain.AuthFailure;
@@ -56,13 +58,6 @@ class AuthServiceTests extends PostgresTestSupport {
     JdbcTemplate jdbc;
 
     @DynamicPropertySource static void properties(DynamicPropertyRegistry registry) throws Exception {
-        migrate();
-        registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
-        registry.add("spring.datasource.username", () -> "fit_dev_app");
-        registry.add("spring.datasource.password", () -> "test-app");
-        registry.add("JWT_SECRET", () -> java.util.Base64.getEncoder().encodeToString(new byte[32]));
-        registry.add("AUTH_FRONTEND_ORIGIN", () -> "http://localhost:3000");
-        registry.add("AUTH_COOKIE_SECURE", () -> "false");
         registry.add("spring.jpa.properties.hibernate.generate_statistics", () -> "true");
         registry.add("auth.cleanup.batch-size", () -> "2");
     }
@@ -512,14 +507,21 @@ class AuthServiceTests extends PostgresTestSupport {
     }
 
     @Test @DisplayName("마이그레이션_인증 설정 없음_DB 설정만으로 기동 종료")
-    void migrate_withoutAuthEnvironment_startsAndCloses() {
+    void migrate_withoutAuthEnvironment_startsAndCloses() throws Exception {
+        // APP_ENV=dev 계약에 맞는 DB를 같은 시험 컨테이너에 준비한다.
+        try (var connection = DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+                var statement = connection.createStatement()) {
+            statement.execute("CREATE DATABASE fit_dev OWNER fit_migrator");
+        }
+        String migrateUrl = POSTGRES.getJdbcUrl().replace("/" + POSTGRES.getDatabaseName(), "/fit_dev");
         try (var context = new SpringApplicationBuilder(ApiApplication.class).web(WebApplicationType.NONE)
-                .profiles("migrate").properties("spring.datasource.url=" + POSTGRES.getJdbcUrl(),
-                        "spring.datasource.username=fit_migrator", "spring.datasource.password=test-migrator",
+                .profiles("migrate").properties(
                         "auth.jwt-secret=${UNDEFINED_AUTH_KEY}", "auth.frontend-origin=${UNDEFINED_AUTH_ORIGIN}",
                         "auth.cookie-secure=${UNDEFINED_AUTH_SECURE}").run(
-                        "--spring.datasource.url=" + POSTGRES.getJdbcUrl(),
-                        "--spring.datasource.username=fit_migrator", "--spring.datasource.password=test-migrator")) {
+                        "--APP_ENV=dev", "--SPRING_PROFILES_ACTIVE=migrate", "--TZ=Asia/Seoul",
+                        "--SPRING_DATASOURCE_URL=" + migrateUrl,
+                        "--SPRING_DATASOURCE_USERNAME=fit_migrator", "--SPRING_DATASOURCE_PASSWORD=test-migrator")) {
             assertEquals(0, context.getBeansOfType(AuthUseCases.class).size());
             assertEquals(0, context.getBeansOfType(AuthCleanup.class).size());
         }

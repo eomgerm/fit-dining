@@ -314,13 +314,15 @@ $env:AUTH_DEMO_NICKNAME = '데모계정'
 
 다른 터미널의 `fe/`에서 `pnpm dev`를 실행하고 `http://localhost:3000/signup` 또는 `/login`으로 접속한다. 필요하면 `$env:BE_INTERNAL_URL = 'http://localhost:8080'`으로 BE 대상을 지정한다. `/api` 프록시는 개발 서버에서만 활성화되고 운영에서는 Caddy가 전달한다. 브라우저 주소와 `AUTH_FRONTEND_ORIGIN`의 호스트·포트를 일치시키며 localhost와 127.0.0.1을 섞지 않는다.
 
+BE 테스트는 Docker 데몬이 필요하며 외부 DB는 불필요하다. `be/`에서 `.\gradlew.bat cleanTest test`를 실행한다. 공통 Testcontainers 기반이 `pgvector/pgvector:0.8.7-pg16` DB와 시험용 인증 설정을 제공한다.
+
 ## 11. 검증 결과 요약
 
 2026-10-23 추가 반영과 프록시 전달 헤더 처리를 포함한 최신 검증 결과다. BE 수치는 직전 실행의 테스트 XML, FE 수치는 직전 실행 기록과 재검증 문서에 근거한다. 이 문서 갱신 작업에서 테스트를 다시 실행한 결과를 뜻하지 않는다.
 
 | 실행·검증 | 결과 |
 |---|---|
-| BE `be/`에서 `.\gradlew.bat test` | 245개 통과, 실패·오류·건너뜀 0건 |
+| BE `be/`에서 `.\gradlew.bat cleanTest test` | 260개 통과, 실패·오류·건너뜀 0건 |
 | FE `fe/`에서 `pnpm lint` | 통과 |
 | `pnpm exec prettier --check .` | 통과 |
 | `pnpm exec tsc --noEmit` | 통과 |
