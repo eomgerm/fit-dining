@@ -39,10 +39,16 @@ class ToolImagesSyncTest(unittest.TestCase):
         self.assertTrue(used <= set(self.ci), f"정의되지 않은 변수: {used - set(self.ci)}")
 
     def test_ci_database_image_is_the_one_the_data_stack_and_local_stack_run(self):
-        # be:test가 붙는 DB는 dev와 prod가 쓰는 이미지와 같아야 한다(다른 버전으로 통과한 시험은 의미가 없다)
+        # BE 시험의 DB는 dev와 prod가 쓰는 이미지와 같아야 한다(다른 버전으로 통과한 시험은 의미가 없다)
         for compose in ("infra/data/compose.data.yml", "infra/local/compose.yml"):
             text = (ROOT / compose).read_text(encoding="utf-8")
             self.assertIn(f"image: {self.sh['PGVECTOR_IMAGE']}\n", text, compose)
+
+    def test_be_testcontainers_database_image_is_the_pinned_one(self):
+        # be:test는 DB 서비스를 주지 않고 PostgresTestSupport가 Testcontainers로 띄운다. 그 이미지가 핀과 어긋나면 서버와 다른 DB로 통과한다
+        support = ROOT / "be/src/test/java/kr/co/fitdining/api/support/PostgresTestSupport.java"
+        self.assertTrue(support.exists(), f"{support.relative_to(ROOT)}가 없다. BE 시험의 DB 이미지를 검사할 수 없다")
+        self.assertIn(f'DockerImageName.parse("{self.sh["PGVECTOR_IMAGE"]}")', support.read_text(encoding="utf-8"))
 
     def test_app_dockerfile_base_defaults_match_the_pins(self):
         # hadolint가 FROM의 태그를 요구해서 Dockerfile에 핀 값을 직접 적는다. build-images.sh는 tool-images.sh의 값을 --build-arg로 넘기므로

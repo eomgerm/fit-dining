@@ -428,7 +428,7 @@ Caddy 컨테이너(`caddy:2.x`, 구현 시 최신 2.x를 핀)가 A의 80·443만
 | 잡 | 단계 | 내용 |
 |---|---|---|
 | `lint:*` | verify | 아래 목록 |
-| `be:test` | verify | Gradle 테스트(`sh ./gradlew test`: 래퍼가 git에서 실행 권한이 없다). 지금 BE 시험은 DB에 붙어야 뜨므로(`ApiApplicationTests`) dev·prod와 같은 pgvector를 잡의 서비스 컨테이너로 붙인다(접속 값은 그 잡 안에서만 쓰는 값이다). Testcontainers를 쓰게 되면 최신 버전이어야 하고, 잡 컨테이너가 형제 컨테이너의 게시 포트에 닿도록 B에 ufw `docker0` 규칙이 있다(3절 호스트 표, 2026-10-26 BE 팀이 Testcontainers로 옮길 때 확인). BE 테스트가 전부 Testcontainers로 옮겨 가면 이 서비스 컨테이너는 쓰이지 않으니 그때 뺀다. JUnit 보고서를 MR에 보인다(실패해도 올린다). jar는 만들지 않는다. MR마다 55MB를 GitLab으로 올리면 느리고, 서버가 흔들릴 때(2026-10-23, 502) 테스트까지 같이 실패한다 |
+| `be:test` | verify | Gradle 테스트(`sh ./gradlew test`: 래퍼가 git에서 실행 권한이 없다). DB가 필요한 BE 시험은 Testcontainers(`PostgresTestSupport`)가 dev·prod와 같은 pgvector(`PGVECTOR_IMAGE` 핀)를 직접 띄운다. 그래서 잡에는 DB 서비스도 `SPRING_DATASOURCE_*` 환경변수도 주지 않는다(환경변수가 시험이 코드로 넣은 값을 가린 적이 있다). Testcontainers는 최신 버전이어야 하고, 잡 컨테이너가 형제 컨테이너의 게시 포트에 닿도록 B에 ufw `docker0` 규칙이 있다(3절 호스트 표. 2026-10-26 BE 팀이 Testcontainers로 옮길 때 확인했고, 같은 날 DB 서비스를 뺐다). JUnit 보고서를 MR에 보인다(실패해도 올린다). jar는 만들지 않는다. MR마다 55MB를 GitLab으로 올리면 느리고, 서버가 흔들릴 때(2026-10-23, 502) 테스트까지 같이 실패한다 |
 | `be:build` | verify | 스위치를 켠 `develop`·`master`에서만 돈다. `be:test`가 끝난 뒤 `bootJar -x test`로 배포할 jar를 만들어 아티팩트로 넘긴다(DB가 필요 없다). jar 크기가 GitLab 아티팩트 상한을 넘으면 B에서 A로 `rsync`한다(상한은 미확인) |
 | `fe:test` | verify | 린트, `next typegen`(Next 16의 전역 타입을 만든다. 없으면 `tsc`가 실패한다), 타입 검사, 단위 테스트(`fe/`). verify 러너(B)에서 Node 이미지(핀, arm64 지원)로 실행 |
 | `fe:build` | verify | 같은 Node 이미지로 `next build`(standalone)를 **한 번만** 하고(환경 값은 번들에 넣지 않는다, 6.8절) 커밋 SHA를 `DEPLOYMENT_VERSION`으로 넘겨 빌드 ID와 `deploymentId`로 쓴다. FE 번들(`standalone`, `static`, `public`)을 GitLab 아티팩트로 넘긴다 |

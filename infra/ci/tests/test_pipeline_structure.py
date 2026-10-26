@@ -352,14 +352,13 @@ class JobsTest(unittest.TestCase):
             for rule in effective(name).get("rules") or []:
                 self.assertNotIn("changes", rule, name)
 
-    def test_be_tests_get_a_database_like_the_one_dev_runs(self):
-        # ApiApplicationTests.contextLoads는 JPA가 DB에 붙어야 뜬다(2026-10-23 DB 없이 돌려 165개 중 이 하나가 실패했다)
+    def test_be_tests_start_their_own_database_and_get_no_ambient_one(self):
+        # DB가 필요한 BE 시험은 Testcontainers(PostgresTestSupport)가 직접 띄운다. 잡에 DB 서비스나 접속 환경변수를 주면
+        # 시험이 코드로 넣은 값이 환경변수에 가려질 수 있다(a0f4be5: 기동 거부 시험이 CI의 SPRING_DATASOURCE_URL에 가려졌다).
         job = effective("be:test")
-        self.assertEqual(job["services"], [{"name": "$PGVECTOR_IMAGE", "alias": "postgres"}])
-        v = job["variables"]
-        self.assertEqual(v["SPRING_DATASOURCE_URL"], f"jdbc:postgresql://postgres:5432/{v['POSTGRES_DB']}")
-        self.assertEqual(v["SPRING_DATASOURCE_USERNAME"], v["POSTGRES_USER"])
-        self.assertEqual(v["SPRING_DATASOURCE_PASSWORD"], v["POSTGRES_PASSWORD"])
+        self.assertNotIn("services", job)
+        leaked = sorted(k for k in job.get("variables", {}) if k.startswith(("SPRING_DATASOURCE_", "POSTGRES_")))
+        self.assertEqual(leaked, [], "be:test에 DB 접속 환경변수를 주지 않는다")
 
     def test_fe_generates_next_types_before_type_checking(self):
         # Next 16의 LayoutProps 같은 전역 타입은 typegen이나 build가 만든다. 먼저 만들지 않으면 tsc가 실패한다

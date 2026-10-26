@@ -425,17 +425,18 @@ smoke:prod:
 
 **BE 팀**
 
-현황 열은 2026-10-23에 `develop` 기준 소스(`be/src/main`)를 찾아본 결과다. 이행하면 팀이 갱신한다.
+현황 열은 2026-10-23에 `develop` 소스를 찾아본 결과이고, 2026-10-26에 BE 팀의 구현(`develop` `481383b`)을 보고 갱신했다. 1·2·4·7번은 2026-10-24에 그 시점의 jar(`a0f4be5`)를 배포와 같은 JRE 이미지로 실제 서버처럼 띄워 확인했다.
 
 | # | 항목 | 확인 방법 | 현황 |
 |---|---|---|---|
-| 1 | `GET /healthz`(상태만, 내부 정보 없음) — 계약 #2 | `curl`로 200 | 소스에 없음 |
-| 2 | `GET /api/v1/version` → `{sha, builtAt}`. 이미지에 박힌 `APP_SHA`, `APP_BUILT_AT`를 읽는다(이름은 제안, 팀과 확정) — 계약 #3 | `smoke.sh`가 새 SHA인지 본다 | 소스에 없음 |
+| 1 | `GET /healthz`(상태만, 내부 정보 없음) — 계약 #2 | `curl`로 200 | **이행됨**(`OpsController`). `{"status":"UP"}` 200, 내부 정보 없음 |
+| 2 | `GET /api/v1/version` → `{sha, builtAt}`. 이미지에 박힌 `APP_SHA`, `APP_BUILT_AT`를 읽는다(이름은 제안, 팀과 확정) — 계약 #3 | `smoke.sh`가 새 SHA인지 본다 | **이행됨**. 이미지가 넣는 `APP_SHA`, `APP_BUILT_AT`를 읽어 `{sha, builtAt}`를 돌려준다(주입한 SHA가 그대로 나왔다. 로컬은 `unknown`) |
 | 3 | 관리 포트 8081과 `/actuator/health/readiness`, `/actuator/prometheus` — 계약 #1 | `deploy.sh` readiness | **이행됨**(2026-10-23, 인프라가 직접). `application.yml`의 `management`(포트 8081, 노출은 health와 prometheus뿐, readiness는 `readinessState,db`)와 `micrometer-registry-prometheus` 의존성. 시험 `ManagementEndpointsTest`. 배포와 같은 JRE 이미지로 실제 서버를 띄워 확인했다: readiness가 11초에 `UP`, 8080에서는 `/actuator/*`가 404, DB를 멈추면 readiness 503이고 liveness는 200 |
-| 4 | `server.shutdown=graceful`, 종료 대기 30초 — 계약 #4 | 롤백 시험 | 소스에 없음 |
+| 4 | `server.shutdown=graceful`, 종료 대기 30초 — 계약 #4 | 롤백 시험 | **이행됨**(`server.shutdown=graceful`, 30초). SIGTERM에 `Commencing graceful shutdown`과 `complete`가 로그에 나온다. 처리 중인 요청이 있을 때의 동작은 시험하지 않았다 |
 | 5 | `SPRING_PROFILES_ACTIVE=migrate`면 웹 서버 없이 마이그레이션 후 종료 — 계약 #9 | 마이그레이션 컨테이너가 0으로 끝남 | `application-migrate.yml`에 웹 서버 없음과 Flyway 켬이 있다. 종료 코드는 첫 dev 배포에서 확인 |
 | 6 | `X-Fallback` 헤더(폴백 응답) — 계약 #17 | `FIT_SMOKE_SEARCH_PATH`를 주면 `smoke.sh`가 확인 | 소스에 없음 |
-| 7 | 부팅 시 env 검증(`REPLACE_ME`, 환경 불일치 거부) — 계약 #8 | prod.env의 자리표시자로 기동이 거부되는지 | 소스에 없음 |
+| 7 | 부팅 시 env 검증(`REPLACE_ME`, 환경 불일치 거부) — 계약 #8 | prod.env의 자리표시자로 기동이 거부되는지 | **이행됨**(`EnvContractValidator`). prod인데 DB가 `fit_dev`, DB 비밀번호가 `REPLACE_ME`, dev인데 Redis가 `redis-prod`, prod에서 목 스위치 켬은 모두 기동을 거부하고 dev에서 목을 켜는 것은 허용한다(실제로 띄워 확인). 필수로 보는 키는 지금 `SPRING_DATASOURCE_*`뿐이다(`AUTH_*`, `MODAL_*`는 검사하지 않는다) |
+| 8 | 접속자 IP: `server.forward-headers-strategy=native` — 계약 #7 | dev에서 사용자별 시도 제한이 따로 세어지는지 | **설정됨**(MR 45의 `application.yml`, BE 팀의 `NativeForwardedHeadersTests`). Caddy가 접속자 IP를 `X-Forwarded-For`로 넘기는 것은 별도 컨테이너로 확인했다. BE가 배포된 뒤 서버에서 실제 헤더로 확인한다 |
 
 **FE 팀**
 
@@ -515,7 +516,7 @@ B는 vCPU 2개(Neoverse-N1)이고 이미지는 arm64 그대로다(에뮬레이�
 
 검증(B, 같은 JDK 이미지, `docker.sock` 마운트, 메모리 2g와 CPU 2, `postgres` 서비스 링크, CI의 `SPRING_DATASOURCE_*` 환경변수까지 맞춤): MR 45의 `be/`(`50117aa`)로 `sh ./gradlew --no-daemon test` 전체가 **288개 통과, 실패 0**(1분 46초, 의존성 캐시가 비어 있는 첫 실행). 규칙 적용 전후의 대조는 임시 컨테이너 점검으로 했다. 게시 포트를 게이트웨이로 부르면 규칙 전에는 시간 초과, 규칙 뒤에는 연결됐고 범위 밖 포트(8123)는 계속 막혔다. `TESTCONTAINERS_HOST_OVERRIDE` 없이도 통과한다(`ApiApplicationTests` 단독 실행으로 확인). 확인하지 못한 것: 규칙을 뺀 상태에서 Testcontainers 테스트를 돌려 실제 예외 메시지를 보는 것(방화벽을 되돌려야 해서 하지 않았다). 원인은 같은 코드가 규칙 전(MR 45 파이프라인)에 실패하고 규칙 뒤에 통과한 대조와, 위의 연결 점검으로 판단한다.
 
-남은 일: MR 45가 병합돼 모든 DB 테스트가 Testcontainers를 쓰면 `be:test`의 `services:`와 `SPRING_DATASOURCE_*`·`POSTGRES_*` 변수는 쓰이지 않는다. 병합 뒤 정리한다. 러너를 사용자 정의 망(`FF_NETWORK_PER_BUILD`)으로 바꾸면 `docker0`가 아니라 그 망의 브리지를 열어야 한다.
+정리(2026-10-26, MR 45 병합 뒤): `be:test`에서 `services:`와 `SPRING_DATASOURCE_*`·`POSTGRES_*` 변수를 뺐다(위 Task 5의 job 정의와 13·16번 항목은 이 정리 전 모양의 기록이다). 같은 조건에서 DB 서비스와 환경변수 없이 develop(`481383b`)의 BE 시험 전체를 B에서 돌려 확인했다. 구조 시험은 `be:test`에 서비스나 DB 환경변수가 다시 생기면 실패하고, `test_tool_images_sync.py`는 BE의 `PostgresTestSupport`가 `PGVECTOR_IMAGE` 핀과 같은 이미지를 쓰는지 본다. 러너를 사용자 정의 망(`FF_NETWORK_PER_BUILD`)으로 바꾸면 `docker0`가 아니라 그 망의 브리지를 열어야 한다.
 
 ## 검증 결과 (2026-10-23, 이 PC)
 

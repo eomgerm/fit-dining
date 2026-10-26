@@ -37,7 +37,8 @@ variables:
   JDK_IMAGE: eclipse-temurin:21.0.12_8-jdk-noble
   JRE_IMAGE: eclipse-temurin:21.0.12_8-jre-noble
   NODE_IMAGE: node:22.23.4-bookworm-slim
-  # be:test가 붙는 DB. dev와 prod가 쓰는 이미지와 같아야 한다(infra/data/compose.data.yml)
+  # BE 시험(Testcontainers)이 띄우는 DB. dev와 prod가 쓰는 이미지와 같아야 한다(infra/data/compose.data.yml).
+  # BE의 PostgresTestSupport가 같은 값을 적어 둔다(tests/test_tool_images_sync.py가 검사한다)
   PGVECTOR_IMAGE: pgvector/pgvector:0.8.7-pg16
 
 # MR 파이프라인은 바뀐 경로에 해당하는 잡만 돌려서 빠르게 끝낸다(rules:changes는 MR 파이프라인에서 대상 브랜치와의 차이로 판단한다).
@@ -253,19 +254,12 @@ be:test:
         - '.gitlab-ci.yml'
         - 'infra/ci/tool-images.sh'
     - *on_branches
-  services:
-    - name: $PGVECTOR_IMAGE
-      alias: postgres
   variables:
     GRADLE_USER_HOME: $CI_PROJECT_DIR/.gradle
     GRADLE_OPTS: -Xmx768m -Dorg.gradle.daemon=false
-    # 아래 DB 값은 이 job의 서비스에서만 쓴다(서버 값이 아니고 비밀도 아니다). ApiApplicationTests가 DB에 붙어야 뜬다
-    POSTGRES_DB: fit_dev
-    POSTGRES_USER: fit_dev_app
-    POSTGRES_PASSWORD: citest
-    SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/fit_dev
-    SPRING_DATASOURCE_USERNAME: fit_dev_app
-    SPRING_DATASOURCE_PASSWORD: citest
+    # DB는 BE 시험이 Testcontainers로 직접 띄운다(PostgresTestSupport. 이미지는 아래 PGVECTOR_IMAGE와 같아야 한다). 그 컨테이너는 B 위에 나란히 생겨
+    # 게시 포트로 잡 컨테이너에 닿으므로 B의 ufw에 docker0 규칙이 있어야 한다(infra/host/README.md). 잡에 DB 서비스나 SPRING_DATASOURCE_* 환경변수를
+    # 주지 않는다: 환경변수가 시험이 코드로 넣은 값을 가린 적이 있다(a0f4be5).
   cache:
     key:
       files:
