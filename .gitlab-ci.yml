@@ -19,9 +19,10 @@ default:
 
 variables:
   GIT_DEPTH: "20"
-  # 배포 스위치. "true"면 fe:build부터 smoke까지 파이프라인에 나타난다. 켜기 전에 docs/infra/plans/2026-10-23-plan-1c3-ci-pipeline.md의
-  # "계약 이행 체크리스트"가 모두 끝나 있어야 한다. 바꾸는 일은 MR로 하고 infra/ci/tests/test_pipeline_structure.py의 기본값 시험도 함께 바꾼다.
-  FIT_CD_ENABLED: "false"
+  # 배포 스위치. "true"면 fe:build부터 smoke까지 파이프라인에 나타난다(2026-10-26에 켰다). 바꾸는 일은 MR로 하고
+  # infra/ci/tests/test_pipeline_structure.py의 스위치 시험도 함께 바꾼다. 비상으로 끄려면 프로젝트 CI/CD 변수 FIT_CD_ENABLED=false를 만든다
+  # (프로젝트 변수가 이 파일의 변수보다 우선한다). 켠 뒤에도 prod는 master의 수동 deploy:prod를 사람이 눌러야 나간다.
+  FIT_CD_ENABLED: "true"
   # 도구 이미지 핀. infra/ci/tool-images.sh와 같아야 한다(tests/test_tool_images_sync.py가 검사한다).
   # 러너가 docker executor라 job 컨테이너 안에서 `docker run -v $PWD`로 도구 컨테이너를 띄울 수 없다
   # (워크스페이스가 호스트 경로가 아니다). 그래서 도구마다 job image를 따로 쓴다.

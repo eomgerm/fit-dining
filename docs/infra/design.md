@@ -438,7 +438,7 @@ Caddy 컨테이너(`caddy:2.x`, 구현 시 최신 2.x를 핀)가 A의 80·443만
 | `deploy:prod` | deploy | master에서 수동(`environment: prod`, `resource_group: prod`). `allow_failure: false`라 사람이 누를 때까지 파이프라인이 멈춘다(`when: manual`만 두면 안 눌러도 통과한 것처럼 보인다) |
 | `smoke:dev`, `smoke:prod` | smoke | 환경별로 배포 뒤에 돈다(`smoke.sh <env> --sha <SHA>`). `--resolve`로 서버 내부 경유 확인. 검색 1건을 호출해 폴백 사용 여부를 확인한다(Modal 연동 누락이 폴백에 가려지지 않게, BE 계약 #17). 콜드 스타트를 감안한 타임아웃을 둔다. FE는 `/`가 200이고 `/config.json`에 필수 키가 모두 있는지 확인한다 |
 
-**배포 스위치:** `.gitlab-ci.yml`의 변수 `FIT_CD_ENABLED`(기본 `"false"`)가 꺼져 있으면 `fe:build`부터 `smoke`까지는 파이프라인에 나타나지 않고 `be:test`와 `fe:test`만 모든 파이프라인(`develop`, `master`, MR)에서 돈다. 켜면 `develop`은 `smoke:dev`까지, `master`는 수동 `deploy:prod`와 `smoke:prod`까지, MR은 검사 잡(`fe:build`, `fe:bundle-check` 포함, 바뀐 경로에 한해)까지 나타난다. jar를 만드는 `be:build`는 MR에 나타나지 않는다. 켜는 일은 MR 한 줄이라 기록이 남고, 구조 시험(`test_pipeline_structure.py`)의 기본값 시험도 함께 바꿔야 해서 실수로 켜지 못한다. BE·FE가 서비스 계약(12.1, 12.5절)을 이행하기 전에 `fe:bundle-check`가 모든 MR을 막는 일을 피하려는 것이다. 켜기 전에 끝나야 할 일은 [계획 1C-3의 계약 이행 체크리스트](plans/2026-10-23-plan-1c3-ci-pipeline.md)에 있다.
+**배포 스위치:** `.gitlab-ci.yml`의 변수 `FIT_CD_ENABLED`가 `"false"`이면(2026-10-26에 `"true"`로 켰다. 비상으로 끄려면 프로젝트 CI/CD 변수로 덮는다) `fe:build`부터 `smoke`까지는 파이프라인에 나타나지 않고 `be:test`와 `fe:test`만 모든 파이프라인(`develop`, `master`, MR)에서 돈다. 켜면 `develop`은 `smoke:dev`까지, `master`는 수동 `deploy:prod`와 `smoke:prod`까지, MR은 검사 잡(`fe:build`, `fe:bundle-check` 포함, 바뀐 경로에 한해)까지 나타난다. jar를 만드는 `be:build`는 MR에 나타나지 않는다. 켜는 일은 MR 한 줄이라 기록이 남고, 구조 시험(`test_pipeline_structure.py`)의 기본값 시험도 함께 바꿔야 해서 실수로 켜지 못한다. BE·FE가 서비스 계약(12.1, 12.5절)을 이행하기 전에 `fe:bundle-check`가 모든 MR을 막는 일을 피하려는 것이다. 켜기 전에 끝나야 할 일은 [계획 1C-3의 계약 이행 체크리스트](plans/2026-10-23-plan-1c3-ci-pipeline.md)에 있다.
 
 **`lint:*` 잡**
 

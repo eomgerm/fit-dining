@@ -1,7 +1,7 @@
 """`.gitlab-ci.yml`의 구조 규칙(계획 1C-3 Task 5).
 
 GitLab 없이 `rules:`를 평가해서 파이프라인마다 어떤 잡이 나타나는지 본다. PyYAML이 필요하다(lint:guards가 py3-yaml을 설치한다).
-배포 스위치(FIT_CD_ENABLED)를 켜는 MR은 이 파일의 기본값 시험도 함께 바꿔야 한다. 그래서 실수로 켜지 못한다.
+배포 스위치(FIT_CD_ENABLED)를 바꾸는 MR은 이 파일의 스위치 시험도 함께 바꿔야 한다. 그래서 실수로 켜거나 끄지 못한다.
 """
 import re
 import unittest
@@ -259,8 +259,9 @@ class JobsTest(unittest.TestCase):
         # when: manual은 allow_failure가 기본 true라 누르지 않아도 파이프라인이 통과한 것처럼 보인다. prod는 멈춰 있어야 한다
         self.assertIs(effective("deploy:prod").get("allow_failure"), False)
 
-    def test_switch_default_is_off(self):
-        self.assertEqual(CI["variables"]["FIT_CD_ENABLED"], "false")
+    def test_switch_is_on(self):
+        # 2026-10-26에 켰다. 파일의 값을 바꾸는 MR은 이 시험도 바꿔야 한다. 비상으로 끄는 길은 프로젝트 CI/CD 변수다
+        self.assertEqual(CI["variables"]["FIT_CD_ENABLED"], "true")
 
     def test_deploy_jobs_clone_the_full_history(self):
         # 얕은 clone이면 현재 배포된 커밋이 범위 밖일 때 다운그레이드 가드(merge-base)와 마이그레이션 비교(git diff)가 틀린다
@@ -383,7 +384,7 @@ class PipelineContentsTest(unittest.TestCase):
 
     def test_with_the_switch_off_only_the_tests_appear_everywhere(self):
         for kind in ("develop", "master", "mr"):
-            self.assertEqual(sorted(self.new_jobs(kind)), ["be:test", "fe:test"], kind)
+            self.assertEqual(sorted(self.new_jobs(kind, "false")), ["be:test", "fe:test"], kind)
 
     def test_no_pipeline_for_a_plain_branch_push_or_a_develop_to_master_mr(self):
         for kind in ("feature-push", "mr-from-develop"):
@@ -464,7 +465,7 @@ class MrPathTest(unittest.TestCase):
         self.assertEqual(self.mr(["README.md"]), ALWAYS_IN_MR)
 
     def test_fe_only_runs_the_fe_test_and_nothing_from_be_or_infra(self):
-        self.assertEqual(self.mr(["fe/src/app/page.tsx"]), ALWAYS_IN_MR | {"fe:test"})
+        self.assertEqual(self.mr(["fe/src/app/page.tsx"], "false"), ALWAYS_IN_MR | {"fe:test"})
         self.assertEqual(self.mr(["fe/src/app/page.tsx"], "true"), ALWAYS_IN_MR | {"fe:test", "fe:build", "fe:bundle-check"})
 
     def test_be_only_runs_the_be_test_and_the_migration_check_only_for_migrations(self):

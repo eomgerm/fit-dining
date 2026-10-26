@@ -96,7 +96,7 @@ Settings → CI/CD → General pipelines에서 설정한다.
 
 ## 3단계: 배포 파이프라인 (스위치를 켜기 전후)
 
-배포 잡(`deploy:dev`, `deploy:prod`)은 `.gitlab-ci.yml`의 변수 `FIT_CD_ENABLED`(기본 `"false"`)를 켜야 파이프라인에 나타난다(설계 6.3절). 시크릿이 아니라서 GitLab 변수가 아니라 파일에 두고, 켜는 일은 MR로 한다. 켜기 전에 [계획 1C-3의 서버 적용 절차와 계약 이행 체크리스트](plans/2026-10-23-plan-1c3-ci-pipeline.md)가 끝나 있어야 한다. "Prevent outdated deployment jobs"와 "Allow job retries for rollback deployments"는 1단계에서 이미 설정했다.
+배포 잡(`deploy:dev`, `deploy:prod`)은 `.gitlab-ci.yml`의 변수 `FIT_CD_ENABLED`가 `"true"`여야 파이프라인에 나타난다(2026-10-26에 켰다. 설계 6.3절). 비상으로 끄려면 프로젝트 CI/CD 변수 `FIT_CD_ENABLED=false`를 만든다(프로젝트 변수가 파일 값보다 우선한다). 시크릿이 아니라서 GitLab 변수가 아니라 파일에 두고, 켜는 일은 MR로 한다. 켜기 전에 확인한 일은 [계획 1C-3의 서버 적용 절차와 계약 이행 체크리스트](plans/2026-10-23-plan-1c3-ci-pipeline.md)에 있다. "Prevent outdated deployment jobs"와 "Allow job retries for rollback deployments"는 1단계에서 이미 설정했다.
 
 ### 환경 보호는 쓸 수 없다
 
