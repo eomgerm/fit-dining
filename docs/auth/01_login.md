@@ -83,6 +83,7 @@
 
 ```json
 {
+  "userId": "<user-id>",
   "accessToken": "<access-jwt>",
   "nickname": "새이름",
   "sessionId": "<family-id>",
@@ -170,21 +171,33 @@ BE의 `AuthText.strip`은 `strip()`과 추가 유니코드 공백 처리를 함�
 
 ## 7. 스키마·보관 정책·DB 권한
 
-스키마 정의는 `be/src/main/resources/db/migration/V1__auth.sql`이다. 시각 컬럼은 모두 `timestamptz`이고, 아래에서 nullable로 적지 않은 컬럼은 NOT NULL이다.
+스키마 정의는 `be/src/main/resources/db/migration/V1__auth.sql`과 `V2__user_preferences_and_soft_delete.sql`이다. 시각 컬럼은 모두 `timestamptz`이고, 아래에서 nullable로 적지 않은 컬럼은 NOT NULL이다.
 
 ### `auth_users`
 
 | 컬럼 | 타입 | 제약·용도 |
 |---|---|---|
 | `id` | text | PRIMARY KEY, 사용자 id |
-| `email` | varchar(254) | UNIQUE, `email = lower(email)` CHECK |
+| `email` | varchar(254) | 활성 계정 부분 UNIQUE, `email = lower(email)` CHECK |
 | `nickname` | varchar(15) | `char_length(nickname) BETWEEN 2 AND 15` CHECK |
 | `age_confirmed_at`, `terms_agreed_at`, `privacy_agreed_at` | timestamptz | 필수 동의 시각 |
 | `terms_version` | text | 가입 시 적용한 약관 버전 |
 | `password_hash` | text | BCrypt 해시 |
 | `created_at` | timestamptz | 생성 시각 |
 
-인덱스는 PK·이메일 UNIQUE의 자동 인덱스와 `auth_users_nickname_idx`: **UNIQUE `lower(nickname)`**다.
+`deleted_at timestamptz NULL`은 탈퇴 시각이며 `deleted_at IS NULL OR deleted_at >= created_at` CHECK를 둔다.
+인덱스는 PK와 `auth_users_email_active_idx`(email), `auth_users_nickname_active_idx`(lower(nickname))다.
+두 UNIQUE 인덱스는 `WHERE deleted_at IS NULL`로 활성 계정만 검사한다.
+
+### `user_preferences`
+
+| 컬럼 | 타입 | 제약·용도 |
+|---|---|---|
+| `user_id` | text | PK, auth_users(id) FK ON DELETE CASCADE |
+| `mood` | text | nullable, QUIET 또는 LIVELY |
+| `priorities`, `purposes` | text[] | NOT NULL, 기본 빈 배열 |
+| `tastes` | jsonb | NOT NULL, 기본 [], JSON 배열 CHECK |
+| `created_at`, `updated_at` | timestamptz | 생성·수정 시각 |
 
 ### `auth_refresh_tokens`
 
@@ -355,3 +368,11 @@ BE 테스트는 Docker 데몬이 필요하며 외부 DB는 불필요하다. `be/
 가입 본문의 선택 `preferences`는 계정·최초 RT와 같은 트랜잭션으로 저장한다.
 로그인·가입·갱신 응답에 JWT sub와 같은 `userId`를 포함한다.
 취향 코드, 조회 API와 V2 스키마는 [온보딩 문서](../onboarding/01_onboarding.md)를 따른다.
+
+## 회원 탈퇴
+
+본인 인증과 Origin 검사를 적용한 `DELETE /api/v1/users/{userId}`는 soft delete 후 204와 RT 쿠키 삭제를 반환한다.
+취향은 즉시 삭제하고 모든 RT를 WITHDRAWN으로 폐기한다. 반복 탈퇴는 204다.
+로그인·갱신은 탈퇴 계정을 거부하며 활성 계정만 이메일·닉네임 중복을 검사한다.
+V2에서 `auth_users.deleted_at` 및 활성 이메일·닉네임 부분 유일 인덱스를 사용한다.
+무상태 AT와 개인정보 보관 관련 남은 이슈는 온보딩 문서를 참고한다.

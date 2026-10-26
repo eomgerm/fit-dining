@@ -63,7 +63,7 @@ public class AuthService implements AuthUseCases {
 
     @Override
     public Profile me(String userId) {
-        AuthUser user = users.findById(userId).orElseThrow(() -> new AuthFailure("인증을 확인해주세요."));
+        AuthUser user = users.findById(userId).filter(value -> value.getDeletedAt() == null).orElseThrow(() -> new AuthFailure("인증을 확인해주세요."));
         return new Profile(user.getNickname(), user.getEmail());
     }
 

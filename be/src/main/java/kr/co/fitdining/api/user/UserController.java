@@ -13,10 +13,23 @@ import org.springframework.http.HttpStatus;
 @RequestMapping("/api/v1/users/{userId}")
 public class UserController {
     private final UserPreferencesRepository preferences;
+    private final kr.co.fitdining.api.auth.repository.AuthUserRepository users;
+    private final UserService service;
+    @org.springframework.beans.factory.annotation.Value("${auth.cookie-secure}") private boolean secure;
+    @DeleteMapping
+    public org.springframework.http.ResponseEntity<Void> withdraw(@PathVariable String userId,
+            @RequestAttribute("auth.identity") Identity identity, jakarta.servlet.http.HttpServletResponse response) {
+        requireOwner(userId, identity);
+        service.withdraw(userId);
+        kr.co.fitdining.api.auth.presentation.AuthController.clearCookie(response, secure);
+        return org.springframework.http.ResponseEntity.noContent().build();
+    }
     @GetMapping("/preferences")
     public PreferencesResponse preferences(@PathVariable String userId,
             @RequestAttribute("auth.identity") Identity identity) {
         requireOwner(userId, identity);
+        if (!users.existsByIdAndDeletedAtIsNull(userId))
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "취향 정보가 없습니다.");
         UserPreferences value = preferences.findById(userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "취향 정보가 없습니다."));
         return new PreferencesResponse(value.getMood(), value.getPriorities(), value.getPurposes(), value.getTastes(), value.getUpdatedAt());

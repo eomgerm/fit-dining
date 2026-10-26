@@ -36,7 +36,7 @@ public class AuthWebConfiguration implements WebMvcConfigurer {
                 response.setHeader("Cache-Control", "no-store");
                 response.setHeader("X-Content-Type-Options", "nosniff");
                 if (request.getMethod().equals("OPTIONS")) return true;
-                if (request.getMethod().equals("POST") && !origin.equals(request.getHeader("Origin")))
+                if ((request.getMethod().equals("POST") || request.getMethod().equals("DELETE")) && !origin.equals(request.getHeader("Origin")))
                     throw new AuthFailure("허용되지 않은 요청 출처입니다.", 403);
                 String path = request.getRequestURI().substring(request.getContextPath().length());
                 if (!protectedPaths.contains(path) && !path.startsWith("/api/v1/users/")) return true;

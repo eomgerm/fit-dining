@@ -57,6 +57,7 @@ public class AuthTransactions {
     /** Creates one refresh family and persists its first RT only. */
     @Transactional
     public Issued login(AuthUser user) {
+        user = activeUser(user.getId());
         Instant now = clock.instant();
         return issue(user.getId(), user.getNickname(), UUID.randomUUID().toString(), now.plusSeconds(86400), now);
     }
@@ -68,6 +69,7 @@ public class AuthTransactions {
      */
     @Transactional
     public Rotation rotate(TokenCodec.Claims claims) {
+        AuthUser user = activeUser(claims.userId());
         AuthRefreshToken token = refreshTokens.lockByJti(claims.jti()).orElseThrow(AuthTransactions::invalid);
         if (!token.getUserId().equals(claims.userId())
                 || token.getExpiresAt().getEpochSecond() != claims.expiresAt()) throw invalid();
@@ -77,7 +79,7 @@ public class AuthTransactions {
         }
         if (!token.getExpiresAt().isAfter(now)) throw invalid();
         token.markUsed(now);
-        return new Rotation(issue(token.getUserId(), users.findById(token.getUserId()).orElseThrow(AuthTransactions::invalid).getNickname(), token.getFamilyId(), token.getExpiresAt(), now), null);
+        return new Rotation(issue(token.getUserId(), user.getNickname(), token.getFamilyId(), token.getExpiresAt(), now), null);
     }
 
     /**
@@ -134,6 +136,10 @@ public class AuthTransactions {
         String at = codec.encode(new TokenCodec.Token(user, null, "access", created, accessExpiry));
         String rt = codec.encode(new TokenCodec.Token(user, jti, "refresh", created, expiry));
         return new Issued(at, rt, new Identity(user, nickname, family, accessExpiry, expiry));
+    }
+
+    private AuthUser activeUser(String id) {
+        return users.lockById(id).filter(user -> user.getDeletedAt() == null).orElseThrow(AuthTransactions::invalid);
     }
 
     private static AuthFailure invalid() { return new AuthFailure("인증을 확인해주세요."); }

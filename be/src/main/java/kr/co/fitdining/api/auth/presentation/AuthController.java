@@ -92,7 +92,7 @@ public class AuthController {
         return ResponseCookie.from(COOKIE, value).httpOnly(true).secure(secure).sameSite("Strict")
                 .path("/api/auth").maxAge(Duration.ofSeconds(age)).build();
     }
-    static void clearCookie(HttpServletResponse response, boolean secure) {
+    public static void clearCookie(HttpServletResponse response, boolean secure) {
         response.addHeader(HttpHeaders.SET_COOKIE, cookie("", secure, 0).toString());
     }
 }

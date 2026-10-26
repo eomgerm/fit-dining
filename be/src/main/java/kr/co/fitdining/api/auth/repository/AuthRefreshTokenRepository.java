@@ -28,6 +28,10 @@ public interface AuthRefreshTokenRepository extends JpaRepository<AuthRefreshTok
     int revokeFamily(@Param("family") String family, @Param("user") String user,
             @Param("now") Instant now, @Param("reason") String reason);
 
+    @Modifying(flushAutomatically = true)
+    @Query("update AuthRefreshToken t set t.revokedAt = :now, t.revokeReason = 'WITHDRAWN' where t.userId = :user")
+    int revokeUser(@Param("user") String user, @Param("now") Instant now);
+
     @Modifying
     @Query(value = "delete from auth_refresh_tokens where jti in (select jti from auth_refresh_tokens "
             + "where expires_at < :cutoff order by expires_at, jti limit :batch)", nativeQuery = true)
