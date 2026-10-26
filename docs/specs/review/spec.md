@@ -11,15 +11,15 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 
 ## Assumptions
 
-1. Walking Skeleton은 사용자를 식별하지 않고 인증 없이 등록한다. 1차 후속부터 사용자는 `Authorization` 헤더의 JWT로 식별한다(D-1, D-15).
+1. 등록은 로그인한 사용자만 하고, 사용자는 `Authorization` 헤더의 JWT로 식별한다. Walking Skeleton은 인증 없이 등록했다(D-1, D-15, D-35).
 2. Walking Skeleton은 방문일이 없고 작성일을 보인다. 1차 후속의 방문일은 KST 날짜이고 범위는 `오늘 - 1개월` 이상 `오늘` 이하이며 서버가 `Clock`으로 계산한다(D-4).
-3. 이유 태그는 1차 후속에서 붙는다. 태그는 공용 특징 코드를 참조하고(D-16), 문구와 업종별 노출은 PRD FR-10 초안을 임시 시드로 쓴다. 기획이 문구를 확정하면 시드만 바꾼다(D-5).
+3. 이유 태그는 1차 후속에서 붙는다. 태그는 공용 특징 코드를 참조한다(D-16). 태그 목록, 문구, 업종별 노출은 아직 확정되지 않아 임시 시드로 진행하고, 확정되면 시드만 바꾼다(D-5).
 4. 오류 응답, 입력 검증, 알 수 없는 속성 거부, null 필드 생략, 로그 규칙은 팀 BE 컨벤션(`be/docs/convention.md`)을 따른다. 오류는 리뷰 기능의 예외 처리 클래스가 ProblemDetail로 바꾸고, 형식 검증은 Bean Validation으로 한다(D-20).
 5. FE는 데이터를 브라우저에서 공통 API 클라이언트(`@/shared/api`)와 TanStack Query로 가져오고 서버 전용 기능을 쓰지 않는다. 상대 경로 `/api/v1/...`를 부르고, 로컬 `next dev`에서는 개발 서버 프록시가 BE로 넘긴다(D-31, 검색 D-58). 화면은 공통 UI 컴포넌트(`@/shared/ui`)와 디자인 토큰으로 그린다(D-31).
 6. 장소 ID는 검색 spec과 같은 정수다. Walking Skeleton은 장소 존재를 확인하지 않는다. 1차 후속부터 장소의 존재 여부와 이름·업종·역은 장소 기능의 조회 인터페이스로 확인한다(D-21, D-22).
 7. 취향·장소 분석·검색 색인은 1차 후속부터 리뷰의 상태 시각과 `updated_at`으로 변경을 가져간다. 서버 안의 일괄 처리는 리뷰 테이블을 직접 조회할 수 있고, Modal에서 도는 AI가 읽는 경로는 AI·인프라 담당과 정한다(D-34). Walking Skeleton의 리뷰는 익명이고 이유 태그가 없어 취향 보정에 쓰이지 않는다(D-27).
 8. 위치 확인은 기기에서만 계산하며 BE API가 없다(D-12).
-9. Walking Skeleton은 DB 테이블 없이 메모리 Mock 저장소에 저장한다. 저장소는 `REVIEW_MOCK_ENABLED`로 local과 dev에서만 켜고, 꺼진 환경에서는 리뷰 API가 503이다. 재시작하면 시드만 남는다. 1차 후속에서 저장소 구현만 `reviews` 테이블을 쓰는 구현으로 바꾼다(D-27, D-28).
+9. 리뷰는 `reviews` 테이블에 저장한다. 메모리 저장소와 시드는 없고, dev도 빈 상태에서 시작한다(D-28, D-35).
 
 ## Usage
 
@@ -40,14 +40,14 @@ Walking Skeleton
 
 Walking Skeleton
 
-- [x] AC-1: 인증 헤더 없이 본문과 함께 리뷰를 등록하면 201과 `reviewId`를 받는다. 본문 없이도 등록되고, 같은 장소에 여러 번 등록할 수 있다. (D-1, D-6, D-15)
+- [x] AC-1: 인증 헤더 없이 본문과 함께 리뷰를 등록하면 201과 `reviewId`를 받는다. 본문 없이도 등록되고, 같은 장소에 여러 번 등록할 수 있다. (D-1, D-6, D-15) (D-35로 바뀜)
 - [x] AC-2: `placeId`가 양의 정수가 아니면(숫자가 아님, 0 이하, `long` 범위 밖) 400 ProblemDetail이다. 장소가 실제로 있는지는 확인하지 않아 Mock 장소 ID로도 등록된다. (D-21, D-22)
 - [x] AC-3: 본문이 500자를 넘으면 400 ProblemDetail이다. 공백뿐인 본문은 본문 없음으로 저장된다. (D-6)
-- [x] AC-4: 목록은 `created_at` 내림차순(같으면 `review_id` 내림차순)이고 커서로 20건씩 다음 페이지를 받으며 페이지 사이에 중복이 없다. 항목은 `reviewId`, 작성 시각, 본문을 담고 `totalCount`는 삭제되지 않은 리뷰 수다. (D-24)
+- [x] AC-4: 목록은 `created_at` 내림차순(같으면 `review_id` 내림차순)이고 커서로 20건씩 다음 페이지를 받으며 페이지 사이에 중복이 없다. 항목은 `reviewId`, 작성 시각, 본문을 담고 `totalCount`는 삭제되지 않은 리뷰 수다. (D-24) (D-35로 바뀜)
 - [x] AC-5: 요청 본문에 정의되지 않은 속성(예: `userId`, `visitedAt`)이 있으면 400 ProblemDetail이다. 응답 JSON 키는 문서화된 필드를 벗어나지 않는다. (D-20)
 - [x] AC-6: 리뷰 등록과 조회를 처리한 뒤(400 포함) BE 로그에 요청 본문과 리뷰 본문이 나타나지 않는다. (D-20)
 - [x] AC-7: 장소 상세의 리뷰 탭은 리뷰 수와 리뷰 목록을 보이고, 목록 끝이 보이면 다음 페이지를 받는다. 홈 탭은 리뷰 수와 최신 3건을 보이고, 리뷰가 있으면 머리글의 "전체 보기"로 리뷰 탭을 연다. 리뷰가 없으면 "리뷰 0"과 빈 상태 안내(6-E03)를, 목록을 불러오지 못하면 "다시 시도" 버튼이 있는 안내를 보인다. 목록은 작성일을 KST 날짜("10월 20일 작성")로 보인다. 작성 화면은 본문 입력칸 하나이고, 입력칸은 500자까지만 받으며 글자 수(예: 44/500)를 보인다. 등록 요청이 처리 중이면 "등록하기"가 비활성이다. 등록에 성공하면 "리뷰가 등록됐어요" 토스트가 뜨고 들어오기 전의 장소 상세(같은 탭)로 돌아가 새 리뷰가 리뷰 탭 맨 위와 홈 미리보기 첫 줄에 보이며, 상세의 "뒤로" 한 번이면 그 전 화면이다. 실패하면 화면에 오류 안내가 뜨고 입력이 남아 있다. (D-24, D-32)
-- [x] AC-24: 리뷰는 메모리 Mock 저장소에 저장되고 `REVIEW_MOCK_ENABLED`가 꺼진 환경에서는 등록과 목록 모두 503 ProblemDetail이다. 전체 리뷰 수가 상한을 넘으면 가장 오래된 리뷰부터 목록과 `totalCount`에서 빠진다. 시드로 Mock 장소 30곳 모두에 리뷰가 있고, 1번 장소에는 25건이 있다. 장소 카드가 "앱 리뷰"로 드는 근거와 인용이 그 장소의 리뷰에 있다. (D-27, D-33)
+- [x] AC-24: 리뷰는 메모리 Mock 저장소에 저장되고 `REVIEW_MOCK_ENABLED`가 꺼진 환경에서는 등록과 목록 모두 503 ProblemDetail이다. 전체 리뷰 수가 상한을 넘으면 가장 오래된 리뷰부터 목록과 `totalCount`에서 빠진다. 시드로 Mock 장소 30곳 모두에 리뷰가 있고, 1번 장소에는 25건이 있다. 장소 카드가 "앱 리뷰"로 드는 근거와 인용이 그 장소의 리뷰에 있다. (D-27, D-33) (D-35로 바뀜)
 
 1차 후속
 
@@ -63,10 +63,13 @@ Walking Skeleton
 - [ ] AC-17: 삭제하면 목록과 `totalCount`에서 즉시 빠지고, 같은 방문일로 다시 등록할 수 있다. (D-28)
 - [ ] AC-18: 사진은 리뷰당 5장 이하이고 사진마다 원본과 썸네일 키가 있다. 업로드 확인에 실패한 키(없음, 크기 초과, 형식 불일치)가 있으면 400 ProblemDetail이다. 확정된 사진만 공개 경로로 읽힌다. (D-9)
 - [ ] AC-19: 신고는 리뷰당 한 번만 가능하다. 두 번째는 409, 본인 리뷰 신고는 400 ProblemDetail이고, 신고만으로 숨겨지지 않는다. "기타"를 고르면 설명 입력창이 나타나고 설명 없이도 신고된다. 설명은 100자까지 입력되고 글자 수(예: 0/100)를 보인다. "기타"가 아닌 사유에 설명을 보내거나 설명이 100자를 넘으면 400이다. (D-11)
-- [ ] AC-20: 운영자가 숨기면 공개 목록에서 빠지고 작성자 본인에게는 `hidden: true`로 보이며, 그 리뷰의 사진은 공개 경로로 읽히지 않는다. 숨김은 분석 제외를 자동 적용하지 않는다. (D-10, D-11)
+- [ ] AC-20: 운영자가 숨기면 공개 목록에서 빠지고 작성자 본인에게는 `hidden: true`로 보이며, 그 리뷰의 사진은 공개 경로로 읽히지 않는다. 작성자 본인에게는 "운영 정책에 따라 숨김 처리됨" 표시와 함께 사진도 보인다. 숨김은 분석 제외를 자동 적용하지 않는다. (D-11, D-39)
 - [ ] AC-21: 숨김, 분석 제외, 작성 차단과 각 해제는 처리자·시각·동작을 처리 기록에 남긴다. 작성 차단된 사용자는 `review-form`에서 작성 불가로 안내받고 등록은 403 ProblemDetail이다. (D-11)
 - [ ] AC-22: "방문 평가 남기기"를 누르면 위치 확인이 시작되고 "측정 거리 + GPS 정확도 ≤ 100m"면 작성 화면에 "방문 확인 완료"가 보인다. 실패하면 7-E02 모달이 뜨고 "그냥 쓰기"로 작성할 수 있다. 좌표와 결과를 어떤 요청·로그·분석 이벤트에도 싣지 않는다. (D-12)
 - [ ] AC-23: 오늘 이미 리뷰를 쓴 장소에서 "방문 평가 남기기"를 누르면 7-E01 모달이 뜨고, "다른 날 고르기"를 누르면 방문일 선택(7-03)이 열리며 이미 쓴 날은 "작성함"으로 막혀 있다. (D-4, D-12)
+- [ ] AC-25: 리뷰는 `reviews` 테이블에 저장된다. 목록은 목록 인덱스(`idx_reviews_place_id_created_at_review_id`)로 범위와 정렬을 처리하고, `totalCount`는 첫 페이지 응답에만 있다. (D-35)
+- [ ] AC-26: 작성 화면은 로그인하지 않았으면 로그인 화면으로 바뀐다. 등록 요청의 AT가 만료됐으면 한 번 갱신해 다시 보내고, 갱신에 실패하면 다시 로그인하라는 안내를 보이며 입력을 남긴다. (D-15, D-35)
+- [x] AC-27: 회원이 탈퇴해도 그 회원의 리뷰는 목록과 리뷰 수에 남고, 탈퇴 뒤 남은 토큰으로는 리뷰를 등록할 수 없다(401). (D-38)
 
 ## Implementation anchors
 
@@ -74,14 +77,15 @@ Walking Skeleton
 |---|---|---|---|
 | `be/src/main/java/kr/co/fitdining/api/review/ReviewController.java#ReviewController` | new | WS | D-2 |
 | `be/src/main/java/kr/co/fitdining/api/review/ReviewService.java#ReviewService` | new | WS | D-6, D-27 |
-| `be/src/main/java/kr/co/fitdining/api/review/store/ReviewStore.java#ReviewStore` | new | WS | D-27 |
-| `be/src/main/java/kr/co/fitdining/api/review/store/InMemoryReviewStore.java#InMemoryReviewStore` | new | WS | D-27 |
-| `be/src/main/java/kr/co/fitdining/api/review/ReviewExceptionHandler.java#ReviewExceptionHandler` | new | WS | D-20 |
+| `be/src/main/java/kr/co/fitdining/api/review/store/Review.java#Review` | new | 1차 | D-28, D-35 |
+| `be/src/main/java/kr/co/fitdining/api/review/store/ReviewRepository.java#ReviewRepository` | new | 1차 | D-35 |
+| `be/src/main/resources/db/migration/V4__create_reviews.sql` (`reviews` 테이블, 목록 인덱스, 같은 날 중복 금지) | new | 1차 | D-28, D-35 |
+| `be/src/main/java/kr/co/fitdining/api/review/exception/ReviewExceptionHandler.java#ReviewExceptionHandler` | new | WS | D-20, D-35 |
 | `be/src/main/java/kr/co/fitdining/api/review/dto/ReviewCreateRequest.java#ReviewCreateRequest` | new | WS | D-23 |
 | `be/src/main/java/kr/co/fitdining/api/review/dto/ReviewListResponse.java#ReviewListResponse` | new | WS | D-23, D-24 |
-| `be/src/main/resources/mock/reviews.json` (시드, 장소 Mock 30곳의 근거에 맞춤) | new | WS | D-27, D-33 |
-| `be/src/main/resources/application.yml#review` (`review.mock.enabled`), `be/.env.example` | modify | WS | D-27 |
+| `be/src/main/resources/application.yml#review` (`review.mock.enabled`), `be/.env.example` (리뷰 Mock 스위치. 다른 기능 파일과 함께 따로 지운다) | modify | WS | D-27, D-35 |
 | `fe/src/app/place/review/page.tsx#ReviewWritePage` (1차에 2단계 흐름으로 바꾼다) | new | WS | D-31 |
+| `fe/src/app/place/review/with-access-token.ts#withAccessToken` (등록 요청에 AT를 붙이고 만료면 한 번 갱신) | new | 1차 | D-35 |
 | `fe/src/domains/place/ui/place-detail-screen.tsx#PlaceDetailSlots` (검색 담당의 상세 화면에 리뷰 탭과 세 자리의 렌더 함수 props를 연다) | modify | WS | D-32 |
 | `fe/src/app/place/place-detail-with-reviews.tsx#PlaceDetailWithReviews` (세 자리를 리뷰 컴포넌트로 채운다. `app/place/page.tsx`가 그린다) | new | WS | D-32 |
 | `fe/src/domains/review/ui/review-section.tsx#ReviewSection` (리뷰 탭 목록, `onShowAll`을 주면 홈 탭 미리보기) | new | WS | D-24, D-32 |
@@ -90,9 +94,7 @@ Walking Skeleton
 | `fe/src/domains/review/model/review.ts#reviewWriteHref` | new | WS | D-31 |
 | `be/src/main/java/kr/co/fitdining/api/review/VisitDatePolicy.java#VisitDatePolicy` | new | 1차 | D-4 |
 | `be/src/main/java/kr/co/fitdining/api/review/ReasonTagRule.java#ReasonTagRule` | new | 1차 | D-5 |
-| `be/src/main/java/kr/co/fitdining/api/review/Review.java#Review` | new | 1차 | D-6, D-28 |
-| `be/src/main/java/kr/co/fitdining/api/review/store/JpaReviewStore.java#JpaReviewStore` | new | 1차 | D-27, D-28 |
-| `be/src/main/resources/db/migration/` (`reviews` 테이블과 중복 금지 인덱스, 태그·사진·신고·운영 테이블) | new | 1차 | D-21, D-28, D-5 |
+| `be/src/main/resources/db/migration/` (태그·사진·신고·운영 테이블) | new | 1차 | D-21, D-28, D-5 |
 | `fe/src/domains/review/ui/review-form.tsx#ReviewForm` | new | 1차 | D-5, D-31 |
 | `fe/src/domains/review/model/review-tags.ts#selectTag` | new | 1차 | D-5 |
 | `fe/src/domains/review/model/nearby-check.ts#isNearby` | new | 1차 | D-12 |
@@ -106,7 +108,7 @@ BE는 팀이 정한 루트 패키지 `kr.co.fitdining.api`(검색 D-32) 아래 `
 | 메서드와 경로 | 단계 | 인증 | 요청 | 응답 |
 |---|---|---|---|---|
 | `GET /api/v1/places/{placeId}/reviews` | WS | 없음(1차부터 선택) | 쿼리 `cursor?` | `ReviewListResponse` |
-| `POST /api/v1/places/{placeId}/reviews` | WS | 없음(1차부터 필수) | `ReviewCreateRequest` | 201 `ReviewCreateResponse` |
+| `POST /api/v1/places/{placeId}/reviews` | WS | 필수(D-35) | `ReviewCreateRequest` | 201 `ReviewCreateResponse` |
 | `GET /api/v1/places/{placeId}/review-form` | 1차 | 필수 | 경로 `placeId` | `ReviewFormResponse` |
 | `GET /api/v1/reviews/{reviewId}` | 1차 | 필수(본인) | 경로 | `ReviewDetailResponse` |
 | `PATCH /api/v1/reviews/{reviewId}` | 1차 | 필수(본인) | `ReviewUpdateRequest` | 204 |
@@ -121,7 +123,7 @@ BE는 팀이 정한 루트 패키지 `kr.co.fitdining.api`(검색 D-32) 아래 `
 DTO (review.dto 패키지, 클래스마다 파일 하나, 필드 목록만, 한 페이지 20건)
 
 Walking Skeleton
-  ReviewListResponse   : totalCount(int), items(ReviewItem[]), nextCursor?
+  ReviewListResponse   : totalCount?(int, 첫 페이지에만), items(ReviewItem[]), nextCursor?
   ReviewItem           : reviewId, createdAt(KST 오프셋 시각), description?
   ReviewCreateRequest  : description?(..500)
   ReviewCreateResponse : reviewId
@@ -150,17 +152,16 @@ Walking Skeleton
 데이터(리뷰 기능이 만드는 테이블, 이름은 팀 명명 규칙을 따른다):
 
 ```text
-Walking Skeleton(테이블 없음, 메모리 Mock 저장소, D-27)
-리뷰           : reviewId, placeId, description?(..500), createdAt(마이크로초로 자른 시각)
-                 장소별 목록, createdAt DESC·reviewId DESC, 전체 상한(임시 5,000건)
+V4__create_reviews.sql(D-28, D-35)
+reviews        : review_id, place_id(BIGINT, FK 없음), user_id(TEXT, auth_users 참조), visit_date(DATE) (NOT NULL),
+                 description(VARCHAR(500), NULL 허용), revisit_intent(NOT NULL, 기본 false), spent_per_person(NULL 허용),
+                 created_at, updated_at, deleted_at (TIMESTAMPTZ)
+                 idx_reviews_place_id_created_at_review_id (place_id, created_at DESC, review_id DESC) WHERE deleted_at IS NULL
+                 uk_reviews_user_id_place_id_visit_date UNIQUE (user_id, place_id, visit_date) WHERE deleted_at IS NULL
+                 CHECK (place_id > 0), CHECK (spent_per_person BETWEEN 0 AND 1000000)
+                 hidden_at, analysis_excluded_at은 S15P31A302-56에서 새 마이그레이션으로 더한다
 
-1차 후속(첫 마이그레이션, D-28)
-reviews        : review_id, place_id(BIGINT), user_id, visited_at(DATE) (NOT NULL),
-                 description(VARCHAR(500), NULL 허용), revisit_intent, spent_per_person,
-                 created_at, updated_at, deleted_at, hidden_at, analysis_excluded_at (TIMESTAMPTZ)
-                 INDEX (place_id, created_at DESC, review_id DESC) WHERE deleted_at IS NULL
-                 UNIQUE (user_id, place_id, visited_at) WHERE deleted_at IS NULL
-                 CHECK (spent_per_person BETWEEN 0 AND 1000000)
+1차 후속에서 더하는 것
 tags           : tag_id, feature_code, sentiment, exclusive_group, display_group, label, active
 tag_categories : (tag_id, category)
 review_tags    : (review_id, tag_id)
@@ -176,8 +177,8 @@ review_write_blocks    : user_id, blocked_by, blocked_at
 Walking Skeleton
 
 - **도메인 규칙** (example), AC-3: 본문의 빈 값·공백을 본문 없음으로 바꾸는 정규화를 순수 Java 단위 테스트로 확인한다.
-- **메모리 저장소** (example), AC-1, AC-4, AC-24: 저장, 정렬, 커서 페이지 경계(같은 `createdAt` 포함), 깨진 커서, 상한을 넘었을 때 오래된 리뷰 버리기를 `InMemoryReviewStore` 단위 테스트로 확인한다(D-29). 놓치는 것: DB 제약(1차 후속).
-- **컨트롤러 경계** (example), AC-1, AC-2, AC-3, AC-5, AC-6, AC-24: 검색 spec D-30처럼 `@WebMvcTest`에 실제 서비스와 메모리 저장소를 꽂아 Bean Validation(`placeId`의 문자·0·음수·`long` 범위 밖, 본문 500자·501자), 인증 없는 등록, ProblemDetail 상태 코드, 알 수 없는 속성 거부, 로그에 본문이 없음, 스위치가 꺼졌을 때 503을 확인한다. 잡는 것: 길이 경계.
+- **영속성** (example), AC-25, AC-27: `ReviewPersistenceTest`가 Testcontainers의 PostgreSQL과 V4로 저장, KST 방문일, 정렬, 커서 페이지 경계(같은 `createdAt` 포함), 리뷰 수는 첫 페이지에만, 삭제·숨김 제외, 같은 날 중복 409와 동시 등록, 삭제 후 재작성, 회원 탈퇴 뒤에도 리뷰가 남는지를 확인한다. 순차 스캔을 끈 `EXPLAIN`으로 목록 쿼리가 목록 인덱스를 타고 Sort가 없는지 본다(D-29, D-35, D-38).
+- **컨트롤러 경계** (example), AC-1, AC-2, AC-3, AC-5, AC-6: `@WebMvcTest`에 서비스와 인증 모듈을 대신 꽂아 Bean Validation(`placeId`의 문자·0·음수·`long` 범위 밖, 본문 500자·501자), 인증 헤더 유무와 토큰 만료 `type`, 409, ProblemDetail 상태 코드, 알 수 없는 속성 거부, 로그에 본문과 토큰이 없음을 확인한다. 잡는 것: 길이 경계.
 - **FE 순수 로직과 정적 렌더** (example), AC-7: `src/domains/review/model`의 KST 날짜 변환(자정 경계)과 등록 요청 만들기(공백뿐이면 본문 없음)를 Vitest로 확인한다. 목록 항목, 홈 미리보기 3건과 "전체 보기", 빈 상태, 불러오기 실패 안내는 데이터 훅과 나눈 그리는 컴포넌트를 `renderToStaticMarkup`으로 확인한다(공통 UI 테스트와 같은 방식, D-31, D-32). 놓치는 것: 누르기·입력·스크롤 같은 상호작용(수동 확인).
 - **수동 확인** AC-7: 장소 상세 하단 버튼 → 작성 화면 → 등록 → 토스트와 함께 들어오기 전 탭으로 복귀해 새 리뷰가 리뷰 탭 맨 위와 홈 미리보기 첫 줄에 보이는지, 상세의 "뒤로" 한 번에 검색 결과로 가는지, 홈 미리보기의 "전체 보기"가 리뷰 탭을 여는지, 목록 끝까지 스크롤하면 다음 페이지가 붙는지, 실패 때 입력이 남는지, 버튼을 연달아 눌러도 한 번만 등록되는지, 500자에서 더 입력되지 않는지 확인한다.
 
@@ -185,7 +186,7 @@ Walking Skeleton
 
 - **도메인 규칙** (example), AC-9, AC-12, AC-16: 방문일 정책은 고정 `Clock`으로 경계일과 KST 자정 전후를, 태그 규칙은 그룹(소음 축 4개 포함)·업종·개수 조합을, 금액은 경계값(0, 1,000,000, 1,000,001)을 단위 테스트로 확인한다.
 - **컨트롤러 경계** (example), AC-8, AC-10, AC-11, AC-16, AC-19: 인증 헤더 유무, 404, 403, 409를 `@WebMvcTest`로 확인한다.
-- **영속성** (example), AC-13, AC-17: 부분 유니크 위반의 409 변환, 동시 등록 두 건, 삭제 후 재작성은 H2로 재현되지 않아 Testcontainers의 PostgreSQL로 확인한다(D-29). `JpaReviewStore`가 메모리 저장소와 같은 정렬·커서 결과를 내는지도 함께 확인한다(D-27).
+- **영속성** (example), AC-13, AC-17: 방문일을 입력받은 뒤의 409, 동시 등록, 삭제 후 재작성을 `ReviewPersistenceTest`에 더한다(D-29).
 - **FE 순수 로직** (example), AC-15, AC-22: `src/domains/review/model`의 태그 선택 함수(같은 그룹 비활성화, 소음 축 4개)와 근처 판정 함수를 Vitest(`pnpm test`)로 확인한다(검색 spec D-30 방식, D-31). 태그 칩 비활성 표시는 정적 렌더로 확인한다(D-31).
 - **사진** (manual), AC-18, AC-20: `infra/edge/test` 환경에서 Caddy를 거친 presigned 업로드(원본·썸네일)와 공개 읽기를 확인한다.
 - **수동 확인** AC-22, AC-23: Figma 흐름(상세 → 위치 확인·오늘 작성 여부 모달 → 1/2·2/2단계 → 상세로 복귀, 검색 상태 유지).
@@ -235,7 +236,7 @@ FE 공통 담당
 - 방문일 달력(7-03)과 사진 고르기·미리보기 칸은 공통 UI 컴포넌트로 만드나요, 리뷰 도메인에서 만드나요? 지금 `@/shared/ui`에는 달력·카메라 아이콘만 있다. 7-03의 시트는 `BottomSheet`로 그린다(D-31).
 
 기획·디자인
-- 이유 태그 최종 문구는 언제 확정되나요? 그 전까지는 임시 시드로 진행한다(D-5).
+- 이유 태그 목록, 문구, 업종별 노출은 언제 확정되나요? PRD FR-10 초안(28개와 업종별 노출 표)과 Figma 7-01·7-02(카페 화면 22개)가 다르다. 그 전까지는 임시 시드로 진행한다(D-5).
 - 7-01에서 좋았던 점을 고르지 않았을 때 "다음" 비활성 상태와 "하나 이상 필수" 안내를 그려야 한다. 7-01, 7-01b와 예외 상태(7-E01~7-E06) 어디에도 아직 없다(D-5).
 - 7-04의 재방문 안내 문구("비슷한 취향의 장소를 찾아드릴게요")를 바꿔야 한다. 재방문 의사는 추천에 쓰지 않는다(D-18).
 

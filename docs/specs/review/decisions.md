@@ -28,6 +28,7 @@ Glossary: none · ADRs: none
 ## D-5 이유 태그 검증
 - Status: settled
 - Decision: 1차 후속부터 적용한다(D-1). 태그는 특징 코드(D-16), 문구, 좋았어요·아쉬웠어요(`sentiment`), 동시 선택 불가 그룹(`exclusive_group`), 화면 묶음(`display_group`: 분위기, 공간, 이용, 방문 목적), 사용 여부를 데이터로 갖고, 업종 노출은 `tag_categories`로 둔다. 서버는 좋았어요 태그 1개 이상(아쉬웠어요는 선택), 업종에 노출되는 태그만, 그룹당 하나만을 검증한다. 그룹은 L2·L3에서 같은 특징의 좋았어요·아쉬웠어요 한 쌍이고, 소음 축(L1)은 4개("조용해서 좋았어요", "활기차서 좋았어요", "너무 시끄러웠어요", "너무 썰렁했어요")가 한 그룹이다. 작성 화면은 좋았던 점(7-01)과 아쉬웠던 점(7-02)이 다른 페이지라도 같은 그룹의 다른 태그를 비활성화한다. 예를 들어 7-01에서 "조용해서 좋았어요"를 고르면 7-02의 소음 축 태그 3개가 비활성이다. 좋았던 점을 하나도 고르지 않으면 7-01의 "다음"이 비활성이다. 문구와 노출은 PRD FR-10 초안으로 임시 시드를 두고 기획 확정 문구로 바꾼다.
+- PRD FR-10은 이유 태그를 좋았어요·아쉬웠어요 구분 없이 1개 이상 필수로 두지만, 리뷰는 좋았어요 1개 이상을 유지한다. PRD와 대조한 뒤 리뷰 담당이 확인한 결정이다(2026-10-26). 태그 목록과 업종별 노출은 아직 확정되지 않았다. PRD FR-10 초안(28개와 업종별 노출 표)과 Figma 7-01·7-02(카페 화면 22개)가 다르다(spec Open questions)(2026-10-26).
 - Rejected: 소음 축을 쌍만 배타 → "조용해서 좋았어요"와 "활기차서 좋았어요"를 함께 고를 수 있어 모순된 평가가 된다. 좋았어요·아쉬웠어요 합산 1개 이상(PRD FR-10 문구) → 2단계 작성 흐름에서 좋았던 점을 먼저 고르게 하는 디자인에 맞춰 좋았어요 1개 이상으로 정했다(2026-10-20). 페이지가 다르면 비활성화하지 않기 → 서버가 400을 돌려줘 작성 끝에서야 실패한다. 태그를 코드 상수로 관리 → 문구와 노출이 바뀔 때마다 배포가 필요하다.
 
 ## D-6 본문, 수정 범위와 1인당 금액
@@ -51,7 +52,7 @@ Glossary: none · ADRs: none
 - Rejected: 원본 한 벌만 → 서버에 이미지 최적화가 없어(인프라 12.5절 #7) 목록이 원본을 그대로 받는다. BE를 거치는 업로드 → API 본문 2MB 상한(인프라 5.1절).
 
 ## D-10 숨김 리뷰의 사진
-- Status: settled
+- Status: superseded by D-39
 - Decision: `confirmed/`는 URL만 알면 공개로 읽히고, Caddy는 `confirmed/`만 공개 경로로 연다(인프라 5.2절). 운영자가 숨기면 그 리뷰의 사진(원본과 썸네일)을 `confirmed/` 밖의 접두사로 옮기고 해제하면 되돌린다. 삭제하면 객체를 지운다.
 - Rejected: 숨김 때 사진 그대로 두기 → "욕설·혐오·음란물" 숨김이 사진에는 효과가 없다.
 
@@ -63,6 +64,7 @@ Glossary: none · ADRs: none
 ## D-12 위치 확인
 - Status: settled
 - Decision: 1차 후속부터 적용한다(D-1). "방문 평가 남기기"를 누르면 위치 확인을 자동으로 시작한다. 버튼을 누른 것을 PRD FR-15의 "확인을 요청한 순간"으로 본다. 계산은 기기에서만 한다. "측정 거리 + GPS 정확도 ≤ 100m"면 근처이고 작성 화면에 "방문 확인 완료" 표시가 붙는다(Figma 7-01). 권한 거절, 값 없음, 범위 밖이면 "근처에서 확인하지 못했어요" 모달(7-E02)에서 "다시 확인"과 "그냥 쓰기"를 준다. 같은 진입 시점에 오늘 이미 리뷰를 썼으면(작성 화면 데이터의 `reviewedDates`) "오늘은 이미 리뷰를 남겼어요" 모달(7-E01)에서 "다른 날 고르기"와 "닫기"를 준다. BE API는 없고, 좌표와 결과를 요청·로그·분석 이벤트에 싣지 않는다(PRD AC-19, AC-35, 검색 D-17과 같은 원칙). 위치 확인 모달이 도는 동안 작성 화면 데이터를 미리 받는다.
+- PRD FR-15는 위치 확인을 선택 사항으로 두고 "확인을 요청한 순간에만" 위치를 쓰게 하지만, 리뷰는 "방문 평가 남기기"를 누른 것을 확인 요청으로 보는 이 해석을 유지한다. 위치 권한을 거절하거나 확인에 실패해도 "그냥 쓰기"로 작성할 수 있어 선택성은 지킨다. PRD와 대조한 뒤 리뷰 담당이 확인한 결정이다(2026-10-26).
 - Rejected: 작성 화면 안의 버튼으로 시작 → Figma 디자인과 흐름이 달라지고 단계가 늘어난다.
 
 ## D-13 검색 spec이 정한 BE 규칙을 따른다
@@ -142,7 +144,7 @@ Glossary: none · ADRs: none
 - Rejected: H2 → PostgreSQL 동작을 재현하지 못한다. 로컬 스택(`infra/local`)의 DB에 붙기 → 테스트 결과가 개발 데이터와 로컬 스택 실행 여부에 따라 달라진다.
 
 ## D-27 Walking Skeleton 저장소는 메모리 Mock이다
-- Status: settled
+- Status: superseded by D-35
 - Decision: Walking Skeleton은 DB 테이블과 마이그레이션 없이 메모리 저장소로 구현한다. `ReviewService`는 저장소 인터페이스 `ReviewStore`(저장, 장소별 커서 페이지 조회, 개수)만 알고, Walking Skeleton은 `InMemoryReviewStore`를 꽂는다. 이 구현은 `review.mock.enabled`(환경변수 `REVIEW_MOCK_ENABLED`, 코드 기본값 꺼짐)가 켜졌을 때만 등록되고 local과 dev에서만 켠다(`be/.env.example`). 저장소가 없으면 `ReviewService`가 503을 낸다(검색 `PlaceService`와 같은 방식). 장소별 목록을 메모리에 두고 `reviewId`는 차례로 매긴다. 정렬(`createdAt DESC, reviewId DESC`), 커서 형식(`createdAt|reviewId`를 패딩 없는 base64url로 인코딩), 마이크로초로 자른 작성 시각은 1차 후속의 DB 구현과 같게 둔다. 그래서 1차 후속에서 저장소 구현만 `reviews` 테이블을 쓰는 `JpaReviewStore`로 바꾸면 API와 FE는 그대로다. 익명 쓰기로 메모리가 차지 않도록 전체 건수에 상한(임시 5,000건)을 두고, 넘으면 가장 오래된 리뷰부터 버린다. 시드는 `classpath:mock/reviews.json`으로 1번 Mock 장소에 25건을 넣어 커서 페이지를 바로 볼 수 있게 한다. 데이터는 재시작하면 시드만 남고 인스턴스마다 따로다. 그래서 1차 후속 전에 Walking Skeleton 리뷰를 지우는 작업이 없다. `reviews` 테이블, 마이그레이션, 영속성 테스트는 1차 후속부터이고(D-28, D-29), 일괄 처리가 읽는 리뷰 테이블(D-17)도 그때 생긴다. `REVIEW_MOCK_ENABLED`를 env 계약에 올리는 일은 인프라 담당에게 알린다(이 기능은 `docs/infra/`를 고치지 않는다).
 - Rejected: Walking Skeleton부터 `reviews` 테이블 → `migrate` 프로필, DB 공통 규칙, Testcontainers 의존성 합의를 기다려야 한다. 첫 마이그레이션과 DML 전용 계정 권한 같은 통합 위험이 1차 후속으로 미뤄지는 것은 감수한다. FE만 Mock(MSW 등) → BE 경로가 연결되지 않아 Walking Skeleton이 아니다. JSON 파일에 쓰기 → 컨테이너 파일 시스템과 동시 쓰기를 다뤄야 한다. 상한 없음 → 익명 등록을 반복하면 dev 서버의 메모리가 찬다.
 - Anchors: `be/src/main/java/kr/co/fitdining/api/review/store/ReviewStore.java#ReviewStore` (new) · `be/src/main/java/kr/co/fitdining/api/review/store/InMemoryReviewStore.java#InMemoryReviewStore` (new) · `be/src/main/resources/mock/reviews.json` (new)
@@ -177,7 +179,7 @@ Glossary: none · ADRs: none
 - Anchors: `fe/src/domains/review/ui/review-section.tsx#ReviewSection` (modify) · `fe/src/app/place/review/review-write-screen.tsx#ReviewWriteScreen` (modify) · `fe/src/domains/place/ui/place-detail-screen.tsx#PlaceDetailSlots` (modify) · `fe/src/app/place/place-detail-with-reviews.tsx#PlaceDetailWithReviews` (new) · `fe/src/app/place/page.tsx#PlaceDetailPage` (modify)
 
 ## D-33 리뷰 시드는 장소 Mock의 근거에 맞춘다
-- Status: settled
+- Status: superseded by D-35
 - Decision: 리뷰 시드(`classpath:mock/reviews.json`)를 장소 Mock 30곳 모두에 넣는다(D-27의 "1번 장소에 25건"을 넓힌다). 장소 카드가 "앱 리뷰"를 근거로 드는 항목(`scoreItems`의 `matched: true`)마다 `evidenceCount`만큼 그 내용을 말하는 리뷰를 두고, 추천 이유의 인용(`quoteSource` "앱 리뷰")은 그중 하나로 그대로 넣어 그 장소의 가장 최근 리뷰로 둔다. 근거가 없는(`matched: false`) 항목은 말하지 않는다. 장소 Mock이 "조용해요"(근거 있음)와 "조용한 곳"(근거 없음)을 함께 두는 곳은 앞쪽을 따른다. 여기에 메뉴 2개, 주의점, 일반 평 하나와 내용 없는 리뷰 1~2건을 더해 장소마다 7~21건이다. 1번 장소는 커서 페이지를 확인하도록 25건과 작성 시각을 그대로 두고 내용만 맞춘다. 작성 시각은 2026-09-02~10-20 사이에서 업종에 맞는 시간대(식당 11~20시, 카페 10~19시, 술집 19~23시 KST)다. 그래서 상세 화면의 추천 이유·핏 점수 설명과 리뷰 탭이 어긋나 보이지 않는다. 시드와 장소 Mock은 id와 내용으로만 맞춘 것이고, 장소 분석이 리뷰를 읽는 실제 연결은 1차 후속(D-17)이다. 장소 Mock이 바뀌면 시드도 다시 맞춘다.
 - Rejected: 1번·2번 장소에만 시드 → 나머지 28곳은 카드가 "앱 리뷰 n개가 근거"라고 하는데 리뷰 탭은 "리뷰 0"이다. 장소 Mock이 리뷰 저장소를 읽어 근거를 계산 → 장소 담당 코드를 바꾸는 일이고 1차 후속의 분석 연결과 겹친다. 시드와 장소 Mock을 테스트로 묶기 → 장소 담당이 Mock을 고칠 때마다 리뷰 테스트가 깨진다.
 - Anchors: `be/src/main/resources/mock/reviews.json` (modify)
@@ -186,3 +188,23 @@ Glossary: none · ADRs: none
 - Status: settled
 - Decision: 리뷰는 삭제·숨김·분석 제외를 시각 컬럼으로 남기고(D-28) 바뀔 때마다 `updated_at`을 갱신해, 읽는 쪽이 상태와 변경 시점을 알 수 있게 한다. 리뷰 기능이 책임지는 것은 여기까지다. 어떤 경로로 읽을지는 받는 쪽마다 정한다. 서버 안에서 도는 일괄 처리(검색 색인 등)는 리뷰 테이블을 직접 조회할 수 있다. 하지만 AI 분석·비교는 Modal에서 돌아 서버 내부망의 Postgres에 붙지 못하므로(AI 비교 spec 6절) 다른 경로가 필요하다. 그 경로(BE 조회 API, 정기 내보내기 등)와 필요한 필드·주기는 AI·인프라 담당과 정한다(spec Open questions). 이벤트나 아웃박스 같은 고도화는 이후에 정한다.
 - Rejected: 모든 일괄 처리가 리뷰 테이블을 직접 조회(D-17) → AI 서비스는 내부망 DB에 붙을 수 없다. 리뷰가 내보내기 API를 먼저 만들기 → 받는 쪽이 필요한 필드와 주기가 정해지지 않았다. 지금 아웃박스 이벤트 도입 → 공용 인프라가 필요하고 받는 쪽이 아직 없다.
+
+## D-35 리뷰 저장소를 DB로 바꾸고 메모리 저장소와 시드를 지운다
+- Status: settled
+- Decision: 리뷰를 `reviews` 테이블(`V4__create_reviews.sql`)에 저장한다. 와이어프레임 화면에 있는 컬럼만 담고, 공개 숨김·분석 제외(S15P31A302-56)는 그 기능을 만들 때 새 마이그레이션으로 더한다. develop에 머지되면 dev DB에 바로 적용돼 고칠 수 없으므로 컬럼을 더할 때는 NULL 허용이나 기본값으로 더한다. 날짜 컬럼은 팀 DB 규칙 초안을 따라 `visit_date`이고(D-28의 `visited_at`), API 필드는 그대로 `visitedAt`이다. `revisit_intent`는 7-04 토글의 기본값과 같은 `NOT NULL DEFAULT false`, `spent_per_person`(7-04의 1인당 쓴 금액)은 NULL 허용이다. `user_id`는 `auth_users(id)`(text)를 참조하고, `place_id`는 `places` 테이블이 없어 FK가 없다. 인덱스는 장소별 목록 `(place_id, created_at DESC, review_id DESC) WHERE deleted_at IS NULL`과 같은 날 중복 금지 `UNIQUE (user_id, place_id, visit_date) WHERE deleted_at IS NULL`이다. 목록은 행 비교 커서 `(created_at, review_id) < (?, ?)`로 읽어 인덱스가 범위와 정렬을 맡고, 리뷰 수는 첫 페이지(`cursor` 없음)에서만 세어 다음 페이지 응답에서는 생략한다. 등록은 로그인한 사용자만 한다. 리뷰 컨트롤러가 `Authorization` 헤더로 인증 모듈의 `AuthUseCases.authenticate`를 직접 부르고, 인증 모듈의 예외 처리기는 인증 API에만 걸려 있어 `AuthFailure`는 리뷰 예외 처리기가 상태 코드와 `type`(토큰 만료)을 유지해 ProblemDetail로 바꾼다. 방문일 입력은 아직 없어 서버가 KST 오늘로 넣는다. 메모리와 DB를 바꿔 끼우려고 둔 `ReviewStore`는 지우고 `ReviewService`가 `ReviewRepository`를 바로 쓴다. 메모리 저장소, 시드(`mock/reviews.json`), 저장소가 없을 때의 503을 지운다. `REVIEW_MOCK_ENABLED`와 `review.mock.enabled`는 다른 기능의 파일에도 있어 따로 지운다. FE 작성 화면은 들어올 때 세션을 확인해 없으면 로그인 화면으로 바꿔치기하고, 등록 요청에 AT를 붙이며 만료면 한 번 갱신해 다시 보낸다. 인증 도메인은 app 계층(`with-access-token.ts`)에서만 부른다.
+- Rejected: 메모리 저장소를 dev 시드용으로 남기기 → 저장소가 둘이면 local·dev와 prod의 동작이 갈리고 스위치를 계속 관리해야 한다. 시드를 마이그레이션에 넣기 → Mock 데이터가 운영 DB에 들어간다. `ReviewStore` 유지 → 구현이 하나뿐이다. 페이지마다 리뷰 수 세기 → 다음 페이지마다 쿼리가 하나 는다. 리뷰용 인증 인터셉터 → 인증이 필요한 리뷰 API가 하나이고 목록은 인증이 선택이라 컨트롤러에서 직접 부르는 편이 단순하다.
+- 감수: dev 리뷰는 빈 상태에서 시작한다. 장소 카드가 "앱 리뷰 n개가 근거"라고 해도 리뷰 탭이 비어 보일 수 있다(D-33이 막던 상황). 로그인 뒤 작성 화면으로 돌아오는 기능은 아직 없다.
+- Anchors: `be/src/main/resources/db/migration/V4__create_reviews.sql` (new) · `be/src/main/java/kr/co/fitdining/api/review/store/Review.java#Review` (new) · `be/src/main/java/kr/co/fitdining/api/review/store/ReviewRepository.java#ReviewRepository` (new) · `be/src/main/java/kr/co/fitdining/api/review/ReviewController.java#ReviewController` (modify) · `fe/src/app/place/review/with-access-token.ts#withAccessToken` (new)
+
+## D-38 회원이 탈퇴해도 그 회원의 리뷰는 남긴다
+- Status: settled
+- Decision: 회원이 탈퇴해도 그 회원의 리뷰는 지우지 않는다. 목록과 리뷰 수에 그대로 보이고 리뷰 행(`deleted_at`, `updated_at`)도 바꾸지 않는다. 탈퇴는 회원 담당(S15P31A302-60)이 `auth_users.deleted_at`으로 처리하고, 리뷰는 탈퇴 처리(`UserService.withdraw`)에 끼어들지 않는다. 탈퇴한 회원의 리뷰는 작성자를 닉네임 대신 "탈퇴한 회원"으로 보인다. 탈퇴해도 `auth_users.nickname`은 남으므로, 닉네임을 붙이는 목록 확장(S15P31A302-52)이 `auth_users.deleted_at`을 보고 바꾼다. 리뷰 사진(S15P31A302-54)도 리뷰와 함께 남는다. 탈퇴한 회원의 신고 기록 처리(S15P31A302-55, S15P31A302-56)는 각 이슈에서 다룬다. `fk_reviews_user_id`는 기본값(NO ACTION) 그대로 둔다. 같은 사람이 탈퇴한 뒤 다시 가입하면 새 계정(새 id)이라서 같은 장소·날짜에 다시 쓸 수 있고 예전 리뷰도 남는다. 시험은 회원 테이블을 고치지 않고 새 id 사용자로 확인한다.
+- 토큰 검증(`AuthUseCases.authenticate`)은 DB를 보지 않아 탈퇴 뒤에도 남은 AT가 만료 전까지 유효하므로, 등록은 작성자가 탈퇴하지 않은 기존 사용자인지(`existsByIdAndDeletedAtIsNull`) 먼저 확인하고 아니면 401이다. 그 사이 계정 행이 사라져 `fk_reviews_user_id`를 어기면 그것도 401로 바꾼다. 탈퇴 트랜잭션과 정확히 같은 순간 들어온 등록은 확인을 지나칠 수 있지만, 같은 사용자가 탈퇴와 등록을 동시에 해야 해서 잠금은 두지 않았다.
+- PRD FR-07은 탈퇴하면 리뷰를 삭제 상태로 표시한다고 정하지만, 리뷰는 남긴다. PRD와 대조한 뒤 리뷰 담당이 확인한 결정이다. PRD OQ-17(soft delete 탈퇴의 법·심사 위험)이 회원 행을 hard delete하기로 정하면 `fk_reviews_user_id`가 회원 행 삭제를 막으므로, 그때 작성자 익명화나 `ON DELETE SET NULL`을 다시 정한다.
+- Rejected: 탈퇴와 함께 그 회원의 리뷰를 soft delete(PRD FR-07, 이 결정의 처음 내용) → 탈퇴로 장소의 리뷰 수와 분석 근거가 줄지 않게 한다. 리뷰는 남기되 `auth_users.deleted_at`을 보고 목록과 리뷰 수에서 빼기 → 목록마다 회원 테이블을 조인해야 하고, AI 전달이 숨김을 알아보지 못한다.
+- Anchors: `be/src/main/java/kr/co/fitdining/api/review/ReviewService.java#ReviewService.create` (new) · `be/src/test/java/kr/co/fitdining/api/review/ReviewPersistenceTest.java#ReviewPersistenceTest.Withdrawal` (new)
+
+## D-39 숨긴 리뷰의 사진은 작성자 본인에게 계속 보인다
+- Status: settled
+- Decision: PRD FR-12대로 운영자가 숨긴 리뷰는 작성자 본인에게 "운영 정책에 따라 숨김 처리됨" 표시와 함께 사진까지 계속 보인다. 공개 목록에서는 리뷰와 사진이 모두 빠진다. 숨기면 그 리뷰의 사진(원본과 썸네일)을 지금처럼 공개 경로(`confirmed/`) 밖의 접두사로 옮기고, 작성자 본인이 볼 때는 BE가 수명이 짧은 presigned GET URL을 내려준다. 해제하면 공개 경로로 되돌리고, 삭제하면 객체를 지운다. 구현은 사진(S15P31A302-54)과 운영(S15P31A302-56)에서 한다.
+- Rejected: 숨김 때 사진 그대로 두기 → "욕설·혐오·음란물" 숨김이 사진에는 효과가 없다. 작성자에게도 사진을 보이지 않기(D-10) → PRD FR-12는 숨긴 리뷰가 작성자에게 계속 보이도록 한다.
