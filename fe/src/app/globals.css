@@ -1,5 +1,73 @@
 @import "tailwindcss";
 
+@keyframes onboarding-ring {
+  from {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.8);
+  }
+}
+@keyframes onboarding-reveal {
+  from {
+    clip-path: inset(0 0 100% 0 round var(--radius-lg));
+  }
+  to {
+    clip-path: inset(0 round var(--radius-lg));
+  }
+}
+@keyframes onboarding-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes onboarding-chip {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .onboarding-orb::before,
+  .onboarding-orb::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border: 2px solid var(--color-primary);
+    border-radius: 50%;
+    animation: onboarding-ring 1.8s ease-out infinite;
+  }
+  .onboarding-orb::after {
+    animation-delay: -0.9s;
+  }
+  .onboarding-result {
+    animation: onboarding-reveal 240ms var(--ease-enter) both;
+  }
+  .onboarding-result-title {
+    animation: onboarding-fade 120ms linear 120ms both;
+  }
+  .onboarding-result-chip {
+    animation: onboarding-chip 240ms var(--ease-enter) both;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-result,
+  .onboarding-result-title,
+  .onboarding-result-chip {
+    animation: onboarding-fade 120ms linear both;
+    animation-delay: 0ms !important;
+  }
+}
+
 /*
  * 디자인 토큰. 원본은 Figma '핏다이닝' 파일의 변수(Color·Number), 텍스트·그림자 스타일, 모션 원칙 메모다.
  * 값을 바꿀 때는 Figma를 먼저 고치고 여기에 옮긴다.

@@ -1,5 +1,5 @@
-import { SearchScreen } from "@/domains/place/ui/search-screen";
+import { HomeEntry } from "./home-entry";
 
 export default function Home() {
-  return <SearchScreen />;
+  return <HomeEntry />;
 }

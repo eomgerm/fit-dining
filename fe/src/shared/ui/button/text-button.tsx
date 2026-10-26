@@ -8,12 +8,16 @@ const textButtonVariants = cva(
   "inline-flex h-11 items-center justify-center px-1 whitespace-nowrap text-ink underline transition select-none data-disabled:pointer-events-none motion-safe:active:scale-98",
   {
     variants: {
+      variant: {
+        default: "text-ink underline",
+        inverse: "text-on-secondary underline",
+      },
       size: {
         md: "rounded-md text-button-md font-normal",
         sm: "rounded-full text-button-sm",
       },
     },
-    defaultVariants: { size: "sm" },
+    defaultVariants: { size: "sm", variant: "default" },
   },
 );
 
@@ -22,10 +26,15 @@ type TextButtonProps = Omit<BaseButton.Props, "className"> &
     className?: string;
   };
 
-export function TextButton({ size, className, ...props }: TextButtonProps) {
+export function TextButton({
+  size,
+  variant,
+  className,
+  ...props
+}: TextButtonProps) {
   return (
     <BaseButton
-      className={cn(textButtonVariants({ size }), className)}
+      className={cn(textButtonVariants({ size, variant }), className)}
       {...props}
     />
   );
