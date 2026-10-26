@@ -47,7 +47,8 @@ export function ReviewSection({
     <ReviewListView
       // 다음 페이지만 실패하면 받은 목록은 그대로 두고 그 자리에서 다시 받는다
       status={data ? "success" : status}
-      totalCount={pages.at(-1)?.totalCount}
+      // 리뷰 수는 첫 페이지 응답에만 있다
+      totalCount={pages[0]?.totalCount}
       items={items}
       onShowAll={onShowAll}
       skeletonRows={isPreview ? PREVIEW_SIZE : 5}

@@ -9,7 +9,8 @@ export type ReviewItem = {
 };
 
 export type ReviewListResponse = {
-  totalCount: number;
+  // 장소의 리뷰 수(삭제·숨김 제외). 첫 페이지에만 있다
+  totalCount?: number;
   items: ReviewItem[];
   // 다음 페이지가 있을 때만 있다
   nextCursor?: string;

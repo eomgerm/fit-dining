@@ -20,6 +20,20 @@ describe("submitErrorMessage", () => {
     );
   });
 
+  it("401은 다시 로그인하라고 하고 입력이 남아 있다고 한다", () => {
+    const message = submitErrorMessage(
+      new ApiError("http", "x", { status: 401 }),
+    );
+    expect(message).toContain("다시 로그인");
+    expect(message).toContain("입력한 내용은 그대로");
+  });
+
+  it("409는 AC-13 문구로 이 날짜에 이미 리뷰를 남겼다고 한다", () => {
+    expect(submitErrorMessage(new ApiError("http", "x", { status: 409 }))).toBe(
+      "이 날짜에는 이미 리뷰를 남겼어요.",
+    );
+  });
+
   it("5xx와 알 수 없는 오류는 잠시 후 다시 시도하라고 한다", () => {
     expect(
       submitErrorMessage(new ApiError("http", "x", { status: 503 })),

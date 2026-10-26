@@ -5,6 +5,12 @@ export function submitErrorMessage(error: unknown) {
   if (isApiError(error) && error.kind !== "http") {
     return "인터넷 연결을 확인하고 다시 시도해 주세요. 입력한 내용은 그대로 있어요.";
   }
+  if (isApiError(error) && error.status === 401) {
+    return "로그인이 끝났어요. 다시 로그인한 뒤 등록해 주세요. 입력한 내용은 그대로 있어요.";
+  }
+  if (isApiError(error) && error.status === 409) {
+    return "이 날짜에는 이미 리뷰를 남겼어요.";
+  }
   if (isApiError(error) && (error.status ?? 0) < 500) {
     return "입력한 내용을 확인해 주세요.";
   }

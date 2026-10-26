@@ -18,10 +18,15 @@ export function fetchReviews(
   });
 }
 
-// Walking Skeleton은 로그인 없이 등록한다(D-15)
-export function createReview(placeId: number, body: ReviewCreateRequest) {
+// 로그인한 사용자만 등록한다. AT는 부르는 쪽이 넘긴다(D-15)
+export function createReview(
+  placeId: number,
+  body: ReviewCreateRequest,
+  accessToken: string,
+) {
   return request<ReviewCreateResponse>(`/v1/places/${placeId}/reviews`, {
     method: "POST",
     body,
+    headers: { Authorization: `Bearer ${accessToken}` },
   });
 }

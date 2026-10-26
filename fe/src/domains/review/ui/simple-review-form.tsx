@@ -12,12 +12,14 @@ import { SectionHeader } from "@/shared/ui/layout/section-header";
 import { TopBar } from "@/shared/ui/layout/top-bar";
 import { useToast } from "@/shared/ui/overlay/toast";
 
-import { useCreateReview } from "../api/queries";
+import { useCreateReview, type WithAccessToken } from "../api/queries";
 import { DESCRIPTION_MAX, toCreateRequest } from "../model/review";
 import { submitErrorMessage } from "./submit-error-message";
 
 type SimpleReviewFormProps = {
   placeId: number;
+  // 등록 요청에 AT를 붙인다. 인증 도메인을 쓰는 app이 넘긴다
+  withAccessToken: WithAccessToken;
   // 등록에 성공하면 부른다. 화면 이동은 부르는 쪽(app)이 정한다
   onSuccess: (reviewId: number) => void;
   onClose: () => void;
@@ -26,11 +28,12 @@ type SimpleReviewFormProps = {
 // Walking Skeleton의 한 화면 작성 폼(D-31). 1차 후속에서 Figma 2단계 흐름(ReviewForm)으로 바뀐다
 export function SimpleReviewForm({
   placeId,
+  withAccessToken,
   onSuccess,
   onClose,
 }: SimpleReviewFormProps) {
   const [draft, setDraft] = useState("");
-  const createReview = useCreateReview(placeId);
+  const createReview = useCreateReview(placeId, withAccessToken);
   const toast = useToast();
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {

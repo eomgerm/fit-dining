@@ -10,7 +10,12 @@ function render() {
   return renderToStaticMarkup(
     <QueryClientProvider client={new QueryClient()}>
       <ToastProvider>
-        <SimpleReviewForm placeId={1} onSuccess={() => {}} onClose={() => {}} />
+        <SimpleReviewForm
+          placeId={1}
+          withAccessToken={(send) => send("token")}
+          onSuccess={() => {}}
+          onClose={() => {}}
+        />
       </ToastProvider>
     </QueryClientProvider>,
   );

@@ -2,6 +2,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import { reviewKeys } from "../api/queries";
+import type { ReviewListResponse } from "../model/review";
 import { ReviewSection } from "./review-section";
 
 // 서버 렌더에서는 쿼리가 돌지 않아 처음 불러오는 중 모양이 나온다. 두 모양의 차이만 확인한다
@@ -28,5 +30,29 @@ describe("ReviewSection", () => {
     const html = render(() => {});
     expect(html).not.toContain("px-4 py-6");
     expect(skeletonRows(html)).toBe(3);
+  });
+
+  it("리뷰 수는 첫 페이지 응답에서 읽는다. 다음 페이지 응답에는 리뷰 수가 없다", () => {
+    const client = new QueryClient();
+    const item = (reviewId: number) => ({
+      reviewId,
+      createdAt: "2026-10-21T12:00:00+09:00",
+    });
+    const pages: ReviewListResponse[] = [
+      { totalCount: 21, items: [item(2)], nextCursor: "next" },
+      { items: [item(1)] },
+    ];
+    client.setQueryData(reviewKeys.list(1), {
+      pages,
+      pageParams: [undefined, "next"],
+    });
+
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={client}>
+        <ReviewSection placeId={1} />
+      </QueryClientProvider>,
+    );
+
+    expect(html).toContain('<span class="text-ink-muted">21</span>');
   });
 });
