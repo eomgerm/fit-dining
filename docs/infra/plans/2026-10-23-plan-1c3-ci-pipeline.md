@@ -455,19 +455,20 @@ smoke:prod:
 
 1. **러너 등록**(사람, 끝났다 2026-10-23): GitLab에서 `fit-verify`(태그 `verify`, untagged 끔, Protected 끔), `fit-deploy`(태그 `deploy`, untagged 끔, Protected 켬)를 만들고 각 서버에서 `sudo bash ~/host/runner.sh register`로 토큰을 숨김 입력한다. `status`가 PASS이고 Runners 목록에서 online이다. 임시 verify 러너(이 PC의 Docker)는 지운다.
 2. **A에 권한 반영**(끝났다 2026-10-23): 코드를 갱신하고 `sudo ROLE=app FIT_PEER_IP=<B의 IP> bash ~/host/bootstrap.sh`로 디렉터리 권한을 적용한다. 이어서 이미 있는 파일의 그룹을 맞춘다: `sudo chgrp -R docker /srv/fit/state /srv/fit/web && sudo chmod -R g+rwX /srv/fit/state /srv/fit/web`. `verify-host.sh`가 통과한다. 실제로는 먼저 새 코드의 `verify-host.sh`를 읽기 전용으로 돌려 실패가 이 두 디렉터리 하나뿐인 것을 확인한 뒤(나머지 호스트 설정은 설계와 같았다), 전체 `bootstrap.sh`를 다시 돌리지 않고 같은 효과의 좁은 명령(`install -d -m 2775 -o root -g docker`, `chgrp -R docker`, `chmod -R g+rwX`)으로 적용했다. 적용 뒤 `verify-host.sh`는 "호스트 정상"이고 Caddy는 healthy다. A의 `~/host`에 있던 옛 `bootstrap.sh`는 `755 root:root`로 되돌릴 수 있어서 새 코드로 갱신했다. 이후 `bootstrap.sh`가 바뀌면 `~/host`를 같이 갱신한다.
-3. **verify 확인:** MR을 올려 `be:test`, `fe:test`가 B의 러너에서 도는 것을 본다(스위치가 꺼진 채로). 아티팩트 크기와 실행 시간(B의 메모리 4GB 안에서 Gradle이 끝나는지)을 기록한다.
+3. **verify 확인**(끝났다 2026-10-23, 스위치를 켠 뒤의 `be:build`, `fe:build`는 2026-10-26에 B에서 같은 조건으로 미리 돌려 통과했다): MR을 올려 `be:test`, `fe:test`가 B의 러너에서 도는 것을 본다. 실측은 아래 "첫 dev 배포"와 MR 경량화 절에 있다.
 4. **GitLab 프로젝트 설정:** `gitlab-setup.md` 3단계(환경 보호는 CE에서 쓸 수 없으므로 대체 확인: Developer가 `deploy:prod`를 못 누르는지, `develop`과 `master`의 보호 설정. 그리고 `process_mode`를 `oldest_first`로). "Prevent outdated deployment jobs" 등은 1단계에서 끝났다.
-5. **계약 체크리스트가 끝나면** 스위치를 켜는 MR(`FIT_CD_ENABLED: "true"`와 구조 시험의 기본값 시험을 함께 바꾼다)을 올리고 `develop`에 병합해 dev 첫 배포를 지켜본다. 실패하면 `rollback.sh`와 알림을 확인한다.
+5. **계약 체크리스트가 끝나면** 스위치를 켜는 MR(`FIT_CD_ENABLED: "true"`와 구조 시험의 기본값 시험을 함께 바꾼다)을 올리고 `develop`에 병합해 dev 첫 배포를 지켜본다(끝났다 2026-10-26, MR 53. 결과는 아래 "첫 dev 배포"). 롤백과 알림은 두 번째 배포 뒤에 확인한다(직전 이미지가 있어야 한다).
 6. dev가 안정된 뒤 `develop → master` MR을 병합하고 `deploy:prod`를 수동으로 누른다.
 
-## 아직 확인하지 못한 것 (구현에서 확인한다)
+## 아직 확인하지 못한 것
 
-- B(Arm, 메모리 4GB)에서 Gradle 테스트와 `bootJar`가 `-Xmx768m`으로 끝나는지, 걸리는 시간. 이 PC는 x86이라 Arm 동작은 서버에서만 본다.
-- GitLab CE 아티팩트 최대 크기(jar, FE 번들)와 SSAFY 인스턴스의 만료 정책.
-- `fit-deploy` 러너(shell executor)가 `gitlab-runner` 사용자로 `deploy.sh`를 돌 때의 권한 전체(`docker` 그룹, `/etc/fit` 읽기, 상태 디렉터리 쓰기, `edgectl.sh reload`). 호스트 권한 변경은 컨테이너 시험으로 모드만 확인한다.
-- 진짜 토큰으로 `runner.sh register`가 동작하는지(첫 등록에서 확인).
-- `corepack`이 `packageManager`의 pnpm(11.20.0)을 내려받는 데 B의 외부 접근이 필요하다. 막혀 있으면 pnpm을 이미지에 넣는 후속이 필요하다.
-- 실제 BE·FE 이미지의 준비 시간과 메모리(1C-2에서도 목 이미지로만 확인했다).
+2026-10-26의 첫 dev 배포로 확인한 것은 "첫 dev 배포" 절에 있다. 남은 것은 다음과 같다.
+
+- GitLab CE 아티팩트 최대 크기와 SSAFY 인스턴스의 만료 정책(jar 약 58MB와 FE 번들 약 45MB는 B에서 A로 넘어갔다. 한도 값 자체는 읽지 못했다).
+- 롤백: 첫 배포라 직전 이미지가 없어 `rollback.sh dev`와 실패 시 자동 복귀를 서버에서 시험하지 못했다. 두 번째 배포 뒤에 한다.
+- `deploy:prod`와 `smoke:prod`, Blue/Green 전환과 `rollback.sh prod`(dev는 교체형이라 시험할 수 없다).
+- Mattermost 배포 알림이 실제로 오는지, GitLab 화면의 잡별 결과(서버의 배포 이력과 컨테이너 상태로만 확인했다).
+- 로그인·회원가입 끝까지, BE가 받는 `X-Forwarded-For` 값.
 
 ## MR 경량화 (2026-10-23)
 
@@ -517,6 +518,23 @@ B는 vCPU 2개(Neoverse-N1)이고 이미지는 arm64 그대로다(에뮬레이�
 검증(B, 같은 JDK 이미지, `docker.sock` 마운트, 메모리 2g와 CPU 2, `postgres` 서비스 링크, CI의 `SPRING_DATASOURCE_*` 환경변수까지 맞춤): MR 45의 `be/`(`50117aa`)로 `sh ./gradlew --no-daemon test` 전체가 **288개 통과, 실패 0**(1분 46초, 의존성 캐시가 비어 있는 첫 실행). 규칙 적용 전후의 대조는 임시 컨테이너 점검으로 했다. 게시 포트를 게이트웨이로 부르면 규칙 전에는 시간 초과, 규칙 뒤에는 연결됐고 범위 밖 포트(8123)는 계속 막혔다. `TESTCONTAINERS_HOST_OVERRIDE` 없이도 통과한다(`ApiApplicationTests` 단독 실행으로 확인). 확인하지 못한 것: 규칙을 뺀 상태에서 Testcontainers 테스트를 돌려 실제 예외 메시지를 보는 것(방화벽을 되돌려야 해서 하지 않았다). 원인은 같은 코드가 규칙 전(MR 45 파이프라인)에 실패하고 규칙 뒤에 통과한 대조와, 위의 연결 점검으로 판단한다.
 
 정리(2026-10-26, MR 45 병합 뒤): `be:test`에서 `services:`와 `SPRING_DATASOURCE_*`·`POSTGRES_*` 변수를 뺐다(위 Task 5의 job 정의와 13·16번 항목은 이 정리 전 모양의 기록이다). 같은 조건에서 DB 서비스와 환경변수 없이 develop(`481383b`)의 BE 시험 전체를 B에서 돌려 확인했다. 구조 시험은 `be:test`에 서비스나 DB 환경변수가 다시 생기면 실패하고, `test_tool_images_sync.py`는 BE의 `PostgresTestSupport`가 `PGVECTOR_IMAGE` 핀과 같은 이미지를 쓰는지 본다. 러너를 사용자 정의 망(`FF_NETWORK_PER_BUILD`)으로 바꾸면 `docker0`가 아니라 그 망의 브리지를 열어야 한다.
+
+## 첫 dev 배포 (2026-10-26)
+
+스위치를 켠 MR 53이 `develop`(`f349ba2`)에 병합돼 `deploy:dev`가 처음으로 돌았다. GitLab 화면은 보지 못하고 서버 A에서 읽어 확인했다.
+
+| 무엇을 | 결과 |
+|---|---|
+| 배포 이력(`history-dev.log`) | `deploy-start` 02:14:38Z, `deploy-end` 02:15:31Z `ok`(53초), 실행 주체 `gitlab-runner` |
+| 컨테이너 | `be-dev`, `fe-dev`가 `f349ba2` 이미지로 교체됐다(master 미리보기를 제자리에서 교체). 재시작 0회, OOM 없음 |
+| 자원 | BE 335MiB/1GiB(기동 30초), FE 45MiB/400MiB |
+| 상태 파일 | `DEPLOYED_SHA`와 `BE_DEV_TAG`, `FE_DEV_TAG`가 `f349ba2`. `*_PREV_TAG`는 `none`(첫 배포) |
+| 엣지(게이트 쿠키) | `/healthz`, `/fe-healthz`, `/`가 200. `/api/v1/version`이 전체 SHA와 `builtAt`을 돌려줘 배포한 커밋과 일치. 쿠키 없이는 404 |
+| DB | Flyway `V1__auth` 성공, `auth_*` 테이블 4개가 `fit_dev`에 생겼다 |
+| 인증 설정(사용자를 만들지 않고) | 올바른 Origin은 401, 다른 사이트·Origin 없음·`http`·prod 호스트 Origin은 403. 쿠키 삭제 응답이 `Secure; HttpOnly; SameSite=Strict; Path=/api/auth`이고 `Domain`이 없다 |
+| prod | 건드리지 않았다. master 미리보기(`be-prod-blue`, `fe-prod-blue`)가 그대로 돈다 |
+
+이 배포로 확인한 것: `fit-deploy` 러너(shell executor)가 `gitlab-runner` 사용자로 `deploy.sh`를 끝까지 돈다(docker 그룹, `/etc/fit` 읽기, 상태 디렉터리 쓰기), B의 verify 러너가 만든 jar와 FE 번들이 아티팩트로 A에 넘어가 `build:images`가 이미지를 만든다(`be:f349ba2…` 517MB, `fe:f349ba2…` 388MB가 A에 있다), B에서 Gradle과 `pnpm`(corepack)이 외부 다운로드까지 끝난다, 실제 BE·FE 이미지가 준비 상태에 도달한다(1C-2에서는 목 이미지로만 확인했다). Modal 값은 임시 값(`https://modal-not-set.invalid`, `MODAL_ENABLED=false`, 키 둘도 임시 값)이라 BE가 Modal 연동을 읽기 시작할 때 진짜 값으로 바꾸고 같은 SHA로 다시 배포해야 한다.
 
 ## 검증 결과 (2026-10-23, 이 PC)
 
