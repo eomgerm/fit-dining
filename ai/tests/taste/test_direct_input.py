@@ -72,15 +72,28 @@ def test_drops_quote_not_in_text_and_unknown_code():
         "items": [
             item("넓은 곳", code="SPACIOUS_SEATING"),
             item("조용한 곳", code="NOPE"),
+            item("좋아요"),
         ]
     }
-    assert parse_items(resp, text) == []
+    assert parse_items(resp, text) == [item("좋아요")]
 
 
 @pytest.mark.parametrize("quote", ["", " "])
 def test_drops_blank_quote(quote):
     text = "시끄럽지 않은 데가 좋아요"
-    assert parse_items({"items": [item(quote, code="FOOD_SPICY")]}, text) == []
+    resp = {"items": [item(quote, code="FOOD_SPICY"), item(text, code="QUIET")]}
+    assert parse_items(resp, text) == [item(text, code="QUIET")]
+
+
+def test_all_items_dropped_is_output_check_failure():
+    # 모델 형식 실수로 취향을 잃지 않게 재요청하고, 그래도 안 되면 해석 대기로 남긴다
+    text = "시끄럽지 않은 데가 좋아요"
+    with pytest.raises(ValueError):
+        parse_items({"items": [item(text + ".", code="QUIET")]}, text)
+
+
+def test_empty_items_is_valid_result():
+    assert parse_items({"items": []}, "안녕하세요") == []
 
 
 def test_disliked_pole_becomes_liked_opposite_pole():

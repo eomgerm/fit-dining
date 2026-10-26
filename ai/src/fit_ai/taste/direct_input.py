@@ -139,6 +139,10 @@ def parse_items(resp: dict, text: str) -> list[dict]:
                 "positive_text": it["positive_text"] if keep_text else None,
             }
         )
+    # 모델이 준 항목이 검사에서 모두 버려졌으면 형식 실수로 취향을 잃은 것이다.
+    # 출력 검사 실패로 알려 다시 요청하고, 그래도 실패하면 해석 대기로 남긴다
+    if resp["items"] and not out:
+        raise ValueError("응답 항목이 모두 검사에서 버려졌다")
     return out
 
 
