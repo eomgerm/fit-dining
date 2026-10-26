@@ -111,6 +111,16 @@ break_and_fix() {
 
 echo "--- 일부러 망가뜨리기"
 break_and_fix "방화벽 허용 규칙 추가" "ufw allow 8000/tcp >/dev/null" "ufw 허용 규칙" "ufw delete allow 8000/tcp >/dev/null"
+# CI 잡 컨테이너가 Testcontainers 형제 컨테이너의 게시 포트에 닿는 규칙은 B(ops)에만 있고, 게시 포트 범위로 좁혀져 있다
+rules="$(ufw show added | grep '^ufw ')"
+CI_RULE='ufw allow in on docker0 from 172.17.0.0/16 to any port 32768:60999 proto tcp'
+if [ "$ROLE" = ops ]; then
+  ok_if "ops: CI 잡 컨테이너용 docker0 규칙이 있다(게시 포트 범위만)" "$(has "$rules" "$CI_RULE")"
+  break_and_fix "CI용 docker0 규칙 삭제" "ufw delete ${CI_RULE#ufw } >/dev/null" "ufw 허용 규칙"
+  break_and_fix "docker0 규칙을 넓힘" "ufw allow in on docker0 >/dev/null" "ufw 허용 규칙" "ufw delete allow in on docker0 >/dev/null"
+else
+  ok_if "app: docker0 규칙이 없다" "$([ "$(has "$rules" docker0)" = 0 ] && echo 1 || echo 0)"
+fi
 break_and_fix "비밀번호 로그인 켜기" "sed -i 's/^PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config.d/10-fit.conf" "비밀번호 로그인이 꺼져 있다"
 break_and_fix "시간대" "ln -sf /usr/share/zoneinfo/UTC /etc/localtime; echo UTC >/etc/timezone" "시간대는 Asia/Seoul"
 break_and_fix "fail2ban 감옥 삭제" "rm -f /etc/fail2ban/jail.d/fit.local" "fail2ban sshd 감옥이 설정돼 있다"

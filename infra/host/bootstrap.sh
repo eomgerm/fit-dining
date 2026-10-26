@@ -275,14 +275,19 @@ configure_ufw() {
   if [ "$ROLE" = app ]; then
     ufw allow 80/tcp >/dev/null
     ufw allow 443/tcp >/dev/null
+  else
+    # B의 verify 러너 잡 컨테이너(기본 브리지)가 Testcontainers가 띄운 형제 컨테이너의 게시 포트에 호스트 게이트웨이로 닿게 한다(BE 계약 #13).
+    # Docker가 게시 포트에 임의로 배정하는 범위만, 기본 브리지의 컨테이너에서 오는 연결만 연다. 22 같은 다른 포트나 다른 망은 열지 않는다
+    ufw allow in on docker0 from 172.17.0.0/16 to any port 32768:60999 proto tcp comment 'ci: job container -> published ports (Testcontainers)' >/dev/null
   fi
   after="$(ufw show added 2>/dev/null || true)"
   if [ "$before" != "$after" ]; then changed "ufw 규칙"; fi
   ufw --force enable >/dev/null
   log "ufw 활성"
   # 목록에 없는 규칙은 지우지 않고 알려 준다(verify-host.sh가 실패로 보고한다)
-  local extra
-  extra="$(printf '%s\n' "$after" | grep '^ufw ' | grep -vE '^ufw (limit 22/tcp|allow 80/tcp|allow 443/tcp)$' || true)"
+  local extra known='limit 22/tcp|allow 80/tcp|allow 443/tcp'
+  if [ "$ROLE" != app ]; then known="limit 22/tcp|allow in on docker0 from 172\.17\.0\.0/16 to any port 32768:60999 proto tcp( comment '[^']*')?"; fi
+  extra="$(printf '%s\n' "$after" | grep '^ufw ' | grep -vE "^ufw ($known)\$" || true)"
   if [ -n "$extra" ]; then
     log "경고: 허용 목록에 없는 ufw 규칙이 있다. 필요 없으면 'ufw delete'로 지운다:"
     printf '  %s\n' "$extra"

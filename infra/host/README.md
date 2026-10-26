@@ -77,6 +77,7 @@ sudo python3 ~/host/envset.py unset dev REVIEW_MOCK_ENABLED             # 키를
 
 - **잠금 방지:** 키가 등록된 일반 로그인 계정이 없으면 비밀번호 로그인을 끄지 않고 멈춘다. sshd 설정 검사(`sshd -t`)가 실패하면 이전 파일로 되돌린다. sshd가 22번 포트가 아니면 ufw를 건드리지 않고 멈춘다.
 - **ufw:** 22는 허용 규칙을 먼저 넣은 뒤 켠다. 허용 목록 밖의 기존 규칙은 지우지 않고 알려 주기만 한다(verify-host가 실패로 보고한다).
+- **ufw: B의 CI 잡용 규칙 하나(`ROLE=ops`만):** `ufw allow in on docker0 from 172.17.0.0/16 to any port 32768:60999 proto tcp`. BE 테스트가 Testcontainers로 띄운 DB·Ryuk 컨테이너는 잡 컨테이너 안이 아니라 B 위에 나란히 생기고 포트가 B의 임의 포트(32768~60999)로 게시된다. 잡 컨테이너(기본 브리지 `docker0`)의 `localhost`는 자기 자신이라, 호스트 게이트웨이(`172.17.0.1`)로 닿아야 한다. 이 규칙이 없으면 `INPUT` 기본 차단에 걸려 연결이 시간 초과가 되고 Ryuk 연결 오류(`RyukResourceReaper`)로 테스트가 시작도 못 한다(2026-10-26 MR 45에서 확인). 게시 포트 범위의 TCP만, `docker0`의 컨테이너에서 오는 것만 연다. 인터넷 쪽은 그대로이고(보안 그룹도 22번뿐) 22 같은 다른 포트는 이 규칙으로 늘지 않는다. A에는 두지 않는다(A의 deploy 러너는 shell executor). 잡 쪽에는 따로 줄 설정이 없다. 잡 컨테이너(`docker.sock` 마운트)에서 Testcontainers가 호스트 주소를 스스로 찾고, 이 규칙만 있으면 `TESTCONTAINERS_HOST_OVERRIDE` 없이 통과한다(2026-10-26 B에서 확인). 러너를 사용자 정의 망으로 바꾸면(`FF_NETWORK_PER_BUILD`) `docker0`가 아니라 그 망의 브리지를 열어야 한다.
 - **Docker:** 이미 설치돼 있으면 건드리지 않는다. 기존 `daemon.json`은 한 번만 `.fit-orig`로 백업한다. 컨테이너가 돌고 있으면 Docker를 재시작하지 않는다.
 - **fail2ban:** `FIT_PEER_IP`를 `ignoreip`에 넣어 A와 B 사이 전송이 차단되지 않게 한다. IP가 아닌 값은 거부한다.
 

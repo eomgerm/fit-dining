@@ -93,7 +93,7 @@ Fit Dining(Next.js SSR 프런트(PWA), Spring Boot 백엔드, OpenSearch 검색,
 ### 1.3 SSAFY 플랫폼 사실
 
 - **방화벽:** 호스트 방화벽 ufw가 켜져 있고 기본 정책이 deny(DROP)다. DROP이라 거부가 아니라 타임아웃으로 보인다. A503은 허용 포트가 22·8000·8001뿐이었고 80/443은 `ufw allow` 직후 열렸다. 클라우드 방화벽은 처음부터 열려 있었다 (확인: A503 문서). 포트가 안 열릴 때 확인 순서는 리스너(`ss -lntp`), ufw, 클라우드 방화벽, 그 바깥이다.
-- **Docker 포트:** Docker 게시 포트는 ufw를 우회한다.
+- **Docker 포트:** Docker 게시 포트는 ufw를 우회한다. 단 밖에서 들어오는 연결의 이야기이고, 컨테이너가 호스트 게이트웨이(`172.17.0.1`)의 게시 포트로 들어가는 연결은 호스트로 들어오는 `INPUT` 경로라 ufw가 막는다 (확인: 2026-10-26 B. 시간 초과로 보인다). Testcontainers를 도는 B의 CI 잡이 이 경우여서 B에만 `docker0` 규칙 한 줄이 있다(3절 호스트 표의 ufw 행).
 - **인증서:** 가비아에서 등록한 도메인이라 Let's Encrypt HTTP-01(80)을 쓴다. DNS-01은 쓰지 않으므로 80 포트는 갱신 때문에 상시 열어 둔다. SSAFY의 `p.ssafy.io` 존은 TXT 권한이 없어 DNS-01을 못 쓴다 (확인: A503 문서).
 - **도메인:** 가비아에서 등록한 도메인을 쓴다. 가비아 DNS의 A 레코드로 `PROD_HOST`와 `DEV_HOST`를 A의 정적 IP에 붙인다. SSAFY 지급 도메인(`<접두><기수><팀>.p.ssafy.io`)은 쓰지 않는다. DNS 변경은 우리가 직접 하므로 IP가 바뀌어도 도메인 변경 요청 절차가 없다.
 - **GitLab:** lab.ssafy.com은 Community Edition v18.11.5이고 Premium 기능은 쓸 수 없다 (확인: 팀원 확인). 공용 러너가 없다 (확인: A503 문서). 프로젝트 러너 생성에는 Maintainer 권한이 필요하다 (확인: GitLab 문서).
@@ -205,7 +205,7 @@ Fit Dining(Next.js SSR 프런트(PWA), Spring Boot 백엔드, OpenSearch 검색,
 | Docker 로그 | `json-file` 10MB×3. be·fe·caddy는 50MB×5(compose `logging:`) | 10MB×3 | 로그 로테이션 부재가 선배 팀의 공통 결함 |
 | Docker 운영 | `live-restore`, 주 1회 이미지·빌더 캐시 prune(be·fe는 SHA 태그 최근 5개 유지, 볼륨은 지우지 않는다) | 주 1회 prune(7일 넘게 쓰지 않은 이미지) | prune 부재가 공통 결함. 시험에서 최근 5개 유지와 사용 중 이미지 보호를 확인했다 (확인: `test-host.sh prune`) |
 | Docker 버전 | `docker version`으로 확인. 29 이상이면 API 클라이언트(cAdvisor, Dozzle, Testcontainers)를 최신으로 핀하고, 안 되면 daemon.json의 `min-api-version`으로 완화 | 〃 | 1.3절 |
-| ufw | 기본 deny. 허용 22(limit), 80, 443 | 기본 deny. 허용 22(limit)만 | 80은 인증서 갱신 때문에 상시 개방 |
+| ufw | 기본 deny. 허용 22(limit), 80, 443 | 기본 deny. 허용 22(limit)와 CI 잡용 한 줄(`allow in on docker0 from 172.17.0.0/16 to any port 32768:60999 proto tcp`) | 80은 인증서 갱신 때문에 상시 개방. B의 한 줄은 verify 러너의 잡 컨테이너가 Testcontainers 형제 컨테이너(DB, Ryuk)의 게시 포트에 호스트 게이트웨이로 닿는 길이다. 없으면 `INPUT` 기본 차단에 걸려 시간 초과가 나고 BE 테스트가 시작도 못 한다 (확인: 2026-10-26 B에서 재현하고 규칙을 넣어 전부 통과). 인터넷 쪽은 영향이 없다 |
 | 포트 규칙 | 컨테이너는 `127.0.0.1:` 바인딩만. 공개는 caddy 하나. CI가 compose 파일을 검사해 위반하면 실패 | 〃 | 13절 |
 | SSH | 키 전용, root 금지, fail2ban(`ignoreip`에 A↔B 상대 호스트 IP). 자동 보안 업데이트는 켜고 자동 재부팅은 끈다(11/06 이후 재부팅은 공지된 창에서만) | 〃 | 설정은 `sshd_config.d/10-fit.conf`다. sshd는 같은 키워드의 첫 값을 쓰고 파일을 이름 순서로 읽으므로 클라우드 이미지의 `60-cloudimg-settings.conf`보다 먼저 읽히게 10번을 쓴다. `Match User` 블록은 그 사용자에게만 적용된다 (확인: `sshd -T -C`). 키가 등록된 로그인 계정이 없으면 bootstrap이 비밀번호 로그인을 끄지 않는다 |
 | 이미지 아키텍처 | amd64 | arm64 | B에 amd64 전용 이미지를 올리지 않는다 |
@@ -428,7 +428,7 @@ Caddy 컨테이너(`caddy:2.x`, 구현 시 최신 2.x를 핀)가 A의 80·443만
 | 잡 | 단계 | 내용 |
 |---|---|---|
 | `lint:*` | verify | 아래 목록 |
-| `be:test` | verify | Gradle 테스트(`sh ./gradlew test`: 래퍼가 git에서 실행 권한이 없다). 지금 BE 시험은 DB에 붙어야 뜨므로(`ApiApplicationTests`) dev·prod와 같은 pgvector를 잡의 서비스 컨테이너로 붙인다(접속 값은 그 잡 안에서만 쓰는 값이다). Testcontainers를 쓰게 되면 최신 버전이어야 한다. JUnit 보고서를 MR에 보인다(실패해도 올린다). jar는 만들지 않는다. MR마다 55MB를 GitLab으로 올리면 느리고, 서버가 흔들릴 때(2026-10-23, 502) 테스트까지 같이 실패한다 |
+| `be:test` | verify | Gradle 테스트(`sh ./gradlew test`: 래퍼가 git에서 실행 권한이 없다). 지금 BE 시험은 DB에 붙어야 뜨므로(`ApiApplicationTests`) dev·prod와 같은 pgvector를 잡의 서비스 컨테이너로 붙인다(접속 값은 그 잡 안에서만 쓰는 값이다). Testcontainers를 쓰게 되면 최신 버전이어야 하고, 잡 컨테이너가 형제 컨테이너의 게시 포트에 닿도록 B에 ufw `docker0` 규칙이 있다(3절 호스트 표, 2026-10-26 BE 팀이 Testcontainers로 옮길 때 확인). BE 테스트가 전부 Testcontainers로 옮겨 가면 이 서비스 컨테이너는 쓰이지 않으니 그때 뺀다. JUnit 보고서를 MR에 보인다(실패해도 올린다). jar는 만들지 않는다. MR마다 55MB를 GitLab으로 올리면 느리고, 서버가 흔들릴 때(2026-10-23, 502) 테스트까지 같이 실패한다 |
 | `be:build` | verify | 스위치를 켠 `develop`·`master`에서만 돈다. `be:test`가 끝난 뒤 `bootJar -x test`로 배포할 jar를 만들어 아티팩트로 넘긴다(DB가 필요 없다). jar 크기가 GitLab 아티팩트 상한을 넘으면 B에서 A로 `rsync`한다(상한은 미확인) |
 | `fe:test` | verify | 린트, `next typegen`(Next 16의 전역 타입을 만든다. 없으면 `tsc`가 실패한다), 타입 검사, 단위 테스트(`fe/`). verify 러너(B)에서 Node 이미지(핀, arm64 지원)로 실행 |
 | `fe:build` | verify | 같은 Node 이미지로 `next build`(standalone)를 **한 번만** 하고(환경 값은 번들에 넣지 않는다, 6.8절) 커밋 SHA를 `DEPLOYMENT_VERSION`으로 넘겨 빌드 ID와 `deploymentId`로 쓴다. FE 번들(`standalone`, `static`, `public`)을 GitLab 아티팩트로 넘긴다 |
@@ -834,7 +834,7 @@ BE·AI·프런트 팀과 M1 전에 합의한다. 합의되면 `docs/infra/contra
 | 10 | 메모리·풀 | JVM `-XX:InitialRAMPercentage=25 -XX:MaxRAMPercentage=60 -XX:MaxMetaspaceSize=192m -XX:+UseSerialGC`. 힙을 컨테이너 한도에 비례시킨다(prod 1.5GB는 힙 약 900MB, dev 1.0GB는 약 600MB, 측정 후 조정). Hikari 풀 prod 10 / dev 5 / batch 5 | 4.1절 예산. 고정 `-Xmx`는 메타스페이스·스레드 스택·코드 캐시가 더해져 한도를 넘는다 |
 | 11 | 지표 | `batch_last_success_timestamp_seconds`(gauge, 시작부터 존재), 외부 호출별 `*_calls_total`, `*_fallback_total`, 지연 히스토그램(버킷 범위 제한) | 9절 알림 |
 | 12 | 외부 호출 | 11.2절의 방어 일체. Modal 호출은 첫 호출(콜드 스타트) 타임아웃을 따로 둔다 | |
-| 13 | 테스트 | 최신 Testcontainers(Docker 29 호환). Gradle `-Xmx768m`, 테스트 포크 768MB. OpenSearch 컨테이너 테스트 금지(모킹 사용). Testcontainers가 쓰는 이미지는 arm64 변형이 있어야 한다 | B에서 실행(4.2절) |
+| 13 | 테스트 | 최신 Testcontainers(Docker 29 호환). Gradle `-Xmx768m`, 테스트 포크 768MB. OpenSearch 컨테이너 테스트 금지(모킹 사용). Testcontainers가 쓰는 이미지는 arm64 변형이 있어야 한다. 잡이 컨테이너 안에서 돌아 형제 컨테이너(DB, Ryuk)의 게시 포트에 호스트 게이트웨이로 닿으므로 B의 ufw에 `docker0` 규칙이 한 줄 있다(3절 호스트 표). 이 규칙 외에 잡에 줄 설정은 없다 | B에서 실행(4.2절) |
 | 14 | Redis | 멱등성 키 등은 noeviction 전제, requirepass | 7.3절 |
 | 15 | SSE | `text/event-stream`, `Last-Event-ID` 재연결 처리. 배포 전환 때 연결이 끊긴다 | 5절 |
 | 16 | API 하위호환 | 직전 배포의 FE 번들(서비스 워커 캐시, 열려 있는 탭)이 호출해도 동작해야 한다(한 버전). 필드 삭제·의미 변경은 expand/contract | 6.8절 버전 스큐 |

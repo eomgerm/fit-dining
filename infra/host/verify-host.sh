@@ -150,10 +150,18 @@ check_ssh() {
 
 check_firewall() {
   echo "-- 방화벽과 열린 포트"
-  local expected="ufw limit 22/tcp" added
-  if [ "$ROLE" = app ]; then expected="$(printf 'ufw allow 443/tcp\nufw allow 80/tcp\nufw limit 22/tcp')"; fi
-  added="$(ufw show added 2>/dev/null | grep '^ufw ' | sort)"
-  ok_if "ufw 허용 규칙이 설계와 정확히 같다($([ "$ROLE" = app ] && echo '22 limit, 80, 443' || echo '22 limit'))" "$(is "$added" "$(printf '%s\n' "$expected" | sort)")"
+  local expected added what
+  if [ "$ROLE" = app ]; then
+    expected="$(printf 'ufw allow 443/tcp\nufw allow 80/tcp\nufw limit 22/tcp')"
+    what='22 limit, 80, 443'
+  else
+    # B: verify 러너 잡 컨테이너가 Testcontainers 형제 컨테이너의 게시 포트에 닿는 길(bootstrap.sh와 같은 규칙)
+    expected="$(printf 'ufw allow in on docker0 from 172.17.0.0/16 to any port 32768:60999 proto tcp\nufw limit 22/tcp')"
+    what='22 limit, docker0의 게시 포트 범위(CI)'
+  fi
+  # 규칙의 주석 문구는 비교에서 뺀다(주석이 달라도 같은 규칙이다)
+  added="$(ufw show added 2>/dev/null | grep '^ufw ' | sed "s/ comment '.*'\$//" | sort)"
+  ok_if "ufw 허용 규칙이 설계와 정확히 같다($what)" "$(is "$added" "$(printf '%s\n' "$expected" | sort)")"
   local status
   status="$(ufw status verbose 2>/dev/null)"
   ok_if "ufw가 켜져 있다" "$(is "$(printf '%s\n' "$status" | head -n 1)" 'Status: active')"

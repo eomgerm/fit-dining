@@ -505,6 +505,18 @@ B는 vCPU 2개(Neoverse-N1)이고 이미지는 arm64 그대로다(에뮬레이�
 - Gradle 빌드 캐시(`--build-cache`).
 - `lint:shell`은 MR에서 바뀐 셸 스크립트만 검사한다(`git diff`로 고르고, 다른 스크립트가 `source`하는 공유 라이브러리가 바뀌면 전체를 검사한다. `develop`·`master`는 항상 전체). 검사 시간이 파일 수에 비례하므로(추정) 스크립트 몇 개를 바꾸는 MR은 1분 25초에서 수 초로 줄 수 있다. 대신 바뀐 파일에 의존하는 스크립트의 경고가 병합 뒤 `develop` 파이프라인에서야 잡힐 수 있고, 변경 파일을 고르는 스크립트와 시험이 늘어난다. 인프라 셸을 바꾸는 MR이 자주 기다리게 될 때 한다.
 
+## BE 테스트와 Testcontainers (2026-10-26)
+
+설계는 BE 테스트를 Testcontainers로 돌리기로 했지만(부록 B, BE 계약 #13) 이 계획은 BE 코드에 DB를 띄우는 부분이 없어서 `be:test`에 `services:`로 pgvector를 붙였다. BE 팀이 MR 45에서 DB가 필요한 테스트를 공통 Testcontainers 기반(`PostgresTestSupport`)으로 옮기자 `be:test`가 288개 중 49개 실패했다. 그 기반을 쓰는 4개 테스트 클래스가 시작도 못 했다(`ExceptionInInitializerError`, 원인은 `RyukResourceReaper.java:132`. 로그에는 예외 메시지가 없다).
+
+원인(B에서 확인): 잡은 컨테이너 안에서 돌고, Testcontainers가 띄운 DB·Ryuk 컨테이너는 잡 컨테이너 안이 아니라 B 위에 나란히 생겨 B의 임의 포트(32768~60999)로 게시된다. 잡 컨테이너의 `localhost`는 자기 자신이라 호스트 게이트웨이(`172.17.0.1`)로 닿아야 하는데, B의 ufw가 `INPUT`을 기본 차단하고 `docker0`의 연결을 허용하는 규칙이 없어 연결이 시간 초과로 끝났다(받는 쪽은 있다. `docker-proxy`가 게시 포트를 듣는다). `services:`는 러너가 DB 컨테이너를 잡 컨테이너에 직접 이어 줘서 호스트 포트를 거치지 않으므로 지금까지 이 길이 필요 없었다.
+
+조치: B의 ufw에 `ufw allow in on docker0 from 172.17.0.0/16 to any port 32768:60999 proto tcp`를 더했다(게시 포트 범위의 TCP만, 기본 브리지의 컨테이너에서 오는 연결만. 인터넷 쪽과 보안 그룹은 그대로다). `bootstrap.sh`(`ROLE=ops`만)와 `verify-host.sh`가 같은 규칙을 다루고, 컨테이너 시험(`run-in-container.sh`)이 규칙의 유무와 범위를 본다. 이 규칙은 `bootstrap.sh`를 새로 돌려 만든 것이 아니라 같은 명령을 B에 직접 입력해 먼저 적용했다(2026-10-26).
+
+검증(B, 같은 JDK 이미지, `docker.sock` 마운트, 메모리 2g와 CPU 2, `postgres` 서비스 링크, CI의 `SPRING_DATASOURCE_*` 환경변수까지 맞춤): MR 45의 `be/`(`50117aa`)로 `sh ./gradlew --no-daemon test` 전체가 **288개 통과, 실패 0**(1분 46초, 의존성 캐시가 비어 있는 첫 실행). 규칙 적용 전후의 대조는 임시 컨테이너 점검으로 했다. 게시 포트를 게이트웨이로 부르면 규칙 전에는 시간 초과, 규칙 뒤에는 연결됐고 범위 밖 포트(8123)는 계속 막혔다. `TESTCONTAINERS_HOST_OVERRIDE` 없이도 통과한다(`ApiApplicationTests` 단독 실행으로 확인). 확인하지 못한 것: 규칙을 뺀 상태에서 Testcontainers 테스트를 돌려 실제 예외 메시지를 보는 것(방화벽을 되돌려야 해서 하지 않았다). 원인은 같은 코드가 규칙 전(MR 45 파이프라인)에 실패하고 규칙 뒤에 통과한 대조와, 위의 연결 점검으로 판단한다.
+
+남은 일: MR 45가 병합돼 모든 DB 테스트가 Testcontainers를 쓰면 `be:test`의 `services:`와 `SPRING_DATASOURCE_*`·`POSTGRES_*` 변수는 쓰이지 않는다. 병합 뒤 정리한다. 러너를 사용자 정의 망(`FF_NETWORK_PER_BUILD`)으로 바꾸면 `docker0`가 아니라 그 망의 브리지를 열어야 한다.
+
 ## 검증 결과 (2026-10-23, 이 PC)
 
 | 무엇을 | 결과 |
