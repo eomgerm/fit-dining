@@ -10,7 +10,14 @@ import org.springframework.dao.DataAccessException;
 public class UserExceptionHandler {
     @ExceptionHandler(AuthFailure.class)
     public ResponseEntity<ProblemDetail> auth(AuthFailure failure) {
-        var problem = ProblemDetail.forStatusAndDetail(HttpStatusCode.valueOf(failure.status()), "인증을 확인해주세요.");
+        var problem = ProblemDetail.forStatusAndDetail(HttpStatusCode.valueOf(failure.status()),
+                switch (failure.status()) {
+                    case 400 -> "입력 형식을 확인해주세요.";
+                    case 403 -> "허용되지 않은 요청 출처입니다.";
+                    case 409 -> "이미 사용 중인 계정 정보입니다.";
+                    case 429 -> "잠시 후 다시 시도해주세요.";
+                    default -> "인증을 확인해주세요.";
+                });
         if (failure.type() != null) problem.setType(failure.type());
         return response(problem);
     }

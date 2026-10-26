@@ -4,6 +4,13 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.net.URI;
 import java.net.http.*;
 import java.util.UUID;
+import java.util.List;
+import java.util.Base64;
+import java.nio.charset.StandardCharsets;
+import java.sql.Timestamp;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import kr.co.fitdining.api.support.PostgresTestSupport;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.*;
@@ -22,7 +29,7 @@ class PreferencesFlowTests extends PostgresTestSupport {
                 + "\",\"agreements\":{\"ageOver14\":true,\"terms\":true,\"privacy\":true}" + preferences + "}";
     }
     JdbcTemplate migrationJdbc() {
-        return new JdbcTemplate(new org.springframework.jdbc.datasource.DriverManagerDataSource(POSTGRES.getJdbcUrl(), "fit_migrator", "test-migrator"));
+        return new JdbcTemplate(new DriverManagerDataSource(POSTGRES.getJdbcUrl(), "fit_migrator", "test-migrator"));
     }
     String id() { return UUID.randomUUID().toString().substring(0, 10); }
     HttpResponse<String> request(String method, String path, String body, String token) throws Exception {
@@ -42,7 +49,7 @@ class PreferencesFlowTests extends PostgresTestSupport {
         assertEquals(201, response.statusCode(), response.body());
         var session = mapper.readTree(response.body());
         String user = session.get("userId").asString(), token = session.get("accessToken").asString();
-        var claims = mapper.readTree(new String(java.util.Base64.getUrlDecoder().decode(token.split("\\.")[1]), java.nio.charset.StandardCharsets.UTF_8));
+        var claims = mapper.readTree(new String(Base64.getUrlDecoder().decode(token.split("\\.")[1]), StandardCharsets.UTF_8));
         assertEquals(user, claims.get("sub").asString());
         var read = request("GET", "/api/v1/users/" + user + "/preferences", null, token);
         assertEquals(200, read.statusCode(), read.body());
@@ -59,8 +66,8 @@ class PreferencesFlowTests extends PostgresTestSupport {
         assertEquals(404, request("GET", "/api/v1/users/" + session.get("userId").asString() + "/preferences", null,
                 session.get("accessToken").asString()).statusCode());
     }
-    @org.junit.jupiter.params.ParameterizedTest
-    @org.junit.jupiter.params.provider.ValueSource(strings = {
+    @ParameterizedTest
+    @ValueSource(strings = {
         "{\"mood\":\"UNKNOWN\"}", "{\"priorities\":[\"UNKNOWN\"]}",
         "{\"tastes\":[{\"polarity\":\"LIKE\",\"label\":\"   \"}]}"})
     @DisplayName("취향_잘못된 코드와 라벨_필드 오류와 가입 방지")
@@ -100,7 +107,7 @@ class PreferencesFlowTests extends PostgresTestSupport {
         assertEquals(204, withdrawn.statusCode(), withdrawn.body());
         String cookie = withdrawn.headers().firstValue("set-cookie").orElseThrow();
         assertTrue(cookie.contains("Max-Age=0") && cookie.contains("Path=/api/auth") && cookie.contains("HttpOnly") && cookie.contains("SameSite=Strict"));
-        assertNotNull(jdbc.queryForObject("select deleted_at from auth_users where id = ?", java.sql.Timestamp.class, user));
+        assertNotNull(jdbc.queryForObject("select deleted_at from auth_users where id = ?", Timestamp.class, user));
         assertEquals(0, jdbc.queryForObject("select count(*) from user_preferences where user_id = ?", Integer.class, user));
         assertEquals(0, jdbc.queryForObject("select count(*) from auth_refresh_tokens where user_id = ? and (revoked_at is null or revoke_reason <> 'WITHDRAWN')", Integer.class, user));
         assertEquals(204, request("DELETE", "/api/v1/users/" + user, null, at).statusCode());
@@ -119,8 +126,48 @@ class PreferencesFlowTests extends PostgresTestSupport {
         assertEquals("ARRAY", jdbc.queryForObject("select data_type from information_schema.columns where table_name='user_preferences' and column_name='priorities'", String.class));
         assertEquals("jsonb", jdbc.queryForObject("select data_type from information_schema.columns where table_name='user_preferences' and column_name='tastes'", String.class));
         assertEquals(0, jdbc.queryForObject("select count(*) from pg_constraint where conname='auth_users_email_key'", Integer.class));
-        for (String index : java.util.List.of("auth_users_email_active_idx", "auth_users_nickname_active_idx")) {
+        for (String index : List.of("auth_users_email_active_idx", "auth_users_nickname_active_idx")) {
             assertTrue(jdbc.queryForObject("select indexdef from pg_indexes where indexname=?", String.class, index).contains("WHERE (deleted_at IS NULL)"));
+        }
+    }
+
+    @ParameterizedTest @ValueSource(strings = {"GET", "DELETE"})
+    @DisplayName("사용자 API_인코딩 경로와 AT 없음_401")
+    void userApi_encodedPathWithoutToken_returns401(String method) throws Exception {
+        String suffix = method.equals("GET") ? "/preferences" : "";
+        var response = request(method, "/api/v1/%75sers/test-user" + suffix, null, null);
+        assertEquals(401, response.statusCode(), response.body());
+        assertEquals("인증을 확인해주세요.", mapper.readTree(response.body()).get("detail").asString());
+    }
+    @Test @DisplayName("사용자 API_출처와 소유자 불일치_별도 고정 문구")
+    void userApi_wrongOriginAndOwner_returnsDistinctDetails() throws Exception {
+        var signup = request("POST", "/api/auth/signup", signupBody(id(), ""), null);
+        assertEquals(201, signup.statusCode(), signup.body());
+        var session = mapper.readTree(signup.body());
+        String user = session.get("userId").asString(), token = session.get("accessToken").asString();
+        var origin = client.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/users/" + user))
+                .header("Authorization", "Bearer " + token).DELETE().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(403, origin.statusCode());
+        assertEquals("허용되지 않은 요청 출처입니다.", mapper.readTree(origin.body()).get("detail").asString());
+        var owner = request("GET", "/api/v1/users/other/preferences", null, token);
+        assertEquals(403, owner.statusCode());
+        assertEquals("접근 권한이 없습니다.", mapper.readTree(owner.body()).get("detail").asString());
+    }
+    @ParameterizedTest @ValueSource(strings = {"en-US", "ko-KR", "fr-FR"})
+    @DisplayName("취향 검증_여러 로캘과 잘못된 라벨_고정 1자 이상 문구")
+    void preferences_invalidLabels_returnsLocaleIndependentReasons(String locale) throws Exception {
+        for (String label : List.of("", "a".repeat(21))) {
+            String body = signupBody(id(), ",\"preferences\":{\"tastes\":[{\"polarity\":\"LIKE\",\"label\":\"" + label + "\"}]}");
+            var response = client.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/auth/signup"))
+                    .header("Origin", "http://localhost:3000").header("Accept-Language", locale)
+                    .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofString());
+            assertEquals(400, response.statusCode(), response.body());
+            var errors = mapper.readTree(response.body()).get("errors");
+            assertFalse(errors.isEmpty());
+            for (var error : errors) {
+                assertEquals("preferences.tastes[0].label", error.get("field").asString());
+                assertEquals("취향은 1~20자로 입력해 주세요.", error.get("reason").asString());
+            }
         }
     }
 }
