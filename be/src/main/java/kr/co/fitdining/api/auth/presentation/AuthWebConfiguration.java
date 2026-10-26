@@ -31,7 +31,8 @@ public class AuthWebConfiguration implements WebMvcConfigurer {
             @Override public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
                 if (!(handler instanceof HandlerMethod method)
                         || !(AuthController.class.isAssignableFrom(method.getBeanType())
-                        || kr.co.fitdining.api.user.UserController.class.isAssignableFrom(method.getBeanType()))) return true;
+                        || kr.co.fitdining.api.user.UserController.class.isAssignableFrom(method.getBeanType())
+                        || kr.co.fitdining.api.onboarding.OnboardingController.class.isAssignableFrom(method.getBeanType()))) return true;
                 response.setHeader("Cache-Control", "no-store");
                 response.setHeader("X-Content-Type-Options", "nosniff");
                 if (request.getMethod().equals("OPTIONS")) return true;
@@ -44,6 +45,6 @@ public class AuthWebConfiguration implements WebMvcConfigurer {
                 request.setAttribute("auth.identity", auth.authenticate(header.substring(7)));
                 return true;
             }
-        }).addPathPatterns("/api/auth/**", "/api/v1/users/**");
+        }).addPathPatterns("/api/auth/**", "/api/v1/users/**", "/api/v1/onboarding/**");
     }
 }

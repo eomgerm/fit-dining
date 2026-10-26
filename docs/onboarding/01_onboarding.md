@@ -22,3 +22,16 @@ V1은 유지한다. V2는 `auth_users.deleted_at`과 활성 이메일·소문자
 `user_preferences`는 `user_id text PK/FK ON DELETE CASCADE`, `mood text NULL`, `priorities text[]`,
 `purposes text[]`, `tastes jsonb`, `created_at/updated_at timestamptz`다.
 배열·JSONB는 Hibernate 네이티브 매핑으로 저장하며 scope의 스키마를 유지한다.
+
+## 취향 분석
+
+공개 `POST /api/v1/onboarding/taste-analysis`는 `{ "text": "..." }`를 받아 `{ "tastes": [...] }`를 반환한다.
+Origin은 `AUTH_FRONTEND_ORIGIN`과 같아야 한다. 공백 제거 후 1~100자이며 실패·3초 타임아웃은 일반 문구의 503이다.
+주소(`getRemoteAddr`)별 15분에 30회, 초과는 429다. 고정 창과 주소만 메모리에 저장한다.
+
+`fitdining.onboarding.taste-analyzer` 기본값은 `mock`이다. `TasteAnalyzer` 구현을 Bean으로 등록하고
+설정값별 조건으로 선택한다. Mock은 사전·부정어로 칩을 만들고 사전에 없으면 앞 20자로 LIKE 칩을 만든다.
+`#실패`는 Mock에서만 503을 재현한다. 입력·결과는 로깅하지 않는다.
+
+실제 AI 연결, 서킷브레이커·예산·킬스위치 정책은 design.md 11절 기준으로 후속 합의한다.
+속도 제한은 인스턴스마다 별도로 센다. 분석 실행은 4개 스레드와 16개 대기 슬롯으로 제한한다.

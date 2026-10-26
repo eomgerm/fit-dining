@@ -73,3 +73,8 @@ auth:
     event-retention: P90D
     attempt-retention: PT15M
     batch-size: 1000
+
+fitdining:
+  onboarding:
+    taste-analyzer: ${TASTE_ANALYZER:mock}
+    timeout-ms: 3000
