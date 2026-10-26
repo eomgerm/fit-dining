@@ -92,8 +92,11 @@ def main() -> None:
         ("profiles.json", profiles),
         ("code_vectors.json", code_vectors),
     ):
+        # Windows에서도 LF로 쓴다. 저장소는 CRLF를 막는다
         (OUT / name).write_text(
-            json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+            json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+            newline="\n",
         )
 
     for no, p in profiles.items():
