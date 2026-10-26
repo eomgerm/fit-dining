@@ -11,7 +11,7 @@ prepare-commit-msg:
     branch-name:
       run: node scripts/git-rules.cjs branch
 
-# 자동 완성(이모지 + Jira 키)을 prepare-commit-msg 가 아닌 여기서 하는 이유:
+# 자동 완성(Jira 키)을 prepare-commit-msg 가 아닌 여기서 하는 이유:
 # prepare-commit-msg 는 에디터가 열리기 전에 실행되어, `-m` 없이 에디터로 쓴 메시지는 아직 비어 있다.
 commit-msg:
   piped: true # 앞 커맨드가 실패하면 뒤는 실행하지 않는다
