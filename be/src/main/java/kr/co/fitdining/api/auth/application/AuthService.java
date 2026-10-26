@@ -69,13 +69,18 @@ public class AuthService implements AuthUseCases {
 
     @Override
     public Issued signup(String email, String password, String nickname, String address) {
+        return signup(email, password, nickname, address, null);
+    }
+
+    @Override
+    public Issued signup(String email, String password, String nickname, String address, kr.co.fitdining.api.user.Preferences preferences) {
         if (!transactions.recordAttempt(address, "signup")) throw new AuthFailure("잠시 후 다시 시도해주세요.", 429);
         String normalized = normalizeEmail(email);
         String name = kr.co.fitdining.api.auth.domain.AuthText.strip(nickname);
         if (users.findByEmail(normalized).isPresent()) throw new kr.co.fitdining.api.auth.domain.SignupConflict("email");
         if (users.existsByNickname(name)) throw new kr.co.fitdining.api.auth.domain.SignupConflict("nickname");
         String hash = passwords.hash(password);
-        try { return transactions.signup(normalized, name, hash); }
+        try { return transactions.signup(normalized, name, hash, preferences); }
         catch (org.springframework.dao.DataIntegrityViolationException conflict) {
             if (users.findByEmail(normalized).isPresent()) throw new kr.co.fitdining.api.auth.domain.SignupConflict("email");
             if (users.existsByNickname(name)) throw new kr.co.fitdining.api.auth.domain.SignupConflict("nickname");

@@ -30,19 +30,20 @@ public class AuthWebConfiguration implements WebMvcConfigurer {
             private final Set<String> protectedPaths = Set.of("/api/auth/me", "/api/auth/protected");
             @Override public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
                 if (!(handler instanceof HandlerMethod method)
-                        || !AuthController.class.isAssignableFrom(method.getBeanType())) return true;
+                        || !(AuthController.class.isAssignableFrom(method.getBeanType())
+                        || kr.co.fitdining.api.user.UserController.class.isAssignableFrom(method.getBeanType()))) return true;
                 response.setHeader("Cache-Control", "no-store");
                 response.setHeader("X-Content-Type-Options", "nosniff");
                 if (request.getMethod().equals("OPTIONS")) return true;
                 if (request.getMethod().equals("POST") && !origin.equals(request.getHeader("Origin")))
                     throw new AuthFailure("허용되지 않은 요청 출처입니다.", 403);
                 String path = request.getRequestURI().substring(request.getContextPath().length());
-                if (!protectedPaths.contains(path)) return true;
+                if (!protectedPaths.contains(path) && !path.startsWith("/api/v1/users/")) return true;
                 String header = request.getHeader("Authorization");
                 if (header == null || !header.startsWith("Bearer ")) throw new AuthFailure("로그인이 필요합니다.");
                 request.setAttribute("auth.identity", auth.authenticate(header.substring(7)));
                 return true;
             }
-        }).addPathPatterns("/api/auth/**");
+        }).addPathPatterns("/api/auth/**", "/api/v1/users/**");
     }
 }

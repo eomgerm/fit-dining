@@ -51,8 +51,20 @@ public class AuthExceptionHandler {
         return response(problem);
     }
     @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ResponseEntity<ProblemDetail> malformed() {
-        return response(ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "입력 형식을 확인해주세요."));
+    public ResponseEntity<ProblemDetail> malformed(HttpMessageNotReadableException failure) {
+        var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "입력 형식을 확인해주세요.");
+        if (failure.getCause() instanceof tools.jackson.core.JacksonException mapping) {
+            StringBuilder field = new StringBuilder();
+            for (var part : mapping.getPath()) {
+                if (part.getPropertyName() != null) {
+                    if (!field.isEmpty()) field.append('.');
+                    field.append(part.getPropertyName());
+                } else if (part.getIndex() >= 0) field.append('[').append(part.getIndex()).append(']');
+            }
+            if (field.toString().startsWith("preferences.")) problem.setProperty("errors",
+                    java.util.List.of(java.util.Map.of("field", field.toString(), "reason", "입력 형식을 확인해 주세요.")));
+        }
+        return response(problem);
     }
     @ExceptionHandler({DataAccessException.class, TransactionException.class})
     public ResponseEntity<ProblemDetail> unavailable(RuntimeException failure) {

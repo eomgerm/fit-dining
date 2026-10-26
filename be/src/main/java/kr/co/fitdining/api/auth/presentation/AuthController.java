@@ -46,13 +46,14 @@ public class AuthController {
         }
     }
     /**
+     * @param userId account identifier equal to JWT sub
      * @param accessToken signed AT
      * @param nickname current public name
      * @param sessionId refresh family identifier
      * @param accessExpiresAt AT expiry in epoch seconds
      * @param sessionExpiresAt absolute family expiry in epoch seconds
      */
-    public record TokenResponse(String accessToken, String nickname, String sessionId, long accessExpiresAt, long sessionExpiresAt) {}
+    public record TokenResponse(String userId, String accessToken, String nickname, String sessionId, long accessExpiresAt, long sessionExpiresAt) {}
     @PostMapping("/login")
     public TokenResponse login(@Valid @RequestBody LoginRequest body, HttpServletRequest request, HttpServletResponse response) {
         return issued(auth.login(body.email(), body.password(), request.getRemoteAddr()), response);
@@ -60,8 +61,10 @@ public class AuthController {
     @PostMapping("/signup")
     public ResponseEntity<TokenResponse> signup(@Valid @RequestBody SignupRequest body,
             HttpServletRequest request, HttpServletResponse response) {
-        return ResponseEntity.status(201).body(issued(auth.signup(body.email(), body.password(),
-                body.nickname(), request.getRemoteAddr()), response));
+        Issued result = body.preferences() == null
+                ? auth.signup(body.email(), body.password(), body.nickname(), request.getRemoteAddr())
+                : auth.signup(body.email(), body.password(), body.nickname(), request.getRemoteAddr(), body.preferences());
+        return ResponseEntity.status(201).body(issued(result, response));
     }
     @PostMapping("/refresh")
     public TokenResponse refresh(@CookieValue(name = COOKIE, required = false) String token, HttpServletResponse response) {
@@ -82,7 +85,7 @@ public class AuthController {
         Identity identity = issued.identity();
         response.addHeader(HttpHeaders.SET_COOKIE, cookie(issued.refreshToken(), secure,
                 Math.max(0, identity.sessionExpiresAt() - clock.instant().getEpochSecond())).toString());
-        return new TokenResponse(issued.accessToken(), identity.nickname(), identity.sessionId(),
+        return new TokenResponse(identity.userId(), issued.accessToken(), identity.nickname(), identity.sessionId(),
                 identity.accessExpiresAt(), identity.sessionExpiresAt());
     }
     static ResponseCookie cookie(String value, boolean secure, long age) {

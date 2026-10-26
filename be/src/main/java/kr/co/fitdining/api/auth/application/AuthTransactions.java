@@ -29,6 +29,7 @@ public class AuthTransactions {
     private final AuthRefreshTokenRepository refreshTokens;
     private final AuthSecurityEventRepository events;
     private final AuthUserRepository users;
+    private final kr.co.fitdining.api.user.UserPreferencesRepository preferences;
     private final TokenCodec codec;
     private final Clock clock;
     @org.springframework.beans.factory.annotation.Value("${auth.terms-version}")
@@ -36,9 +37,10 @@ public class AuthTransactions {
 
     /** Saves the account and initial RT atomically, after transaction-free hashing. */
     @Transactional
-    public Issued signup(String email, String nickname, String hash) {
+    public Issued signup(String email, String nickname, String hash, kr.co.fitdining.api.user.Preferences answers) {
         AuthUser user = users.saveAndFlush(new AuthUser(UUID.randomUUID().toString(), email, nickname,
                 hash, clock.instant(), termsVersion));
+        if (answers != null) preferences.saveAndFlush(new kr.co.fitdining.api.user.UserPreferences(user.getId(), answers, clock.instant()));
         return login(user);
     }
 
