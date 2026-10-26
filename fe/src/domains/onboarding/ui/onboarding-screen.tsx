@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@/shared/ui/button/button";
 import { Chip } from "@/shared/ui/button/chip";
 import { IconButton } from "@/shared/ui/button/icon-button";
@@ -61,12 +61,19 @@ export function OnboardingScreen({
   const chipButtons = useRef<(HTMLButtonElement | null)[]>([]);
   const pendingChipFocus = useRef<number | null>(null);
   const previousStep = useRef(step);
+  const previousStatus = useRef(status);
   useEffect(() => {
     if (step === 0 && previousStep.current === 1) startButton.current?.focus();
     else if (step !== 0) heading.current?.focus();
     previousStep.current = step;
   }, [step]);
-  useEffect(() => {
+  useLayoutEffect(() => {
+    // 분석 덮개가 사라진 직후, 다음 입력 전에 포커스를 복구한다.
+    if (previousStatus.current === "analyzing" && status !== "analyzing")
+      heading.current?.focus();
+    previousStatus.current = status;
+  }, [status]);
+  useLayoutEffect(() => {
     if (pendingChipFocus.current === null) return;
     const index = pendingChipFocus.current;
     pendingChipFocus.current = null;
@@ -98,9 +105,6 @@ export function OnboardingScreen({
       }
     } catch {
       if (!controller.signal.aborted) setStatus("error");
-    } finally {
-      if (!controller.signal.aborted)
-        requestAnimationFrame(() => heading.current?.focus());
     }
   }
   if (step === 0)

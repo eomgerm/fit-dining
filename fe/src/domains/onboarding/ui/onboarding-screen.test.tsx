@@ -68,6 +68,9 @@ describe("온보딩 화면", () => {
     fireEvent.change(input, { target: { value: "국물, 조용한 곳, 매운맛" } });
     click("AI 분석");
     await screen.findByText("이렇게 이해했어요");
+    expect(document.activeElement).toBe(
+      screen.getByRole("heading", { level: 1 }),
+    );
     click("국물 지우기");
     expect(document.activeElement).toBe(
       screen.getByRole("button", { name: "조용한 분위기 지우기" }),
@@ -81,6 +84,67 @@ describe("온보딩 화면", () => {
     expect(screen.queryByText("이렇게 이해했어요")).toBeNull();
     click("시작하기");
     expect(await screen.findByRole("alertdialog")).toBeTruthy();
+  });
+  it("분석 직후 칩을 삭제해도 늦은 프레임이 포커스를 빼앗지 않는다", async () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    mocks.analyze.mockResolvedValueOnce([
+      { polarity: "like", label: "국물" },
+      { polarity: "like", label: "조용한 분위기" },
+    ]);
+    render(<OnboardingScreen onComplete={vi.fn()} />);
+    reachTaste();
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "국물, 조용한 곳" },
+    });
+    click("AI 분석");
+    await screen.findByText("이렇게 이해했어요");
+    click("국물 지우기");
+    const next = screen.getByRole("button", { name: "조용한 분위기 지우기" });
+    expect(document.activeElement).toBe(next);
+    act(() => frames.forEach((callback) => callback(0)));
+    expect(document.activeElement).toBe(next);
+  });
+  it("결과 커밋 직후 수동 effect 전에 칩을 삭제해도 다음 칩에 포커스를 옮긴다", async () => {
+    mocks.analyze.mockResolvedValueOnce([
+      { polarity: "like", label: "국물" },
+      { polarity: "like", label: "조용한 분위기" },
+      { polarity: "dislike", label: "매운맛" },
+    ]);
+    const view = render(<OnboardingScreen onComplete={vi.fn()} />);
+    reachTaste();
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "국물, 조용한 곳, 매운맛" },
+    });
+    let observer: MutationObserver | undefined;
+    try {
+      await new Promise<void>((resolve, reject) => {
+        observer = new MutationObserver(() => {
+          if (!screen.queryByText("이렇게 이해했어요")) return;
+          observer?.disconnect();
+          try {
+            // findBy/waitFor를 거치지 않고 커밋 직후의 첫 마이크로태스크에서 누른다.
+            click("국물 지우기");
+            expect(
+              screen.queryByRole("button", { name: "국물 지우기" }),
+            ).toBeNull();
+            expect(document.activeElement).toBe(
+              screen.getByRole("button", { name: "조용한 분위기 지우기" }),
+            );
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
+        observer.observe(view.container, { childList: true, subtree: true });
+        click("AI 분석");
+      });
+    } finally {
+      observer?.disconnect();
+    }
   });
   it("분석 상태 안내 영역은 분석 전후에도 같은 노드로 유지된다", async () => {
     mocks.analyze.mockResolvedValueOnce([{ polarity: "like", label: "국물" }]);
@@ -173,6 +237,9 @@ describe("온보딩 화면", () => {
     mocks.analyze.mockRejectedValueOnce(new Error("실패"));
     click("AI 분석");
     expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(document.activeElement).toBe(
+      screen.getByRole("heading", { level: 1 }),
+    );
     expect(input.getAttribute("aria-invalid")).toBe("true");
     fireEvent.change(input, { target: { value: "조용" } });
     expect(screen.queryByRole("alert")).toBeNull();
