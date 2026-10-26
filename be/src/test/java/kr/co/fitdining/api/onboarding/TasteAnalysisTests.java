@@ -14,6 +14,7 @@ class TasteAnalysisTests {
         assertEquals(List.of(new TasteChip(Polarity.LIKE, "담백한 국물"), new TasteChip(Polarity.DISLIKE, "매운맛")),
                 analyzer.analyze("담백한 국물 좋아하고 너무 매운 건 별로예요"));
         assertEquals(1, analyzer.analyze("새로운 취향").size());
+        assertEquals("나만의 취향", analyzer.analyze("\u0000").getFirst().label());
         assertTrue(analyzer.analyze("가".repeat(100)).getFirst().label().length() <= 20);
     }
     @Test @DisplayName("분석_시도 제한_주소별 30회와 창 만료")

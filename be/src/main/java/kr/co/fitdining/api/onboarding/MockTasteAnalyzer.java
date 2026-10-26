@@ -30,6 +30,7 @@ public class MockTasteAnalyzer implements TasteAnalyzer {
         }
         if (chips.isEmpty()) {
             String label = text.replaceAll("\\p{Cc}", " ").strip();
+            if (label.isEmpty()) label = "나만의 취향";
             int end = Math.min(20, label.length());
             if (end > 0 && Character.isHighSurrogate(label.charAt(end - 1))) end--;
             chips.add(new TasteChip(Polarity.LIKE, label.substring(0, end)));
