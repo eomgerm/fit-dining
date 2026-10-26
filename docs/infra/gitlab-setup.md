@@ -110,9 +110,9 @@ Settings → CI/CD → General pipelines에서 설정한다.
 
 ### 배포 순서 보장 (첫 배포 파이프라인 뒤)
 
-`resource_group`의 기본 `process_mode`는 `unordered`라 대기 중인 배포의 순서가 보장되지 않는다 (확인: GitLab 문서). `.gitlab-ci.yml`로는 바꿀 수 없고 API로만 바꾼다. 키 이름은 `.gitlab-ci.yml`의 `resource_group`인 `dev`와 `prod`다. 그룹은 그 키를 가진 잡의 파이프라인이 처음 만들어진 뒤에 생긴다 (추정).
+`resource_group`의 기본 `process_mode`는 `unordered`라 대기 중인 배포의 순서가 보장되지 않는다 (확인: GitLab 문서). `.gitlab-ci.yml`로는 바꿀 수 없고 API로만 바꾼다. 키 이름은 `.gitlab-ci.yml`의 `resource_group`인 `dev`와 `prod`다. 그룹은 그 키를 가진 잡의 파이프라인이 처음 만들어진 뒤에 생긴다 (확인: `dev`의 생성 시각이 첫 `deploy:dev` 파이프라인 시각(2026-10-26 11:08)과 같고 `verify-heavy`는 첫 MR 파이프라인 때(2026-10-23) 생겼다. `prod`는 master 파이프라인이 생기기 전이라 아직 목록에 없다).
 
-필요한 것: 프로젝트 ID(프로젝트 화면의 점 세 개 메뉴 또는 Settings → General), `api` 범위의 토큰. 토큰에 필요한 권한은 문서에 명시돼 있지 않다 (#25). 토큰은 환경변수로만 넘기고 출력하지 않는다.
+필요한 것: 프로젝트 ID(프로젝트 화면의 점 세 개 메뉴 또는 Settings → General), `api` 범위의 토큰. 토큰에 필요한 권한은 문서에 명시돼 있지 않다 (#25). 2026-10-26에 `api` 범위 토큰으로 `dev` 그룹의 `PUT`이 성공했다(토큰 종류는 사용자 보고에 없다). 쓰고 나면 토큰은 취소한다. 토큰은 환경변수로만 넘기고 출력하지 않는다.
 
 ```bash
 curl --fail --request PUT --header "PRIVATE-TOKEN: $GITLAB_API_TOKEN" \
@@ -122,7 +122,8 @@ curl --fail --header "PRIVATE-TOKEN: $GITLAB_API_TOKEN" \
   "https://lab.ssafy.com/api/v4/projects/<프로젝트ID>/resource_groups/<키>"
 ```
 
-- [ ] 환경마다 위 두 호출을 실행한다. 성공하면 상태 코드 200이고 두 번째 응답의 `process_mode`가 `oldest_first`다. 실패하면 400이다.
+- [x] `dev`: 두 호출을 실행했다. 첫 응답과 두 번째 응답(목록)의 `dev`가 `process_mode: oldest_first`다(사용자 보고, 2026-10-26). 목록에는 `verify-heavy`(`unordered`)도 있고 설계는 이 그룹을 바꾸지 않는다.
+- [ ] `prod`: 첫 master 파이프라인(`deploy:prod`가 생긴 뒤)이 만들어진 다음 같은 호출을 키 `prod`로 실행한다. 성공하면 상태 코드 200이고 응답의 `process_mode`가 `oldest_first`다. 실패하면 400이다.
 
 ## 확인 결과 기록
 
@@ -132,9 +133,9 @@ curl --fail --header "PRIVATE-TOKEN: $GITLAB_API_TOKEN" \
 | Create project runner 버튼 (#5) | 있음 | 2026-10-19 | 인프라 담당 |
 | 플랜과 GitLab 버전 | Community Edition v18.11.5 | 2026-10-19 | 인프라 담당 |
 | 승인 규칙·CODEOWNERS 사용 가능 (#25) | 불가 (CE, 설정 화면에 항목 없음) | 2026-10-19 | 인프라 담당 |
-| API 토큰 권한 (#25) | | | |
+| API 토큰 권한 (#25) | `api` 범위 토큰으로 resource group `PUT` 성공(200). 필요한 최소 권한은 확인하지 못했다 | 2026-10-26 | 인프라 담당 |
 | 1단계 완료 | 완료 (사용자 보고) | 2026-10-19 | 인프라 담당 |
 | 2단계 완료 (러너 online) | 러너 2개 online, MR 38 파이프라인 통과, Pipelines must succeed 켬, B의 `concurrent 2` 적용. Rebase 버튼 확인만 남음 | 2026-10-23 | 인프라 담당 |
 | 보호된 환경 (CE) | 불가 (Premium 이상, GitLab 문서). 위 3단계의 대체 확인이 남음 | 2026-10-23 | 문서 조사 |
 | 3단계의 환경 보호 대체 확인(Developer의 `deploy:prod` 불가, `develop`·`master` 보호, Rebase 버튼) | 모두 확인함(사용자 보고) | 2026-10-23 | 인프라 담당 |
-| 3단계 완료 (`oldest_first`) | 첫 배포 파이프라인이 생긴 뒤에 한다 | | |
+| 3단계 완료 (`oldest_first`) | `dev` 적용함(응답과 목록 모두 `oldest_first`). `prod`는 첫 master 파이프라인이 생긴 뒤에 한다 | 2026-10-26 | 인프라 담당 |
