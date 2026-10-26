@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import { ToastProvider } from "@/shared/ui/overlay/toast";
+import { ANSWERS_KEY, GUEST_KEY } from "@/domains/onboarding/model/storage";
 import SignupPage from "./page";
 
 vi.mock("@/shared/ui/display/carousel", () => ({
@@ -31,3 +32,19 @@ it.each(["이용약관", "개인정보처리방침"])(
     ).toBe("/");
   },
 );
+
+it("가입 없이 시작하면 답변을 지우고 비회원 표시만 저장한다", async () => {
+  sessionStorage.setItem(ANSWERS_KEY, "private answers");
+  render(
+    <ToastProvider>
+      <SignupPage />
+    </ToastProvider>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "건너뛰기" }));
+  const link = await screen.findByRole("link", { name: "가입 없이 시작" });
+  // Prevent jsdom navigation while keeping the actual click handler.
+  link.addEventListener("click", (event) => event.preventDefault());
+  fireEvent.click(link);
+  expect(sessionStorage.getItem(ANSWERS_KEY)).toBeNull();
+  expect(localStorage.getItem(GUEST_KEY)).toBe("1");
+});

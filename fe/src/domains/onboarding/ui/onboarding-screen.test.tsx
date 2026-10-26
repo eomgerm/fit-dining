@@ -16,6 +16,7 @@ vi.mock("../api/analyze-taste", () => ({
 }));
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.restoreAllMocks();
   mocks.analyze.mockReset();
 });
@@ -58,9 +59,9 @@ describe("온보딩 화면", () => {
   });
   it("칩 삭제 뒤 다음·이전·입력창 순으로 포커스를 옮기고 모두 지우면 미분석 모달을 연다", async () => {
     mocks.analyze.mockResolvedValueOnce([
-      { polarity: "like", label: "국물" },
-      { polarity: "like", label: "조용한 분위기" },
-      { polarity: "dislike", label: "매운맛" },
+      { polarity: "LIKE", label: "국물" },
+      { polarity: "LIKE", label: "조용한 분위기" },
+      { polarity: "DISLIKE", label: "매운맛" },
     ]);
     render(<OnboardingScreen onComplete={vi.fn()} />);
     reachTaste();
@@ -92,8 +93,8 @@ describe("온보딩 화면", () => {
       return frames.length;
     });
     mocks.analyze.mockResolvedValueOnce([
-      { polarity: "like", label: "국물" },
-      { polarity: "like", label: "조용한 분위기" },
+      { polarity: "LIKE", label: "국물" },
+      { polarity: "LIKE", label: "조용한 분위기" },
     ]);
     render(<OnboardingScreen onComplete={vi.fn()} />);
     reachTaste();
@@ -110,9 +111,9 @@ describe("온보딩 화면", () => {
   });
   it("결과 커밋 직후 수동 effect 전에 칩을 삭제해도 다음 칩에 포커스를 옮긴다", async () => {
     mocks.analyze.mockResolvedValueOnce([
-      { polarity: "like", label: "국물" },
-      { polarity: "like", label: "조용한 분위기" },
-      { polarity: "dislike", label: "매운맛" },
+      { polarity: "LIKE", label: "국물" },
+      { polarity: "LIKE", label: "조용한 분위기" },
+      { polarity: "DISLIKE", label: "매운맛" },
     ]);
     const view = render(<OnboardingScreen onComplete={vi.fn()} />);
     reachTaste();
@@ -147,7 +148,7 @@ describe("온보딩 화면", () => {
     }
   });
   it("분석 상태 안내 영역은 분석 전후에도 같은 노드로 유지된다", async () => {
-    mocks.analyze.mockResolvedValueOnce([{ polarity: "like", label: "국물" }]);
+    mocks.analyze.mockResolvedValueOnce([{ polarity: "LIKE", label: "국물" }]);
     render(<OnboardingScreen onComplete={vi.fn()} />);
     reachTaste();
     const liveRegion = screen.getByRole("status");
@@ -202,16 +203,16 @@ describe("온보딩 화면", () => {
     expect(await screen.findByRole("alertdialog")).toBeTruthy();
     click("그냥 시작하기");
     expect(complete).toHaveBeenCalledWith({
-      mood: "calm",
-      priorities: ["cozy"],
-      purposes: ["solo"],
+      mood: "QUIET",
+      priorities: ["COZY"],
+      purposes: ["SOLO"],
       tastes: [],
     });
     expect(storage).not.toHaveBeenCalled();
     expect(cookie).not.toHaveBeenCalled();
   });
   it("분석 중 차단, 결과 삭제와 입력 수정 초기화, 실패 재시도를 처리한다", async () => {
-    let resolve!: (value: { polarity: "like"; label: string }[]) => void;
+    let resolve!: (value: { polarity: "LIKE"; label: string }[]) => void;
     mocks.analyze.mockImplementationOnce(
       () =>
         new Promise((done) => {
@@ -225,11 +226,12 @@ describe("온보딩 화면", () => {
     click("AI 분석");
     expect(screen.getByRole("status")).toBeTruthy();
     expect(input.closest("[inert]")).toBeTruthy();
-    await act(async () => resolve([{ polarity: "like", label: "국물" }]));
+    await act(async () => resolve([{ polarity: "LIKE", label: "국물" }]));
+    await screen.findByText("이렇게 이해했어요");
     expect(screen.getByText("이렇게 이해했어요")).toBeTruthy();
     click("국물 지우기");
     expect(screen.queryByText("이렇게 이해했어요")).toBeNull();
-    mocks.analyze.mockResolvedValueOnce([{ polarity: "like", label: "국물" }]);
+    mocks.analyze.mockResolvedValueOnce([{ polarity: "LIKE", label: "국물" }]);
     click("AI 분석");
     await screen.findByText("이렇게 이해했어요");
     fireEvent.change(input, { target: { value: "매운맛" } });
@@ -244,7 +246,7 @@ describe("온보딩 화면", () => {
     fireEvent.change(input, { target: { value: "조용" } });
     expect(screen.queryByRole("alert")).toBeNull();
     mocks.analyze.mockResolvedValueOnce([
-      { polarity: "like", label: "조용한 분위기" },
+      { polarity: "LIKE", label: "조용한 분위기" },
     ]);
     click("AI 분석");
     await waitFor(() =>
@@ -266,4 +268,20 @@ describe("온보딩 화면", () => {
     view.unmount();
     expect(signal.aborted).toBe(true);
   });
+});
+
+it("분석 API가 즉시 끝나도 덮개를 최소 600ms 보여준다", async () => {
+  vi.useFakeTimers();
+  mocks.analyze.mockResolvedValueOnce([{ polarity: "LIKE", label: "국물" }]);
+  render(<OnboardingScreen onComplete={vi.fn()} />);
+  reachTaste();
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: "국물" } });
+  click("AI 분석");
+  await act(async () => vi.advanceTimersByTimeAsync(599));
+  expect(screen.queryByText("이렇게 이해했어요")).toBeNull();
+  expect(
+    screen.getByRole("textbox", { hidden: true }).closest("[inert]"),
+  ).toBeTruthy();
+  await act(async () => vi.advanceTimersByTimeAsync(1));
+  expect(screen.getByText("이렇게 이해했어요")).toBeTruthy();
 });

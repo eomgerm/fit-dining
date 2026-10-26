@@ -30,3 +30,19 @@ export function validateSignup(fields: SignupFields): SignupErrors {
     errors.nickname = signupMessages.nickname;
   return errors;
 }
+
+// 가입 API 계약. app 계층에서 온보딩 답변을 조합하고 도메인 간 의존은 두지 않는다.
+export type SignupPreferences = {
+  mood: "QUIET" | "LIVELY" | null;
+  priorities: (
+    | "SPACIOUS"
+    | "SHORT_WAIT"
+    | "GENEROUS_PORTION"
+    | "PRETTY_SPACE"
+    | "VIEW_OUTDOOR"
+    | "COZY"
+    | "VALUE"
+  )[];
+  purposes: ("CONVERSATION" | "SOLO" | "DATE" | "GATHERING" | "WORK_STUDY")[];
+  tastes: { polarity: "LIKE" | "DISLIKE"; label: string }[];
+};

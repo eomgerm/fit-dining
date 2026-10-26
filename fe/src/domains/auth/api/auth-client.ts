@@ -1,6 +1,9 @@
 "use client";
 
+import type { SignupPreferences } from "../model/signup";
+
 export type AuthSession = {
+  userId: string;
   accessToken: string;
   nickname: string;
   sessionId: string;
@@ -87,6 +90,7 @@ export async function login(email: string, password: string) {
   });
 }
 export type SignupRequest = {
+  preferences?: SignupPreferences;
   email: string;
   password: string;
   nickname: string;

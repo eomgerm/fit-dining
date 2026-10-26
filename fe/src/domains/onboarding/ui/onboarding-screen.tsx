@@ -84,7 +84,14 @@ export function OnboardingScreen({
   useEffect(() => () => request.current?.abort(), []);
   function complete() {
     request.current?.abort();
-    onComplete(collectAnswers(answers));
+    onComplete(
+      collectAnswers({
+        mood: answers.mood,
+        priorities: step >= 2 ? answers.priorities : [],
+        purposes: step >= 3 ? answers.purposes : [],
+        tastes: step >= 4 ? answers.tastes : [],
+      }),
+    );
   }
   function edit(next: string) {
     setText(next);
@@ -97,13 +104,18 @@ export function OnboardingScreen({
     request.current = controller;
     setDialog(false);
     setStatus("analyzing");
+    const minimum = new Promise<void>((resolve) => setTimeout(resolve, 600));
     try {
-      const tastes = await analyzeTaste(text, { signal: controller.signal });
+      const [tastes] = await Promise.all([
+        analyzeTaste(text, { signal: controller.signal }),
+        minimum,
+      ]);
       if (!controller.signal.aborted) {
         setAnswers((previous) => ({ ...previous, tastes }));
         setStatus("idle");
       }
     } catch {
+      await minimum;
       if (!controller.signal.aborted) setStatus("error");
     }
   }
@@ -363,12 +375,12 @@ export function OnboardingScreen({
                         }}
                         className={cn(
                           "onboarding-result-chip inline-flex min-h-11 max-w-full items-center rounded-sm border border-line-strong bg-surface pl-3 text-body-sm",
-                          taste.polarity === "like" &&
+                          taste.polarity === "LIKE" &&
                             "border-primary bg-primary-soft text-primary-strong",
                         )}
                       >
                         <span className="min-w-0 wrap-anywhere">
-                          {taste.polarity === "like" ? "좋아요" : "별로예요"} ·{" "}
+                          {taste.polarity === "LIKE" ? "좋아요" : "별로예요"} ·{" "}
                           {taste.label}
                         </span>
                         <IconButton

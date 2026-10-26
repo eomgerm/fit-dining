@@ -1,24 +1,24 @@
 export const moods = [
-  { id: "calm", label: "조용하고 차분한 곳" },
-  { id: "lively", label: "활기찬 곳" },
+  { id: "QUIET", label: "조용하고 차분한 곳" },
+  { id: "LIVELY", label: "활기찬 곳" },
 ] as const;
 export const priorities = [
-  { id: "seating", label: "자리가 넉넉한 곳" },
-  { id: "short-wait", label: "대기가 적은 곳" },
-  { id: "portions", label: "양이 충분한 곳" },
-  { id: "interior", label: "공간이 예쁜 곳" },
-  { id: "view", label: "전망·야외가 좋은 곳" },
-  { id: "cozy", label: "아늑한 곳" },
-  { id: "value", label: "가격만큼 만족스러운 곳" },
+  { id: "SPACIOUS", label: "자리가 넉넉한 곳" },
+  { id: "SHORT_WAIT", label: "대기가 적은 곳" },
+  { id: "GENEROUS_PORTION", label: "양이 충분한 곳" },
+  { id: "PRETTY_SPACE", label: "공간이 예쁜 곳" },
+  { id: "VIEW_OUTDOOR", label: "전망·야외가 좋은 곳" },
+  { id: "COZY", label: "아늑한 곳" },
+  { id: "VALUE", label: "가격만큼 만족스러운 곳" },
 ] as const;
 export const purposes = [
-  { id: "conversation", label: "대화하기 좋은 곳" },
-  { id: "solo", label: "혼밥하기 좋은 곳" },
-  { id: "date", label: "데이트·특별한 날" },
-  { id: "gathering", label: "모임하기 좋은 곳" },
-  { id: "work", label: "작업·공부하기 좋은 곳" },
+  { id: "CONVERSATION", label: "대화하기 좋은 곳" },
+  { id: "SOLO", label: "혼밥하기 좋은 곳" },
+  { id: "DATE", label: "데이트·특별한 날" },
+  { id: "GATHERING", label: "모임하기 좋은 곳" },
+  { id: "WORK_STUDY", label: "작업·공부하기 좋은 곳" },
 ] as const;
-export type TasteChip = { polarity: "like" | "dislike"; label: string };
+export type TasteChip = { polarity: "LIKE" | "DISLIKE"; label: string };
 export type OnboardingAnswers = {
   mood: (typeof moods)[number]["id"] | null;
   priorities: (typeof priorities)[number]["id"][];

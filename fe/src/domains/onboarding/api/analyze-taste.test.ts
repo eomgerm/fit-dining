@@ -1,55 +1,29 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { analyzeTaste } from "./analyze-taste";
-afterEach(() => {
-  vi.useRealTimers();
-  vi.unstubAllEnvs();
-});
-describe("가짜 취향 분석", () => {
-  it("예문을 긍정과 부정으로 구분한다", async () => {
-    vi.useFakeTimers();
-    const pending = analyzeTaste("담백한 국물 좋아하고 너무 매운 건 별로예요", {
-      signal: new AbortController().signal,
-    });
-    await vi.advanceTimersByTimeAsync(1200);
-    expect(await pending).toEqual([
-      { polarity: "like", label: "담백한 국물" },
-      { polarity: "dislike", label: "매운맛" },
-    ]);
+import { ApiError } from "@/shared/api/api-error";
+const mocks = vi.hoisted(() => ({ request: vi.fn() }));
+vi.mock("@/shared/api/client", () => ({ request: mocks.request }));
+afterEach(() => vi.clearAllMocks());
+describe("취향 분석 API", () => {
+  it("입력과 취소 신호를 공통 API 클라이언트로 전달한다", async () => {
+    const signal = new AbortController().signal;
+    const tastes = [{ polarity: "LIKE", label: "국물" }];
+    mocks.request.mockResolvedValueOnce({ tastes });
+    expect(await analyzeTaste("국물", { signal })).toEqual(tastes);
+    expect(mocks.request).toHaveBeenCalledWith(
+      "/v1/onboarding/taste-analysis",
+      {
+        method: "POST",
+        body: { text: "국물" },
+        signal,
+      },
+    );
   });
-  it("키워드가 없어도 결과를 반환한다", async () => {
-    vi.useFakeTimers();
-    const pending = analyzeTaste("새로운 음식", {
-      signal: new AbortController().signal,
-    });
-    await vi.advanceTimersByTimeAsync(1200);
-    expect(await pending).toEqual([{ polarity: "like", label: "새로운 음식" }]);
-  });
-  it("개발 환경의 실패와 운영 환경의 성공을 구분한다", async () => {
-    vi.useFakeTimers();
-    vi.stubEnv("NODE_ENV", "development");
-    const pending = analyzeTaste("#실패", {
-      signal: new AbortController().signal,
-    });
-    const failure = expect(pending).rejects.toThrow("개발 환경");
-    await vi.advanceTimersByTimeAsync(1200);
-    await failure;
-    vi.stubEnv("NODE_ENV", "production");
-    const production = analyzeTaste("#실패", {
-      signal: new AbortController().signal,
-    });
-    await vi.advanceTimersByTimeAsync(1200);
-    expect((await production).length).toBeGreaterThan(0);
-  });
-  it("진행 중 또는 이미 취소된 signal을 처리한다", async () => {
-    for (const alreadyAborted of [false, true]) {
-      const controller = new AbortController();
-      if (alreadyAborted) controller.abort();
-      const pending = analyzeTaste("국물", { signal: controller.signal });
-      const failure = expect(pending).rejects.toMatchObject({
-        name: "AbortError",
-      });
-      controller.abort();
-      await failure;
-    }
+  it.each([429, 503])("%s 오류를 화면으로 전달한다", async (status) => {
+    const error = new ApiError("http", "실패", { status });
+    mocks.request.mockRejectedValueOnce(error);
+    await expect(
+      analyzeTaste("국물", { signal: new AbortController().signal }),
+    ).rejects.toBe(error);
   });
 });

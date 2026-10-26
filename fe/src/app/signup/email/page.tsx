@@ -1,5 +1,6 @@
 "use client";
 
+import { clearAnswers, readAnswers } from "@/domains/onboarding/model/storage";
 import { signupFailure } from "@/domains/auth/api/signup-error";
 
 import { useRef, useState, type FormEvent } from "react";
@@ -61,12 +62,15 @@ export default function SignupEmailPage() {
     setBusy(true);
     setMessage("");
     try {
+      const preferences = readAnswers();
       await signup({
         email: fields.email,
         password: fields.password,
         nickname: fields.nickname,
         agreements,
+        ...(preferences ? { preferences } : {}),
       });
+      clearAnswers();
       setFields({ email: "", password: "", confirmation: "", nickname: "" });
       router.replace("/");
     } catch (error) {

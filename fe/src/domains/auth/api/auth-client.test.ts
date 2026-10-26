@@ -6,6 +6,7 @@ const load = () => {
   return import("./auth-client");
 };
 const value = (token = "at-1", expires = Date.now() / 1000 + 1800) => ({
+  userId: "user-1",
   accessToken: token,
   nickname: "demo",
   sessionId: "sid-1",
@@ -94,6 +95,7 @@ test("simultaneous expired API requests share one refresh and retry once", async
     assert.equal(refreshes, 1);
     assert.deepEqual(results, [{ message: "ok" }, { message: "ok" }]);
     assert.equal(auth.getSession()?.accessToken, "at-2");
+    assert.equal(auth.getSession()?.userId, "user-1");
   } finally {
     env.reset();
   }

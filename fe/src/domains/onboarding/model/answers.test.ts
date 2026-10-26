@@ -17,9 +17,9 @@ describe("온보딩 답변", () => {
     expect(canContinue(4, empty)).toBe(true);
     const selected: OnboardingAnswers = {
       ...empty,
-      mood: "calm",
-      priorities: ["cozy"],
-      purposes: ["solo"],
+      mood: "QUIET",
+      priorities: ["COZY"],
+      purposes: ["SOLO"],
     };
     for (const step of [1, 2, 3])
       expect(canContinue(step, selected)).toBe(true);
@@ -28,7 +28,7 @@ describe("온보딩 답변", () => {
     expect(toggleSelection(["a"], "a")).toEqual([]);
     expect(toggleSelection(["a"], "b")).toEqual(["a", "b"]);
     const result = collectAnswers(empty);
-    result.priorities.push("cozy");
+    result.priorities.push("COZY");
     expect(empty.priorities).toEqual([]);
   });
 });

@@ -25,7 +25,7 @@ export default function LoginPage() {
     let active = true;
     restore()
       .then(() => {
-        if (active) router.replace("/auth-demo");
+        if (active) router.replace("/");
       })
       .catch((error: unknown) => {
         if (active && (!(error instanceof AuthError) || error.status !== 401))
@@ -54,7 +54,7 @@ export default function LoginPage() {
       await login(String(data.get("email")), String(data.get("password")));
       form.reset();
       setPassword("");
-      router.replace("/auth-demo");
+      router.replace("/");
     } catch (error) {
       const credentialsInvalid =
         error instanceof AuthError && error.status === 401;

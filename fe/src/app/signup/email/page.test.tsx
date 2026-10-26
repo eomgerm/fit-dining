@@ -9,6 +9,7 @@ import {
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ApiError } from "@/shared/api/api-error";
 import { ToastProvider } from "@/shared/ui/overlay/toast";
+import { writeAnswers, readAnswers } from "@/domains/onboarding/model/storage";
 import SignupEmailPage from "./page";
 
 const mocks = vi.hoisted(() => ({ signup: vi.fn(), replace: vi.fn() }));
@@ -18,6 +19,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/domains/auth/api/auth-client", () => ({ signup: mocks.signup }));
 beforeEach(() => {
   vi.clearAllMocks();
+  sessionStorage.clear();
 });
 afterEach(cleanup);
 function form() {
@@ -118,4 +120,24 @@ it("shows a preparation toast when viewing terms", async () => {
   fireEvent.click(screen.getAllByRole("button", { name: "보기" })[0]);
   expect(await screen.findByText("약관 본문은 준비 중이에요.")).toBeTruthy();
   expect(mocks.signup).not.toHaveBeenCalled();
+});
+
+it("온보딩 답변을 가입 요청에 포함하고 성공하면 지운다", async () => {
+  const preferences = {
+    mood: "QUIET" as const,
+    priorities: ["COZY" as const],
+    purposes: [],
+    tastes: [],
+  };
+  writeAnswers(preferences);
+  mocks.signup.mockResolvedValueOnce({ userId: "new-user" });
+  form();
+  await screen.findByRole("button", { name: "동의하고 시작하기" });
+  fireEvent.click(screen.getByRole("checkbox", { name: "전체 동의" }));
+  fireEvent.click(screen.getByRole("button", { name: "동의하고 시작하기" }));
+  await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/"));
+  expect(mocks.signup).toHaveBeenCalledWith(
+    expect.objectContaining({ preferences }),
+  );
+  expect(readAnswers()).toBeUndefined();
 });

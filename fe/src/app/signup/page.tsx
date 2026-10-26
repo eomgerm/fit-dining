@@ -1,5 +1,6 @@
 "use client";
 
+import { startAsGuest } from "@/domains/onboarding/model/storage";
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -209,7 +210,12 @@ export default function SignupPage() {
         }
         action={
           <div className="flex w-full gap-2">
-            <Button variant="outline" size="md" render={<Link href="/" />}>
+            <Button
+              variant="outline"
+              size="md"
+              onClick={startAsGuest}
+              render={<Link href="/" />}
+            >
               가입 없이 시작
             </Button>
             <Button size="md" onClick={() => setSkip(false)}>
