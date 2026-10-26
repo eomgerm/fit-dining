@@ -109,7 +109,7 @@ class PreferencesFlowTests extends PostgresTestSupport {
         assertTrue(cookie.contains("Max-Age=0") && cookie.contains("Path=/api/auth") && cookie.contains("HttpOnly") && cookie.contains("SameSite=Strict"));
         assertNotNull(jdbc.queryForObject("select deleted_at from auth_users where id = ?", Timestamp.class, user));
         assertEquals(0, jdbc.queryForObject("select count(*) from user_preferences where user_id = ?", Integer.class, user));
-        assertEquals(0, jdbc.queryForObject("select count(*) from auth_refresh_tokens where user_id = ? and (revoked_at is null or revoke_reason <> 'WITHDRAWN')", Integer.class, user));
+        assertEquals(0, jdbc.queryForObject("select count(*) from auth_refresh_tokens where user_id = ? and revoked_at is null", Integer.class, user));
         assertEquals(204, request("DELETE", "/api/v1/users/" + user, null, at).statusCode());
         assertEquals(404, request("GET", "/api/v1/users/" + user + "/preferences", null, at).statusCode());
         assertEquals(401, request("POST", "/api/auth/login", credentials, null).statusCode());
@@ -169,5 +169,28 @@ class PreferencesFlowTests extends PostgresTestSupport {
                 assertEquals("취향은 1~20자로 입력해 주세요.", error.get("reason").asString());
             }
         }
+    }
+
+    @ParameterizedTest @ValueSource(strings = {"LOGOUT", "REFRESH_REUSE"})
+    @DisplayName("탈퇴_이미 폐기된 RT 존재_기존 사유와 시각 유지 및 활성 RT 폐기")
+    void withdraw_previouslyRevokedToken_preservesHistoryAndRevokesActiveTokens(String reason) throws Exception {
+        String name = id();
+        var signup = request("POST", "/api/auth/signup", signupBody(name, ""), null);
+        assertEquals(201, signup.statusCode(), signup.body());
+        var session = mapper.readTree(signup.body());
+        String user = session.get("userId").asString(), family = session.get("sessionId").asString();
+        String at = session.get("accessToken").asString();
+        jdbc.update("update auth_refresh_tokens set revoked_at = created_at, revoke_reason = ? where family_id = ?", reason, family);
+        var previous = jdbc.queryForMap("select revoked_at, revoke_reason from auth_refresh_tokens where family_id = ?", family);
+        String credentials = "{\"email\":\"" + name + "@example.com\",\"password\":\"password123\"}";
+        var login = request("POST", "/api/auth/login", credentials, null);
+        assertEquals(200, login.statusCode(), login.body());
+        assertEquals(1, jdbc.queryForObject("select count(*) from auth_refresh_tokens where user_id = ? and revoked_at is null", Integer.class, user));
+        assertEquals(204, request("DELETE", "/api/v1/users/" + user, null, at).statusCode());
+        assertEquals(0, jdbc.queryForObject("select count(*) from auth_refresh_tokens where user_id = ? and revoked_at is null", Integer.class, user));
+        assertEquals(previous, jdbc.queryForMap("select revoked_at, revoke_reason from auth_refresh_tokens where family_id = ?", family));
+        assertEquals(1, jdbc.queryForObject("select count(*) from auth_refresh_tokens where user_id = ? and revoke_reason = 'WITHDRAWN'", Integer.class, user));
+        assertEquals(204, request("DELETE", "/api/v1/users/" + user, null, at).statusCode());
+        assertEquals(previous, jdbc.queryForMap("select revoked_at, revoke_reason from auth_refresh_tokens where family_id = ?", family));
     }
 }

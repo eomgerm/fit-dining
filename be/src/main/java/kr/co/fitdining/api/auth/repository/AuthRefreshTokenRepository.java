@@ -29,7 +29,7 @@ public interface AuthRefreshTokenRepository extends JpaRepository<AuthRefreshTok
             @Param("now") Instant now, @Param("reason") String reason);
 
     @Modifying(flushAutomatically = true)
-    @Query("update AuthRefreshToken t set t.revokedAt = :now, t.revokeReason = 'WITHDRAWN' where t.userId = :user")
+    @Query("update AuthRefreshToken t set t.revokedAt = :now, t.revokeReason = 'WITHDRAWN' where t.userId = :user and t.revokedAt is null")
     int revokeUser(@Param("user") String user, @Param("now") Instant now);
 
     @Modifying
