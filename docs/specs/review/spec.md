@@ -206,15 +206,14 @@ Walking Skeleton
 
 ### 1차 후속 전에 필요
 
-1차 후속을 시작하는 데 가장 먼저 필요한 것은 로그인 머지, `users`·`places` 마이그레이션, AI가 리뷰를 읽는 경로다.
+로그인과 회원 테이블(`auth_users`, `V1__auth`)은 develop에 들어왔다(S15P31A302-38). 남은 선행 조건 중 가장 큰 것은 `places` 테이블과 AI가 리뷰를 읽는 경로다.
 
 장소·검색 담당
 - 1차 후속의 장소 확인(D-21)에 무엇을 쓰나요? `PlaceService#getPlace(long)`가 이름·업종·역(`PlaceSummary`)을 돌려주고 Mock 장소(D-22)도 통과한다. 하지만 없는 장소의 `PlaceNotFoundException`은 장소 컨트롤러에만 걸린 `PlaceExceptionHandler`가 404로 바꾸므로, 리뷰에서 그대로 부르면 500이다. 장소 기능이 `Optional`을 돌려주는 조회 메서드를 열어 주나요, 아니면 리뷰가 이 예외를 404로 바꾸나요? 장소 Mock이 꺼진 환경(`PLACE_MOCK_ENABLED`)의 503도 함께 정한다.
 
 회원 담당
-- 로그인 브랜치는 언제 머지하나요? 리뷰는 AT(`Authorization: Bearer`)만 받는다(D-15). 공통 인증 인터셉터를 `/api/v1/**`에 어떻게 거는지, 목록처럼 헤더 없이도 되는 선택 인증을 지원하는지, 컨트롤러가 사용자 ID(`sub`)를 어떻게 받는지 알려 주세요.
-- 닉네임은 어디서 조회하나요? 로그인 브랜치에는 username만 있고 회원가입이 없다. 목록에 현재 닉네임을 보여야 한다(PRD AC-22).
-- 관리자 권한은 어떻게 구분하나요? 로그인 브랜치의 사용자에는 역할이 없다. 관리자 API(D-11)가 여기에 달려 있다.
+- 공통 인증 인터셉터를 `/api/v1/**`에도 걸 계획인가요? 지금 인터셉터는 `/api/auth/**`에만 걸려 있고, 사용자 ID는 `AuthUseCases.authenticate`가 AT(`Authorization: Bearer`)에서 꺼낸다(D-15). 리뷰 목록처럼 헤더 없이도 되는 선택 인증이 필요하다.
+- 관리자 권한은 어떻게 구분하나요? `auth_users`에는 역할이 없다. 관리자 API(D-11)가 여기에 달려 있다.
 
 취향·AI·검색 담당
 - 리뷰 이유 태그가 분석의 코드표(`features.py`, `QUIET`·`PURPOSE_GROUP` 등)를 그대로 참조해도 되나요? 언제 공유되나요? 비교 spec이 이미 이 코드표를 조건 코드로 쓴다. 태그 시드 마이그레이션이 이 코드를 참조하므로 마이그레이션을 머지하기 전에 정해야 한다(D-16).
@@ -223,9 +222,9 @@ Walking Skeleton
 
 BE 팀 공통
 - DB 공통 규칙 초안의 이름 규칙, 삭제 행 제외 방식, 마이그레이션 버전 형식을 언제 합의하나요? 1차 후속의 `reviews` 마이그레이션이 이를 따른다(D-28).
-- `places`, `users` 테이블과 첫 마이그레이션은 누가 언제 만드나요? `db/migration`이 아직 없고, 로그인 브랜치는 사용자를 파일(`auth-store.json`)에 둔다. 리뷰의 작성자·장소 참조와 닉네임 조회가 여기에 달려 있다. 이 테이블로 FK를 거나요? FK를 걸면 Mock 장소(D-22)도 `places`에 있어야 한다.
-- 같은 상태 코드 안의 오류 구분은 컨벤션 3절대로 ProblemDetail의 `type`이나 확장 필드로 하면 되나요? 리뷰는 400 안에서 방문일 범위와 태그 위반을 FE가 구분해야 한다(409 중복은 상태 코드로 구분된다). 로그인 브랜치의 오류 응답(`{"code","message"}`)은 이 규칙과 달라 어느 쪽으로 맞출지 정해야 한다.
-- 모듈 경계 규칙은 무엇인가요? 장소와 리뷰는 기능 패키지(`place`, `review`) 아래에 평평하게 두는데(D-23), 로그인 브랜치의 `auth`는 `domain`·`ports`·`application`·`infrastructure`·`presentation`으로 나눈다.
+- `places` 테이블과 마이그레이션은 누가 언제 만드나요? 리뷰의 장소 참조가 여기에 달려 있다. 이 테이블로 FK를 거나요? FK를 걸면 Mock 장소(D-22)도 `places`에 있어야 한다. 회원은 `auth_users`(`V1__auth`, `id`는 text)가 있다.
+- 같은 상태 코드 안의 오류 구분은 컨벤션 3절대로 ProblemDetail의 `type`이나 확장 필드로 하면 되나요? 리뷰는 400 안에서 방문일 범위와 태그 위반을 FE가 구분해야 한다(409 중복은 상태 코드로 구분된다). 인증 오류는 ProblemDetail의 `type`(`urn:fitdining:auth:access-token-expired`)으로 토큰 만료를 구분한다.
+- 모듈 경계 규칙은 무엇인가요? 장소와 리뷰는 기능 패키지(`place`, `review`) 아래에 평평하게 두는데(D-23), `auth`는 `domain`·`ports`·`application`·`infrastructure`·`presentation`으로 나눈다.
 
 인프라 담당
 - BE는 브라우저가 쓰는 공개 호스트의 경로(`/fit-<env>-photos/`)로 presigned URL을 서명해야 한다(인프라 5.2절, 12.5절 #2). app env 계약에는 내부 주소 `S3_ENDPOINT`뿐인데 공개 호스트는 어떤 키로 받나요?
@@ -244,8 +243,6 @@ FE 공통 담당
 - 관리자 도구(Appsmith)는 관리자 API를 부르나요, DB에 직접 붙나요?
 
 ### 리뷰 담당이 준비할 것
-
-- 1차 후속의 첫 영속성 MR: Testcontainers 의존성을 `be/build.gradle`에 넣고(인프라 BE 계약 #13) BE 팀을 리뷰어로 둔다(D-29).
 
 - Walking Skeleton 뒤 1차 선행 작업: 다른 담당을 기다리지 않는 부분을 1차 작성 화면(`/place/review?id=`)에서 먼저 만든다. 방문일 정책(`Clock`, 범위), 재방문 의사·1인당 금액 입력, 근처 판정 함수와 7-E02, 닫기 확인(7-E03), 등록 실패 구분(7-E05, 7-E06)이 해당한다. 태그, 7-E01과 409, 사진은 각 질문이 풀린 뒤에 붙인다(D-4, D-6, D-12, D-31).
 - 1차 후속 전: 임시 태그 시드 표(특징 코드, 문구, sentiment, 동시 선택 불가 그룹, 화면 묶음, 업종 노출)를 Figma 7-01·7-02 문구와 PRD FR-10 초안으로 만든다(D-5, AC-11, AC-12, AC-15).
