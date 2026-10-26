@@ -4,13 +4,12 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.Base64;
-import java.util.Comparator;
 
 /**
  * 목록의 위치. 작성 시각 내림차순, 같으면 리뷰 id 내림차순 정렬에서 리뷰 하나를 가리킨다.
  *
  * <p>문자열 형식은 {@code <ISO-8601 작성 시각>|<리뷰 id>}를 패딩 없는 base64url로 인코딩한 값이다(검색 Mock과
- * 같은 방식). 저장소 구현과 관계없이 같아서 1차 후속에 DB로 바꿔도 FE가 가진 커서가 그대로 쓰인다(D-27).
+ * 같은 방식). 메모리 저장소 때와 같은 형식이라 DB로 바꾼 뒤에도 FE가 가진 커서가 그대로 쓰인다(D-35).
  *
  * @param createdAt 작성 시각
  * @param reviewId 리뷰 id
@@ -20,15 +19,10 @@ public record ReviewCursor(
 		long reviewId
 ) {
 
-	/** 최신순. 작성 시각 내림차순, 같으면 리뷰 id 내림차순이다. */
-	public static final Comparator<ReviewCursor> NEWEST_FIRST = Comparator.comparing(ReviewCursor::createdAt)
-			.thenComparingLong(ReviewCursor::reviewId)
-			.reversed();
-
 	private static final char SEPARATOR = '|';
 
-	public static ReviewCursor of(StoredReview review) {
-		return new ReviewCursor(review.createdAt(), review.reviewId());
+	public static ReviewCursor of(Review review) {
+		return new ReviewCursor(review.getCreatedAt(), review.getReviewId());
 	}
 
 	public String encode() {

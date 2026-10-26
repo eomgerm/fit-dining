@@ -45,16 +45,4 @@ class ReviewCursorTest {
 		assertThatThrownBy(() -> ReviewCursor.decode(cursor)).isInstanceOf(InvalidReviewCursorException.class);
 	}
 
-	@Test
-	@DisplayName("최신순정렬_작성시각이같으면_리뷰id가큰쪽이먼저다")
-	void newestFirst_sameCreatedAt_higherIdFirst() {
-		Instant at = Instant.parse("2026-10-21T03:00:00Z");
-		ReviewCursor older = new ReviewCursor(at.minusSeconds(1), 9);
-		ReviewCursor lowerId = new ReviewCursor(at, 1);
-		ReviewCursor higherId = new ReviewCursor(at, 2);
-
-		assertThat(ReviewCursor.NEWEST_FIRST.compare(higherId, lowerId)).isNegative();
-		assertThat(ReviewCursor.NEWEST_FIRST.compare(lowerId, older)).isNegative();
-	}
-
 }

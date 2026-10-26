@@ -105,9 +105,8 @@ class AuthApplicationFlowTests extends PostgresTestSupport {
         }
         var response = client.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/places/1/reviews"))
                 .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString("{}")) .build(), HttpResponse.BodyHandlers.ofString());
-        assertNotEquals(401, response.statusCode());
-        assertNotEquals(403, response.statusCode());
-        assertNotEquals(405, response.statusCode());
+        // 리뷰 등록은 로그인이 필요하다(리뷰 D-35). Origin 검사(403)가 아니라 인증(401)으로 거절한다.
+        assertEquals(401, response.statusCode());
     }
 
 }

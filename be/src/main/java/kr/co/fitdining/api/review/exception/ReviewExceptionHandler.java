@@ -1,9 +1,11 @@
 package kr.co.fitdining.api.review.exception;
 
+import kr.co.fitdining.api.auth.domain.AuthFailure;
 import kr.co.fitdining.api.review.ReviewController;
 import kr.co.fitdining.api.review.store.InvalidReviewCursorException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -32,10 +34,24 @@ public class ReviewExceptionHandler {
 		return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "요청 형식이 올바르지 않아요.");
 	}
 
-	@ExceptionHandler(ReviewUnavailableException.class)
-	public ProblemDetail handleUnavailable() {
-		log.warn("Review store is not configured");
-		return ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, "지금은 리뷰를 쓸 수 없어요.");
+	/**
+	 * 인증 모듈의 처리기는 인증 API에만 걸려 있어 리뷰가 직접 바꾼다. FE가 토큰 만료를 알아보고 갱신하도록
+	 * 상태 코드와 {@code type}을 그대로 둔다.
+	 */
+	@ExceptionHandler(AuthFailure.class)
+	public ProblemDetail handleAuthFailure(AuthFailure failure) {
+		log.info("Rejected review request: reason=AuthFailure, status={}", failure.status());
+		ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatusCode.valueOf(failure.status()),
+				"로그인이 필요해요.");
+		if (failure.type() != null) {
+			problem.setType(failure.type());
+		}
+		return problem;
+	}
+
+	@ExceptionHandler(DuplicateReviewException.class)
+	public ProblemDetail handleDuplicate() {
+		return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "이 날짜에는 이미 리뷰를 남겼어요.");
 	}
 
 }
