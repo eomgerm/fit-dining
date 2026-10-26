@@ -61,6 +61,7 @@ def fail(messages, parse, **_):
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
+    gms.check_config()
     if os.environ.get("GMS_ENABLED") != "true":
         log.warning("GMS_ENABLED가 true가 아니라 직접 입력은 해석 대기로 남는다")
 

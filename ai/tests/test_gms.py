@@ -38,6 +38,52 @@ def test_disabled_sends_nothing(monkeypatch):
     assert seen == []
 
 
+def test_config_check_skipped_when_disabled(monkeypatch):
+    monkeypatch.setenv("GMS_ENABLED", "false")
+    monkeypatch.delenv("GMS_BASE_URL")
+    monkeypatch.delenv("GMS_API_KEY")
+    gms.check_config()
+
+
+def test_valid_config_passes():
+    gms.check_config()
+
+
+@pytest.mark.parametrize("name", ["GMS_BASE_URL", "GMS_API_KEY"])
+@pytest.mark.parametrize("value", [None, ""])
+def test_missing_setting_names_the_variable(monkeypatch, name, value):
+    if value is None:
+        monkeypatch.delenv(name)
+    else:
+        monkeypatch.setenv(name, value)
+    with pytest.raises(ValueError, match=name):
+        gms.check_config()
+
+
+@pytest.mark.parametrize("url", ["gms.example/v1", "ftp://gms.example/v1", "https://"])
+def test_bad_url_is_config_error(monkeypatch, url):
+    monkeypatch.setenv("GMS_BASE_URL", url)
+    with pytest.raises(ValueError, match="GMS_BASE_URL"):
+        gms.check_config()
+
+
+def test_call_raises_config_error_without_sending(monkeypatch):
+    # 설정 실수는 장애처럼 재시도·원문 보관으로 가려지지 않고 드러나야 한다
+    monkeypatch.setenv("GMS_BASE_URL", "gms.example/v1")
+    client, seen = client_with()
+    with pytest.raises(ValueError):
+        gms.call_json(MESSAGES, lambda d: d, client=client)
+    assert seen == []
+
+
+def test_config_error_does_not_leak_key(monkeypatch):
+    monkeypatch.setenv("GMS_API_KEY", "secret-key")
+    monkeypatch.setenv("GMS_BASE_URL", "nope")
+    with pytest.raises(ValueError) as e:
+        gms.check_config()
+    assert "secret-key" not in str(e.value)
+
+
 @pytest.mark.parametrize(
     "base", ["https://gms.example/v1", "https://gms.example/v1/chat/completions/"]
 )
