@@ -88,6 +88,7 @@ Fit Dining(Next.js SSR 프런트(PWA), Spring Boot 백엔드, OpenSearch 검색,
 | Modal | serverless GPU | AI 추론 전부(임베딩, 리랭커, 소형 LLM)와 FastAPI. A·B에는 AI 구성요소가 없다. 호출 쪽 계약(11.2절)은 인프라와 BE가 맡는다 |
 
 - **A의 CPU 크레딧:** baseline은 vCPU당 40%(2023-06-29 이후 생성한 인스턴스 기준)라서 지속 약 1.6 vCPU다. 초과분은 유휴 때 적립한 burst 용량을 쓰고, 오래 burst하면 적립분을 다 써서 다시 baseline(지속 가능 구간)으로 돌아간다 (확인: AWS 문서, 실측은 RB-09).
+- **A의 CPU 크레딧 실측(2026-10-27):** A는 SSAFY가 준 서버라 AWS 콘솔이 없다. 크레딧 잔액과 크레딧 모드(standard·unlimited)는 콘솔과 CloudWatch로만 보이고 인스턴스 메타데이터에도 해당 키가 없어 확인하지 못했다 (미확인). 서버 안에서는 인스턴스 유형 `t3.xlarge`(확인: 메타데이터)와 CPU steal(확인: A의 Prometheus `job=node`)을 읽는다. 최근 3일 steal은 평균 0.8%, 5분 평균의 최댓값 6.7%였고 같은 기간 CPU 사용률은 평균 5.8%, 5분 평균의 최댓값 42.9%였다. 부하가 낮은 동안 크레딧 때문에 제한된 징후는 없다. 다만 이 값은 크레딧 모드의 증거가 아니고, 크레딧이 바닥나 제한되면 steal로 보일 것이라는 것은 추정이며(미확인), 동시 사용자 100명 피크에서의 동작은 알려 주지 않는다. 그 부분은 경량 부하 시험과 RB-09로 본다. 알림은 `FitCpuHigh30m`(30분 평균 CPU 40% 초과, warning)뿐이고 steal 알림은 없다. steal은 Prometheus에서 `node_cpu_seconds_total{mode="steal"}`로 볼 수 있다.
 - **B의 성능:** T 계열이 아니라 고정 성능이다. burst 크레딧이 없다 (확인).
 
 ### 1.3 SSAFY 플랫폼 사실
@@ -100,6 +101,7 @@ Fit Dining(Next.js SSR 프런트(PWA), Spring Boot 백엔드, OpenSearch 검색,
 - **AWS·S3:** AWS 콘솔·IAM·S3 사용 흔적이 선배 팀 양쪽에 없다. S3는 쓸 수 없다고 가정한다.
 - **아웃바운드:** 제한이 없었다(Docker Hub, HuggingFace 등 접근 가능).
 - **공인 IP:** Lightsail의 기본 공인 IP는 stop/start하면 바뀌고, 정적 IP는 인스턴스에 붙여 두면 무료다 (확인: AWS 문서). EC2의 공인 IP도 Elastic IP가 없으면 stop/start로 바뀐다. `remote_ip` 허용, 금고 전송, DNS가 이 IP에 기대므로 인스턴스는 멈추지 않고 M0에서 둘 다 고정 IP를 붙인다.
+- **A의 공인 IP 실측(2026-10-27, 위험 19):** 인스턴스 메타데이터(IMDSv2)에서 `t3.xlarge`(온디맨드, ap-northeast-2a)와 공인 IP `3.35.170.47`을 읽었고, `PROD_HOST`와 `DEV_HOST`의 A 레코드(TTL 600초)도 같은 IP를 가리킨다 (확인). 이 IP가 Elastic IP인지는 확인하지 못했다 (미확인). A는 SSAFY가 준 서버라 콘솔이 없고, 메타데이터의 `public-ipv4`와 `ipv4-associations`는 자동으로 받은 IP에도 같은 값을 주며 Elastic IP 여부를 알려 주는 키가 없다. Elastic IP가 아니면 stop/start 때 IP가 바뀐다. 이 IP를 박아 둔 곳은 B의 금고 계정 `from="3.35.170.47"`과 fail2ban `ignoreip`, 가비아의 A 레코드다 (확인: 2026-10-27 B). B의 클라우드 방화벽에 A의 IP가 들어 있는지는 확인하지 못했다 (미확인). 대체 수단은 세 가지다. (1) 인스턴스를 멈추지 않는다. (2) IP나 DNS가 어긋나면 B의 프로브가 `https://<PROD_HOST>/healthz`와 `/`에서 2분 넘게 200을 못 받아 `FitExternalDown`(critical)이 울린다. (3) IP가 바뀌면 금고 전송이 `from=`에 막혀 pg 백업이 8시간 넘게 안 들어오고 `FitVaultStale`(critical)이 울린다. 복구는 가비아에서 A 레코드를 새 IP로 고치고(TTL 600초) B의 금고 `from=`와 fail2ban 허용 IP를 새 IP로 바꾸는 것이다.
 - **작업 방식:** 선배 팀에서 AI 에이전트는 EC2에 접속하지 못했다. 서버에서의 실행은 사람이 하고, 런북은 값을 출력하지 않는 확인 명령을 포함한다.
 - **Docker Engine 29:** 최소 API 버전이 1.44로 올라 구버전 클라이언트(Traefik, Testcontainers, docker-java 계열)를 거부한다 (확인). 29.3에서 최소 API가 낮아졌다는 보고는 단일 출처라 (미확인).
 - **서버를 받아야 아는 것:** 스펙, 스왑, 디스크, Docker 버전.
@@ -994,7 +996,7 @@ AI 팀과 M1 전에 합의한다. FastAPI는 Modal에서 돌고 A·B에는 AI �
 | 16 | prod·dev 쿠키가 겹침 | 호스트를 나누고 쿠키에 `Domain`을 쓰지 않는다(5.4절, BE #21, 12.5절 #9) |
 | 17 | Let's Encrypt 발급 실패나 한도 | 우리 도메인만의 한도라 다른 팀과 나누지 않는다. 운영에서 `acme_ca` 미지정으로 ZeroSSL 폴백 유지, M1 첫날 발급, `caddy_data` 즉시 백업 |
 | 18 | 유료 Modal 엔드포인트 남용 | 프록시 인증, 사용자·IP별 속도 제한, 질의 길이 상한, 전역 예산(폴백), 지출 한도(11.2절) |
-| 19 | stop/start로 공인 IP 변경 | A 정적 IP·B Elastic IP 부착, 인스턴스 stop 금지(1.3절) |
+| 19 | stop/start로 공인 IP 변경, A의 CPU 크레딧 소진(A는 콘솔 없이 확인하지 못한다) | 인스턴스 stop 금지(1.3절). A의 Elastic IP 여부와 크레딧 모드는 확인하지 못했고, 확인한 값과 대체 감시(B의 `FitExternalDown`·`FitVaultStale`, `FitCpuHigh30m`, steal 지표)는 1.2절 CPU 크레딧 실측과 1.3절 공인 IP 실측에 있다. B는 Elastic IP 부착 |
 | 20 | MR이 몰려 verify 큐가 길어지고 병합 순서가 꼬임 | fast-forward 직렬 병합, 파이프라인 `timeout`, 작은 MR 우선(10.8절) |
 | 21 | 옛 SHA가 나중에 배포됨 | `oldest_first`, outdated 배포 보호, `deploy.sh` 다운그레이드 가드(6.2·6.4절) |
 | 22 | `develop`의 미완성 코드가 prod로 승격됨 | `develop`은 항상 배포 가능, 미완성은 `*_ENABLED` 스위치 뒤(10.8절) |
