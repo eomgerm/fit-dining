@@ -421,3 +421,21 @@ V2에서 `auth_users.deleted_at` 및 활성 이메일·닉네임 부분 유일 �
 소셜 통합 (2026-10-27): V1 → V2(취향·soft delete) → V3 순서로 적용한다. V2의 활성 이메일·닉네임 부분 유일 인덱스와 deleted_at을 유지한다. 탈퇴 트랜잭션에서 auth_social_accounts 연결과 취향을 삭제하고 RT를 폐기한다. 같은 소셜 식별자로 돌아오면 /signup/social에서 새 계정으로 가입하며 탈퇴 계정의 닉네임도 다시 사용할 수 있다. 남아 있는 탈퇴 계정 연결은 기존 activeUser 판정으로 로그인을 거부한다.
 
 POST /api/auth/social/signup은 이메일 가입과 같은 선택 preferences 타입·검증·저장을 사용한다. FE는 sessionStorage의 온보딩 답변을 읽어 전달하고 성공 후에만 삭제한다. 취향 생략 시 행을 만들지 않는다. 소셜 가입 응답도 userId를 포함하는 TokenResponse이며 기존 계정 콜백은 JSON 대신 RT 쿠키와 홈(/) 리다이렉트를 반환한다.
+
+## 인증 간소 모드 (local·dev)
+
+`AUTH_SIMPLE_ENABLED=true`로 켠다(기본 false). prod는 간소 모드와 값이 있는 `AUTH_DEV_KEY`를 거부한다.
+local은 APP_ENV가 없고 dev/prod/migrate 프로필도 없는 경우다. local에서만 Origin 검사를 생략하고 JWT_SECRET이 비면 고정 개발 서명 키를 쓴다.
+dev 서버는 실제 JWT_SECRET, Origin 검사, AUTH_DEV_KEY와 AUTH_DEMO_PASSWORD가 필수다.
+
+이메일·소셜 요청 제한과 시도 기록을 생략하고 BCrypt cost 4를 사용한다. 모르는 계정의 dummy hash를 만들거나 비교하지 않는다.
+AT는 12시간, 세션은 30일이다. 사용한 RT는 만료 전까지 같은 family로 재발급할 수 있고 재사용 보안 이벤트를 남기지 않는다. logout으로 폐기한 RT는 거부한다.
+간소 모드에서 받은 RT는 Strict로 바꿔도 만료(30일)까지 유효하다. 확인하려면 로그아웃 후 다시 로그인한다.
+데모 기본 계정은 `dev@fitdining.local`, 닉네임 `개발자`, local 기본 비밀번호는 `fitdining-dev1`이다. AUTH_DEMO_EMAIL/PASSWORD/NICKNAME으로 덮어쓴다.
+
+`POST /api/auth/dev/token`은 간소 모드에서만 등록된다. 선택 본문 `{"email":"existing@example.com"}`이 없으면 데모 계정을 쓴다.
+AUTH_DEV_KEY를 X-Dev-Key 헤더에 전달한다(local에서 키 미설정 시 생략 가능). 이 경로는 Origin 검사에서 제외된다.
+성공 시 일반 TokenResponse와 기존 정책의 RT 쿠키를 반환하며 키 오류는 403, 없는 계정은 404다.
+발급한 AT를 `Authorization: Bearer <AT>`로 `/api/auth/me`와 보호 API에 사용한다.
+
+prod 동작 확인 시 dev에서 AUTH_SIMPLE_ENABLED=false로 재시작하여 21번째 시도 429, RT 재사용 시 family 폐기, 30분 AT 수명과 Origin 검사를 확인한다.

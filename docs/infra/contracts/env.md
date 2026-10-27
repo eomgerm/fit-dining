@@ -51,6 +51,9 @@
 | `JWT_SECRET` | app | O | 비밀. 서명 방식은 BE 팀이 정한다 |
 | `AUTH_FRONTEND_ORIGIN` | app | O | 인증 API(`/api/auth/**`)의 POST가 우리 화면에서 온 것인지 가르는 기준 출처(CSRF 방어). 브라우저가 붙이는 `Origin` 헤더와 정확히 같아야 하므로 경로와 끝 `/` 없이 `https://호스트`만 쓴다. prod는 `https://<PROD_HOST>`, dev는 `https://<DEV_HOST>`이고 둘 다 443이라 포트를 붙이지 않는다. 환경마다 달라 기본값이 없고, 값이 형식에 맞지 않으면 BE가 기동을 거부한다(BE 계약 #8). 로컬 개발은 이 계약 밖이고 `be/.env`에서 `http://localhost:3000`을 쓴다 |
 | `AUTH_COOKIE_SECURE` | app | O | RT 쿠키의 `Secure` 속성 여부(`true` 또는 `false`). dev와 prod 서버는 Caddy 뒤 HTTPS라 둘 다 `true`다. 로컬(`http://localhost`)만 `false`다. 기본값이 없고 `true`·`false`가 아닌 값은 BE가 기동을 거부한다(BE 계약 #8, 쿠키는 #21) |
+| `AUTH_SIMPLE_ENABLED` | app | X | 인증 간소 모드 스위치. 기본 `false`, local·dev에서만 허용하며 prod는 `true`이면 기동을 거부한다 |
+| `AUTH_DEV_KEY` | app | X | 개발 토큰 발급 키. 비밀. 간소 모드 dev 서버에서 32자 이상 필수이며 local은 선택이고 길이 제한이 없다. prod는 값이 있으면 기동을 거부한다 |
+| `AUTH_DEMO_PASSWORD` | app | X | 데모 계정 비밀번호. 비밀. 간소 모드 dev 서버에서 필수이며 local 기본값은 `fitdining-dev1`이다 |
 | `AUTH_GOOGLE_CLIENT_ID` | app | X | 구글 소셜 로그인의 OAuth 클라이언트 ID. `AUTH_GOOGLE_CLIENT_SECRET`과 한 쌍이다(위 규칙). 제공자 콘솔에 콜백 `https://<호스트>/api/auth/oauth/google/callback`을 등록해야 한다. 호스트는 `AUTH_FRONTEND_ORIGIN`과 같다 |
 | `AUTH_GOOGLE_CLIENT_SECRET` | app | X | 구글 OAuth 클라이언트 시크릿. 비밀 |
 | `AUTH_KAKAO_CLIENT_ID` | app | X | 카카오 로그인의 REST API 키. `AUTH_KAKAO_CLIENT_SECRET`과 한 쌍이다. 콜백 `https://<호스트>/api/auth/oauth/kakao/callback`을 등록한다 |
@@ -143,3 +146,21 @@
 | `naverMapClientId` | X | 네이버 지도 Client ID |
 
 FE는 `APP_ENV`, `POSTHOG_KEY`, `POSTHOG_HOST`, `PUSH_PUBLIC_KEY`, `NAVER_MAP_CLIENT_ID`를 런타임에 읽어 위 키로 돌려준다(`fe` 그룹).
+
+
+## 인증 간소 모드 (local·dev)
+
+위 키 표의 `AUTH_SIMPLE_ENABLED`로 켠다.
+local은 APP_ENV가 없고 dev/prod/migrate 프로필도 없는 경우다. local에서만 Origin 검사를 생략하고 JWT_SECRET이 비면 고정 개발 서명 키를 쓴다.
+dev 서버는 실제 JWT_SECRET과 Origin 검사를 유지한다. 개발 토큰 키와 데모 비밀번호 조건은 위 키 표를 따른다.
+
+이메일·소셜 요청 제한과 시도 기록을 생략하고 BCrypt cost 4를 사용한다. 모르는 계정의 dummy hash를 만들거나 비교하지 않는다.
+AT는 12시간, 세션은 30일이다. 사용한 RT는 만료 전까지 같은 family로 재발급할 수 있고 재사용 보안 이벤트를 남기지 않는다. logout으로 폐기한 RT는 거부한다.
+데모 기본 계정은 `dev@fitdining.local`, 닉네임 `개발자`다. AUTH_DEMO_EMAIL/PASSWORD/NICKNAME으로 덮어쓴다.
+
+`POST /api/auth/dev/token`은 간소 모드에서만 등록된다. 선택 본문 `{"email":"existing@example.com"}`이 없으면 데모 계정을 쓴다.
+AUTH_DEV_KEY를 X-Dev-Key 헤더에 전달한다(local에서 키 미설정 시 생략 가능). 이 경로는 Origin 검사에서 제외된다.
+성공 시 일반 TokenResponse와 기존 정책의 RT 쿠키를 반환하며 키 오류는 403, 없는 계정은 404다.
+발급한 AT를 `Authorization: Bearer <AT>`로 `/api/auth/me`와 보호 API에 사용한다.
+
+prod 동작 확인 시 dev에서 AUTH_SIMPLE_ENABLED=false로 재시작하여 21번째 시도 429, RT 재사용 시 family 폐기, 30분 AT 수명과 Origin 검사를 확인한다.
