@@ -25,8 +25,7 @@ import psycopg
 
 from fit_ai import embedding
 from fit_ai.features import FEATURES
-from fit_ai.match.conditions import CONDITIONS
-from fit_ai.match.place import CATEGORY_NAMES, STATION_NAMES
+from fit_ai.match.conditions import CATEGORY_NAMES, CONDITIONS, STATION_NAMES
 
 DEFAULT_DATA = Path.home() / ".cache" / "fitdining-ai" / "devdb"
 REPO = Path(__file__).resolve().parents[2]

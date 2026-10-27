@@ -1,33 +1,45 @@
 """AI API를 확인한다.
 
-검색 응답 모양(BE 카드 계약), 해석 결과로 만든 거르기 조건, 폴백 표시, 결과 없음,
-준비 안 됨·혼잡·입력 오류의 ProblemDetail, 로그에 요청문이 남지 않는지를 본다.
-공유 모듈 `fit_ai.embedding`, `fit_ai.gms`는 가짜로 바꿔 끼우고 장소 저장소도 가짜다.
+요청을 검색 요청으로 바꾸는지, 검색 결과를 응답 모양(BE 카드 계약)과 폴백 표시로
+바꾸는지, 준비 안 됨·혼잡·입력 오류·검색 실패의 ProblemDetail, 로그에 요청문이 남지
+않는지를 본다. 검색 자체는 tests/match/test_search.py에서 보고, 여기서는 `search`를
+정해 둔 결과를 내는 가짜로 바꿔 끼운다.
 """
 
 import json
 import logging
-import re
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 
 import pytest
 from fastapi.testclient import TestClient
 
 from fit_ai import embedding
-from fit_ai.match import interpretation
-from fit_ai.match.candidates import (
-    Candidate,
-    Found,
-    MapBounds,
-    PlaceFilter,
-    StoreError,
+from fit_ai.match.candidates import Found, MapBounds, PlaceFilter, StoreError
+from fit_ai.match.cards import Card, Reason, ReasonTag, ScoreItem, Source
+from fit_ai.match.interpretation import Conditions, Interpretation
+from fit_ai.match.search import (
+    EmbeddingError,
+    EmptyReason,
+    Fallback,
+    SearchRequest,
+    SearchResult,
+    SearchTrace,
 )
-from fit_ai.match.place import ConditionEvidence, Place, PlaceInfo
+from fit_ai.match.taste import TasteProfile
+from server import app as server_app
 from server.app import Dependencies, create_app
 
 QUERY_TEXT = "역삼역 조용한 술집 찾아요"
 
-CONDITIONS = {
+CONDITIONS = Conditions(
+    text=QUERY_TEXT,
+    embedding_text="역삼역 조용한 술집",
+    codes=("QUIET",),
+    category_group="BAR",
+    station="YEOKSAM",
+)
+
+CONDITIONS_BODY = {
     "text": QUERY_TEXT,
     "embeddingText": "역삼역 조용한 술집",
     "codes": ["QUIET"],
@@ -36,85 +48,86 @@ CONDITIONS = {
     "nearby": False,
 }
 
-INTERPRETED = {
-    "text": None,
-    "embedding_text": "역삼역 조용한 술집",
-    "codes": ["QUIET"],
-    "category_group": "BAR",
-    "station": "YEOKSAM",
-    "nearby": False,
-    "change_summary": None,
+TASTE_BODY = {
+    "schema": "taste-profile/v0",
+    "user_id": "u1",
+    "features": [{"code": "QUIET", "layer": "axis", "like": True, "weight": 1}],
 }
+
+CARD = Card(
+    place_id=2,
+    score=100,
+    labels=("조용해요", "술집"),
+    reasons=(
+        Reason(
+            '리뷰에서 "조용해요"라는 말이 많아요',
+            (ReasonTag(Source.REQUEST, "조용해요"),),
+        ),
+    ),
+    score_items=(ScoreItem("QUIET", Source.REQUEST, "조용해요", True, 5),),
+)
 
 MODELS = {
     "embedding": f"{embedding.MODEL_ID}@{embedding.REVISION}",
     "llm": "gpt-4o-mini",
 }
 
-FakeGms = Callable[[Callable[[list[dict]], object]], list[list[dict]]]
 
-
-def make_candidate(place_id: int, similarity: float) -> Candidate:
-    """조용함 근거가 충분한 역삼역 술집 후보"""
-    place = Place(
-        place_id=place_id,
-        info=PlaceInfo(place_id, "BAR", "YEOKSAM", {"PARKING": None}),
-        summary=f"설명 {place_id}",
-        conditions={"QUIET": ConditionEvidence(pos=5)},
+def make_result(
+    cards: tuple[Card, ...] = (CARD,),
+    conditions: Conditions = CONDITIONS,
+    change_summary: str | None = None,
+    interpret_error: str | None = None,
+    fallback: Fallback | None = None,
+    empty: EmptyReason | None = None,
+    invalid: tuple[int, ...] = (),
+) -> SearchResult:
+    """검색 결과. 기본은 LLM으로 해석하고 정렬해 카드 한 장이 나온 결과다."""
+    failed = fallback is Fallback.LLM_FAILED
+    ranked_by_llm = bool(cards) and fallback is None
+    trace = SearchTrace(
+        embed_seconds=0.1,
+        store_seconds=0.01,
+        candidates=len(cards),
+        fallback=fallback,
+        rank_llm_error="후보 밖 번호다: 9" if failed else None,
+        rank_llm_raw='{"ranking": [{"id": 1}]}' if ranked_by_llm else None,
+        rank_llm_seconds=1.0 if failed or ranked_by_llm else None,
     )
-    return Candidate(place, similarity)
+    return SearchResult(
+        interpretation=Interpretation(conditions, change_summary, interpret_error, 1.0),
+        cards=cards,
+        empty_reason=empty,
+        invalid_place_ids=invalid,
+        trace=trace,
+    )
 
 
-CANDIDATES = (make_candidate(1, 0.8), make_candidate(2, 0.6))
+class FakeSearch:
+    """`search` 대신 정해 둔 결과를 내거나 예외를 던진다. 받은 인자를 남긴다."""
 
+    def __init__(self) -> None:
+        self.outcome: SearchResult | Exception = make_result()
+        self.calls: list[tuple[SearchRequest, object, float]] = []
 
-def answers(
-    fail_interpret: bool = False, fail_ranking: bool = False, **interpreted: object
-) -> Callable[[list[dict]], object]:
-    """가짜 GMS 답. 해석에는 정해 둔 조건으로, 정렬에는 장소 id가 큰 순서로 답한다."""
-
-    def answer(messages: list[dict]) -> object:
-        system, user = messages[0]["content"], messages[1]["content"]
-        if system == interpretation.SYSTEM_PROMPT:
-            return None if fail_interpret else {**INTERPRETED, **interpreted}
-        if fail_ranking:
-            return None
-        numbers = {
-            int(place_id): int(number)
-            for number, place_id in re.findall(
-                r"^\[(\d+)\] .* \| 설명 (\d+)(?: \| .*)?$", user, re.MULTILINE
-            )
-        }
-        return {
-            "ranking": [
-                {"id": numbers[place_id]} for place_id in sorted(numbers, reverse=True)
-            ]
-        }
-
-    return answer
+    def __call__(
+        self, request: SearchRequest, store: object, timeout: float = 5.0
+    ) -> SearchResult:
+        self.calls.append((request, store, timeout))
+        if isinstance(self.outcome, Exception):
+            raise self.outcome
+        return self.outcome
 
 
 class FakeStore:
-    """정해 둔 후보를 돌려주고 받은 거르기 조건과 k를 남긴다."""
+    """상태 확인에 쓰는 장소 저장소. 검색은 가짜 `search`가 하므로 `find`는 쓰지 않는다."""
 
-    def __init__(
-        self,
-        candidates: tuple[Candidate, ...] = CANDIDATES,
-        invalid: tuple[int, ...] = (),
-        fail: bool = False,
-        mismatched: int = 0,
-    ) -> None:
-        self.candidates = candidates
-        self.invalid = invalid
+    def __init__(self, fail: bool = False, mismatched: int = 0) -> None:
         self.fail = fail
         self.mismatched_count = mismatched
-        self.calls: list[tuple[PlaceFilter, int]] = []
 
     def find(self, place_filter: PlaceFilter, query: Sequence[float], k: int) -> Found:
-        if self.fail:
-            raise StoreError("장소 저장소를 읽지 못했다: OperationalError")
-        self.calls.append((place_filter, k))
-        return Found(self.candidates[:k], self.invalid)
+        raise NotImplementedError
 
     def mismatched(self) -> int:
         if self.fail:
@@ -123,23 +136,10 @@ class FakeStore:
 
 
 @pytest.fixture(autouse=True)
-def encoder(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
-    """공유 모듈의 요청문 인코딩을 같은 벡터를 내는 가짜로 바꾼다."""
-    seen: list[list[str]] = []
-
-    def encode_queries(texts: list[str]) -> list[list[float]]:
-        seen.append(texts)
-        return [[1.0, 0.0] for _ in texts]
-
-    monkeypatch.setattr(embedding, "encode_queries", encode_queries)
-    return seen
-
-
-@pytest.fixture
-def gms(fake_gms: FakeGms) -> FakeGms:
-    """기본은 해석과 정렬이 모두 성공하는 가짜 GMS다. 테스트에서 다시 바꿔 끼울 수 있다."""
-    fake_gms(answers())
-    return fake_gms
+def searched(monkeypatch: pytest.MonkeyPatch) -> FakeSearch:
+    fake = FakeSearch()
+    monkeypatch.setattr(server_app, "search", fake)
+    return fake
 
 
 def client(**overrides: object) -> TestClient:
@@ -154,7 +154,6 @@ def post(app: TestClient, **body: object) -> dict:
     return response.json()
 
 
-@pytest.mark.usefixtures("gms")
 class TestSearch:
     """검색 응답"""
 
@@ -162,17 +161,15 @@ class TestSearch:
         """검색_새검색이면_조건과BE카드모양과모델버전을돌려준다"""
         data = post(client())
 
-        assert data["conditions"] == CONDITIONS
+        assert data["conditions"] == CONDITIONS_BODY
         assert data["nearby"] is False
         assert data["interpretedBy"] == "LLM"
         assert data["rankedBy"] == "LLM"
         assert data["fallbacks"] == []
         assert data["models"] == MODELS
-        # 카드 id는 40 프로필의 place_id가 아니라 BE 장소 id다.
-        assert [item["placeId"] for item in data["items"]] == [2, 1]
         card = data["items"][0]
         assert set(card) == {"placeId", "score", "labels", "reasons", "scoreItems"}
-        assert card["score"] == 100
+        assert (card["placeId"], card["score"]) == (2, 100)
         assert card["scoreItems"][0] == {
             "source": "REQUEST",
             "label": "조용해요",
@@ -184,80 +181,57 @@ class TestSearch:
         assert "changeSummary" not in data
         assert "emptyReason" not in data
 
-    def test_encodes_embedding_text(self, encoder: list[list[str]]) -> None:
-        """검색_요청문이아니라해석이낸벡터용문장을_공유모듈로인코딩한다"""
-        post(client())
-
-        assert encoder == [["역삼역 조용한 술집"]]
-
-    def test_filter_from_conditions(self, gms: FakeGms) -> None:
-        """검색_해석한업종역시설로_저장소에서20곳을뽑는다"""
-        gms(answers(codes=["QUIET", "PARKING"]))
+    def test_request_passed_to_search(self, searched: FakeSearch) -> None:
+        """검색_요청본문을_검색요청으로바꿔저장소와GMS대기시간과함께넘긴다"""
         store = FakeStore()
 
-        post(client(store=store))
+        post(
+            client(store=store, gms_timeout=3.0),
+            previousConditions=CONDITIONS_BODY,
+            mapBounds={"swLat": 37.49, "neLng": 127.04},
+            tasteProfile=TASTE_BODY,
+        )
 
-        assert store.calls == [
+        assert searched.calls == [
             (
-                PlaceFilter(
-                    category_group="BAR", station="YEOKSAM", facilities=("PARKING",)
+                SearchRequest(
+                    QUERY_TEXT,
+                    previous=CONDITIONS,
+                    taste=TasteProfile.from_dict(TASTE_BODY),
+                    bounds=MapBounds(sw_lat=37.49, ne_lng=127.04),
                 ),
-                20,
+                store,
+                3.0,
             )
         ]
 
-    def test_map_bounds_replace_station(self) -> None:
-        """검색_지도영역이있으면_역대신좌표로거른다"""
-        store = FakeStore()
+    def test_follow_up(self, searched: FakeSearch) -> None:
+        """검색_후속이면_changeSummary를준다"""
+        searched.outcome = make_result(change_summary="넓은 곳을 더했어요")
 
-        post(client(store=store), mapBounds={"swLat": 37.49, "neLng": 127.04})
+        data = post(client(), query="넓은 곳", previousConditions=CONDITIONS_BODY)
 
-        place_filter, _ = store.calls[0]
-        assert place_filter.station is None
-        assert place_filter.bounds == MapBounds(sw_lat=37.49, ne_lng=127.04)
-
-    def test_nearby(self, gms: FakeGms) -> None:
-        """검색_근처검색이면_역으로거르지않고100곳을코드등급과유사도로정렬한다"""
-        calls = gms(answers(nearby=True, station=None))
-        store = FakeStore()
-
-        data = post(client(store=store))
-
-        place_filter, k = store.calls[0]
-        assert (place_filter.station, k) == (None, 100)
-        assert data["nearby"] is True
-        assert data["rankedBy"] == "SIMILARITY"
-        # 근처 검색은 처음부터 LLM 없이 정렬하므로 폴백이 아니다.
-        assert data["fallbacks"] == []
-        assert len(calls) == 1
-
-    def test_follow_up(self, gms: FakeGms) -> None:
-        """검색_이전조건이있으면_후속으로합치고changeSummary를준다"""
-        gms(
-            answers(
-                text="역삼역 조용하고 넓은 술집", change_summary="넓은 곳을 더했어요"
-            )
-        )
-
-        data = post(client(), query="넓은 곳", previousConditions=CONDITIONS)
-
-        assert data["conditions"]["text"] == "역삼역 조용하고 넓은 술집"
         assert data["changeSummary"] == "넓은 곳을 더했어요"
         assert data["fallbacks"] == []
 
     @pytest.mark.parametrize(
-        "previous", [{}, {"text": "x"}, {**CONDITIONS, "codes": "QUIET"}]
+        "previous", [{}, {"text": "x"}, {**CONDITIONS_BODY, "codes": "QUIET"}]
     )
-    def test_invalid_previous_is_new_search(self, previous: dict) -> None:
-        """검색_이전조건을읽지못하면_새검색으로보고PREVIOUS_INVALID를담는다"""
+    def test_invalid_previous_is_new_search(
+        self, searched: FakeSearch, previous: dict
+    ) -> None:
+        """검색_이전조건을읽지못하면_새검색으로넘기고PREVIOUS_INVALID를담는다"""
         data = post(client(), previousConditions=previous)
 
+        assert searched.calls[0][0].previous is None
         assert data["fallbacks"] == ["PREVIOUS_INVALID"]
-        assert "changeSummary" not in data
 
-    def test_llm_down(self, gms: FakeGms) -> None:
-        """검색_GMS가꺼져있거나모두실패하면_규칙해석과유사도정렬로답한다"""
-        gms(answers(fail_interpret=True, fail_ranking=True))
+    def test_llm_down(self, searched: FakeSearch) -> None:
+        """검색_해석과정렬LLM이모두실패하면_규칙과유사도로표시하고LLM모델을빼고답한다"""
+        searched.outcome = make_result(
+            interpret_error="GMS가 꺼져 있거나 호출이 실패했다",
+            fallback=Fallback.LLM_FAILED,
+        )
 
         data = post(client())
 
@@ -265,12 +239,10 @@ class TestSearch:
         assert data["rankedBy"] == "SIMILARITY"
         assert data["fallbacks"] == ["INTERPRET_LLM_FAILED", "RANK_LLM_FAILED"]
         assert data["models"] == {"embedding": MODELS["embedding"]}
-        assert data["conditions"]["codes"] == ["QUIET"]
-        assert [item["placeId"] for item in data["items"]] == [1, 2]
 
-    def test_rank_llm_failure_only(self, gms: FakeGms) -> None:
-        """검색_정렬LLM만실패하면_유사도로정렬하고RANK_LLM_FAILED만담는다"""
-        gms(answers(fail_ranking=True))
+    def test_rank_llm_failure_only(self, searched: FakeSearch) -> None:
+        """검색_정렬LLM만실패하면_RANK_LLM_FAILED만담고LLM모델은남긴다"""
+        searched.outcome = make_result(fallback=Fallback.LLM_FAILED)
 
         data = post(client())
 
@@ -278,6 +250,19 @@ class TestSearch:
         assert data["rankedBy"] == "SIMILARITY"
         assert data["fallbacks"] == ["RANK_LLM_FAILED"]
         assert data["models"]["llm"] == "gpt-4o-mini"
+
+    def test_nearby(self, searched: FakeSearch) -> None:
+        """검색_근처검색이면_유사도로정렬했다고표시하지만폴백은아니다"""
+        searched.outcome = make_result(
+            conditions=Conditions("근처 카페", "근처 카페", (), "CAFE", nearby=True),
+            fallback=Fallback.NEARBY,
+        )
+
+        data = post(client())
+
+        assert data["nearby"] is True
+        assert data["rankedBy"] == "SIMILARITY"
+        assert data["fallbacks"] == []
 
     @pytest.mark.parametrize(
         "taste",
@@ -294,24 +279,35 @@ class TestSearch:
             },
         ],
     )
-    def test_invalid_taste_profile_degrades(self, taste: dict) -> None:
+    def test_invalid_taste_profile_degrades(
+        self, searched: FakeSearch, taste: dict
+    ) -> None:
         """검색_취향프로필을읽지못하면_취향없이검색하고TASTE_INVALID를담는다"""
         data = post(client(), tasteProfile=taste)
 
+        assert searched.calls[0][0].taste is None
         assert data["fallbacks"] == ["TASTE_INVALID"]
 
-    def test_unreadable_profiles_reported(self) -> None:
+    def test_unreadable_profiles_reported(self, searched: FakeSearch) -> None:
         """검색_저장소가읽지못한프로필이있으면_PROFILE_INVALID를담는다"""
-        data = post(client(store=FakeStore(invalid=(7,))))
+        searched.outcome = make_result(invalid=(7,))
+
+        data = post(client())
 
         assert data["fallbacks"] == ["PROFILE_INVALID"]
-        assert len(data["items"]) == 2
+        assert len(data["items"]) == 1
 
-    def test_no_candidates(self, gms: FakeGms) -> None:
-        """검색_뽑힌장소가없으면_빈목록과결과없음이유를돌려준다"""
-        gms(answers(codes=["PARKING"]))
+    def test_no_candidates(self, searched: FakeSearch) -> None:
+        """검색_뽑힌장소가없으면_빈목록과결과없음이유를돌려주고정렬방법은뺀다"""
+        searched.outcome = make_result(
+            cards=(),
+            empty=EmptyReason(
+                "이 지역 술집 중 주차할 수 있는 곳이 없어요",
+                "주차 조건을 빼고 다시 찾아 보세요",
+            ),
+        )
 
-        data = post(client(store=FakeStore(candidates=())), mapBounds={"swLat": 37.4})
+        data = post(client())
 
         assert data["items"] == []
         assert "rankedBy" not in data
@@ -321,7 +317,6 @@ class TestSearch:
         }
 
 
-@pytest.mark.usefixtures("gms")
 class TestErrors:
     """오류 응답"""
 
@@ -337,26 +332,27 @@ class TestErrors:
             {"query": QUERY_TEXT, "tasteProfile": "QUIET"},
         ],
     )
-    def test_invalid_request_is_problem_400(self, body: dict) -> None:
-        """오류_요청형식이틀리면_입력을되풀이하지않는400ProblemDetail이다"""
+    def test_invalid_request_is_problem_400(
+        self, searched: FakeSearch, body: dict
+    ) -> None:
+        """오류_요청형식이틀리면_검색하지않고입력을되풀이하지않는400ProblemDetail이다"""
         response = client().post("/v1/search", json=body)
 
         assert response.status_code == 400
         assert response.headers["content-type"] == "application/problem+json"
         assert response.json()["code"] == "INVALID_REQUEST"
         assert QUERY_TEXT not in response.text
+        assert searched.calls == []
 
-    def test_embedding_not_ready(self, gms: FakeGms) -> None:
-        """오류_요청문인코더를올리지못했으면_GMS를부르지않고503이다"""
-        calls = gms(answers())
-
+    def test_embedding_not_ready(self, searched: FakeSearch) -> None:
+        """오류_요청문인코더를올리지못했으면_검색하지않고503이다"""
         response = client(embedding_ready=False).post(
             "/v1/search", json={"query": QUERY_TEXT}
         )
 
         assert response.status_code == 503
         assert response.json()["code"] == "EMBEDDING_UNAVAILABLE"
-        assert calls == []
+        assert searched.calls == []
 
     def test_no_store(self) -> None:
         """오류_장소저장소가없으면_503PLACES_UNAVAILABLE이다"""
@@ -365,27 +361,26 @@ class TestErrors:
         assert response.status_code == 503
         assert response.json()["code"] == "PLACES_UNAVAILABLE"
 
-    def test_embedding_failure(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """오류_요청문인코딩이실패하면_503EMBEDDING_UNAVAILABLE이다"""
-
-        def encode_queries(texts: list[str]) -> list[list[float]]:
-            raise RuntimeError("CUDA out of memory")
-
-        monkeypatch.setattr(embedding, "encode_queries", encode_queries)
+    @pytest.mark.parametrize(
+        ("error", "code"),
+        [
+            (EmbeddingError("RuntimeError"), "EMBEDDING_UNAVAILABLE"),
+            (
+                StoreError("장소 저장소를 읽지 못했다: OperationalError"),
+                "PLACES_UNAVAILABLE",
+            ),
+        ],
+    )
+    def test_search_failure(
+        self, searched: FakeSearch, error: Exception, code: str
+    ) -> None:
+        """오류_요청문인코딩이나장소저장소읽기가실패하면_503이다"""
+        searched.outcome = error
 
         response = client().post("/v1/search", json={"query": QUERY_TEXT})
 
         assert response.status_code == 503
-        assert response.json()["code"] == "EMBEDDING_UNAVAILABLE"
-
-    def test_store_failure(self) -> None:
-        """오류_장소저장소를읽지못하면_503PLACES_UNAVAILABLE이다"""
-        response = client(store=FakeStore(fail=True)).post(
-            "/v1/search", json={"query": QUERY_TEXT}
-        )
-
-        assert response.status_code == 503
-        assert response.json()["code"] == "PLACES_UNAVAILABLE"
+        assert response.json()["code"] == code
 
     def test_busy(self) -> None:
         """오류_동시처리상한에걸리면_503BUSY와Retry-After다"""
@@ -429,7 +424,6 @@ class TestHealth:
         assert response.json()["code"] == code
 
 
-@pytest.mark.usefixtures("gms")
 def test_logs_are_json_without_query(caplog: pytest.LogCaptureFixture) -> None:
     """로그_검색하면_JSON한줄을남기고요청문은넣지않는다"""
     caplog.set_level(logging.INFO, logger="server")
@@ -440,5 +434,6 @@ def test_logs_are_json_without_query(caplog: pytest.LogCaptureFixture) -> None:
     assert [event["event"] for event in events] == ["search"]
     assert events[0]["codes"] == ["QUIET"]
     assert events[0]["ranked_by"] == "LLM"
-    assert events[0]["candidates"] == 2
+    assert events[0]["candidates"] == 1
+    assert events[0]["rank_llm_raw"] == '{"ranking": [{"id": 1}]}'
     assert QUERY_TEXT not in caplog.text

@@ -1,4 +1,7 @@
-"""40(장소 특징 분석)이 만든 장소 프로필을 장소 정보와 합쳐 읽는다.
+"""장소. 40(장소 특징 분석)의 장소 프로필을 읽고 장소가 조건을 채우는지 판정한다.
+
+카드의 근거 항목(③)과 LLM 정렬의 등급 기준(②)이 같은 판정(`Place.judge`)을 쓴다.
+그래야 화면의 근거 항목과 핏 점수가 같은 근거를 말한다(docs/comparison/spec.md 4.3).
 
 비교는 장소 프로필을 만들지 않고 읽기만 한다. 장소 데이터는 AI가 들고 있지 않고
 검색마다 Postgres 뷰에서 거른 장소를 프로필째 읽는다(docs/comparison/api.md 5장).
@@ -7,7 +10,21 @@
 """
 
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Any
+
+from fit_ai.match.conditions import CONDITIONS, Layer
+
+
+class Verdict(StrEnum):
+    """조건 하나의 판정. 값은 LLM 입력에 쓰는 말이다."""
+
+    CONFIRMED = "확인"
+    """근거가 충분하거나 장소 정보에 있다고 나온다."""
+    CONTRARY = "반대"
+    """아니라는 리뷰가 더 많거나 장소 정보에 없다고 나온다."""
+    UNKNOWN = "모름"
+    """리뷰가 없거나 적어서 판단할 수 없다."""
 
 
 @dataclass(frozen=True)
@@ -22,6 +39,11 @@ class ConditionEvidence:
     pos: int = 0
     neg: int = 0
 
+    @property
+    def supported(self) -> bool:
+        """근거가 충분한지. 긍정 리뷰가 2개 이상이고 부정 리뷰의 2배 이상이면 True다."""
+        return self.pos >= 2 and self.pos >= 2 * self.neg
+
 
 NO_EVIDENCE = ConditionEvidence()
 """긍정·부정 리뷰가 모두 0개인 근거. 장소 프로필에 줄이 없는 조건은 이 값으로 본다."""
@@ -31,12 +53,6 @@ SCHEMA = "place-profile/v0"
 
 AXIS_OPPOSITES = {"QUIET": "LIVELY", "LIVELY": "QUIET"}
 """소음 축의 반대 극"""
-
-CATEGORY_NAMES = {"RESTAURANT": "식당", "CAFE": "카페", "BAR": "술집"}
-"""업종 코드의 화면 이름. BE `CategoryGroup`과 같다."""
-
-STATION_NAMES = {"GANGNAM": "강남역", "YEOKSAM": "역삼역", "SEOLLEUNG": "선릉역"}
-"""역 코드의 화면 이름. BE `Station`과 같다."""
 
 
 @dataclass(frozen=True)
@@ -84,6 +100,26 @@ class Place:
             조건의 근거. 프로필에 없는 조건이면 `NO_EVIDENCE`다.
         """
         return self.conditions.get(condition_id, NO_EVIDENCE)
+
+    def judge(self, condition_id: str) -> Verdict:
+        """조건을 채우는지 판정한다. 시설은 장소 정보를 먼저 보고 모르면 리뷰로 본다.
+
+        Args:
+            condition_id: 조건 id. `CONDITIONS`에 있는 id만 받는다.
+
+        Returns:
+            판정
+        """
+        if CONDITIONS[condition_id].layer is Layer.FACILITY:
+            known = self.info.facilities.get(condition_id)
+            if known is not None:
+                return Verdict.CONFIRMED if known else Verdict.CONTRARY
+        evidence = self.evidence(condition_id)
+        if evidence.supported:
+            return Verdict.CONFIRMED
+        if evidence.neg > evidence.pos:
+            return Verdict.CONTRARY
+        return Verdict.UNKNOWN
 
     @classmethod
     def from_dict(cls, data: dict[str, Any], info: PlaceInfo) -> "Place":

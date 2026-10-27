@@ -1,8 +1,8 @@
 """AI API(FastAPI). BE가 Modal 위의 이 앱을 검색마다 한 번 부른다.
 
-검색 한 번에 요청 해석, 요청문 인코딩, 거르기와 후보 뽑기(Postgres + pgvector),
-LLMRank 정렬, 카드 만들기를 차례로 한다. 앱은 장소 데이터를 들고 있지 않고
-검색마다 DB 뷰에서 읽는다. BE 요구(검색 spec의 카드 계약, BE 컨벤션의
+검색 자체(요청 해석부터 카드 만들기까지)는 `fit_ai.match.search`가 한다. 앱은 요청을
+검사해 검색에 넘기고, 결과를 응답 모양과 폴백 코드로 바꾸고, 로그를 남긴다. 앱은 장소
+데이터를 들고 있지 않고 검색마다 DB 뷰에서 읽는다. BE 요구(검색 spec의 카드 계약, BE 컨벤션의
 ProblemDetail)와 인프라 요구를 맞춘다. 인프라 요구는 design.md 12.2의 모델 버전·
 로그·서버 쪽 방어, 12.1 BE 계약 #17의 폴백 표시, contracts/metrics.md의 폴백
 지표다. 명세는 docs/comparison/api.md에 있다.
@@ -11,7 +11,6 @@ ProblemDetail)와 인프라 요구를 맞춘다. 인프라 요구는 design.md 1
 import json
 import logging
 import threading
-import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from http import HTTPStatus
@@ -24,17 +23,16 @@ from pydantic import ValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from fit_ai import embedding, gms
-from fit_ai.match.candidates import (
-    GENERAL_K,
-    NEARBY_K,
-    MapBounds,
-    PlaceFilter,
-    PlaceStore,
-    StoreError,
+from fit_ai.match.candidates import MapBounds, PlaceStore, StoreError
+from fit_ai.match.cards import Card
+from fit_ai.match.interpretation import Conditions
+from fit_ai.match.search import (
+    EmbeddingError,
+    Fallback,
+    SearchRequest,
+    SearchResult,
+    search,
 )
-from fit_ai.match.interpretation import Conditions, empty_reason, interpret
-from fit_ai.match.models import Card
-from fit_ai.match.search import Fallback, SearchRequest, search
 from fit_ai.match.taste import TasteProfile
 from server.schemas import (
     CardBody,
@@ -161,79 +159,33 @@ def _search(deps: Dependencies, body: SearchBody) -> JSONResponse:
     if deps.store is None:
         return _problem(503, "PLACES_UNAVAILABLE", "장소 저장소가 설정되지 않았다")
 
-    fallbacks: list[str] = []
     previous = None
     if body.previous_conditions is not None:
         previous = _read_previous(body.previous_conditions)
-        if previous is None:
-            fallbacks.append("PREVIOUS_INVALID")
-    interpretation = interpret(body.query, previous, deps.gms_timeout)
-    if interpretation.llm_error is not None:
-        fallbacks.append("INTERPRET_LLM_FAILED")
-    conditions = interpretation.conditions
     taste = _read_taste(body.taste_profile)
-    if body.taste_profile is not None and taste is None:
-        fallbacks.append("TASTE_INVALID")
-
-    start = time.perf_counter()
+    request = SearchRequest(body.query, previous, taste, _bounds(body.map_bounds))
     try:
-        [query] = embedding.encode_queries([conditions.embedding_text])
-    except (RuntimeError, OSError, ValueError) as e:
-        # torch(CUDA 메모리 부족 등)와 모델 파일 오류다. 요청문은 남기지 않는다.
-        _log("embedding_failed", error=type(e).__name__)
+        result = search(request, deps.store, timeout=deps.gms_timeout)
+    except EmbeddingError as e:
+        _log("embedding_failed", error=str(e))
         return _problem(503, "EMBEDDING_UNAVAILABLE", "요청문을 벡터로 바꾸지 못했다")
-    embed_seconds = time.perf_counter() - start
-
-    bounds = _bounds(body.map_bounds)
-    place_filter = PlaceFilter(
-        category_group=conditions.category_group,
-        # 지도 영역이 있으면 좌표로 거르고, 근처 검색은 폰이 현재 위치로 거른다.
-        station=None if bounds or conditions.nearby else conditions.station,
-        bounds=bounds,
-        facilities=conditions.facilities,
-    )
-    start = time.perf_counter()
-    try:
-        found = deps.store.find(
-            place_filter, query, NEARBY_K if conditions.nearby else GENERAL_K
-        )
     except StoreError as e:
         _log("store_failed", error=str(e))
         return _problem(503, "PLACES_UNAVAILABLE", "장소 저장소를 읽지 못했다")
-    store_seconds = time.perf_counter() - start
-    if found.invalid:
-        _log("profile_invalid", place_ids=list(found.invalid))
-        fallbacks.append("PROFILE_INVALID")
+    if result.invalid_place_ids:
+        _log("profile_invalid", place_ids=list(result.invalid_place_ids))
 
-    if found.candidates:
-        result = search(
-            found.candidates,
-            SearchRequest(
-                text=conditions.text,
-                request_codes=conditions.codes,
-                nearby=conditions.nearby,
-                taste=taste,
-            ),
-            timeout=deps.gms_timeout,
-        )
-        trace = result.trace
-        if trace.fallback is Fallback.LLM_FAILED:
-            fallbacks.append("RANK_LLM_FAILED")
-        ranked_by = "LLM" if trace.fallback is None else "SIMILARITY"
-        items = [_card_body(card) for card in result.cards]
-        reason = None
-    else:
-        trace = None
-        ranked_by = None
-        items = []
-        reason = empty_reason(conditions, bounds is not None)
-
+    interpretation, trace = result.interpretation, result.trace
+    conditions = interpretation.conditions
+    fallbacks = _fallbacks(body, previous, taste, result)
+    ranked_by = _ranked_by(result)
     used_llm = interpretation.llm_error is None or ranked_by == "LLM"
+    reason = result.empty_reason
     response = SearchResponse(
         conditions=_conditions_body(conditions),
         nearby=conditions.nearby,
         change_summary=interpretation.change_summary,
-        items=items,
+        items=[_card_body(card) for card in result.cards],
         empty_reason=(
             EmptyReasonBody(cause=reason.cause, suggestion=reason.suggestion)
             if reason
@@ -256,25 +208,49 @@ def _search(deps: Dependencies, body: SearchBody) -> JSONResponse:
         category_group=conditions.category_group,
         station=conditions.station,
         nearby=conditions.nearby,
-        in_map_bounds=bounds is not None,
-        candidates=len(found.candidates),
-        items=len(items),
+        in_map_bounds=request.bounds is not None,
+        candidates=trace.candidates,
+        items=len(result.cards),
         ranked_by=ranked_by,
         fallbacks=fallbacks,
         interpret_llm_error=interpretation.llm_error,
         interpret_llm_seconds=interpretation.llm_seconds,
-        embed_seconds=embed_seconds,
-        store_seconds=store_seconds,
-        rank_llm_error=trace.llm_error if trace else None,
-        rank_llm_seconds=trace.llm_seconds if trace else None,
+        embed_seconds=trace.embed_seconds,
+        store_seconds=trace.store_seconds,
+        rank_llm_error=trace.rank_llm_error,
+        rank_llm_seconds=trace.rank_llm_seconds,
         # 검사를 통과한 LLM 응답에는 후보 번호와 등급만 있다. 실패한 응답은 요청문을
         # 되풀이했을 수 있어 길이만 남긴다(인프라 설계 12.2-5).
-        rank_llm_raw=trace.llm_raw if trace and ranked_by == "LLM" else None,
+        rank_llm_raw=trace.rank_llm_raw if ranked_by == "LLM" else None,
         rank_llm_raw_length=(
-            len(trace.llm_raw) if trace and trace.llm_raw is not None else None
+            len(trace.rank_llm_raw) if trace.rank_llm_raw is not None else None
         ),
     )
     return JSONResponse(response.model_dump(by_alias=True, exclude_none=True))
+
+
+def _fallbacks(
+    body: SearchBody,
+    previous: Conditions | None,
+    taste: TasteProfile | None,
+    result: SearchResult,
+) -> list[str]:
+    """응답에 담을 폴백 코드. 읽지 못한 입력, 실패한 LLM, 빠진 장소를 이 순서로 담는다."""
+    happened = {
+        "PREVIOUS_INVALID": body.previous_conditions is not None and previous is None,
+        "INTERPRET_LLM_FAILED": result.interpretation.llm_error is not None,
+        "TASTE_INVALID": body.taste_profile is not None and taste is None,
+        "PROFILE_INVALID": bool(result.invalid_place_ids),
+        "RANK_LLM_FAILED": result.trace.fallback is Fallback.LLM_FAILED,
+    }
+    return [code for code, yes in happened.items() if yes]
+
+
+def _ranked_by(result: SearchResult) -> str | None:
+    """정렬 방법. 뽑힌 장소가 없어 정렬하지 않았으면 None이다."""
+    if result.empty_reason is not None:
+        return None
+    return "LLM" if result.trace.fallback is None else "SIMILARITY"
 
 
 def _read_previous(data: dict[str, Any]) -> Conditions | None:

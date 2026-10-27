@@ -1,7 +1,8 @@
-"""카드에 쓰는 조건 목록. 취향 코드표의 온보딩 코드 14개와 시설 4개다.
+"""비교가 쓰는 낱말표. 카드 조건 목록과 업종·역 이름이다.
 
-id는 취향 프로필 spec(S15P31A302-39)의 코드표를 따른다. 시설 4개는 코드표에 없어서
-BE의 `Facility` 코드를 쓴다(docs/comparison/spec.md 2장).
+카드 조건은 취향 코드표의 온보딩 코드 14개와 시설 4개다. id는 취향 프로필
+spec(S15P31A302-39)의 코드표를 따른다. 시설 4개는 코드표에 없어서 BE의 `Facility`
+코드를 쓴다(docs/comparison/spec.md 2장). 다른 비교 모듈을 가져다 쓰지 않는다.
 """
 
 from dataclasses import dataclass
@@ -63,3 +64,9 @@ CONDITIONS: dict[str, Condition] = {
     )
 }
 """조건 id로 찾는 조건 목록. 순서는 특징 라벨을 고를 때 동점을 가르는 데 쓴다."""
+
+CATEGORY_NAMES = {"RESTAURANT": "식당", "CAFE": "카페", "BAR": "술집"}
+"""업종 코드의 화면 이름. BE `CategoryGroup`과 같다."""
+
+STATION_NAMES = {"GANGNAM": "강남역", "YEOKSAM": "역삼역", "SEOLLEUNG": "선릉역"}
+"""역 코드의 화면 이름. BE `Station`과 같다."""

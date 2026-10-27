@@ -15,9 +15,8 @@ from dataclasses import dataclass
 from fit_ai import gms
 from fit_ai.features import FEATURES
 from fit_ai.match.candidates import Candidate
-from fit_ai.match.conditions import CONDITIONS, Layer
-from fit_ai.match.evidence import Verdict, judge
-from fit_ai.match.place import CATEGORY_NAMES, Place
+from fit_ai.match.conditions import CATEGORY_NAMES, CONDITIONS, Layer
+from fit_ai.match.place import Place, Verdict
 from fit_ai.match.taste import FreeText, TasteFeature
 
 SIMILARITY_FLOOR = 0.2
@@ -158,7 +157,7 @@ def grade_by_rules(place: Place, codes: Sequence[str]) -> int:
     Returns:
         `GRADES`의 번호. 0이 딱 맞음이다.
     """
-    verdicts = [judge(place, code) for code in codes]
+    verdicts = [place.judge(code) for code in codes]
     if Verdict.CONTRARY in verdicts:
         return 3
     confirmed = verdicts.count(Verdict.CONFIRMED)
@@ -402,7 +401,7 @@ def _request_text(place: Place, request_codes: Sequence[str]) -> str:
 
 
 def _verdict_text(place: Place, code: str) -> str:
-    verdict = judge(place, code)
+    verdict = place.judge(code)
     if (
         CONDITIONS[code].layer is Layer.FACILITY
         and place.info.facilities.get(code) is not None

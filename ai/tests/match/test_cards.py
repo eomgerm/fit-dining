@@ -1,10 +1,9 @@
 """LLM 없이 만드는 카드를 확인한다.
 
-근거 항목, 추천 이유, 특징 라벨을 본다. 근거 판정은 test_evidence.py에 있다.
+근거 항목, 추천 이유, 특징 라벨을 본다. 근거 판정은 test_place.py에 있다.
 """
 
-from fit_ai.match.cards import MAX_REASONS, build_card
-from fit_ai.match.models import Source
+from fit_ai.match.cards import MAX_REASONS, Source, build_card
 from fit_ai.match.place import ConditionEvidence, Place, PlaceInfo
 
 

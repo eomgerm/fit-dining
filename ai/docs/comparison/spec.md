@@ -16,7 +16,7 @@ Status: draft · Jira: S15P31A302-41 · 작성일: 2026-10-23 · 고친 날: 202
 - [api.md](api.md): BE가 부르는 AI API 명세와 AI가 읽는 DB 뷰
 - [experiments/interpretation](../../experiments/interpretation/README.md): 요청 해석 평가
 
-코드는 `ai/src/fit_ai/match/`(비교 로직)와 `ai/server/`(API 앱)에 있다. 공유 모듈 `fit_ai.features`, `fit_ai.embedding`, `fit_ai.gms`는 39 것을 그대로 쓴다.
+코드는 `ai/src/fit_ai/match/`(비교 로직)와 `ai/server/`(API 앱)에 있다. 검색 한 번의 흐름은 `match/search.py`가 잇고, `server/`는 요청 검사, 응답 변환, 로그만 한다. 공유 모듈 `fit_ai.features`, `fit_ai.embedding`, `fit_ai.gms`는 39 것을 그대로 쓴다.
 
 ## 1. 역할
 
@@ -132,7 +132,7 @@ AI가 뷰 `ai_place_search`를 SQL 한 번으로 읽어 거르고 뽑는다. 뷰
 
 정할 것: 소음 축 읽기, 카드 라벨에 40 `label`을 쓸지.
 
-### 4.3 정렬 (`match/ranking.py`, `match/evidence.py`, `match/taste.py`)
+### 4.3 정렬 (`match/ranking.py`, `match/place.py`, `match/taste.py`)
 
 취향 프로필은 이렇게 쓴다.
 
@@ -247,12 +247,12 @@ LLM 없이 정렬할 때(근처 검색, LLM 실패)도 체크표가 있으면 �
 
 끝낸 일(단위 테스트는 가짜 인코더·LLM·저장소로, DB 저장소는 임시 Postgres로, 흐름 전체는 실제 인코더·GMS·로컬 DB로 확인했다):
 
-- 요청 해석과 규칙 해석, 결과 없음 이유(`interpretation.py`). 질의 54개 평가 98%
+- 요청 해석과 규칙 해석(`interpretation.py`). 질의 54개 평가 98%
 - DB 후보 추출(`pg_store.py`)과 장소 프로필 읽기(`place.py`)
 - 취향 프로필 읽기와 겹치는 취향 빼기(`taste.py`)
-- 체크표(`evidence.py`), 코드 등급과 LLM 순서 정렬(`ranking.py`), 카드(`cards.py`), 이들을 잇는 검색(`search.py`)
+- 체크표(`Place.judge`), 코드 등급과 LLM 순서 정렬(`ranking.py`), 카드(`cards.py`), 해석부터 카드까지 잇는 검색과 결과 없음 이유(`search.py`)
 - 검색 API(`server/`, [api.md](api.md)). 엔드포인트는 `/v1/search` 하나다
-- 공유 모듈(`fit_ai.features`, `embedding`, `gms`)로 바꾸고 39 구조로 옮겼다. 인코더와 GMS는 감싸지 않고 공유 모듈을 바로 부른다(10-27)
+- 공유 모듈(`fit_ai.features`, `embedding`, `gms`)로 바꾸고 39 구조로 옮겼다. 인코더와 GMS는 감싸지 않고 공유 모듈을 바로 부른다. 검색 흐름을 `server/`에서 `search.py`로 옮기고 판정은 `place.py`, 카드 모양은 `cards.py`로 합쳤다(10-27)
 - SSAFY GPU 서버 5번 GPU(H200)에서 인코더를 확인했다. 요청문 하나 15ms, 장소 요약 300개 1초
 - 로컬 개발 DB(`scripts/dev_db.py`, BE Mock 장소 30곳)로 새 검색, 후속, 근처, 코드 없는 표현, 결과 없음, 취향 포함을 처음부터 끝까지 돌렸다. 검색 한 번 1.2~3.6초
 

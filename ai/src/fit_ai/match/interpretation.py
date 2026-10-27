@@ -13,8 +13,7 @@ from dataclasses import asdict, dataclass
 
 from fit_ai import gms
 from fit_ai.features import FEATURES
-from fit_ai.match.conditions import CONDITIONS, Layer
-from fit_ai.match.place import CATEGORY_NAMES, STATION_NAMES
+from fit_ai.match.conditions import CATEGORY_NAMES, CONDITIONS, STATION_NAMES, Layer
 
 MAX_TEXT_LENGTH = 400
 """합친 요청문 길이 상한. 후속 조건이 쌓여도 정렬 LLM 입력이 커지지 않게 한다."""
@@ -162,14 +161,6 @@ _NEGATED = re.compile(r"\S+\s*(?:말고|대신|아니고)")
 
 _PEOPLE = re.compile(r"(\d+)\s*(?:명|인)")
 
-FACILITY_PHRASES = {
-    "PARKING": ("주차할 수 있는", "주차"),
-    "WIFI": ("와이파이가 되는", "와이파이"),
-    "GROUP": ("단체로 갈 수 있는", "단체"),
-    "RESERVATION": ("예약할 수 있는", "예약"),
-}
-"""결과가 없을 때 문구에 쓰는 시설 말. (원인 문구, 제안 문구)다."""
-
 
 @dataclass(frozen=True)
 class Conditions:
@@ -217,19 +208,6 @@ class Interpretation:
     change_summary: str | None
     llm_error: str | None = None
     llm_seconds: float | None = None
-
-
-@dataclass(frozen=True)
-class EmptyReason:
-    """결과가 없을 때의 원인과 제안. BE `EmptyReason`과 같다.
-
-    Attributes:
-        cause: 원인
-        suggestion: 수정 제안
-    """
-
-    cause: str
-    suggestion: str
 
 
 def interpret(
@@ -302,44 +280,6 @@ def interpret_by_rules(query: str, previous: Conditions | None = None) -> Condit
         category_group=category_group or previous.category_group,
         station=station or previous.station,
         nearby=nearby or previous.nearby,
-    )
-
-
-def empty_reason(conditions: Conditions, in_map_bounds: bool) -> EmptyReason:
-    """뽑힌 장소가 없을 때 원인과 제안을 만든다.
-
-    Args:
-        conditions: 해석한 조건
-        in_map_bounds: 역 대신 지도 영역으로 걸렀는지
-
-    Returns:
-        원인과 제안
-    """
-    where = None
-    if in_map_bounds:
-        where = "이 지역"
-    elif conditions.station and not conditions.nearby:
-        where = STATION_NAMES[conditions.station]
-    what = CATEGORY_NAMES.get(conditions.category_group or "", "가게")
-    scope = f"{where} {what}" if where else what
-    facilities = conditions.facilities
-    if len(facilities) == 1:
-        phrase, name = FACILITY_PHRASES[facilities[0]]
-        return EmptyReason(
-            f"{scope} 중 {phrase} 곳이 없어요", f"{name} 조건을 빼고 다시 찾아 보세요"
-        )
-    if facilities:
-        return EmptyReason(
-            f"{scope} 중 요청한 시설을 모두 갖춘 곳이 없어요",
-            "시설 조건을 줄여서 다시 찾아 보세요",
-        )
-    if in_map_bounds:
-        return EmptyReason(
-            f"{scope} 중 조건에 맞는 곳이 없어요",
-            "지도를 옮기거나 넓혀서 다시 찾아 보세요",
-        )
-    return EmptyReason(
-        f"{scope} 중 조건에 맞는 곳이 없어요", "다른 역이나 업종으로 다시 찾아 보세요"
     )
 
 

@@ -1,7 +1,7 @@
 # AI API 명세
 
 Status: 초안 v0.3 · Jira: S15P31A302-41 · 작성일: 2026-10-23 · 고친 날: 2026-10-27
-코드: `ai/server/`, `ai/src/fit_ai/match/pg_store.py`
+코드: `ai/server/`(API), `ai/src/fit_ai/match/search.py`(검색 흐름), `ai/src/fit_ai/match/pg_store.py`(뷰 읽기)
 
 BE는 검색 한 번에 AI를 한 번 부른다. AI가 요청 해석, 요청문 인코딩, 거르기와 후보 뽑기, 정렬, 카드 만들기를 모두 하고 카드의 AI 필드를 돌려준다. 장소는 AI가 들고 있지 않고 검색마다 Postgres 뷰 하나(5장)에서 pgvector로 읽는다. 인프라 설계 12.2절이 AI 팀에 맡긴 명세(요청·응답, 오류 코드, 입력 상한, 모델 버전)다. 흐름은 [spec.md](spec.md)에 있다.
 

@@ -1,6 +1,6 @@
 """요청 해석을 확인한다.
 
-LLM 출력 검사, 규칙 폴백, 후속 조건 합치기, 결과 없음 문구를 본다. GMS는 공유 모듈
+LLM 출력 검사, 규칙 폴백, 후속 조건 합치기를 본다. GMS는 공유 모듈
 `fit_ai.gms.call_json`을 가짜(`fake_gms`)로 바꿔 끼운다.
 """
 
@@ -13,7 +13,6 @@ from fit_ai.match.interpretation import (
     MAX_TEXT_LENGTH,
     SYSTEM_PROMPT,
     Conditions,
-    empty_reason,
     interpret,
     interpret_by_rules,
 )
@@ -272,41 +271,3 @@ def test_prompt_lists_codes() -> None:
     """지시_코드표에는_취향코드와시설코드가있다"""
     assert "QUIET: 조용하고 차분한 곳" in SYSTEM_PROMPT
     assert "PARKING: 주차할 수 있어요" in SYSTEM_PROMPT
-
-
-class TestEmptyReason:
-    """결과 없음 문구"""
-
-    def test_one_facility(self) -> None:
-        """결과없음_시설하나면_그시설을빼보라고한다"""
-        conditions = Conditions("t", "t", ("PARKING",), "BAR", "YEOKSAM")
-
-        reason = empty_reason(conditions, in_map_bounds=False)
-
-        assert reason.cause == "역삼역 술집 중 주차할 수 있는 곳이 없어요"
-        assert reason.suggestion == "주차 조건을 빼고 다시 찾아 보세요"
-
-    def test_many_facilities(self) -> None:
-        """결과없음_시설이여럿이면_시설조건을줄이라고한다"""
-        conditions = Conditions("t", "t", ("PARKING", "WIFI"), "CAFE")
-
-        reason = empty_reason(conditions, in_map_bounds=False)
-
-        assert reason.cause == "카페 중 요청한 시설을 모두 갖춘 곳이 없어요"
-
-    def test_map_bounds(self) -> None:
-        """결과없음_지도영역으로걸렀으면_역대신이지역이라하고지도를옮기라고한다"""
-        conditions = Conditions("t", "t", (), "CAFE", "GANGNAM")
-
-        reason = empty_reason(conditions, in_map_bounds=True)
-
-        assert reason.cause == "이 지역 카페 중 조건에 맞는 곳이 없어요"
-        assert reason.suggestion == "지도를 옮기거나 넓혀서 다시 찾아 보세요"
-
-    def test_nearby_without_category(self) -> None:
-        """결과없음_근처검색에업종이없으면_역없이가게라고한다"""
-        conditions = Conditions("t", "t", station="GANGNAM", nearby=True)
-
-        assert empty_reason(conditions, in_map_bounds=False).cause == (
-            "가게 중 조건에 맞는 곳이 없어요"
-        )
