@@ -103,7 +103,7 @@ class TestLlm:
         [
             ("조용한 카페", "JSON 객체"),
             ([], "JSON 객체"),
-            (answer(embedding_text=" "), "embedding_text"),
+            (answer(embedding_text=None), "embedding_text"),
             (answer(codes="QUIET"), "codes"),
             (answer(nearby="false"), "nearby"),
         ],
@@ -119,15 +119,82 @@ class TestLlm:
         assert len(calls) == 1
         assert reason in result.llm_error
         assert result.conditions.codes == ("QUIET",)
+        # 출력 검사에 걸린 것은 GMS 장애가 아니다.
+        assert result.gms_failed is False
 
     def test_llm_failure_falls_back_to_rules(self, fake_gms: FakeGms) -> None:
-        """LLM해석_호출이실패하거나꺼져있으면_규칙으로해석한다"""
+        """LLM해석_호출이실패하거나꺼져있으면_규칙으로해석하고GMS장애로표시한다"""
         fake_gms(lambda messages: None)
 
         result = interpret("강남역 조용한 카페")
 
         assert result.llm_error == "GMS가 꺼져 있거나 호출이 실패했다"
         assert result.conditions.category_group == "CAFE"
+        assert result.gms_failed is True
+
+    @pytest.mark.parametrize("embedding_text", ["...", " ", "…", ""])
+    def test_empty_embedding_text_uses_query(
+        self, fake_gms: FakeGms, embedding_text: str
+    ) -> None:
+        """LLM해석_벡터용문장에글자가없으면_LLM결과는쓰고문장만요청문으로대신한다"""
+        fake_gms(lambda messages: answer(embedding_text=embedding_text))
+
+        result = interpret("강남역 카페")
+
+        assert result.llm_error is None
+        assert result.conditions.embedding_text == "강남역 카페"
+        assert result.conditions.codes == ("QUIET",)
+
+    def test_empty_embedding_text_in_follow_up_uses_text(
+        self, fake_gms: FakeGms
+    ) -> None:
+        """LLM해석_후속에서벡터용문장에글자가없으면_합친요청문으로대신한다"""
+        fake_gms(
+            lambda messages: answer(text="역삼역 조용한 술집", embedding_text="...")
+        )
+
+        result = interpret("더 조용하게", PREVIOUS)
+
+        assert result.conditions.embedding_text == "역삼역 조용한 술집"
+
+    def test_follow_up_to_nearby_drops_station(self, fake_gms: FakeGms) -> None:
+        """LLM해석_역검색뒤근처로바꿨는데이전역을남기면_역을버리고근처검색으로본다"""
+        fake_gms(
+            lambda messages: answer(
+                text="근처 모임하기 좋은 술집", station="YEOKSAM", nearby=True
+            )
+        )
+
+        conditions = interpret("그냥 내 근처에서 찾아줘", PREVIOUS).conditions
+
+        assert (conditions.station, conditions.nearby) == (None, True)
+
+    def test_follow_up_new_station_wins(self, fake_gms: FakeGms) -> None:
+        """LLM해석_후속에서새역과근처가함께오면_새역을기준으로찾는다"""
+        fake_gms(
+            lambda messages: answer(
+                text="강남역 모임하기 좋은 술집", station="GANGNAM", nearby=True
+            )
+        )
+
+        conditions = interpret("강남역으로 바꿔줘", PREVIOUS).conditions
+
+        assert (conditions.station, conditions.nearby) == ("GANGNAM", False)
+
+    def test_unknown_previous_codes_not_in_prompt(self, fake_gms: FakeGms) -> None:
+        """LLM입력_이전조건의모르는코드는_프롬프트에넣지않는다"""
+        calls = fake_gms(lambda messages: answer(text="역삼역 조용한 술집"))
+        previous = Conditions(
+            text="역삼역 술집",
+            embedding_text="역삼역 술집",
+            codes=("QUIET", "X" * 5000),
+        )
+
+        interpret("더 조용하게", previous)
+
+        prompt = calls[0][1]["content"]
+        assert '"codes": ["QUIET"]' in prompt
+        assert "XXXX" not in prompt
 
     def test_follow_up(self, fake_gms: FakeGms) -> None:
         """LLM해석_후속조건이면_합친text와바뀐점을받고이전조건을입력에넣는다"""
@@ -252,6 +319,20 @@ class TestRules:
             category_group="RESTAURANT",
             station="YEOKSAM",
         )
+
+    def test_follow_up_new_station_ends_nearby(self) -> None:
+        """규칙해석_근처검색뒤역을말하면_근처검색을끄고그역으로찾는다"""
+        previous = Conditions("근처 카페", "근처 카페", (), "CAFE", nearby=True)
+
+        conditions = interpret_by_rules("강남역에서 찾아줘", previous)
+
+        assert (conditions.station, conditions.nearby) == ("GANGNAM", False)
+
+    def test_follow_up_nearby_drops_station(self) -> None:
+        """규칙해석_역검색뒤근처를말하면_이전역을버린다"""
+        conditions = interpret_by_rules("근처로 찾아줘", PREVIOUS)
+
+        assert (conditions.station, conditions.nearby) == (None, True)
 
     def test_follow_up_too_long(self) -> None:
         """규칙해석_합친문장이너무길면_새요청만남긴다"""

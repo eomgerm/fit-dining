@@ -1,8 +1,8 @@
 """② 정렬을 확인한다.
 
 LLM 입력 만들기, 출력 검사, 체크표로 등급 정하기, 등급으로 점수 매기기, LLM이
-고르지 않은 후보 붙이기, LLM 없는 점수를 본다. 체크할 조건이 있으면 등급은 코드가,
-없으면 LLM이 정한다. GMS는 공유 모듈 `fit_ai.gms.call_json`을 가짜(`fake_gms`)로 바꿔
+고르지 않은 후보 붙이기, LLM 없는 점수를 본다. 등급은 늘 코드가 정하고, 체크할
+조건이 없으면 모두 딱 맞음이다. GMS는 공유 모듈 `fit_ai.gms.call_json`을 가짜(`fake_gms`)로 바꿔
 끼우고, 가짜는 입력의 후보 줄을 읽고 정해 둔 순서로 답한다.
 """
 
@@ -17,8 +17,6 @@ from fit_ai.match.candidates import Candidate
 from fit_ai.match.conditions import Layer
 from fit_ai.match.place import ConditionEvidence, Place, PlaceInfo
 from fit_ai.match.ranking import (
-    GRADE_PROMPT,
-    GRADES,
     LLM_TOP_K,
     ORDER_PROMPT,
     Ranked,
@@ -27,7 +25,6 @@ from fit_ai.match.ranking import (
     judged_codes,
     rank_by_similarity,
     rank_with_llm,
-    similarity_to_score,
 )
 from fit_ai.match.taste import FreeText, TasteFeature
 
@@ -130,11 +127,9 @@ def scores(ranked: list[Ranked]) -> list[tuple[int, int]]:
 class TestPrompt:
     """LLM 입력"""
 
-    def test_prompts(self) -> None:
-        """LLM지시_등급을매길때는기준을_순서만정할때는등급을바꾸지말라고담는다"""
-        assert f"최대 {LLM_TOP_K}곳" in GRADE_PROMPT
-        for grade in GRADES:
-            assert f"- {grade.label}: {grade.rule}." in GRADE_PROMPT
+    def test_prompt(self) -> None:
+        """LLM지시_등급은바꾸지말고_순서만정해최대10곳고르라고담는다"""
+        assert f"최대 {LLM_TOP_K}곳" in ORDER_PROMPT
         assert "등급은 바꾸지 않는다" in ORDER_PROMPT
         assert '"fit"' not in ORDER_PROMPT
 
@@ -176,7 +171,9 @@ class TestPrompt:
         rank(fake_gms, llm, [make_candidate(place_id) for place_id in ids])
 
         lines = re.findall(
-            r"^\[\d+\] 카페 \| 설명 (\d+)$", llm.prompts[0][1], re.MULTILINE
+            r"^\[\d+\] 카페 \| 설명 (\d+) \| 등급: 딱 맞음$",
+            llm.prompts[0][1],
+            re.MULTILINE,
         )
         assert sorted(map(int, lines)) == ids
         assert list(map(int, lines)) != ids
@@ -198,7 +195,7 @@ class TestPrompt:
         rank(fake_gms, llm, [candidate])
 
         assert (
-            "[1] 카페 | 설명 101 | 리뷰: 단체 모임 하기 좋은 곳 20/1, "
+            "[1] 카페 | 설명 101 | 등급: 딱 맞음 | 리뷰: 단체 모임 하기 좋은 곳 20/1, "
             "조용하고 차분한 곳 8/2, 매장이 넓고 좌석이 편한 곳 0/5\n"
         ) in llm.prompts[0] + "\n"
 
@@ -240,12 +237,13 @@ class TestGradeByRules:
             ({"QUIET": (5, 0)}, ["QUIET", "PURPOSE_TALK", "COZY"], 2),
             ({}, ["QUIET", "PURPOSE_TALK"], 2),
             ({"QUIET": (5, 0), "PURPOSE_TALK": (1, 4)}, ["QUIET", "PURPOSE_TALK"], 3),
+            ({"QUIET": (1, 4)}, [], 0),
         ],
     )
     def test_rules(
         self, conditions: dict[str, tuple[int, int]], codes: list[str], grade: int
     ) -> None:
-        """등급_반대가있으면안맞음_모두확인이면딱맞음_절반이상이면대체로_나머지는일부"""
+        """등급_반대가있으면안맞음_모두확인이면딱맞음_절반이상이면대체로_나머지는일부_체크할조건이없으면딱맞음"""
         candidate = make_candidate(
             1,
             conditions={
@@ -332,24 +330,18 @@ class TestOrderWithinCodeGrade:
 class TestRankWithLlm:
     """LLM 정렬"""
 
-    def test_scores_from_grade_and_rank(self, fake_gms: FakeGms) -> None:
-        """LLM정렬_등급구간안에서순위대로점수를매기고_등급1위가구간최고점이다"""
-        ranked = rank(
-            fake_gms, FakeLlm([(103, "딱 맞음"), (101, "딱 맞음"), (102, "대체로")])
-        )
+    def test_no_conditions_all_top_grade(self, fake_gms: FakeGms) -> None:
+        """조건없음_체크할조건이없으면_모두딱맞음구간에서LLM순서대로점수를나눈다"""
+        llm = FakeLlm([(103, "일부"), (101, "딱 맞음"), (102, "안 맞음")])
 
-        assert scores(ranked) == [(103, 100), (101, 92), (102, 84)]
+        ranked = rank(fake_gms, llm)
 
-    def test_grade_wins_over_order(self, fake_gms: FakeGms) -> None:
-        """LLM정렬_순서와등급이어긋나면_등급을따르고같은등급안에서는LLM순서다"""
-        ranked = rank(
-            fake_gms, FakeLlm([(101, "일부"), (102, "딱 맞음"), (103, "일부")])
-        )
-
-        assert scores(ranked) == [(102, 100), (101, 64), (103, 52)]
+        # LLM이 등급을 적어도 읽지 않는다.
+        assert scores(ranked) == [(103, 100), (101, 95), (102, 90)]
+        assert llm.prompts[0][0] == ORDER_PROMPT
 
     def test_unpicked_follow_by_similarity(self, fake_gms: FakeGms) -> None:
-        """LLM정렬_고르지않은후보는_유사도순서로고른후보보다낮은점수로붙인다"""
+        """조건없음_LLM이고르지않은후보는_고른후보뒤에유사도순서로같은구간을나눈다"""
         candidates = [
             make_candidate(place_id, similarity)
             for place_id, similarity in [
@@ -361,32 +353,37 @@ class TestRankWithLlm:
             ]
         ]
 
-        ranked = rank(fake_gms, FakeLlm([(4, "딱 맞음"), (2, "대체로")]), candidates)
+        ranked = rank(fake_gms, FakeLlm([(4, "딱 맞음"), (2, "딱 맞음")]), candidates)
 
-        assert scores(ranked) == [(4, 100), (2, 84), (1, 83), (3, 67), (5, 33)]
+        assert scores(ranked) == [(4, 100), (2, 97), (1, 94), (3, 91), (5, 88)]
 
-    def test_fit_label_ignores_spaces(self, fake_gms: FakeGms) -> None:
-        """LLM정렬_등급이름의띄어쓰기가달라도_읽는다"""
-        raw = '{"ranking": [{"id": 1, "fit": "딱맞음"}]}'
+    def test_empty_pick_is_not_failure(self, fake_gms: FakeGms) -> None:
+        """조건없음_LLM이아무것도고르지않아도_실패가아니고유사도순서로정렬한다"""
+        ranked = rank(fake_gms, FixedLlm('{"ranking": []}'))
 
-        ranked = rank(fake_gms, FixedLlm(raw), CANDIDATES[:1])
+        assert scores(ranked) == [(101, 100), (102, 95), (103, 90)]
 
-        assert ranked[0].score == 100
+    def test_raw_keeps_only_ids(self, fake_gms: FakeGms) -> None:
+        """LLM정렬_로그용출력에는_읽어낸후보번호만남기고LLM이덧붙인문장은버린다"""
+        fake_gms(
+            FixedLlm(
+                '{"ranking": [{"id": 2, "fit": "딱 맞음", '
+                '"reason": "역삼역 조용한 식당이라서"}], "note": "역삼역"}'
+            )
+        )
+
+        result = rank_with_llm("역삼역 조용한 식당", (), CANDIDATES, (), ())
+
+        assert result.raw == '{"ranking": [{"id": 2}]}'
 
     @pytest.mark.parametrize(
         ("raw", "reason"),
         [
             ('{"order": []}', "ranking"),
-            ('{"ranking": []}', "고른 후보가 없다"),
-            (
-                '{"ranking": [{"id": 1, "fit": "일부"}, {"id": 1, "fit": "일부"}]}',
-                "두 번",
-            ),
-            ('{"ranking": [{"id": 4, "fit": "일부"}]}', "후보 밖"),
-            ('{"ranking": [{"id": "1", "fit": "일부"}]}', "후보 밖"),
-            ('{"ranking": [{"id": 1, "fit": "최고"}]}', "모르는 등급"),
-            ('{"ranking": [{"id": 1, "fit": 3}]}', "모르는 등급"),
-            ('{"ranking": [{"id": 1, "score": 90}]}', "모르는 등급"),
+            ('{"ranking": [{"id": 1}, {"id": 1}]}', "두 번"),
+            ('{"ranking": [{"id": 4}]}', "후보 밖"),
+            ('{"ranking": [{"id": "1"}]}', "후보 밖"),
+            ('{"ranking": [{"id": true}]}', "후보 밖"),
         ],
     )
     def test_reject_bad_output(self, fake_gms: FakeGms, raw: str, reason: str) -> None:
@@ -399,6 +396,15 @@ class TestRankWithLlm:
         assert len(llm.prompts) == 1
         assert json.loads(error.value.raw) == json.loads(raw)
         assert error.value.seconds is not None
+
+    def test_error_message_has_no_llm_text(self, fake_gms: FakeGms) -> None:
+        """LLM정렬_실패이유는로그에남으므로_LLM이낸값을넣지않는다"""
+        llm = FixedLlm('{"ranking": [{"id": "역삼역 조용한 식당"}]}')
+
+        with pytest.raises(RankingError) as error:
+            rank(fake_gms, llm)
+
+        assert "역삼역" not in str(error.value)
 
     @pytest.mark.parametrize("answer", [broken, FixedLlm("순위는 이렇다")])
     def test_llm_call_failed(self, fake_gms: FakeGms, answer) -> None:
@@ -419,13 +425,13 @@ class TestRankWithLlm:
 class TestRankBySimilarity:
     """LLM 없는 정렬"""
 
-    def test_keep_order_and_convert(self) -> None:
-        """유사도정렬_후보가있으면_순서는그대로두고유사도를점수로바꾼다"""
-        candidates = [make_candidate(1, 0.8), make_candidate(2, 0.5)]
+    def test_no_conditions_all_top_grade(self) -> None:
+        """유사도정렬_체크할조건이없으면_모두딱맞음구간에서유사도순서로점수를나눈다"""
+        candidates = [make_candidate(1, 0.8), make_candidate(2, 0.1)]
 
         ranked = rank_by_similarity(candidates)
 
-        assert scores(ranked) == [(1, 100), (2, 50)]
+        assert scores(ranked) == [(1, 100), (2, 92)]
 
     def test_code_grade_then_similarity(self) -> None:
         """유사도정렬_체크할조건이있으면_코드등급순서로놓고같은등급안은유사도순서다"""
@@ -434,11 +440,3 @@ class TestRankBySimilarity:
         ranked = rank_by_similarity(candidates, ["QUIET"])
 
         assert scores(ranked) == [(2, 100), (1, 64)]
-
-    @pytest.mark.parametrize(
-        ("similarity", "expected"),
-        [(0.2, 0), (0.5, 50), (0.8, 100), (-1.0, 0), (1.0, 100)],
-    )
-    def test_linear_and_clipped(self, similarity: float, expected: int) -> None:
-        """점수변환_범위안은비례하고_범위밖은0이나100으로자른다"""
-        assert similarity_to_score(similarity) == expected

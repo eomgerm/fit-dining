@@ -4,7 +4,7 @@ JSON 이름은 BE와 같은 camelCase다. 요청의 모르는 속성은 거부�
 응답의 null 필드는 뺀다. 명세는 docs/comparison/api.md에 있다.
 """
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic.alias_generators import to_camel
@@ -40,6 +40,10 @@ class ModelsBody(_Body):
     llm: str | None = None
 
 
+Coordinate = Annotated[float | None, Field(strict=True, allow_inf_nan=False)]
+"""좌표 하나. 숫자만 받는다. 문자열("37.4")이나 참거짓, NaN은 거부한다."""
+
+
 class MapBoundsBody(_Body):
     """지도 영역("이 지역에서 검색"). BE `MapBounds`와 같다. 빠진 값은 제한하지 않는다.
 
@@ -50,10 +54,10 @@ class MapBoundsBody(_Body):
         ne_lng: 북동쪽 경도
     """
 
-    sw_lat: float | None = None
-    sw_lng: float | None = None
-    ne_lat: float | None = None
-    ne_lng: float | None = None
+    sw_lat: Coordinate = None
+    sw_lng: Coordinate = None
+    ne_lat: Coordinate = None
+    ne_lng: Coordinate = None
 
 
 class SearchBody(_Body):

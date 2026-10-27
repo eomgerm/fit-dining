@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from http import HTTPStatus
 from typing import Any
 
+import httpx
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -67,12 +68,14 @@ class Dependencies:
         embedding_ready: 요청문 인코더 모델을 올렸는지. 못 올렸으면 검색이 503이다.
         store: 장소 저장소. 접속 주소가 없으면 None이다.
         gms_timeout: GMS 한 번 부를 때 기다리는 시간(초)
+        gms_client: GMS 연결을 다시 쓰는 HTTP 클라이언트. 없으면 부를 때마다 만든다.
         max_concurrent: 컨테이너 하나가 동시에 처리하는 요청 수 상한
     """
 
     embedding_ready: bool
     store: PlaceStore | None
     gms_timeout: float = 5.0
+    gms_client: httpx.Client | None = None
     max_concurrent: int = 8
 
 
@@ -109,6 +112,9 @@ def create_app(deps: Dependencies) -> FastAPI:
 
     @app.exception_handler(StarletteHTTPException)
     async def _http_error(_: Request, e: StarletteHTTPException) -> JSONResponse:
+        if e.status_code == HTTPStatus.BAD_REQUEST:
+            # 본문을 JSON으로 읽지 못한 경우(깨진 UTF-8 등)도 형식 오류다.
+            return _problem(400, "INVALID_REQUEST", "요청 형식이 올바르지 않다")
         return _problem(e.status_code, "HTTP_ERROR", "요청을 처리할 수 없다")
 
     @app.exception_handler(Exception)
@@ -137,17 +143,20 @@ def _health(deps: Dependencies) -> JSONResponse:
     if deps.store is None:
         return _problem(503, "PLACES_UNAVAILABLE", "장소 저장소가 설정되지 않았다")
     try:
-        mismatched = deps.store.mismatched()
+        counts = deps.store.vector_counts()
     except StoreError as e:
         _log("store_failed", error=str(e))
         return _problem(503, "PLACES_UNAVAILABLE", "장소 저장소를 읽지 못했다")
-    if mismatched:
+    if counts.mismatched and not counts.comparable:
         # 모델이나 버전이 다른 벡터끼리는 비교할 수 없다(인프라 설계 12.2-7).
         return _problem(
             503,
             "MODEL_MISMATCH",
-            f"장소 {mismatched}곳의 벡터가 요청문 인코더와 맞지 않아 검색에서 빠진다",
+            f"장소 {counts.mismatched}곳 모두 벡터가 요청문 인코더와 맞지 않는다",
         )
+    if counts.mismatched:
+        # 프로필이 아직 없는 새 장소처럼 일부만 빠지면 검색은 되므로 경고만 남긴다.
+        _log("places_mismatched", count=counts.mismatched)
     return JSONResponse({"status": "ok"})
 
 
@@ -165,7 +174,9 @@ def _search(deps: Dependencies, body: SearchBody) -> JSONResponse:
     taste = _read_taste(body.taste_profile)
     request = SearchRequest(body.query, previous, taste, _bounds(body.map_bounds))
     try:
-        result = search(request, deps.store, timeout=deps.gms_timeout)
+        result = search(
+            request, deps.store, timeout=deps.gms_timeout, client=deps.gms_client
+        )
     except EmbeddingError as e:
         _log("embedding_failed", error=str(e))
         return _problem(503, "EMBEDDING_UNAVAILABLE", "요청문을 벡터로 바꾸지 못했다")
@@ -263,9 +274,15 @@ def _read_previous(data: dict[str, Any]) -> Conditions | None:
 
 
 def _bounds(body: MapBoundsBody | None) -> MapBounds | None:
+    """지도 영역을 읽는다. 값이 하나도 없으면 영역이 없는 것으로 본다.
+
+    BE는 지도 영역을 검증하지 않고 넘기므로 `{}`가 올 수 있다. 이를 영역으로 보면 역
+    필터가 빠져 모든 역의 장소가 나온다.
+    """
     if body is None:
         return None
-    return MapBounds(body.sw_lat, body.sw_lng, body.ne_lat, body.ne_lng)
+    bounds = MapBounds(body.sw_lat, body.sw_lng, body.ne_lat, body.ne_lng)
+    return None if bounds == MapBounds() else bounds
 
 
 def _conditions(body: ConditionsBody) -> Conditions:

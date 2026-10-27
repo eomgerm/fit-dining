@@ -4,7 +4,7 @@
 그래야 화면의 근거 항목과 핏 점수가 같은 근거를 말한다(docs/comparison/spec.md 4.3).
 
 비교는 장소 프로필을 만들지 않고 읽기만 한다. 장소 데이터는 AI가 들고 있지 않고
-검색마다 Postgres 뷰에서 거른 장소를 프로필째 읽는다(docs/comparison/api.md 5장).
+검색마다 Postgres 뷰에서 거른 장소를 프로필째 읽는다(docs/comparison/api.md 부록 A).
 프로필 형식은 40 spec 7단계의 `place-profile/v0`을 따른다. 40 spec이 초안이라 읽는
 방식도 확정이 아니다. 정리는 docs/comparison/spec.md 4.2에 있다.
 """
@@ -138,7 +138,7 @@ class Place:
             장소
 
         Raises:
-            ValueError: `schema`가 `SCHEMA`와 다를 때
+            ValueError: `schema`가 `SCHEMA`와 다르거나 리뷰 수가 음수일 때
             KeyError: 필수 필드가 없을 때
             TypeError: 필드의 타입이 다르거나 요약 문장이 문자열이 아닐 때
         """
@@ -161,9 +161,17 @@ def _conditions(features: list[dict[str, Any]]) -> dict[str, ConditionEvidence]:
     40은 소음 축을 손님이 느낀 쪽(코드)과 그게 좋았는지(좋았어요·아쉬웠어요)로 센다.
     "너무 썰렁했어요"는 `QUIET` 아쉬웠어요다. 카드는 그 조건을 채웠는지로 세므로
     느낀 쪽의 좋았어요·아쉬웠어요를 모두 긍정으로, 반대 극의 것을 모두 부정으로 본다.
-    나머지 코드는 좋았어요를 긍정, 아쉬웠어요를 부정으로 그대로 쓴다.
+    나머지 코드는 좋았어요를 긍정, 아쉬웠어요를 부정으로 그대로 쓴다. 타입이 틀린
+    값은 카드와 정렬에서 터지므로 여기서 막는다.
     """
+    if not isinstance(features, list) or not all(isinstance(f, dict) for f in features):
+        raise TypeError("features가 객체 목록이 아니다")
     counts = {f["code"]: (f["like_count"], f["dislike_count"]) for f in features}
+    for code, pair in counts.items():
+        if not isinstance(code, str) or not all(_is_count(n) for n in pair):
+            raise TypeError("특징의 code나 리뷰 수 타입이 다르다")
+        if min(pair) < 0:
+            raise ValueError("리뷰 수가 음수다")
     felt = {code: sum(counts.get(code, (0, 0))) for code in AXIS_OPPOSITES}
     conditions: dict[str, ConditionEvidence] = {}
     for code, (like, dislike) in counts.items():
@@ -173,3 +181,8 @@ def _conditions(features: list[dict[str, Any]]) -> dict[str, ConditionEvidence]:
         if felt[code] or felt[opposite]:
             conditions[code] = ConditionEvidence(pos=felt[code], neg=felt[opposite])
     return conditions
+
+
+def _is_count(value: object) -> bool:
+    # bool은 int의 하위 타입이라 따로 막는다.
+    return isinstance(value, int) and not isinstance(value, bool)

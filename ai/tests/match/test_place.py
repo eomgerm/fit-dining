@@ -98,12 +98,17 @@ def test_vector_not_needed() -> None:
     [
         ({**PROFILE, "schema": "place-profile/v1"}, ValueError, "place-profile/v1"),
         ({**PROFILE, "summary": {"text": None}}, TypeError, "요약"),
+        (with_features(("COZY", None, 0)), TypeError, "리뷰 수"),
+        (with_features(("COZY", "3", 0)), TypeError, "리뷰 수"),
+        (with_features(("COZY", True, 0)), TypeError, "리뷰 수"),
+        (with_features(("COZY", -1, 0)), ValueError, "음수"),
+        ({**PROFILE, "features": {"code": "COZY"}}, TypeError, "features"),
     ],
 )
 def test_reject_unusable_profile(
     profile: dict, error: type[Exception], message: str
 ) -> None:
-    """장소읽기_형식이다르면ValueError고_요약문장이없으면TypeError다"""
+    """장소읽기_형식이다르거나리뷰수가음수면ValueError고_요약문장이없거나타입이틀리면TypeError다"""
     with pytest.raises(error, match=message):
         load(profile)
 

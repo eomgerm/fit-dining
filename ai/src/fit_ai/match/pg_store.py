@@ -2,7 +2,7 @@
 
 거르기와 유사도 계산(pgvector `<=>`, 코사인 거리)을 SQL 한 번으로 한다. 장소가 300곳
 남짓이라 인덱스 없이 전부 계산해도 빠르고 결과가 정확하다. 뷰의 컬럼은
-docs/comparison/api.md 5장에 있다. 뷰를 만들고 채우는 일은 BE와 40이 한다.
+docs/comparison/api.md 부록 A에 있다. 뷰를 만들고 채우는 일은 BE와 40이 한다.
 """
 
 from collections.abc import Sequence
@@ -17,6 +17,7 @@ from fit_ai.match.candidates import (
     Found,
     PlaceFilter,
     StoreError,
+    VectorCounts,
 )
 from fit_ai.match.place import Place, PlaceInfo
 
@@ -44,14 +45,20 @@ LIMIT %(k)s
 """
 """거르기와 유사도 상위 k곳을 한 번에 뽑는다. 요약 벡터는 가져오지 않는다."""
 
-MISMATCH_SQL = """
-SELECT count(*) FROM ai_place_search
-WHERE summary_vector IS NULL
-   OR profile -> 'embedding' ->> 'model' IS DISTINCT FROM %(model)s
-   OR profile -> 'embedding' ->> 'revision' IS DISTINCT FROM %(revision)s
-   OR profile -> 'embedding' ->> 'prompt' IS DISTINCT FROM 'document'
+COUNT_SQL = """
+SELECT count(*) FILTER (WHERE comparable), count(*) FILTER (WHERE NOT comparable)
+FROM (
+  SELECT coalesce(
+           summary_vector IS NOT NULL
+           AND profile -> 'embedding' ->> 'model' = %(model)s
+           AND profile -> 'embedding' ->> 'revision' = %(revision)s
+           AND profile -> 'embedding' ->> 'prompt' = 'document',
+           false) AS comparable
+  FROM ai_place_search
+) AS checked
 """
-"""검색에서 빠지는 장소(벡터 없음, 모델·버전 다름, 질의 쪽 벡터)를 센다."""
+"""비교할 수 있는 장소와 검색에서 빠지는 장소(벡터 없음, 모델·버전 다름, 질의 쪽
+벡터)를 센다."""
 
 SESSION_OPTIONS = "-c statement_timeout=2000 -c default_transaction_read_only=on"
 """접속마다 거는 설정. 쿼리는 2초를 넘기면 끊고, 읽기만 한다."""
@@ -111,8 +118,10 @@ class PgPlaceStore:
         candidates: list[Candidate] = []
         invalid: list[int] = []
         for place_id, category_group, station, facilities, profile, similarity in rows:
-            info = PlaceInfo(place_id, category_group, station, dict(facilities or {}))
             try:
+                info = PlaceInfo(
+                    place_id, category_group, station, _facilities(facilities)
+                )
                 place = Place.from_dict(profile, info)
             except (ValueError, KeyError, TypeError, AttributeError):
                 invalid.append(place_id)
@@ -120,19 +129,21 @@ class PgPlaceStore:
             candidates.append(Candidate(place, float(similarity)))
         return Found(tuple(candidates), tuple(invalid))
 
-    def mismatched(self) -> int:
-        """검색에서 빠지는 장소 수를 센다.
+    def vector_counts(self) -> VectorCounts:
+        """비교할 수 있는 장소와 검색에서 빠지는 장소를 센다.
 
         Returns:
-            벡터가 없거나 모델·버전이 공유 모듈과 다르거나 질의 쪽 벡터인 장소 수
+            장소 수. 빠지는 장소는 벡터가 없거나, 모델·버전이 공유 모듈과 다르거나,
+            질의 쪽 벡터인 장소다.
 
         Raises:
             StoreError: 저장소를 읽지 못했을 때
         """
         rows = self._fetch(
-            MISMATCH_SQL, {"model": embedding.MODEL_ID, "revision": embedding.REVISION}
+            COUNT_SQL, {"model": embedding.MODEL_ID, "revision": embedding.REVISION}
         )
-        return int(rows[0][0])
+        comparable, mismatched = rows[0]
+        return VectorCounts(int(comparable), int(mismatched))
 
     def close(self) -> None:
         """접속 풀을 닫는다."""
@@ -145,6 +156,22 @@ class PgPlaceStore:
         except (psycopg.Error, PoolTimeout) as e:
             # 메시지에 접속 주소나 값이 섞일 수 있어 종류만 남긴다.
             raise StoreError(f"장소 저장소를 읽지 못했다: {type(e).__name__}") from e
+
+
+def _facilities(value: object) -> dict[str, bool | None]:
+    """뷰의 `facilities`를 읽는다. true·false가 아닌 값은 모름으로 본다.
+
+    Raises:
+        TypeError: JSON 객체가 아닐 때. 그 장소는 읽지 못한 장소로 뺀다.
+    """
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise TypeError("facilities가 JSON 객체가 아니다")
+    return {
+        code: known if isinstance(known, bool) else None
+        for code, known in value.items()
+    }
 
 
 def _vector_text(vector: Sequence[float]) -> str:

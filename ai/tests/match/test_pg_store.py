@@ -11,7 +11,7 @@ from collections.abc import Iterator
 import pytest
 
 from fit_ai import embedding
-from fit_ai.match.candidates import MapBounds, PlaceFilter, StoreError
+from fit_ai.match.candidates import MapBounds, PlaceFilter, StoreError, VectorCounts
 
 pgserver = pytest.importorskip("pgserver")
 psycopg = pytest.importorskip("psycopg")
@@ -142,10 +142,52 @@ def test_unreadable_profile_reported(store: PgPlaceStore, database: str) -> None
     assert found.invalid == (3,)
 
 
-def test_mismatched_count(store: PgPlaceStore) -> None:
-    """저장소_모델이다르거나질의쪽이거나벡터가없는장소를_센다"""
-    # 5번(모델 다름), 6번(질의 쪽), 7번(embedding 없음), 8번(벡터 없음)
-    assert store.mismatched() == 4
+def test_vector_counts(store: PgPlaceStore) -> None:
+    """저장소_비교할수있는장소와_모델이다르거나질의쪽이거나벡터가없는장소를센다"""
+    # 빠지는 곳: 5번(모델 다름), 6번(질의 쪽), 7번(embedding 없음), 8번(벡터 없음)
+    assert store.vector_counts() == VectorCounts(comparable=4, mismatched=4)
+
+
+@pytest.mark.parametrize(
+    "facilities", ['["PARKING", "WIFI"]', '"PARKING"', "3", "true"]
+)
+def test_facilities_not_object(
+    store: PgPlaceStore, database: str, facilities: str
+) -> None:
+    """저장소_시설이JSON객체가아니면_검색을멈추지않고그장소만뺀다"""
+    with psycopg.connect(database) as conn:
+        conn.execute(
+            "UPDATE ai_place_search SET facilities = %s::jsonb WHERE place_id = 3",
+            (facilities,),
+        )
+    try:
+        found = store.find(PlaceFilter(station="YEOKSAM"), QUERY, 10)
+    finally:
+        with psycopg.connect(database) as conn:
+            conn.execute(
+                "UPDATE ai_place_search SET facilities = '{}' WHERE place_id = 3"
+            )
+
+    assert found.candidates == ()
+    assert found.invalid == (3,)
+
+
+def test_non_bool_facility_is_unknown(store: PgPlaceStore, database: str) -> None:
+    """저장소_시설값이참거짓이아니면_모름으로읽는다"""
+    with psycopg.connect(database) as conn:
+        conn.execute(
+            'UPDATE ai_place_search SET facilities = \'{"PARKING": "yes"}\' '
+            "WHERE place_id = 3"
+        )
+    try:
+        found = store.find(PlaceFilter(station="YEOKSAM"), QUERY, 10)
+    finally:
+        with psycopg.connect(database) as conn:
+            conn.execute(
+                "UPDATE ai_place_search SET facilities = '{}' WHERE place_id = 3"
+            )
+
+    assert found.candidates[0].place.info.facilities == {"PARKING": None}
 
 
 def test_connection_failure() -> None:

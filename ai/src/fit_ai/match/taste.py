@@ -17,6 +17,13 @@ FOOD_SPICY = "FOOD_SPICY"
 SCHEMA = "taste-profile/v0"
 """읽을 수 있는 취향 프로필 형식"""
 
+MAX_WEIGHT = 3
+"""취향 강도 상한. 취향 spec과 같다."""
+
+MAX_FREE_TEXT_LENGTH = 100
+"""취향 문장 길이 상한. 온보딩 직접 입력 상한(PRD FR-06)과 같다. 문장은 정렬 LLM
+입력에 들어가므로 길이를 막는다."""
+
 
 @dataclass(frozen=True)
 class TasteFeature:
@@ -83,32 +90,19 @@ class TasteProfile:
             취향 프로필
 
         Raises:
-            ValueError: `schema`가 `SCHEMA`와 다르거나 모르는 층이 있을 때
+            ValueError: `schema`가 `SCHEMA`와 다르거나, 모르는 층이 있거나, 강도나 문장
+                길이가 범위를 벗어날 때
             KeyError: 필수 필드가 없을 때
+            TypeError: 필드의 타입이 다를 때
         """
         if data.get("schema") != SCHEMA:
-            raise ValueError(f"읽을 수 없는 취향 프로필 형식이다: {data.get('schema')}")
+            raise ValueError("읽을 수 없는 취향 프로필 형식이다")
+        if not isinstance(data["user_id"], str):
+            raise TypeError("user_id가 문자열이 아니다")
         return cls(
             user_id=data["user_id"],
-            features=tuple(
-                TasteFeature(
-                    code=feature["code"],
-                    layer=Layer(feature["layer"]),
-                    like=feature["like"],
-                    weight=feature["weight"],
-                )
-                for feature in data.get("features", [])
-            ),
-            free_texts=tuple(
-                FreeText(
-                    text=free_text["text"],
-                    like=free_text["like"],
-                    vector=None
-                    if free_text["vector"] is None
-                    else tuple(free_text["vector"]),
-                )
-                for free_text in data.get("free_texts", [])
-            ),
+            features=tuple(_feature(f) for f in _list(data.get("features", []))),
+            free_texts=tuple(_free_text(t) for t in _list(data.get("free_texts", []))),
         )
 
 
@@ -133,6 +127,42 @@ def select_tastes(
     request_groups = {_group(code) for code in request_codes} - {None}
     return tuple(
         feature for feature in features if _group(feature.code) not in request_groups
+    )
+
+
+def _list(value: object) -> list[dict[str, Any]]:
+    if not isinstance(value, list) or not all(isinstance(v, dict) for v in value):
+        raise TypeError("객체 목록이 아니다")
+    return value
+
+
+def _feature(data: dict[str, Any]) -> TasteFeature:
+    """`features` 원소 하나를 읽는다. 타입이 틀리면 검색 중에 터지므로 여기서 막는다."""
+    code, like, weight = data["code"], data["like"], data["weight"]
+    if not isinstance(code, str) or not isinstance(like, bool):
+        raise TypeError("취향의 code나 like 타입이 다르다")
+    # bool은 int의 하위 타입이라 따로 막는다.
+    if not isinstance(weight, int) or isinstance(weight, bool):
+        raise TypeError("취향의 weight가 정수가 아니다")
+    if not 1 <= weight <= MAX_WEIGHT:
+        raise ValueError("취향의 weight가 범위를 벗어났다")
+    return TasteFeature(code=code, layer=Layer(data["layer"]), like=like, weight=weight)
+
+
+def _free_text(data: dict[str, Any]) -> FreeText:
+    """`free_texts` 원소 하나를 읽는다."""
+    text, like, vector = data["text"], data["like"], data["vector"]
+    if not isinstance(text, str) or not (like is None or isinstance(like, bool)):
+        raise TypeError("취향 문장의 text나 like 타입이 다르다")
+    if len(text) > MAX_FREE_TEXT_LENGTH:
+        raise ValueError("취향 문장이 너무 길다")
+    if vector is not None and not (
+        isinstance(vector, list)
+        and all(isinstance(v, int | float) and not isinstance(v, bool) for v in vector)
+    ):
+        raise TypeError("취향 문장의 vector가 숫자 목록이 아니다")
+    return FreeText(
+        text=text, like=like, vector=None if vector is None else tuple(vector)
     )
 
 

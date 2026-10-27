@@ -80,6 +80,19 @@ class Found:
     invalid: tuple[int, ...] = ()
 
 
+@dataclass(frozen=True)
+class VectorCounts:
+    """장소 벡터 상태별 장소 수.
+
+    Attributes:
+        comparable: 요청문 인코더와 모델·리비전이 같아 비교할 수 있는 장소 수
+        mismatched: 벡터가 없거나 모델·리비전이 달라 검색에서 빠지는 장소 수
+    """
+
+    comparable: int
+    mismatched: int
+
+
 class StoreError(Exception):
     """장소 저장소를 읽지 못했다. 접속 실패, 시간 초과, SQL 오류 등이다."""
 
@@ -105,10 +118,11 @@ class PlaceStore(Protocol):
         """
         ...
 
-    def mismatched(self) -> int:
-        """공유 모듈 `fit_ai.embedding`과 모델·리비전이 다르거나 벡터가 없는 장소 수를 센다.
+    def vector_counts(self) -> VectorCounts:
+        """공유 모듈 `fit_ai.embedding`과 비교할 수 있는 장소와 빠지는 장소를 센다.
 
-        이런 장소는 `find`에서 빠진다. 상태 확인(`/healthz`)에서 쓴다.
+        벡터가 없거나 모델·리비전이 다른 장소는 `find`에서 빠진다. 상태
+        확인(`/healthz`)에서 쓴다.
 
         Returns:
             장소 수

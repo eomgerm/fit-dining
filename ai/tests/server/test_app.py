@@ -14,7 +14,13 @@ import pytest
 from fastapi.testclient import TestClient
 
 from fit_ai import embedding
-from fit_ai.match.candidates import Found, MapBounds, PlaceFilter, StoreError
+from fit_ai.match.candidates import (
+    Found,
+    MapBounds,
+    PlaceFilter,
+    StoreError,
+    VectorCounts,
+)
 from fit_ai.match.cards import Card, Reason, ReasonTag, ScoreItem, Source
 from fit_ai.match.interpretation import Conditions, Interpretation
 from fit_ai.match.search import (
@@ -109,11 +115,17 @@ class FakeSearch:
     def __init__(self) -> None:
         self.outcome: SearchResult | Exception = make_result()
         self.calls: list[tuple[SearchRequest, object, float]] = []
+        self.clients: list[object] = []
 
     def __call__(
-        self, request: SearchRequest, store: object, timeout: float = 5.0
+        self,
+        request: SearchRequest,
+        store: object,
+        timeout: float = 5.0,
+        client: object = None,
     ) -> SearchResult:
         self.calls.append((request, store, timeout))
+        self.clients.append(client)
         if isinstance(self.outcome, Exception):
             raise self.outcome
         return self.outcome
@@ -122,17 +134,19 @@ class FakeSearch:
 class FakeStore:
     """상태 확인에 쓰는 장소 저장소. 검색은 가짜 `search`가 하므로 `find`는 쓰지 않는다."""
 
-    def __init__(self, fail: bool = False, mismatched: int = 0) -> None:
+    def __init__(
+        self, fail: bool = False, comparable: int = 30, mismatched: int = 0
+    ) -> None:
         self.fail = fail
-        self.mismatched_count = mismatched
+        self.counts = VectorCounts(comparable, mismatched)
 
     def find(self, place_filter: PlaceFilter, query: Sequence[float], k: int) -> Found:
         raise NotImplementedError
 
-    def mismatched(self) -> int:
+    def vector_counts(self) -> VectorCounts:
         if self.fail:
             raise StoreError("장소 저장소를 읽지 못했다: OperationalError")
-        return self.mismatched_count
+        return self.counts
 
 
 @pytest.fixture(autouse=True)
@@ -204,6 +218,23 @@ class TestSearch:
                 3.0,
             )
         ]
+
+    def test_shares_gms_client(self, searched: FakeSearch) -> None:
+        """검색_시작때만든GMS클라이언트를_검색에넘긴다"""
+        gms_client = object()
+
+        post(client(gms_client=gms_client))
+
+        assert searched.clients == [gms_client]
+
+    @pytest.mark.parametrize(
+        "bounds", [{}, {"swLat": None, "swLng": None, "neLat": None, "neLng": None}]
+    )
+    def test_empty_map_bounds_is_none(self, searched: FakeSearch, bounds: dict) -> None:
+        """검색_지도영역에값이하나도없으면_영역이없는것으로보고역으로거른다"""
+        post(client(), mapBounds=bounds)
+
+        assert searched.calls[0][0].bounds is None
 
     def test_follow_up(self, searched: FakeSearch) -> None:
         """검색_후속이면_changeSummary를준다"""
@@ -330,6 +361,8 @@ class TestErrors:
             {"query": QUERY_TEXT, "mapBounds": {"zoom": 3}},
             {"query": QUERY_TEXT, "previousConditions": ["QUIET"]},
             {"query": QUERY_TEXT, "tasteProfile": "QUIET"},
+            {"query": QUERY_TEXT, "mapBounds": {"swLat": "37.4"}},
+            {"query": QUERY_TEXT, "mapBounds": {"swLat": True}},
         ],
     )
     def test_invalid_request_is_problem_400(
@@ -392,6 +425,28 @@ class TestErrors:
         assert response.json()["code"] == "BUSY"
         assert response.headers["retry-after"] == "1"
 
+    def test_nan_coordinate(self) -> None:
+        """오류_좌표가NaN이나Infinity면_400이다"""
+        response = client().post(
+            "/v1/search",
+            content=b'{"query": "cafe", "mapBounds": {"swLat": NaN, "neLat": Infinity}}',
+            headers={"content-type": "application/json"},
+        )
+
+        assert response.status_code == 400
+        assert response.json()["code"] == "INVALID_REQUEST"
+
+    def test_unreadable_body_is_invalid_request(self) -> None:
+        """오류_본문을JSON으로읽지못하면_HTTP_ERROR가아니라INVALID_REQUEST다"""
+        response = client().post(
+            "/v1/search",
+            content=b'{"query": "\xff\xfe"}',
+            headers={"content-type": "application/json"},
+        )
+
+        assert response.status_code == 400
+        assert response.json()["code"] == "INVALID_REQUEST"
+
     def test_unknown_path(self) -> None:
         """오류_없는주소면_404ProblemDetail이다"""
         response = client().get("/v1/unknown")
@@ -413,15 +468,26 @@ class TestHealth:
             ({"embedding_ready": False}, "EMBEDDING_UNAVAILABLE"),
             ({"store": None}, "PLACES_UNAVAILABLE"),
             ({"store": FakeStore(fail=True)}, "PLACES_UNAVAILABLE"),
-            ({"store": FakeStore(mismatched=3)}, "MODEL_MISMATCH"),
+            ({"store": FakeStore(comparable=0, mismatched=3)}, "MODEL_MISMATCH"),
         ],
     )
     def test_not_ready(self, overrides: dict, code: str) -> None:
-        """상태확인_인코더나저장소가준비되지않았거나모델이다르면_503이다"""
+        """상태확인_인코더나저장소가준비되지않았거나모든장소의모델이다르면_503이다"""
         response = client(**overrides).get("/healthz")
 
         assert response.status_code == 503
         assert response.json()["code"] == code
+
+
+def test_partial_mismatch_is_ready(caplog: pytest.LogCaptureFixture) -> None:
+    """상태확인_일부장소만모델이다르면_200이고빠진장소수를경고로남긴다"""
+    caplog.set_level(logging.INFO, logger="server")
+
+    response = client(store=FakeStore(comparable=29, mismatched=1)).get("/healthz")
+
+    assert response.status_code == 200
+    events = [json.loads(r.getMessage()) for r in caplog.records if r.name == "server"]
+    assert events == [{"event": "places_mismatched", "count": 1}]
 
 
 def test_logs_are_json_without_query(caplog: pytest.LogCaptureFixture) -> None:
@@ -430,7 +496,7 @@ def test_logs_are_json_without_query(caplog: pytest.LogCaptureFixture) -> None:
 
     post(client())
 
-    events = [json.loads(record.getMessage()) for record in caplog.records]
+    events = [json.loads(r.getMessage()) for r in caplog.records if r.name == "server"]
     assert [event["event"] for event in events] == ["search"]
     assert events[0]["codes"] == ["QUIET"]
     assert events[0]["ranked_by"] == "LLM"

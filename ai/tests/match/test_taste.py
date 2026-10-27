@@ -59,8 +59,52 @@ class TestReadProfile:
 
     def test_reject_other_schema(self) -> None:
         """프로필읽기_형식버전이다르면_오류로멈춘다"""
-        with pytest.raises(ValueError, match="taste-profile/v1"):
+        with pytest.raises(ValueError, match="형식"):
             TasteProfile.from_dict({**PROFILE, "schema": "taste-profile/v1"})
+
+    @pytest.mark.parametrize(
+        ("feature", "error"),
+        [
+            ({"code": ["QUIET"]}, TypeError),
+            ({"code": {"x": 1}}, TypeError),
+            ({"weight": [1]}, TypeError),
+            ({"weight": True}, TypeError),
+            ({"weight": 4}, ValueError),
+            ({"weight": 0}, ValueError),
+            ({"like": "false"}, TypeError),
+            ({"layer": "unknown"}, ValueError),
+        ],
+    )
+    def test_reject_bad_feature(self, feature: dict, error: type[Exception]) -> None:
+        """프로필읽기_취향의타입이나값이틀리면_검색중에터지지않게읽을때거부한다"""
+        bad = {"code": "COZY", "layer": "importance", "like": True, "weight": 1}
+
+        with pytest.raises(error):
+            TasteProfile.from_dict({**PROFILE, "features": [{**bad, **feature}]})
+
+    @pytest.mark.parametrize(
+        ("free_text", "error"),
+        [
+            ({"text": "가" * 101}, ValueError),
+            ({"text": 3}, TypeError),
+            ({"like": "yes"}, TypeError),
+            ({"vector": "0.1"}, TypeError),
+            ({"vector": [0.1, "x"]}, TypeError),
+        ],
+    )
+    def test_reject_bad_free_text(
+        self, free_text: dict, error: type[Exception]
+    ) -> None:
+        """프로필읽기_취향문장이100자를넘거나타입이틀리면_거부한다"""
+        bad = {"text": "조용한 곳", "like": True, "vector": [0.1, 0.2]}
+
+        with pytest.raises(error):
+            TasteProfile.from_dict({**PROFILE, "free_texts": [{**bad, **free_text}]})
+
+    def test_reject_non_list(self) -> None:
+        """프로필읽기_features가목록이아니면_거부한다"""
+        with pytest.raises(TypeError):
+            TasteProfile.from_dict({**PROFILE, "features": {"code": "QUIET"}})
 
 
 class TestSelectTastes:

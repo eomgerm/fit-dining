@@ -3,7 +3,9 @@
 요청 해석 → 요청문 인코딩 → ① 후보 뽑기(장소 저장소) → ⓪ 취향 고르기 → ② 정렬 →
 ③ 카드 만들기 순서다. 뽑힌 장소가 없으면 정렬하지 않고 결과 없음 이유를 만든다. 근처
 검색과 LLM 실패 때는 LLM 없이 같은 모양의 카드를 만든다(docs/comparison/spec.md 3장).
-HTTP 요청·응답 모양과 폴백 코드로 바꾸는 일은 API(`server/app.py`)가 한다.
+검색 한 번은 시간 예산(`SEARCH_BUDGET_SECONDS`) 안에서 끝내려고, 남은 시간이 모자라면
+정렬 LLM을 부르지 않는다. HTTP 요청·응답 모양과 폴백 코드로 바꾸는 일은
+API(`server/app.py`)가 한다.
 """
 
 import random
@@ -11,6 +13,8 @@ import time
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from enum import StrEnum
+
+import httpx
 
 from fit_ai import embedding
 from fit_ai.match.candidates import (
@@ -35,6 +39,14 @@ FACILITY_PHRASES = {
 }
 """결과가 없을 때 문구에 쓰는 시설 말. (원인 문구, 제안 문구)다."""
 
+SEARCH_BUDGET_SECONDS = 9.0
+"""검색 한 번의 시간 예산. BE 타임아웃(12초 제안) 안에 대신 처리한 결과라도 돌려주려고
+둔다. 해석이 GMS를 기다리다 실패하면 10초까지 걸리고, 그때는 정렬 LLM을 부르지 않는다.
+임시 값이다."""
+
+MIN_RANK_WAIT_SECONDS = 1.5
+"""정렬 LLM 한 번에 줄 수 있는 가장 짧은 대기 시간. 이보다 짧으면 부르지 않는다."""
+
 
 class Fallback(StrEnum):
     """LLM 없이 정렬한 이유."""
@@ -42,7 +54,8 @@ class Fallback(StrEnum):
     NEARBY = "NEARBY"
     """근처 검색. 정렬할 때 어느 장소가 반경 안에 남을지 모른다."""
     LLM_FAILED = "LLM_FAILED"
-    """LLM 호출이 실패했거나 출력이 형식에 맞지 않았다."""
+    """LLM 호출이 실패했거나, 출력이 형식에 맞지 않았거나, 시간 예산이 모자라 부르지
+    않았다."""
 
 
 class EmbeddingError(Exception):
@@ -129,6 +142,7 @@ def search(
     store: PlaceStore,
     rng: random.Random | None = None,
     timeout: float = 5.0,
+    client: httpx.Client | None = None,
 ) -> SearchResult:
     """검색 한 번을 한다.
 
@@ -137,6 +151,7 @@ def search(
         store: 장소 저장소
         rng: LLM에 넣을 후보를 섞는 난수기. 없으면 새로 만든다.
         timeout: GMS 한 번 부를 때 기다리는 시간(초)
+        client: GMS 연결을 다시 쓰는 HTTP 클라이언트. 없으면 부를 때마다 만든다.
 
     Returns:
         카드 목록과 해석 결과, 기록
@@ -145,7 +160,8 @@ def search(
         EmbeddingError: 요청문을 벡터로 바꾸지 못했을 때
         StoreError: 장소 저장소를 읽지 못했을 때
     """
-    interpretation = interpret(request.query, request.previous, timeout)
+    deadline = time.perf_counter() + SEARCH_BUDGET_SECONDS
+    interpretation = interpret(request.query, request.previous, timeout, client)
     conditions = interpretation.conditions
 
     start = time.perf_counter()
@@ -165,8 +181,9 @@ def search(
     if not found.candidates:
         reason = empty_reason(conditions, in_map_bounds=request.bounds is not None)
         return SearchResult(interpretation, (), reason, found.invalid, trace)
+    wait, skipped = _rank_wait(interpretation, deadline, timeout)
     cards, trace = _rank_cards(
-        found.candidates, conditions, request.taste, trace, rng, timeout
+        found.candidates, conditions, request.taste, trace, rng, wait, skipped, client
     )
     return SearchResult(interpretation, cards, None, found.invalid, trace)
 
@@ -230,22 +247,47 @@ def _place_filter(conditions: Conditions, bounds: MapBounds | None) -> PlaceFilt
     )
 
 
+def _rank_wait(
+    interpretation: Interpretation, deadline: float, timeout: float
+) -> tuple[float | None, str | None]:
+    """정렬 LLM 한 번에 기다릴 시간을 정한다.
+
+    해석에서 GMS 호출이 실패했으면 정렬도 실패할 가능성이 커서 부르지 않는다. 공유
+    모듈은 호출이 실패하면 한 번 더 부르므로 남은 예산의 절반까지만 기다린다.
+
+    Returns:
+        (기다릴 시간, 부르지 않는 이유). 부르지 않으면 기다릴 시간이 None이다.
+    """
+    if interpretation.gms_failed:
+        return None, "해석에서 GMS 호출이 실패해 정렬 LLM을 부르지 않았다"
+    wait = min(timeout, (deadline - time.perf_counter()) / 2)
+    if wait < MIN_RANK_WAIT_SECONDS:
+        return None, "검색 시간 예산이 모자라 정렬 LLM을 부르지 않았다"
+    return wait, None
+
+
 def _rank_cards(
     candidates: Sequence[Candidate],
     conditions: Conditions,
     taste: TasteProfile | None,
     trace: SearchTrace,
     rng: random.Random | None,
-    timeout: float,
+    wait: float | None,
+    skipped: str | None,
+    client: httpx.Client | None,
 ) -> tuple[tuple[Card, ...], SearchTrace]:
     """⓪ 취향을 고르고 ② 정렬해서 ③ 카드를 만든다.
 
-    근처 검색이거나 LLM 정렬이 실패하면 LLM 없이 정렬하고 기록에 이유를 남긴다.
+    근처 검색이거나, 정렬 LLM을 부르지 않았거나(`wait`가 None), LLM 정렬이 실패하면
+    LLM 없이 정렬하고 기록에 이유를 남긴다.
     """
     tastes = select_tastes(taste.features, conditions.codes) if taste else ()
     if conditions.nearby:
         ranked = rank_by_similarity(candidates, conditions.codes)
         trace = replace(trace, fallback=Fallback.NEARBY)
+    elif wait is None:
+        ranked = rank_by_similarity(candidates, conditions.codes)
+        trace = replace(trace, fallback=Fallback.LLM_FAILED, rank_llm_error=skipped)
     else:
         try:
             result = rank_with_llm(
@@ -255,7 +297,8 @@ def _rank_cards(
                 tastes,
                 taste.free_texts if taste else (),
                 rng,
-                timeout,
+                wait,
+                client,
             )
             ranked = result.ranked
             trace = replace(

@@ -11,6 +11,8 @@ import re
 import time
 from dataclasses import asdict, dataclass
 
+import httpx
+
 from fit_ai import gms
 from fit_ai.features import FEATURES
 from fit_ai.match.conditions import CATEGORY_NAMES, CONDITIONS, STATION_NAMES, Layer
@@ -44,6 +46,7 @@ SYSTEM_PROMPT = f"""\
 너는 장소 검색 서비스의 요청 해석기다. 사용자의 검색 요청을 조건으로 바꾼다.
 - category_group: RESTAURANT(식당), CAFE(카페), BAR(술집) 중 하나. \
 음식 종류나 메뉴(한식, 라멘, 파스타, 국물 요리 등)를 말하면 RESTAURANT다. \
+맛집, 밥집, 먹을 데처럼 식사하는 곳을 찾는 말도 RESTAURANT다. \
 술 마시는 곳(이자카야, 포차, 호프, 와인바, 칵테일바, 루프탑 바 등)은 BAR다. \
 커피나 디저트를 먹는 곳은 CAFE다. 알 수 없으면 null.
 - station: GANGNAM(강남역), YEOKSAM(역삼역), SEOLLEUNG(선릉역) 중 하나. \
@@ -60,10 +63,12 @@ FOOD_WESTERN, 쌀국수·팟타이는 FOOD_ASIAN, 짜장면·마라탕은 FOOD_C
 - codes에는 요청에 없는 조건을 넣지 않는다. "식당"이라는 말만으로 음식 종류 코드를, \
 "모임", "회식", 인원만으로 시설 GROUP을 넣지 않는다. GROUP은 단체석, 단체 예약처럼 \
 시설을 말할 때만 넣는다.
-- embedding_text: 요청을 긍정형 한 문장으로 쓴다. \
+- embedding_text: 요청을 긍정형 한 문장으로 쓴다. 비우거나 줄이지 않는다. \
+역과 업종만 있는 짧은 요청도 그대로 쓴다. \
 부정 표현은 바라는 쪽으로 바꾼다("시끄러운 곳 말고" → "조용한 곳").
 - 이전 조건이 있으면 새 요청은 이전 조건에 더하거나 바꾸는 말이다. \
 둘을 합친 조건을 낸다. "A 말고 B"는 A를 빼고 B를 넣는다. \
+근처로 바꾸는 말이면 station은 null, 역으로 바꾸는 말이면 nearby는 false다. \
 text는 합친 요청을 한 문장으로, \
 change_summary는 바뀐 점을 "~했어요"로 끝나는 짧은 한 문장으로 쓴다.
 - 이전 조건이 없으면 text와 change_summary는 null이다.
@@ -73,17 +78,19 @@ change_summary는 바뀐 점을 "~했어요"로 끝나는 짧은 한 문장으�
 
 예시:
 - "선릉역 라멘집" → codes ["FOOD_JAPANESE"], category_group "RESTAURANT", \
-station "SEOLLEUNG"
+station "SEOLLEUNG", embedding_text "선릉역 라멘집"
 - "북적이는 데 말고 공부할 카페" → codes ["QUIET", "PURPOSE_WORK"], \
 category_group "CAFE", embedding_text "조용하고 공부하기 좋은 카페"
-- "역삼 포차" → codes [], category_group "BAR", station "YEOKSAM"
-- "주차 되는 카페" → codes ["PARKING"], category_group "CAFE"
+- "역삼 포차" → codes [], category_group "BAR", station "YEOKSAM", \
+embedding_text "역삼 포차"
+- "주차 되는 카페" → codes ["PARKING"], category_group "CAFE", \
+embedding_text "주차할 수 있는 카페"
 - "강남 5명 저녁 먹을 데" → codes ["PURPOSE_GROUP"], category_group "RESTAURANT", \
-station "GANGNAM"
+station "GANGNAM", embedding_text "강남에서 5명이 저녁 먹기 좋은 곳"
 
 아래 형식의 JSON만 출력한다.
-{{"text": null, "embedding_text": "...", "codes": [], "category_group": null, \
-"station": null, "nearby": false, "change_summary": null}}"""
+{{"text": null, "embedding_text": "<요청을 긍정형으로 쓴 한 문장>", "codes": [], \
+"category_group": null, "station": null, "nearby": false, "change_summary": null}}"""
 """요청 해석 시스템 지시. 예시 문장은 평가 질의(experiments/interpretation)와
 겹치지 않게 고른다."""
 
@@ -202,16 +209,22 @@ class Interpretation:
         change_summary: 후속 조건에서 바뀐 점. 새 검색이면 None이다.
         llm_error: 규칙으로 해석한 이유. LLM으로 해석했으면 None이다.
         llm_seconds: LLM 호출에 걸린 시간(초)
+        gms_failed: GMS 호출 자체가 실패했는지(꺼짐 포함). 출력 검사에 걸린 것과
+            다르다. 검색은 이때 정렬 LLM을 부르지 않는다.
     """
 
     conditions: Conditions
     change_summary: str | None
     llm_error: str | None = None
     llm_seconds: float | None = None
+    gms_failed: bool = False
 
 
 def interpret(
-    query: str, previous: Conditions | None = None, timeout: float = 5.0
+    query: str,
+    previous: Conditions | None = None,
+    timeout: float = 5.0,
+    client: httpx.Client | None = None,
 ) -> Interpretation:
     """요청문을 조건으로 바꾼다. LLM이 실패하면 규칙으로 해석한다.
 
@@ -219,6 +232,7 @@ def interpret(
         query: 사용자가 이번에 입력한 요청문
         previous: 후속 조건이면 기준 요청의 조건. 새 검색이면 None이다.
         timeout: GMS 한 번 부를 때 기다리는 시간(초)
+        client: GMS 연결을 다시 쓰는 HTTP 클라이언트. 없으면 부를 때마다 만든다.
 
     Returns:
         해석 결과
@@ -233,10 +247,17 @@ def interpret(
         # 출력 검사는 받은 뒤 한 번만 한다. 공유 모듈에 넘기면 검사에 걸릴 때도 다시 부른다.
         lambda data: data,
         timeout=timeout,
+        client=client,
     )
     seconds = time.perf_counter() - start
     if data is None:
-        return _by_rules(query, previous, "GMS가 꺼져 있거나 호출이 실패했다", seconds)
+        return _by_rules(
+            query,
+            previous,
+            "GMS가 꺼져 있거나 호출이 실패했다",
+            seconds,
+            gms_failed=True,
+        )
     try:
         conditions, summary = _parse(data, query, previous)
     except (ValueError, TypeError) as e:
@@ -278,19 +299,26 @@ def interpret_by_rules(query: str, previous: Conditions | None = None) -> Condit
         embedding_text=_join(previous.embedding_text, query),
         codes=_known_codes([*previous.codes, *codes]),
         category_group=category_group or previous.category_group,
-        station=station or previous.station,
-        nearby=nearby or previous.nearby,
+        # 새로 말한 쪽을 따른다. 역을 말하면 근처 검색이 아니고, 근처를 말하면 이전 역을
+        # 버린다.
+        station=station or (None if nearby else previous.station),
+        nearby=nearby or (previous.nearby and station is None),
     )
 
 
 def _by_rules(
-    query: str, previous: Conditions | None, error: str, seconds: float | None
+    query: str,
+    previous: Conditions | None,
+    error: str,
+    seconds: float | None,
+    gms_failed: bool = False,
 ) -> Interpretation:
     return Interpretation(
         conditions=interpret_by_rules(query, previous),
         change_summary=None if previous is None else DEFAULT_CHANGE_SUMMARY,
         llm_error=error,
         llm_seconds=seconds,
+        gms_failed=gms_failed,
     )
 
 
@@ -300,6 +328,8 @@ def _user_prompt(query: str, previous: Conditions | None) -> str:
     data = asdict(previous)
     # 후보 추출용 문장은 LLM이 새로 쓰므로 보여 주지 않는다.
     del data["embedding_text"]
+    # 이전 조건은 FE가 돌려보낸 값이라 모르는 코드로 프롬프트를 키울 수 있다.
+    data["codes"] = list(_known_codes(list(previous.codes)))
     return "\n".join(
         [f"이전 조건: {json.dumps(data, ensure_ascii=False)}", f"새 요청: {query}"]
     )
@@ -316,8 +346,8 @@ def _parse(
     if not isinstance(data, dict):
         raise TypeError("JSON 객체가 아니다")
     embedding_text = data.get("embedding_text")
-    if not _is_text(embedding_text):
-        raise ValueError("embedding_text가 없다")
+    if not isinstance(embedding_text, str):
+        raise TypeError("embedding_text가 문자열이 아니다")
     codes = data.get("codes", [])
     if not isinstance(codes, list):
         raise TypeError("codes가 목록이 아니다")
@@ -336,11 +366,19 @@ def _parse(
         summary = data.get("change_summary")
         if not _is_text(summary) or len(summary) > MAX_CHANGE_SUMMARY_LENGTH:
             summary = DEFAULT_CHANGE_SUMMARY
+    # 짧은 요청에서 "..."처럼 글자 없는 문장을 내는 일이 있다(10-27 평가 216번 중
+    # 12번). 그대로 인코딩하면 유사도가 무의미해져서 요청문으로 대신한다.
+    if not any(ch.isalnum() for ch in embedding_text):
+        embedding_text = text
     category_group = data.get("category_group")
     station = data.get("station") if data.get("station") in STATION_NAMES else None
-    # "강남역 근처"는 역을 기준으로 찾는 말이다. LLM이 헷갈려도 역이 있으면 근처 검색이
-    # 아니다(규칙 해석과 같다).
-    nearby = nearby and station is None
+    if station is not None and nearby:
+        if previous is not None and station == previous.station and not previous.nearby:
+            # 역 검색 뒤 "근처로"라고 했는데 LLM이 이전 역을 남긴 경우다.
+            station = None
+        else:
+            # "강남역 근처"는 역을 기준으로 찾는 말이다(규칙 해석과 같다).
+            nearby = False
     conditions = Conditions(
         text=text.strip()[:MAX_TEXT_LENGTH],
         embedding_text=embedding_text.strip()[:MAX_TEXT_LENGTH],

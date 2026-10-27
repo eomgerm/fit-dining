@@ -11,8 +11,9 @@ from collections.abc import Callable, Sequence
 
 import pytest
 
-from fit_ai import embedding
+from fit_ai import embedding, gms
 from fit_ai.match import interpretation
+from fit_ai.match import search as search_module
 from fit_ai.match.candidates import (
     Candidate,
     Found,
@@ -204,7 +205,10 @@ class TestRanking:
         assert result.empty_reason is None
         assert result.trace.candidates == 3
         assert result.trace.fallback is None
-        assert json.loads(result.trace.rank_llm_raw) == rank
+        # 로그용 출력에는 읽어 낸 후보 번호만 남는다.
+        assert json.loads(result.trace.rank_llm_raw) == {
+            "ranking": [{"id": 3}, {"id": 1}, {"id": 2}]
+        }
         assert result.trace.rank_llm_seconds is not None
 
     def test_cards_use_selected_liked_tastes(self, fake_gms: FakeGms) -> None:
@@ -262,6 +266,58 @@ class TestRanking:
         assert [card.place_id for card in result.cards] == [1, 2, 3]
         assert result.trace.fallback is Fallback.LLM_FAILED
         assert result.trace.rank_llm_raw is None
+
+
+class TestBudget:
+    """검색 시간 예산"""
+
+    def test_gms_failure_skips_rank_llm(self, fake_gms: FakeGms) -> None:
+        """예산_해석에서GMS호출이실패하면_정렬LLM을부르지않고유사도로정렬한다"""
+        calls = fake_gms(lambda messages: None)
+
+        result = run()
+
+        assert result.interpretation.gms_failed is True
+        assert rank_calls(calls) == 0
+        assert result.trace.fallback is Fallback.LLM_FAILED
+        assert "해석에서 GMS" in result.trace.rank_llm_error
+        assert len(result.cards) == 3
+
+    def test_no_time_left_skips_rank_llm(
+        self, fake_gms: FakeGms, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """예산_남은시간이정렬한번에모자라면_정렬LLM을부르지않는다"""
+        calls = fake_gms(answers(ranking((1, "딱 맞음"))))
+        monkeypatch.setattr(search_module, "SEARCH_BUDGET_SECONDS", 0.0)
+
+        result = run()
+
+        assert rank_calls(calls) == 0
+        assert result.trace.fallback is Fallback.LLM_FAILED
+        assert "예산" in result.trace.rank_llm_error
+
+    def test_rank_wait_and_shared_client(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """예산_정렬LLM은남은예산의절반까지만기다리고_해석과정렬이같은클라이언트를쓴다"""
+        seen: list[tuple[bool, float, object]] = []
+        answer = answers(ranking((1, "딱 맞음")))
+
+        def call_json(
+            messages, parse, *, response_format=None, timeout=10.0, client=None
+        ):
+            is_interpret = messages[0]["content"] == interpretation.SYSTEM_PROMPT
+            seen.append((is_interpret, timeout, client))
+            return parse(answer(messages))
+
+        monkeypatch.setattr(gms, "call_json", call_json)
+        client = object()
+
+        search(SearchRequest(QUERY), FakeStore(), NoShuffle(), 5.0, client)  # type: ignore[arg-type]
+
+        [(first, interpret_wait, c1), (second, rank_wait, c2)] = seen
+        assert (first, second) == (True, False)
+        assert interpret_wait == 5.0
+        assert 4.0 < rank_wait <= search_module.SEARCH_BUDGET_SECONDS / 2
+        assert c1 is client and c2 is client
 
 
 class TestEmptyAndFailures:

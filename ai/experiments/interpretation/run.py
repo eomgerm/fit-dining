@@ -4,6 +4,7 @@
 
 화면에 요약을 찍고, 질의별 결과는 results/<--label>.json에 남긴다(기본은 날짜).
 LLM 해석은 실제 GMS를 부른다. 같은 질의를 여러 번 돌려 답이 흔들리는지도 본다.
+LLM이 낸 벡터용 문장은 코드가 고치기 전 값으로도 남긴다("..."처럼 글자 없는 문장).
 """
 
 import argparse
@@ -14,13 +15,31 @@ from collections import Counter, defaultdict
 from datetime import date
 from pathlib import Path
 
+from fit_ai import gms
 from fit_ai.match.interpretation import (
+    SYSTEM_PROMPT,
     Conditions,
     interpret,
     interpret_by_rules,
 )
 
 HERE = Path(__file__).resolve().parent
+
+_outputs: list[object] = []
+"""이번 해석에서 GMS가 낸 출력(JSON을 읽은 값)"""
+
+
+def _record(call_json):
+    """GMS 출력을 `_outputs`에 남기도록 공유 모듈 호출을 감싼다."""
+
+    def wrapper(messages, parse, **kwargs):
+        def keep(data):
+            _outputs.append(data)
+            return parse(data)
+
+        return call_json(messages, keep, **kwargs)
+
+    return wrapper
 
 
 def main() -> None:
@@ -30,19 +49,33 @@ def main() -> None:
     args = parser.parse_args()
     cases = json.loads((HERE / "cases.json").read_text(encoding="utf-8"))["cases"]
     timeout = float(os.environ.get("GMS_TIMEOUT_SECONDS", "5.0"))
+    gms.call_json = _record(gms.call_json)
 
     rows = []
     for case in cases:
         previous = _previous(case.get("previous"))
         runs = []
         for _ in range(args.runs):
+            _outputs.clear()
             result = interpret(case["query"], previous, timeout)
+            output = _outputs[-1] if _outputs else None
+            raw_text = (
+                output.get("embedding_text") if isinstance(output, dict) else None
+            )
             runs.append(
                 {
                     **_check(case, result.conditions),
                     "llm_error": result.llm_error,
                     "seconds": result.llm_seconds,
                     "change_summary": result.change_summary,
+                    "raw_embedding_text": raw_text,
+                    "raw_embedding_empty": isinstance(raw_text, str)
+                    and not any(ch.isalnum() for ch in raw_text),
+                    # 평가 질의는 프롬프트 예시와 겹치지 않으므로 프롬프트에 있는
+                    # 문장이 나오면 베낀 것이다.
+                    "raw_embedding_copied": isinstance(raw_text, str)
+                    and len(raw_text) > 3
+                    and raw_text in SYSTEM_PROMPT,
                 }
             )
         rule = _check(case, interpret_by_rules(case["query"], previous))
@@ -170,6 +203,18 @@ def _report(rows: list[dict]) -> None:
     kept = sum(len(r["llm"][0]["uncovered_kept"]) for r in rows)
     total = sum(r["llm"][0]["uncovered_total"] for r in rows)
     print(f"\n코드로 못 잡는 표현이 벡터용 문장에 남은 비율: {kept}/{total}")
+    empty = [r["query"] for r in rows for run in r["llm"] if run["raw_embedding_empty"]]
+    print(
+        f"LLM이 글자 없는 벡터용 문장을 낸 횟수(코드가 요청문으로 대신함): "
+        f"{len(empty)}/{len(llm_runs)} {sorted(set(empty))}"
+    )
+    copied = [
+        r["query"] for r in rows for run in r["llm"] if run["raw_embedding_copied"]
+    ]
+    print(
+        f"LLM이 프롬프트 문장을 벡터용 문장으로 베낀 횟수: "
+        f"{len(copied)}/{len(llm_runs)} {sorted(set(copied))}"
+    )
 
 
 def _summary(name: str, runs: list[dict]) -> None:
