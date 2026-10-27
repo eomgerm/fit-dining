@@ -1,7 +1,10 @@
 package kr.co.fitdining.api.review;
 
-import jakarta.validation.Valid;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.ConstraintViolationException;
+import jakarta.validation.Validator;
 import jakarta.validation.constraints.Positive;
+import java.util.Set;
 import kr.co.fitdining.api.auth.domain.AuthFailure;
 import kr.co.fitdining.api.auth.ports.AuthUseCases;
 import kr.co.fitdining.api.review.dto.ReviewCreateRequest;
@@ -42,6 +45,7 @@ public class ReviewController {
 
 	private final ReviewService reviewService;
 	private final AuthUseCases auth;
+	private final Validator validator;
 
 	/**
 	 * 장소의 리뷰를 최신순으로 돌려준다. 인증 없이 조회한다.
@@ -59,11 +63,12 @@ public class ReviewController {
 	}
 
 	/**
-	 * 로그인한 사용자의 리뷰를 등록한다. 장소 존재는 아직 확인하지 않는다(D-15, D-21).
+	 * 로그인한 사용자의 리뷰를 등록한다(D-15, D-40).
 	 *
-	 * <p>오류: 본문을 읽을 수 없거나 정의되지 않은 속성이 있으면 400. {@code description}이 500자를 넘으면 400.
-	 * {@code placeId}가 양의 정수가 아니면 400. {@code Authorization} 헤더가 없거나 토큰이 유효하지 않으면 401
-	 * (만료면 {@code type}이 {@code urn:fitdining:auth:access-token-expired}). 같은 장소에 오늘 이미 썼으면 409.
+	 * <p>오류: 본문을 읽을 수 없거나 정의되지 않은 속성이 있으면 400. {@code placeId}가 양의 정수가 아니면 400.
+	 * {@code Authorization} 헤더가 없거나 토큰이 유효하지 않으면 401(만료면 {@code type}이
+	 * {@code urn:fitdining:auth:access-token-expired}). 인증 뒤 필드 형식, 방문일 범위, 태그 규칙이 틀리면 400.
+	 * 없는 장소면 404. 같은 장소에 같은 방문일로 이미 썼으면 409.
 	 *
 	 * @param placeId 장소 id
 	 * @param authorization {@code Bearer <AT>}
@@ -74,8 +79,13 @@ public class ReviewController {
 	@ResponseStatus(HttpStatus.CREATED)
 	public ReviewCreateResponse create(@PathVariable @Positive long placeId,
 			@RequestHeader(name = HttpHeaders.AUTHORIZATION, required = false) String authorization,
-			@Valid @RequestBody ReviewCreateRequest request) {
-		return reviewService.create(placeId, userId(authorization), request);
+			@RequestBody ReviewCreateRequest request) {
+		String userId = userId(authorization);
+		Set<ConstraintViolation<ReviewCreateRequest>> violations = validator.validate(request);
+		if (!violations.isEmpty()) {
+			throw new ConstraintViolationException(violations);
+		}
+		return reviewService.create(placeId, userId, request);
 	}
 
 	/** 로그인한 사용자의 작성 화면 데이터. 오류: 401(인증), 404(없는 장소), 503(장소 검색 불가). */

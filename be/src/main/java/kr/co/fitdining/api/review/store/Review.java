@@ -1,13 +1,19 @@
 package kr.co.fitdining.api.review.store;
 
+import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Collection;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -56,18 +62,25 @@ public class Review {
 
 	private Instant deletedAt;
 
+	/** 리뷰와 같은 flush에 저장돼 등록이 실패하면 함께 남지 않는다(D-40). */
+	@ElementCollection
+	@CollectionTable(name = "review_reason_tags", joinColumns = @JoinColumn(name = "review_id"))
+	@Column(name = "code")
+	private Set<String> tagCodes = new LinkedHashSet<>();
+
 	/**
-	 * @param placeId 장소 id
-	 * @param userId 작성자 id
-	 * @param visitDate 방문일(KST)
 	 * @param description 본문. 공백뿐이면 서비스가 null로 바꿔 넘긴다.
 	 * @param createdAt 작성 시각. 마이크로초로 자른 값이다.
 	 */
-	public Review(long placeId, String userId, LocalDate visitDate, String description, Instant createdAt) {
+	public Review(long placeId, String userId, LocalDate visitDate, Collection<String> tagCodes,
+			boolean revisitIntent, String description, Integer spentPerPerson, Instant createdAt) {
 		this.placeId = placeId;
 		this.userId = userId;
 		this.visitDate = visitDate;
+		this.tagCodes.addAll(tagCodes);
+		this.revisitIntent = revisitIntent;
 		this.description = description;
+		this.spentPerPerson = spentPerPerson;
 		this.createdAt = createdAt;
 		this.updatedAt = createdAt;
 	}

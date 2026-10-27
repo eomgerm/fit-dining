@@ -1,5 +1,6 @@
 package kr.co.fitdining.api.review.exception;
 
+import jakarta.validation.ConstraintViolationException;
 import kr.co.fitdining.api.auth.domain.AuthFailure;
 import kr.co.fitdining.api.place.exception.PlaceNotFoundException;
 import kr.co.fitdining.api.place.exception.PlaceSearchUnavailableException;
@@ -29,7 +30,9 @@ public class ReviewExceptionHandler {
 			HandlerMethodValidationException.class,
 			HttpMessageNotReadableException.class,
 			MethodArgumentTypeMismatchException.class,
+			ConstraintViolationException.class,
 			InvalidReviewCursorException.class,
+			InvalidVisitDateException.class,
 			InvalidReasonTagsException.class
 	})
 	public ProblemDetail handleBadRequest(Exception e) {

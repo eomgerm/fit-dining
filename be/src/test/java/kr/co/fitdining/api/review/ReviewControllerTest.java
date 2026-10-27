@@ -32,6 +32,7 @@ import kr.co.fitdining.api.review.dto.ReviewItem;
 import kr.co.fitdining.api.review.dto.ReviewListResponse;
 import kr.co.fitdining.api.review.exception.DuplicateReviewException;
 import kr.co.fitdining.api.review.exception.InvalidReasonTagsException;
+import kr.co.fitdining.api.review.exception.InvalidVisitDateException;
 import kr.co.fitdining.api.review.store.InvalidReviewCursorException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -86,6 +87,13 @@ class ReviewControllerTest {
 				.header("Authorization", "Bearer " + TOKEN);
 	}
 
+	/** 필수 필드만 채운 본문에 {@code extra}(앞에 쉼표를 붙인 JSON 속성)를 더한다. */
+	private static String valid(String extra) {
+		return "{\"visitedAt\":\"2026-10-21\",\"tagCodes\":[\"QUIET_GOOD\"],\"revisitIntent\":false" + extra + "}";
+	}
+
+	private static final String VALID = valid("");
+
 	private static MockHttpServletRequestBuilder createWithoutAuthorization(Object placeId, String body) {
 		return post("/api/v1/places/{placeId}/reviews", placeId).contentType(MediaType.APPLICATION_JSON).content(body);
 	}
@@ -101,39 +109,72 @@ class ReviewControllerTest {
 		@Test
 		@DisplayName("등록_유효한토큰이면_201과리뷰id를받고작성자로저장한다")
 		void create_validToken_returnsCreatedWithAuthor() throws Exception {
-			mockMvc.perform(create(3, "{\"description\":\"분위기가 좋았어요\"}"))
+			mockMvc.perform(create(3, "{\"visitedAt\":\"2026-10-18\",\"tagCodes\":[\"QUIET_GOOD\",\"SHORT_WAIT_BAD\"],"
+							+ "\"revisitIntent\":true,\"description\":\"분위기가 좋았어요\",\"spentPerPerson\":15000}"))
 					.andExpect(status().isCreated())
 					.andExpect(content().contentType(MediaType.APPLICATION_JSON))
 					.andExpect(jsonPath("$.reviewId").value(7));
 
-			verify(reviewService).create(3L, USER_ID, new ReviewCreateRequest("분위기가 좋았어요"));
+			verify(reviewService).create(3L, USER_ID, new ReviewCreateRequest(LocalDate.of(2026, 10, 18),
+					List.of("QUIET_GOOD", "SHORT_WAIT_BAD"), true, "분위기가 좋았어요", 15000));
 		}
 
 		@Test
-		@DisplayName("등록_본문없이도_201이다")
-		void create_withoutDescription_returnsCreated() throws Exception {
-			mockMvc.perform(create(3, "{}")).andExpect(status().isCreated());
+		@DisplayName("등록_본문과금액없이도_201이다")
+		void create_withoutOptionalFields_returnsCreated() throws Exception {
+			mockMvc.perform(create(3, VALID)).andExpect(status().isCreated());
 		}
 
 		@Test
 		@DisplayName("등록_본문이500자면_201이다")
 		void create_description500_returnsCreated() throws Exception {
-			mockMvc.perform(create(3, "{\"description\":\"" + "가".repeat(500) + "\"}"))
+			mockMvc.perform(create(3, valid(",\"description\":\"" + "가".repeat(500) + "\"")))
 					.andExpect(status().isCreated());
 		}
 
 		@Test
 		@DisplayName("등록_본문이501자면_400이다")
 		void create_description501_returnsBadRequest() throws Exception {
-			expectProblem(create(3, "{\"description\":\"" + "가".repeat(501) + "\"}"), 400);
+			expectProblem(create(3, valid(",\"description\":\"" + "가".repeat(501) + "\"")), 400);
+		}
+
+		@ParameterizedTest
+		@ValueSource(ints = {0, 1_000_000})
+		@DisplayName("등록_1인당금액이0원이나1000000원이면_201이다")
+		void create_spentPerPersonBoundary_returnsCreated(int spent) throws Exception {
+			mockMvc.perform(create(3, valid(",\"spentPerPerson\":" + spent))).andExpect(status().isCreated());
+		}
+
+		@ParameterizedTest
+		@ValueSource(ints = {-1, 1_000_001})
+		@DisplayName("등록_1인당금액이범위밖이면_400이고저장하지않는다")
+		void create_spentPerPersonOutOfRange_returnsBadRequest(int spent) throws Exception {
+			expectProblem(create(3, valid(",\"spentPerPerson\":" + spent)), 400);
+
+			verify(reviewService, never()).create(anyLong(), anyString(), any());
+		}
+
+		@ParameterizedTest
+		@ValueSource(strings = {
+				"{}",
+				"{\"tagCodes\":[\"QUIET_GOOD\"],\"revisitIntent\":false}",
+				"{\"visitedAt\":\"2026-10-21\",\"revisitIntent\":false}",
+				"{\"visitedAt\":\"2026-10-21\",\"tagCodes\":[],\"revisitIntent\":false}",
+				"{\"visitedAt\":\"2026-10-21\",\"tagCodes\":[\"QUIET_GOOD\"]}"
+		})
+		@DisplayName("등록_방문일태그재방문의사중하나라도없으면_400이고저장하지않는다")
+		void create_missingRequiredField_returnsBadRequest(String body) throws Exception {
+			expectProblem(create(3, body), 400);
+
+			verify(reviewService, never()).create(anyLong(), anyString(), any());
 		}
 
 		@Test
-		@DisplayName("등록_같은장소에오늘이미썼으면_409다")
+		@DisplayName("등록_같은장소에같은방문일로이미썼으면_409다")
 		void create_duplicateVisit_returnsConflict() throws Exception {
 			when(reviewService.create(anyLong(), anyString(), any())).thenThrow(new DuplicateReviewException());
 
-			expectProblem(create(3, "{}"), 409);
+			expectProblem(create(3, VALID), 409);
 		}
 
 		@Test
@@ -141,7 +182,15 @@ class ReviewControllerTest {
 		void create_invalidReasonTags_returnsBadRequest() throws Exception {
 			when(reviewService.create(anyLong(), anyString(), any())).thenThrow(new InvalidReasonTagsException());
 
-			expectProblem(create(3, "{}"), 400);
+			expectProblem(create(3, VALID), 400);
+		}
+
+		@Test
+		@DisplayName("등록_방문일이범위밖이면_400이다")
+		void create_invalidVisitDate_returnsBadRequest() throws Exception {
+			when(reviewService.create(anyLong(), anyString(), any())).thenThrow(new InvalidVisitDateException());
+
+			expectProblem(create(3, VALID), 400);
 		}
 	}
 
@@ -150,9 +199,10 @@ class ReviewControllerTest {
 	class Authentication {
 
 		@Test
-		@DisplayName("등록_Authorization헤더가없으면_401이고저장하지않는다")
-		void create_noAuthorization_returnsUnauthorized() throws Exception {
+		@DisplayName("등록_Authorization헤더가없으면_본문이비어도400이아니라401이고저장하지않는다")
+		void create_noAuthorization_returnsUnauthorizedBeforeValidation() throws Exception {
 			expectProblem(createWithoutAuthorization(3, "{}"), 401);
+			expectProblem(createWithoutAuthorization(3, VALID), 401);
 
 			verify(reviewService, never()).create(anyLong(), anyString(), any());
 		}
@@ -204,7 +254,7 @@ class ReviewControllerTest {
 		void reviewForm_loggedIn_returnsForm() throws Exception {
 			LocalDate today = LocalDate.of(2026, 10, 21);
 			when(reviewService.reviewForm(3L, USER_ID)).thenReturn(new ReviewFormResponse(
-					new ReviewFormResponse.Place("카페 온담", CategoryGroup.CAFE, Station.YEOKSAM),
+					new ReviewFormResponse.Place("카페 온담", CategoryGroup.CAFE, Station.YEOKSAM, null),
 					new ReviewFormResponse.VisitDate(today.minusMonths(1), today, today), List.of(today),
 					new ReviewFormResponse.Tags(
 							List.of(new ReviewFormResponse.FormTag("QUIET_GOOD", "조용해서 좋았어요", "NOISE", "분위기")),
@@ -214,6 +264,7 @@ class ReviewControllerTest {
 			mockMvc.perform(form(3))
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.place.categoryGroup").value("CAFE"))
+					.andExpect(jsonPath("$.place.thumbnailUrl").doesNotExist())
 					.andExpect(jsonPath("$.visitDate.default").value("2026-10-21"))
 					.andExpect(jsonPath("$.visitDate.min").value("2026-09-21"))
 					.andExpect(jsonPath("$.reviewedDates[0]").value("2026-10-21"))
@@ -235,7 +286,7 @@ class ReviewControllerTest {
 			when(reviewService.create(anyLong(), anyString(), any())).thenThrow(new PlaceNotFoundException());
 
 			expectProblem(form(999), 404);
-			expectProblem(create(999, "{}"), 404);
+			expectProblem(create(999, VALID), 404);
 		}
 
 		@Test
@@ -254,7 +305,7 @@ class ReviewControllerTest {
 		@ParameterizedTest
 		@ValueSource(strings = {
 				"{\"description\":\"좋았어요\",\"userId\":1}",
-				"{\"visitedAt\":\"2026-10-21\"}"
+				"{\"visitedAt\":\"2026-10-21\",\"tagCodes\":[\"QUIET_GOOD\"],\"revisitIntent\":false,\"createdAt\":1}"
 		})
 		@DisplayName("등록_정의되지않은속성이있으면_400이다")
 		void create_unknownProperty_returnsBadRequest(String body) throws Exception {
@@ -337,7 +388,7 @@ class ReviewControllerTest {
 		@Test
 		@DisplayName("등록_응답키는_reviewId하나다")
 		void create_responseKeys_reviewIdOnly() throws Exception {
-			String body = mockMvc.perform(create(3, "{}")).andExpect(status().isCreated())
+			String body = mockMvc.perform(create(3, VALID)).andExpect(status().isCreated())
 					.andReturn().getResponse().getContentAsString();
 
 			assertThat(Set.copyOf(jsonMapper.readTree(body).propertyNames())).containsExactly("reviewId");
@@ -352,7 +403,7 @@ class ReviewControllerTest {
 		@Test
 		@DisplayName("등록_정상요청후_로그에본문과토큰이없다")
 		void create_success_doesNotLogDescriptionOrToken(CapturedOutput output) throws Exception {
-			mockMvc.perform(create(3, "{\"description\":\"" + LOG_SECRET + "\"}"))
+			mockMvc.perform(create(3, valid(",\"description\":\"" + LOG_SECRET + "\"")))
 					.andExpect(status().isCreated());
 
 			assertThat(output.getAll()).doesNotContain(LOG_SECRET).doesNotContain(TOKEN);
@@ -384,7 +435,9 @@ class ReviewControllerTest {
 
 	static Stream<Arguments> badRequestsWithSecret() {
 		return Stream.of(
-				Arguments.of("501자 본문", create(1, "{\"description\":\"" + LOG_SECRET + "가".repeat(501) + "\"}")),
+				Arguments.of("501자 본문", create(1, valid(",\"description\":\"" + LOG_SECRET + "가".repeat(501) + "\""))),
+				Arguments.of("범위 밖 금액과 본문", create(1, valid(",\"description\":\"" + LOG_SECRET
+						+ "\",\"spentPerPerson\":1000001"))),
 				Arguments.of("정의되지 않은 속성", create(1, "{\"description\":\"" + LOG_SECRET + "\",\"userId\":1}")),
 				Arguments.of("문자열 자리의 객체", create(1, "{\"description\":{\"text\":\"" + LOG_SECRET + "\"}}")),
 				Arguments.of("깨진 JSON", create(1, "{\"description\":\"" + LOG_SECRET + "\"")));

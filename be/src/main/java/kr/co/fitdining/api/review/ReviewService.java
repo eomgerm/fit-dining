@@ -18,6 +18,7 @@ import kr.co.fitdining.api.review.dto.ReviewFormResponse;
 import kr.co.fitdining.api.review.dto.ReviewItem;
 import kr.co.fitdining.api.review.dto.ReviewListResponse;
 import kr.co.fitdining.api.review.exception.DuplicateReviewException;
+import kr.co.fitdining.api.review.exception.InvalidVisitDateException;
 import kr.co.fitdining.api.review.store.Review;
 import kr.co.fitdining.api.review.store.ReviewCursor;
 import kr.co.fitdining.api.review.store.ReviewRepository;
@@ -62,23 +63,29 @@ public class ReviewService {
 	}
 
 	/**
-	 * 리뷰를 등록한다. 방문일은 아직 입력받지 않아 KST 오늘이다.
+	 * 리뷰를 등록한다. 장소, 방문일, 태그를 이 순서로 확인한 뒤 리뷰와 태그를 함께 저장한다(D-40).
 	 *
 	 * @param placeId 장소 id
 	 * @param userId 작성자 id(인증된 사용자)
-	 * @param request 등록 요청
+	 * @param request 등록 요청. 형식 검증은 컨트롤러가 인증 뒤에 한다.
 	 * @return 등록된 리뷰 id
 	 * @throws DuplicateReviewException 같은 사용자가 같은 장소에 같은 방문일로 이미 썼을 때
 	 * @throws AuthFailure 탈퇴했거나 없는 사용자일 때(401). 토큰은 탈퇴 뒤에도 만료 전까지 유효하다(D-38).
 	 * @throws kr.co.fitdining.api.place.exception.PlaceNotFoundException 없는 장소일 때
+	 * @throws InvalidVisitDateException 방문일이 범위 밖일 때
+	 * @throws kr.co.fitdining.api.review.exception.InvalidReasonTagsException 태그가 선택 규칙에 맞지 않을 때
 	 */
 	public ReviewCreateResponse create(long placeId, String userId, ReviewCreateRequest request) {
 		requireActiveUser(userId);
-		places.getPlace(placeId);
+		PlaceSummary place = places.getPlace(placeId).place();
+		if (!VisitDatePolicy.at(clock).contains(request.visitedAt())) {
+			throw new InvalidVisitDateException();
+		}
+		ReasonTagRule.validate(request.tagCodes(), tags.findExposed(place.categoryGroup()));
 		// PostgreSQL은 마이크로초까지만 저장하므로 커서 비교가 어긋나지 않게 자른다(D-27).
 		Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
-		Review review = new Review(placeId, userId, LocalDate.ofInstant(now, SEOUL),
-				normalize(request.description()), now);
+		Review review = new Review(placeId, userId, request.visitedAt(), request.tagCodes(), request.revisitIntent(),
+				normalize(request.description()), request.spentPerPerson(), now);
 		try {
 			// 저장 전 조회는 동시 요청을 막지 못한다. 제약 위반을 그 자리에서 받으려고 flush한다(D-28).
 			return new ReviewCreateResponse(reviews.saveAndFlush(review).getReviewId());
@@ -108,7 +115,7 @@ public class ReviewService {
 					tag.code(), tag.label(), ReasonTagRule.group(tag), tag.displayGroup()));
 		}
 		return new ReviewFormResponse(
-				new ReviewFormResponse.Place(place.name(), place.categoryGroup(), place.station()),
+				new ReviewFormResponse.Place(place.name(), place.categoryGroup(), place.station(), place.thumbnailUrl()),
 				new ReviewFormResponse.VisitDate(visitDates.min(), visitDates.max(), visitDates.max()),
 				reviews.findReviewedDates(userId, placeId, visitDates.min()),
 				new ReviewFormResponse.Tags(good, bad), LIMITS, true);

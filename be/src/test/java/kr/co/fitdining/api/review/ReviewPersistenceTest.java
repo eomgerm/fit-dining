@@ -37,6 +37,8 @@ import kr.co.fitdining.api.review.dto.ReviewFormResponse;
 import kr.co.fitdining.api.review.dto.ReviewItem;
 import kr.co.fitdining.api.review.dto.ReviewListResponse;
 import kr.co.fitdining.api.review.exception.DuplicateReviewException;
+import kr.co.fitdining.api.review.exception.InvalidReasonTagsException;
+import kr.co.fitdining.api.review.exception.InvalidVisitDateException;
 import kr.co.fitdining.api.review.store.ReviewRepository;
 import kr.co.fitdining.api.support.PostgresTestSupport;
 import kr.co.fitdining.api.user.UserService;
@@ -72,6 +74,7 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 	private static final Instant NOON = Instant.parse("2026-10-21T03:00:00.123456789Z");
 	private static final String USER_PREFIX = "review-test-";
 	private static final String PASSWORD = "review-test-password1";
+	private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
 
 	@DynamicPropertySource
 	static void placeMock(DynamicPropertyRegistry registry) {
@@ -142,6 +145,7 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 	@AfterEach
 	void cleanUp() {
 		JdbcTemplate app = new JdbcTemplate(appSource());
+		app.update("delete from review_reason_tags");
 		app.update("delete from reviews");
 		app.update("delete from auth_refresh_tokens where user_id like ?", USER_PREFIX + "%");
 		app.update("delete from auth_users where id like ?", USER_PREFIX + "%");
@@ -162,8 +166,17 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 		userService.withdraw(userId, new AuthUseCases.Identity(userId, null, null, 0, 0));
 	}
 
-	private static ReviewCreateRequest body(String description) {
-		return new ReviewCreateRequest(description);
+	/** 시계 기준 KST 오늘 방문, 모든 업종에 노출되는 좋았어요 태그 하나 */
+	private ReviewCreateRequest body(String description) {
+		return request(LocalDate.ofInstant(clock.instant, SEOUL), List.of("QUIET_GOOD"), description);
+	}
+
+	private static ReviewCreateRequest request(LocalDate visitedAt, List<String> tagCodes, String description) {
+		return new ReviewCreateRequest(visitedAt, tagCodes, false, description, null);
+	}
+
+	private int count(String table) {
+		return jdbc.queryForObject("select count(*) from " + table, Integer.class);
 	}
 
 	@Nested
@@ -171,12 +184,12 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 	class Create {
 
 		@Test
-		@DisplayName("등록_KST자정직후면_방문일이KST날짜이고작성시각은마이크로초로자른다")
-		void create_justAfterMidnightKst_storesKstDateAndMicros() {
+		@DisplayName("등록_KST자정직후면_KST오늘을방문일로받고작성시각은마이크로초로자른다")
+		void create_justAfterMidnightKst_acceptsKstTodayAndTruncatesMicros() {
 			String user = createUsers(1).getFirst();
 			clock.instant = Instant.parse("2026-10-21T15:30:00.123456789Z");
 
-			service.create(1, user, body("좋았어요"));
+			service.create(1, user, request(LocalDate.of(2026, 10, 22), List.of("QUIET_GOOD"), "좋았어요"));
 
 			Map<String, Object> row = jdbc.queryForMap("select visit_date, created_at, revisit_intent from reviews");
 			assertThat(row.get("visit_date").toString()).isEqualTo("2026-10-22");
@@ -258,6 +271,88 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 				pool.shutdownNow();
 			}
 			assertThat(jdbc.queryForObject("select count(*) from reviews", Integer.class)).isEqualTo(1);
+		}
+	}
+
+	@Nested
+	@DisplayName("방문일과 이유 태그")
+	class VisitDateAndTags {
+
+		private static final LocalDate TODAY = LocalDate.of(2026, 10, 21);
+
+		@Test
+		@DisplayName("등록_방문일태그재방문의사금액을_리뷰와함께저장한다")
+		void create_storesVisitDateTagsRevisitAndSpent() {
+			String user = createUsers(1).getFirst();
+
+			long reviewId = service.create(1, user, new ReviewCreateRequest(TODAY.minusDays(3),
+					List.of("QUIET_GOOD", "SHORT_WAIT_BAD"), true, null, 1_000_000)).reviewId();
+
+			Map<String, Object> row = jdbc.queryForMap(
+					"select visit_date, revisit_intent, spent_per_person from reviews where review_id = ?", reviewId);
+			assertThat(row.get("visit_date").toString()).isEqualTo("2026-10-18");
+			assertThat(row).containsEntry("revisit_intent", true).containsEntry("spent_per_person", 1_000_000);
+			assertThat(jdbc.queryForList("select code from review_reason_tags where review_id = ? order by code",
+					String.class, reviewId)).containsExactly("QUIET_GOOD", "SHORT_WAIT_BAD");
+		}
+
+		@Test
+		@DisplayName("등록_방문일이오늘과한달전이면_저장하고_그밖이면_예외이고저장하지않는다")
+		void create_visitDateBoundaries() {
+			List<String> authors = createUsers(2);
+
+			service.create(1, authors.get(0), request(TODAY, List.of("QUIET_GOOD"), null));
+			service.create(1, authors.get(0), request(TODAY.minusMonths(1), List.of("QUIET_GOOD"), null));
+			for (LocalDate outside : List.of(TODAY.plusDays(1), TODAY.minusMonths(1).minusDays(1))) {
+				assertThatThrownBy(() -> service.create(1, authors.get(1), request(outside, List.of("QUIET_GOOD"), null)))
+						.isInstanceOf(InvalidVisitDateException.class);
+			}
+
+			assertThat(count("reviews")).isEqualTo(2);
+		}
+
+		@Test
+		@DisplayName("등록_태그가선택규칙에맞지않으면_예외이고아무것도저장하지않는다")
+		void create_invalidTags_savesNothing() {
+			String user = createUsers(1).getFirst();
+			List<List<String>> invalid = List.of(
+					List.of("SHORT_WAIT_BAD"),
+					List.of("QUIET_GOOD", "LIVELY_BAD"),
+					List.of("PURPOSE_WORK_GOOD"),
+					List.of("NOT_A_TAG"));
+
+			for (List<String> tagCodes : invalid) {
+				assertThatThrownBy(() -> service.create(1, user, request(TODAY, tagCodes, null)))
+						.as(tagCodes.toString()).isInstanceOf(InvalidReasonTagsException.class);
+			}
+
+			assertThat(count("reviews")).isZero();
+			assertThat(count("review_reason_tags")).isZero();
+		}
+
+		@Test
+		@DisplayName("등록_같은날두번째가중복이면_그태그도남지않는다")
+		void create_duplicate_leavesNoTags() {
+			String user = createUsers(1).getFirst();
+			service.create(1, user, request(TODAY.minusDays(2), List.of("QUIET_GOOD"), null));
+
+			assertThatThrownBy(() -> service.create(1, user,
+					request(TODAY.minusDays(2), List.of("COZY_GOOD", "SHORT_WAIT_BAD"), null)))
+					.isInstanceOf(DuplicateReviewException.class);
+
+			assertThat(jdbc.queryForList("select code from review_reason_tags", String.class))
+					.containsExactly("QUIET_GOOD");
+		}
+
+		@Test
+		@DisplayName("등록_다른날로쓰면_오늘리뷰가있어도저장한다")
+		void create_otherVisitDate_allowedWithTodayReview() {
+			String user = createUsers(1).getFirst();
+			service.create(1, user, request(TODAY, List.of("QUIET_GOOD"), null));
+
+			assertThatCode(() -> service.create(1, user, request(TODAY.minusDays(1), List.of("QUIET_GOOD"), null)))
+					.doesNotThrowAnyException();
+			assertThat(service.reviewForm(1, user).reviewedDates()).containsExactly(TODAY.minusDays(1), TODAY);
 		}
 	}
 
@@ -530,6 +625,11 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 			return client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
 		}
 
+		private static String json(String visitedAt, String description) {
+			return "{\"visitedAt\":\"" + visitedAt + "\",\"tagCodes\":[\"QUIET_GOOD\",\"SHORT_WAIT_BAD\"],"
+					+ "\"revisitIntent\":true,\"description\":\"" + description + "\",\"spentPerPerson\":15000}";
+		}
+
 		@Test
 		@DisplayName("등록_로그인한토큰으로_201이고목록맨위에보이며같은날두번째는409다")
 		void create_loggedIn_createdShownAndSecondConflicts() throws Exception {
@@ -537,19 +637,34 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 			String token = auth.login(USER_PREFIX + "0@example.com", PASSWORD, "127.0.0.1").accessToken();
 			String path = "/api/v1/places/1/reviews";
 
-			HttpResponse<String> created = send("POST", path, token, "{\"description\":\"직접 등록\"}");
-			HttpResponse<String> duplicate = send("POST", path, token, "{}");
-			HttpResponse<String> anonymous = send("POST", path, null, "{}");
+			HttpResponse<String> created = send("POST", path, token, json("2026-10-18", "직접 등록"));
+			HttpResponse<String> duplicate = send("POST", path, token, json("2026-10-18", "두 번째"));
 			JsonNode page = mapper.readTree(send("GET", path, null, null).body());
 
 			assertThat(created.statusCode()).isEqualTo(201);
 			assertThat(duplicate.statusCode()).isEqualTo(409);
-			assertThat(anonymous.statusCode()).isEqualTo(401);
 			assertThat(page.get("totalCount").asInt()).isEqualTo(1);
 			assertThat(page.get("items").get(0).get("description").asString()).isEqualTo("직접 등록");
-			assertThat(jdbc.queryForObject("select user_id from reviews", String.class)).isEqualTo(user);
-			assertThat(jdbc.queryForObject("select visit_date from reviews", LocalDate.class))
-					.isEqualTo(LocalDate.of(2026, 10, 21));
+			Map<String, Object> row = jdbc.queryForMap(
+					"select user_id, visit_date, revisit_intent, spent_per_person from reviews");
+			assertThat(row).containsEntry("user_id", user).containsEntry("revisit_intent", true)
+					.containsEntry("spent_per_person", 15000);
+			assertThat(row.get("visit_date").toString()).isEqualTo("2026-10-18");
+			assertThat(jdbc.queryForList("select code from review_reason_tags order by code", String.class))
+					.containsExactly("QUIET_GOOD", "SHORT_WAIT_BAD");
+		}
+
+		@Test
+		@DisplayName("등록_로그인을본문검증보다먼저확인한다")
+		void create_authenticatesBeforeValidatingBody() throws Exception {
+			createUsers(1);
+			String token = auth.login(USER_PREFIX + "0@example.com", PASSWORD, "127.0.0.1").accessToken();
+			String path = "/api/v1/places/1/reviews";
+
+			assertThat(send("POST", path, null, "{}").statusCode()).isEqualTo(401);
+			assertThat(send("POST", path, token, "{}").statusCode()).isEqualTo(400);
+			assertThat(send("POST", path, token, json("2026-10-22", "내일")).statusCode()).isEqualTo(400);
+			assertThat(count("reviews")).isZero();
 		}
 
 		@Test
@@ -560,7 +675,8 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 
 			withdrawAccount(user);
 
-			assertThat(send("POST", "/api/v1/places/1/reviews", token, "{}").statusCode()).isEqualTo(401);
+			assertThat(send("POST", "/api/v1/places/1/reviews", token, json("2026-10-21", "탈퇴 뒤"))
+					.statusCode()).isEqualTo(401);
 		}
 	}
 

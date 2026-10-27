@@ -9,13 +9,20 @@ import static org.mockito.Mockito.when;
 import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import kr.co.fitdining.api.auth.domain.AuthFailure;
 import kr.co.fitdining.api.auth.repository.AuthUserRepository;
 import kr.co.fitdining.api.place.PlaceService;
+import kr.co.fitdining.api.place.dto.PlaceDetailResponse;
+import kr.co.fitdining.api.place.dto.PlaceSummary;
+import kr.co.fitdining.api.place.dto.PlaceSummary.CategoryGroup;
+import kr.co.fitdining.api.place.dto.PlaceSummary.Station;
 import kr.co.fitdining.api.review.dto.ReviewCreateRequest;
 import kr.co.fitdining.api.review.store.ReviewRepository;
+import kr.co.fitdining.api.review.tag.ReasonTag;
 import kr.co.fitdining.api.review.tag.ReasonTagRepository;
 import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.DisplayName;
@@ -54,18 +61,27 @@ class ReviewServiceTest {
 
 		private final ReviewRepository reviews = mock(ReviewRepository.class);
 		private final AuthUserRepository users = mock(AuthUserRepository.class);
-		private final ReviewService service = new ReviewService(reviews, users, mock(PlaceService.class),
-				mock(ReasonTagRepository.class),
+		private final PlaceService places = mock(PlaceService.class);
+		private final ReasonTagRepository tags = mock(ReasonTagRepository.class);
+		private final ReviewService service = new ReviewService(reviews, users, places, tags,
 				Optional.of(Clock.fixed(Instant.parse("2026-10-21T03:00:00Z"), ZoneOffset.UTC)));
 
 		@Test
 		@DisplayName("등록_저장중작성자FK위반이면_401이다")
 		void create_authorForeignKeyViolation_unauthorized() {
+			PlaceDetailResponse detail = mock(PlaceDetailResponse.class);
+			when(detail.place()).thenReturn(new PlaceSummary(1L, "식당", CategoryGroup.RESTAURANT, Station.GANGNAM,
+					null, null, null));
+			when(places.getPlace(1)).thenReturn(detail);
+			when(tags.findExposed(CategoryGroup.RESTAURANT)).thenReturn(List.of(
+					new ReasonTag("QUIET_GOOD", "QUIET", ReasonTag.Sentiment.GOOD, "조용해서 좋았어요", "분위기")));
 			when(users.existsByIdAndDeletedAtIsNull("user-1")).thenReturn(true);
 			when(reviews.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("x",
 					new ConstraintViolationException("fk", new SQLException(), ReviewService.AUTHOR_CONSTRAINT)));
+			ReviewCreateRequest request = new ReviewCreateRequest(LocalDate.of(2026, 10, 21), List.of("QUIET_GOOD"),
+					false, null, null);
 
-			assertThatThrownBy(() -> service.create(1, "user-1", new ReviewCreateRequest(null)))
+			assertThatThrownBy(() -> service.create(1, "user-1", request))
 					.isInstanceOfSatisfying(AuthFailure.class, failure -> assertThat(failure.status()).isEqualTo(401));
 		}
 	}
