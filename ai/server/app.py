@@ -23,6 +23,7 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from fit_ai import embedding, gms
 from fit_ai.match.candidates import (
     GENERAL_K,
     NEARBY_K,
@@ -31,9 +32,7 @@ from fit_ai.match.candidates import (
     PlaceStore,
     StoreError,
 )
-from fit_ai.match.embedder import EmbeddingError, QueryEmbedder
 from fit_ai.match.interpretation import Conditions, empty_reason, interpret
-from fit_ai.match.llm import LlmClient
 from fit_ai.match.models import Card
 from fit_ai.match.search import Fallback, SearchRequest, search
 from fit_ai.match.taste import TasteProfile
@@ -64,18 +63,18 @@ MAX_TASTE_FREE_TEXTS = 20
 class Dependencies:
     """앱이 쓰는 바깥 의존성. 서비스 시작 때 한 번 만든다.
 
+    요청문 인코딩과 GMS 호출은 공유 모듈 `fit_ai.embedding`, `fit_ai.gms`를 바로 부른다.
+
     Attributes:
-        embedder: 요청문 인코더. 불러오지 못했으면 None이다.
-        llm: 요청 해석과 정렬에 쓰는 LLM
-        llm_model: LLM 모델 이름. 응답의 `models.llm`에 싣는다.
+        embedding_ready: 요청문 인코더 모델을 올렸는지. 못 올렸으면 검색이 503이다.
         store: 장소 저장소. 접속 주소가 없으면 None이다.
+        gms_timeout: GMS 한 번 부를 때 기다리는 시간(초)
         max_concurrent: 컨테이너 하나가 동시에 처리하는 요청 수 상한
     """
 
-    embedder: QueryEmbedder | None
-    llm: LlmClient
-    llm_model: str
+    embedding_ready: bool
     store: PlaceStore | None
+    gms_timeout: float = 5.0
     max_concurrent: int = 8
 
 
@@ -89,7 +88,7 @@ def create_app(deps: Dependencies) -> FastAPI:
         FastAPI 앱. `GET /healthz`와 `POST /v1/search`가 있다.
     """
     app = FastAPI(title="Fit Dining AI", version="0.3.0")
-    if deps.embedder is None:
+    if not deps.embedding_ready:
         _log("not_ready", reason="EMBEDDING_UNAVAILABLE")
     if deps.store is None:
         _log("not_ready", reason="PLACES_UNAVAILABLE")
@@ -133,14 +132,14 @@ def create_app(deps: Dependencies) -> FastAPI:
 
 
 def _health(deps: Dependencies) -> JSONResponse:
-    if deps.embedder is None:
+    if not deps.embedding_ready:
         return _problem(
             503, "EMBEDDING_UNAVAILABLE", "요청문 인코더가 아직 준비되지 않았다"
         )
     if deps.store is None:
         return _problem(503, "PLACES_UNAVAILABLE", "장소 저장소가 설정되지 않았다")
     try:
-        mismatched = deps.store.mismatched(deps.embedder.model, deps.embedder.revision)
+        mismatched = deps.store.mismatched()
     except StoreError as e:
         _log("store_failed", error=str(e))
         return _problem(503, "PLACES_UNAVAILABLE", "장소 저장소를 읽지 못했다")
@@ -155,7 +154,7 @@ def _health(deps: Dependencies) -> JSONResponse:
 
 
 def _search(deps: Dependencies, body: SearchBody) -> JSONResponse:
-    if deps.embedder is None:
+    if not deps.embedding_ready:
         return _problem(
             503, "EMBEDDING_UNAVAILABLE", "요청문 인코더가 아직 준비되지 않았다"
         )
@@ -168,7 +167,7 @@ def _search(deps: Dependencies, body: SearchBody) -> JSONResponse:
         previous = _read_previous(body.previous_conditions)
         if previous is None:
             fallbacks.append("PREVIOUS_INVALID")
-    interpretation = interpret(deps.llm, body.query, previous)
+    interpretation = interpret(body.query, previous, deps.gms_timeout)
     if interpretation.llm_error is not None:
         fallbacks.append("INTERPRET_LLM_FAILED")
     conditions = interpretation.conditions
@@ -178,9 +177,10 @@ def _search(deps: Dependencies, body: SearchBody) -> JSONResponse:
 
     start = time.perf_counter()
     try:
-        query = deps.embedder.encode_query(conditions.embedding_text)
-    except EmbeddingError as e:
-        _log("embedding_failed", error=str(e))
+        [query] = embedding.encode_queries([conditions.embedding_text])
+    except (RuntimeError, OSError, ValueError) as e:
+        # torch(CUDA 메모리 부족 등)와 모델 파일 오류다. 요청문은 남기지 않는다.
+        _log("embedding_failed", error=type(e).__name__)
         return _problem(503, "EMBEDDING_UNAVAILABLE", "요청문을 벡터로 바꾸지 못했다")
     embed_seconds = time.perf_counter() - start
 
@@ -214,7 +214,7 @@ def _search(deps: Dependencies, body: SearchBody) -> JSONResponse:
                 nearby=conditions.nearby,
                 taste=taste,
             ),
-            deps.llm,
+            timeout=deps.gms_timeout,
         )
         trace = result.trace
         if trace.fallback is Fallback.LLM_FAILED:
@@ -243,8 +243,8 @@ def _search(deps: Dependencies, body: SearchBody) -> JSONResponse:
         ranked_by=ranked_by,
         fallbacks=fallbacks,
         models=ModelsBody(
-            embedding=f"{query.model}@{query.revision}",
-            llm=deps.llm_model if used_llm else None,
+            embedding=f"{embedding.MODEL_ID}@{embedding.REVISION}",
+            llm=gms.MODEL if used_llm else None,
         ),
     )
     _log(

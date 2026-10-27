@@ -9,11 +9,7 @@ import logging
 import os
 from collections.abc import Mapping
 
-import httpx
-
-from fit_ai import gms
-from fit_ai.match.embedder import EmbeddingError, QueryEmbedder, SharedEmbedder
-from fit_ai.match.llm import GmsLlm
+from fit_ai import embedding, gms
 from fit_ai.match.pg_store import PgPlaceStore
 from server.app import Dependencies, create_app
 
@@ -25,8 +21,8 @@ def build_dependencies(env: Mapping[str, str]) -> Dependencies:
 
     GMS 접속 설정은 공유 모듈 `fit_ai.gms`가 환경변수에서 직접 읽는다. 설정이 틀리면
     장애로 가리지 않고 시작할 때 ValueError로 드러낸다(취향 spec 1단계). 인코더를
-    불러오지 못하거나 DB 접속 주소가 없으면 그 의존성은 None이다. 앱은 떠 있지만
-    `/healthz`와 검색은 503을 돌려준다.
+    올리지 못하거나 DB 접속 주소가 없으면 앱은 떠 있지만 `/healthz`와 검색은 503을
+    돌려준다.
 
     Args:
         env: 환경변수
@@ -40,27 +36,32 @@ def build_dependencies(env: Mapping[str, str]) -> Dependencies:
     gms.check_config()
     dsn = env.get("DATABASE_URL")
     return Dependencies(
-        embedder=_embedder(env),
-        # 연결을 다시 쓰도록 클라이언트를 하나 만들어 넘긴다.
-        llm=GmsLlm(
-            timeout_seconds=float(env.get("GMS_TIMEOUT_SECONDS", "5.0")),
-            client=httpx.Client(),
-        ),
-        llm_model=gms.MODEL,
+        embedding_ready=_warm_up_embedding(env),
         store=PgPlaceStore(dsn, int(env.get("DB_POOL_SIZE", "2"))) if dsn else None,
+        gms_timeout=float(env.get("GMS_TIMEOUT_SECONDS", "5.0")),
         max_concurrent=int(env.get("MAX_CONCURRENT_REQUESTS", "8")),
     )
 
 
-def _embedder(env: Mapping[str, str]) -> QueryEmbedder | None:
-    """`EMBEDDING_ENABLED`가 "true"일 때만 인코더를 불러온다. 실패하면 None이다."""
+def _warm_up_embedding(env: Mapping[str, str]) -> bool:
+    """`EMBEDDING_ENABLED`가 "true"면 요청문 인코더 모델을 미리 올린다.
+
+    공유 모듈 `fit_ai.embedding`은 처음 부를 때 모델을 올린다(2GB 남짓 내려받기 포함).
+    첫 검색이 이를 기다리지 않도록 시작할 때 한 번 인코딩한다.
+
+    Returns:
+        모델을 올렸으면 True
+    """
     if env.get("EMBEDDING_ENABLED") != "true":
-        return None
+        return False
     try:
-        return SharedEmbedder()
-    except EmbeddingError as e:
-        logger.error(json.dumps({"event": "embedder_failed", "error": str(e)}))
-        return None
+        embedding.encode_queries(["준비"])
+    except (RuntimeError, OSError, ValueError) as e:
+        logger.error(
+            json.dumps({"event": "embedding_failed", "error": type(e).__name__})
+        )
+        return False
+    return True
 
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")

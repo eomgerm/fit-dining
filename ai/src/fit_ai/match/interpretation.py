@@ -1,8 +1,9 @@
 """요청 해석. 요청문을 BE가 장소를 거를 값과 정렬에 넘길 조건으로 바꾼다.
 
-GMS를 한 번 부르고, 호출이 실패하거나 출력이 형식에 맞지 않으면 낱말 규칙으로
-해석한다(인프라 설계 11.2). 후속 조건이면 이전 조건과 새 요청문을 합친다(검색 spec
-D-50). 정리는 docs/comparison/spec.md 4.1에 있다.
+공유 모듈 `fit_ai.gms`로 GMS를 한 번 부른다. 호출이 실패하거나 JSON이 아니면 공유 모듈이
+한 번 더 부른다. 그래도 실패하거나 출력이 형식에 맞지 않으면 다시 부르지 않고 낱말
+규칙으로 해석한다(인프라 설계 11.2). 후속 조건이면 이전 조건과 새 요청문을 합친다
+(검색 spec D-50). 정리는 docs/comparison/spec.md 4.1에 있다.
 """
 
 import json
@@ -10,9 +11,9 @@ import re
 import time
 from dataclasses import asdict, dataclass
 
+from fit_ai import gms
 from fit_ai.features import FEATURES
 from fit_ai.match.conditions import CONDITIONS, Layer
-from fit_ai.match.llm import LlmClient, LlmError, strip_json_fence
 from fit_ai.match.place import CATEGORY_NAMES, STATION_NAMES
 
 MAX_TEXT_LENGTH = 400
@@ -232,28 +233,34 @@ class EmptyReason:
 
 
 def interpret(
-    llm: LlmClient, query: str, previous: Conditions | None = None
+    query: str, previous: Conditions | None = None, timeout: float = 5.0
 ) -> Interpretation:
     """요청문을 조건으로 바꾼다. LLM이 실패하면 규칙으로 해석한다.
 
     Args:
-        llm: LLM
         query: 사용자가 이번에 입력한 요청문
         previous: 후속 조건이면 기준 요청의 조건. 새 검색이면 None이다.
+        timeout: GMS 한 번 부를 때 기다리는 시간(초)
 
     Returns:
         해석 결과
     """
-    seconds = None
     start = time.perf_counter()
+    data = gms.call_json(
+        [
+            # GMS 안내 예시처럼 지시는 developer 역할로 보낸다.
+            {"role": "developer", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": _user_prompt(query, previous)},
+        ],
+        # 출력 검사는 받은 뒤 한 번만 한다. 공유 모듈에 넘기면 검사에 걸릴 때도 다시 부른다.
+        lambda data: data,
+        timeout=timeout,
+    )
+    seconds = time.perf_counter() - start
+    if data is None:
+        return _by_rules(query, previous, "GMS가 꺼져 있거나 호출이 실패했다", seconds)
     try:
-        try:
-            raw = llm.complete_json(SYSTEM_PROMPT, _user_prompt(query, previous))
-        finally:
-            seconds = time.perf_counter() - start
-        conditions, summary = _parse(raw, query, previous)
-    except LlmError as e:
-        return _by_rules(query, previous, f"LLM 호출이 실패했다: {e}", seconds)
+        conditions, summary = _parse(data, query, previous)
     except (ValueError, TypeError) as e:
         return _by_rules(query, previous, str(e), seconds)
     return Interpretation(conditions, summary, llm_seconds=seconds)
@@ -359,14 +366,13 @@ def _user_prompt(query: str, previous: Conditions | None) -> str:
 
 
 def _parse(
-    raw: str, query: str, previous: Conditions | None
+    data: object, query: str, previous: Conditions | None
 ) -> tuple[Conditions, str | None]:
-    """LLM 출력을 조건으로 바꾼다. 형식이 틀리면 실패다.
+    """LLM 출력(JSON을 읽은 값)을 조건으로 바꾼다. 형식이 틀리면 실패다.
 
     모르는 코드는 버리고, 모르는 업종·역은 거르지 않도록 None으로 본다.
     메시지는 로그에 남으므로 출력 내용을 넣지 않는다.
     """
-    data = json.loads(strip_json_fence(raw))
     if not isinstance(data, dict):
         raise TypeError("JSON 객체가 아니다")
     embedding_text = data.get("embedding_text")

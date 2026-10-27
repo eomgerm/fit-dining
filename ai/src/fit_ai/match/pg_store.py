@@ -11,13 +11,13 @@ from typing import Any
 import psycopg
 from psycopg_pool import ConnectionPool, PoolTimeout
 
+from fit_ai import embedding
 from fit_ai.match.candidates import (
     Candidate,
     Found,
     PlaceFilter,
     StoreError,
 )
-from fit_ai.match.embedder import Embedding
 from fit_ai.match.place import Place, PlaceInfo
 
 FIND_SQL = """
@@ -77,7 +77,7 @@ class PgPlaceStore:
             open=True,
         )
 
-    def find(self, place_filter: PlaceFilter, query: Embedding, k: int) -> Found:
+    def find(self, place_filter: PlaceFilter, query: Sequence[float], k: int) -> Found:
         """조건에 맞는 장소 중 요청문과 가까운 k곳을 뽑는다.
 
         Args:
@@ -95,9 +95,9 @@ class PgPlaceStore:
         rows = self._fetch(
             FIND_SQL,
             {
-                "query": _vector_text(query.vector),
-                "model": query.model,
-                "revision": query.revision,
+                "query": _vector_text(query),
+                "model": embedding.MODEL_ID,
+                "revision": embedding.REVISION,
                 "category": place_filter.category_group,
                 "station": place_filter.station,
                 "sw_lat": bounds.sw_lat if bounds else None,
@@ -120,20 +120,18 @@ class PgPlaceStore:
             candidates.append(Candidate(place, float(similarity)))
         return Found(tuple(candidates), tuple(invalid))
 
-    def mismatched(self, model: str, revision: str) -> int:
+    def mismatched(self) -> int:
         """검색에서 빠지는 장소 수를 센다.
 
-        Args:
-            model: 요청문 인코더의 모델 이름
-            revision: 요청문 인코더의 모델 버전
-
         Returns:
-            벡터가 없거나 모델·버전이 다르거나 질의 쪽 벡터인 장소 수
+            벡터가 없거나 모델·버전이 공유 모듈과 다르거나 질의 쪽 벡터인 장소 수
 
         Raises:
             StoreError: 저장소를 읽지 못했을 때
         """
-        rows = self._fetch(MISMATCH_SQL, {"model": model, "revision": revision})
+        rows = self._fetch(
+            MISMATCH_SQL, {"model": embedding.MODEL_ID, "revision": embedding.REVISION}
+        )
         return int(rows[0][0])
 
     def close(self) -> None:

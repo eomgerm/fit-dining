@@ -8,14 +8,15 @@
 
 import json
 import random
+import time
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from fit_ai import gms
 from fit_ai.features import FEATURES
 from fit_ai.match.candidates import Candidate
 from fit_ai.match.conditions import CONDITIONS, Layer
 from fit_ai.match.evidence import Verdict, judge
-from fit_ai.match.llm import LlmClient, LlmError, strip_json_fence
 from fit_ai.match.place import CATEGORY_NAMES, Place
 from fit_ai.match.taste import FreeText, TasteFeature
 
@@ -104,16 +105,35 @@ class Ranked:
     score: int
 
 
+@dataclass(frozen=True)
+class LlmRanking:
+    """LLM 정렬 결과.
+
+    Attributes:
+        ranked: 모든 후보. 점수 내림차순이다.
+        raw: 검사를 통과한 LLM 출력(JSON 문자열). 후보 번호와 등급뿐이라 로그에 남긴다.
+        seconds: GMS 호출에 걸린 시간(초). 다시 부른 시간까지 들어간다.
+    """
+
+    ranked: list[Ranked]
+    raw: str | None
+    seconds: float | None
+
+
 class RankingError(Exception):
     """LLM 정렬이 실패했다. 부르는 쪽은 `rank_by_similarity`로 넘어간다.
 
     Attributes:
-        raw: LLM 원본 출력. 호출 자체가 실패했으면 None이다.
+        raw: 검사에 걸린 LLM 출력. 호출 자체가 실패했으면 None이다.
+        seconds: GMS 호출에 걸린 시간(초)
     """
 
-    def __init__(self, message: str, raw: str | None = None) -> None:
+    def __init__(
+        self, message: str, raw: str | None = None, seconds: float | None = None
+    ) -> None:
         super().__init__(message)
         self.raw = raw
+        self.seconds = seconds
 
 
 def judged_codes(request_codes: Sequence[str]) -> list[str]:
@@ -148,39 +168,42 @@ def grade_by_rules(place: Place, codes: Sequence[str]) -> int:
 
 
 def rank_with_llm(
-    llm: LlmClient,
     request_text: str,
     request_codes: Sequence[str],
     candidates: Sequence[Candidate],
     features: Sequence[TasteFeature],
     free_texts: Sequence[FreeText],
     rng: random.Random | None = None,
-) -> list[Ranked]:
+    timeout: float = 5.0,
+) -> LlmRanking:
     """LLM 한 번으로 후보 순서를 정하고 맞음 등급으로 핏 점수를 매긴다.
 
     체크할 조건이 있으면 등급은 코드가 정하고 LLM은 순서만 정한다. LLM이 고르지
     않은 후보도 등급을 받아, 같은 등급 안에서 고른 후보 뒤에 유사도 순서로 붙는다.
     체크할 조건이 없으면 LLM이 고른 후보에 등급을 매기고, 고르지 않은 후보는 그보다
     낮은 점수로 유사도 순서로 붙는다. 후보는 섞어서 1부터 번호를 붙여 넣는다.
-    유사도 순서를 그대로 넣으면 LLM이 앞쪽을 위로 올리는 위치 편향이 있다.
+    유사도 순서를 그대로 넣으면 LLM이 앞쪽을 위로 올리는 위치 편향이 있다. GMS는 공유
+    모듈 `fit_ai.gms`로 부른다. 호출이 실패하거나 JSON이 아니면 공유 모듈이 한 번 더
+    부르고, 출력이 형식에 맞지 않으면 다시 부르지 않는다.
 
     Args:
-        llm: LLM
         request_text: 요청문. 후속 조건이면 이전 요청과 합친 문장이다.
         request_codes: 요청 조건 코드
         candidates: ① 후보 뽑기 결과. 유사도 내림차순이다.
         features: ⓪ 취향 고르기로 남은 취향
         free_texts: 취향 프로필의 취향 문장. 벡터가 있는 문장만 쓴다.
         rng: 후보를 섞는 난수기. 없으면 새로 만든다.
+        timeout: GMS 한 번 부를 때 기다리는 시간(초)
 
     Returns:
-        모든 후보. 점수 내림차순이다.
+        LLM 정렬 결과
 
     Raises:
-        RankingError: LLM 호출이 실패했거나 출력이 형식에 맞지 않을 때
+        RankingError: GMS가 꺼져 있거나, 두 번 모두 호출이 실패하거나, 출력이 형식에 맞지
+            않을 때
     """
     if not candidates:
-        return []
+        return LlmRanking([], None, None)
     order = list(range(len(candidates)))
     (rng or random.Random()).shuffle(order)
     shuffled = [candidates[i] for i in order]
@@ -194,17 +217,32 @@ def rank_with_llm(
         features,
         free_texts,
     )
+    start = time.perf_counter()
+    data = gms.call_json(
+        [
+            # GMS 안내 예시처럼 지시는 developer 역할로 보낸다.
+            {"role": "developer", "content": ORDER_PROMPT if grades else GRADE_PROMPT},
+            {"role": "user", "content": user},
+        ],
+        # 출력 검사는 받은 뒤 한 번만 한다. 공유 모듈에 넘기면 검사에 걸릴 때도 다시 부른다.
+        lambda data: data,
+        timeout=timeout,
+    )
+    seconds = time.perf_counter() - start
+    if data is None:
+        raise RankingError("GMS가 꺼져 있거나 호출이 실패했다", seconds=seconds)
+    raw = json.dumps(data, ensure_ascii=False)
     try:
-        raw = llm.complete_json(ORDER_PROMPT if grades else GRADE_PROMPT, user)
-    except LlmError as e:
-        raise RankingError(f"LLM 호출이 실패했다: {e}") from e
+        picked = _parse(data, len(shuffled), with_grades=grades is None)
+    except (ValueError, TypeError) as e:
+        raise RankingError(str(e), raw=raw, seconds=seconds) from e
 
     # 등급을 코드가 정했으면 LLM이 아무것도 고르지 않아도 등급과 유사도로 정렬한다.
-    picked = _parse(raw, len(shuffled), with_grades=grades is None)
     if grades:
-        return _by_grade(
+        ranked = _by_grade(
             candidates, grades, [order[number - 1] for number, _ in picked]
         )
+        return LlmRanking(ranked, raw, seconds)
 
     # 정렬은 안정 정렬이라 같은 등급 안에서는 LLM 순서가 남는다.
     picked.sort(key=lambda item: item[1])
@@ -221,7 +259,7 @@ def rank_with_llm(
         # LLM이 고르지 않은 후보는 고른 후보보다 낮게, 유사도 순서대로 붙인다.
         previous = max(0, min(similarity_to_score(candidate.similarity), previous - 1))
         ranked.append(Ranked(candidate, previous))
-    return ranked
+    return LlmRanking(ranked, raw, seconds)
 
 
 def rank_by_similarity(
@@ -406,39 +444,36 @@ def _like_word(like: bool) -> str:
     return "좋아함" if like else "싫어함"
 
 
-def _parse(raw: str, size: int, with_grades: bool) -> list[tuple[int, int | None]]:
-    """LLM 출력을 (후보 번호, 등급 번호) 목록으로 바꾼다. 하나라도 어긋나면 실패다.
+def _parse(data: object, size: int, with_grades: bool) -> list[tuple[int, int | None]]:
+    """LLM 출력(JSON을 읽은 값)을 (후보 번호, 등급 번호) 목록으로 바꾼다.
 
-    `with_grades`면 등급(`fit`)을 읽고, 점수를 매길 수 없으니 1곳 이상 골라야 한다.
-    아니면 등급은 None으로 두고 빈 목록도 받는다.
+    하나라도 어긋나면 ValueError나 TypeError다. `with_grades`면 등급(`fit`)을 읽고,
+    점수를 매길 수 없으니 1곳 이상 골라야 한다. 아니면 등급은 None으로 두고 빈 목록도
+    받는다.
     """
-    try:
-        data = json.loads(strip_json_fence(raw))
-    except json.JSONDecodeError as e:
-        raise RankingError("JSON이 아니다", raw) from e
     items = data.get("ranking") if isinstance(data, dict) else None
     if not isinstance(items, list):
-        raise RankingError("ranking 목록이 없다", raw)
+        raise TypeError("ranking 목록이 없다")
     if not items and with_grades:
-        raise RankingError("고른 후보가 없다", raw)
+        raise ValueError("고른 후보가 없다")
 
     labels = {grade.label.replace(" ", ""): i for i, grade in enumerate(GRADES)}
     result: list[tuple[int, int | None]] = []
     for item in items:
         number = item.get("id") if isinstance(item, dict) else None
         if not _is_int(number) or not 1 <= number <= size:
-            raise RankingError(f"후보 밖 번호다: {number}", raw)
+            raise ValueError(f"후보 밖 번호다: {number}")
         grade = None
         if with_grades:
             fit = item.get("fit")
             grade = labels.get(fit.replace(" ", "")) if isinstance(fit, str) else None
             if grade is None:
-                raise RankingError(f"모르는 등급이다: {fit}", raw)
+                raise ValueError(f"모르는 등급이다: {fit}")
         result.append((number, grade))
 
     numbers = [number for number, _ in result]
     if len(set(numbers)) != len(numbers):
-        raise RankingError("같은 후보가 두 번 나왔다", raw)
+        raise ValueError("같은 후보가 두 번 나왔다")
     return result
 
 

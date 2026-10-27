@@ -5,10 +5,10 @@
 취향은 쓰지 않는다. 취향은 ② 정렬에서만 쓴다(docs/comparison/spec.md 4.2).
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from fit_ai.match.embedder import Embedding
 from fit_ai.match.place import Place
 
 GENERAL_K = 20
@@ -87,14 +87,14 @@ class StoreError(Exception):
 class PlaceStore(Protocol):
     """거르기 조건과 요청문 벡터로 후보를 뽑는 장소 저장소."""
 
-    def find(self, place_filter: PlaceFilter, query: Embedding, k: int) -> Found:
+    def find(self, place_filter: PlaceFilter, query: Sequence[float], k: int) -> Found:
         """조건에 맞는 장소 중 요청문과 가까운 k곳을 뽑는다.
 
-        요청문 벡터와 모델·리비전이 같은 장소 벡터만 비교한다.
+        공유 모듈 `fit_ai.embedding`과 모델·리비전이 같은 장소 벡터만 비교한다.
 
         Args:
             place_filter: 거르기 조건
-            query: 요청문 벡터. 질의 쪽(`query: ` 붙임)으로 인코딩했다.
+            query: 요청문 벡터. `fit_ai.embedding.encode_queries`로 인코딩했다.
             k: 뽑을 후보 수
 
         Returns:
@@ -105,14 +105,10 @@ class PlaceStore(Protocol):
         """
         ...
 
-    def mismatched(self, model: str, revision: str) -> int:
-        """요청문 인코더와 모델·리비전이 다르거나 벡터가 없는 장소 수를 센다.
+    def mismatched(self) -> int:
+        """공유 모듈 `fit_ai.embedding`과 모델·리비전이 다르거나 벡터가 없는 장소 수를 센다.
 
         이런 장소는 `find`에서 빠진다. 상태 확인(`/healthz`)에서 쓴다.
-
-        Args:
-            model: 요청문 인코더의 모델 이름
-            revision: 요청문 인코더의 모델 버전
 
         Returns:
             장소 수

@@ -6,14 +6,12 @@
 """
 
 import random
-import time
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 
 from fit_ai.match.candidates import Candidate
 from fit_ai.match.cards import build_card
-from fit_ai.match.llm import LlmClient
 from fit_ai.match.models import Card
 from fit_ai.match.ranking import (
     Ranked,
@@ -85,16 +83,16 @@ class SearchResult:
 def search(
     candidates: Sequence[Candidate],
     request: SearchRequest,
-    llm: LlmClient,
     rng: random.Random | None = None,
+    timeout: float = 5.0,
 ) -> SearchResult:
     """후보로 카드 목록을 만든다.
 
     Args:
         candidates: ① 후보 뽑기 결과. 유사도 내림차순이다.
         request: 요청 해석이 끝난 검색 요청
-        llm: LLM
         rng: LLM에 넣을 후보를 섞는 난수기. 없으면 새로 만든다.
+        timeout: GMS 한 번 부를 때 기다리는 시간(초)
 
     Returns:
         카드 목록과 기록
@@ -110,25 +108,25 @@ def search(
         ranked = rank_by_similarity(candidates, request.request_codes)
         trace = SearchTrace(fallback=Fallback.NEARBY)
     else:
-        recorder = _Recorder(llm)
         try:
-            ranked = rank_with_llm(
-                recorder,
+            result = rank_with_llm(
                 request.text,
                 request.request_codes,
                 candidates,
                 tastes,
                 taste.free_texts if taste else (),
                 rng,
+                timeout,
             )
-            trace = SearchTrace(llm_raw=recorder.raw, llm_seconds=recorder.seconds)
+            ranked = result.ranked
+            trace = SearchTrace(llm_raw=result.raw, llm_seconds=result.seconds)
         except RankingError as e:
             ranked = rank_by_similarity(candidates, request.request_codes)
             trace = SearchTrace(
                 fallback=Fallback.LLM_FAILED,
                 llm_error=str(e),
                 llm_raw=e.raw,
-                llm_seconds=recorder.seconds,
+                llm_seconds=e.seconds,
             )
 
     # 카드의 취향 항목은 좋아하는 취향만 보여 준다(docs/comparison/spec.md 4.3).
@@ -138,20 +136,3 @@ def search(
         for r in ranked
     )
     return SearchResult(cards, trace)
-
-
-class _Recorder:
-    """LLM 호출의 원본 출력과 걸린 시간을 남긴다."""
-
-    def __init__(self, llm: LlmClient) -> None:
-        self.llm = llm
-        self.raw: str | None = None
-        self.seconds: float | None = None
-
-    def complete_json(self, system: str, user: str) -> str:
-        start = time.perf_counter()
-        try:
-            self.raw = self.llm.complete_json(system, user)
-            return self.raw
-        finally:
-            self.seconds = time.perf_counter() - start

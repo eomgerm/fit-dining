@@ -1,10 +1,10 @@
 """요청 해석을 확인한다.
 
-LLM 출력 검사, 규칙 폴백, 후속 조건 합치기, 결과 없음 문구를 본다. LLM은 정해 둔
-문자열로 답하는 가짜다.
+LLM 출력 검사, 규칙 폴백, 후속 조건 합치기, 결과 없음 문구를 본다. GMS는 공유 모듈
+`fit_ai.gms.call_json`을 가짜(`fake_gms`)로 바꿔 끼운다.
 """
 
-import json
+from collections.abc import Callable
 
 import pytest
 
@@ -17,7 +17,6 @@ from fit_ai.match.interpretation import (
     interpret,
     interpret_by_rules,
 )
-from fit_ai.match.llm import LlmError
 
 PREVIOUS = Conditions(
     text="역삼역 모임하기 좋은 술집",
@@ -27,25 +26,10 @@ PREVIOUS = Conditions(
     station="YEOKSAM",
 )
 
-
-class FixedLlm:
-    """정해 둔 문자열로 답하고 받은 입력을 남긴다."""
-
-    def __init__(self, raw: str) -> None:
-        self.raw = raw
-        self.prompts: list[str] = []
-
-    def complete_json(self, system: str, user: str) -> str:
-        self.prompts.append(user)
-        return self.raw
+FakeGms = Callable[[Callable[[list[dict]], object]], list[list[dict]]]
 
 
-class BrokenLlm:
-    def complete_json(self, system: str, user: str) -> str:
-        raise LlmError("GMS 응답 시간 초과")
-
-
-def answer(**overrides: object) -> str:
+def answer(**overrides: object) -> dict:
     data = {
         "text": None,
         "embedding_text": "조용한 카페",
@@ -56,17 +40,17 @@ def answer(**overrides: object) -> str:
         "change_summary": None,
     }
     data.update(overrides)
-    return json.dumps(data, ensure_ascii=False)
+    return data
 
 
 class TestLlm:
     """LLM 해석"""
 
-    def test_new_search(self) -> None:
+    def test_new_search(self, fake_gms: FakeGms) -> None:
         """LLM해석_새검색이면_LLM의조건을쓰고text는요청문그대로다"""
-        llm = FixedLlm(answer())
+        calls = fake_gms(lambda messages: answer())
 
-        result = interpret(llm, "강남역 시끄러운 곳 말고 카페")
+        result = interpret("강남역 시끄러운 곳 말고 카페")
 
         assert result.conditions == Conditions(
             text="강남역 시끄러운 곳 말고 카페",
@@ -77,67 +61,79 @@ class TestLlm:
         )
         assert result.change_summary is None
         assert result.llm_error is None
-        assert llm.prompts == ["요청: 강남역 시끄러운 곳 말고 카페"]
+        assert calls == [
+            [
+                {"role": "developer", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": "요청: 강남역 시끄러운 곳 말고 카페"},
+            ]
+        ]
 
-    def test_unknown_values_are_dropped(self) -> None:
+    def test_unknown_values_are_dropped(self, fake_gms: FakeGms) -> None:
         """LLM해석_모르는코드와업종역이면_코드는버리고업종역은거르지않는다"""
-        raw = answer(
-            codes=["QUIET", "NOISY", "QUIET", 3], category_group="PUB", station="X"
+        fake_gms(
+            lambda messages: answer(
+                codes=["QUIET", "NOISY", "QUIET", 3], category_group="PUB", station="X"
+            )
         )
 
-        conditions = interpret(FixedLlm(raw), "조용한 펍").conditions
+        conditions = interpret("조용한 펍").conditions
 
         assert conditions.codes == ("QUIET",)
         assert (conditions.category_group, conditions.station) == (None, None)
 
-    def test_null_nearby_is_false(self) -> None:
+    def test_null_nearby_is_false(self, fake_gms: FakeGms) -> None:
         """LLM해석_nearby가null이면_근처검색이아닌것으로본다"""
-        result = interpret(FixedLlm(answer(nearby=None)), "강남역 조용한 카페")
+        fake_gms(lambda messages: answer(nearby=None))
+
+        result = interpret("강남역 조용한 카페")
 
         assert result.llm_error is None
         assert result.conditions.nearby is False
 
-    def test_station_means_not_nearby(self) -> None:
+    def test_station_means_not_nearby(self, fake_gms: FakeGms) -> None:
         """LLM해석_역과근처검색이함께오면_역을기준으로찾는다"""
-        result = interpret(FixedLlm(answer(nearby=True)), "강남역 근처 카페")
+        fake_gms(lambda messages: answer(nearby=True))
+
+        result = interpret("강남역 근처 카페")
 
         assert result.conditions.station == "GANGNAM"
         assert result.conditions.nearby is False
 
-    def test_fenced_json(self) -> None:
-        """LLM해석_코드펜스로감싸도_읽는다"""
-        result = interpret(FixedLlm(f"```json\n{answer()}\n```"), "강남역 카페")
-
-        assert result.llm_error is None
-
     @pytest.mark.parametrize(
-        "raw",
+        ("output", "reason"),
         [
-            "조용한 카페",
-            "[]",
-            answer(embedding_text=" "),
-            answer(codes="QUIET"),
-            answer(nearby="false"),
+            ("조용한 카페", "JSON 객체"),
+            ([], "JSON 객체"),
+            (answer(embedding_text=" "), "embedding_text"),
+            (answer(codes="QUIET"), "codes"),
+            (answer(nearby="false"), "nearby"),
         ],
     )
-    def test_bad_output_falls_back_to_rules(self, raw: str) -> None:
-        """LLM해석_형식이틀리면_규칙으로해석하고이유를남긴다"""
-        result = interpret(FixedLlm(raw), "강남역 조용한 카페")
+    def test_bad_output_falls_back_to_rules(
+        self, fake_gms: FakeGms, output: object, reason: str
+    ) -> None:
+        """LLM해석_형식이틀리면_다시부르지않고규칙으로해석하고검사에걸린이유를남긴다"""
+        calls = fake_gms(lambda messages: output)
 
-        assert result.llm_error is not None
+        result = interpret("강남역 조용한 카페")
+
+        assert len(calls) == 1
+        assert reason in result.llm_error
         assert result.conditions.codes == ("QUIET",)
 
-    def test_llm_failure_falls_back_to_rules(self) -> None:
-        """LLM해석_호출이실패하면_규칙으로해석한다"""
-        result = interpret(BrokenLlm(), "강남역 조용한 카페")
+    def test_llm_failure_falls_back_to_rules(self, fake_gms: FakeGms) -> None:
+        """LLM해석_호출이실패하거나꺼져있으면_규칙으로해석한다"""
+        fake_gms(lambda messages: None)
 
-        assert result.llm_error == "LLM 호출이 실패했다: GMS 응답 시간 초과"
+        result = interpret("강남역 조용한 카페")
+
+        assert result.llm_error == "GMS가 꺼져 있거나 호출이 실패했다"
         assert result.conditions.category_group == "CAFE"
 
-    def test_follow_up(self) -> None:
+    def test_follow_up(self, fake_gms: FakeGms) -> None:
         """LLM해석_후속조건이면_합친text와바뀐점을받고이전조건을입력에넣는다"""
-        llm = FixedLlm(
-            answer(
+        calls = fake_gms(
+            lambda messages: answer(
                 text="역삼역 모임하기 좋고 조용한 술집",
                 codes=["PURPOSE_GROUP", "QUIET"],
                 category_group="BAR",
@@ -146,29 +142,35 @@ class TestLlm:
             )
         )
 
-        result = interpret(llm, "더 조용하게", PREVIOUS)
+        result = interpret("더 조용하게", PREVIOUS)
 
         assert result.conditions.text == "역삼역 모임하기 좋고 조용한 술집"
         assert result.conditions.codes == ("PURPOSE_GROUP", "QUIET")
         assert result.change_summary == "조용한 곳으로 좁혔어요"
-        [prompt] = llm.prompts
+        prompt = calls[0][1]["content"]
         assert prompt.endswith("새 요청: 더 조용하게")
         assert '"codes": ["PURPOSE_GROUP"]' in prompt
         assert "embedding_text" not in prompt
 
     @pytest.mark.parametrize("summary", [None, "", "가" * 61])
-    def test_follow_up_default_summary(self, summary: str | None) -> None:
+    def test_follow_up_default_summary(
+        self, fake_gms: FakeGms, summary: str | None
+    ) -> None:
         """LLM해석_후속인데바뀐점이없거나길면_기본문구를쓴다"""
-        raw = answer(text="역삼역 조용한 술집", change_summary=summary)
+        fake_gms(
+            lambda messages: answer(text="역삼역 조용한 술집", change_summary=summary)
+        )
 
-        result = interpret(FixedLlm(raw), "더 조용하게", PREVIOUS)
+        result = interpret("더 조용하게", PREVIOUS)
 
         assert result.llm_error is None
         assert result.change_summary == DEFAULT_CHANGE_SUMMARY
 
-    def test_follow_up_without_text_falls_back(self) -> None:
+    def test_follow_up_without_text_falls_back(self, fake_gms: FakeGms) -> None:
         """LLM해석_후속인데text가없으면_규칙으로합친다"""
-        result = interpret(FixedLlm(answer()), "더 조용하게", PREVIOUS)
+        fake_gms(lambda messages: answer())
+
+        result = interpret("더 조용하게", PREVIOUS)
 
         assert result.llm_error is not None
         assert result.conditions.codes == ("PURPOSE_GROUP", "QUIET")

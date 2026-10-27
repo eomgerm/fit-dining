@@ -1,12 +1,13 @@
 """⓪~③을 잇는 검색 한 번을 확인한다.
 
 일반 검색, 근처 검색, LLM 실패, 후보 없음에서 카드와 기록을 본다. 후보는 저장소가
-뽑았다고 치고 유사도와 함께 넘긴다. LLM은 정해 둔 문자열로 답하는 가짜이고 후보는
-섞지 않는다.
+뽑았다고 치고 유사도와 함께 넘긴다. GMS는 공유 모듈을 정해 둔 답을 내는 가짜(`fake_gms`)로
+바꿔 끼우고 후보는 섞지 않는다.
 """
 
 import json
 import random
+from collections.abc import Callable
 
 from fit_ai.match.candidates import Candidate
 from fit_ai.match.conditions import Layer
@@ -47,16 +48,12 @@ class NoShuffle(random.Random):
         pass
 
 
-class FixedLlm:
-    """정해 둔 문자열로 답하고 받은 입력을 남긴다."""
+FakeGms = Callable[[Callable[[list[dict]], object]], list[list[dict]]]
 
-    def __init__(self, raw: str) -> None:
-        self.raw = raw
-        self.prompts: list[str] = []
 
-    def complete_json(self, system: str, user: str) -> str:
-        self.prompts.append(user)
-        return self.raw
+def fixed(raw: str) -> Callable[[list[dict]], object]:
+    """정해 둔 응답 본문(JSON)으로 답하는 가짜 GMS 답"""
+    return lambda messages: json.loads(raw)
 
 
 def make_request(nearby: bool = False) -> SearchRequest:
@@ -75,11 +72,12 @@ def ranking(*pairs: tuple[int, str]) -> str:
     )
 
 
-def test_general_search_uses_llm() -> None:
+def test_general_search_uses_llm(fake_gms: FakeGms) -> None:
     """검색_일반검색이면_코드등급과LLM순서로카드를만들고원본을남긴다"""
     raw = ranking((3, "딱 맞음"), (1, "대체로"), (2, "일부"))
+    fake_gms(fixed(raw))
 
-    result = search(CANDIDATES, make_request(), FixedLlm(raw), NoShuffle())
+    result = search(CANDIDATES, make_request(), NoShuffle())
 
     # 세 곳 모두 조용함이 확인이라 등급은 모두 딱 맞음이고, LLM이 낸 등급은 쓰지 않는다.
     assert [(c.place_id, c.score) for c in result.cards] == [(3, 100), (1, 95), (2, 90)]
@@ -88,25 +86,23 @@ def test_general_search_uses_llm() -> None:
     assert result.trace.llm_seconds is not None
 
 
-def test_cards_use_selected_liked_tastes() -> None:
+def test_cards_use_selected_liked_tastes(fake_gms: FakeGms) -> None:
     """검색_요청에소음조건이있으면_카드취향항목에서소음취향을빼고좋아함만남긴다"""
-    result = search(
-        CANDIDATES,
-        make_request(),
-        FixedLlm(ranking((1, "딱 맞음"), (2, "딱 맞음"), (3, "딱 맞음"))),
-    )
+    fake_gms(fixed(ranking((1, "딱 맞음"), (2, "딱 맞음"), (3, "딱 맞음"))))
+
+    result = search(CANDIDATES, make_request())
 
     items = [(i.condition_id, i.source) for i in result.cards[0].score_items]
     assert items == [("QUIET", Source.REQUEST), ("PURPOSE_WORK", Source.PREFERENCE)]
 
 
-def test_nearby_skips_llm() -> None:
+def test_nearby_skips_llm(fake_gms: FakeGms) -> None:
     """검색_근처검색이면_LLM을부르지않고코드등급과유사도로점수를매긴다"""
-    llm = FixedLlm(ranking())
+    calls = fake_gms(fixed(ranking()))
 
-    result = search(CANDIDATES, make_request(nearby=True), llm)
+    result = search(CANDIDATES, make_request(nearby=True))
 
-    assert llm.prompts == []
+    assert calls == []
     assert [(c.place_id, c.score) for c in result.cards] == [
         (1, 100),
         (2, 95),
@@ -115,21 +111,22 @@ def test_nearby_skips_llm() -> None:
     assert result.trace.fallback is Fallback.NEARBY
 
 
-def test_llm_picks_some() -> None:
+def test_llm_picks_some(fake_gms: FakeGms) -> None:
     """검색_LLM이일부만고르면_고른후보뒤에나머지를유사도순서로붙인다"""
-    raw = ranking((2, "딱 맞음"))
+    fake_gms(fixed(ranking((2, "딱 맞음"))))
 
-    result = search(CANDIDATES, make_request(), FixedLlm(raw), NoShuffle())
+    result = search(CANDIDATES, make_request(), NoShuffle())
 
     assert [(c.place_id, c.score) for c in result.cards] == [(2, 100), (1, 95), (3, 90)]
     assert result.trace.fallback is None
 
 
-def test_llm_failure_falls_back() -> None:
-    """검색_LLM출력이형식에맞지않으면_유사도순서로넘어가고이유와원본을남긴다"""
+def test_llm_failure_falls_back(fake_gms: FakeGms) -> None:
+    """검색_LLM출력이두번모두형식에맞지않으면_유사도순서로넘어가고이유와원본을남긴다"""
     raw = json.dumps({"ranking": [{"id": 9}]})
+    fake_gms(fixed(raw))
 
-    result = search(CANDIDATES, make_request(), FixedLlm(raw), NoShuffle())
+    result = search(CANDIDATES, make_request(), NoShuffle())
 
     assert [c.place_id for c in result.cards] == [1, 2, 3]
     assert result.trace.fallback is Fallback.LLM_FAILED
@@ -137,12 +134,12 @@ def test_llm_failure_falls_back() -> None:
     assert result.trace.llm_raw == raw
 
 
-def test_no_candidates() -> None:
+def test_no_candidates(fake_gms: FakeGms) -> None:
     """검색_장소가없으면_LLM을부르지않고빈목록을돌려준다"""
-    llm = FixedLlm(ranking())
+    calls = fake_gms(fixed(ranking()))
 
-    result = search([], make_request(), llm)
+    result = search([], make_request())
 
     assert result.cards == ()
-    assert llm.prompts == []
+    assert calls == []
     assert result.trace.fallback is None

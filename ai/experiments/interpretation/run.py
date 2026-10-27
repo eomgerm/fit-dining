@@ -19,7 +19,6 @@ from fit_ai.match.interpretation import (
     interpret,
     interpret_by_rules,
 )
-from fit_ai.match.llm import GmsLlm
 
 HERE = Path(__file__).resolve().parent
 
@@ -30,14 +29,14 @@ def main() -> None:
     parser.add_argument("--label", default=str(date.today()), help="결과 파일 이름")
     args = parser.parse_args()
     cases = json.loads((HERE / "cases.json").read_text(encoding="utf-8"))["cases"]
-    llm = GmsLlm(timeout_seconds=float(os.environ.get("GMS_TIMEOUT_SECONDS", "5.0")))
+    timeout = float(os.environ.get("GMS_TIMEOUT_SECONDS", "5.0"))
 
     rows = []
     for case in cases:
         previous = _previous(case.get("previous"))
         runs = []
         for _ in range(args.runs):
-            result = interpret(llm, case["query"], previous)
+            result = interpret(case["query"], previous, timeout)
             runs.append(
                 {
                     **_check(case, result.conditions),

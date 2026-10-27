@@ -2,7 +2,7 @@
 
 pgserver(개발 의존성)로 임시 Postgres(pgvector)를 띄우고, 뷰 `ai_place_search`와 같은
 컬럼의 테이블을 만들어 거르기, 유사도 순서, 모델 확인, 깨진 프로필을 본다.
-벡터는 2차원 가짜 값이다.
+벡터는 2차원 가짜 값이고, 모델·리비전은 공유 모듈 `fit_ai.embedding`의 값을 쓴다.
 """
 
 import json
@@ -10,22 +10,24 @@ from collections.abc import Iterator
 
 import pytest
 
+from fit_ai import embedding
 from fit_ai.match.candidates import MapBounds, PlaceFilter, StoreError
-from fit_ai.match.embedder import Embedding
 
 pgserver = pytest.importorskip("pgserver")
 psycopg = pytest.importorskip("psycopg")
 
 from fit_ai.match.pg_store import PgPlaceStore
 
-QUERY = Embedding("fake", "0", (1.0, 0.0))
+QUERY = (1.0, 0.0)
 
 
-def profile(place_id: int, model: str = "fake", prompt: str = "document") -> dict:
+def profile(
+    place_id: int, model: str = embedding.MODEL_ID, prompt: str = "document"
+) -> dict:
     return {
         "schema": "place-profile/v0",
         "summary": {"text": f"설명 {place_id}", "vector": [1.0, 0.0]},
-        "embedding": {"model": model, "revision": "0", "prompt": prompt},
+        "embedding": {"model": model, "revision": embedding.REVISION, "prompt": prompt},
         "features": [
             {"code": "QUIET", "layer": "axis", "like_count": 5, "dislike_count": 0}
         ],
@@ -143,7 +145,7 @@ def test_unreadable_profile_reported(store: PgPlaceStore, database: str) -> None
 def test_mismatched_count(store: PgPlaceStore) -> None:
     """저장소_모델이다르거나질의쪽이거나벡터가없는장소를_센다"""
     # 5번(모델 다름), 6번(질의 쪽), 7번(embedding 없음), 8번(벡터 없음)
-    assert store.mismatched("fake", "0") == 4
+    assert store.mismatched() == 4
 
 
 def test_connection_failure() -> None:
