@@ -18,6 +18,7 @@ public class UserService {
     private final UserPreferencesRepository preferences;
     private final AuthRefreshTokenRepository tokens;
     private final Clock clock;
+    private final kr.co.fitdining.api.auth.repository.AuthSocialAccountRepository socialAccounts;
     @Transactional(readOnly = true)
     public UserPreferences preferences(String userId, Identity identity) {
         requireOwner(userId, identity);
@@ -37,6 +38,7 @@ public class UserService {
             if (user.getDeletedAt() != null) return;
             var now = clock.instant();
             user.withdraw(now);
+            socialAccounts.deleteByUserId(userId);
             preferences.deleteById(userId);
             tokens.revokeUser(userId, now);
         });

@@ -67,7 +67,7 @@ class AuthServiceTests extends PostgresTestSupport {
         passwords.entered = null;
         passwords.release = null;
         jdbc = new JdbcTemplate(appSource());
-        for (String table : List.of("auth_refresh_tokens", "auth_security_events", "auth_login_attempts", "auth_users")) {
+        for (String table : List.of("auth_refresh_tokens", "auth_security_events", "auth_login_attempts", "auth_social_accounts", "auth_users")) {
             jdbc.update("delete from " + table);
         }
         users.saveAndFlush(new AuthUser("user-1", "demo@example.com", "demo", passwords.hash("example-test-password1"), clock.instant(), "2026-10-23"));
@@ -110,7 +110,8 @@ class AuthServiceTests extends PostgresTestSupport {
 
     private int attempt(String action, String remoteAddress) throws Exception {
         var mvc = org.springframework.test.web.servlet.setup.MockMvcBuilders
-                .standaloneSetup(new kr.co.fitdining.api.auth.presentation.AuthController(auth, false, clock))
+                .standaloneSetup(new kr.co.fitdining.api.auth.presentation.AuthController(auth,
+                        new kr.co.fitdining.api.auth.presentation.AuthRefreshCookieWriter(false, clock)))
                 .setControllerAdvice(new kr.co.fitdining.api.auth.presentation.AuthExceptionHandler(environment)).build();
         String body = action.equals("login")
                 ? "{\"email\":\"demo@example.com\",\"password\":\"wrong\"}"

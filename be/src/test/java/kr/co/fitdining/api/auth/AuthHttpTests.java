@@ -17,7 +17,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(controllers = AuthController.class, properties = {
     "auth.cookie-secure=false", "auth.frontend-origin=http://localhost:3000"})
-@Import({AuthWebConfiguration.class, AuthHttpTests.Configuration.class})
+@Import({AuthRefreshCookieWriter.class, AuthWebConfiguration.class, AuthHttpTests.Configuration.class})
 class AuthHttpTests {
     @org.springframework.boot.test.context.TestConfiguration
     static class Configuration { @Bean Clock authClock() { return Clock.systemUTC(); } }

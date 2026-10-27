@@ -33,6 +33,7 @@ public class AuthWebConfiguration implements WebMvcConfigurer {
             @Override public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
                 if (!(handler instanceof HandlerMethod method)
                         || !(AuthController.class.isAssignableFrom(method.getBeanType())
+                        || SocialAuthController.class.isAssignableFrom(method.getBeanType())
                         || UserController.class.isAssignableFrom(method.getBeanType())
                         || OnboardingController.class.isAssignableFrom(method.getBeanType()))) return true;
                 response.setHeader("Cache-Control", "no-store");

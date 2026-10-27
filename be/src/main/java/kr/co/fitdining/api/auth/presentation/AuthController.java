@@ -1,7 +1,5 @@
 package kr.co.fitdining.api.auth.presentation;
 
-import java.time.Clock;
-import java.time.Duration;
 import java.util.Map;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -10,9 +8,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -31,10 +27,11 @@ import kr.co.fitdining.api.auth.ports.AuthUseCases.Issued;
 public class AuthController {
     public static final String COOKIE = "fitdining_rt";
     private final AuthUseCases auth;
-    private final boolean secure;
-    private final Clock clock;
-    public AuthController(AuthUseCases auth, @Value("${auth.cookie-secure}") boolean secure, Clock clock) {
-        this.auth = auth; this.secure = secure; this.clock = clock;
+    private final AuthRefreshCookieWriter cookies;
+
+    public AuthController(AuthUseCases auth, AuthRefreshCookieWriter cookies) {
+        this.auth = auth;
+        this.cookies = cookies;
     }
     /**
      * @param email required email, at most 254 characters
@@ -72,7 +69,8 @@ public class AuthController {
     }
     @PostMapping("/logout")
     public ResponseEntity<Void> logout(@CookieValue(name = COOKIE, required = false) String token, HttpServletResponse response) {
-        auth.logout(token); clearCookie(response, secure);
+        auth.logout(token);
+        cookies.clear(response);
         return ResponseEntity.noContent().build();
     }
     @GetMapping("/me")
@@ -82,17 +80,10 @@ public class AuthController {
         return Map.of("message", "인증에 성공했습니다.", "userId", identity.userId());
     }
     private TokenResponse issued(Issued issued, HttpServletResponse response) {
-        Identity identity = issued.identity();
-        response.addHeader(HttpHeaders.SET_COOKIE, cookie(issued.refreshToken(), secure,
-                Math.max(0, identity.sessionExpiresAt() - clock.instant().getEpochSecond())).toString());
-        return new TokenResponse(identity.userId(), issued.accessToken(), identity.nickname(), identity.sessionId(),
-                identity.accessExpiresAt(), identity.sessionExpiresAt());
+        return cookies.issued(issued, response);
     }
-    static ResponseCookie cookie(String value, boolean secure, long age) {
-        return ResponseCookie.from(COOKIE, value).httpOnly(true).secure(secure).sameSite("Strict")
-                .path("/api/auth").maxAge(Duration.ofSeconds(age)).build();
-    }
+
     public static void clearCookie(HttpServletResponse response, boolean secure) {
-        response.addHeader(HttpHeaders.SET_COOKIE, cookie("", secure, 0).toString());
+        response.addHeader(HttpHeaders.SET_COOKIE, AuthRefreshCookieWriter.cookie("", secure, 0).toString());
     }
 }

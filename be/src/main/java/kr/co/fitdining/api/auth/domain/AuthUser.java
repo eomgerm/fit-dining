@@ -17,7 +17,7 @@ import lombok.NoArgsConstructor;
 public class AuthUser {
     @Id
     private String id;
-    @Column(nullable = false, length = 254)
+    @Column(length = 254)
     private String email;
     @Column(nullable = false, length = 15)
     private String nickname;
@@ -29,7 +29,7 @@ public class AuthUser {
     private Instant privacyAgreedAt;
     @Column(nullable = false)
     private String termsVersion;
-    @Column(nullable = false)
+    @Column
     private String passwordHash;
     @Column(nullable = false)
     private Instant createdAt;
@@ -38,6 +38,10 @@ public class AuthUser {
 
     /** Marks withdrawal once; retained identity fields follow the account retention policy. */
     public void withdraw(Instant now) { if (deletedAt == null) deletedAt = now; }
+
+    public AuthUser(String id, String nickname, Instant createdAt, String termsVersion) {
+        this(id, null, nickname, null, createdAt, termsVersion);
+    }
 
     public AuthUser(String id, String email, String nickname, String passwordHash, Instant createdAt, String termsVersion) {
         this.id = id;
