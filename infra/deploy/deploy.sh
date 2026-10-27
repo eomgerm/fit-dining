@@ -94,7 +94,7 @@ sync_pool() {
 
 # prod: 반대 색을 띄우고 확인한 뒤 엣지를 전환한다. 어느 단계든 실패하면 새 색을 치우고 엣지를 원래대로 돌린다
 deploy_color() { # deploy_color be|fe
-  local svc="$1" S active new name oldname tagk oldtag activetag
+  local svc="$1" S active new name oldname tagk oldtag activetag oldkeep keepprev
   S="$(upper "$svc")"
   active="$(state_get prod "${S}_ACTIVE" green)"
   new="$(other_color "$active")"
@@ -103,12 +103,19 @@ deploy_color() { # deploy_color be|fe
   tagk="$(tag_key "$svc" prod "$new")"
   oldtag="$(state_get prod "$tagk" none)"
   activetag="$(state_get prod "$(tag_key "$svc" prod "$active")" none)"
+  oldkeep="$(state_get prod "${S}_PROD_PREV_TAG" none)"
+  # 이미 활성인 SHA를 다시 배포하면 새 색의 태그(직전 릴리스)가 SHA로 덮여 두 색이 같은 태그가 된다.
+  # 롤백이 그 직전 릴리스로 돌아갈 수 있게 따로 적어 둔다(rollback.sh가 두 색의 태그가 같을 때 쓴다)
+  keepprev=none
+  if [ "$activetag" = "$SHA" ]; then
+    if [ "$oldtag" != none ] && [ "$oldtag" != "$SHA" ]; then keepprev="$oldtag"; else keepprev="$oldkeep"; fi
+  fi
   log "[$svc] $active → $new ($name)"
   if [ "$svc" = fe ]; then sync_pool "$SHA" || return 1; fi
-  state_set prod "$tagk=$SHA"
+  state_set prod "$tagk=$SHA" "${S}_PROD_PREV_TAG=$keepprev"
   discard_new() {
     compose prod rm -sf "$name" >/dev/null 2>&1 || true
-    state_set prod "$tagk=$oldtag"
+    state_set prod "$tagk=$oldtag" "${S}_PROD_PREV_TAG=$oldkeep"
   }
   if ! compose prod up -d --no-deps --force-recreate "$name"; then
     discard_new
@@ -140,15 +147,18 @@ deploy_color() { # deploy_color be|fe
 
 # dev: 단일 색을 교체한다. 확인에 실패하면 직전 이미지로 돌아간다
 deploy_dev() { # deploy_dev be|fe
-  local svc="$1" S name tagk oldtag oldprev
+  local svc="$1" S name tagk oldtag oldprev newprev
   S="$(upper "$svc")"
   name="$(svc_name "$svc" dev)"
   tagk="$(tag_key "$svc" dev)"
   oldtag="$(state_get dev "$tagk" none)"
   oldprev="$(state_get dev "${S}_DEV_PREV_TAG" none)"
+  # 이미 떠 있는 SHA를 다시 배포하면 직전 태그를 그 SHA로 덮지 않는다(롤백 대상이 사라진다)
+  newprev="$oldtag"
+  if [ "$oldtag" = "$SHA" ]; then newprev="$oldprev"; fi
   log "[$svc] dev 교체 $oldtag → $SHA"
   if [ "$svc" = fe ]; then sync_pool "$SHA" || return 1; fi
-  state_set dev "$tagk=$SHA" "${S}_DEV_PREV_TAG=$oldtag"
+  state_set dev "$tagk=$SHA" "${S}_DEV_PREV_TAG=$newprev"
   if compose dev up -d --no-deps --force-recreate "$name" && wait_ready "$svc" "$name" &&
     smoke_idle "$svc" dev "$name" "$SHA" && bash "$DEPLOY_DIR/smoke.sh" dev --sha "$SHA" --only "$svc"; then
     return 0
@@ -169,7 +179,10 @@ main() {
   for svc in be fe; do
     if [ "$ENVN" = prod ]; then deploy_color "$svc" || return 1; else deploy_dev "$svc" || return 1; fi
   done
-  state_set "$ENVN" "DEPLOYED_SHA=$SHA" "PREVIOUS_SHA=$PREV"
+  # 같은 SHA를 다시 배포한 것이면 이전 SHA를 그대로 둔다(PREV가 지금 SHA라 덮으면 롤백 대상이 사라진다)
+  local prevsha="$PREV"
+  if sha_match "$PREV" "$SHA"; then prevsha="$(state_get "$ENVN" PREVIOUS_SHA none)"; fi
+  state_set "$ENVN" "DEPLOYED_SHA=$SHA" "PREVIOUS_SHA=$prevsha"
 }
 
 if main; then

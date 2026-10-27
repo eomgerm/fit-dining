@@ -24,26 +24,34 @@ trap release_lock EXIT
 WHO="${GITLAB_USER_LOGIN:-$(id -un)}"
 
 rollback_color() { # rollback_color be|fe
-  local svc="$1" S active prev name oldname prevtag activetag
+  local svc="$1" S active prev name oldname prevtag activetag prevtagk origprevtag keep
   S="$(upper "$svc")"
   active="$(state_get prod "${S}_ACTIVE" green)"
   prev="$(other_color "$active")"
   name="$(svc_name "$svc" prod "$prev")"
   oldname="$(svc_name "$svc" prod "$active")"
-  prevtag="$(state_get prod "$(tag_key "$svc" prod "$prev")" none)"
+  prevtagk="$(tag_key "$svc" prod "$prev")"
+  prevtag="$(state_get prod "$prevtagk" none)"
   activetag="$(state_get prod "$(tag_key "$svc" prod "$active")" none)"
   [ "$prevtag" != none ] || {
     log "[$svc] 되돌릴 이전 색이 없다"
     return 1
   }
+  # 같은 SHA를 다시 배포해 두 색이 같은 태그를 가리키면 deploy.sh가 따로 적어 둔 직전 릴리스로 돌아간다
+  origprevtag="$prevtag"
+  keep="$(state_get prod "${S}_PROD_PREV_TAG" none)"
+  if [ "$prevtag" = "$activetag" ] && [ "$keep" != none ] && [ "$keep" != "$activetag" ]; then prevtag="$keep"; fi
   docker image inspect "$(image_of "$svc"):$prevtag" >/dev/null 2>&1 || {
     log "[$svc] 이전 이미지 $(image_of "$svc"):$prevtag 가 없다"
     return 1
   }
   log "[$svc] $active($activetag) → $prev($prevtag)"
+  # 이전 색 컨테이너가 이 태그의 이미지로 뜨도록 상태의 태그를 맞춘다(실패하면 아래에서 되돌린다)
+  state_set prod "$prevtagk=$prevtag"
   if ! compose prod up -d --no-deps "$name" || ! wait_ready "$svc" "$name" || ! smoke_idle "$svc" prod "$name" "$prevtag"; then
     log "[$svc] 이전 색($name)이 준비되지 않았다. 지금 상태를 그대로 둔다"
     compose prod stop -t 40 "$name" >/dev/null 2>&1 || true
+    state_set prod "$prevtagk=$origprevtag"
     return 1
   fi
   write_upstream prod "$svc" "$name" "$(svc_port "$svc")"
@@ -52,9 +60,10 @@ rollback_color() { # rollback_color be|fe
     write_upstream prod "$svc" "$oldname" "$(svc_port "$svc")"
     reload_edge || log "경고: 엣지를 되돌리는 reload에 실패했다. 수동으로 확인한다"
     compose prod stop -t 40 "$name" >/dev/null 2>&1 || true
+    state_set prod "$prevtagk=$origprevtag"
     return 1
   fi
-  state_set prod "${S}_ACTIVE=$prev"
+  state_set prod "${S}_ACTIVE=$prev" "${S}_PROD_PREV_TAG=none"
   history_add prod rollback "$svc" "$prevtag" "$prev"
   compose prod stop -t 40 "$oldname" >/dev/null
 }

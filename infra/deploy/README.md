@@ -24,6 +24,7 @@ CI가 아닌 곳에서 `deploy.sh`를 직접 실행하려면 `SKIP_VERIFY=<사�
 - 배포 잡은 전체 clone(`GIT_DEPTH: "0"`)을 쓴다. 얕은 clone이면 `preflight.sh`의 다운그레이드 가드와 마이그레이션 비교가 틀린다.
 - prod는 사람이 `master`의 최신 파이프라인에서 `deploy:prod`를 눌러야 한다(누를 때까지 파이프라인이 멈춘다).
 - 같은 SHA를 다시 배포하려면 그 파이프라인의 배포 잡을 **Retry**한다(이미지는 있으면 다시 조립하지 않는다). 이미 더 새로운 SHA가 배포돼 있으면 다운그레이드 가드가 거부한다.
+- **이미 떠 있는 SHA를 다시 배포해도 롤백 대상은 그대로다.** `PREVIOUS_SHA`는 바뀌지 않고, dev는 `BE_DEV_PREV_TAG`·`FE_DEV_PREV_TAG`를, prod는 직전 릴리스 태그를 `BE_PROD_PREV_TAG`·`FE_PROD_PREV_TAG`에 따로 적어 둔다(두 색이 같은 태그가 되기 때문이다). 그 뒤의 `rollback.sh`는 재배포 전의 직전 릴리스로 돌아간다. env 값을 바꾼 뒤 같은 SHA를 다시 배포해도 롤백 지점을 잃지 않는다.
 
 ## env 파일을 바꾼 뒤 반영하기
 
@@ -73,7 +74,7 @@ dev는 같은 흐름이지만 색이 없어서 교체하고, 확인에 실패하
 | `../app/compose.app.yml` | BE·FE 컨테이너 정의(`fit-app-prod`, `fit-app-dev`, 프로필 `prod`·`dev`) |
 | `test/` | 노트북 시험(목 BE·FE 이미지, 시험용 엣지) |
 
-상태 파일은 `/srv/fit/state/deploy-<환경>.env`다(compose의 `--env-file`이기도 하다). 서비스별 활성 색(`BE_ACTIVE`, `FE_ACTIVE`), 색별 이미지 태그(`BE_BLUE_TAG` 등), `DEPLOYED_SHA`, `PREVIOUS_SHA`가 있다.
+상태 파일은 `/srv/fit/state/deploy-<환경>.env`다(compose의 `--env-file`이기도 하다). 서비스별 활성 색(`BE_ACTIVE`, `FE_ACTIVE`), 색별 이미지 태그(`BE_BLUE_TAG` 등), `DEPLOYED_SHA`, `PREVIOUS_SHA`가 있다. dev는 서비스별 직전 이미지 태그(`BE_DEV_PREV_TAG`, `FE_DEV_PREV_TAG`)를, prod는 같은 SHA를 다시 배포했을 때만 쓰는 직전 릴리스 태그(`BE_PROD_PREV_TAG`, `FE_PROD_PREV_TAG`, 평소에는 `none`)를 더 갖는다.
 
 ## 환경변수
 

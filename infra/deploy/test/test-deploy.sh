@@ -365,6 +365,18 @@ run_prod_checks() {
   printf '%s\n' "$out" >>"$OUT_ALL"
   ok_if "SKIP_VERIFY 사유를 주면 CI 밖에서도 배포하고 이력에 사유가 남는다" \
     "$([ "$rc" = 0 ] && [ "$(be_sha)$(fe_sha)" = "$C6$C6" ] && grep -q 'skip-verify:시험용 긴급 배포' "$FIT_STATE_DIR/history-prod.log" && echo 1 || echo 0)"
+  echo "--- prod: 이미 배포된 SHA(c6)를 다시 배포해도 롤백 대상(c2)을 잃지 않는다"
+  run_deploy prod "$C6"
+  ok_if "같은 SHA 재배포가 성공하고 c6으로 응답한다" "$([ "$rc" = 0 ] && [ "$(be_sha)$(fe_sha)" = "$C6$C6" ] && echo 1 || echo 0)"
+  ok_if "상태: 배포 SHA는 c6이고 이전 SHA는 c2로 그대로 남는다" "$(is "$(st prod DEPLOYED_SHA)$(st prod PREVIOUS_SHA)" "$C6$C2")"
+  out="$(bash infra/deploy/rollback.sh prod 2>&1)" && rc=0 || rc=$?
+  printf '%s\n' "$out" >>"$OUT_ALL"
+  ok_if "재배포 뒤 rollback.sh prod가 c2로 되돌린다" "$([ "$rc" = 0 ] && [ "$(be_sha)$(fe_sha)" = "$C2$C2" ] && echo 1 || echo 0)"
+  ok_if "상태: 배포 SHA는 c2이고 이전 SHA는 c6이다" "$(is "$(st prod DEPLOYED_SHA)$(st prod PREVIOUS_SHA)" "$C2$C6")"
+  run_deploy prod "$C6"
+  run_deploy prod "$C6"
+  ok_if "c6을 두 번 배포하면 c6이 blue에서 돌고 green은 멈춘다(뒤 시험의 출발 상태)" \
+    "$([ "$rc" = 0 ] && [ "$(be_sha)$(fe_sha)$(st prod BE_ACTIVE)$(st prod FE_ACTIVE)$(running be-prod-green)$(running fe-prod-green)" = "${C6}${C6}blueblue""falsefalse" ] && echo 1 || echo 0)"
 }
 
 run_dev_checks() {
@@ -377,6 +389,15 @@ run_dev_checks() {
   run_deploy dev "$C2"
   ok_if "dev 교체가 성공하고 직전 태그가 c1로 남는다" \
     "$([ "$rc" = 0 ] && [ "$(dev_be_sha)$(dev_fe_sha)" = "$C2$C2" ] && [ "$(st dev BE_DEV_PREV_TAG)$(st dev FE_DEV_PREV_TAG)" = "$C1$C1" ] && echo 1 || echo 0)"
+  echo "--- dev: 이미 배포된 SHA(c2)를 다시 배포해도 롤백 대상(c1)을 잃지 않는다"
+  run_deploy dev "$C2"
+  ok_if "같은 SHA 재배포가 성공하고 c2로 응답한다" "$([ "$rc" = 0 ] && [ "$(dev_be_sha)$(dev_fe_sha)" = "$C2$C2" ] && echo 1 || echo 0)"
+  ok_if "직전 태그와 이전 SHA가 c1로 그대로 남는다" "$(is "$(st dev BE_DEV_PREV_TAG)$(st dev FE_DEV_PREV_TAG)$(st dev PREVIOUS_SHA)" "$C1$C1$C1")"
+  out="$(bash infra/deploy/rollback.sh dev 2>&1)" && rc=0 || rc=$?
+  printf '%s\n' "$out" >>"$OUT_ALL"
+  ok_if "재배포 뒤 rollback.sh dev가 c1로 되돌린다" "$([ "$rc" = 0 ] && [ "$(dev_be_sha)$(dev_fe_sha)" = "$C1$C1" ] && echo 1 || echo 0)"
+  run_deploy dev "$C2"
+  ok_if "다시 c2를 배포하면 직전 태그가 c1이다(뒤 시험의 출발 상태)" "$([ "$rc" = 0 ] && [ "$(st dev BE_DEV_PREV_TAG)$(st dev FE_DEV_PREV_TAG)" = "$C1$C1" ] && echo 1 || echo 0)"
   run_deploy dev "$C7"
   ok_if "FE가 망가진 배포(c7)는 실패한다" "$([ "$rc" != 0 ] && [ "$(has "$out" 'dev 확인에 실패했다')" = 1 ] && echo 1 || echo 0)"
   ok_if "BE는 c7로 갔고 FE는 직전 이미지(c2)로 복귀해 응답한다" "$(is "$(dev_be_sha)$(dev_fe_sha)" "$C7$C2")"

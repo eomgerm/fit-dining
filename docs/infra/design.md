@@ -478,6 +478,7 @@ BE와 FE는 같은 절차로 전환하되 BE가 먼저, FE가 나중이다. 새 
 - 준비 확인과 idle 색 확인은 호스트에 게시하지 않는 포트를 위해 같은 망의 caddy 컨테이너 안에서 `wget`으로 한다. BE는 `/actuator/health/readiness`, `/healthz`, `/api/v1/version`(SHA), FE는 `/fe-healthz`, `/`, `/config.json`(`env`)이다.
 - 마이그레이션은 이전 배포 SHA와 새 SHA 사이에 `be/src/main/resources/db/migration`이 바뀌었을 때(첫 배포 포함)만 실행한다. prod는 그 전에 `infra/backup/pg-backup.sh predeploy <환경> <sha>`(8절)로 덤프하고, 덤프나 마이그레이션이 실패하면 트래픽을 건드리기 전에 멈춘다.
 - 새 색의 준비·직접 확인이나 엣지 전환 뒤 확인에 실패하면 새 색을 치우고 엣지를 이전 색으로 되돌린다. BE는 성공하고 FE가 실패하면 BE는 새 버전, FE는 이전 버전으로 남는다(새 BE가 직전 FE와 호환돼야 한다). `rollback.sh`는 서비스별로 이전 색(컨테이너와 이미지가 남아 있다)으로 옮기고, 전체 롤백이면 `DEPLOYED_SHA`와 `PREVIOUS_SHA`를 맞바꾼다.
+- 이미 활성인 SHA를 다시 배포(env 값을 바꾼 뒤의 재배포, Retry)해도 롤백 대상은 유지된다. dev는 서비스별 직전 태그(`*_DEV_PREV_TAG`)와 `PREVIOUS_SHA`를 덮지 않는다. prod는 반대 색에 같은 태그를 띄워 두 색의 태그가 같아지므로 직전 릴리스를 `*_PROD_PREV_TAG`에 따로 적고, `rollback.sh`가 두 색의 태그가 같을 때 그 태그의 이미지로 이전 색을 띄운다(Jira S15P31A302-98, 확인: `infra/deploy/test/test-deploy.sh`).
 - 사전 점검은 FE env의 `BE_INTERNAL_URL`이 이 환경의 엣지 내부 리스너(prod `caddy:8081`, dev `caddy:8082`)인지 확인한다. 같은 망의 컨테이너는 어느 환경의 리스너에도 닿으므로 환경 간 호출을 여기서 막는다.
 - 정적 자산 풀(`/srv/fit/web/<환경>/pool/_next/static`)은 FE 이미지의 `/app/.next/static`을 `docker cp`로 꺼내 이미 있는 파일은 덮어쓰지 않고 쌓는다. 이번 릴리스가 가진 파일의 수정 시각을 갱신하고, 14일 넘게 어느 릴리스에도 없던 파일은 지운다.
 - 잠금은 `mkdir`로 잡는다(프로세스가 죽어 남은 잠금은 pid로 알아본다). `flock`이 없는 환경에서도 같게 돈다. CI 밖에서 직접 실행하려면 `SKIP_VERIFY=<사유>`가 필요하고 사유는 이력에 남는다.
