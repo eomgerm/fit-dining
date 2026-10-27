@@ -27,7 +27,8 @@ public class ReviewExceptionHandler {
 			HandlerMethodValidationException.class,
 			HttpMessageNotReadableException.class,
 			MethodArgumentTypeMismatchException.class,
-			InvalidReviewCursorException.class
+			InvalidReviewCursorException.class,
+			InvalidReasonTagsException.class
 	})
 	public ProblemDetail handleBadRequest(Exception e) {
 		log.info("Rejected review request: reason={}", e.getClass().getSimpleName());

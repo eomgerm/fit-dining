@@ -25,6 +25,7 @@ import kr.co.fitdining.api.review.dto.ReviewCreateResponse;
 import kr.co.fitdining.api.review.dto.ReviewItem;
 import kr.co.fitdining.api.review.dto.ReviewListResponse;
 import kr.co.fitdining.api.review.exception.DuplicateReviewException;
+import kr.co.fitdining.api.review.exception.InvalidReasonTagsException;
 import kr.co.fitdining.api.review.store.InvalidReviewCursorException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -127,6 +128,14 @@ class ReviewControllerTest {
 			when(reviewService.create(anyLong(), anyString(), any())).thenThrow(new DuplicateReviewException());
 
 			expectProblem(create(3, "{}"), 409);
+		}
+
+		@Test
+		@DisplayName("등록_이유태그가선택규칙에맞지않으면_400이다")
+		void create_invalidReasonTags_returnsBadRequest() throws Exception {
+			when(reviewService.create(anyLong(), anyString(), any())).thenThrow(new InvalidReasonTagsException());
+
+			expectProblem(create(3, "{}"), 400);
 		}
 	}
 
