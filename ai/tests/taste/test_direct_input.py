@@ -66,16 +66,32 @@ def test_positive_text_kept_only_for_liked_taste(kind, like, kept):
     assert parse_items(resp, text)[0]["positive_text"] == kept
 
 
+@pytest.mark.parametrize("kind", ["facility", "quality", "budget"])
+def test_code_kept_only_for_taste(kind):
+    text = "주차 되는 조용한 곳"
+    resp = {"items": [item(text, code="QUIET", kind=kind)]}
+    assert parse_items(resp, text) == [item(text, kind=kind)]
+
+
+@pytest.mark.parametrize("positive_text", [None, "", " "])
+def test_liked_taste_without_code_or_sentence_is_output_check_failure(positive_text):
+    # 비교에 쓸 문장 없이 취향을 조용히 잃지 않게 재요청한다
+    text = "마라탕 좋아해요"
+    with pytest.raises(ValueError):
+        parse_items({"items": [item(text, positive_text=positive_text)]}, text)
+
+
 def test_drops_quote_not_in_text_and_unknown_code():
     text = "조용한 곳 좋아요"
+    liked = item("좋아요", positive_text="좋은 곳")
     resp = {
         "items": [
             item("넓은 곳", code="SPACIOUS_SEATING"),
             item("조용한 곳", code="NOPE"),
-            item("좋아요"),
+            liked,
         ]
     }
-    assert parse_items(resp, text) == [item("좋아요")]
+    assert parse_items(resp, text) == [liked]
 
 
 @pytest.mark.parametrize("quote", ["", " "])

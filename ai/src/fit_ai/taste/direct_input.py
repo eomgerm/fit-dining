@@ -121,6 +121,8 @@ def parse_items(resp: dict, text: str) -> list[dict]:
             continue
         if code is not None and code not in FEATURES:
             continue
+        if it["kind"] != "taste":  # 시설·품질·예산은 취향 코드로 세지 않는다
+            code = None
         if code and not like:
             feature = FEATURES[code]
             if feature.opposite:  # 반대 극 비선호는 반대 극 선호로
@@ -130,13 +132,17 @@ def parse_items(resp: dict, text: str) -> list[dict]:
                 code = None
         # 벡터로 만들 문장은 좋아하는 취향(taste)뿐이다. 시설·품질·예산은 보관만 한다
         keep_text = it["kind"] == "taste" and like
+        positive_text = it["positive_text"] if keep_text else None
+        # 코드도 문장도 없는 선호 취향은 비교에 쓸 수 없어 출력 검사 실패로 다시 요청한다
+        if keep_text and not code and not (positive_text or "").strip():
+            raise ValueError("코드 없는 선호 취향에 positive_text가 없다")
         out.append(
             {
                 "quote": quote,
                 "kind": it["kind"],
                 "like": like,
                 "code": code,
-                "positive_text": it["positive_text"] if keep_text else None,
+                "positive_text": positive_text,
             }
         )
     # 모델이 준 항목이 검사에서 모두 버려졌으면 형식 실수로 취향을 잃은 것이다.
