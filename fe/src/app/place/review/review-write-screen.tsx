@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { restore } from "@/domains/auth/api/auth-client";
 import { parsePlaceId } from "@/domains/review/model/review";
-import { SimpleReviewForm } from "@/domains/review/ui/simple-review-form";
+import { ReviewForm } from "@/domains/review/ui/review-form";
 import { Button } from "@/shared/ui/button/button";
 import { EmptyState } from "@/shared/ui/display/empty-state";
 import { PinOffIcon } from "@/shared/ui/icon/icons/pin-off";
@@ -22,6 +22,7 @@ export function ReviewWriteScreen() {
   const router = useRouter();
   const placeId = parsePlaceId(useSearchParams().get("id"));
   const [signedIn, setSignedIn] = useState(false);
+  const goToLogin = useCallback(() => router.replace("/login"), [router]);
 
   // 리뷰는 로그인한 사용자만 쓴다. 쓰기 전에 세션을 확인하고, 없으면 로그인 화면으로 바꿔치기해
   // 로그인 화면의 "뒤로"가 이 화면이 아니라 장소 상세로 가게 한다. 로그인 뒤 이 화면으로 돌아오는 것은 아직 없다
@@ -29,12 +30,12 @@ export function ReviewWriteScreen() {
     let active = true;
     restore().then(
       () => active && setSignedIn(true),
-      () => active && router.replace("/login"),
+      () => active && goToLogin(),
     );
     return () => {
       active = false;
     };
-  }, [router]);
+  }, [goToLogin]);
 
   if (placeId === null) {
     return (
@@ -67,11 +68,12 @@ export function ReviewWriteScreen() {
       : router.replace(placeDetailHref(placeId));
   if (!signedIn) return null;
   return (
-    <SimpleReviewForm
+    <ReviewForm
       placeId={placeId}
       withAccessToken={withAccessToken}
       onSuccess={leave}
       onClose={leave}
+      onSignedOut={goToLogin}
     />
   );
 }

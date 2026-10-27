@@ -1,4 +1,4 @@
-// 리뷰 API의 요청·응답 모양(spec Interfaces). 1차 후속에서 필드가 더해진다
+// 리뷰 API의 요청·응답 모양(spec Interfaces)
 
 export type ReviewItem = {
   reviewId: number;
@@ -17,15 +17,44 @@ export type ReviewListResponse = {
 };
 
 export type ReviewCreateRequest = {
+  // KST 날짜(예: 2026-10-21)
+  visitedAt: string;
+  tagCodes: string[];
+  revisitIntent: boolean;
   description?: string;
+  spentPerPerson?: number;
 };
 
 export type ReviewCreateResponse = {
   reviewId: number;
 };
 
-// 본문 최대 길이. 공통 Textarea와 BE @Size처럼 UTF-16 단위로 센다(D-30)
-export const DESCRIPTION_MAX = 500;
+export type FormTag = {
+  code: string;
+  label: string;
+  // 같은 값의 태그는 함께 고를 수 없다(D-5)
+  group: string;
+  displayGroup: string;
+};
+
+// 작성 화면 데이터(D-37). 날짜는 모두 KST 날짜 문자열이다
+export type ReviewFormResponse = {
+  place: {
+    name: string;
+    categoryGroup: string;
+    station: string;
+    thumbnailUrl?: string;
+  };
+  visitDate: { min: string; max: string; default: string };
+  reviewedDates: string[];
+  tags: { good: FormTag[]; bad: FormTag[] };
+  limits: {
+    descriptionMax: number;
+    photoMax: number;
+    spentPerPersonMax: number;
+  };
+  writable: boolean;
+};
 
 // 홈 탭 미리보기에 보이는 리뷰 수(Figma 6-01)
 export const PREVIEW_SIZE = 3;
@@ -44,11 +73,6 @@ const kstMonthDay = new Intl.DateTimeFormat("ko-KR", {
 // 목록 날짜(AC-7). Figma의 "10월 12일 방문" 꼴을 따라 "10월 20일"이다
 export function formatKstDate(createdAt: string) {
   return kstMonthDay.format(new Date(createdAt));
-}
-
-// 공백뿐이면 본문 없이 보낸다. BE도 본문 없음으로 저장한다(D-6)
-export function toCreateRequest(text: string): ReviewCreateRequest {
-  return text.trim() === "" ? {} : { description: text };
 }
 
 // 주소의 id는 BE와 같이 양의 정수만 받는다(AC-2). 아니면 null

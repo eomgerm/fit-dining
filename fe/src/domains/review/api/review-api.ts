@@ -3,6 +3,7 @@ import { request } from "@/shared/api/client";
 import type {
   ReviewCreateRequest,
   ReviewCreateResponse,
+  ReviewFormResponse,
   ReviewListResponse,
 } from "../model/review";
 
@@ -14,6 +15,18 @@ export function fetchReviews(
 ) {
   return request<ReviewListResponse>(`/v1/places/${placeId}/reviews`, {
     query: { cursor },
+    signal,
+  });
+}
+
+// 작성 화면 데이터. 이 사용자가 이미 쓴 방문일이 들어 있어 로그인이 필요하다(D-37)
+export function fetchReviewForm(
+  placeId: number,
+  accessToken: string,
+  signal?: AbortSignal,
+) {
+  return request<ReviewFormResponse>(`/v1/places/${placeId}/review-form`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
     signal,
   });
 }

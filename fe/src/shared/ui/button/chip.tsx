@@ -12,7 +12,7 @@ export function Chip({ className, children, ...props }: ChipProps) {
   return (
     <Toggle
       className={cn(
-        "group inline-flex h-11 items-center gap-1 rounded-sm border border-line-strong bg-surface px-4 text-body-md whitespace-nowrap text-ink transition-colors duration-200 select-none data-disabled:pointer-events-none data-pressed:border-1.5 data-pressed:border-primary data-pressed:bg-primary-soft data-pressed:pl-3 data-pressed:font-semibold data-pressed:text-primary-strong",
+        "group inline-flex h-11 items-center gap-1 rounded-sm border border-line-strong bg-surface px-4 text-body-md whitespace-nowrap text-ink transition-colors duration-200 select-none data-disabled:pointer-events-none data-disabled:border-line data-disabled:bg-surface-sunken data-disabled:text-ink-disabled data-pressed:border-1.5 data-pressed:border-primary data-pressed:bg-primary-soft data-pressed:pl-3 data-pressed:font-semibold data-pressed:text-primary-strong",
         className,
       )}
       {...props}

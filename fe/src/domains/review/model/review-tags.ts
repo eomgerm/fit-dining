@@ -1,10 +1,6 @@
-// 작성 화면 데이터(review-form)의 이유 태그. group이 같은 태그는 함께 고를 수 없다(D-5)
-export type FormTag = {
-  code: string;
-  label: string;
-  group: string;
-  displayGroup: string;
-};
+import type { FormTag } from "./review";
+
+export type { FormTag };
 
 export function toggleTag(selected: readonly string[], code: string) {
   return selected.includes(code)
@@ -32,4 +28,16 @@ export function hasGoodTag(
   goodTags: readonly FormTag[],
 ) {
   return goodTags.some((tag) => selected.includes(tag.code));
+}
+
+// 화면 묶음(분위기·공간·이용·양·방문 목적)을 받은 순서대로 나눈다
+export function groupByDisplayGroup(tags: readonly FormTag[]) {
+  const groups = new Map<string, FormTag[]>();
+  for (const tag of tags) {
+    groups.set(tag.displayGroup, [
+      ...(groups.get(tag.displayGroup) ?? []),
+      tag,
+    ]);
+  }
+  return [...groups].map(([name, items]) => ({ name, tags: items }));
 }
