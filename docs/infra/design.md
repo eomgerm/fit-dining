@@ -436,7 +436,7 @@ Caddy 컨테이너(`caddy:2.x`, 구현 시 최신 2.x를 핀)가 A의 80·443만
 | `fe:build` | verify | 같은 Node 이미지로 `next build`(standalone)를 **한 번만** 하고(환경 값은 번들에 넣지 않는다, 6.8절) 커밋 SHA를 `DEPLOYMENT_VERSION`으로 넘겨 빌드 ID와 `deploymentId`로 쓴다. FE 번들(`standalone`, `static`, `public`)을 GitLab 아티팩트로 넘긴다 |
 | `fe:bundle-check` | verify | `infra/ci/check_fe_bundle.py`로 번들 산출물을 검사한다(서버 파일, 정적 자산, 빌드 ID와 `deploymentId`가 SHA와 같음, 이미지 최적화 꺼짐, `sharp` 외 네이티브 모듈 없음, `localhost` 주소 없음. mock 글자는 경고, PWA 파일 없음은 건너뜀). 실패하면 `build:images`가 돌지 않는다 |
 | `build:images` | build | `<서비스>:<SHA>`(be, fe) 로컬 조립(`infra/ci/build-images.sh`). verify 단계가 만든 jar와 FE 번들을 `COPY`한다(BE 계약 #20, FE 계약 #1). 레지스트리는 없다. 이미 있으면 재사용한다(MR을 fast-forward로 병합하므로 SHA가 그대로라 다시 조립하지 않는다). `develop`과 `master`에서만 돈다 |
-| `deploy:dev` | deploy | develop 푸시 시 자동(`environment: dev`, `resource_group: dev`). 전체 clone(`GIT_DEPTH: "0"`)을 쓴다. 얕은 clone이면 다운그레이드 가드와 마이그레이션 비교가 틀린다 |
+| `deploy:dev` | deploy | develop 푸시 시 자동(`environment: dev`, `resource_group: dev`). 전체 clone(`GIT_DEPTH: "0"`)을 쓴다. 얕은 clone이면 다운그레이드 가드와 마이그레이션 비교가 틀리므로 preflight가 얕은 저장소를 `git fetch --unshallow`로 채우고 못 채우면 거부한다(Jira S15P31A302-99) |
 | `deploy:prod` | deploy | master에서 수동(`environment: prod`, `resource_group: prod`). `allow_failure: false`라 사람이 누를 때까지 파이프라인이 멈춘다(`when: manual`만 두면 안 눌러도 통과한 것처럼 보인다) |
 | `smoke:dev`, `smoke:prod` | smoke | 환경별로 배포 뒤에 돈다(`smoke.sh <env> --sha <SHA>`). `--resolve`로 서버 내부 경유 확인. 검색 1건을 호출해 폴백 사용 여부를 확인한다(Modal 연동 누락이 폴백에 가려지지 않게, BE 계약 #17). 콜드 스타트를 감안한 타임아웃을 둔다. FE는 `/`가 200이고 `/config.json`에 필수 키가 모두 있는지 확인한다 |
 
@@ -462,7 +462,7 @@ verify는 Arm, prod는 x86이다. 그래서 deploy 스크립트가 idle 색에�
 
 GitLab이 죽어도 서버에서 직접 실행할 수 있다.
 
-1. preflight(값 비출력): env 파일·권한·CRLF·필수 키, `compose config -q`, 디스크 여유, **메모리 여유**(겹침 배포에 필요한 양보다 적으면 중단), **다운그레이드 가드**(배포할 SHA가 현재 배포된 SHA의 후손이 아니면 거부한다. `git merge-base --is-ancestor`를 쓰며 얕은 clone에서는 현재 SHA를 먼저 fetch한다. 되돌리기는 `rollback.sh`로만 한다)
+1. preflight(값 비출력): env 파일·권한·CRLF·필수 키, `compose config -q`, 디스크 여유, **메모리 여유**(겹침 배포에 필요한 양보다 적으면 중단), **다운그레이드 가드**(배포할 SHA가 현재 배포된 SHA의 후손이 아니면 거부한다. `git merge-base --is-ancestor`를 쓰며 저장소가 얕으면 먼저 `git fetch --unshallow origin`으로 전체 이력을 채우고, 못 채우면 거부한다. 되돌리기는 `rollback.sh`로만 한다)
 2. `flock` 잠금
 3. prod는 마이그레이션이 있으면 사전 `pg_dump` 후 일회성 마이그레이션 컨테이너 실행. 실패하면 트래픽을 건드리기 전에 중단
 4. 서비스별로(BE, FE 순) 반대 색 기동 → readiness(BE 최대 150초, FE는 `/fe-healthz`) → idle 색 스모크(BE는 헬스·버전, FE는 SSR 페이지와 `/config.json`). FE의 정적 자산은 색을 띄우기 전에 풀에 쌓는다

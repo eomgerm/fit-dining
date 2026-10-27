@@ -280,6 +280,21 @@ run_guard_checks() {
   ok_if "메모리 여유가 모자라면 사전 점검이 실패한다" "$([ "$rc" = 1 ] && [ "$(has "$out" 'FAIL  메모리 여유')" = 1 ] && echo 1 || echo 0)"
   out="$(bash infra/deploy/preflight.sh prod aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 2>&1)" && rc=0 || rc=$?
   ok_if "이미지나 커밋이 없는 SHA는 사전 점검이 실패한다" "$([ "$rc" = 1 ] && [ "$(has "$out" 'FAIL  이미지')" = 1 ] && [ "$(has "$out" 'FAIL  저장소에 커밋')" = 1 ] && echo 1 || echo 0)"
+
+  echo "--- 얕은 저장소(러너 checkout은 GIT_DEPTH 20 잡이 받은 얕은 상태로 남을 수 있다)"
+  rm -rf "$T/shallow-repo"
+  git clone -q --depth 1 --no-tags "file://$T/repo" "$T/shallow-repo" 2>/dev/null
+  ok_if "(준비) 깊이 1로 받은 저장소는 얕다" "$(is "$(git -C "$T/shallow-repo" rev-parse --is-shallow-repository)" true)"
+  out="$(FIT_REPO_DIR="$T/shallow-repo" bash infra/deploy/preflight.sh prod "$C1" 2>&1)" && rc=0 || rc=$?
+  ok_if "얕은 저장소는 origin에서 전체 이력을 받아 사전 점검이 통과한다" "$([ "$rc" = 0 ] && [ "$(git -C "$T/shallow-repo" rev-parse --is-shallow-repository)" = false ] && echo 1 || echo 0)"
+  rm -rf "$T/shallow-repo"
+  git clone -q --depth 1 --no-tags "file://$T/repo" "$T/shallow-repo" 2>/dev/null
+  git -C "$T/shallow-repo" remote set-url origin "file://$T/no-such-repo"
+  out="$(FIT_REPO_DIR="$T/shallow-repo" bash infra/deploy/preflight.sh prod "$C8" 2>&1)" && rc=0 || rc=$?
+  ok_if "전체 이력을 받지 못하면 얕은 저장소를 거부한다" "$([ "$rc" = 1 ] && [ "$(has "$out" 'FAIL  저장소가 전체 이력이다')" = 1 ] && echo 1 || echo 0)"
+  out="$(FIT_REPO_DIR="$T/shallow-repo" bash infra/deploy/preflight.sh prod - --rollback 2>&1)" && rc=0 || rc=$?
+  ok_if "롤백 사전 점검은 얕은 저장소여도 막지 않는다(이력이 필요 없다)" "$(is "$rc" 0)"
+  rm -rf "$T/shallow-repo"
 }
 
 run_prod_checks() {

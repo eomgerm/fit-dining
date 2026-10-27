@@ -21,7 +21,7 @@ CI가 아닌 곳에서 `deploy.sh`를 직접 실행하려면 `SKIP_VERIFY=<사�
 `.gitlab-ci.yml`이 위 스크립트를 부른다(설계 6.3절). `develop`에 병합하면 `be:build`와 `fe:build`가 jar와 번들을 만들고 `build:images` → `deploy:dev` → `smoke:dev`가 돌고, `master`에서는 같은 이미지로 수동 `deploy:prod` → `smoke:prod`다. 배포 단계(`be:build`, `fe:build`부터 `smoke`까지)는 변수 `FIT_CD_ENABLED`가 `"true"`일 때만 나타난다. MR 파이프라인은 바뀐 경로의 검사만 돌려 빠르게 끝나고(jar는 만들지 않는다), `develop`·`master`는 항상 전체를 돌린다(설계 6.3절). 2026-10-26에 켰다(비상으로 끄려면 프로젝트 CI/CD 변수 `FIT_CD_ENABLED=false`). 켜기 전에 확인한 일은 [계획 1C-3의 체크리스트](../../docs/infra/plans/2026-10-23-plan-1c3-ci-pipeline.md)에 있다.
 
 - 잡은 서버 A의 `fit-deploy` 러너(shell, 보호된 브랜치만)에서 돌고 `gitlab-runner` 계정이 docker 그룹이라 `deploy.sh`를 그대로 실행한다. `/srv/fit/state`와 `/srv/fit/web`은 `root:docker 2775`여야 쓸 수 있다(`infra/host/bootstrap.sh`가 만든다).
-- 배포 잡은 전체 clone(`GIT_DEPTH: "0"`)을 쓴다. 얕은 clone이면 `preflight.sh`의 다운그레이드 가드와 마이그레이션 비교가 틀린다.
+- 배포 잡은 전체 clone(`GIT_DEPTH: "0"`)을 쓴다. 얕은 clone이면 `preflight.sh`의 다운그레이드 가드와 마이그레이션 비교가 틀린다. 그런데 A의 러너 checkout은 하나라서, 앞뒤 잡(`build:images`, `smoke:*`는 `GIT_DEPTH: 20`)이 받은 얕은 상태가 남을 수 있고 깊이 없는 `git fetch`는 얕은 채로 둔다. 그래서 `preflight.sh`가 저장소가 얕으면 먼저 `git fetch --unshallow origin`으로 채우고, 그래도 얕으면 `저장소가 전체 이력이다` 점검이 실패해 배포를 거부한다(롤백 모드는 이력을 쓰지 않아 검사하지 않는다).
 - prod는 사람이 `master`의 최신 파이프라인에서 `deploy:prod`를 눌러야 한다(누를 때까지 파이프라인이 멈춘다).
 - 같은 SHA를 다시 배포하려면 그 파이프라인의 배포 잡을 **Retry**한다(이미지는 있으면 다시 조립하지 않는다). 이미 더 새로운 SHA가 배포돼 있으면 다운그레이드 가드가 거부한다.
 - **이미 떠 있는 SHA를 다시 배포해도 롤백 대상은 그대로다.** `PREVIOUS_SHA`는 바뀌지 않고, dev는 `BE_DEV_PREV_TAG`·`FE_DEV_PREV_TAG`를, prod는 직전 릴리스 태그를 `BE_PROD_PREV_TAG`·`FE_PROD_PREV_TAG`에 따로 적어 둔다(두 색이 같은 태그가 되기 때문이다). 그 뒤의 `rollback.sh`는 재배포 전의 직전 릴리스로 돌아간다. env 값을 바꾼 뒤 같은 SHA를 다시 배포해도 롤백 지점을 잃지 않는다.

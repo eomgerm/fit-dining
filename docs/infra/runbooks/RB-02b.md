@@ -15,7 +15,7 @@
 
 ## 2. 왜 번들로 저장소를 올리나
 
-`deploy.sh`의 사전 점검은 **전체 이력이 있는 저장소**에서 돌아야 한다(다운그레이드 가드와 마이그레이션 비교가 커밋을 읽는다). A의 러너 checkout(`/home/gitlab-runner/builds/.../S15P31A302`)은 쓰지 않는다. 마지막 잡(`build:images`, `smoke:*`)이 `GIT_DEPTH: 20`으로 받아서 얕은 저장소일 수 있고(2026-10-27 확인: `shallow: true`, 20커밋), GitLab이 죽었으면 새로 받을 수도 없다. 그래서 노트북의 저장소를 `git bundle`로 올려 A에서 전체 이력 clone을 만든다. GitLab이 없어도 된다.
+`deploy.sh`의 사전 점검은 **전체 이력이 있는 저장소**에서 돌아야 한다(다운그레이드 가드와 마이그레이션 비교가 커밋을 읽는다). A의 러너 checkout(`/home/gitlab-runner/builds/.../S15P31A302`)은 쓰지 않는다. 마지막 잡(`build:images`, `smoke:*`)이 `GIT_DEPTH: 20`으로 받아서 얕은 저장소일 수 있고(2026-10-27 확인: `shallow: true`, 20커밋), GitLab이 죽었으면 새로 받을 수도 없다. 사전 점검은 저장소가 얕으면 `git fetch --unshallow origin`으로 채우려 하고, 못 채우면 `저장소가 전체 이력이다` 점검 실패로 배포를 거부한다(Jira S15P31A302-99). 그래서 노트북의 저장소를 `git bundle`로 올려 A에서 전체 이력 clone을 만든다. GitLab이 없어도 된다.
 
 ## 3. 절차
 

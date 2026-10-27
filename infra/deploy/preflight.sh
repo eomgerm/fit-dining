@@ -115,6 +115,13 @@ if [ "$ROLLBACK" = 0 ]; then
     echo "SHA가 필요하다" >&2
     exit 2
   }
+  # 러너의 checkout은 마지막으로 받은 잡(build:images, smoke는 GIT_DEPTH 20)의 얕은 상태로 남을 수 있고, 깊이 없는 fetch는 얕은 채로 둔다.
+  # 얕으면 현재 배포된 커밋이 경계 밖일 때 다운그레이드 가드(merge-base)가 정상 배포를 막으므로 전체 이력을 채우고, 못 채우면 거부한다
+  if [ "$(git -C "$REPO_DIR" rev-parse --is-shallow-repository 2>/dev/null)" = true ]; then
+    git -C "$REPO_DIR" fetch --quiet --unshallow origin >/dev/null 2>&1 || true
+  fi
+  ok_if "저장소가 전체 이력이다(얕은 저장소는 다운그레이드 가드와 마이그레이션 비교가 틀린다)" \
+    "$([ "$(git -C "$REPO_DIR" rev-parse --is-shallow-repository 2>/dev/null)" = false ] && echo 1 || echo 0)"
   ok_if "이미지 $BE_IMAGE:$SHA 가 있다" "$(succeeds docker image inspect "$BE_IMAGE:$SHA")"
   ok_if "이미지 $FE_IMAGE:$SHA 가 있다" "$(succeeds docker image inspect "$FE_IMAGE:$SHA")"
   ok_if "저장소에 커밋 $SHA 가 있다" "$(succeeds git -C "$REPO_DIR" rev-parse --verify -q "$SHA^{commit}")"
