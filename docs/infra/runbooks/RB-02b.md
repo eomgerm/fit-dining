@@ -1,6 +1,6 @@
 # RB-02b 긴급 수동 배포(`SKIP_VERIFY`)
 
-- 검증 기준: develop `52c661d`, 2026-10-27. 서버 A에서 4번의 준비와 사전 점검까지 실제로 실행했다. **`deploy.sh` 실행 자체는 따라 해 보지 못했다**(맨 아래 범위).
+- 검증 기준: develop `52c661d`, 2026-10-27. 서버 A의 dev에서 아래 3절을 처음부터 끝까지(번들, clone, 사전 점검, `deploy.sh`, `smoke.sh`) 실제로 실행했다. prod에서는 해 보지 못했다(맨 아래 범위).
 - 쓰는 때: CI(GitLab 또는 B)를 쓸 수 없는데 배포나 되돌림이 급할 때. 사유를 이력에 남기는 조건으로 CI의 verify 단계를 건너뛴다(설계 6.7절).
 - 쓰지 않는 때: 롤백만 필요하면 [RB-02](RB-02.md)의 `rollback.sh`다(사유도 저장소도 필요 없다).
 
@@ -49,16 +49,23 @@ sudo rm -rf /tmp/fit-deploy-repo /tmp/fit.bundle
 - **읽을 수 있는 디렉터리에서 실행한다.** `ubuntu`의 홈(`~`)에서 부르면 `gitlab-runner`가 현재 디렉터리를 못 읽어 `compose 설정이 올바르다` 점검이 `stat .: permission denied`로 실패한다(2026-10-27에 겪었다).
 - **`SKIP_VERIFY`는 사유다.** 값이 이력에 `skip-verify:<사유>`로 남는다. 사유 없이 부르면 `deploy.sh`가 "CI 밖에서 직접 배포하려면 SKIP_VERIFY=<사유>를 준다"며 사전 점검 전에 거부한다(확인함).
 - 사전 점검이 통과해도 배포가 실패하면 자동으로 이전 상태로 돌아가고 종료 코드 1이다([RB-02](RB-02.md)의 실패 표).
+- **이미 배포된 SHA를 다시 배포하면 롤백 대상이 사라진다.** `PREVIOUS_SHA`가 같은 SHA로 덮인다(아래 시험에서 확인). 배포 전에 `sudo grep -E '^(DEPLOYED|PREVIOUS)_SHA=' /srv/fit/state/deploy-<ENV>.env`로 지금 값을 적어 두고, 롤백 가능성이 중요한 prod에서는 새 SHA를 배포한다.
+- **dev는 BE가 잠깐 끊긴다.** 교체 방식이라 BE 컨테이너가 다시 뜨는 동안 응답이 없다(아래 시험에서 약 22초).
 - 이 배포는 2인 승인의 예외다. 장애 중에는 사후 승인을 허용하고 사유를 남긴다(설계 10.6절). 배포한 뒤 팀 채널에 SHA와 사유를 알린다.
 
 ## 4. 되돌리기
 
-- 배포가 나쁘면 [RB-02](RB-02.md)의 `rollback.sh <ENV>`다. 저장소가 필요 없다.
+- 배포가 나쁘면 [RB-02](RB-02.md)의 `rollback.sh <ENV>`다. 저장소가 필요 없다. 단 같은 SHA를 다시 배포한 경우에는 롤백 대상이 같은 SHA라 쓸모가 없다(위 주의).
 - 임시 clone과 번들은 위 마지막 줄로 지운다. 서버에 남는 것은 상태 파일과 이력(`/srv/fit/state`)뿐이다.
 - GitLab이 돌아오면 같은 SHA의 파이프라인 상태를 확인한다. 다음 CI 배포는 서버의 `DEPLOYED_SHA`를 기준으로 다운그레이드 가드를 적용한다.
 
 ## 이 런북을 따라 해 본 범위
 
 - 직접 실행함(2026-10-27, A): 번들 만들기와 전송, `gitlab-runner` 권한으로 clone(222커밋, 전체 이력)과 `checkout`, 사유 없이 `deploy.sh`를 부르면 거부되는지, 같은 위치에서 `preflight.sh dev <전체 SHA>`가 "배포 사전 점검 통과"인지. 시험하다 겪은 세 가지(짧은 SHA, 읽을 수 없는 현재 디렉터리, 원격 추적 이름의 번들)를 위에 반영했다.
-- **실행하지 못함: `deploy.sh`로 실제 배포하는 단계와 그 뒤의 `smoke.sh`.** dev를 이미 배포된 SHA로 다시 배포해 보려 했으나 실행 권한 판정에서 거부돼 하지 않았다. 따라서 이 절차의 배포 단계는 코드와 노트북 시험(`infra/deploy/test`)에 기댄 것이고 서버에서는 확인하지 못했다. dev에서 한 번 시험할 기회가 생기면 이 줄을 고친다.
-- 실행하지 못함: prod에 대한 수동 배포(prod는 아직 이 스크립트로 배포한 적이 없다), GitLab이 실제로 죽은 상황에서의 흐름.
+- **배포 단계까지 실행함(2026-10-27 10:39 KST, dev, 승인 후).** 이미 배포된 `52c661d`를 번들 clone에서 `SKIP_VERIFY='RB-02b 따라 하기 시험(S15P31A302-83)'`로 다시 배포했다.
+  - 종료 코드 0, 걸린 시간 33초(스크립트 로그 "32초"). 이력(`history-dev.log`)에 `skip-verify:<사유>`가 `deploy-start`와 `deploy-end` 줄에 남았다. 실행 계정은 `gitlab-runner`였다.
+  - `smoke.sh dev --sha <전체 SHA>` 통과, 엣지 경유 버전은 `52c661d`.
+  - 끊김(0.5초 간격 접속 확인 28회): BE `/healthz`가 7회 연결 실패(`000`), 비정상 구간 약 21.7초. FE `/fe-healthz`는 모두 200이었다.
+  - `/srv/fit/state`의 파일 소유자는 시험 전후 같았다(`deploy-dev.env`, `history-dev.log`는 `gitlab-runner`).
+  - **같은 SHA 재배포의 부작용:** `PREVIOUS_SHA`가 `a04e167…`에서 `52c661d…`로 바뀌고 `BE_DEV_PREV_TAG`, `FE_DEV_PREV_TAG`도 같은 SHA가 됐다. 이 뒤의 `rollback.sh dev`는 같은 버전으로 돌아간다.
+- 실행하지 못함: prod에 대한 수동 배포(prod는 아직 이 스크립트로 배포한 적이 없다. Blue/Green 전환은 시험하지 못했다), GitLab이 실제로 죽은 상황에서의 흐름, 새 SHA(이전과 다른 커밋)를 수동 배포해 마이그레이션이 도는 경우.
