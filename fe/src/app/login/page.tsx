@@ -10,7 +10,8 @@ import { TextButton } from "@/shared/ui/button/text-button";
 import { TextField } from "@/shared/ui/form/text-field";
 import { Icon } from "@/shared/ui/icon/icon";
 import { CloseIcon } from "@/shared/ui/icon/icons/close";
-import { KakaoIcon } from "@/shared/ui/icon/icons/kakao";
+import { SocialButtons } from "@/domains/auth/ui/social-buttons";
+import { SocialError } from "@/domains/auth/ui/social-error";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -74,6 +75,7 @@ export default function LoginPage() {
   }
   return (
     <main className="mx-auto flex min-h-svh w-full max-w-110 flex-col bg-surface px-5 pb-6 text-ink sm:px-8">
+      <SocialError />
       <header className="-mx-3 flex min-h-14 items-center justify-end">
         <IconButton label="로그인 닫기" render={<Link href="/" />}>
           <CloseIcon />
@@ -191,41 +193,7 @@ export default function LoginPage() {
         className="mt-auto flex flex-col gap-3 pt-16"
         aria-label="소셜 로그인"
       >
-        <Button
-          variant="outline"
-          size="md"
-          className="w-full"
-          type="button"
-          disabled
-          aria-describedby="social-status"
-        >
-          <KakaoIcon size="md" className="mr-2" />
-          카카오로 계속하기
-        </Button>
-        <Button
-          variant="outline"
-          size="md"
-          className="w-full"
-          type="button"
-          disabled
-          aria-describedby="social-status"
-        >
-          <Image
-            className="mr-2"
-            src="/brand/google.svg"
-            alt=""
-            width={20}
-            height={20}
-            unoptimized
-          />
-          구글로 계속하기
-        </Button>
-        <p
-          id="social-status"
-          className="text-center text-caption-sm text-ink-muted"
-        >
-          소셜 로그인은 준비 중이에요.
-        </p>
+        <SocialButtons from="login" />
       </section>
     </main>
   );

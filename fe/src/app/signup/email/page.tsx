@@ -17,19 +17,12 @@ import { Button } from "@/shared/ui/button/button";
 import { TextButton } from "@/shared/ui/button/text-button";
 import { IconButton } from "@/shared/ui/button/icon-button";
 import { TextField } from "@/shared/ui/form/text-field";
-import { Checkbox } from "@/shared/ui/form/checkbox";
 import { ChevronLeftIcon } from "@/shared/ui/icon/icons/chevron-left";
-import { BottomSheet } from "@/shared/ui/overlay/bottom-sheet";
-import { useToast } from "@/shared/ui/overlay/toast";
 
-const agreementLabels = {
-  ageOver14: "만 14세 이상이에요",
-  terms: "서비스 이용약관",
-  privacy: "개인정보 수집·이용",
-};
+import { SignupTerms } from "@/domains/auth/ui/signup-terms";
+
 export default function SignupEmailPage() {
   const router = useRouter();
-  const toast = useToast();
   const formRef = useRef<HTMLFormElement>(null);
   const submitting = useRef(false);
   const [fields, setFields] = useState<SignupFields>({
@@ -190,71 +183,14 @@ export default function SignupEmailPage() {
           다음
         </Button>
       </form>
-      <BottomSheet
-        title="약관에 동의하고 시작해요"
+      <SignupTerms
         open={open}
-        onOpenChange={(value) => {
-          if (!busy) setOpen(value);
-        }}
-      >
-        <p className="mb-4 text-body-sm text-ink-muted">
-          핏다이닝을 쓰려면 아래 약관에 동의해 주세요.
-        </p>
-        <Checkbox
-          checked={allAgreed}
-          indeterminate={!allAgreed && Object.values(agreements).some(Boolean)}
-          disabled={busy}
-          onCheckedChange={(checked) =>
-            setAgreements({
-              ageOver14: checked,
-              terms: checked,
-              privacy: checked,
-            })
-          }
-        >
-          전체 동의
-        </Checkbox>
-        <div className="my-3 border-t border-line" />
-        {(Object.keys(agreementLabels) as (keyof typeof agreements)[]).map(
-          (field) => (
-            <div
-              key={field}
-              className="flex items-center justify-between gap-2"
-            >
-              <Checkbox
-                checked={agreements[field]}
-                disabled={busy}
-                onCheckedChange={(checked) =>
-                  setAgreements((previous) => ({
-                    ...previous,
-                    [field]: checked,
-                  }))
-                }
-              >
-                <span className="text-body-sm">
-                  <span className="mr-2 text-primary-strong">필수</span>
-                  {agreementLabels[field]}
-                </span>
-              </Checkbox>
-              {field !== "ageOver14" && (
-                <TextButton
-                  disabled={busy}
-                  onClick={() => toast("약관 본문은 준비 중이에요.")}
-                >
-                  보기
-                </TextButton>
-              )}
-            </div>
-          ),
-        )}
-        <Button
-          className="mt-5 w-full"
-          disabled={!allAgreed || busy}
-          onClick={start}
-        >
-          {busy ? "가입 중" : "동의하고 시작하기"}
-        </Button>
-      </BottomSheet>
+        setOpen={setOpen}
+        busy={busy}
+        agreements={agreements}
+        setAgreements={setAgreements}
+        start={start}
+      />
     </main>
   );
 }

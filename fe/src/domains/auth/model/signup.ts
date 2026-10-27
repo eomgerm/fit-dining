@@ -25,9 +25,8 @@ export function validateSignup(fields: SignupFields): SignupErrors {
     errors.password = signupMessages.password;
   if (!fields.confirmation || fields.password !== fields.confirmation)
     errors.confirmation = signupMessages.confirmation;
-  const length = Array.from(fields.nickname.trim()).length;
-  if (length < 2 || length > 15 || /\p{Cc}/u.test(fields.nickname.trim()))
-    errors.nickname = signupMessages.nickname;
+  const nicknameError = validateNickname(fields.nickname);
+  if (nicknameError) errors.nickname = nicknameError;
   return errors;
 }
 
@@ -46,3 +45,9 @@ export type SignupPreferences = {
   purposes: ("CONVERSATION" | "SOLO" | "DATE" | "GATHERING" | "WORK_STUDY")[];
   tastes: { polarity: "LIKE" | "DISLIKE"; label: string }[];
 };
+
+export function validateNickname(nickname: string): string | undefined {
+  const length = Array.from(nickname.trim()).length;
+  if (length < 2 || length > 15 || /\p{Cc}/u.test(nickname.trim()))
+    return signupMessages.nickname;
+}

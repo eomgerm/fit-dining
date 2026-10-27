@@ -244,3 +244,26 @@ test("missing browser locks fails before sending credentials", async () => {
     env.reset();
   }
 });
+
+test("social signup saves session and broadcasts the cookie change", async () => {
+  const env = environment(async (url, options) => {
+    assert.equal(url, "/api/auth/social/signup");
+    assert.equal(options.credentials, "include");
+    assert.deepEqual(JSON.parse(options.body as string), {
+      nickname: "social",
+      agreements: { ageOver14: true, terms: true, privacy: true },
+    });
+    return json(value("social-at"), 201);
+  });
+  try {
+    const auth = await load();
+    await auth.socialSignup({
+      nickname: " social ",
+      agreements: { ageOver14: true, terms: true, privacy: true },
+    });
+    assert.equal(auth.getSession()?.accessToken, "social-at");
+    assert.deepEqual(env.messages, ["session-changed"]);
+  } finally {
+    env.reset();
+  }
+});

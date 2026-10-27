@@ -108,6 +108,8 @@
 
   /* 색: Figma semantic 변수와 같은 이름 */
   /* CTA 면, 선택 핀, 탭 밑줄, 24px 이상 점수 숫자 */
+  --color-kakao: #fee500;
+  --color-naver: #03a94d;
   --color-primary: var(--orange-500);
   /* 작은 주황 글자, 선택 칩·톤 버튼 글자 */
   --color-primary-strong: var(--orange-500);

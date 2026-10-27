@@ -2,7 +2,6 @@
 
 import { startAsGuest } from "@/domains/onboarding/model/storage";
 import { useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/shared/ui/button/button";
 import { TextButton } from "@/shared/ui/button/text-button";
@@ -10,7 +9,8 @@ import { Carousel } from "@/shared/ui/display/carousel";
 import { CarouselDots } from "@/shared/ui/display/carousel-dots";
 import { AlertDialog } from "@/shared/ui/overlay/alert-dialog";
 import { useToast } from "@/shared/ui/overlay/toast";
-import { KakaoIcon } from "@/shared/ui/icon/icons/kakao";
+import { SocialButtons } from "@/domains/auth/ui/social-buttons";
+import { SocialError } from "@/domains/auth/ui/social-error";
 import { BookmarkFilledIcon } from "@/shared/ui/icon/icons/bookmark-filled";
 
 const slides = [
@@ -116,6 +116,7 @@ export default function SignupPage() {
   const [skip, setSkip] = useState(false);
   return (
     <main className="mx-auto flex min-h-svh w-full max-w-110 flex-col bg-surface px-5 pb-6 text-ink sm:px-8">
+      <SocialError />
       <header className="flex min-h-14 justify-end">
         <TextButton onClick={() => setSkip(true)}>건너뛰기</TextButton>
       </header>
@@ -145,37 +146,7 @@ export default function SignupPage() {
         className="my-6 justify-center"
       />
       <div className="mt-auto flex flex-col gap-3 pt-5">
-        <Button
-          variant="outline"
-          size="md"
-          disabled
-          aria-describedby="signup-social-status"
-        >
-          <KakaoIcon size="md" className="mr-2" />
-          카카오로 계속하기
-        </Button>
-        <Button
-          variant="outline"
-          size="md"
-          disabled
-          aria-describedby="signup-social-status"
-        >
-          <Image
-            src="/brand/google.svg"
-            width={20}
-            height={20}
-            alt=""
-            unoptimized
-            className="mr-2"
-          />
-          구글로 계속하기
-        </Button>
-        <p
-          id="signup-social-status"
-          className="text-center text-caption-sm text-ink-muted"
-        >
-          소셜 가입은 준비 중이에요.
-        </p>
+        <SocialButtons from="signup" />
         <TextButton render={<Link href="/signup/email" />}>
           이메일로 가입하기
         </TextButton>

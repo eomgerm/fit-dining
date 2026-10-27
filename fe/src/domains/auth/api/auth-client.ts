@@ -112,6 +112,20 @@ export async function signup(body: SignupRequest) {
     return next;
   });
 }
+export async function socialSignup(
+  body: Pick<SignupRequest, "nickname" | "agreements" | "preferences">,
+) {
+  return browserLock(async () => {
+    const next = await send<AuthSession>("/social/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...body, nickname: body.nickname.trim() }),
+    });
+    update(next);
+    channel?.postMessage("session-changed");
+    return next;
+  });
+}
 export function refresh(): Promise<AuthSession> {
   if (!pendingRefresh) {
     pendingRefresh = browserLock(async () => {

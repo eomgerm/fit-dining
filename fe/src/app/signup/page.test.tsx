@@ -11,6 +11,7 @@ vi.mock("@/shared/ui/display/carousel", () => ({
     <section>{children}</section>
   ),
 }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }));
 afterEach(cleanup);
 it.each(["이용약관", "개인정보처리방침"])(
   "shows guest notice and preparation toast for %s",
