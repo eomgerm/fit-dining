@@ -93,6 +93,19 @@ Modal Environment는 `fit-test`·`fit-dev`·`fit-prod`이고 앱 이름은 모�
 - 응답: `{"model": "<모델>@<리비전>", "dim": 1024, "vectors": [...]}`, 헤더 `X-Model-Version`. 벡터는 단위 길이이고 소수 6자리로 반올림됩니다.
 - 인증: `requires_proxy_auth=True`. BE는 Modal 대시보드에서 만든 프록시 토큰을 `Modal-Key`·`Modal-Secret` 헤더로 보냅니다.
 
+## 검색 API(비교) 로컬 실행
+
+비교(S15P31A302-41)의 검색 API는 `server/`에 있고 명세는 `docs/comparison/api.md`입니다. Docker 없이 개발용 Postgres(pgvector)를 띄워 BE Mock 장소 30곳으로 처음부터 끝까지 돌려 볼 수 있습니다.
+
+```bash
+uv run python scripts/dev_db.py                  # 개발 DB를 띄우고 예시 장소를 채운다
+# 마지막 줄의 DATABASE_URL과 EMBEDDING_ENABLED=true를 .env에 넣는다(GMS 설정도 .env에 둔다)
+uv run --env-file .env uvicorn server.main:app   # 검색 API를 띄운다
+uv run python scripts/dev_db.py --stop           # 개발 DB를 멈춘다
+```
+
+요청 해석 평가는 `experiments/interpretation/`에 있습니다.
+
 ## GPU로 돌리기
 
 기본 `uv sync`는 PyPI의 torch를 씁니다(Windows는 CPU, Linux는 CUDA 13 빌드). GPU를 쓰려면 CUDA 12.8 빌드를 고릅니다. 드라이버가 CUDA 12.8 이상이면 됩니다(`nvidia-smi` 오른쪽 위 `CUDA Version`).
