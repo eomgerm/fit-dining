@@ -6,6 +6,7 @@
 - 형식: `KEY=VALUE`만 쓴다. 공백, 따옴표, `#`, `$`, 백슬래시, 백틱, CRLF를 금지한다. `check_env_files.py`가 검사한다.
 - 일치: 아래 표와 예제 파일의 키는 `infra/ci/check_env_contract.py`가 맞춰 본다. 예제 파일에 있는 키는 표에 있어야 하고, 필수 키는 예제 파일에 있어야 한다. 키를 바꾸면 이 표와 예제 파일을 함께 고친다.
 - 자리표시자: 예제의 `REPLACE_ME`는 비밀이 아직 없다는 표시다. BE는 이 값이나 비어 있는 값으로는 기동을 거부한다(BE 계약 #8).
+- 소셜 로그인 키(`AUTH_{GOOGLE,KAKAO,NAVER}_CLIENT_ID`와 `_CLIENT_SECRET`)는 제공자마다 한 쌍이고 선택이다(BE 구현은 S15P31A302-95). 쌍의 두 값이 다 있으면 그 제공자 로그인이 켜지고, 둘 다 없으면 꺼지며, 하나만 있으면 BE가 기동을 거부한다. 값을 아직 모르면 서버 env에 키를 넣지 않는다. 예제 파일에는 두지 않고(선택 키), `REPLACE_ME`를 넣으면 배포 preflight가 막는다.
 - `$`가 필요한 값(bcrypt 해시 등)은 base64로 인코딩해 둔다(design.md 13.2절).
 - `*_BASE_URL` 값은 끝에 `/`를 붙이지 않는다(예: `https://gms.ssafy.io/gmsapi`).
 - 서버의 `/etc/fit/*.env`에 값을 넣고 바꾸는 도구는 `infra/host/envset.py`다(사용법은 [infra/host/README.md](../../../infra/host/README.md)). 위 형식과 `*_BASE_URL` 규칙을 지키고, 이 표에 없는 키를 넣으면 알려 준다.
@@ -50,6 +51,12 @@
 | `JWT_SECRET` | app | O | 비밀. 서명 방식은 BE 팀이 정한다 |
 | `AUTH_FRONTEND_ORIGIN` | app | O | 인증 API(`/api/auth/**`)의 POST가 우리 화면에서 온 것인지 가르는 기준 출처(CSRF 방어). 브라우저가 붙이는 `Origin` 헤더와 정확히 같아야 하므로 경로와 끝 `/` 없이 `https://호스트`만 쓴다. prod는 `https://<PROD_HOST>`, dev는 `https://<DEV_HOST>`이고 둘 다 443이라 포트를 붙이지 않는다. 환경마다 달라 기본값이 없고, 값이 형식에 맞지 않으면 BE가 기동을 거부한다(BE 계약 #8). 로컬 개발은 이 계약 밖이고 `be/.env`에서 `http://localhost:3000`을 쓴다 |
 | `AUTH_COOKIE_SECURE` | app | O | RT 쿠키의 `Secure` 속성 여부(`true` 또는 `false`). dev와 prod 서버는 Caddy 뒤 HTTPS라 둘 다 `true`다. 로컬(`http://localhost`)만 `false`다. 기본값이 없고 `true`·`false`가 아닌 값은 BE가 기동을 거부한다(BE 계약 #8, 쿠키는 #21) |
+| `AUTH_GOOGLE_CLIENT_ID` | app | X | 구글 소셜 로그인의 OAuth 클라이언트 ID. `AUTH_GOOGLE_CLIENT_SECRET`과 한 쌍이다(위 규칙). 제공자 콘솔에 콜백 `https://<호스트>/api/auth/oauth/google/callback`을 등록해야 한다. 호스트는 `AUTH_FRONTEND_ORIGIN`과 같다 |
+| `AUTH_GOOGLE_CLIENT_SECRET` | app | X | 구글 OAuth 클라이언트 시크릿. 비밀 |
+| `AUTH_KAKAO_CLIENT_ID` | app | X | 카카오 로그인의 REST API 키. `AUTH_KAKAO_CLIENT_SECRET`과 한 쌍이다. 콜백 `https://<호스트>/api/auth/oauth/kakao/callback`을 등록한다 |
+| `AUTH_KAKAO_CLIENT_SECRET` | app | X | 카카오 클라이언트 시크릿. 비밀. 카카오 콘솔의 클라이언트 시크릿은 ON으로 둔다 |
+| `AUTH_NAVER_CLIENT_ID` | app | X | 네이버 로그인의 Client ID. `AUTH_NAVER_CLIENT_SECRET`과 한 쌍이다. 콜백 `https://<호스트>/api/auth/oauth/naver/callback`을 등록한다 |
+| `AUTH_NAVER_CLIENT_SECRET` | app | X | 네이버 Client Secret. 비밀 |
 | `MODAL_BASE_URL` | app | O | Modal 엔드포인트의 기준 URL. 환경별 앱이 다르다 |
 | `MODAL_KEY` | app | O | `Modal-Key` 헤더 값. 비밀 |
 | `MODAL_SECRET` | app | O | `Modal-Secret` 헤더 값. 비밀 |
