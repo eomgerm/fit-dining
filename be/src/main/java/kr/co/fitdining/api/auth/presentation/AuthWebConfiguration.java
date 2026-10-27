@@ -1,5 +1,7 @@
 package kr.co.fitdining.api.auth.presentation;
 
+import kr.co.fitdining.api.auth.infrastructure.StrictAuthPolicy;
+import kr.co.fitdining.api.auth.ports.AuthPolicy;
 import java.net.URI;
 import org.springframework.web.method.HandlerMethod;
 import java.util.Set;
@@ -17,6 +19,12 @@ import kr.co.fitdining.api.onboarding.OnboardingController;
 public class AuthWebConfiguration implements WebMvcConfigurer {
     private final AuthUseCases auth;
     private final String origin;
+    private AuthPolicy policy = new StrictAuthPolicy();
+    public AuthWebConfiguration(AuthUseCases auth, String origin, String secure, AuthPolicy policy) {
+        this(auth, origin, secure);
+        this.policy = policy;
+    }
+    @org.springframework.beans.factory.annotation.Autowired
     public AuthWebConfiguration(AuthUseCases auth, @Value("${auth.frontend-origin}") String origin,
             @Value("${auth.cookie-secure}") String secure) {
         URI uri = URI.create(origin);
@@ -34,12 +42,15 @@ public class AuthWebConfiguration implements WebMvcConfigurer {
                 if (!(handler instanceof HandlerMethod method)
                         || !(AuthController.class.isAssignableFrom(method.getBeanType())
                         || SocialAuthController.class.isAssignableFrom(method.getBeanType())
+                        || DevAuthController.class.isAssignableFrom(method.getBeanType())
                         || UserController.class.isAssignableFrom(method.getBeanType())
                         || OnboardingController.class.isAssignableFrom(method.getBeanType()))) return true;
                 response.setHeader("Cache-Control", "no-store");
                 response.setHeader("X-Content-Type-Options", "nosniff");
                 if (request.getMethod().equals("OPTIONS")) return true;
-                if ((request.getMethod().equals("POST") || request.getMethod().equals("DELETE")) && !origin.equals(request.getHeader("Origin")))
+                if (policy.checkOrigin() && !DevAuthController.class.isAssignableFrom(method.getBeanType())
+                        && (request.getMethod().equals("POST") || request.getMethod().equals("DELETE"))
+                        && !origin.equals(request.getHeader("Origin")))
                     throw new AuthFailure("허용되지 않은 요청 출처입니다.", 403);
                 String path = request.getRequestURI().substring(request.getContextPath().length());
                 if (!UserController.class.isAssignableFrom(method.getBeanType()) && !protectedPaths.contains(path)) return true;

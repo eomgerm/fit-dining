@@ -64,7 +64,10 @@ review:
 
 auth:
   terms-version: ${AUTH_TERMS_VERSION:2026-10-23}
-  jwt-secret: ${JWT_SECRET}
+  simple:
+    enabled: ${AUTH_SIMPLE_ENABLED:false}
+    dev-key: ${AUTH_DEV_KEY:}
+  jwt-secret: ${JWT_SECRET:}
   frontend-origin: ${AUTH_FRONTEND_ORIGIN}
   cookie-secure: ${AUTH_COOKIE_SECURE}
   cleanup:

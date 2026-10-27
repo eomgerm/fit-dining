@@ -88,6 +88,20 @@ public class EnvContractValidator implements EnvironmentPostProcessor, Ordered {
 			expect(violations, "OPENSEARCH_INDEX_PREFIX", indexPrefix, appEnv + "-");
 		}
 
+		String simple = env.apply("auth.simple.enabled");
+		if (simple == null) simple = env.apply("AUTH_SIMPLE_ENABLED");
+		boolean simpleEnabled = simple != null && TRUE_VALUES.contains(simple.trim().toLowerCase(java.util.Locale.ROOT));
+		String devKey = env.apply("auth.simple.dev-key");
+		if (devKey == null) devKey = env.apply("AUTH_DEV_KEY");
+		if (appEnv.equals("prod")) {
+		    if (simpleEnabled) violations.add("auth.simple.enabled는 prod에서 켤 수 없다");
+		    if (devKey != null && !devKey.isBlank()) violations.add("AUTH_DEV_KEY는 prod에서 설정할 수 없다");
+		}
+		if (appEnv.equals("dev") && simpleEnabled) {
+		    if (isMissing(devKey)) violations.add("AUTH_DEV_KEY 값이 없거나 " + PLACEHOLDER + "다");
+		    else if (devKey.length() < 32) violations.add("AUTH_DEV_KEY는 32자 이상이어야 한다");
+		    if (isMissing(env.apply("AUTH_DEMO_PASSWORD"))) violations.add("AUTH_DEMO_PASSWORD 값이 없거나 " + PLACEHOLDER + "다");
+		}
 		if (appEnv.equals("prod")) {
 			for (String key : MOCK_SWITCHES) {
 				String value = env.apply(key);

@@ -1,5 +1,6 @@
 package kr.co.fitdining.api.auth.application;
 
+import kr.co.fitdining.api.auth.ports.AuthPolicy;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.UUID;
@@ -32,6 +33,7 @@ public class AuthTransactions {
     private final kr.co.fitdining.api.user.UserPreferencesRepository preferences;
     private final TokenCodec codec;
     private final Clock clock;
+    private final AuthPolicy policy;
     @org.springframework.beans.factory.annotation.Value("${auth.terms-version}")
     private String termsVersion;
 
@@ -47,6 +49,7 @@ public class AuthTransactions {
     /** Records a login attempt only while the per-address window is below its limit. */
     @Transactional
     public boolean recordAttempt(String address, String action) {
+        if (!policy.limitAttempts()) return true;
         Instant now = clock.instant();
         attempts.lockAddress(address + ":" + action);
         if (attempts.countByAddressAndActionAndCreatedAtAfter(address, action, now.minusSeconds(900)) >= 20) return false;
@@ -59,7 +62,7 @@ public class AuthTransactions {
     public Issued login(AuthUser user) {
         user = activeUser(user.getId());
         Instant now = clock.instant();
-        return issue(user.getId(), user.getNickname(), UUID.randomUUID().toString(), now.plusSeconds(86400), now);
+        return issue(user.getId(), user.getNickname(), UUID.randomUUID().toString(), now.plusSeconds(policy.sessionSeconds()), now);
     }
 
     /**
@@ -74,7 +77,7 @@ public class AuthTransactions {
         if (!token.getUserId().equals(claims.userId())
                 || token.getExpiresAt().getEpochSecond() != claims.expiresAt()) throw invalid();
         Instant now = clock.instant();
-        if (token.getUsedAt() != null || token.getRevokedAt() != null) {
+        if ((policy.rejectRefreshReuse() && token.getUsedAt() != null) || token.getRevokedAt() != null) {
             return new Rotation(null, invalid());
         }
         if (!token.getExpiresAt().isAfter(now)) throw invalid();
@@ -89,6 +92,7 @@ public class AuthTransactions {
      */
     @Transactional
     public void revokeReused(TokenCodec.Claims claims) {
+        if (!policy.rejectRefreshReuse()) return;
         Instant now = clock.instant();
         AuthRefreshToken token = refreshTokens.findById(claims.jti()).orElseThrow(AuthTransactions::invalid);
         String family = token.getFamilyId();
@@ -130,7 +134,7 @@ public class AuthTransactions {
     private Issued issue(String user, String nickname, String family, Instant familyExpiry, Instant now) {
         long created = now.getEpochSecond();
         long expiry = familyExpiry.getEpochSecond();
-        long accessExpiry = Math.min(created + 1800, expiry);
+        long accessExpiry = Math.min(created + policy.accessSeconds(), expiry);
         String jti = UUID.randomUUID().toString();
         refreshTokens.save(new AuthRefreshToken(jti, family, user, now, familyExpiry));
         String at = codec.encode(new TokenCodec.Token(user, null, "access", created, accessExpiry));

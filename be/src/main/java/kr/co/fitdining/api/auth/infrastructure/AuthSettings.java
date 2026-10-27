@@ -1,12 +1,17 @@
 package kr.co.fitdining.api.auth.infrastructure;
 
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 import java.util.Set;
 import org.springframework.core.env.Environment;
 
 /**
  * Validated web-only settings; optional credentials are absent together.
+ * @param simpleEnabled whether development authentication is enabled
+ * @param devKey optional local key, mandatory on dev servers, never logged
  * @param signingKey decoded signing key, never logged
  * @param origin allowed frontend origin
  * @param cookieSecure cookie Secure policy
@@ -15,10 +20,29 @@ import org.springframework.core.env.Environment;
  * @param demoNickname optional public name, null when seeding is disabled
  */
 public record AuthSettings(byte[] signingKey, String origin, boolean cookieSecure,
-        String demoEmail, String demoPassword, String demoNickname) {
-    /** Loads mandatory settings without defaults; no auth settings are read by migrate. */
+        String demoEmail, String demoPassword, String demoNickname, boolean simpleEnabled, String devKey) {
+    public AuthSettings(byte[] key, String origin, boolean secure, String email, String password, String nickname) {
+        this(key, origin, secure, email, password, nickname, false, null);
+    }
+
+    /** Uses the same local boundary as the environment contract validator. */
+    public static boolean isLocal(Environment environment) {
+        return environment.getProperty("APP_ENV") == null && java.util.Arrays.stream(environment.getActiveProfiles())
+                .noneMatch(Set.of("dev", "prod", "migrate")::contains);
+    }
+    /** Loads validated settings with development defaults only in simple local mode. */
     public static AuthSettings load(Environment environment) {
-        byte[] key = Base64.getDecoder().decode(environment.getRequiredProperty("auth.jwt-secret"));
+        boolean simple = environment.getProperty("auth.simple.enabled", Boolean.class, false);
+        boolean local = isLocal(environment);
+        String devKey = environment.getProperty("auth.simple.dev-key", environment.getProperty("AUTH_DEV_KEY"));
+        if (devKey != null && devKey.isBlank()) devKey = null;
+        if (simple && !local && (devKey == null || devKey.equals("REPLACE_ME")))
+            throw new IllegalArgumentException("AUTH_DEV_KEY is required for simple authentication on servers");
+        if (simple && !local && devKey.length() < 32)
+            throw new IllegalArgumentException("AUTH_DEV_KEY requires at least 32 characters on servers");
+        String secret = environment.getProperty("auth.jwt-secret", "");
+        byte[] key = simple && local && secret.isBlank()
+                ? localSigningKey() : Base64.getDecoder().decode(secret);
         if (key.length < 32) throw new IllegalArgumentException("JWT_SECRET requires at least 32 decoded bytes");
         String origin = environment.getRequiredProperty("auth.frontend-origin");
         URI uri = URI.create(origin);
@@ -32,6 +56,13 @@ public record AuthSettings(byte[] signingKey, String origin, boolean cookieSecur
         String email = environment.getProperty("AUTH_DEMO_EMAIL");
         String nickname = environment.getProperty("AUTH_DEMO_NICKNAME");
         String password = environment.getProperty("AUTH_DEMO_PASSWORD");
+        if (simple) {
+            if (email == null || email.isBlank()) email = "dev@fitdining.local";
+            if (nickname == null || nickname.isBlank()) nickname = "개발자";
+            if (local && (password == null || password.isBlank())) password = "fitdining-dev1";
+            if (!local && (password == null || password.isBlank() || password.equals("REPLACE_ME")))
+                throw new IllegalArgumentException("AUTH_DEMO_PASSWORD is required for simple authentication on servers");
+        }
         if (email != null || password != null || nickname != null) {
             if (email == null || nickname == null
                     || !kr.co.fitdining.api.auth.presentation.SignupValue.Validator.valid("email", kr.co.fitdining.api.auth.application.AuthService.normalizeEmail(email))
@@ -40,7 +71,17 @@ public record AuthSettings(byte[] signingKey, String origin, boolean cookieSecur
                 throw new IllegalArgumentException("All three demo account settings are required and must satisfy signup rules");
             }
         }
-        return new AuthSettings(key, origin, Boolean.parseBoolean(secure), email == null ? null : kr.co.fitdining.api.auth.application.AuthService.normalizeEmail(email), password, kr.co.fitdining.api.auth.domain.AuthText.strip(nickname));
+        return new AuthSettings(key, origin, Boolean.parseBoolean(secure), email == null ? null : kr.co.fitdining.api.auth.application.AuthService.normalizeEmail(email), password, kr.co.fitdining.api.auth.domain.AuthText.strip(nickname), simple, devKey);
+    }
+
+    /** Derives a stable development-only signing key without configured credentials. */
+    private static byte[] localSigningKey() {
+        try {
+            return MessageDigest.getInstance("SHA-256")
+                    .digest("fitdining-local-dev-signing-key".getBytes(StandardCharsets.UTF_8));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is required for the local signing key", e);
+        }
     }
 
     /** Prevents accidental credential disclosure through record-generated logging. */
