@@ -13,7 +13,7 @@
 - 세션 테이블은 없다. 가입·로그인마다 새 `family_id`를 만들고 API의 `sessionId`로 반환한다. 묶음 식별자와 만료는 RT 행에서 읽는다.
 - JWT에는 표준 클레임과 `token_type`만 담는다. 계정 정보는 응답 본문이나 내 정보 API로 제공한다.
 - DB에는 비밀번호 해시와 RT 식별자·메타데이터를 저장한다. 평문 비밀번호, JWT 원문, AT, 서명 키는 저장하지 않는다.
-- 소셜 로그인·가입, 이메일 인증, 비밀번호 찾기, 다른 기기 관리 UI는 구현되어 있지 않다.
+- 소셜 로그인·가입은 아래 소셜 로그인 절을 따른다. 이메일 인증, 비밀번호 찾기, 다른 기기 관리 UI는 구현되어 있지 않다.
 
 ## 2. 화면과 사용자 흐름
 
@@ -21,12 +21,12 @@
 
 | 실제 화면·상태 | 레퍼런스 | 현재 동작 |
 |---|---|---|
-| `/signup` | `Signup` (2-01) | 기능 소개 캐러셀 3장과 점 표시. 시각물은 정적 그림이다. 카카오·구글 버튼은 비활성이며 준비 중 안내를 표시한다. 이메일 가입 링크는 `/signup/email`로 이동한다. |
+| `/signup` | `Signup` (2-01) | 기능 소개 캐러셀 3장과 점 표시. 시각물은 정적 그림이다. 카카오·네이버·구글 버튼으로 소셜 가입을 시작한다. 이메일 가입 링크는 `/signup/email`로 이동한다. |
 | 건너뛰기 대화상자 | `SignupLater` (2-E01) | “가입하지 않고 시작할까요?”에서 “가입 없이 시작”은 `/`로 이동하고 “가입하기”는 창을 닫는다. “시작하면 이용약관과 개인정보처리방침에 동의한 것으로 간주해요.”를 고지한다. 링크 모양의 “이용약관”, “개인정보처리방침” 버튼을 누르면 각각 “이용약관은 준비 중이에요.”, “개인정보처리방침은 준비 중이에요.” 토스트를 표시한다. |
 | `/signup/email` | `SignupEmail` (2-02) | 이메일·비밀번호·비밀번호 확인·닉네임 입력. 모두 유효하면 “다음”이 활성화된다. |
 | 약관 바텀시트 | `SignupTerms` (2-03) | 전체 동의와 필수 3개 항목. 모두 동의하면 “동의하고 시작하기”가 활성화된다. “보기”는 본문 준비 중 토스트를 표시한다. |
 | 가입 입력 오류 | `SignupEmailError` (2-E02) | 가입 실패 시 시트를 닫고 해당 입력칸 아래에 오류를 표시한다. 이메일 중복이면 로그인 링크도 표시한다. 일반 실패·시도 제한은 안내 문구로 표시한다. |
-| `/login` | `Login` (3-01), `LoginError` (3-E01) | 이메일·비밀번호 입력, 비밀번호 표시 전환, 로그인 오류 안내. “이메일로 가입하기”는 `/signup`으로 이동한다. 비밀번호 찾기는 준비 중 안내, 소셜 버튼은 비활성이다. |
+| `/login` | `Login` (3-01), `LoginError` (3-E01) | 이메일·비밀번호 입력, 비밀번호 표시 전환, 로그인 오류 안내. “이메일로 가입하기”는 `/signup`으로 이동한다. 비밀번호 찾기는 준비 중 안내, 소셜 버튼으로 로그인을 시작한다. |
 | `/auth-demo` | 인증 확인용 화면 | 닉네임, 묶음 식별자, AT·묶음 만료 시각을 표시한다. 인증 API 호출, 수동 갱신, 현재 묶음 로그아웃을 제공한다. 토큰 원문은 표시하지 않는다. |
 
 가입 흐름은 `/signup` → `/signup/email` → 약관 시트 → 자동 로그인 → `/`다. `/login`의 로그인 성공 또는 기존 로그인 복구 성공은 `/`로 이동한다. `/auth-demo`는 복구와 `/me` 확인에 실패하여 401을 받으면 `/login`으로 이동하며, 로그아웃 성공 뒤에도 `/login`으로 이동한다.
@@ -309,8 +309,10 @@ PowerShell에서 `be/` 기준 마이그레이션과 웹 실행:
 $env:SPRING_DATASOURCE_URL = 'jdbc:postgresql://127.0.0.1:15432/fit_dev'
 $env:SPRING_DATASOURCE_USERNAME = 'fit_migrator'
 $env:SPRING_DATASOURCE_PASSWORD = '<FIT_MIGRATOR_PASSWORD>'
+$env:APP_ENV = 'dev'
 .\gradlew.bat bootRun --args='--spring.profiles.active=migrate'
 
+Remove-Item Env:APP_ENV
 $env:SPRING_DATASOURCE_USERNAME = 'fit_dev_app'
 $env:SPRING_DATASOURCE_PASSWORD = '<FIT_DEV_APP_PASSWORD>'
 $env:JWT_SECRET = '<안전하게 보관한 32바이트 이상 Base64 키>'
@@ -323,7 +325,7 @@ $env:AUTH_DEMO_NICKNAME = '데모계정'
 .\gradlew.bat bootRun
 ```
 
-`migrate`에는 DB 설정만 필요하다. 웹 필수 인증 설정이 누락되거나 유효하지 않으면 기동을 거부한다. 기존 `.env`에 데모 계정 설정이 일부만 남아 있어도 기동을 거부하므로 세 설정은 함께 관리한다.
+`migrate`에는 DB 설정과 `APP_ENV`가 필요하다. `migrate`는 서버 프로필이라 env 계약 검사가 `APP_ENV`를 요구하고, 로컬 DB 이름이 `fit_dev`이므로 `dev`를 준다. 웹을 로컬로 띄울 때는 `APP_ENV`를 지운다. 남아 있으면 웹도 dev 서버로 보고 서버용 env 계약을 검사한다. 웹 필수 인증 설정이 누락되거나 유효하지 않으면 기동을 거부한다. 기존 `.env`에 데모 계정 설정이 일부만 남아 있어도 기동을 거부하므로 세 설정은 함께 관리한다.
 
 다른 터미널의 `fe/`에서 `pnpm dev`를 실행하고 `http://localhost:3000/signup` 또는 `/login`으로 접속한다. 필요하면 `$env:BE_INTERNAL_URL = 'http://localhost:8080'`으로 BE 대상을 지정한다. `/api` 프록시는 개발 서버에서만 활성화되고 운영에서는 Caddy가 전달한다. 브라우저 주소와 `AUTH_FRONTEND_ORIGIN`의 호스트·포트를 일치시키며 localhost와 127.0.0.1을 섞지 않는다.
 
@@ -361,7 +363,7 @@ BE 테스트는 Docker 데몬이 필요하며 외부 DB는 불필요하다. `be/
 - 정리 작업은 기본 10분마다 테이블당 1,000행까지 처리한다. 유입량이 이를 넘을 경우 보관 데이터가 쌓일 수 있어 운영 처리량에 맞춘 설정 확인이 필요하다.
 - 약관 본문은 준비 중 안내만 제공하며, 실제 본문은 없다.
 - 가입 소개 캐러셀은 정적 그림이며 레퍼런스의 모션 그래픽은 없다.
-- 소셜 로그인·이메일 인증·비밀번호 찾기는 미구현이다. 소셜 로그인과 세션 관련 검토는 [세션·소셜 로그인 검토](02_session-and-social-login-review.md)에 정리되어 있다.
+- 이메일 인증·비밀번호 찾기는 미구현이다. 소셜 로그인은 아래 2026-10-26 절에 정리되어 있다. 로그인 유지 방식 결정 배경은 [세션·소셜 로그인 검토](02_session-and-social-login-review.md)를 참고한다.
 
 ## 온보딩 가입 확장 (2026-10-26)
 
@@ -376,3 +378,46 @@ BE 테스트는 Docker 데몬이 필요하며 외부 DB는 불필요하다. `be/
 로그인·갱신은 탈퇴 계정을 거부하며 활성 계정만 이메일·닉네임 중복을 검사한다.
 V2에서 `auth_users.deleted_at` 및 활성 이메일·닉네임 부분 유일 인덱스를 사용한다.
 무상태 AT와 개인정보 보관 관련 남은 이슈는 온보딩 문서를 참고한다.
+
+
+## 소셜 로그인 (2026-10-26)
+
+구글·카카오·네이버를 지원한다. `(provider, provider_user_id)`로만 계정을 찾으며 이메일 계정과 연결하지 않는다. 제공자 토큰은 코드 교환과 사용자 정보 조회 중에만 사용하고 저장하지 않는다. 기존 AT 메모리·RT HttpOnly 쿠키와 절대 만료 24시간은 유지한다. 소셜 사용자의 `GET /api/auth/me` 응답에는 `email`이 없다.
+
+1. `/login`, `/signup`의 전체 페이지 링크가 `GET /api/auth/oauth/{provider}?from=login|signup`을 호출한다.
+2. BE가 state와 PKCE를 만들고 서명 쿠키를 설정한 뒤 제공자 인가 화면으로 302 이동한다. 구글 scope는 `openid`, 카카오·네이버는 별도 scope를 요청하지 않는다. 콘솔 동의 항목도 최소로 설정한다.
+3. `GET /api/auth/oauth/{provider}/callback`에서 서명·만료·제공자·state를 확인하고 상태 쿠키를 삭제한다. 구글·카카오는 S256 verifier를 토큰 교환에 전송한다. 네이버는 state를 전송한다. HTTP 연결 3초·읽기 5초 제한을 둔다.
+4. 기존 활성 계정은 RT를 발급하고 `/`로 이동한다. 이후 인증 요청의 `restore()`가 AT를 얻는다. 신규 계정은 가입 대기 쿠키를 받고 `/signup/social`로 이동한다.
+5. 닉네임과 필수 약관 3개에 동의한 뒤 `POST /api/auth/social/signup`을 호출한다. 성공은 201 `TokenResponse`, RT 설정, 가입 대기 쿠키 삭제이며 FE는 `/`로 이동한다. 동일 제공자 식별자의 동시 가입은 DB 트랜잭션 advisory lock으로 직렬화하여 기존 계정으로 로그인한다.
+
+실패 콜백은 항상 `/login?error=social` 또는 `/signup?error=social`로 302 이동한다. 신뢰할 수 있는 출발 화면이 없으면 `/login`이다. FE는 실패 토스트를 한 번 띄우고 error 쿼리를 제거한다. 코드·토큰·state·제공자 응답은 로그에 남기지 않는다. 가입 API는 쿠키 인증 실패 401, 닉네임·약관 검증 400, 닉네임 중복 409(`urn:fitdining:auth:nickname-taken`), Origin 불일치 403, 시도 제한 429다. 콜백은 `login`, 가입은 `signup` 시도 제한(15분 20회)을 사용한다. 새 경로에도 `Cache-Control: no-store`가 적용된다.
+
+| 쿠키 | 내용 | 속성 | 수명 |
+|---|---|---|---|
+| `fitdining_oauth` | provider, state, verifier, from을 서명한 `oauth_state` JWT | HttpOnly, Secure=`AUTH_COOKIE_SECURE`, SameSite=Lax, Path=/api/auth/oauth | 10분, 콜백 즉시 삭제 |
+| `fitdining_social` | provider, providerUserId를 서명한 `social_signup` JWT | HttpOnly, Secure=`AUTH_COOKIE_SECURE`, SameSite=Strict, Path=/api/auth/social | 10분, 가입 성공 시 삭제 |
+| `fitdining_rt` | 기존 refresh JWT | 기존 속성 유지 | 기존 절대 만료 24시간 |
+
+`V3__social_login.sql`은 `auth_users.email/password_hash`를 함께 NULL일 수 있게 하고 한쪽만 NULL인 경우는 CHECK로 거부한다. `auth_social_accounts`의 복합 PK는 `(provider, provider_user_id)`, `user_id`는 UNIQUE FK다. 기존 닉네임·이메일 제약은 유지한다. 웹에서 마이그레이션하지 않으며 배포 시 `migrate` 프로필을 먼저 실행한다.
+
+선택 env는 `AUTH_GOOGLE_CLIENT_ID`, `AUTH_GOOGLE_CLIENT_SECRET`, `AUTH_KAKAO_CLIENT_ID`, `AUTH_KAKAO_CLIENT_SECRET`, `AUTH_NAVER_CLIENT_ID`, `AUTH_NAVER_CLIENT_SECRET`다. 제공자마다 둘 다 비어 있으면 비활성이고 하나만 있으면 기동을 거부한다. 기본 자격 증명은 없다. `JWT_SECRET`, `AUTH_FRONTEND_ORIGIN`, `AUTH_COOKIE_SECURE`는 기존 값을 사용한다. 인프라 담당자가 env 계약과 서버 배포를 처리해야 한다.
+
+각 제공자 콘솔에 다음 콜백을 등록한다(DEV_HOST/PROD_HOST는 해당 배포 호스트로 치환).
+
+| 환경 | 구글 | 카카오 | 네이버 |
+|---|---|---|---|
+| local | `http://localhost:3000/api/auth/oauth/google/callback` | `http://localhost:3000/api/auth/oauth/kakao/callback` | `http://localhost:3000/api/auth/oauth/naver/callback` |
+| dev | `https://<DEV_HOST>/api/auth/oauth/google/callback` | `https://<DEV_HOST>/api/auth/oauth/kakao/callback` | `https://<DEV_HOST>/api/auth/oauth/naver/callback` |
+| prod | `https://<PROD_HOST>/api/auth/oauth/google/callback` | `https://<PROD_HOST>/api/auth/oauth/kakao/callback` | `https://<PROD_HOST>/api/auth/oauth/naver/callback` |
+
+공식 문서 확인(2026-10-26): [Google OpenID Connect](https://developers.google.com/identity/openid-connect/openid-connect), [Google UserInfo](https://developers.google.com/identity/openid-connect/reference), [카카오 REST API](https://developers.kakao.com/docs/ko/kakaologin/rest-api), [네이버 로그인 API](https://developers.naver.com/docs/login/api/api.md), [네이버 개발 가이드](https://developers.naver.com/docs/login/devguide/devguide.md). 엔드포인트는 범위 문서와 동일하다. 카카오 공식 discovery 설명의 `code_challenge_methods_supported`는 `S256`이므로 PKCE를 적용한다. 로그인에 OIDC ID 토큰을 사용하지 않으며 카카오는 `/v2/user/me`의 숫자 `id`만 추출한다. 네이버는 `response.id`만 추출한다.
+
+운영 전에는 제공자 키 발급·콜백 등록 후 실제 로그인을 확인해야 한다. 네이버 검수 전에는 등록한 테스터 범위로 제한될 수 있다. 네이버 버튼은 브랜드 색과 흰 N을 사용했으며 디자인 확인이 남아 있다.
+
+네이버 버튼 색은 범위 문서의 `#03C75A` 대신 [현행 공식 버튼 가이드](https://developers.naver.com/docs/login/bi/bi.md)의 변경된 지정색 `#03A94D`를 적용했다. 흰 N 로고와 8px 간격을 사용한다.
+
+소셜 자격 증명은 데모 계정 설정처럼 `AUTH_*_CLIENT_ID`와 `AUTH_*_CLIENT_SECRET` env를 직접 읽는다. `application.yml`에 별도의 `auth.social.*` 설정은 두지 않는다. 카카오 콘솔의 클라이언트 시크릿은 ON으로 둔다.
+
+소셜 통합 (2026-10-27): V1 → V2(취향·soft delete) → V3 순서로 적용한다. V2의 활성 이메일·닉네임 부분 유일 인덱스와 deleted_at을 유지한다. 탈퇴 트랜잭션에서 auth_social_accounts 연결과 취향을 삭제하고 RT를 폐기한다. 같은 소셜 식별자로 돌아오면 /signup/social에서 새 계정으로 가입하며 탈퇴 계정의 닉네임도 다시 사용할 수 있다. 남아 있는 탈퇴 계정 연결은 기존 activeUser 판정으로 로그인을 거부한다.
+
+POST /api/auth/social/signup은 이메일 가입과 같은 선택 preferences 타입·검증·저장을 사용한다. FE는 sessionStorage의 온보딩 답변을 읽어 전달하고 성공 후에만 삭제한다. 취향 생략 시 행을 만들지 않는다. 소셜 가입 응답도 userId를 포함하는 TokenResponse이며 기존 계정 콜백은 JSON 대신 RT 쿠키와 홈(/) 리다이렉트를 반환한다.
