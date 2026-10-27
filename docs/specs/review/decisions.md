@@ -28,7 +28,7 @@ Glossary: none · ADRs: none
 ## D-5 이유 태그 검증
 - Status: settled
 - Decision: 1차 후속부터 적용한다(D-1). 태그는 특징 코드(D-16), 문구, 좋았어요·아쉬웠어요(`sentiment`), 동시 선택 불가 그룹(`exclusive_group`), 화면 묶음(`display_group`: 분위기, 공간, 이용, 방문 목적), 사용 여부를 데이터로 갖고, 업종 노출은 `tag_categories`로 둔다. 서버는 좋았어요 태그 1개 이상(아쉬웠어요는 선택), 업종에 노출되는 태그만, 그룹당 하나만을 검증한다. 그룹은 L2·L3에서 같은 특징의 좋았어요·아쉬웠어요 한 쌍이고, 소음 축(L1)은 4개("조용해서 좋았어요", "활기차서 좋았어요", "너무 시끄러웠어요", "너무 썰렁했어요")가 한 그룹이다. 작성 화면은 좋았던 점(7-01)과 아쉬웠던 점(7-02)이 다른 페이지라도 같은 그룹의 다른 태그를 비활성화한다. 예를 들어 7-01에서 "조용해서 좋았어요"를 고르면 7-02의 소음 축 태그 3개가 비활성이다. 좋았던 점을 하나도 고르지 않으면 7-01의 "다음"이 비활성이다. 문구와 노출은 PRD FR-10 초안으로 임시 시드를 두고 기획 확정 문구로 바꾼다.
-- PRD FR-10은 이유 태그를 좋았어요·아쉬웠어요 구분 없이 1개 이상 필수로 두지만, 리뷰는 좋았어요 1개 이상을 유지한다. PRD와 대조한 뒤 리뷰 담당이 확인한 결정이다(2026-10-26). 태그 목록과 업종별 노출은 아직 확정되지 않았다. PRD FR-10 초안(28개와 업종별 노출 표)과 Figma 7-01·7-02(카페 화면 22개)가 다르다(spec Open questions)(2026-10-26).
+- PRD FR-10은 이유 태그를 좋았어요·아쉬웠어요 구분 없이 1개 이상 필수로 두지만, 리뷰는 좋았어요 1개 이상을 유지한다. PRD와 대조한 뒤 리뷰 담당이 확인한 결정이다(2026-10-26). 태그 목록과 업종별 노출은 아직 확정되지 않아 PRD FR-10 초안을 임시 시드로 쓴다(D-36). Figma 7-01·7-02는 카페 화면이라 그 22개가 PRD 노출 표의 카페 태그와 같다(2026-10-27).
 - Rejected: 소음 축을 쌍만 배타 → "조용해서 좋았어요"와 "활기차서 좋았어요"를 함께 고를 수 있어 모순된 평가가 된다. 좋았어요·아쉬웠어요 합산 1개 이상(PRD FR-10 문구) → 2단계 작성 흐름에서 좋았던 점을 먼저 고르게 하는 디자인에 맞춰 좋았어요 1개 이상으로 정했다(2026-10-20). 페이지가 다르면 비활성화하지 않기 → 서버가 400을 돌려줘 작성 끝에서야 실패한다. 태그를 코드 상수로 관리 → 문구와 노출이 바뀔 때마다 배포가 필요하다.
 
 ## D-6 본문, 수정 범위와 1인당 금액
@@ -87,6 +87,7 @@ Glossary: none · ADRs: none
 - Status: settled
 - Decision: 리뷰 이유 태그, 온보딩 태그, 검색 `preferences`는 PRD §2의 L1~L4 모델을 따른 공용 특징 코드 목록 하나를 쓴다. 리뷰 `tags`는 그 코드를 참조하고 문구·sentiment·그룹·업종 노출은 리뷰가 관리한다. 목록을 누가 관리하는지는 미결이다.
 - AI 비교 spec(브랜치)이 AI 분석의 코드표(`features.py`, `QUIET`, `PURPOSE_GROUP` 등)를 공용 조건 코드로 쓴다. 리뷰 태그도 이 코드표를 참조하는 것을 기본안으로 두고, 그대로 써도 되는지와 공유 시점은 분석 담당에게 묻는다(spec Open questions)(2026-10-23).
+- 취향 분석 브랜치(S15P31A302-39, 머지 전)의 `ai/src/fit_ai/features.py`가 "39가 관리하고 40·41과 공유한다"고 정했다. 리뷰 태그는 이 코드표의 코드를 쓴다(D-36). develop의 온보딩 코드(`SPACIOUS`, `VALUE`, `CONVERSATION` 등)는 이 코드표와 7개가 달라 회원·AI 담당이 맞춰야 한다(2026-10-27).
 - Rejected: 리뷰 태그를 따로 관리 → 취향 보정과 검색이 리뷰 태그를 특징으로 다시 매핑해야 한다.
 
 ## D-17 리뷰 변경 전달 (Walking Skeleton)
@@ -208,3 +209,9 @@ Glossary: none · ADRs: none
 - Status: settled
 - Decision: PRD FR-12대로 운영자가 숨긴 리뷰는 작성자 본인에게 "운영 정책에 따라 숨김 처리됨" 표시와 함께 사진까지 계속 보인다. 공개 목록에서는 리뷰와 사진이 모두 빠진다. 숨기면 그 리뷰의 사진(원본과 썸네일)을 지금처럼 공개 경로(`confirmed/`) 밖의 접두사로 옮기고, 작성자 본인이 볼 때는 BE가 수명이 짧은 presigned GET URL을 내려준다. 해제하면 공개 경로로 되돌리고, 삭제하면 객체를 지운다. 구현은 사진(S15P31A302-54)과 운영(S15P31A302-56)에서 한다.
 - Rejected: 숨김 때 사진 그대로 두기 → "욕설·혐오·음란물" 숨김이 사진에는 효과가 없다. 작성자에게도 사진을 보이지 않기(D-10) → PRD FR-12는 숨긴 리뷰가 작성자에게 계속 보이도록 한다.
+
+## D-36 이유 태그 테이블과 반복 마이그레이션 시드
+- Status: settled
+- Decision: 태그는 `reason_tags`(`code`, `feature_code`, `sentiment`, `label`, `display_group`, `sort_order`), 업종 노출은 `reason_tag_categories`(`category`, `code`, `label`), 리뷰의 태그는 `review_reason_tags`(`review_id`, `code`)에 둔다(`V5__create_reason_tags.sql`). 기본 키는 각각 `code`, `(category, code)`, `(review_id, code)`이다. 태그는 바뀌지 않는 `code`로 참조하고 API도 `code`를 쓴다. `feature_code`는 AI 코드표(S15P31A302-39)의 코드이고, 장소 특징 분석(S15P31A302-40) 규칙대로 장소에서 실제로 그랬던 쪽을 적는다. 그래서 "너무 시끄러웠어요"는 `LIVELY`·`BAD`, "너무 썰렁했어요"는 `QUIET`·`BAD`다. 사용자 취향 쪽 코드는 소음 축 아쉬웠어요만 반대 극이고 나머지는 같아 컬럼으로 두지 않고, AI 전달(S15P31A302-57)에서 이 규칙으로 바꿔 함께 보낸다. 같은 그룹은 같은 `feature_code`이고, PRD L1의 유일한 양극 축인 `QUIET`·`LIVELY` 네 태그만 한 그룹(`NOISE`)이다. 같은 특징이 업종마다 문구만 다르면 태그 하나로 두고 `reason_tag_categories.label`에 업종 문구를 적는다(혼밥·혼술은 `PURPOSE_SOLO` 하나, 술집 문구만 혼술). 태그는 아직 확정되지 않아 PRD FR-10 초안 28개와 업종별 노출 표를 임시 시드로 쓰고, 시드는 반복 마이그레이션 `R__reason_tag_seed.sql`에 둔다. 태그는 `code`로 덮어쓰고 노출 행은 지운 뒤 다시 넣으므로, 확정되면 이 파일만 고쳐 dev·prod에 다시 적용한다. 목록에서 빼려면 노출 표에서 그 특징을 지우고, 이미 쓴 리뷰가 참조하는 태그 행은 남긴다. 화면 묶음은 Figma의 분위기·공간·이용·방문 목적에 양을 더했다(양 충분은 "양", 혼밥·모임은 "방문 목적").
+- Rejected: 숫자 `tag_id` → `code`가 이미 바뀌지 않는 식별자다. `exclusive_group` 컬럼 → 소음 축 말고는 `feature_code`와 같다. `active` 컬럼 → 노출 행이 없으면 고를 수 없다. 사용자 쪽 코드 컬럼 → 다른 경우가 두 태그뿐이고 규칙 하나로 정해진다. 혼밥·혼술을 태그 둘로 → 같은 특징이 두 코드로 나뉜다. 버전 마이그레이션에 시드 → 태그가 바뀔 때마다 새 버전 파일이 쌓인다. Figma 화면의 22개만 시드 → 카페 화면이라 식당·술집 태그가 빠진다.
+- Anchors: `be/src/main/resources/db/migration/V5__create_reason_tags.sql` (new) · `be/src/main/resources/db/migration/R__reason_tag_seed.sql` (new) · `be/src/main/java/kr/co/fitdining/api/review/tag/ReasonTagRule.java#ReasonTagRule` (new) · `fe/src/domains/review/model/review-tags.ts#disabledTagCodes` (new)

@@ -93,10 +93,11 @@ Walking Skeleton
 | `fe/src/domains/review/api/review-api.ts#createReview` | new | WS | D-31 |
 | `fe/src/domains/review/model/review.ts#reviewWriteHref` | new | WS | D-31 |
 | `be/src/main/java/kr/co/fitdining/api/review/VisitDatePolicy.java#VisitDatePolicy` | new | 1차 | D-4 |
-| `be/src/main/java/kr/co/fitdining/api/review/ReasonTagRule.java#ReasonTagRule` | new | 1차 | D-5 |
+| `be/src/main/java/kr/co/fitdining/api/review/tag/ReasonTagRule.java#ReasonTagRule` | new | 1차 | D-5, D-36 |
+| `be/src/main/resources/db/migration/V5__create_reason_tags.sql`, `R__reason_tag_seed.sql` (태그 테이블과 임시 시드) | new | 1차 | D-36 |
 | `be/src/main/resources/db/migration/` (태그·사진·신고·운영 테이블) | new | 1차 | D-21, D-28, D-5 |
 | `fe/src/domains/review/ui/review-form.tsx#ReviewForm` | new | 1차 | D-5, D-31 |
-| `fe/src/domains/review/model/review-tags.ts#selectTag` | new | 1차 | D-5 |
+| `fe/src/domains/review/model/review-tags.ts#disabledTagCodes` | new | 1차 | D-5, D-36 |
 | `fe/src/domains/review/model/nearby-check.ts#isNearby` | new | 1차 | D-12 |
 
 BE는 팀이 정한 루트 패키지 `kr.co.fitdining.api`(검색 D-32) 아래 `review`에 두고, DTO는 `review.dto`에 둔다(D-23). 모듈 경계 규칙이 정해지면 그에 맞춘다. FE는 master의 공통 구조(`app → domains → shared`)를 따라 리뷰 코드를 `src/domains/review`에 둔다. 장소 상세는 검색 담당이 만들고(`src/domains/place`), 리뷰 담당이 상세 화면에 리뷰 자리 세 곳(`slots`)을 렌더 함수 props로 열어 `src/app/place/place-detail-with-reviews.tsx`에서 `ReviewSection`(리뷰 탭, `onShowAll`을 주면 홈 탭 미리보기)과 `reviewWriteHref`(하단 버튼)로 채운다. 도메인끼리는 import하지 않기 때문이다. 작성 화면(`src/app/place/review`)은 리뷰 담당이 만든다(D-32).
@@ -132,14 +133,14 @@ Walking Skeleton
   ReviewItem           : + visitedAt(date), nickname, revisitIntent(bool),
                          tags(TagView[]), photos({url, thumbUrl}[]), mine(bool), hidden(bool)
   ReviewDetailResponse : ReviewItem과 같은 필드
-  ReviewCreateRequest  : + visitedAt(date), tagIds(1..), revisitIntent,
+  ReviewCreateRequest  : + visitedAt(date), tagCodes(1..), revisitIntent,
                          photos?({key, thumbKey}[], ..5), spentPerPerson?(0..1,000,000 정수)
-  TagView              : tagId, label, sentiment(GOOD|BAD)
+  TagView              : code, label, sentiment(GOOD|BAD)
   ReviewFormResponse   : place({name, categoryGroup, station}), visitDate({min, max, default}),
                          reviewedDates(date[]), tags({good: FormTag[], bad: FormTag[]}),
                          limits({descriptionMax: 500, photoMax: 5, spentPerPersonMax: 1000000}),
                          writable(bool)
-  FormTag              : tagId, label, exclusiveGroup, displayGroup(분위기|공간|이용|방문 목적)
+  FormTag              : code, label, group, displayGroup(분위기|공간|이용|양|방문 목적)
   ReviewReportRequest  : reason(AD_SPAM|ABUSE|UNRELATED|OTHER), detail?(..100, reason이 OTHER일 때만)
   ReviewPhotoUploadRequest  : count(1..5)
   ReviewPhotoUploadResponse : uploads(PhotoUpload[])
@@ -162,9 +163,10 @@ reviews        : review_id, place_id(BIGINT, FK 없음), user_id(TEXT, auth_user
                  hidden_at, analysis_excluded_at은 S15P31A302-56에서 새 마이그레이션으로 더한다
 
 1차 후속에서 더하는 것
-tags           : tag_id, feature_code, sentiment, exclusive_group, display_group, label, active
-tag_categories : (tag_id, category)
-review_tags    : (review_id, tag_id)
+V5__create_reason_tags.sql, R__reason_tag_seed.sql(D-36)
+reason_tags           : code(PK), feature_code, sentiment(GOOD|BAD), label, display_group, sort_order
+reason_tag_categories : (category, code)(PK), label(업종 문구, NULL 허용)
+review_reason_tags    : (review_id, code)(PK)
 review_photos  : review_photo_id, review_id, object_key, thumb_key, sort_order
 review_reports : review_report_id, review_id, reporter_id, reason, detail, created_at
                  UNIQUE (review_id, reporter_id)
@@ -217,7 +219,7 @@ Walking Skeleton
 - 관리자 권한은 어떻게 구분하나요? `auth_users`에는 역할이 없다. 관리자 API(D-11)가 여기에 달려 있다.
 
 취향·AI·검색 담당
-- 리뷰 이유 태그가 분석의 코드표(`features.py`, `QUIET`·`PURPOSE_GROUP` 등)를 그대로 참조해도 되나요? 언제 공유되나요? 비교 spec이 이미 이 코드표를 조건 코드로 쓴다. 태그 시드 마이그레이션이 이 코드를 참조하므로 마이그레이션을 머지하기 전에 정해야 한다(D-16).
+- 코드표(`features.py`)는 취향 분석 브랜치(S15P31A302-39)가 관리하기로 했고 리뷰 태그도 이 코드를 쓴다(D-16, D-36). 이 브랜치는 언제 머지되나요? develop의 온보딩 코드(`SPACIOUS`, `VALUE`, `CONVERSATION` 등)와 7개가 다른데 어느 쪽에 맞추나요?
 - AI는 리뷰를 어디서 읽나요? AI는 Modal에서 돌아 서버 내부망의 Postgres를 직접 읽지 못한다(비교 spec 6절). 리뷰는 삭제·숨김·분석 제외 시각과 `updated_at`을 남긴다(D-34). BE 조회 API나 정기 내보내기 같은 받는 방법, 필요한 필드와 주기를 인프라 담당과 함께 정해야 한다.
 - 삭제·숨김·분석 제외된 리뷰가 카드의 인용(`reasons[].quote`, `quoteSource` "앱 리뷰")과 근거 수(`evidenceCount`)에서 빠지게 하는 쪽은 비교 쪽인가요? 지금 베이스라인은 인용을 넣지 않지만 다음 단계에서 앱 리뷰 인용을 붙인다.
 
@@ -236,7 +238,7 @@ FE 공통 담당
 - 방문일 달력(7-03)과 사진 고르기·미리보기 칸은 공통 UI 컴포넌트로 만드나요, 리뷰 도메인에서 만드나요? 지금 `@/shared/ui`에는 달력·카메라 아이콘만 있다. 7-03의 시트는 `BottomSheet`로 그린다(D-31).
 
 기획·디자인
-- 이유 태그 목록, 문구, 업종별 노출은 언제 확정되나요? PRD FR-10 초안(28개와 업종별 노출 표)과 Figma 7-01·7-02(카페 화면 22개)가 다르다. 그 전까지는 임시 시드로 진행한다(D-5).
+- 이유 태그 목록, 문구, 업종별 노출은 언제 확정되나요? 그 전까지는 PRD FR-10 초안을 임시 시드로 쓰고, 확정되면 `R__reason_tag_seed.sql`만 고친다(D-36).
 - 7-01에서 좋았던 점을 고르지 않았을 때 "다음" 비활성 상태와 "하나 이상 필수" 안내를 그려야 한다. 7-01, 7-01b와 예외 상태(7-E01~7-E06) 어디에도 아직 없다(D-5).
 - 7-04의 재방문 안내 문구("비슷한 취향의 장소를 찾아드릴게요")를 바꿔야 한다. 재방문 의사는 추천에 쓰지 않는다(D-18).
 
