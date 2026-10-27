@@ -157,6 +157,24 @@ class TestLlm:
 
         assert result.conditions.embedding_text == "역삼역 조용한 술집"
 
+    def test_follow_up_unchanged_text_gets_query(self, fake_gms: FakeGms) -> None:
+        """LLM해석_후속인데이전문장을그대로내면_새요청을뒤에붙인다"""
+        fake_gms(
+            lambda messages: answer(
+                text=PREVIOUS.text,
+                embedding_text=PREVIOUS.embedding_text,
+                codes=["PURPOSE_GROUP", "SPACIOUS_SEATING"],
+            )
+        )
+
+        conditions = interpret("넓은 곳이면 좋겠어", PREVIOUS).conditions
+
+        assert conditions.text == "역삼역 모임하기 좋은 술집 넓은 곳이면 좋겠어"
+        assert (
+            conditions.embedding_text == "역삼역 모임하기 좋은 술집 넓은 곳이면 좋겠어"
+        )
+        assert conditions.codes == ("PURPOSE_GROUP", "SPACIOUS_SEATING")
+
     def test_follow_up_to_nearby_drops_station(self, fake_gms: FakeGms) -> None:
         """LLM해석_역검색뒤근처로바꿨는데이전역을남기면_역을버리고근처검색으로본다"""
         fake_gms(

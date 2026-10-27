@@ -63,11 +63,13 @@ FOOD_WESTERN, 쌀국수·팟타이는 FOOD_ASIAN, 짜장면·마라탕은 FOOD_C
 - codes에는 요청에 없는 조건을 넣지 않는다. "식당"이라는 말만으로 음식 종류 코드를, \
 "모임", "회식", 인원만으로 시설 GROUP을 넣지 않는다. GROUP은 단체석, 단체 예약처럼 \
 시설을 말할 때만 넣는다.
-- embedding_text: 요청을 긍정형 한 문장으로 쓴다. 비우거나 줄이지 않는다. \
+- embedding_text: 요청을 긍정형 검색어로 쓴다. 비우거나 줄이지 않는다. \
+"찾고 있어요", "찾습니다" 같은 말은 붙이지 않는다. \
 역과 업종만 있는 짧은 요청도 그대로 쓴다. \
 부정 표현은 바라는 쪽으로 바꾼다("시끄러운 곳 말고" → "조용한 곳").
 - 이전 조건이 있으면 새 요청은 이전 조건에 더하거나 바꾸는 말이다. \
 둘을 합친 조건을 낸다. "A 말고 B"는 A를 빼고 B를 넣는다. \
+text와 embedding_text에는 새 요청 내용을 반드시 넣는다. \
 근처로 바꾸는 말이면 station은 null, 역으로 바꾸는 말이면 nearby는 false다. \
 text는 합친 요청을 한 문장으로, \
 change_summary는 바뀐 점을 "~했어요"로 끝나는 짧은 한 문장으로 쓴다.
@@ -89,7 +91,7 @@ embedding_text "주차할 수 있는 카페"
 station "GANGNAM", embedding_text "강남에서 5명이 저녁 먹기 좋은 곳"
 
 아래 형식의 JSON만 출력한다.
-{{"text": null, "embedding_text": "<요청을 긍정형으로 쓴 한 문장>", "codes": [], \
+{{"text": null, "embedding_text": "<긍정형 검색어>", "codes": [], \
 "category_group": null, "station": null, "nearby": false, "change_summary": null}}"""
 """요청 해석 시스템 지시. 예시 문장은 평가 질의(experiments/interpretation)와
 겹치지 않게 고른다."""
@@ -366,6 +368,13 @@ def _parse(
         summary = data.get("change_summary")
         if not _is_text(summary) or len(summary) > MAX_CHANGE_SUMMARY_LENGTH:
             summary = DEFAULT_CHANGE_SUMMARY
+        # "넓은 곳이면 좋겠어"처럼 조건을 더하는 후속에서 LLM이 이전 문장을 그대로 낼
+        # 때가 있다. 그러면 새 요청이 정렬과 후보 추출에서 빠지므로 뒤에 붙인다(규칙
+        # 해석과 같다).
+        if text.strip() == previous.text.strip():
+            text = _join(previous.text, query)
+        if embedding_text.strip() == previous.embedding_text.strip():
+            embedding_text = _join(previous.embedding_text, query)
     # 짧은 요청에서 "..."처럼 글자 없는 문장을 내는 일이 있다(10-27 평가 216번 중
     # 12번). 그대로 인코딩하면 유사도가 무의미해져서 요청문으로 대신한다.
     if not any(ch.isalnum() for ch in embedding_text):

@@ -2,7 +2,7 @@
 
 거르기와 유사도 계산(pgvector `<=>`, 코사인 거리)을 SQL 한 번으로 한다. 장소가 300곳
 남짓이라 인덱스 없이 전부 계산해도 빠르고 결과가 정확하다. 뷰의 컬럼은
-docs/comparison/api.md 부록 A에 있다. 뷰를 만들고 채우는 일은 BE와 40이 한다.
+docs/comparison/api.md 부록에 있다. 뷰를 만들고 채우는 일은 BE와 40이 한다.
 """
 
 from collections.abc import Sequence

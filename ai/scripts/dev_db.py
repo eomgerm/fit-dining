@@ -5,7 +5,7 @@ pgserver(개발 의존성)로 Docker 없이 띄운다. BE Mock 장소 30곳
 문장을 공유 모듈 `fit_ai.embedding`의 문서 쪽 함수로 인코딩해 넣는다. 리뷰 수와 시설은 Mock 카드의 라벨과
 태그로 만든 예시 값이라 실제 데이터와 다르다.
 
-AI가 읽는 것은 뷰 `ai_place_search` 하나다(docs/comparison/api.md 부록 A). 여기서는 BE
+AI가 읽는 것은 뷰 `ai_place_search` 하나다(docs/comparison/api.md 부록). 여기서는 BE
 장소 테이블과 40 프로필 테이블을 조인한 뷰로 만들어, 실제 테이블 모양과 상관없이
 뷰만 맞추면 된다는 걸 보인다.
 

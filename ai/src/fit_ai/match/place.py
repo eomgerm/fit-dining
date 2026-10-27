@@ -4,7 +4,7 @@
 그래야 화면의 근거 항목과 핏 점수가 같은 근거를 말한다(docs/comparison/spec.md 4.3).
 
 비교는 장소 프로필을 만들지 않고 읽기만 한다. 장소 데이터는 AI가 들고 있지 않고
-검색마다 Postgres 뷰에서 거른 장소를 프로필째 읽는다(docs/comparison/api.md 부록 A).
+검색마다 Postgres 뷰에서 거른 장소를 프로필째 읽는다(docs/comparison/api.md 부록).
 프로필 형식은 40 spec 7단계의 `place-profile/v0`을 따른다. 40 spec이 초안이라 읽는
 방식도 확정이 아니다. 정리는 docs/comparison/spec.md 4.2에 있다.
 """

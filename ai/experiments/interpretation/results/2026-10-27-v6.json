@@ -1,0 +1,5261 @@
+[
+ {
+  "id": "A1",
+  "type": "업종·역",
+  "query": "강남역 카페",
+  "expect": {
+   "codes": [],
+   "category": "CAFE",
+   "station": "GANGNAM",
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [],
+    "category": "CAFE",
+    "station": "GANGNAM",
+    "nearby": false,
+    "embedding_text": "강남역 카페",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 0,
+    "allowed": 0,
+    "got": 0,
+    "must": 0,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.2781879809990642,
+    "change_summary": null,
+    "raw_embedding_text": "강남역 카페",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [],
+    "category": "CAFE",
+    "station": "GANGNAM",
+    "nearby": false,
+    "embedding_text": "강남역 카페",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 0,
+    "allowed": 0,
+    "got": 0,
+    "must": 0,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.843876740997075,
+    "change_summary": null,
+    "raw_embedding_text": "강남역 카페",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [],
+   "category": "CAFE",
+   "station": "GANGNAM",
+   "nearby": false,
+   "embedding_text": "강남역 카페",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 0,
+   "allowed": 0,
+   "got": 0,
+   "must": 0,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "A2",
+  "type": "업종·역",
+  "query": "역삼역 술집 추천해줘",
+  "expect": {
+   "codes": [],
+   "category": "BAR",
+   "station": "YEOKSAM",
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [],
+    "category": "BAR",
+    "station": "YEOKSAM",
+    "nearby": false,
+    "embedding_text": "역삼역 술집 추천",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 0,
+    "allowed": 0,
+    "got": 0,
+    "must": 0,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.506365654997353,
+    "change_summary": null,
+    "raw_embedding_text": "역삼역 술집 추천",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [],
+    "category": "BAR",
+    "station": "YEOKSAM",
+    "nearby": false,
+    "embedding_text": "역삼역 술집 추천",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 0,
+    "allowed": 0,
+    "got": 0,
+    "must": 0,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.5916711180034326,
+    "change_summary": null,
+    "raw_embedding_text": "역삼역 술집 추천",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [],
+   "category": "BAR",
+   "station": "YEOKSAM",
+   "nearby": false,
+   "embedding_text": "역삼역 술집 추천해줘",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 0,
+   "allowed": 0,
+   "got": 0,
+   "must": 0,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "A3",
+  "type": "업종·역",
+  "query": "선릉역 근처 밥집",
+  "expect": {
+   "codes": [],
+   "category": "RESTAURANT",
+   "station": "SEOLLEUNG",
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [],
+    "category": "RESTAURANT",
+    "station": "SEOLLEUNG",
+    "nearby": false,
+    "embedding_text": "선릉역 근처 밥집",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 0,
+    "allowed": 0,
+    "got": 0,
+    "must": 0,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.4459990890027257,
+    "change_summary": null,
+    "raw_embedding_text": "선릉역 근처 밥집",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [],
+    "category": "RESTAURANT",
+    "station": "SEOLLEUNG",
+    "nearby": false,
+    "embedding_text": "선릉역 근처 밥집",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 0,
+    "allowed": 0,
+    "got": 0,
+    "must": 0,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.300847539001552,
+    "change_summary": null,
+    "raw_embedding_text": "선릉역 근처 밥집",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [],
+   "category": "RESTAURANT",
+   "station": "SEOLLEUNG",
+   "nearby": false,
+   "embedding_text": "선릉역 근처 밥집",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 0,
+   "allowed": 0,
+   "got": 0,
+   "must": 0,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "A4",
+  "type": "업종·역",
+  "query": "강남 맛집",
+  "expect": {
+   "codes": [],
+   "category": "RESTAURANT",
+   "station": "GANGNAM",
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [],
+    "category": "RESTAURANT",
+    "station": "GANGNAM",
+    "nearby": false,
+    "embedding_text": "강남 맛집",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 0,
+    "allowed": 0,
+    "got": 0,
+    "must": 0,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.7623691499975394,
+    "change_summary": null,
+    "raw_embedding_text": "강남 맛집",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [],
+    "category": "RESTAURANT",
+    "station": "GANGNAM",
+    "nearby": false,
+    "embedding_text": "강남 맛집",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 0,
+    "allowed": 0,
+    "got": 0,
+    "must": 0,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.607484290994762,
+    "change_summary": null,
+    "raw_embedding_text": "강남 맛집",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [],
+   "category": "RESTAURANT",
+   "station": "GANGNAM",
+   "nearby": false,
+   "embedding_text": "강남 맛집",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 0,
+   "allowed": 0,
+   "got": 0,
+   "must": 0,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "A5",
+  "type": "업종·역",
+  "query": "역삼 이자카야",
+  "expect": {
+   "codes": [],
+   "category": "BAR",
+   "station": "YEOKSAM",
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [],
+    "category": "BAR",
+    "station": "YEOKSAM",
+    "nearby": false,
+    "embedding_text": "역삼 이자카야",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 0,
+    "allowed": 0,
+    "got": 0,
+    "must": 0,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.2833790000004228,
+    "change_summary": null,
+    "raw_embedding_text": "역삼 이자카야",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [],
+    "category": "BAR",
+    "station": "YEOKSAM",
+    "nearby": false,
+    "embedding_text": "역삼 이자카야",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 0,
+    "allowed": 0,
+    "got": 0,
+    "must": 0,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.4786419480005861,
+    "change_summary": null,
+    "raw_embedding_text": "역삼 이자카야",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [],
+   "category": "BAR",
+   "station": "YEOKSAM",
+   "nearby": false,
+   "embedding_text": "역삼 이자카야",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 0,
+   "allowed": 0,
+   "got": 0,
+   "must": 0,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "B1",
+  "type": "분위기·기준",
+  "query": "조용한 카페",
+  "expect": {
+   "codes": [
+    "QUIET"
+   ],
+   "category": "CAFE",
+   "station": null,
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [
+     "QUIET"
+    ],
+    "category": "CAFE",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "조용한 카페",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.7932763360004174,
+    "change_summary": null,
+    "raw_embedding_text": "조용한 카페",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "QUIET"
+    ],
+    "category": "CAFE",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "조용한 카페",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.6199422880017664,
+    "change_summary": null,
+    "raw_embedding_text": "조용한 카페",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "QUIET"
+   ],
+   "category": "CAFE",
+   "station": null,
+   "nearby": false,
+   "embedding_text": "조용한 카페",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 1,
+   "allowed": 1,
+   "got": 1,
+   "must": 1,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "B2",
+  "type": "분위기·기준",
+  "query": "활기찬 분위기의 술집",
+  "expect": {
+   "codes": [
+    "LIVELY"
+   ],
+   "category": "BAR",
+   "station": null,
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [
+     "LIVELY"
+    ],
+    "category": "BAR",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "활기찬 분위기의 술집",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.9813553269996191,
+    "change_summary": null,
+    "raw_embedding_text": "활기찬 분위기의 술집",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "LIVELY"
+    ],
+    "category": "BAR",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "활기찬 분위기의 술집",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.654824245000782,
+    "change_summary": null,
+    "raw_embedding_text": "활기찬 분위기의 술집",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "LIVELY"
+   ],
+   "category": "BAR",
+   "station": null,
+   "nearby": false,
+   "embedding_text": "활기찬 분위기의 술집",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 1,
+   "allowed": 1,
+   "got": 1,
+   "must": 1,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "B3",
+  "type": "분위기·기준",
+  "query": "자리 넓고 편한 식당",
+  "expect": {
+   "codes": [
+    "SPACIOUS_SEATING"
+   ],
+   "category": "RESTAURANT",
+   "station": null,
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [
+     "SPACIOUS_SEATING"
+    ],
+    "category": "RESTAURANT",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "매장이 넓고 좌석이 편한 식당",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.8858272569996188,
+    "change_summary": null,
+    "raw_embedding_text": "매장이 넓고 좌석이 편한 식당",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "SPACIOUS_SEATING"
+    ],
+    "category": "RESTAURANT",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "자리 넓고 편한 식당",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.4411540319997584,
+    "change_summary": null,
+    "raw_embedding_text": "자리 넓고 편한 식당",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "SPACIOUS_SEATING"
+   ],
+   "category": "RESTAURANT",
+   "station": null,
+   "nearby": false,
+   "embedding_text": "자리 넓고 편한 식당",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 1,
+   "allowed": 1,
+   "got": 1,
+   "must": 1,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "B4",
+  "type": "분위기·기준",
+  "query": "웨이팅 없이 바로 들어갈 수 있는 곳",
+  "expect": {
+   "codes": [
+    "SHORT_WAIT"
+   ],
+   "category": null,
+   "station": null,
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [
+     "SHORT_WAIT"
+    ],
+    "category": null,
+    "station": null,
+    "nearby": false,
+    "embedding_text": "대기가 적은 곳",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.1768269980020705,
+    "change_summary": null,
+    "raw_embedding_text": "대기가 적은 곳",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "SHORT_WAIT"
+    ],
+    "category": null,
+    "station": null,
+    "nearby": false,
+    "embedding_text": "대기가 적은 곳",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.3467484930006322,
+    "change_summary": null,
+    "raw_embedding_text": "대기가 적은 곳",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "SHORT_WAIT"
+   ],
+   "category": null,
+   "station": null,
+   "nearby": false,
+   "embedding_text": "웨이팅 없이 바로 들어갈 수 있는 곳",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 1,
+   "allowed": 1,
+   "got": 1,
+   "must": 1,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "B5",
+  "type": "분위기·기준",
+  "query": "양 많이 주는 식당",
+  "expect": {
+   "codes": [
+    "GENEROUS_PORTION"
+   ],
+   "category": "RESTAURANT",
+   "station": null,
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [
+     "GENEROUS_PORTION"
+    ],
+    "category": "RESTAURANT",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "양이 많아서 배부르게 먹을 수 있는 식당",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.3325878549949266,
+    "change_summary": null,
+    "raw_embedding_text": "양이 많아서 배부르게 먹을 수 있는 식당",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "GENEROUS_PORTION"
+    ],
+    "category": "RESTAURANT",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "양이 많아서 배부르게 먹을 수 있는 식당",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.8076831520011183,
+    "change_summary": null,
+    "raw_embedding_text": "양이 많아서 배부르게 먹을 수 있는 식당",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "GENEROUS_PORTION"
+   ],
+   "category": "RESTAURANT",
+   "station": null,
+   "nearby": false,
+   "embedding_text": "양 많이 주는 식당",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 1,
+   "allowed": 1,
+   "got": 1,
+   "must": 1,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "B6",
+  "type": "분위기·기준",
+  "query": "인테리어 예쁜 카페",
+  "expect": {
+   "codes": [
+    "PRETTY_SPACE"
+   ],
+   "category": "CAFE",
+   "station": null,
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [
+     "PRETTY_SPACE"
+    ],
+    "category": "CAFE",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "인테리어가 멋진 카페",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.5974946880014613,
+    "change_summary": null,
+    "raw_embedding_text": "인테리어가 멋진 카페",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "PRETTY_SPACE"
+    ],
+    "category": "CAFE",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "인테리어가 멋진 카페",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.8845514429995092,
+    "change_summary": null,
+    "raw_embedding_text": "인테리어가 멋진 카페",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "PRETTY_SPACE"
+   ],
+   "category": "CAFE",
+   "station": null,
+   "nearby": false,
+   "embedding_text": "인테리어 예쁜 카페",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 1,
+   "allowed": 1,
+   "got": 1,
+   "must": 1,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "B7",
+  "type": "분위기·기준",
+  "query": "가성비 좋은 술집",
+  "expect": {
+   "codes": [
+    "VALUE_FOR_MONEY"
+   ],
+   "category": "BAR",
+   "station": null,
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [
+     "VALUE_FOR_MONEY"
+    ],
+    "category": "BAR",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "가성비 좋은 술집",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.848312474998238,
+    "change_summary": null,
+    "raw_embedding_text": "가성비 좋은 술집",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "VALUE_FOR_MONEY"
+    ],
+    "category": "BAR",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "가성비 좋은 술집",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.3107015019995742,
+    "change_summary": null,
+    "raw_embedding_text": "가성비 좋은 술집",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "VALUE_FOR_MONEY"
+   ],
+   "category": "BAR",
+   "station": null,
+   "nearby": false,
+   "embedding_text": "가성비 좋은 술집",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 1,
+   "allowed": 1,
+   "got": 1,
+   "must": 1,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "B8",
+  "type": "분위기·기준",
+  "query": "아늑한 분위기 카페",
+  "expect": {
+   "codes": [
+    "COZY"
+   ],
+   "category": "CAFE",
+   "station": null,
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [
+     "COZY"
+    ],
+    "category": "CAFE",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "아늑한 분위기의 카페",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.528773486999853,
+    "change_summary": null,
+    "raw_embedding_text": "아늑한 분위기의 카페",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "COZY"
+    ],
+    "category": "CAFE",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "아늑한 분위기의 카페",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.3887944110028911,
+    "change_summary": null,
+    "raw_embedding_text": "아늑한 분위기의 카페",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "COZY"
+   ],
+   "category": "CAFE",
+   "station": null,
+   "nearby": false,
+   "embedding_text": "아늑한 분위기 카페",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 1,
+   "allowed": 1,
+   "got": 1,
+   "must": 1,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "B9",
+  "type": "분위기·기준",
+  "query": "뷰 좋은 루프탑 바",
+  "expect": {
+   "codes": [
+    "VIEW_OUTDOOR"
+   ],
+   "category": "BAR",
+   "station": null,
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [
+     "VIEW_OUTDOOR"
+    ],
+    "category": "BAR",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "전망이 좋은 루프탑 바",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.3091692809975939,
+    "change_summary": null,
+    "raw_embedding_text": "전망이 좋은 루프탑 바",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "VIEW_OUTDOOR"
+    ],
+    "category": "BAR",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "전망이 좋은 루프탑 바",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.8317593000028864,
+    "change_summary": null,
+    "raw_embedding_text": "전망이 좋은 루프탑 바",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "VIEW_OUTDOOR"
+   ],
+   "category": null,
+   "station": null,
+   "nearby": false,
+   "embedding_text": "뷰 좋은 루프탑 바",
+   "extra": [],
+   "missing": [],
+   "category_ok": false,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 1,
+   "allowed": 1,
+   "got": 1,
+   "must": 1,
+   "codes_ok": true,
+   "all_ok": false
+  }
+ },
+ {
+  "id": "C1",
+  "type": "목적·인원",
+  "query": "데이트하기 좋은 곳",
+  "expect": {
+   "codes": [
+    "PURPOSE_DATE"
+   ],
+   "category": null,
+   "station": null,
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [
+     "PURPOSE_DATE"
+    ],
+    "category": null,
+    "station": null,
+    "nearby": false,
+    "embedding_text": "데이트하기 좋은 곳",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.60764559800009,
+    "change_summary": null,
+    "raw_embedding_text": "데이트하기 좋은 곳",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "PURPOSE_DATE"
+    ],
+    "category": null,
+    "station": null,
+    "nearby": false,
+    "embedding_text": "데이트하기 좋은 곳",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.3197571579949,
+    "change_summary": null,
+    "raw_embedding_text": "데이트하기 좋은 곳",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "PURPOSE_DATE"
+   ],
+   "category": null,
+   "station": null,
+   "nearby": false,
+   "embedding_text": "데이트하기 좋은 곳",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 1,
+   "allowed": 1,
+   "got": 1,
+   "must": 1,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "C2",
+  "type": "목적·인원",
+  "query": "혼밥하기 편한 식당",
+  "expect": {
+   "codes": [
+    "PURPOSE_SOLO"
+   ],
+   "category": "RESTAURANT",
+   "station": null,
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [
+     "PURPOSE_SOLO"
+    ],
+    "category": "RESTAURANT",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "혼밥하기 좋은 식당",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.379397908996907,
+    "change_summary": null,
+    "raw_embedding_text": "혼밥하기 좋은 식당",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "PURPOSE_SOLO"
+    ],
+    "category": "RESTAURANT",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "혼밥하기 좋은 식당",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.9207873109990032,
+    "change_summary": null,
+    "raw_embedding_text": "혼밥하기 좋은 식당",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "PURPOSE_SOLO"
+   ],
+   "category": "RESTAURANT",
+   "station": null,
+   "nearby": false,
+   "embedding_text": "혼밥하기 편한 식당",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 1,
+   "allowed": 1,
+   "got": 1,
+   "must": 1,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "C3",
+  "type": "목적·인원",
+  "query": "노트북 들고 작업할 카페",
+  "expect": {
+   "codes": [
+    "PURPOSE_WORK"
+   ],
+   "optional": [
+    "WIFI"
+   ],
+   "category": "CAFE",
+   "station": null,
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [
+     "PURPOSE_WORK"
+    ],
+    "category": "CAFE",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "작업하기 좋은 카페",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.2545917839961476,
+    "change_summary": null,
+    "raw_embedding_text": "작업하기 좋은 카페",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "PURPOSE_WORK"
+    ],
+    "category": "CAFE",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "작업하기 좋은 카페",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.4285662199981743,
+    "change_summary": null,
+    "raw_embedding_text": "작업하기 좋은 카페",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "PURPOSE_WORK"
+   ],
+   "category": "CAFE",
+   "station": null,
+   "nearby": false,
+   "embedding_text": "노트북 들고 작업할 카페",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 1,
+   "allowed": 1,
+   "got": 1,
+   "must": 1,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "C4",
+  "type": "목적·인원",
+  "query": "역삼역 회식 장소",
+  "expect": {
+   "codes": [
+    "PURPOSE_GROUP"
+   ],
+   "category": [
+    null,
+    "RESTAURANT",
+    "BAR"
+   ],
+   "station": "YEOKSAM",
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [
+     "PURPOSE_GROUP"
+    ],
+    "category": null,
+    "station": "YEOKSAM",
+    "nearby": false,
+    "embedding_text": "역삼역에서 회식하기 좋은 장소",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.9694397260027472,
+    "change_summary": null,
+    "raw_embedding_text": "역삼역에서 회식하기 좋은 장소",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "PURPOSE_GROUP"
+    ],
+    "category": null,
+    "station": "YEOKSAM",
+    "nearby": false,
+    "embedding_text": "역삼역에서 회식하기 좋은 장소",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.4557236350010498,
+    "change_summary": null,
+    "raw_embedding_text": "역삼역에서 회식하기 좋은 장소",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "PURPOSE_GROUP"
+   ],
+   "category": null,
+   "station": "YEOKSAM",
+   "nearby": false,
+   "embedding_text": "역삼역 회식 장소",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 1,
+   "allowed": 1,
+   "got": 1,
+   "must": 1,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "C5",
+  "type": "목적·인원",
+  "query": "6명이서 갈 만한 술집",
+  "expect": {
+   "codes": [
+    "PURPOSE_GROUP"
+   ],
+   "category": "BAR",
+   "station": null,
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [
+     "PURPOSE_GROUP"
+    ],
+    "category": "BAR",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "6명이서 갈 만한 술집",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.4276980819995515,
+    "change_summary": null,
+    "raw_embedding_text": "6명이서 갈 만한 술집",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "PURPOSE_GROUP"
+    ],
+    "category": "BAR",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "6명이서 갈 만한 술집",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.625111109999125,
+    "change_summary": null,
+    "raw_embedding_text": "6명이서 갈 만한 술집",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "PURPOSE_GROUP"
+   ],
+   "category": "BAR",
+   "station": null,
+   "nearby": false,
+   "embedding_text": "6명이서 갈 만한 술집",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 1,
+   "allowed": 1,
+   "got": 1,
+   "must": 1,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "C6",
+  "type": "목적·인원",
+  "query": "친구랑 수다 떨기 좋은 카페",
+  "expect": {
+   "codes": [
+    "PURPOSE_TALK"
+   ],
+   "category": "CAFE",
+   "station": null,
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [
+     "PURPOSE_TALK"
+    ],
+    "category": "CAFE",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "친구랑 수다 떨기 좋은 카페",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.516375719998905,
+    "change_summary": null,
+    "raw_embedding_text": "친구랑 수다 떨기 좋은 카페",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "PURPOSE_TALK"
+    ],
+    "category": "CAFE",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "친구랑 수다 떨기 좋은 카페",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.5328203129975009,
+    "change_summary": null,
+    "raw_embedding_text": "친구랑 수다 떨기 좋은 카페",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "PURPOSE_TALK"
+   ],
+   "category": "CAFE",
+   "station": null,
+   "nearby": false,
+   "embedding_text": "친구랑 수다 떨기 좋은 카페",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 1,
+   "allowed": 1,
+   "got": 1,
+   "must": 1,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "D1",
+  "type": "시설",
+  "query": "주차되는 식당",
+  "expect": {
+   "codes": [
+    "PARKING"
+   ],
+   "category": "RESTAURANT",
+   "station": null,
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [
+     "PARKING"
+    ],
+    "category": "RESTAURANT",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "주차할 수 있는 식당",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.3409837250001146,
+    "change_summary": null,
+    "raw_embedding_text": "주차할 수 있는 식당",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "PARKING"
+    ],
+    "category": "RESTAURANT",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "주차할 수 있는 식당",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.6091299280014937,
+    "change_summary": null,
+    "raw_embedding_text": "주차할 수 있는 식당",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "PARKING"
+   ],
+   "category": "RESTAURANT",
+   "station": null,
+   "nearby": false,
+   "embedding_text": "주차되는 식당",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 1,
+   "allowed": 1,
+   "got": 1,
+   "must": 1,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "D2",
+  "type": "시설",
+  "query": "와이파이 잘 되는 카페",
+  "expect": {
+   "codes": [
+    "WIFI"
+   ],
+   "optional": [
+    "PURPOSE_WORK"
+   ],
+   "category": "CAFE",
+   "station": null,
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [
+     "WIFI"
+    ],
+    "category": "CAFE",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "와이파이가 잘 되는 카페",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.7374724580004113,
+    "change_summary": null,
+    "raw_embedding_text": "와이파이가 잘 되는 카페",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "WIFI"
+    ],
+    "category": "CAFE",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "와이파이가 잘 되는 카페",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.2166002540034242,
+    "change_summary": null,
+    "raw_embedding_text": "와이파이가 잘 되는 카페",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "WIFI"
+   ],
+   "category": "CAFE",
+   "station": null,
+   "nearby": false,
+   "embedding_text": "와이파이 잘 되는 카페",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 1,
+   "allowed": 1,
+   "got": 1,
+   "must": 1,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "D3",
+  "type": "시설",
+  "query": "단체석 있는 술집",
+  "expect": {
+   "codes": [
+    "GROUP"
+   ],
+   "optional": [
+    "PURPOSE_GROUP"
+   ],
+   "category": "BAR",
+   "station": null,
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [
+     "GROUP"
+    ],
+    "category": "BAR",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "단체석이 있는 술집",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.6016365289979149,
+    "change_summary": null,
+    "raw_embedding_text": "단체석이 있는 술집",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "GROUP"
+    ],
+    "category": "BAR",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "단체석이 있는 술집",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 2.458967330996529,
+    "change_summary": null,
+    "raw_embedding_text": "단체석이 있는 술집",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "PURPOSE_GROUP",
+    "GROUP"
+   ],
+   "category": "BAR",
+   "station": null,
+   "nearby": false,
+   "embedding_text": "단체석 있는 술집",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 1,
+   "allowed": 2,
+   "got": 2,
+   "must": 1,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "D4",
+  "type": "시설",
+  "query": "예약 가능한 강남역 식당",
+  "expect": {
+   "codes": [
+    "RESERVATION"
+   ],
+   "category": "RESTAURANT",
+   "station": "GANGNAM",
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [
+     "RESERVATION"
+    ],
+    "category": "RESTAURANT",
+    "station": "GANGNAM",
+    "nearby": false,
+    "embedding_text": "예약할 수 있는 강남역 식당",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.4659380759985652,
+    "change_summary": null,
+    "raw_embedding_text": "예약할 수 있는 강남역 식당",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "RESERVATION"
+    ],
+    "category": "RESTAURANT",
+    "station": "GANGNAM",
+    "nearby": false,
+    "embedding_text": "예약할 수 있는 강남역 식당",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.5033480490019429,
+    "change_summary": null,
+    "raw_embedding_text": "예약할 수 있는 강남역 식당",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "RESERVATION"
+   ],
+   "category": "RESTAURANT",
+   "station": "GANGNAM",
+   "nearby": false,
+   "embedding_text": "예약 가능한 강남역 식당",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 1,
+   "allowed": 1,
+   "got": 1,
+   "must": 1,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "E1",
+  "type": "음식",
+  "query": "한식 먹고 싶어",
+  "expect": {
+   "codes": [
+    "FOOD_KOREAN"
+   ],
+   "category": "RESTAURANT",
+   "station": null,
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [
+     "FOOD_KOREAN"
+    ],
+    "category": "RESTAURANT",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "한식 먹고 싶어",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.3907639969984302,
+    "change_summary": null,
+    "raw_embedding_text": "한식 먹고 싶어",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "FOOD_KOREAN"
+    ],
+    "category": "RESTAURANT",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "한식 먹고 싶어",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.553796656000486,
+    "change_summary": null,
+    "raw_embedding_text": "한식 먹고 싶어",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "FOOD_KOREAN"
+   ],
+   "category": "RESTAURANT",
+   "station": null,
+   "nearby": false,
+   "embedding_text": "한식 먹고 싶어",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 1,
+   "allowed": 1,
+   "got": 1,
+   "must": 1,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "E2",
+  "type": "음식",
+  "query": "역삼역 초밥집",
+  "expect": {
+   "codes": [
+    "FOOD_JAPANESE"
+   ],
+   "category": "RESTAURANT",
+   "station": "YEOKSAM",
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [
+     "FOOD_JAPANESE"
+    ],
+    "category": "RESTAURANT",
+    "station": "YEOKSAM",
+    "nearby": false,
+    "embedding_text": "역삼역 초밥집",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.4272522600003867,
+    "change_summary": null,
+    "raw_embedding_text": "역삼역 초밥집",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "FOOD_JAPANESE"
+    ],
+    "category": "RESTAURANT",
+    "station": "YEOKSAM",
+    "nearby": false,
+    "embedding_text": "역삼역 초밥집",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.741850553000404,
+    "change_summary": null,
+    "raw_embedding_text": "역삼역 초밥집",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "FOOD_JAPANESE"
+   ],
+   "category": "RESTAURANT",
+   "station": "YEOKSAM",
+   "nearby": false,
+   "embedding_text": "역삼역 초밥집",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 1,
+   "allowed": 1,
+   "got": 1,
+   "must": 1,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "E3",
+  "type": "음식",
+  "query": "매운 거 먹고 싶다",
+  "expect": {
+   "codes": [
+    "FOOD_SPICY"
+   ],
+   "optional": [
+    "FOOD_KOREAN"
+   ],
+   "category": "RESTAURANT",
+   "station": null,
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [
+     "FOOD_SPICY"
+    ],
+    "category": "RESTAURANT",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "매운 음식을 먹고 싶다",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.2872660639986861,
+    "change_summary": null,
+    "raw_embedding_text": "매운 음식을 먹고 싶다",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": true,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "FOOD_SPICY"
+    ],
+    "category": "RESTAURANT",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "매운 음식을 먹고 싶다",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.7665079279977363,
+    "change_summary": null,
+    "raw_embedding_text": "매운 음식을 먹고 싶다",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": true,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "FOOD_SPICY"
+   ],
+   "category": "RESTAURANT",
+   "station": null,
+   "nearby": false,
+   "embedding_text": "매운 거 먹고 싶다",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 1,
+   "allowed": 1,
+   "got": 1,
+   "must": 1,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "E4",
+  "type": "음식",
+  "query": "파스타 맛있는 곳",
+  "expect": {
+   "codes": [
+    "FOOD_WESTERN"
+   ],
+   "category": "RESTAURANT",
+   "station": null,
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [
+     "FOOD_WESTERN"
+    ],
+    "category": "RESTAURANT",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "파스타 맛있는 곳",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.3667602939967765,
+    "change_summary": null,
+    "raw_embedding_text": "파스타 맛있는 곳",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "FOOD_WESTERN"
+    ],
+    "category": "RESTAURANT",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "파스타 맛있는 곳",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.3330793579953024,
+    "change_summary": null,
+    "raw_embedding_text": "파스타 맛있는 곳",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "FOOD_WESTERN"
+   ],
+   "category": "RESTAURANT",
+   "station": null,
+   "nearby": false,
+   "embedding_text": "파스타 맛있는 곳",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 1,
+   "allowed": 1,
+   "got": 1,
+   "must": 1,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "E5",
+  "type": "음식",
+  "query": "강남역 쌀국수",
+  "expect": {
+   "codes": [
+    "FOOD_ASIAN"
+   ],
+   "category": "RESTAURANT",
+   "station": "GANGNAM",
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [
+     "FOOD_ASIAN"
+    ],
+    "category": "RESTAURANT",
+    "station": "GANGNAM",
+    "nearby": false,
+    "embedding_text": "강남역 쌀국수",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.7924870709975949,
+    "change_summary": null,
+    "raw_embedding_text": "강남역 쌀국수",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "FOOD_ASIAN"
+    ],
+    "category": "RESTAURANT",
+    "station": "GANGNAM",
+    "nearby": false,
+    "embedding_text": "강남역 쌀국수",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 2.999361347996455,
+    "change_summary": null,
+    "raw_embedding_text": "강남역 쌀국수",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "FOOD_ASIAN"
+   ],
+   "category": "RESTAURANT",
+   "station": "GANGNAM",
+   "nearby": false,
+   "embedding_text": "강남역 쌀국수",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 1,
+   "allowed": 1,
+   "got": 1,
+   "must": 1,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "F1",
+  "type": "부정 표현",
+  "query": "시끄러운 곳 말고 데이트하기 좋은 데",
+  "expect": {
+   "codes": [
+    "QUIET",
+    "PURPOSE_DATE"
+   ],
+   "category": null,
+   "station": null,
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [
+     "QUIET",
+     "PURPOSE_DATE"
+    ],
+    "category": null,
+    "station": null,
+    "nearby": false,
+    "embedding_text": "조용하고 데이트하기 좋은 곳",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 2,
+    "allowed": 2,
+    "got": 2,
+    "must": 2,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.9131000179986586,
+    "change_summary": null,
+    "raw_embedding_text": "조용하고 데이트하기 좋은 곳",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "QUIET",
+     "PURPOSE_DATE"
+    ],
+    "category": null,
+    "station": null,
+    "nearby": false,
+    "embedding_text": "조용하고 데이트하기 좋은 곳",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 2,
+    "allowed": 2,
+    "got": 2,
+    "must": 2,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.8246941839970532,
+    "change_summary": null,
+    "raw_embedding_text": "조용하고 데이트하기 좋은 곳",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "PURPOSE_DATE"
+   ],
+   "category": null,
+   "station": null,
+   "nearby": false,
+   "embedding_text": "시끄러운 곳 말고 데이트하기 좋은 데",
+   "extra": [],
+   "missing": [
+    "QUIET"
+   ],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 1,
+   "allowed": 1,
+   "got": 1,
+   "must": 2,
+   "codes_ok": false,
+   "all_ok": false
+  }
+ },
+ {
+  "id": "F2",
+  "type": "부정 표현",
+  "query": "웨이팅 긴 데는 싫어",
+  "expect": {
+   "codes": [
+    "SHORT_WAIT"
+   ],
+   "category": null,
+   "station": null,
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [
+     "SHORT_WAIT"
+    ],
+    "category": null,
+    "station": null,
+    "nearby": false,
+    "embedding_text": "대기가 적은 곳",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.4733429870029795,
+    "change_summary": null,
+    "raw_embedding_text": "대기가 적은 곳",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "SHORT_WAIT"
+    ],
+    "category": null,
+    "station": null,
+    "nearby": false,
+    "embedding_text": "대기가 적은 곳",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.4429243780032266,
+    "change_summary": null,
+    "raw_embedding_text": "대기가 적은 곳",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "SHORT_WAIT"
+   ],
+   "category": null,
+   "station": null,
+   "nearby": false,
+   "embedding_text": "웨이팅 긴 데는 싫어",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 1,
+   "allowed": 1,
+   "got": 1,
+   "must": 1,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "F3",
+  "type": "부정 표현",
+  "query": "비싼 데 말고 술집",
+  "expect": {
+   "codes": [
+    "VALUE_FOR_MONEY"
+   ],
+   "category": "BAR",
+   "station": null,
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [
+     "VALUE_FOR_MONEY"
+    ],
+    "category": "BAR",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "비싸지 않은 술집",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.4284153710032115,
+    "change_summary": null,
+    "raw_embedding_text": "비싸지 않은 술집",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "VALUE_FOR_MONEY"
+    ],
+    "category": "BAR",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "가성비 좋은 술집",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.575388870005554,
+    "change_summary": null,
+    "raw_embedding_text": "가성비 좋은 술집",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [],
+   "category": "BAR",
+   "station": null,
+   "nearby": false,
+   "embedding_text": "비싼 데 말고 술집",
+   "extra": [],
+   "missing": [
+    "VALUE_FOR_MONEY"
+   ],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 0,
+   "allowed": 0,
+   "got": 0,
+   "must": 1,
+   "codes_ok": false,
+   "all_ok": false
+  }
+ },
+ {
+  "id": "F4",
+  "type": "부정 표현",
+  "query": "매운 거 말고 담백한 국물 요리",
+  "expect": {
+   "codes": [],
+   "category": "RESTAURANT",
+   "station": null,
+   "nearby": false,
+   "uncovered": [
+    "국물"
+   ]
+  },
+  "llm": [
+   {
+    "codes": [
+     "FOOD_SPICY"
+    ],
+    "category": "RESTAURANT",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "담백한 국물 요리",
+    "extra": [
+     "FOOD_SPICY"
+    ],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [
+     "국물"
+    ],
+    "uncovered_total": 1,
+    "hits": 0,
+    "allowed": 0,
+    "got": 1,
+    "must": 0,
+    "codes_ok": false,
+    "all_ok": false,
+    "llm_error": null,
+    "seconds": 1.4329511420000927,
+    "change_summary": null,
+    "raw_embedding_text": "담백한 국물 요리",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "QUIET"
+    ],
+    "category": "RESTAURANT",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "담백한 국물 요리",
+    "extra": [
+     "QUIET"
+    ],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [
+     "국물"
+    ],
+    "uncovered_total": 1,
+    "hits": 0,
+    "allowed": 0,
+    "got": 1,
+    "must": 0,
+    "codes_ok": false,
+    "all_ok": false,
+    "llm_error": null,
+    "seconds": 1.6018458129983628,
+    "change_summary": null,
+    "raw_embedding_text": "담백한 국물 요리",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "FOOD_SPICY"
+   ],
+   "category": "RESTAURANT",
+   "station": null,
+   "nearby": false,
+   "embedding_text": "매운 거 말고 담백한 국물 요리",
+   "extra": [
+    "FOOD_SPICY"
+   ],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [
+    "국물"
+   ],
+   "uncovered_total": 1,
+   "hits": 0,
+   "allowed": 0,
+   "got": 1,
+   "must": 0,
+   "codes_ok": false,
+   "all_ok": false
+  }
+ },
+ {
+  "id": "G1",
+  "type": "근처",
+  "query": "근처 카페",
+  "expect": {
+   "codes": [],
+   "category": "CAFE",
+   "station": null,
+   "nearby": true
+  },
+  "llm": [
+   {
+    "codes": [],
+    "category": "CAFE",
+    "station": null,
+    "nearby": true,
+    "embedding_text": "근처 카페",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 0,
+    "allowed": 0,
+    "got": 0,
+    "must": 0,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.291061976000492,
+    "change_summary": null,
+    "raw_embedding_text": "근처 카페",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [],
+    "category": "CAFE",
+    "station": null,
+    "nearby": true,
+    "embedding_text": "근처 카페",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 0,
+    "allowed": 0,
+    "got": 0,
+    "must": 0,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.198981597997772,
+    "change_summary": null,
+    "raw_embedding_text": "근처 카페",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [],
+   "category": "CAFE",
+   "station": null,
+   "nearby": true,
+   "embedding_text": "근처 카페",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 0,
+   "allowed": 0,
+   "got": 0,
+   "must": 0,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "G2",
+  "type": "근처",
+  "query": "주변에 혼밥할 만한 곳",
+  "expect": {
+   "codes": [
+    "PURPOSE_SOLO"
+   ],
+   "category": [
+    null,
+    "RESTAURANT"
+   ],
+   "station": null,
+   "nearby": true
+  },
+  "llm": [
+   {
+    "codes": [
+     "PURPOSE_SOLO"
+    ],
+    "category": null,
+    "station": null,
+    "nearby": true,
+    "embedding_text": "혼밥하기 좋은 곳",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.4005372399988119,
+    "change_summary": null,
+    "raw_embedding_text": "혼밥하기 좋은 곳",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "PURPOSE_SOLO"
+    ],
+    "category": null,
+    "station": null,
+    "nearby": true,
+    "embedding_text": "혼밥하기 좋은 곳",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.4060255459990003,
+    "change_summary": null,
+    "raw_embedding_text": "혼밥하기 좋은 곳",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "PURPOSE_SOLO"
+   ],
+   "category": null,
+   "station": null,
+   "nearby": true,
+   "embedding_text": "주변에 혼밥할 만한 곳",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 1,
+   "allowed": 1,
+   "got": 1,
+   "must": 1,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "G3",
+  "type": "근처",
+  "query": "강남역 근처 술집",
+  "expect": {
+   "codes": [],
+   "category": "BAR",
+   "station": "GANGNAM",
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [],
+    "category": "BAR",
+    "station": "GANGNAM",
+    "nearby": false,
+    "embedding_text": "강남역 근처 술집",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 0,
+    "allowed": 0,
+    "got": 0,
+    "must": 0,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.262841521995142,
+    "change_summary": null,
+    "raw_embedding_text": "강남역 근처 술집",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [],
+    "category": "BAR",
+    "station": "GANGNAM",
+    "nearby": false,
+    "embedding_text": "강남역 근처 술집",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 0,
+    "allowed": 0,
+    "got": 0,
+    "must": 0,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.2624531599940383,
+    "change_summary": null,
+    "raw_embedding_text": "강남역 근처 술집",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [],
+   "category": "BAR",
+   "station": "GANGNAM",
+   "nearby": false,
+   "embedding_text": "강남역 근처 술집",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 0,
+   "allowed": 0,
+   "got": 0,
+   "must": 0,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "H1",
+  "type": "후속",
+  "query": "주차도 되면 좋겠어",
+  "expect": {
+   "codes": [
+    "QUIET",
+    "PARKING"
+   ],
+   "category": "CAFE",
+   "station": "YEOKSAM",
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [
+     "QUIET",
+     "PARKING"
+    ],
+    "category": "CAFE",
+    "station": "YEOKSAM",
+    "nearby": false,
+    "embedding_text": "역삼역에서 조용하고 주차할 수 있는 카페",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 2,
+    "allowed": 2,
+    "got": 2,
+    "must": 2,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.9275722940001287,
+    "change_summary": "주차 조건을 추가했어요",
+    "raw_embedding_text": "역삼역에서 조용하고 주차할 수 있는 카페",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "QUIET",
+     "PARKING"
+    ],
+    "category": "CAFE",
+    "station": "YEOKSAM",
+    "nearby": false,
+    "embedding_text": "역삼역에서 조용하고 주차할 수 있는 카페",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 2,
+    "allowed": 2,
+    "got": 2,
+    "must": 2,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.7140264550034772,
+    "change_summary": "주차 조건을 추가했어요",
+    "raw_embedding_text": "역삼역에서 조용하고 주차할 수 있는 카페",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "QUIET",
+    "PARKING"
+   ],
+   "category": "CAFE",
+   "station": "YEOKSAM",
+   "nearby": false,
+   "embedding_text": "역삼역 조용한 카페 주차도 되면 좋겠어",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 2,
+   "allowed": 2,
+   "got": 2,
+   "must": 2,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "H2",
+  "type": "후속",
+  "query": "카페 말고 술집으로",
+  "expect": {
+   "codes": [
+    "QUIET"
+   ],
+   "category": "BAR",
+   "station": "YEOKSAM",
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [
+     "QUIET"
+    ],
+    "category": "BAR",
+    "station": "YEOKSAM",
+    "nearby": false,
+    "embedding_text": "역삼역 조용한 술집",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.926674535003258,
+    "change_summary": "카페에서 술집으로 바꿨어요",
+    "raw_embedding_text": "역삼역 조용한 술집",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "QUIET"
+    ],
+    "category": "BAR",
+    "station": "YEOKSAM",
+    "nearby": false,
+    "embedding_text": "역삼역 조용한 술집",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.6550063559989212,
+    "change_summary": "카페에서 술집으로 바꿨어요",
+    "raw_embedding_text": "역삼역 조용한 술집",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "QUIET"
+   ],
+   "category": "BAR",
+   "station": "YEOKSAM",
+   "nearby": false,
+   "embedding_text": "역삼역 조용한 카페 카페 말고 술집으로",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 1,
+   "allowed": 1,
+   "got": 1,
+   "must": 1,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "H3",
+  "type": "후속",
+  "query": "역삼역 말고 선릉역에서",
+  "expect": {
+   "codes": [
+    "QUIET"
+   ],
+   "category": "CAFE",
+   "station": "SEOLLEUNG",
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [
+     "QUIET"
+    ],
+    "category": "CAFE",
+    "station": "SEOLLEUNG",
+    "nearby": false,
+    "embedding_text": "조용한 선릉역 카페",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 2.0590997990002506,
+    "change_summary": "역삼역에서 선릉역으로 바꿨어요",
+    "raw_embedding_text": "조용한 선릉역 카페",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "QUIET"
+    ],
+    "category": "CAFE",
+    "station": "SEOLLEUNG",
+    "nearby": false,
+    "embedding_text": "조용한 선릉역 카페",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.6391015650006011,
+    "change_summary": "역삼역에서 선릉역으로 바꿨어요",
+    "raw_embedding_text": "조용한 선릉역 카페",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "QUIET"
+   ],
+   "category": "CAFE",
+   "station": "SEOLLEUNG",
+   "nearby": false,
+   "embedding_text": "역삼역 조용한 카페 역삼역 말고 선릉역에서",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 1,
+   "allowed": 1,
+   "got": 1,
+   "must": 1,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "H4",
+  "type": "후속",
+  "query": "조용한 거 말고 활기찬 곳으로 바꿔줘",
+  "expect": {
+   "codes": [
+    "LIVELY"
+   ],
+   "category": "CAFE",
+   "station": "YEOKSAM",
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [
+     "LIVELY"
+    ],
+    "category": "CAFE",
+    "station": "YEOKSAM",
+    "nearby": false,
+    "embedding_text": "역삼역 활기찬 카페",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.5696883799973875,
+    "change_summary": "조용한 거 말고 활기찬 곳으로 바꿨어요",
+    "raw_embedding_text": "역삼역 활기찬 카페",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "LIVELY"
+    ],
+    "category": "CAFE",
+    "station": "YEOKSAM",
+    "nearby": false,
+    "embedding_text": "역삼역 활기찬 카페",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 2.496730040998955,
+    "change_summary": "조용한 거 말고 활기찬 곳으로 바꿨어요",
+    "raw_embedding_text": "역삼역 활기찬 카페",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "QUIET",
+    "LIVELY"
+   ],
+   "category": "CAFE",
+   "station": "YEOKSAM",
+   "nearby": false,
+   "embedding_text": "역삼역 조용한 카페 조용한 거 말고 활기찬 곳으로 바꿔줘",
+   "extra": [
+    "QUIET"
+   ],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 1,
+   "allowed": 1,
+   "got": 2,
+   "must": 1,
+   "codes_ok": false,
+   "all_ok": false
+  }
+ },
+ {
+  "id": "H5",
+  "type": "후속",
+  "query": "가성비도 좋았으면",
+  "expect": {
+   "codes": [
+    "PURPOSE_GROUP",
+    "VALUE_FOR_MONEY"
+   ],
+   "category": "BAR",
+   "station": "GANGNAM",
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [
+     "PURPOSE_GROUP",
+     "VALUE_FOR_MONEY"
+    ],
+    "category": "BAR",
+    "station": "GANGNAM",
+    "nearby": false,
+    "embedding_text": "강남역에서 모임하기 좋은 가성비 좋은 술집",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 2,
+    "allowed": 2,
+    "got": 2,
+    "must": 2,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 2.2691430720005883,
+    "change_summary": "가성비 좋은 조건을 추가했어요.",
+    "raw_embedding_text": "강남역에서 모임하기 좋은 가성비 좋은 술집",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": true
+   },
+   {
+    "codes": [
+     "PURPOSE_GROUP",
+     "VALUE_FOR_MONEY"
+    ],
+    "category": "BAR",
+    "station": "GANGNAM",
+    "nearby": false,
+    "embedding_text": "강남역에서 모임하기 좋은 가성비 좋은 술집",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 2,
+    "allowed": 2,
+    "got": 2,
+    "must": 2,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 2.368277545996534,
+    "change_summary": "가성비 좋은 조건을 추가했어요.",
+    "raw_embedding_text": "강남역에서 모임하기 좋은 가성비 좋은 술집",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": true
+   }
+  ],
+  "rule": {
+   "codes": [
+    "PURPOSE_GROUP",
+    "VALUE_FOR_MONEY"
+   ],
+   "category": "BAR",
+   "station": "GANGNAM",
+   "nearby": false,
+   "embedding_text": "강남역 모임하기 좋은 술집 가성비도 좋았으면",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 2,
+   "allowed": 2,
+   "got": 2,
+   "must": 2,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "H6",
+  "type": "후속",
+  "query": "작업하기 좋은 데로",
+  "expect": {
+   "codes": [
+    "PURPOSE_WORK"
+   ],
+   "optional": [
+    "WIFI"
+   ],
+   "category": "CAFE",
+   "station": null,
+   "nearby": true
+  },
+  "llm": [
+   {
+    "codes": [
+     "PURPOSE_WORK"
+    ],
+    "category": "CAFE",
+    "station": null,
+    "nearby": true,
+    "embedding_text": "근처 카페에서 작업하기 좋은 곳",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.5644663869970827,
+    "change_summary": "작업하기 좋은 조건을 추가했어요.",
+    "raw_embedding_text": "근처 카페에서 작업하기 좋은 곳",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "PURPOSE_WORK"
+    ],
+    "category": "CAFE",
+    "station": null,
+    "nearby": true,
+    "embedding_text": "근처 카페에서 작업하기 좋은 곳",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.5205616300008842,
+    "change_summary": "작업하기 좋은 데로 바꿨어요",
+    "raw_embedding_text": "근처 카페에서 작업하기 좋은 곳",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "PURPOSE_WORK"
+   ],
+   "category": "CAFE",
+   "station": null,
+   "nearby": true,
+   "embedding_text": "근처 카페 작업하기 좋은 데로",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 1,
+   "allowed": 1,
+   "got": 1,
+   "must": 1,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "R1",
+  "type": "이전 오류",
+  "query": "강남역 근처 4명이서 갈 만한 식당",
+  "expect": {
+   "codes": [
+    "PURPOSE_GROUP"
+   ],
+   "category": "RESTAURANT",
+   "station": "GANGNAM",
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [
+     "PURPOSE_GROUP"
+    ],
+    "category": "RESTAURANT",
+    "station": "GANGNAM",
+    "nearby": false,
+    "embedding_text": "강남역에서 4명이서 갈 만한 식당",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 2.021284422997269,
+    "change_summary": null,
+    "raw_embedding_text": "강남역에서 4명이서 갈 만한 식당",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "PURPOSE_GROUP"
+    ],
+    "category": "RESTAURANT",
+    "station": "GANGNAM",
+    "nearby": false,
+    "embedding_text": "강남역 근처 4명이서 갈 만한 식당",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.6558960610054783,
+    "change_summary": null,
+    "raw_embedding_text": "강남역 근처 4명이서 갈 만한 식당",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "PURPOSE_GROUP"
+   ],
+   "category": "RESTAURANT",
+   "station": "GANGNAM",
+   "nearby": false,
+   "embedding_text": "강남역 근처 4명이서 갈 만한 식당",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 1,
+   "allowed": 1,
+   "got": 1,
+   "must": 1,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "R2",
+  "type": "이전 오류",
+  "query": "주차되는 술집",
+  "expect": {
+   "codes": [
+    "PARKING"
+   ],
+   "category": "BAR",
+   "station": null,
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [
+     "PARKING"
+    ],
+    "category": "BAR",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "주차할 수 있는 술집",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.5827218320046086,
+    "change_summary": null,
+    "raw_embedding_text": "주차할 수 있는 술집",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "PARKING"
+    ],
+    "category": "BAR",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "주차할 수 있는 술집",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.2884139660018263,
+    "change_summary": null,
+    "raw_embedding_text": "주차할 수 있는 술집",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "PARKING"
+   ],
+   "category": "BAR",
+   "station": null,
+   "nearby": false,
+   "embedding_text": "주차되는 술집",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 1,
+   "allowed": 1,
+   "got": 1,
+   "must": 1,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "R3",
+  "type": "이전 오류",
+  "query": "혼밥하기 편한 가성비 좋은 한식",
+  "expect": {
+   "codes": [
+    "PURPOSE_SOLO",
+    "VALUE_FOR_MONEY",
+    "FOOD_KOREAN"
+   ],
+   "category": "RESTAURANT",
+   "station": null,
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [
+     "PURPOSE_SOLO",
+     "VALUE_FOR_MONEY",
+     "FOOD_KOREAN"
+    ],
+    "category": "RESTAURANT",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "혼밥하기 좋은 가성비 좋은 한식",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 3,
+    "allowed": 3,
+    "got": 3,
+    "must": 3,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.720835141997668,
+    "change_summary": null,
+    "raw_embedding_text": "혼밥하기 좋은 가성비 좋은 한식",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "PURPOSE_SOLO",
+     "VALUE_FOR_MONEY",
+     "FOOD_KOREAN"
+    ],
+    "category": "RESTAURANT",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "혼밥하기 좋은 가성비 좋은 한식",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 3,
+    "allowed": 3,
+    "got": 3,
+    "must": 3,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.655424281998421,
+    "change_summary": null,
+    "raw_embedding_text": "혼밥하기 좋은 가성비 좋은 한식",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "VALUE_FOR_MONEY",
+    "PURPOSE_SOLO",
+    "FOOD_KOREAN"
+   ],
+   "category": "RESTAURANT",
+   "station": null,
+   "nearby": false,
+   "embedding_text": "혼밥하기 편한 가성비 좋은 한식",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 3,
+   "allowed": 3,
+   "got": 3,
+   "must": 3,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "R4",
+  "type": "이전 오류",
+  "query": "강남역 쌀국수 같은 국물 요리",
+  "expect": {
+   "codes": [],
+   "optional": [
+    "FOOD_ASIAN"
+   ],
+   "category": "RESTAURANT",
+   "station": "GANGNAM",
+   "nearby": false,
+   "uncovered": [
+    "국물"
+   ]
+  },
+  "llm": [
+   {
+    "codes": [],
+    "category": "RESTAURANT",
+    "station": "GANGNAM",
+    "nearby": false,
+    "embedding_text": "강남역에서 쌀국수 같은 국물 요리",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [
+     "국물"
+    ],
+    "uncovered_total": 1,
+    "hits": 0,
+    "allowed": 0,
+    "got": 0,
+    "must": 0,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.4103244650032138,
+    "change_summary": null,
+    "raw_embedding_text": "강남역에서 쌀국수 같은 국물 요리",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [],
+    "category": "RESTAURANT",
+    "station": "GANGNAM",
+    "nearby": false,
+    "embedding_text": "강남역에서 쌀국수 같은 국물 요리",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [
+     "국물"
+    ],
+    "uncovered_total": 1,
+    "hits": 0,
+    "allowed": 0,
+    "got": 0,
+    "must": 0,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.6171120959988912,
+    "change_summary": null,
+    "raw_embedding_text": "강남역에서 쌀국수 같은 국물 요리",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "FOOD_ASIAN"
+   ],
+   "category": "RESTAURANT",
+   "station": "GANGNAM",
+   "nearby": false,
+   "embedding_text": "강남역 쌀국수 같은 국물 요리",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [
+    "국물"
+   ],
+   "uncovered_total": 1,
+   "hits": 0,
+   "allowed": 1,
+   "got": 1,
+   "must": 0,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "I1",
+  "type": "코드 밖 표현",
+  "query": "와인 종류 많은 바",
+  "expect": {
+   "codes": [],
+   "category": "BAR",
+   "station": null,
+   "nearby": false,
+   "uncovered": [
+    "와인"
+   ]
+  },
+  "llm": [
+   {
+    "codes": [],
+    "category": "BAR",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "와인 종류가 많은 바",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [
+     "와인"
+    ],
+    "uncovered_total": 1,
+    "hits": 0,
+    "allowed": 0,
+    "got": 0,
+    "must": 0,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.5501629670034163,
+    "change_summary": null,
+    "raw_embedding_text": "와인 종류가 많은 바",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [],
+    "category": "BAR",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "와인 종류가 많은 바",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [
+     "와인"
+    ],
+    "uncovered_total": 1,
+    "hits": 0,
+    "allowed": 0,
+    "got": 0,
+    "must": 0,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.6686796310023055,
+    "change_summary": null,
+    "raw_embedding_text": "와인 종류가 많은 바",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [],
+   "category": null,
+   "station": null,
+   "nearby": false,
+   "embedding_text": "와인 종류 많은 바",
+   "extra": [],
+   "missing": [],
+   "category_ok": false,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [
+    "와인"
+   ],
+   "uncovered_total": 1,
+   "hits": 0,
+   "allowed": 0,
+   "got": 0,
+   "must": 0,
+   "codes_ok": true,
+   "all_ok": false
+  }
+ },
+ {
+  "id": "I2",
+  "type": "코드 밖 표현",
+  "query": "디저트 맛있는 카페",
+  "expect": {
+   "codes": [],
+   "category": "CAFE",
+   "station": null,
+   "nearby": false,
+   "uncovered": [
+    "디저트"
+   ]
+  },
+  "llm": [
+   {
+    "codes": [],
+    "category": "CAFE",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "디저트가 맛있는 카페",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [
+     "디저트"
+    ],
+    "uncovered_total": 1,
+    "hits": 0,
+    "allowed": 0,
+    "got": 0,
+    "must": 0,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.4761494749982376,
+    "change_summary": null,
+    "raw_embedding_text": "디저트가 맛있는 카페",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [],
+    "category": "CAFE",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "디저트가 맛있는 카페",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [
+     "디저트"
+    ],
+    "uncovered_total": 1,
+    "hits": 0,
+    "allowed": 0,
+    "got": 0,
+    "must": 0,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.436482723998779,
+    "change_summary": null,
+    "raw_embedding_text": "디저트가 맛있는 카페",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [],
+   "category": "CAFE",
+   "station": null,
+   "nearby": false,
+   "embedding_text": "디저트 맛있는 카페",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [
+    "디저트"
+   ],
+   "uncovered_total": 1,
+   "hits": 0,
+   "allowed": 0,
+   "got": 0,
+   "must": 0,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "I3",
+  "type": "코드 밖 표현",
+  "query": "늦게까지 하는 술집",
+  "expect": {
+   "codes": [],
+   "category": "BAR",
+   "station": null,
+   "nearby": false,
+   "uncovered": [
+    "늦게"
+   ]
+  },
+  "llm": [
+   {
+    "codes": [],
+    "category": "BAR",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "늦게까지 하는 술집",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [
+     "늦게"
+    ],
+    "uncovered_total": 1,
+    "hits": 0,
+    "allowed": 0,
+    "got": 0,
+    "must": 0,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.2968313219971606,
+    "change_summary": null,
+    "raw_embedding_text": "늦게까지 하는 술집",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [],
+    "category": "BAR",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "늦게까지 하는 술집",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [
+     "늦게"
+    ],
+    "uncovered_total": 1,
+    "hits": 0,
+    "allowed": 0,
+    "got": 0,
+    "must": 0,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.2667259459994966,
+    "change_summary": null,
+    "raw_embedding_text": "늦게까지 하는 술집",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [],
+   "category": "BAR",
+   "station": null,
+   "nearby": false,
+   "embedding_text": "늦게까지 하는 술집",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [
+    "늦게"
+   ],
+   "uncovered_total": 1,
+   "hits": 0,
+   "allowed": 0,
+   "got": 0,
+   "must": 0,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "I4",
+  "type": "코드 밖 표현",
+  "query": "반려견 동반 가능한 카페",
+  "expect": {
+   "codes": [],
+   "category": "CAFE",
+   "station": null,
+   "nearby": false,
+   "uncovered": [
+    "반려"
+   ]
+  },
+  "llm": [
+   {
+    "codes": [],
+    "category": "CAFE",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "반려견 동반 가능한 카페",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [
+     "반려"
+    ],
+    "uncovered_total": 1,
+    "hits": 0,
+    "allowed": 0,
+    "got": 0,
+    "must": 0,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.2820034629985457,
+    "change_summary": null,
+    "raw_embedding_text": "반려견 동반 가능한 카페",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [],
+    "category": "CAFE",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "반려견 동반 가능한 카페",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [
+     "반려"
+    ],
+    "uncovered_total": 1,
+    "hits": 0,
+    "allowed": 0,
+    "got": 0,
+    "must": 0,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.509319246004452,
+    "change_summary": null,
+    "raw_embedding_text": "반려견 동반 가능한 카페",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [],
+   "category": "CAFE",
+   "station": null,
+   "nearby": false,
+   "embedding_text": "반려견 동반 가능한 카페",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [
+    "반려"
+   ],
+   "uncovered_total": 1,
+   "hits": 0,
+   "allowed": 0,
+   "got": 0,
+   "must": 0,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "I5",
+  "type": "코드 밖 표현",
+  "query": "콘센트 많은 카페",
+  "expect": {
+   "codes": [],
+   "optional": [
+    "PURPOSE_WORK"
+   ],
+   "category": "CAFE",
+   "station": null,
+   "nearby": false,
+   "uncovered": [
+    "콘센트"
+   ]
+  },
+  "llm": [
+   {
+    "codes": [],
+    "category": "CAFE",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "콘센트가 많은 카페",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [
+     "콘센트"
+    ],
+    "uncovered_total": 1,
+    "hits": 0,
+    "allowed": 0,
+    "got": 0,
+    "must": 0,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.2656866929974058,
+    "change_summary": null,
+    "raw_embedding_text": "콘센트가 많은 카페",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [],
+    "category": "CAFE",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "콘센트가 많은 카페",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [
+     "콘센트"
+    ],
+    "uncovered_total": 1,
+    "hits": 0,
+    "allowed": 0,
+    "got": 0,
+    "must": 0,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.147354858003382,
+    "change_summary": null,
+    "raw_embedding_text": "콘센트가 많은 카페",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [],
+   "category": "CAFE",
+   "station": null,
+   "nearby": false,
+   "embedding_text": "콘센트 많은 카페",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [
+    "콘센트"
+   ],
+   "uncovered_total": 1,
+   "hits": 0,
+   "allowed": 0,
+   "got": 0,
+   "must": 0,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "I6",
+  "type": "코드 밖 표현",
+  "query": "음악 좋은 바",
+  "expect": {
+   "codes": [
+    "GOOD_MUSIC"
+   ],
+   "category": "BAR",
+   "station": null,
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [
+     "GOOD_MUSIC"
+    ],
+    "category": "BAR",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "음악이 좋은 바",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.4458523189969128,
+    "change_summary": null,
+    "raw_embedding_text": "음악이 좋은 바",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "GOOD_MUSIC"
+    ],
+    "category": "BAR",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "음악이 좋은 바",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.224333108002611,
+    "change_summary": null,
+    "raw_embedding_text": "음악이 좋은 바",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "GOOD_MUSIC"
+   ],
+   "category": null,
+   "station": null,
+   "nearby": false,
+   "embedding_text": "음악 좋은 바",
+   "extra": [],
+   "missing": [],
+   "category_ok": false,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 1,
+   "allowed": 1,
+   "got": 1,
+   "must": 1,
+   "codes_ok": true,
+   "all_ok": false
+  }
+ },
+ {
+  "id": "I7",
+  "type": "코드 밖 표현",
+  "query": "컨셉이 독특한 카페",
+  "expect": {
+   "codes": [
+    "UNIQUE_CONCEPT"
+   ],
+   "category": "CAFE",
+   "station": null,
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [
+     "UNIQUE_CONCEPT"
+    ],
+    "category": "CAFE",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "컨셉이 독특한 카페",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.5041157450032188,
+    "change_summary": null,
+    "raw_embedding_text": "컨셉이 독특한 카페",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "UNIQUE_CONCEPT"
+    ],
+    "category": "CAFE",
+    "station": null,
+    "nearby": false,
+    "embedding_text": "컨셉이 독특한 카페",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 2.162942387003568,
+    "change_summary": null,
+    "raw_embedding_text": "컨셉이 독특한 카페",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "UNIQUE_CONCEPT"
+   ],
+   "category": "CAFE",
+   "station": null,
+   "nearby": false,
+   "embedding_text": "컨셉이 독특한 카페",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 1,
+   "allowed": 1,
+   "got": 1,
+   "must": 1,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ },
+ {
+  "id": "I8",
+  "type": "코드 밖 표현",
+  "query": "점심에 빨리 먹고 나올 수 있는 곳",
+  "expect": {
+   "codes": [
+    "FAST_SERVING"
+   ],
+   "category": [
+    null,
+    "RESTAURANT"
+   ],
+   "station": null,
+   "nearby": false
+  },
+  "llm": [
+   {
+    "codes": [
+     "FAST_SERVING"
+    ],
+    "category": null,
+    "station": null,
+    "nearby": false,
+    "embedding_text": "점심에 음식이 빨리 나오는 곳",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.6645264350008802,
+    "change_summary": null,
+    "raw_embedding_text": "점심에 음식이 빨리 나오는 곳",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   },
+   {
+    "codes": [
+     "FAST_SERVING"
+    ],
+    "category": null,
+    "station": null,
+    "nearby": false,
+    "embedding_text": "점심에 음식이 빨리 나오는 곳",
+    "extra": [],
+    "missing": [],
+    "category_ok": true,
+    "station_ok": true,
+    "nearby_ok": true,
+    "uncovered_kept": [],
+    "uncovered_total": 0,
+    "hits": 1,
+    "allowed": 1,
+    "got": 1,
+    "must": 1,
+    "codes_ok": true,
+    "all_ok": true,
+    "llm_error": null,
+    "seconds": 1.8065590639962466,
+    "change_summary": null,
+    "raw_embedding_text": "점심에 음식이 빨리 나오는 곳",
+    "raw_embedding_empty": false,
+    "raw_embedding_copied": false,
+    "raw_embedding_sentence": false,
+    "raw_text_unchanged": false
+   }
+  ],
+  "rule": {
+   "codes": [
+    "FAST_SERVING"
+   ],
+   "category": null,
+   "station": null,
+   "nearby": false,
+   "embedding_text": "점심에 빨리 먹고 나올 수 있는 곳",
+   "extra": [],
+   "missing": [],
+   "category_ok": true,
+   "station_ok": true,
+   "nearby_ok": true,
+   "uncovered_kept": [],
+   "uncovered_total": 0,
+   "hits": 1,
+   "allowed": 1,
+   "got": 1,
+   "must": 1,
+   "codes_ok": true,
+   "all_ok": true
+  }
+ }
+]

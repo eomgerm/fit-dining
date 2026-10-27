@@ -17,6 +17,7 @@ from pathlib import Path
 
 from fit_ai import gms
 from fit_ai.match.interpretation import (
+    CODE_PHRASES,
     SYSTEM_PROMPT,
     Conditions,
     interpret,
@@ -72,10 +73,19 @@ def main() -> None:
                     "raw_embedding_empty": isinstance(raw_text, str)
                     and not any(ch.isalnum() for ch in raw_text),
                     # 평가 질의는 프롬프트 예시와 겹치지 않으므로 프롬프트에 있는
-                    # 문장이 나오면 베낀 것이다.
+                    # 문장이 나오면 베낀 것이다. 코드표 문구는 요청을 바꿔 말한 것일
+                    # 수 있어 세지 않는다.
                     "raw_embedding_copied": isinstance(raw_text, str)
                     and len(raw_text) > 3
-                    and raw_text in SYSTEM_PROMPT,
+                    and raw_text in SYSTEM_PROMPT
+                    and raw_text not in CODE_PHRASES.values(),
+                    # "~을 찾고 있습니다."처럼 검색어가 아니라 문장으로 끝낸 경우다.
+                    "raw_embedding_sentence": isinstance(raw_text, str)
+                    and raw_text.rstrip(" .").endswith(("다", "요")),
+                    # 후속인데 합친 문장에 새 요청을 넣지 않은 경우다. 코드가 뒤에 붙인다.
+                    "raw_text_unchanged": previous is not None
+                    and isinstance(output, dict)
+                    and output.get("text") == previous.text,
                 }
             )
         rule = _check(case, interpret_by_rules(case["query"], previous))
@@ -215,6 +225,11 @@ def _report(rows: list[dict]) -> None:
         f"LLM이 프롬프트 문장을 벡터용 문장으로 베낀 횟수: "
         f"{len(copied)}/{len(llm_runs)} {sorted(set(copied))}"
     )
+    sentences = sum(run["raw_embedding_sentence"] for run in llm_runs)
+    print(f"벡터용 문장을 '~다', '~요'로 끝낸 횟수: {sentences}/{len(llm_runs)}")
+    follow_ups = [run for row in rows for run in row["llm"] if row["type"] == "후속"]
+    unchanged = sum(run["raw_text_unchanged"] for run in follow_ups)
+    print(f"후속에서 LLM이 이전 문장을 그대로 낸 횟수: {unchanged}/{len(follow_ups)}")
 
 
 def _summary(name: str, runs: list[dict]) -> None:

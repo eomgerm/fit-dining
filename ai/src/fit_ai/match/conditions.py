@@ -1,16 +1,19 @@
 """비교가 쓰는 낱말표. 카드 조건 목록과 업종·역 이름이다.
 
-카드 조건은 취향 코드표의 온보딩 코드 14개와 시설 4개다. id는 취향 프로필
-spec(S15P31A302-39)의 코드표를 따른다. 시설 4개는 코드표에 없어서 BE의 `Facility`
-코드를 쓴다(docs/comparison/spec.md 2장). 다른 비교 모듈을 가져다 쓰지 않는다.
+카드 조건은 공유 코드표(`fit_ai.features`)의 온보딩 코드와 시설 4개다. 온보딩 코드의
+코드와 층은 공유 코드표에서 가져오고, 여기에는 코드표에 없는 것만 둔다. 카드 문구,
+시설(BE의 `Facility` 코드, docs/comparison/spec.md 2장), 업종·역 이름이다. 다른 비교
+모듈을 가져다 쓰지 않는다.
 """
 
 from dataclasses import dataclass
 from enum import StrEnum
 
+from fit_ai.features import FEATURES
+
 
 class Layer(StrEnum):
-    """조건의 층. 값은 취향 프로필 spec의 `layer` 값과 같다."""
+    """조건의 층. 값은 공유 코드표의 `layer` 값과 같고 시설만 더했다."""
 
     AXIS = "axis"
     """성향 축(PRD L1). 조용함과 활기처럼 한쪽을 고르면 반대쪽은 비선호다."""
@@ -40,30 +43,47 @@ class Condition:
     layer: Layer
 
 
-CONDITIONS: dict[str, Condition] = {
-    c.id: c
-    for c in (
-        Condition("QUIET", "조용해요", Layer.AXIS),
-        Condition("LIVELY", "활기차요", Layer.AXIS),
-        Condition("SPACIOUS_SEATING", "자리가 넉넉해요", Layer.IMPORTANCE),
-        Condition("SHORT_WAIT", "대기가 짧아요", Layer.IMPORTANCE),
-        Condition("GENEROUS_PORTION", "양이 넉넉해요", Layer.IMPORTANCE),
-        Condition("PRETTY_SPACE", "공간이 예뻐요", Layer.IMPORTANCE),
-        Condition("VIEW_OUTDOOR", "전망이 좋아요", Layer.IMPORTANCE),
-        Condition("COZY", "아늑해요", Layer.IMPORTANCE),
-        Condition("VALUE_FOR_MONEY", "가격만큼 만족해요", Layer.IMPORTANCE),
-        Condition("PURPOSE_TALK", "대화하기 좋아요", Layer.PURPOSE),
-        Condition("PURPOSE_SOLO", "혼밥하기 좋아요", Layer.PURPOSE),
-        Condition("PURPOSE_DATE", "데이트하기 좋아요", Layer.PURPOSE),
-        Condition("PURPOSE_GROUP", "모임하기 좋아요", Layer.PURPOSE),
-        Condition("PURPOSE_WORK", "작업하기 좋아요", Layer.PURPOSE),
-        Condition("PARKING", "주차할 수 있어요", Layer.FACILITY),
-        Condition("WIFI", "와이파이가 돼요", Layer.FACILITY),
-        Condition("GROUP", "단체로 갈 수 있어요", Layer.FACILITY),
-        Condition("RESERVATION", "예약할 수 있어요", Layer.FACILITY),
-    )
+CARD_LABELS = {
+    "QUIET": "조용해요",
+    "LIVELY": "활기차요",
+    "SPACIOUS_SEATING": "자리가 넉넉해요",
+    "SHORT_WAIT": "대기가 짧아요",
+    "GENEROUS_PORTION": "양이 넉넉해요",
+    "PRETTY_SPACE": "공간이 예뻐요",
+    "VIEW_OUTDOOR": "전망이 좋아요",
+    "COZY": "아늑해요",
+    "VALUE_FOR_MONEY": "가격만큼 만족해요",
+    "PURPOSE_TALK": "대화하기 좋아요",
+    "PURPOSE_SOLO": "혼밥하기 좋아요",
+    "PURPOSE_DATE": "데이트하기 좋아요",
+    "PURPOSE_GROUP": "모임하기 좋아요",
+    "PURPOSE_WORK": "작업하기 좋아요",
 }
-"""조건 id로 찾는 조건 목록. 순서는 특징 라벨을 고를 때 동점을 가르는 데 쓴다."""
+"""온보딩 코드의 카드 문구. 코드표의 `label`은 온보딩 태그 문구("조용하고 차분한 곳")라
+카드에는 이 문구를 쓴다. 코드표에 온보딩 코드가 늘면 여기도 더해야 한다(없으면 불러올
+때 KeyError로 드러난다)."""
+
+FACILITY_LABELS = {
+    "PARKING": "주차할 수 있어요",
+    "WIFI": "와이파이가 돼요",
+    "GROUP": "단체로 갈 수 있어요",
+    "RESERVATION": "예약할 수 있어요",
+}
+"""시설 코드와 카드 문구. 시설은 공유 코드표에 없다."""
+
+CONDITIONS: dict[str, Condition] = {
+    **{
+        code: Condition(code, CARD_LABELS[code], Layer(feature.layer))
+        for code, feature in FEATURES.items()
+        if feature.onboarding
+    },
+    **{
+        code: Condition(code, label, Layer.FACILITY)
+        for code, label in FACILITY_LABELS.items()
+    },
+}
+"""조건 id로 찾는 조건 목록. 공유 코드표 순서, 그다음 시설이다. 순서는 특징 라벨을
+고를 때 동점을 가르는 데 쓴다."""
 
 CATEGORY_NAMES = {"RESTAURANT": "식당", "CAFE": "카페", "BAR": "술집"}
 """업종 코드의 화면 이름. BE `CategoryGroup`과 같다."""
