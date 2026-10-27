@@ -54,6 +54,23 @@ bash infra/backup/restore-check.sh -i ~/fit-backup-key.txt --fetch-seconds <1에
 - 사진과 인증서 백업(`photos-*.tar.age`, `caddy-*.tar.age`)은 복호화해 tar 목록을 확인한다.
 - BE가 아직 마이그레이션하기 전의 빈 DB 덤프는 `--allow-empty`를 붙인다.
 - 내려받은 암호화 덤프 최신 1벌은 노트북에 남긴다(설계 13.4절, 세 번째 사본).
+- Windows Git Bash에서는 `age`(WinGet 설치 경로)를 `PATH`에 넣고, `-i`와 백업 파일에 `C:/...` 경로를 주고, `TMPDIR=C:/Users/<이름>/AppData/Local/Temp`를 내보낸다. `restore-check.sh`가 `/tmp/...`를 만드는데 윈도 `age.exe`가 그 경로를 열지 못한다.
+- prod DB에 테이블이 생기기 전에 실제 테이블이 있는 덤프가 필요하면 A에서 dev DB를 평문 없이 바로 암호화한다. 운영 백업 줄기(`pg/`, `outbox/`, 금고)와 섞이지 않게 별도 폴더에 두고, 파일 이름은 `pg-<UTC 시각>.dump.age` 형식이어야 `restore-check.sh`가 받는다.
+
+  ```bash
+  sudo install -d -m 700 /srv/fit/backups/rehearsal-dev
+  sudo bash -c "set -o pipefail; docker exec fit-data-postgres-1 pg_dump -U postgres -Fc -d fit_dev | age -R /etc/fit/keys/age-recipients.txt -o /srv/fit/backups/rehearsal-dev/pg-$(date -u +%Y%m%dT%H%M%SZ).dump.age"
+  ```
+
+### 리허설 기록
+
+| 회차 | 날짜(KST) | 대상 | 결과 | RTO | 한계 |
+|---|---|---|---|---|---|
+| #1 | 2026-10-22 | `fit_prod` 덤프(테이블 0개, `--allow-empty`)와 사진 tar | 복호화·복원 성공, 사진 tar 목록을 읽음 | 6초 | 빈 DB라 데이터는 확인하지 못했다 |
+| #2 | 2026-10-27 | `fit_dev` 덤프(테이블 6개, 마이그레이션 기록 2건, 나머지 5개 테이블은 0행) | 복호화·복원 성공, 테이블 6개와 `flyway_schema_history` 2건을 확인 | 7초(내려받기 1초 + 복호화·복원 6초) | 행이 거의 없어 실제 데이터 크기의 RTO가 아니다. 덤프는 금고를 거치지 않고 A에서 받았다 |
+
+- 두 번 모두 첫 번째 수신자의 개인키로 했다. 두 번째 수신자는 2026-10-27에 같은 형식의 덤프를 자기 키로 복호화했다고 보고했다(Jira S15P31A302-79).
+- 서비스를 공개해 데이터가 쌓인 뒤에 RTO를 다시 재야 한다. 그때까지 7초는 하한이다.
 
 ## 자주 하는 일
 
