@@ -14,14 +14,20 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Stream;
 import kr.co.fitdining.api.auth.domain.AuthFailure;
 import kr.co.fitdining.api.auth.ports.AuthUseCases;
+import kr.co.fitdining.api.place.dto.PlaceSummary.CategoryGroup;
+import kr.co.fitdining.api.place.dto.PlaceSummary.Station;
+import kr.co.fitdining.api.place.exception.PlaceNotFoundException;
+import kr.co.fitdining.api.place.exception.PlaceSearchUnavailableException;
 import kr.co.fitdining.api.review.dto.ReviewCreateRequest;
 import kr.co.fitdining.api.review.dto.ReviewCreateResponse;
+import kr.co.fitdining.api.review.dto.ReviewFormResponse;
 import kr.co.fitdining.api.review.dto.ReviewItem;
 import kr.co.fitdining.api.review.dto.ReviewListResponse;
 import kr.co.fitdining.api.review.exception.DuplicateReviewException;
@@ -182,6 +188,62 @@ class ReviewControllerTest {
 			when(reviewService.list(3L, null)).thenReturn(new ReviewListResponse(0, List.of(), null));
 
 			mockMvc.perform(list(3)).andExpect(status().isOk()).andExpect(jsonPath("$.totalCount").value(0));
+		}
+	}
+
+	@Nested
+	@DisplayName("작성 화면 데이터")
+	class ReviewForm {
+
+		private MockHttpServletRequestBuilder form(Object placeId) {
+			return get("/api/v1/places/{placeId}/review-form", placeId).header("Authorization", "Bearer " + TOKEN);
+		}
+
+		@Test
+		@DisplayName("작성화면_로그인했으면_작성자기준데이터를돌려준다")
+		void reviewForm_loggedIn_returnsForm() throws Exception {
+			LocalDate today = LocalDate.of(2026, 10, 21);
+			when(reviewService.reviewForm(3L, USER_ID)).thenReturn(new ReviewFormResponse(
+					new ReviewFormResponse.Place("카페 온담", CategoryGroup.CAFE, Station.YEOKSAM),
+					new ReviewFormResponse.VisitDate(today.minusMonths(1), today, today), List.of(today),
+					new ReviewFormResponse.Tags(
+							List.of(new ReviewFormResponse.FormTag("QUIET_GOOD", "조용해서 좋았어요", "NOISE", "분위기")),
+							List.of()),
+					ReviewService.LIMITS, true));
+
+			mockMvc.perform(form(3))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.place.categoryGroup").value("CAFE"))
+					.andExpect(jsonPath("$.visitDate.default").value("2026-10-21"))
+					.andExpect(jsonPath("$.visitDate.min").value("2026-09-21"))
+					.andExpect(jsonPath("$.reviewedDates[0]").value("2026-10-21"))
+					.andExpect(jsonPath("$.tags.good[0].group").value("NOISE"))
+					.andExpect(jsonPath("$.limits.descriptionMax").value(500))
+					.andExpect(jsonPath("$.writable").value(true));
+		}
+
+		@Test
+		@DisplayName("작성화면_로그인하지않으면_401이다")
+		void reviewForm_noAuthorization_returnsUnauthorized() throws Exception {
+			expectProblem(get("/api/v1/places/{placeId}/review-form", 3), 401);
+		}
+
+		@Test
+		@DisplayName("작성화면과등록_없는장소면_404다")
+		void placeNotFound_returnsNotFound() throws Exception {
+			when(reviewService.reviewForm(anyLong(), anyString())).thenThrow(new PlaceNotFoundException());
+			when(reviewService.create(anyLong(), anyString(), any())).thenThrow(new PlaceNotFoundException());
+
+			expectProblem(form(999), 404);
+			expectProblem(create(999, "{}"), 404);
+		}
+
+		@Test
+		@DisplayName("작성화면_장소검색을쓸수없으면_503이다")
+		void placeUnavailable_returnsServiceUnavailable() throws Exception {
+			when(reviewService.reviewForm(anyLong(), anyString())).thenThrow(new PlaceSearchUnavailableException());
+
+			expectProblem(form(3), 503);
 		}
 	}
 

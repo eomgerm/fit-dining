@@ -6,6 +6,7 @@ import kr.co.fitdining.api.auth.domain.AuthFailure;
 import kr.co.fitdining.api.auth.ports.AuthUseCases;
 import kr.co.fitdining.api.review.dto.ReviewCreateRequest;
 import kr.co.fitdining.api.review.dto.ReviewCreateResponse;
+import kr.co.fitdining.api.review.dto.ReviewFormResponse;
 import kr.co.fitdining.api.review.dto.ReviewListResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
@@ -33,7 +34,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @ConditionalOnWebApplication
-@RequestMapping("/api/v1/places/{placeId}/reviews")
+@RequestMapping("/api/v1/places/{placeId}")
 @RequiredArgsConstructor
 public class ReviewController {
 
@@ -51,7 +52,7 @@ public class ReviewController {
 	 * @param cursor 다음 페이지 요청일 때, 직전 응답의 {@code nextCursor}
 	 * @return 리뷰 목록. 리뷰 수는 첫 페이지에만 있다.
 	 */
-	@GetMapping
+	@GetMapping("/reviews")
 	public ReviewListResponse list(@PathVariable @Positive long placeId,
 			@RequestParam(required = false) String cursor) {
 		return reviewService.list(placeId, cursor);
@@ -69,12 +70,19 @@ public class ReviewController {
 	 * @param request 등록 요청
 	 * @return 등록된 리뷰 id
 	 */
-	@PostMapping
+	@PostMapping("/reviews")
 	@ResponseStatus(HttpStatus.CREATED)
 	public ReviewCreateResponse create(@PathVariable @Positive long placeId,
 			@RequestHeader(name = HttpHeaders.AUTHORIZATION, required = false) String authorization,
 			@Valid @RequestBody ReviewCreateRequest request) {
 		return reviewService.create(placeId, userId(authorization), request);
+	}
+
+	/** 로그인한 사용자의 작성 화면 데이터. 오류: 401(인증), 404(없는 장소), 503(장소 검색 불가). */
+	@GetMapping("/review-form")
+	public ReviewFormResponse reviewForm(@PathVariable @Positive long placeId,
+			@RequestHeader(name = HttpHeaders.AUTHORIZATION, required = false) String authorization) {
+		return reviewService.reviewForm(placeId, userId(authorization));
 	}
 
 	/** 인증 모듈을 직접 불러 AT에서 사용자 id를 꺼낸다. 실패하면 {@link AuthFailure}가 그대로 나간다. */

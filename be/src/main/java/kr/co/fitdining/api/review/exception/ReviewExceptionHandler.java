@@ -1,6 +1,8 @@
 package kr.co.fitdining.api.review.exception;
 
 import kr.co.fitdining.api.auth.domain.AuthFailure;
+import kr.co.fitdining.api.place.exception.PlaceNotFoundException;
+import kr.co.fitdining.api.place.exception.PlaceSearchUnavailableException;
 import kr.co.fitdining.api.review.ReviewController;
 import kr.co.fitdining.api.review.store.InvalidReviewCursorException;
 import lombok.extern.slf4j.Slf4j;
@@ -48,6 +50,17 @@ public class ReviewExceptionHandler {
 			problem.setType(failure.type());
 		}
 		return problem;
+	}
+
+	@ExceptionHandler(PlaceNotFoundException.class)
+	public ProblemDetail handlePlaceNotFound() {
+		return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "장소를 찾을 수 없어요.");
+	}
+
+	@ExceptionHandler(PlaceSearchUnavailableException.class)
+	public ProblemDetail handlePlaceUnavailable() {
+		log.warn("Place lookup is unavailable for review");
+		return ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, "지금은 리뷰를 쓸 수 없어요.");
 	}
 
 	@ExceptionHandler(DuplicateReviewException.class)

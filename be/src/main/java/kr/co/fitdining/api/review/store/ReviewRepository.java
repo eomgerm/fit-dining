@@ -1,6 +1,7 @@
 package kr.co.fitdining.api.review.store;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -27,6 +28,11 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
 			ORDER BY created_at DESC, review_id DESC
 			LIMIT :limit""";
 
+	String REVIEWED_DATES = """
+			SELECT visit_date FROM reviews
+			WHERE user_id = :userId AND place_id = :placeId AND deleted_at IS NULL AND visit_date >= :from
+			ORDER BY visit_date""";
+
 	/**
 	 * @param placeId 장소 id
 	 * @param limit 읽을 최대 건수
@@ -51,5 +57,9 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
 	 * @return 삭제한 리뷰를 뺀 리뷰 수
 	 */
 	long countByPlaceIdAndDeletedAtIsNull(long placeId);
+
+	@Query(value = REVIEWED_DATES, nativeQuery = true)
+	List<LocalDate> findReviewedDates(@Param("userId") String userId, @Param("placeId") long placeId,
+			@Param("from") LocalDate from);
 
 }

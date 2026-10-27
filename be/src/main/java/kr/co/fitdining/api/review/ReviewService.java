@@ -5,24 +5,32 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import kr.co.fitdining.api.auth.domain.AuthFailure;
 import kr.co.fitdining.api.auth.repository.AuthUserRepository;
+import kr.co.fitdining.api.place.PlaceService;
+import kr.co.fitdining.api.place.dto.PlaceSummary;
 import kr.co.fitdining.api.review.dto.ReviewCreateRequest;
 import kr.co.fitdining.api.review.dto.ReviewCreateResponse;
+import kr.co.fitdining.api.review.dto.ReviewFormResponse;
 import kr.co.fitdining.api.review.dto.ReviewItem;
 import kr.co.fitdining.api.review.dto.ReviewListResponse;
 import kr.co.fitdining.api.review.exception.DuplicateReviewException;
 import kr.co.fitdining.api.review.store.Review;
 import kr.co.fitdining.api.review.store.ReviewCursor;
 import kr.co.fitdining.api.review.store.ReviewRepository;
+import kr.co.fitdining.api.review.tag.ReasonTag;
+import kr.co.fitdining.api.review.tag.ReasonTagRepository;
+import kr.co.fitdining.api.review.tag.ReasonTagRule;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 /**
- * 본문 정규화, 작성 시각과 방문일, 중복 금지, 커서 페이지 계산을 맡는다. 장소 존재는 아직 확인하지 않는다(D-21).
+ * 본문 정규화, 작성 시각과 방문일, 중복 금지, 커서 페이지 계산, 작성 화면 데이터를 맡는다. 등록과 작성 화면 데이터는
+ * 장소 기능으로 장소를 확인한다(D-37).
  */
 @Service
 public class ReviewService {
@@ -36,13 +44,20 @@ public class ReviewService {
 
 	private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
 
+	static final ReviewFormResponse.Limits LIMITS = new ReviewFormResponse.Limits(500, 5, 1_000_000);
+
 	private final ReviewRepository reviews;
 	private final AuthUserRepository users;
+	private final PlaceService places;
+	private final ReasonTagRepository tags;
 	private final Clock clock;
 
-	public ReviewService(ReviewRepository reviews, AuthUserRepository users, Optional<Clock> clock) {
+	public ReviewService(ReviewRepository reviews, AuthUserRepository users, PlaceService places,
+			ReasonTagRepository tags, Optional<Clock> clock) {
 		this.reviews = reviews;
 		this.users = users;
+		this.places = places;
+		this.tags = tags;
 		this.clock = clock.orElseGet(() -> Clock.system(SEOUL));
 	}
 
@@ -55,11 +70,11 @@ public class ReviewService {
 	 * @return 등록된 리뷰 id
 	 * @throws DuplicateReviewException 같은 사용자가 같은 장소에 같은 방문일로 이미 썼을 때
 	 * @throws AuthFailure 탈퇴했거나 없는 사용자일 때(401). 토큰은 탈퇴 뒤에도 만료 전까지 유효하다(D-38).
+	 * @throws kr.co.fitdining.api.place.exception.PlaceNotFoundException 없는 장소일 때
 	 */
 	public ReviewCreateResponse create(long placeId, String userId, ReviewCreateRequest request) {
-		if (!users.existsByIdAndDeletedAtIsNull(userId)) {
-			throw new AuthFailure("로그인이 필요합니다.");
-		}
+		requireActiveUser(userId);
+		places.getPlace(placeId);
 		// PostgreSQL은 마이크로초까지만 저장하므로 커서 비교가 어긋나지 않게 자른다(D-27).
 		Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
 		Review review = new Review(placeId, userId, LocalDate.ofInstant(now, SEOUL),
@@ -75,6 +90,34 @@ public class ReviewService {
 				throw new AuthFailure("로그인이 필요합니다.");
 			}
 			throw e;
+		}
+	}
+
+	/**
+	 * @throws AuthFailure 탈퇴했거나 없는 사용자일 때(401)
+	 * @throws kr.co.fitdining.api.place.exception.PlaceNotFoundException 없는 장소일 때
+	 */
+	public ReviewFormResponse reviewForm(long placeId, String userId) {
+		requireActiveUser(userId);
+		PlaceSummary place = places.getPlace(placeId).place();
+		VisitDatePolicy visitDates = VisitDatePolicy.at(clock);
+		List<ReviewFormResponse.FormTag> good = new ArrayList<>();
+		List<ReviewFormResponse.FormTag> bad = new ArrayList<>();
+		for (ReasonTag tag : tags.findExposed(place.categoryGroup())) {
+			(tag.sentiment() == ReasonTag.Sentiment.GOOD ? good : bad).add(new ReviewFormResponse.FormTag(
+					tag.code(), tag.label(), ReasonTagRule.group(tag), tag.displayGroup()));
+		}
+		return new ReviewFormResponse(
+				new ReviewFormResponse.Place(place.name(), place.categoryGroup(), place.station()),
+				new ReviewFormResponse.VisitDate(visitDates.min(), visitDates.max(), visitDates.max()),
+				reviews.findReviewedDates(userId, placeId, visitDates.min()),
+				new ReviewFormResponse.Tags(good, bad), LIMITS, true);
+	}
+
+	/** 토큰 검증은 DB를 보지 않아 탈퇴 뒤에도 남은 토큰이 만료 전까지 유효하다(D-38). */
+	private void requireActiveUser(String userId) {
+		if (!users.existsByIdAndDeletedAtIsNull(userId)) {
+			throw new AuthFailure("로그인이 필요합니다.");
 		}
 	}
 

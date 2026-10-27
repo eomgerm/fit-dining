@@ -30,7 +30,10 @@ import kr.co.fitdining.api.auth.domain.AuthUser;
 import kr.co.fitdining.api.auth.ports.AuthUseCases;
 import kr.co.fitdining.api.auth.ports.PasswordHasher;
 import kr.co.fitdining.api.auth.repository.AuthUserRepository;
+import kr.co.fitdining.api.place.dto.PlaceSummary.CategoryGroup;
+import kr.co.fitdining.api.place.exception.PlaceNotFoundException;
 import kr.co.fitdining.api.review.dto.ReviewCreateRequest;
+import kr.co.fitdining.api.review.dto.ReviewFormResponse;
 import kr.co.fitdining.api.review.dto.ReviewItem;
 import kr.co.fitdining.api.review.dto.ReviewListResponse;
 import kr.co.fitdining.api.review.exception.DuplicateReviewException;
@@ -52,6 +55,8 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.datasource.SingleConnectionDataSource;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -67,6 +72,11 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 	private static final Instant NOON = Instant.parse("2026-10-21T03:00:00.123456789Z");
 	private static final String USER_PREFIX = "review-test-";
 	private static final String PASSWORD = "review-test-password1";
+
+	@DynamicPropertySource
+	static void placeMock(DynamicPropertyRegistry registry) {
+		registry.add("place.mock.enabled", () -> "true");
+	}
 
 	@TestConfiguration
 	static class Configuration {
@@ -340,6 +350,69 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 	}
 
 	@Nested
+	@DisplayName("작성 화면 데이터")
+	class ReviewForm {
+
+		private static final long CAFE = 3;
+
+		@Test
+		@DisplayName("작성화면_카페면_장소와방문일범위와카페태그를돌려준다")
+		void reviewForm_cafe_returnsPlaceDatesAndTags() {
+			String user = createUsers(1).getFirst();
+
+			ReviewFormResponse form = service.reviewForm(CAFE, user);
+
+			assertThat(form.place().categoryGroup()).isEqualTo(CategoryGroup.CAFE);
+			assertThat(form.visitDate().min()).isEqualTo(LocalDate.of(2026, 9, 21));
+			assertThat(form.visitDate().max()).isEqualTo(LocalDate.of(2026, 10, 21));
+			assertThat(form.visitDate().defaultDate()).isEqualTo(LocalDate.of(2026, 10, 21));
+			assertThat(form.tags().good()).hasSize(11);
+			assertThat(form.tags().bad()).hasSize(11);
+			assertThat(form.tags().good().getFirst().group()).isEqualTo("NOISE");
+			assertThat(form.writable()).isTrue();
+		}
+
+		@Test
+		@DisplayName("작성화면_이미쓴날짜는_내가범위안에남긴리뷰만이다")
+		void reviewForm_reviewedDates_ownActiveInRange() {
+			List<String> authors = createUsers(2);
+			String me = authors.get(0);
+			clock.instant = Instant.parse("2026-09-10T03:00:00Z");
+			service.create(CAFE, me, body("범위 밖"));
+			clock.instant = Instant.parse("2026-10-15T03:00:00Z");
+			service.create(CAFE, me, body("지운 리뷰"));
+			jdbc.update("update reviews set deleted_at = now() where visit_date = date '2026-10-15'");
+			clock.instant = NOON;
+			service.create(CAFE, me, body("오늘"));
+			service.create(CAFE, authors.get(1), body("다른 사람"));
+			service.create(4, me, body("다른 장소"));
+
+			assertThat(service.reviewForm(CAFE, me).reviewedDates()).containsExactly(LocalDate.of(2026, 10, 21));
+		}
+
+		@Test
+		@DisplayName("작성화면과등록_없는장소면_예외이고저장하지않는다")
+		void unknownPlace_throwsAndSavesNothing() {
+			String user = createUsers(1).getFirst();
+
+			assertThatThrownBy(() -> service.reviewForm(999, user)).isInstanceOf(PlaceNotFoundException.class);
+			assertThatThrownBy(() -> service.create(999, user, body(null))).isInstanceOf(PlaceNotFoundException.class);
+			assertThat(jdbc.queryForObject("select count(*) from reviews", Integer.class)).isZero();
+		}
+
+		@Test
+		@DisplayName("작성화면_탈퇴했거나없는사용자면_401이다")
+		void reviewForm_withdrawnOrMissingUser_unauthorized() {
+			String user = createUsers(1).getFirst();
+			withdrawAccount(user);
+
+			assertThatThrownBy(() -> service.reviewForm(CAFE, user))
+					.isInstanceOfSatisfying(AuthFailure.class, failure -> assertThat(failure.status()).isEqualTo(401));
+			assertThatThrownBy(() -> service.reviewForm(CAFE, USER_PREFIX + "missing")).isInstanceOf(AuthFailure.class);
+		}
+	}
+
+	@Nested
 	@DisplayName("회원 탈퇴")
 	class Withdrawal {
 
@@ -425,6 +498,15 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 					"createdAt", java.sql.Timestamp.from(NOON), "reviewId", 100L, "limit", 21));
 
 			assertThat(plan).contains("idx_reviews_place_id_created_at_review_id").doesNotContain("Sort");
+		}
+
+		@Test
+		@DisplayName("이미쓴날짜_중복금지인덱스를탄다")
+		void reviewedDates_usesDuplicateVisitIndex() throws Exception {
+			String plan = explain(ReviewRepository.REVIEWED_DATES, Map.of("userId", USER_PREFIX + "0", "placeId", 3L,
+					"from", java.sql.Date.valueOf("2026-09-21")));
+
+			assertThat(plan).contains("uk_reviews_user_id_place_id_visit_date");
 		}
 	}
 

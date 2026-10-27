@@ -13,8 +13,10 @@ import java.time.ZoneOffset;
 import java.util.Optional;
 import kr.co.fitdining.api.auth.domain.AuthFailure;
 import kr.co.fitdining.api.auth.repository.AuthUserRepository;
+import kr.co.fitdining.api.place.PlaceService;
 import kr.co.fitdining.api.review.dto.ReviewCreateRequest;
 import kr.co.fitdining.api.review.store.ReviewRepository;
+import kr.co.fitdining.api.review.tag.ReasonTagRepository;
 import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -52,7 +54,8 @@ class ReviewServiceTest {
 
 		private final ReviewRepository reviews = mock(ReviewRepository.class);
 		private final AuthUserRepository users = mock(AuthUserRepository.class);
-		private final ReviewService service = new ReviewService(reviews, users,
+		private final ReviewService service = new ReviewService(reviews, users, mock(PlaceService.class),
+				mock(ReasonTagRepository.class),
 				Optional.of(Clock.fixed(Instant.parse("2026-10-21T03:00:00Z"), ZoneOffset.UTC)));
 
 		@Test
