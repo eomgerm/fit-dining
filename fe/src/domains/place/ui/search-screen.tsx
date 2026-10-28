@@ -339,7 +339,7 @@ export function SearchScreen() {
           <Fab label="저장한 장소" onClick={() => toast(NOT_READY_MESSAGE)}>
             <BookmarkIcon className="text-icon" />
           </Fab>
-          <Fab label="내 정보" onClick={() => toast(NOT_READY_MESSAGE)}>
+          <Fab label="내 정보" onClick={() => router.push("/my")}>
             <UserIcon className="text-icon" />
           </Fab>
         </div>

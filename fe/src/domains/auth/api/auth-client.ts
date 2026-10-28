@@ -39,6 +39,9 @@ export function subscribe(listener: () => void) {
   };
 }
 export const getSession = () => session;
+export function clearSession() {
+  update(null);
+}
 export const getServerSession = () => null;
 
 async function browserLock<T>(work: () => Promise<T>) {

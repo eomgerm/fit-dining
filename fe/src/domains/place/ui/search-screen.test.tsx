@@ -1088,7 +1088,12 @@ describe("SearchScreen", () => {
       expect(screen.getByRole("button", { name: "최근 검색" })).toBeTruthy();
     });
 
-    it.each(["저장한 장소", "내 정보"])(
+    it("내 정보 버튼은 /my로 이동한다", () => {
+      renderScreen();
+      fireEvent.click(screen.getByRole("button", { name: "내 정보" }));
+      expect(push).toHaveBeenCalledWith("/my");
+    });
+    it.each(["저장한 장소"])(
       "'%s' 버튼은 첫 화면과 결과 화면에서 '준비 중이에요'를 띄운다",
       async (name) => {
         renderScreen();

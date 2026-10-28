@@ -66,6 +66,22 @@ function environment(
   };
 }
 
+test("clearSession removes the in-memory session and notifies subscribers", async () => {
+  const env = environment(async () => json(value()));
+  try {
+    const auth = await load();
+    await auth.login("demo@example.com", "password123");
+    const listener = vi.fn();
+    const unsubscribe = auth.subscribe(listener);
+    auth.clearSession();
+    assert.equal(auth.getSession(), null);
+    assert.equal(listener.mock.calls.length, 1);
+    unsubscribe();
+  } finally {
+    env.reset();
+  }
+});
+
 test("simultaneous expired API requests share one refresh and retry once", async () => {
   let refreshes = 0;
   const env = environment(async (url, options) => {

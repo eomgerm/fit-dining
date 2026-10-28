@@ -3,7 +3,7 @@ import {
   getSession,
   refresh,
   restore,
-} from "@/domains/auth/api/auth-client";
+} from "./auth-client";
 import { isApiError } from "@/shared/api/api-error";
 
 // 로그인이 필요한 리뷰 요청에 AT를 붙인다. AT가 만료됐으면 한 번 갱신해 다시 보낸다.

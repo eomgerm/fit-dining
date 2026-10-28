@@ -11,7 +11,7 @@ import { Button } from "@/shared/ui/button/button";
 import { EmptyState } from "@/shared/ui/display/empty-state";
 import { PinOffIcon } from "@/shared/ui/icon/icons/pin-off";
 
-import { withAccessToken } from "./with-access-token";
+import { withAccessToken } from "@/domains/auth/api/with-access-token";
 
 // 장소 상세 주소. 상세 탭은 화면 상태라 주소에 싣지 않는다(D-32)
 function placeDetailHref(placeId: number) {
