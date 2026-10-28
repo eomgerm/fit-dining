@@ -34,7 +34,7 @@ from fit_ai.match.search import (
     SearchResult,
     search,
 )
-from fit_ai.match.taste_select import TasteProfile
+from fit_ai.match.taste_select import TasteProfile, TasteStore
 from server.schemas import (
     CardBody,
     ConditionsBody,
@@ -70,6 +70,7 @@ class Dependencies:
         gms_timeout: GMS 한 번 부를 때 기다리는 시간(초)
         gms_client: GMS 연결을 다시 쓰는 HTTP 클라이언트. 없으면 부를 때마다 만든다.
         max_concurrent: 컨테이너 하나가 동시에 처리하는 요청 수 상한
+        taste_store: 회원 취향 저장소. 없으면 회원 id로 온 검색은 취향 없이 한다.
     """
 
     embedding_ready: bool
@@ -77,6 +78,7 @@ class Dependencies:
     gms_timeout: float = 5.0
     gms_client: httpx.Client | None = None
     max_concurrent: int = 8
+    taste_store: TasteStore | None = None
 
 
 def create_app(deps: Dependencies) -> FastAPI:
@@ -171,7 +173,7 @@ def _search(deps: Dependencies, body: SearchBody) -> JSONResponse:
     previous = None
     if body.previous_conditions is not None:
         previous = _read_previous(body.previous_conditions)
-    taste = _read_taste(body.taste_profile)
+    taste, taste_invalid = _resolve_taste(deps.taste_store, body)
     request = SearchRequest(body.query, previous, taste, _bounds(body.map_bounds))
     try:
         result = search(
@@ -188,7 +190,7 @@ def _search(deps: Dependencies, body: SearchBody) -> JSONResponse:
 
     interpretation, trace = result.interpretation, result.trace
     conditions = interpretation.conditions
-    fallbacks = _fallbacks(body, previous, taste, result)
+    fallbacks = _fallbacks(body, previous, taste_invalid, result)
     ranked_by = _ranked_by(result)
     used_llm = interpretation.llm_error is None or ranked_by == "LLM"
     reason = result.empty_reason
@@ -243,14 +245,14 @@ def _search(deps: Dependencies, body: SearchBody) -> JSONResponse:
 def _fallbacks(
     body: SearchBody,
     previous: Conditions | None,
-    taste: TasteProfile | None,
+    taste_invalid: bool,
     result: SearchResult,
 ) -> list[str]:
     """응답에 담을 폴백 코드. 읽지 못한 입력, 실패한 LLM, 빠진 장소를 이 순서로 담는다."""
     happened = {
         "PREVIOUS_INVALID": body.previous_conditions is not None and previous is None,
         "INTERPRET_LLM_FAILED": result.interpretation.llm_error is not None,
-        "TASTE_INVALID": body.taste_profile is not None and taste is None,
+        "TASTE_INVALID": taste_invalid,
         "PROFILE_INVALID": bool(result.invalid_place_ids),
         "RANK_LLM_FAILED": result.trace.fallback is Fallback.LLM_FAILED,
     }
@@ -307,22 +309,56 @@ def _conditions_body(conditions: Conditions) -> ConditionsBody:
     )
 
 
-def _read_taste(data: dict[str, Any] | None) -> TasteProfile | None:
-    """취향 프로필을 읽는다. 읽지 못하면 None이다. 취향은 보조라 검색은 막지 않는다."""
-    if data is None:
-        return None
-    try:
-        profile = TasteProfile.from_dict(data)
-    except (ValueError, KeyError, TypeError, AttributeError) as e:
-        _log("taste_invalid", error=type(e).__name__)
-        return None
-    if (
+def _resolve_taste(
+    store: TasteStore | None, body: SearchBody
+) -> tuple[TasteProfile | None, bool]:
+    """이번 검색에 쓸 취향을 정한다. 취향은 보조라 읽지 못해도 검색은 막지 않는다.
+
+    회원 id가 있으면 취향 저장소에서 꺼내고, 없으면 요청에 실린 취향 프로필(비회원)을
+    읽는다. 둘 다 오면 회원 id를 따른다(docs/comparison/spec.md 2장).
+
+    Returns:
+        (취향, 읽지 못했는지). 저장소에 그 회원의 취향이 없으면 읽지 못한 게 아니라
+        취향이 없는 것이라 (None, False)다.
+    """
+    if body.user_id is not None:
+        profile, invalid = _stored_taste(store, body.user_id)
+    elif body.taste_profile is not None:
+        profile, invalid = _sent_taste(body.taste_profile)
+    else:
+        return None, False
+    if profile is not None and (
         len(profile.features) > MAX_TASTE_FEATURES
         or len(profile.free_texts) > MAX_TASTE_FREE_TEXTS
     ):
         _log("taste_invalid", error="too_large")
-        return None
-    return profile
+        return None, True
+    return profile, invalid
+
+
+def _stored_taste(
+    store: TasteStore | None, user_id: str
+) -> tuple[TasteProfile | None, bool]:
+    """회원 취향을 저장소에서 꺼낸다. 저장소가 없거나 읽지 못하면 읽지 못한 것이다."""
+    if store is None:
+        _log("taste_invalid", error="NO_TASTE_STORE")
+        return None, True
+    try:
+        return store.find(user_id), False
+    except StoreError as e:
+        _log("taste_store_failed", error=str(e))
+    except (ValueError, KeyError, TypeError, AttributeError) as e:
+        _log("taste_invalid", error=type(e).__name__)
+    return None, True
+
+
+def _sent_taste(data: dict[str, Any]) -> tuple[TasteProfile | None, bool]:
+    """요청에 실린 취향 프로필을 읽는다."""
+    try:
+        return TasteProfile.from_dict(data), False
+    except (ValueError, KeyError, TypeError, AttributeError) as e:
+        _log("taste_invalid", error=type(e).__name__)
+        return None, True
 
 
 def _card_body(card: Card) -> CardBody:

@@ -21,7 +21,7 @@ JSON 이름은 camelCase다. 요청에 모르는 속성이 있으면 400이고(�
 {
   "query": "역삼역 조용하게 대화하기 좋은 식당",
   "mapBounds": {"swLat": 37.49, "swLng": 127.02, "neLat": 37.51, "neLng": 127.05},
-  "tasteProfile": {"schema": "taste-profile/v0", "user_id": "u1", "features": [], "free_texts": []}
+  "userId": "0b6f3c1e-8a4d-4c2b-9f7e-2d5a1c9e4b10"
 }
 ```
 
@@ -30,9 +30,10 @@ JSON 이름은 camelCase다. 요청에 모르는 속성이 있으면 400이고(�
 | `query` | O | 요청문. 1~200자, 공백만은 안 된다 | `query` |
 | `previousConditions` | | 후속 검색이면 직전 응답의 `conditions`. 읽지 못하면 새 검색으로 본다 | `previousConditions` |
 | `mapBounds` | | 지도 영역(숫자). 있으면 역 대신 이 영역으로 거른다. 빠진 값은 제한하지 않고 `{}`는 없는 것으로 본다 | `mapBounds` |
-| `tasteProfile` | | 사용자의 39 취향 프로필 JSON 그대로(형식은 39 spec). 없거나 읽지 못하면 취향 없이 정렬한다 | 없음(5장) |
+| `userId` | | 회원 id(1~64자). BE가 로그인으로 확인한 id만 보낸다. 있으면 AI가 회원 취향(`user_preferences`)을 직접 읽고 `tasteProfile`은 읽지 않는다. 취향이 저장돼 있지 않으면 취향 없이 정렬한다 | 로그인 사용자 |
+| `tasteProfile` | | 비회원 취향. 기기가 저장한 39 취향 프로필 JSON을 BE가 그대로 넘긴다(형식은 39 spec). 없거나 읽지 못하면 취향 없이 정렬한다 | 없음(5장) |
 
-`conditions`에는 해석 결과만 있다. 후속 검색 때도 `tasteProfile`과 `mapBounds`는 다시 보내야 한다. BE의 `preferences`와 `cursor`는 null이라도 넣으면 400이므로 AI 요청용 DTO를 따로 둔다.
+`conditions`에는 해석 결과만 있다. 후속 검색 때도 `userId`(또는 `tasteProfile`)와 `mapBounds`는 다시 보내야 한다. BE의 `preferences`와 `cursor`는 null이라도 넣으면 400이므로 AI 요청용 DTO를 따로 둔다.
 
 ### 응답
 
@@ -79,7 +80,7 @@ JSON 이름은 camelCase다. 요청에 모르는 속성이 있으면 400이고(�
 | `fallbacks` 값 | AI가 대신 한 일 |
 | --- | --- |
 | `PREVIOUS_INVALID` | 이전 조건을 읽지 못해 새 검색으로 했다 |
-| `TASTE_INVALID` | 취향 프로필을 읽지 못해 취향 없이 정렬했다 |
+| `TASTE_INVALID` | 취향을 읽지 못해(형식이 깨짐, 취향 저장소 장애) 취향 없이 정렬했다 |
 | `INTERPRET_LLM_FAILED` | 해석 LLM이 실패해 낱말 규칙으로 해석했다 |
 | `PROFILE_INVALID` | 40 프로필을 읽지 못한 장소를 뺐다 |
 | `RANK_LLM_FAILED` | 정렬 LLM이 실패했거나 시간이 모자라 유사도로 정렬했다 |
@@ -211,4 +212,4 @@ LLM 실패와 읽지 못한 입력은 오류가 아니라 200과 `fallbacks`로 
 | 점수 구간 | 딱 맞음 85~100, 대체로 65~84, 일부 40~64, 안 맞음 0~39. 따질 조건이 없으면 모두 딱 맞음 |
 | 모델 | LLM `gpt-4o-mini`, 인코더 arctic-ko 리비전 `55ec6e9`. 40 장소 벡터도 같은 인코더로 만든다 |
 | 인증 | Modal이면 `Modal-Key`, `Modal-Secret` 헤더(인프라 설계 11.2). GPU 서버는 미정 |
-| 취향 전달 | BE에는 `preferences`만 있어 `tasteProfile`을 보낼 수 없다. 방법을 BE와 정해야 한다 |
+| 취향 전달 | 회원은 `userId`로 보내고 AI가 `user_preferences`(저장 설계 V6)를 읽는다. 비회원은 기기가 저장한 프로필을 `tasteProfile`로 보낸다. 기기가 저장할 형식과 계산 주체는 FE·BE·39와 정해야 한다 |

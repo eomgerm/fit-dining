@@ -1,7 +1,8 @@
 """① 후보 뽑기. 거르기 조건에 맞는 장소 중 요청문과 가까운 순서로 고른다.
 
 거르기와 유사도 계산은 장소 저장소(Postgres + pgvector)가 SQL 한 번으로 한다.
-여기에는 저장소가 지켜야 할 모양만 둔다. 실제 구현은 `pg_store.py`다.
+여기에는 저장소가 지켜야 할 모양만 둔다. 구현은 `pg_store.py`(Postgres)와, 실제 장소
+DB가 생기기 전에 쓰는 `json_store.py`(JSON 파일)다.
 취향은 쓰지 않는다. 취향은 ② 정렬에서만 쓴다(docs/comparison/spec.md 4.2).
 """
 
@@ -24,8 +25,8 @@ class Candidate:
 
     Attributes:
         place: 장소
-        similarity: 요청문과 장소 요약의 코사인 유사도.
-            LLM 점수가 없을 때 핏 점수로 바꾼다.
+        similarity: 요청문과 장소 요약의 코사인 유사도. 값은 쓰지 않고 순서만 쓴다.
+            후보를 자를 때와 같은 등급 안에서 순서를 가를 때다.
     """
 
     place: Place
@@ -94,7 +95,7 @@ class VectorCounts:
 
 
 class StoreError(Exception):
-    """장소 저장소를 읽지 못했다. 접속 실패, 시간 초과, SQL 오류 등이다."""
+    """장소·취향 저장소를 읽지 못했다. 접속 실패, 시간 초과, SQL 오류 등이다."""
 
 
 class PlaceStore(Protocol):

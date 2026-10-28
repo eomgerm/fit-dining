@@ -5,14 +5,18 @@ pgserver(개발 의존성)로 Docker 없이 띄운다. BE Mock 장소 30곳
 문장을 공유 모듈 `fit_ai.embedding`의 문서 쪽 함수로 인코딩해 넣는다. 리뷰 수와 시설은 Mock 카드의 라벨과
 태그로 만든 예시 값이라 실제 데이터와 다르다.
 
-AI가 읽는 것은 뷰 `ai_place_search` 하나다(docs/comparison/api.md 부록). 여기서는 BE
+AI가 읽는 장소는 뷰 `ai_place_search` 하나다(`fit_ai.match.pg_store`). 여기서는 BE
 장소 테이블과 40 프로필 테이블을 조인한 뷰로 만들어, 실제 테이블 모양과 상관없이
-뷰만 맞추면 된다는 걸 보인다.
+뷰만 맞추면 된다는 걸 보인다. 회원 취향 예시(샘플 사용자 7명)도 저장 설계와 같은
+`user_preferences`에 넣는다.
 
     uv run python scripts/dev_db.py          # 띄우고 채운다
     uv run python scripts/dev_db.py --stop   # 멈춘다
+    uv run python scripts/dev_db.py --json samples/place/mock.json  # DB 없이 파일로 쓴다
 
-마지막 줄에 찍히는 `DATABASE_URL`을 `.env`에 넣고 앱을 띄운다.
+마지막 줄에 찍히는 `DATABASE_URL`을 `.env`에 넣고 앱을 띄운다. `--json`이면 같은 장소를
+뷰의 행 모양(요약 벡터는 프로필 안)으로 파일에 쓴다. 실제 장소 DB가 생기기 전에
+`PLACES_FILE`로 읽는 예시 파일이다(`fit_ai.match.json_store`).
 """
 
 import argparse
@@ -54,7 +58,21 @@ CREATE VIEW ai_place_search AS
 SELECT p.id AS place_id, p.category_group, p.station, p.lat, p.lng, p.facilities,
        pp.profile, pp.summary_vector
 FROM place p JOIN place_profile pp ON pp.place_id = p.id;
+DROP TABLE IF EXISTS user_preferences;
+CREATE TABLE user_preferences (
+  user_id text PRIMARY KEY,
+  mood text,
+  priorities text[] NOT NULL DEFAULT '{}',
+  purposes text[] NOT NULL DEFAULT '{}',
+  tastes jsonb,
+  features jsonb NOT NULL DEFAULT '[]'
+);
 """
+"""개발 DB 스키마. `user_preferences`는 BE 마이그레이션 V2·V6의 컬럼 중 AI가 읽는 것과
+온보딩 원본만 둔다(docs/specs/profile-storage/spec.md)."""
+
+SAMPLE_TASTES = REPO / "ai/samples/taste/profiles.json"
+"""회원 취향 예시. 취향 분석의 샘플 사용자 7명이고 회원 id는 파일의 키("1"~"7")다."""
 
 LABEL_CODES = {
     **{condition.label: condition.id for condition in CONDITIONS.values()},
@@ -83,23 +101,39 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--data", type=Path, default=DEFAULT_DATA, help="데이터 폴더")
     parser.add_argument("--stop", action="store_true", help="띄운 DB를 멈춘다")
+    parser.add_argument("--json", type=Path, help="DB 대신 이 파일에 장소를 쓴다")
     args = parser.parse_args()
     if args.stop:
         pgserver.pg_ctl(["-D", str(args.data), "stop"])
         print("멈췄다:", args.data)
         return
 
-    args.data.mkdir(parents=True, exist_ok=True)
-    # 스크립트가 끝나도 DB는 떠 있게 둔다. 멈출 때는 --stop을 쓴다.
-    uri = pgserver.get_server(args.data, cleanup_mode=None).get_uri()
     places = json.loads(MOCK_PLACES.read_text(encoding="utf-8"))["places"]
     summaries = [_summary(place) for place in places]
     vectors = embedding.encode_documents(summaries)
+    rows = [
+        _row(place, summary, vector)
+        for place, summary, vector in zip(places, summaries, vectors, strict=True)
+    ]
+    if args.json:
+        args.json.parent.mkdir(parents=True, exist_ok=True)
+        # 벡터가 길어 장소 하나를 한 줄로 쓴다.
+        lines = ",\n".join(json.dumps(row, ensure_ascii=False) for row in rows)
+        args.json.write_text(f"[\n{lines}\n]\n", encoding="utf-8")
+        print(f"장소 {len(rows)}곳을 썼다: {args.json}")
+        return
+
+    args.data.mkdir(parents=True, exist_ok=True)
+    # 스크립트가 끝나도 DB는 떠 있게 둔다. 멈출 때는 --stop을 쓴다.
+    uri = pgserver.get_server(args.data, cleanup_mode=None).get_uri()
     with psycopg.connect(uri) as conn:
         conn.execute(SCHEMA_SQL)
-        for place, summary, vector in zip(places, summaries, vectors, strict=True):
-            _insert(conn, place, summary, vector)
-    print(f"장소 {len(places)}곳을 넣었다.")
+        for place, row in zip(places, rows, strict=True):
+            _insert(conn, row, place["card"]["place"]["name"])
+        tastes = json.loads(SAMPLE_TASTES.read_text(encoding="utf-8"))
+        for user_id, profile in tastes.items():
+            _insert_taste(conn, user_id, profile)
+    print(f"장소 {len(places)}곳, 회원 취향 {len(tastes)}명을 넣었다.")
     print(f"DATABASE_URL={uri}")
 
 
@@ -146,48 +180,83 @@ def _features(place: dict, rng: random.Random) -> list[dict]:
     ]
 
 
-def _insert(
-    conn: psycopg.Connection,
-    place: dict,
-    summary: str,
-    vector: list[float],
-) -> None:
+def _row(place: dict, summary: str, vector: list[float]) -> dict:
+    """Mock 장소 하나를 뷰 `ai_place_search`의 행 모양으로 만든다. 요약 벡터는 프로필 안에 둔다."""
     info = place["card"]["place"]
     present = set(place["detail"]["facilities"])
-    # Mock은 있는 시설만 적는다. 예시라서 적히지 않은 시설은 없음으로 둔다.
-    facilities = {code: code in present for code in FACILITIES}
-    profile = {
-        "schema": "place-profile/v0",
-        "place_id": f"mock-{info['id']}",
-        "food_type": None,
-        "summary": {"text": summary, "vector": list(vector)},
-        "embedding": {
-            "model": embedding.MODEL_ID,
-            "revision": embedding.REVISION,
-            "prompt": "document",
+    return {
+        "place_id": info["id"],
+        "category_group": info["categoryGroup"],
+        "station": info["station"],
+        "lat": info["lat"],
+        "lng": info["lng"],
+        # Mock은 있는 시설만 적는다. 예시라서 적히지 않은 시설은 없음으로 둔다.
+        "facilities": {code: code in present for code in FACILITIES},
+        "profile": {
+            "schema": "place-profile/v0",
+            "place_id": f"mock-{info['id']}",
+            "food_type": None,
+            "summary": {"text": summary, "vector": list(vector)},
+            "embedding": {
+                "model": embedding.MODEL_ID,
+                "revision": embedding.REVISION,
+                "prompt": "document",
+            },
+            "features": _features(place, random.Random(info["id"])),
+            "personas": [],
+            "evidence": [],
         },
-        "features": _features(place, random.Random(info["id"])),
-        "personas": [],
-        "evidence": [],
     }
+
+
+def _insert(conn: psycopg.Connection, row: dict, name: str) -> None:
     conn.execute(
         "INSERT INTO place VALUES (%s, %s, %s, %s, %s, %s, %s)",
         (
-            info["id"],
-            info["name"],
-            info["categoryGroup"],
-            info["station"],
-            info["lat"],
-            info["lng"],
-            json.dumps(facilities),
+            row["place_id"],
+            name,
+            row["category_group"],
+            row["station"],
+            row["lat"],
+            row["lng"],
+            json.dumps(row["facilities"]),
         ),
     )
+    vector = row["profile"]["summary"]["vector"]
     conn.execute(
         "INSERT INTO place_profile VALUES (%s, %s, %s::vector)",
         (
-            info["id"],
-            json.dumps(profile, ensure_ascii=False),
+            row["place_id"],
+            json.dumps(row["profile"], ensure_ascii=False),
             "[" + ",".join(repr(value) for value in vector) + "]",
+        ),
+    )
+
+
+def _insert_taste(conn: psycopg.Connection, user_id: str, profile: dict) -> None:
+    """취향 프로필 하나를 저장 설계(V6)의 `user_preferences` 행 모양으로 넣는다.
+
+    회원 id는 샘플 파일의 키("1"~"7")다. 7번은 1번 사용자가 리뷰를 쓴 뒤라 프로필의
+    `user_id`가 1번과 같다. `features`는 그대로 넣고, 취향 문장은 코드 없는
+    칩(`code: null`)으로 바꾼다. 해석 대기 문장(`like: null`)은 저장 설계에 없어 넣지
+    않는다.
+    """
+    chips = [
+        {
+            "polarity": "LIKE" if text["like"] else "DISLIKE",
+            "label": text["text"],
+            "code": None,
+            "vector": text["vector"],
+        }
+        for text in profile["free_texts"]
+        if text["like"] is not None
+    ]
+    conn.execute(
+        "INSERT INTO user_preferences (user_id, tastes, features) VALUES (%s, %s, %s)",
+        (
+            user_id,
+            json.dumps(chips, ensure_ascii=False),
+            json.dumps(profile["features"], ensure_ascii=False),
         ),
     )
 

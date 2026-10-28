@@ -104,6 +104,10 @@ uv run --env-file .env uvicorn server.main:app   # 검색 API를 띄운다
 uv run python scripts/dev_db.py --stop           # 개발 DB를 멈춘다
 ```
 
+개발 DB에는 회원 취향 예시(샘플 사용자 7명, 회원 id `"1"`~`"7"`)도 들어 있어 요청에 `"userId": "1"`을 넣으면 취향을 읽습니다.
+
+Postgres 없이 띄우려면 `.env`의 `DATABASE_URL`을 비우고 `PLACES_FILE=samples/place/mock.json`, `TASTE_FILE=samples/taste/profiles.json`을 넣습니다. 같은 BE Mock 장소 30곳과 샘플 사용자 7명을 파일에서 읽습니다. 실제 장소 DB가 생기기 전에 배포할 때도 이 방법을 씁니다. 인코더 모델이나 Mock 장소가 바뀌면 `uv run python scripts/dev_db.py --json samples/place/mock.json`으로 다시 만듭니다.
+
 요청 해석 평가는 `experiments/interpretation/`에 있습니다.
 
 ## GPU로 돌리기

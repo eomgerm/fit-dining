@@ -149,6 +149,23 @@ class FakeStore:
         return self.counts
 
 
+STORED_TASTE = TasteProfile.from_dict(TASTE_BODY | {"user_id": "user-1"})
+
+
+class FakeTasteStore:
+    """정해 둔 취향을 돌려주거나 예외를 던지는 회원 취향 저장소. 받은 회원 id를 남긴다."""
+
+    def __init__(self, outcome: object = STORED_TASTE) -> None:
+        self.outcome = outcome
+        self.calls: list[str] = []
+
+    def find(self, user_id: str) -> TasteProfile | None:
+        self.calls.append(user_id)
+        if isinstance(self.outcome, Exception):
+            raise self.outcome
+        return self.outcome  # type: ignore[return-value]
+
+
 @pytest.fixture(autouse=True)
 def searched(monkeypatch: pytest.MonkeyPatch) -> FakeSearch:
     fake = FakeSearch()
@@ -319,6 +336,55 @@ class TestSearch:
         assert searched.calls[0][0].taste is None
         assert data["fallbacks"] == ["TASTE_INVALID"]
 
+    def test_member_taste_from_store(self, searched: FakeSearch) -> None:
+        """검색_회원id가있으면_취향저장소에서꺼내고요청의취향프로필은읽지않는다"""
+        tastes = FakeTasteStore()
+
+        data = post(
+            client(taste_store=tastes),
+            userId="user-1",
+            tasteProfile={"schema": "taste-profile/v1"},
+        )
+
+        assert tastes.calls == ["user-1"]
+        assert searched.calls[0][0].taste == STORED_TASTE
+        assert data["fallbacks"] == []
+
+    def test_member_without_taste(self, searched: FakeSearch) -> None:
+        """검색_저장소에회원취향이없으면_취향없이검색하고폴백은없다"""
+        data = post(client(taste_store=FakeTasteStore(outcome=None)), userId="u9")
+
+        assert searched.calls[0][0].taste is None
+        assert data["fallbacks"] == []
+
+    @pytest.mark.parametrize(
+        "outcome",
+        [
+            StoreError("취향 저장소를 읽지 못했다: OperationalError"),
+            ValueError("취향의 weight가 범위를 벗어났다"),
+            TasteProfile.from_dict(
+                TASTE_BODY | {"features": TASTE_BODY["features"] * 51}
+            ),
+        ],
+    )
+    def test_member_taste_unreadable(
+        self, searched: FakeSearch, outcome: object
+    ) -> None:
+        """검색_회원취향을읽지못하거나상한을넘으면_취향없이검색하고TASTE_INVALID를담는다"""
+        tastes = FakeTasteStore(outcome=outcome)
+
+        data = post(client(taste_store=tastes), userId="user-1")
+
+        assert searched.calls[0][0].taste is None
+        assert data["fallbacks"] == ["TASTE_INVALID"]
+
+    def test_member_without_taste_store(self, searched: FakeSearch) -> None:
+        """검색_회원id가왔는데취향저장소가없으면_취향없이검색하고TASTE_INVALID를담는다"""
+        data = post(client(), userId="user-1")
+
+        assert searched.calls[0][0].taste is None
+        assert data["fallbacks"] == ["TASTE_INVALID"]
+
     def test_unreadable_profiles_reported(self, searched: FakeSearch) -> None:
         """검색_저장소가읽지못한프로필이있으면_PROFILE_INVALID를담는다"""
         searched.outcome = make_result(invalid=(7,))
@@ -363,6 +429,9 @@ class TestErrors:
             {"query": QUERY_TEXT, "tasteProfile": "QUIET"},
             {"query": QUERY_TEXT, "mapBounds": {"swLat": "37.4"}},
             {"query": QUERY_TEXT, "mapBounds": {"swLat": True}},
+            {"query": QUERY_TEXT, "userId": ""},
+            {"query": QUERY_TEXT, "userId": "u" * 65},
+            {"query": QUERY_TEXT, "userId": 3},
         ],
     )
     def test_invalid_request_is_problem_400(

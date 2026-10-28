@@ -14,6 +14,9 @@ from fit_ai.match.interpretation import MAX_CODES, MAX_TEXT_LENGTH
 MAX_QUERY_LENGTH = 200
 """요청문 길이 상한. BE 검색 요청과 같다(검색 spec 3번, 인프라 BE 계약 #18)."""
 
+MAX_USER_ID_LENGTH = 64
+"""회원 id 길이 상한. BE 회원 id는 UUID 문자열(36자)이다."""
+
 
 class _Body(BaseModel):
     model_config = ConfigDict(
@@ -68,13 +71,19 @@ class SearchBody(_Body):
         previous_conditions: 후속 조건이면 FE가 돌려보낸 기준 요청의 `conditions`.
             BE는 해석하지 않고 그대로 넘긴다. 읽지 못하면 새 검색으로 본다.
         map_bounds: 지도 영역. 있으면 역 대신 좌표로 거른다.
-        taste_profile: 취향 프로필(`taste-profile/v0`) JSON. 읽지 못하면 취향 없이
-            검색하고 `fallbacks`에 `TASTE_INVALID`를 담는다.
+        user_id: 회원 id. BE가 로그인으로 확인한 id다. 있으면 취향 저장소에서 그 회원의
+            취향을 꺼내고 `taste_profile`은 읽지 않는다. 비회원이면 null이다.
+        taste_profile: 비회원 취향 프로필(`taste-profile/v0`) JSON. 기기가 저장한
+            프로필을 BE가 그대로 넘긴다. 읽지 못하면 취향 없이 검색하고 `fallbacks`에
+            `TASTE_INVALID`를 담는다.
     """
 
     query: str = Field(min_length=1, max_length=MAX_QUERY_LENGTH)
     previous_conditions: dict[str, Any] | None = None
     map_bounds: MapBoundsBody | None = None
+    user_id: str | None = Field(
+        default=None, min_length=1, max_length=MAX_USER_ID_LENGTH
+    )
     taste_profile: dict[str, Any] | None = None
 
     @field_validator("query")

@@ -1,0 +1,239 @@
+"""장소·취향 저장소의 JSON 파일 구현. 실제 DB가 생기기 전에 배포와 개발에 쓰는 임시 구현이다.
+
+장소 파일은 장소마다 `PgPlaceStore`가 읽는 행과 같은 값(장소 정보와 40 프로필)을 담은
+객체 목록이다. 요약 벡터는 프로필의 `summary.vector`를 쓴다. 시작할 때 한 번 읽어
+메모리에 두고, 거르기와 유사도 순서는 `pg_store.FIND_SQL`과 같은 규칙으로 매번 전부
+계산한다. 예시 장소 수십 곳용이다. 예시 파일은 `scripts/dev_db.py --json`으로 만든다.
+
+취향 파일은 취향 프로필(`taste-profile/v0`)을 담은 객체나 목록이다. 샘플 사용자 7명
+(`samples/taste/profiles.json`)을 그대로 읽는다.
+"""
+
+import json
+import math
+from collections.abc import Sequence
+from pathlib import Path
+from typing import Any, TypeGuard
+
+from fit_ai import embedding
+from fit_ai.match.candidates import (
+    Candidate,
+    Found,
+    MapBounds,
+    PlaceFilter,
+    StoreError,
+    VectorCounts,
+)
+from fit_ai.match.place import Place, PlaceInfo, read_facilities
+from fit_ai.match.taste_select import TasteProfile
+
+
+class JsonPlaceStore:
+    """JSON 파일에서 후보를 뽑는다."""
+
+    def __init__(self, path: Path) -> None:
+        """장소 파일을 읽어 둔다.
+
+        파일 모양이 틀리면 앱이 시작할 때 드러나도록 여기서 멈춘다. 장소 하나의 프로필이
+        깨진 것은 `find`에서 그 장소만 뺀다(`PgPlaceStore`와 같다).
+
+        Args:
+            path: 장소 파일 경로
+
+        Raises:
+            OSError: 파일을 읽지 못했을 때
+            ValueError: JSON이 아니거나, 객체 목록이 아니거나, 정수 `place_id`가 없는
+                장소가 있을 때
+        """
+        rows = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(rows, list) or not all(isinstance(r, dict) for r in rows):
+            raise ValueError("장소 파일이 객체 목록이 아니다")
+        if not all(_is_int(row.get("place_id")) for row in rows):
+            raise ValueError("place_id가 정수가 아닌 장소가 있다")
+        self._rows: list[dict[str, Any]] = rows
+        self._vectors = [_comparable_vector(row) for row in rows]
+
+    def find(self, place_filter: PlaceFilter, query: Sequence[float], k: int) -> Found:
+        """조건에 맞는 장소 중 요청문과 가까운 k곳을 뽑는다.
+
+        Args:
+            place_filter: 거르기 조건
+            query: 요청문 벡터
+            k: 뽑을 후보 수
+
+        Returns:
+            뽑은 후보. 프로필을 읽지 못한 장소는 빼고 id를 남긴다.
+
+        Raises:
+            StoreError: 장소 벡터와 요청문 벡터의 차원이 다를 때
+        """
+        scored = [
+            (_cosine(vector, query), row)
+            for row, vector in zip(self._rows, self._vectors, strict=True)
+            if vector is not None and _matches(row, place_filter)
+        ]
+        # 정렬은 안정적이라 유사도가 같으면 파일 순서다.
+        scored.sort(key=lambda item: -item[0])
+        candidates: list[Candidate] = []
+        invalid: list[int] = []
+        # PgPlaceStore처럼 k곳을 자른 뒤에 프로필을 읽는다.
+        for similarity, row in scored[:k]:
+            try:
+                info = PlaceInfo(
+                    row["place_id"],
+                    row["category_group"],
+                    row["station"],
+                    read_facilities(row.get("facilities")),
+                )
+                place = Place.from_dict(row["profile"], info)
+            except (ValueError, KeyError, TypeError, AttributeError):
+                invalid.append(row["place_id"])
+                continue
+            candidates.append(Candidate(place, similarity))
+        return Found(tuple(candidates), tuple(invalid))
+
+    def vector_counts(self) -> VectorCounts:
+        """비교할 수 있는 장소와 검색에서 빠지는 장소를 센다.
+
+        Returns:
+            장소 수. 빠지는 장소는 벡터가 없거나, 모델·버전이 공유 모듈과 다르거나,
+            질의 쪽 벡터인 장소다.
+        """
+        comparable = sum(vector is not None for vector in self._vectors)
+        return VectorCounts(comparable, len(self._vectors) - comparable)
+
+
+class JsonTasteStore:
+    """JSON 파일에서 회원 취향을 꺼낸다.
+
+    객체 파일이면 키를 회원 id로 본다. 샘플 파일(`samples/taste/profiles.json`)은 7번이
+    1번 사용자가 리뷰를 쓴 뒤의 취향이라 `user_id`가 1번과 같아서, 키("1"~"7")로
+    구분한다. 목록 파일이면 프로필의 `user_id`로 찾는다.
+    """
+
+    def __init__(self, path: Path) -> None:
+        """취향 파일을 읽어 둔다. 모양이 틀리면 앱이 시작할 때 드러나도록 여기서 멈춘다.
+
+        Args:
+            path: 취향 파일 경로. 값이 취향 프로필인 객체이거나 취향 프로필 목록이다.
+
+        Raises:
+            OSError: 파일을 읽지 못했을 때
+            ValueError: JSON이 아니거나, 읽지 못하는 취향 프로필이 있거나, 목록
+                파일에 같은 `user_id`가 두 번 나올 때
+        """
+        data = json.loads(path.read_text(encoding="utf-8"))
+        items = None
+        if isinstance(data, dict):
+            items = list(data.items())
+        elif isinstance(data, list):
+            items = [
+                (p.get("user_id") if isinstance(p, dict) else None, p) for p in data
+            ]
+        if items is None or not all(isinstance(p, dict) for _, p in items):
+            raise ValueError("취향 파일이 취향 프로필을 담은 객체나 목록이 아니다")
+        try:
+            self._profiles = {
+                user_id: TasteProfile.from_dict(item) for user_id, item in items
+            }
+        except (KeyError, TypeError) as e:
+            raise ValueError(
+                f"읽지 못하는 취향 프로필이 있다: {type(e).__name__}"
+            ) from e
+        if len(self._profiles) != len(items):
+            raise ValueError("같은 회원 id가 두 번 나온다")
+
+    def find(self, user_id: str) -> TasteProfile | None:
+        """회원 한 명의 취향 프로필을 꺼낸다.
+
+        Args:
+            user_id: 회원 id
+
+        Returns:
+            취향 프로필. 파일에 없는 회원이면 None이다.
+        """
+        return self._profiles.get(user_id)
+
+
+def _comparable_vector(row: dict[str, Any]) -> list[float] | None:
+    """요청문과 비교할 수 있는 요약 벡터. FIND_SQL의 모델 확인 조건과 같다.
+
+    벡터가 없거나, 모델·리비전이 공유 모듈과 다르거나, 문서 쪽(`document`) 벡터가
+    아니면 None이다.
+    """
+    profile = row.get("profile")
+    if not isinstance(profile, dict):
+        return None
+    meta, summary = profile.get("embedding"), profile.get("summary")
+    if not isinstance(meta, dict) or not isinstance(summary, dict):
+        return None
+    if (meta.get("model"), meta.get("revision"), meta.get("prompt")) != (
+        embedding.MODEL_ID,
+        embedding.REVISION,
+        "document",
+    ):
+        return None
+    vector = summary.get("vector")
+    if not isinstance(vector, list) or not all(_is_number(v) for v in vector):
+        return None
+    return vector
+
+
+def _matches(row: dict[str, Any], place_filter: PlaceFilter) -> bool:
+    """FIND_SQL의 거르기 조건과 같다. 조건 값이 None이면 그 조건으로 거르지 않는다."""
+    if (
+        place_filter.category_group is not None
+        and row.get("category_group") != place_filter.category_group
+    ):
+        return False
+    if place_filter.station is not None and row.get("station") != place_filter.station:
+        return False
+    if place_filter.bounds is not None and not _inside(
+        row.get("lat"), row.get("lng"), place_filter.bounds
+    ):
+        return False
+    facilities = row.get("facilities")
+    # 없다고 확인된(false) 시설만 뺀다. 키가 없거나 null이면 모름이라 남긴다.
+    return not (
+        isinstance(facilities, dict)
+        and any(facilities.get(code) is False for code in place_filter.facilities)
+    )
+
+
+def _inside(lat: object, lng: object, bounds: MapBounds) -> bool:
+    """좌표가 지도 영역 안인지. 빠진 경계는 제한하지 않는다.
+
+    경계가 있는데 좌표가 없으면 SQL처럼 영역 밖으로 본다.
+    """
+    for low, value, high in (
+        (bounds.sw_lat, lat, bounds.ne_lat),
+        (bounds.sw_lng, lng, bounds.ne_lng),
+    ):
+        if low is None and high is None:
+            continue
+        if not _is_number(value):
+            return False
+        if (low is not None and value < low) or (high is not None and value > high):
+            return False
+    return True
+
+
+def _cosine(vector: Sequence[float], query: Sequence[float]) -> float:
+    """코사인 유사도. pgvector의 `1 - (a <=> b)`와 같다."""
+    if len(vector) != len(query):
+        # pgvector도 차원이 다르면 SQL 오류를 낸다.
+        raise StoreError("장소 벡터와 요청문 벡터의 차원이 다르다")
+    dot = math.fsum(a * b for a, b in zip(vector, query, strict=True))
+    norm = math.sqrt(math.fsum(a * a for a in vector)) * math.sqrt(
+        math.fsum(b * b for b in query)
+    )
+    return dot / norm if norm else 0.0
+
+
+def _is_number(value: object) -> TypeGuard[int | float]:
+    # bool은 int의 하위 타입이라 따로 막는다.
+    return isinstance(value, int | float) and not isinstance(value, bool)
+
+
+def _is_int(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)

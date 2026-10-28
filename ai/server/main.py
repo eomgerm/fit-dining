@@ -9,11 +9,15 @@ import logging
 import os
 import traceback
 from collections.abc import Mapping
+from pathlib import Path
 
 import httpx
 
 from fit_ai import embedding, gms
-from fit_ai.match.pg_store import PgPlaceStore
+from fit_ai.match.candidates import PlaceStore
+from fit_ai.match.json_store import JsonPlaceStore, JsonTasteStore
+from fit_ai.match.pg_store import PgPlaceStore, PgTasteStore
+from fit_ai.match.taste_select import TasteStore
 from server.app import Dependencies, create_app
 
 logger = logging.getLogger("server")
@@ -24,8 +28,8 @@ def build_dependencies(env: Mapping[str, str]) -> Dependencies:
 
     GMS 접속 설정은 공유 모듈 `fit_ai.gms`가 환경변수에서 직접 읽는다. 설정이 틀리면
     장애로 가리지 않고 시작할 때 ValueError로 드러낸다(취향 spec 1단계). 인코더를
-    올리지 못하거나 DB 접속 주소가 없으면 앱은 떠 있지만 `/healthz`와 검색은 503을
-    돌려준다.
+    올리지 못하거나 장소 저장소(DB 접속 주소나 장소 파일)가 없으면 앱은 떠 있지만
+    `/healthz`와 검색은 503을 돌려준다.
 
     Args:
         env: 환경변수
@@ -34,18 +38,49 @@ def build_dependencies(env: Mapping[str, str]) -> Dependencies:
         앱의 의존성
 
     Raises:
-        ValueError: `GMS_ENABLED=true`인데 GMS 접속 설정이 틀렸을 때
+        ValueError: `GMS_ENABLED=true`인데 GMS 접속 설정이 틀렸을 때, 장소·취향 파일의
+            모양이 틀렸을 때
+        OSError: 장소·취향 파일을 읽지 못했을 때
     """
     gms.check_config()
-    dsn = env.get("DATABASE_URL")
     return Dependencies(
         embedding_ready=_warm_up_embedding(env),
-        store=PgPlaceStore(dsn, int(env.get("DB_POOL_SIZE", "2"))) if dsn else None,
+        store=_place_store(env),
         gms_timeout=float(env.get("GMS_TIMEOUT_SECONDS", "5.0")),
         # 검색마다 GMS를 두 번 부르므로 연결을 다시 써서 TLS 연결 시간을 아낀다.
         gms_client=httpx.Client(),
         max_concurrent=int(env.get("MAX_CONCURRENT_REQUESTS", "8")),
+        taste_store=_taste_store(env),
     )
+
+
+def _place_store(env: Mapping[str, str]) -> PlaceStore | None:
+    """장소 저장소를 고른다. DB 접속 주소가 있으면 DB를, 없고 장소 파일이 있으면 파일을 쓴다.
+
+    장소 파일은 실제 장소 DB가 생기기 전에 쓰는 임시 구현이다. 둘 다 없으면 None이다.
+    """
+    dsn = env.get("DATABASE_URL")
+    if dsn:
+        return PgPlaceStore(dsn, int(env.get("DB_POOL_SIZE", "2")))
+    places_file = env.get("PLACES_FILE")
+    if places_file:
+        return JsonPlaceStore(Path(places_file))
+    return None
+
+
+def _taste_store(env: Mapping[str, str]) -> TasteStore | None:
+    """회원 취향 저장소를 고른다. 장소 저장소와 같은 규칙이다.
+
+    DB 접속 주소가 있으면 DB(`user_preferences`)를, 없고 취향 파일이 있으면 파일을 쓴다.
+    둘 다 없으면 None이고, 회원 id로 온 검색은 취향 없이 한다.
+    """
+    dsn = env.get("DATABASE_URL")
+    if dsn:
+        return PgTasteStore(dsn)
+    taste_file = env.get("TASTE_FILE")
+    if taste_file:
+        return JsonTasteStore(Path(taste_file))
+    return None
 
 
 def _warm_up_embedding(env: Mapping[str, str]) -> bool:

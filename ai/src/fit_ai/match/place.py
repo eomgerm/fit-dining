@@ -4,7 +4,7 @@
 그래야 화면의 근거 항목과 핏 점수가 같은 근거를 말한다(docs/comparison/spec.md 4.3).
 
 비교는 장소 프로필을 만들지 않고 읽기만 한다. 장소 데이터는 AI가 들고 있지 않고
-검색마다 Postgres 뷰에서 거른 장소를 프로필째 읽는다(docs/comparison/api.md 부록).
+검색마다 장소 저장소에서 거른 장소를 프로필째 읽는다(`candidates.PlaceStore`).
 프로필 형식은 40 spec 7단계의 `place-profile/v0`을 따른다. 40 spec이 초안이라 읽는
 방식도 확정이 아니다. 정리는 docs/comparison/spec.md 4.2에 있다.
 """
@@ -153,6 +153,30 @@ class Place:
             summary=summary,
             conditions=_conditions(data.get("features", [])),
         )
+
+
+def read_facilities(value: object) -> dict[str, bool | None]:
+    """장소 정보의 시설 값을 읽는다. true·false가 아닌 값은 모름으로 본다.
+
+    장소 저장소 구현체(`pg_store.py`, `json_store.py`)가 함께 쓴다.
+
+    Args:
+        value: 시설 코드별 유무를 담은 JSON 값. None이면 모두 모름이다.
+
+    Returns:
+        시설 코드별 유무. None은 모름이다.
+
+    Raises:
+        TypeError: JSON 객체가 아닐 때. 그 장소는 읽지 못한 장소로 뺀다.
+    """
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise TypeError("facilities가 JSON 객체가 아니다")
+    return {
+        code: known if isinstance(known, bool) else None
+        for code, known in value.items()
+    }
 
 
 def _conditions(features: list[dict[str, Any]]) -> dict[str, ConditionEvidence]:

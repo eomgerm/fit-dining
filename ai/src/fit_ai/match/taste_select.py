@@ -1,12 +1,14 @@
 """⓪ 취향 고르기. 분석이 만든 취향 프로필을 읽고 이번 요청과 겹치는 취향을 뺀다.
 
 요청이 장기 취향보다 앞선다(PRD AC-28, AC-30). 규칙은 docs/comparison/spec.md 4.3이다.
-취향 프로필 형식은 분석 담당의 spec(S15P31A302-39)을 따른다.
+취향 프로필 형식은 분석 담당의 spec(S15P31A302-39)을 따른다. 회원 취향은 취향
+저장소(`TasteStore`)에서 꺼낸다. 구현은 `pg_store.py`(DB)와, 실제 취향 DB가 생기기 전에
+쓰는 `json_store.py`(JSON 파일)다.
 """
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 
 from fit_ai.features import FEATURES
 from fit_ai.match.conditions import Layer
@@ -104,6 +106,30 @@ class TasteProfile:
             features=tuple(_feature(f) for f in _list(data.get("features", []))),
             free_texts=tuple(_free_text(t) for t in _list(data.get("free_texts", []))),
         )
+
+
+class TasteStore(Protocol):
+    """사용자 id로 회원의 취향 프로필을 꺼내는 저장소.
+
+    취향 분석이 계산해 둔 결과를 읽기만 한다. 비교는 취향을 계산하지 않는다.
+    """
+
+    def find(self, user_id: str) -> TasteProfile | None:
+        """회원 한 명의 취향 프로필을 꺼낸다.
+
+        Args:
+            user_id: 회원 id. BE가 로그인으로 확인한 id다.
+
+        Returns:
+            취향 프로필. 그 회원의 취향이 저장돼 있지 않으면 None이다.
+
+        Raises:
+            StoreError: 저장소를 읽지 못했을 때
+            ValueError: 저장된 취향의 값이 범위를 벗어났을 때
+            KeyError: 저장된 취향에 필수 필드가 없을 때
+            TypeError: 저장된 취향의 타입이 다를 때
+        """
+        ...
 
 
 def select_tastes(

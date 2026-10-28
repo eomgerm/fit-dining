@@ -4,12 +4,18 @@ GMS 접속 설정은 공유 모듈 `fit_ai.gms`가 환경변수에서 직접 읽
 요청문 인코더 모델은 공유 모듈 `fit_ai.embedding`을 가짜로 바꿔 올린다.
 """
 
+from pathlib import Path
+
 import httpx
 import pytest
 
 from fit_ai import embedding
-from fit_ai.match.pg_store import PgPlaceStore
+from fit_ai.match.json_store import JsonPlaceStore, JsonTasteStore
+from fit_ai.match.pg_store import PgPlaceStore, PgTasteStore
 from server.main import build_dependencies
+
+MOCK_FILE = Path(__file__).resolve().parents[2] / "samples" / "place" / "mock.json"
+TASTE_FILE = Path(__file__).resolve().parents[2] / "samples" / "taste" / "profiles.json"
 
 
 def test_builds_store_and_settings(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -33,6 +39,38 @@ def test_builds_store_and_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     deps.gms_client.close()
 
 
+def test_places_file_without_database(monkeypatch: pytest.MonkeyPatch) -> None:
+    """의존성_DB주소가없고장소파일이있으면_파일저장소를만든다"""
+    monkeypatch.setenv("GMS_ENABLED", "false")
+
+    deps = build_dependencies(
+        {"PLACES_FILE": str(MOCK_FILE), "TASTE_FILE": str(TASTE_FILE)}
+    )
+
+    assert isinstance(deps.store, JsonPlaceStore)
+    assert isinstance(deps.taste_store, JsonTasteStore)
+    deps.gms_client.close()
+
+
+def test_database_wins_over_places_file(monkeypatch: pytest.MonkeyPatch) -> None:
+    """의존성_DB주소와장소파일이모두있으면_DB를쓴다"""
+    monkeypatch.setenv("GMS_ENABLED", "false")
+
+    deps = build_dependencies(
+        {
+            "DATABASE_URL": "postgresql://nobody@127.0.0.1:1/none",
+            "PLACES_FILE": str(MOCK_FILE),
+            "TASTE_FILE": str(TASTE_FILE),
+        }
+    )
+
+    assert isinstance(deps.store, PgPlaceStore)
+    assert isinstance(deps.taste_store, PgTasteStore)
+    deps.store.close()
+    deps.taste_store.close()
+    deps.gms_client.close()
+
+
 def test_off_unless_set(monkeypatch: pytest.MonkeyPatch) -> None:
     """의존성_DB주소와인코더설정이없으면_둘다준비되지않은것으로본다"""
     monkeypatch.setenv("GMS_ENABLED", "false")
@@ -40,6 +78,7 @@ def test_off_unless_set(monkeypatch: pytest.MonkeyPatch) -> None:
     deps = build_dependencies({})
 
     assert deps.store is None
+    assert deps.taste_store is None
     assert deps.embedding_ready is False
 
 

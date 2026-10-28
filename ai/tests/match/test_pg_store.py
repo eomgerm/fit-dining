@@ -1,8 +1,9 @@
-"""Postgres 장소 저장소를 실제 SQL로 확인한다.
+"""Postgres 장소·취향 저장소를 실제 SQL로 확인한다.
 
 pgserver(개발 의존성)로 임시 Postgres(pgvector)를 띄우고, 뷰 `ai_place_search`와 같은
 컬럼의 테이블을 만들어 거르기, 유사도 순서, 모델 확인, 깨진 프로필을 본다.
 벡터는 2차원 가짜 값이고, 모델·리비전은 공유 모듈 `fit_ai.embedding`의 값을 쓴다.
+취향은 저장 설계(V6)와 같은 `user_preferences`를 만들어 회원 취향을 읽는지 본다.
 """
 
 import json
@@ -16,7 +17,7 @@ from fit_ai.match.candidates import MapBounds, PlaceFilter, StoreError, VectorCo
 pgserver = pytest.importorskip("pgserver")
 psycopg = pytest.importorskip("psycopg")
 
-from fit_ai.match.pg_store import PgPlaceStore
+from fit_ai.match.pg_store import PgPlaceStore, PgTasteStore
 
 QUERY = (1.0, 0.0)
 
@@ -47,6 +48,34 @@ ROWS = [
 ]
 
 
+QUIET_FEATURES = [
+    {"code": "QUIET", "layer": "axis", "like": True, "weight": 1},
+    {"code": "LIVELY", "layer": "axis", "like": False, "weight": 1},
+]
+
+# (회원 id, 온보딩 칩, 취향 계산 결과). 칩 모양은 저장 설계 V6의 [{polarity, label, code, vector}]다.
+TASTE_ROWS = [
+    (
+        "user-1",
+        [
+            {"polarity": "LIKE", "label": "조용한 곳", "code": "QUIET", "vector": None},
+            {
+                "polarity": "LIKE",
+                "label": "담백한 국물 요리를 먹을 수 있는 곳",
+                "code": None,
+                "vector": [0.6, 0.8],
+            },
+            {"polarity": "DISLIKE", "label": "비싼 곳", "code": None, "vector": None},
+        ],
+        QUIET_FEATURES,
+    ),
+    # 취향 분석 결과를 더하기 전의 온보딩 원본 칩(code, vector 키 없음), 계산 실패한 결과([])
+    ("user-2", [{"polarity": "LIKE", "label": "넓은 데"}], []),
+    ("user-3", None, [{"code": "QUIET", "layer": "axis", "like": True, "weight": 9}]),
+    ("user-4", [{"polarity": "MAYBE", "label": "조용한 곳"}], QUIET_FEATURES),
+]
+
+
 @pytest.fixture(scope="module")
 def database(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
     """예시 장소를 넣은 임시 DB의 접속 주소"""
@@ -71,6 +100,20 @@ def database(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
                     json.dumps(data, ensure_ascii=False),
                     None if vector is None else f"[{vector[0]},{vector[1]}]",
                 ),
+            )
+        # 저장 설계(V2·V6)의 user_preferences 중 AI가 읽는 컬럼과 온보딩 원본
+        conn.execute(
+            """
+            CREATE TABLE user_preferences (
+              user_id text PRIMARY KEY, mood text, priorities text[], purposes text[],
+              tastes jsonb, features jsonb NOT NULL DEFAULT '[]'
+            )"""
+        )
+        for user_id, tastes, features in TASTE_ROWS:
+            conn.execute(
+                "INSERT INTO user_preferences (user_id, mood, tastes, features) "
+                "VALUES (%s, 'QUIET', %s, %s)",
+                (user_id, json.dumps(tastes, ensure_ascii=False), json.dumps(features)),
             )
     yield uri
     server.cleanup()
@@ -198,3 +241,57 @@ def test_connection_failure() -> None:
             broken.find(PlaceFilter(), QUERY, 1)
     finally:
         broken.close()
+
+
+@pytest.fixture(scope="module")
+def tastes(database: str) -> Iterator[PgTasteStore]:
+    taste_store = PgTasteStore(database)
+    yield taste_store
+    taste_store.close()
+
+
+class TestTasteStore:
+    """회원 취향"""
+
+    def test_reads_features_and_uncoded_chips(self, tastes: PgTasteStore) -> None:
+        """취향저장소_회원행이있으면_계산결과와코드없는칩을취향문장으로읽는다"""
+        profile = tastes.find("user-1")
+
+        assert profile is not None
+        assert profile.user_id == "user-1"
+        assert [(f.code, f.like, f.weight) for f in profile.features] == [
+            ("QUIET", True, 1),
+            ("LIVELY", False, 1),
+        ]
+        # 코드가 붙은 칩은 이미 features에 있어 문장으로 다시 넣지 않는다.
+        assert [(t.text, t.like, t.vector) for t in profile.free_texts] == [
+            ("담백한 국물 요리를 먹을 수 있는 곳", True, (0.6, 0.8)),
+            ("비싼 곳", False, None),
+        ]
+
+    def test_onboarding_only_row(self, tastes: PgTasteStore) -> None:
+        """취향저장소_분석결과없이원본칩만있으면_취향없고칩은보관만하는문장이다"""
+        profile = tastes.find("user-2")
+
+        assert profile is not None
+        assert profile.features == ()
+        assert [(t.text, t.usable) for t in profile.free_texts] == [("넓은 데", False)]
+
+    def test_missing_user_is_none(self, tastes: PgTasteStore) -> None:
+        """취향저장소_회원행이없으면_None이다"""
+        assert tastes.find("nobody") is None
+
+    @pytest.mark.parametrize("user_id", ["user-3", "user-4"])
+    def test_broken_row_raises(self, tastes: PgTasteStore, user_id: str) -> None:
+        """취향저장소_가중치가범위밖이거나polarity가다르면_ValueError다"""
+        with pytest.raises(ValueError):
+            tastes.find(user_id)
+
+    def test_connection_failure(self) -> None:
+        """취향저장소_접속하지못하면_StoreError다"""
+        broken = PgTasteStore("postgresql://nobody@127.0.0.1:1/none")
+        try:
+            with pytest.raises(StoreError, match="취향 저장소"):
+                broken.find("user-1")
+        finally:
+            broken.close()

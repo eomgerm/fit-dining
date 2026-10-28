@@ -1,8 +1,11 @@
-"""장소 저장소의 Postgres 구현. 뷰 `ai_place_search` 하나만 읽는다.
+"""장소·취향 저장소의 Postgres 구현. 장소는 뷰 `ai_place_search`, 취향은
+`user_preferences`를 읽는다.
 
-거르기와 유사도 계산(pgvector `<=>`, 코사인 거리)을 SQL 한 번으로 한다. 장소가 300곳
-남짓이라 인덱스 없이 전부 계산해도 빠르고 결과가 정확하다. 뷰의 컬럼은
-docs/comparison/api.md 부록에 있다. 뷰를 만들고 채우는 일은 BE와 40이 한다.
+장소는 거르기와 유사도 계산(pgvector `<=>`, 코사인 거리)을 SQL 한 번으로 한다. 장소가
+300곳 남짓이라 인덱스 없이 전부 계산해도 빠르고 결과가 정확하다. 장소 뷰는 로컬 개발
+DB(`scripts/dev_db.py`)의 임시 모양이고, 실제 DB는 저장 설계의 `places`,
+`place_personas`로 다시 맞춘다. 취향 표의 모양은 저장 설계(docs/specs/profile-storage/
+spec.md, BE 마이그레이션 V6)를 따른다.
 """
 
 from collections.abc import Sequence
@@ -19,7 +22,9 @@ from fit_ai.match.candidates import (
     StoreError,
     VectorCounts,
 )
-from fit_ai.match.place import Place, PlaceInfo
+from fit_ai.match.place import Place, PlaceInfo, read_facilities
+from fit_ai.match.taste_select import SCHEMA as TASTE_SCHEMA
+from fit_ai.match.taste_select import TasteProfile
 
 FIND_SQL = """
 SELECT place_id, category_group, station, facilities,
@@ -60,8 +65,16 @@ FROM (
 """비교할 수 있는 장소와 검색에서 빠지는 장소(벡터 없음, 모델·버전 다름, 질의 쪽
 벡터)를 센다."""
 
+TASTE_SQL = """
+SELECT features, tastes FROM user_preferences WHERE user_id = %(user_id)s
+"""
+"""회원 한 명의 취향 계산 결과(`features`)와 온보딩 칩(`tastes`)을 읽는다."""
+
 SESSION_OPTIONS = "-c statement_timeout=2000 -c default_transaction_read_only=on"
 """접속마다 거는 설정. 쿼리는 2초를 넘기면 끊고, 읽기만 한다."""
+
+POLARITY = {"LIKE": True, "DISLIKE": False}
+"""온보딩 칩의 `polarity`(BE `Preferences.Polarity`)를 좋아함 여부로 바꾸는 표"""
 
 
 class PgPlaceStore:
@@ -75,14 +88,7 @@ class PgPlaceStore:
             pool_size: 컨테이너 하나가 여는 접속 수 상한. Postgres 접속 수 상한(60)을
                 컨테이너 수로 나눠 정한다.
         """
-        self._pool = ConnectionPool(
-            dsn,
-            min_size=0,
-            max_size=pool_size,
-            timeout=3,
-            kwargs={"connect_timeout": 3, "options": SESSION_OPTIONS},
-            open=True,
-        )
+        self._pool = _open_pool(dsn, pool_size)
 
     def find(self, place_filter: PlaceFilter, query: Sequence[float], k: int) -> Found:
         """조건에 맞는 장소 중 요청문과 가까운 k곳을 뽑는다.
@@ -120,7 +126,7 @@ class PgPlaceStore:
         for place_id, category_group, station, facilities, profile, similarity in rows:
             try:
                 info = PlaceInfo(
-                    place_id, category_group, station, _facilities(facilities)
+                    place_id, category_group, station, read_facilities(facilities)
                 )
                 place = Place.from_dict(profile, info)
             except (ValueError, KeyError, TypeError, AttributeError):
@@ -150,28 +156,109 @@ class PgPlaceStore:
         self._pool.close()
 
     def _fetch(self, sql: str, params: dict[str, Any]) -> list[tuple[Any, ...]]:
-        try:
-            with self._pool.connection() as conn:
-                return conn.execute(sql, params).fetchall()
-        except (psycopg.Error, PoolTimeout) as e:
-            # 메시지에 접속 주소나 값이 섞일 수 있어 종류만 남긴다.
-            raise StoreError(f"장소 저장소를 읽지 못했다: {type(e).__name__}") from e
+        return _fetch(self._pool, sql, params, "장소")
 
 
-def _facilities(value: object) -> dict[str, bool | None]:
-    """뷰의 `facilities`를 읽는다. true·false가 아닌 값은 모름으로 본다.
+class PgTasteStore:
+    """`user_preferences`에서 회원 취향을 꺼낸다. 접속은 풀로 돌려 쓴다.
+
+    취향 분석이 온보딩 때와 04:00 배치에서 계산해 둔 결과만 읽는다. 온보딩 원본
+    (`mood`, `priorities`, `purposes`)은 읽지 않는다.
+    """
+
+    def __init__(self, dsn: str, pool_size: int = 1) -> None:
+        """접속 풀을 연다. 접속은 처음 쓸 때 맺는다.
+
+        Args:
+            dsn: Postgres 접속 주소(`DATABASE_URL`)
+            pool_size: 접속 수 상한. 검색마다 한 행을 읽는 짧은 쿼리라 하나로 둔다.
+        """
+        self._pool = _open_pool(dsn, pool_size)
+
+    def find(self, user_id: str) -> TasteProfile | None:
+        """회원 한 명의 취향 프로필을 꺼낸다.
+
+        Args:
+            user_id: 회원 id
+
+        Returns:
+            취향 프로필. `user_preferences`에 그 회원의 행이 없으면 None이다.
+
+        Raises:
+            StoreError: 저장소를 읽지 못했을 때
+            ValueError: 저장된 취향의 값이 범위를 벗어났거나 `polarity`가 다를 때
+            KeyError: 저장된 취향에 필수 필드가 없을 때
+            TypeError: 저장된 취향의 타입이 다를 때
+        """
+        rows = _fetch(self._pool, TASTE_SQL, {"user_id": user_id}, "취향")
+        if not rows:
+            return None
+        features, tastes = rows[0]
+        return _taste_profile(user_id, features, tastes)
+
+    def close(self) -> None:
+        """접속 풀을 닫는다."""
+        self._pool.close()
+
+
+def _open_pool(dsn: str, size: int) -> ConnectionPool:
+    return ConnectionPool(
+        dsn,
+        min_size=0,
+        max_size=size,
+        timeout=3,
+        kwargs={"connect_timeout": 3, "options": SESSION_OPTIONS},
+        open=True,
+    )
+
+
+def _fetch(
+    pool: ConnectionPool, sql: str, params: dict[str, Any], name: str
+) -> list[tuple[Any, ...]]:
+    """쿼리 결과를 모두 읽는다. 실패하면 `name` 저장소를 읽지 못한 StoreError다."""
+    try:
+        with pool.connection() as conn:
+            return conn.execute(sql, params).fetchall()
+    except (psycopg.Error, PoolTimeout) as e:
+        # 메시지에 접속 주소나 값이 섞일 수 있어 종류만 남긴다.
+        raise StoreError(f"{name} 저장소를 읽지 못했다: {type(e).__name__}") from e
+
+
+def _taste_profile(user_id: str, features: object, tastes: object) -> TasteProfile:
+    """`user_preferences` 한 행을 취향 프로필로 읽는다.
+
+    `features`는 취향 분석이 계산한 결과라 그대로 쓴다. 칩 중 코드가 붙은 것은 이미
+    `features`에 들어 있어 코드가 없는 칩만 취향 문장으로 읽는다. 벡터는 코드 없는
+    좋아함 칩에만 있다. `code` 키가 없는 칩(취향 분석 결과를 더하기 전의 온보딩 원본)도
+    벡터가 없어 보관만 하는 문장이 된다.
 
     Raises:
-        TypeError: JSON 객체가 아닐 때. 그 장소는 읽지 못한 장소로 뺀다.
+        ValueError: `polarity`가 LIKE·DISLIKE가 아니거나 취향 값이 범위를 벗어났을 때
+        KeyError: 칩이나 취향에 필수 필드가 없을 때
+        TypeError: 칩 목록이나 취향의 타입이 다를 때
     """
-    if value is None:
-        return {}
-    if not isinstance(value, dict):
-        raise TypeError("facilities가 JSON 객체가 아니다")
-    return {
-        code: known if isinstance(known, bool) else None
-        for code, known in value.items()
-    }
+    chips = [] if tastes is None else tastes
+    if not isinstance(chips, list) or not all(isinstance(c, dict) for c in chips):
+        raise TypeError("tastes가 객체 목록이 아니다")
+    if any(chip["polarity"] not in POLARITY for chip in chips):
+        raise ValueError("칩의 polarity가 LIKE나 DISLIKE가 아니다")
+    free_texts = [
+        {
+            "text": chip["label"],
+            "like": POLARITY[chip["polarity"]],
+            "vector": chip.get("vector"),
+        }
+        for chip in chips
+        if chip.get("code") is None
+    ]
+    return TasteProfile.from_dict(
+        {
+            "schema": TASTE_SCHEMA,
+            "user_id": user_id,
+            "features": features,
+            "free_texts": free_texts,
+        }
+    )
 
 
 def _vector_text(vector: Sequence[float]) -> str:
