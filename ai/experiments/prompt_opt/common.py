@@ -14,7 +14,7 @@ from fit_ai import gms
 
 # 반성은 강한 모델로 한다. judge는 대상(gms.MODEL)과 다른 모델을 써서
 # 자기 선호 편향(arXiv 2404.13076)을 피한다
-REFLECTION_MODEL = "openai:/gpt-5.5"
+REFLECTION_MODEL = os.environ.get("REFLECTION_MODEL", "openai:/gpt-5.5")
 JUDGE_MODEL = "openai:/gpt-5.5"
 
 # trace에 리뷰 원문이 들어가므로 기록은 레포 밖에 둔다(README "데이터")
@@ -41,12 +41,17 @@ def setup(experiment: str) -> None:
     mlflow.set_experiment(experiment)
 
 
-def optimize(name, template, predict_fn, train, scorers, *, max_metric_calls: int):
+def optimize(
+    name, template, predict_fn, train, scorers, *, max_metric_calls: int, val=None
+):
     """프롬프트를 등록하고 GEPA로 한 번 최적화한다.
 
     `predict_fn`은 `mlflow.genai.load_prompt(f"prompts:/{name}@latest").format(...)`로
     프롬프트를 읽어야 한다. 최적화 중에는 이름이 같은 프롬프트의 템플릿이 후보로 바뀐다.
     GMS 호출은 대략 max_metric_calls × (1 + LLM judge 수)에 반성 호출 몇 번이 더해진다.
+
+    `val`이 없으면 GEPA는 train으로 후보를 고른다. MLflow는 val을 받지 않아
+    gepa_kwargs로 넘긴다. 모양은 MLflow가 train을 바꾼 것과 같은 inputs·expectations 레코드다.
     """
     prompt = mlflow.genai.register_prompt(name=name, template=template)
     return mlflow.genai.optimize_prompts(
@@ -54,7 +59,9 @@ def optimize(name, template, predict_fn, train, scorers, *, max_metric_calls: in
         train_data=train,
         prompt_uris=[prompt.uri],
         optimizer=GepaPromptOptimizer(
-            reflection_model=REFLECTION_MODEL, max_metric_calls=max_metric_calls
+            reflection_model=REFLECTION_MODEL,
+            max_metric_calls=max_metric_calls,
+            gepa_kwargs={"valset": val} if val else None,
         ),
         scorers=scorers,
     )

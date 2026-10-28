@@ -20,7 +20,7 @@
 {"id": "complaint-06", "split": "val", "slice": "complaint", "text": "가격에 비해 별로인 곳은 안 가요", "items": [{"kind": "taste", "code": "VALUE_FOR_MONEY", "like": true}]}
 {"id": "complaint-07", "split": "train", "slice": "complaint", "text": "시끌벅적한 술집은 피곤해요", "items": [{"kind": "taste", "code": "QUIET", "like": true}]}
 {"id": "complaint-08", "split": "test", "slice": "complaint", "text": "음악이 너무 구리면 못 있겠어요", "items": [{"kind": "taste", "code": "GOOD_MUSIC", "like": true}]}
-{"id": "complaint-09", "split": "train", "slice": "complaint", "text": "삭막하고 썰렁한 분위기 싫어요", "items": [{"kind": "taste", "code": "COZY", "like": true}]}
+{"id": "complaint-09", "split": "train", "slice": "complaint", "text": "삭막하고 썰렁한 분위기 싫어요", "items": [{"kind": "taste", "code": "QUIET", "like": true}], "note": "삭막·썰렁 = 조용함 쪽(사람 확인)"}
 {"id": "complaint-10", "split": "test", "slice": "complaint", "text": "혼자 가면 눈치 보이는 곳 싫어요", "items": [{"kind": "taste", "code": "PURPOSE_SOLO", "like": true}]}
 {"id": "complaint-11", "split": "val", "slice": "complaint", "text": "평범하고 뻔한 가게는 재미없어요", "items": [{"kind": "taste", "code": "UNIQUE_CONCEPT", "like": true}]}
 {"id": "complaint-12", "split": "train", "slice": "complaint", "text": "뷰 없는 지하 가게는 답답해요", "items": [{"kind": "taste", "code": "VIEW_OUTDOOR", "like": true}]}
