@@ -1,7 +1,6 @@
 import type {
   CategoryGroup,
   EvidenceSource,
-  Facility,
   OpenStatus,
   ScoreItem,
 } from "./place-types";
@@ -22,12 +21,50 @@ export const OPEN_STATUS_LABELS: Record<OpenStatus, string | undefined> = {
   UNKNOWN: undefined,
 };
 
-export const FACILITY_LABELS: Record<Facility, string> = {
-  PARKING: "주차",
-  WIFI: "무선 인터넷",
-  GROUP: "단체 이용",
-  RESERVATION: "예약",
+// 시설 칩 아이콘의 묶음. 비슷한 시설은 같은 아이콘을 쓴다
+export type FacilityIconGroup =
+  | "parking"
+  | "wifi"
+  | "group"
+  | "reservation"
+  | "takeout"
+  | "restroom"
+  | "kids"
+  | "wheelchair"
+  | "pet"
+  | "menu";
+
+// 네이버 시설 이름 → 아이콘 묶음. 여기에 없는 이름은 기본 아이콘이다
+export const FACILITY_ICON_GROUPS: Record<string, FacilityIconGroup> = {
+  주차: "parking",
+  발렛파킹: "parking",
+  "장애인 주차구역": "parking",
+  "무선 인터넷": "wifi",
+  "단체 이용 가능": "group",
+  예약: "reservation",
+  포장: "takeout",
+  배달: "takeout",
+  "테이크아웃 할인": "takeout",
+  "남/녀 화장실 구분": "restroom",
+  유아의자: "kids",
+  키즈메뉴: "kids",
+  노키즈존: "kids",
+  "출입구 휠체어 이용가능": "wheelchair",
+  "좌석 휠체어 이용가능": "wheelchair",
+  "화장실 휠체어 이용가능": "wheelchair",
+  "반려동물 동반": "pet",
+  "비건 메뉴": "menu",
+  "글루텐프리 메뉴": "menu",
+  "유기농 메뉴": "menu",
+  "무한 리필": "menu",
+  "와인 페어링": "menu",
 };
+
+export function facilityIconGroup(name: string): FacilityIconGroup | undefined {
+  return Object.hasOwn(FACILITY_ICON_GROUPS, name)
+    ? FACILITY_ICON_GROUPS[name]
+    : undefined;
+}
 
 export const EVIDENCE_LABELS: Record<EvidenceSource, string> = {
   REQUEST: "요청",

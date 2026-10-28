@@ -6,7 +6,6 @@ export type OpenStatus =
   "OPEN" | "CLOSING_SOON" | "BREAK" | "CLOSED" | "UNKNOWN";
 export type EvidenceSource = "REQUEST" | "PREFERENCE";
 export type DayCode = "MON" | "TUE" | "WED" | "THU" | "FRI" | "SAT" | "SUN";
-export type Facility = "PARKING" | "WIFI" | "GROUP" | "RESERVATION";
 
 export type LatLng = { lat: number; lng: number };
 
@@ -77,21 +76,50 @@ export type PlaceSearchResponse = {
   changeSummary?: string;
 };
 
+// 시각은 HH:mm. close가 open과 같거나 이르면 다음 날 마감이고, 24시간 영업은 둘 다 "00:00"이다.
+// 휴무일은 closed가 true이고, 영업시간 정보가 없는 요일은 closed가 false인데 open과 close가 없다
 export type Hours = {
   dayOfWeek: DayCode;
   open?: string;
   close?: string;
-  breakStart?: string;
-  breakEnd?: string;
+  breaks: Break[];
   lastOrders: string[];
   closed: boolean;
 };
 
+export type Break = { start: string; end: string };
+
 export type Menu = {
-  category: string;
+  category?: string;
   name: string;
+  description?: string;
+  // 정가일 때만 있다. 화면의 가격은 priceText(원문)다
   price?: number;
+  priceText?: string;
+  labels: string[];
+  representative: boolean;
   photoUrl?: string;
+};
+
+// line은 네이버 값 그대로("2", "신분당")
+export type Subway = {
+  station: string;
+  line?: string;
+  exit?: string;
+  walkMinutes?: number;
+};
+
+export type Parking = { free?: boolean; note?: string; valet: boolean };
+export type Pet = { allowed?: boolean; note?: string };
+export type Corkage = { allowed?: boolean; note?: string };
+export type Seat = { name: string; description?: string };
+
+export type Broadcast = {
+  channel?: string;
+  program?: string;
+  episode?: string;
+  airedOn?: string;
+  menu?: string;
 };
 
 export type PlaceDetail = {
@@ -105,5 +133,19 @@ export type PlaceDetail = {
   hours: Hours[];
   closedDayNote?: string;
   menus: Menu[];
-  facilities: Facility[];
+  // 네이버 시설 이름 그대로
+  facilities: string[];
+  // 도보 거리순
+  subways: Subway[];
+  directions?: string;
+  parking?: Parking;
+  pet?: Pet;
+  noKidsZone: boolean;
+  corkage?: Corkage;
+  bookingUrl?: string;
+  seats: Seat[];
+  description?: string;
+  paymentMethods: string[];
+  broadcasts: Broadcast[];
+  extraLinks: string[];
 };

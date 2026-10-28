@@ -1,20 +1,34 @@
 "use client";
 
-import { useState, type ReactElement, type ReactNode } from "react";
+import {
+  useState,
+  type ComponentType,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 
 import { cn } from "@/shared/lib/cn";
 import { Note } from "@/shared/ui/display/note";
 import { Tag } from "@/shared/ui/display/tag";
+import type { IconProps } from "@/shared/ui/icon/icon";
+import { BabyIcon } from "@/shared/ui/icon/icons/baby";
 import { CalendarIcon } from "@/shared/ui/icon/icons/calendar";
+import { CheckIcon } from "@/shared/ui/icon/icons/check";
 import { ChevronDownIcon } from "@/shared/ui/icon/icons/chevron-down";
 import { ChevronRightIcon } from "@/shared/ui/icon/icons/chevron-right";
 import { ClockIcon } from "@/shared/ui/icon/icons/clock";
 import { CopyIcon } from "@/shared/ui/icon/icons/copy";
 import { ExternalLinkIcon } from "@/shared/ui/icon/icons/external-link";
 import { GlobeIcon } from "@/shared/ui/icon/icons/globe";
+import { LeafIcon } from "@/shared/ui/icon/icons/leaf";
+import { ParkingIcon } from "@/shared/ui/icon/icons/parking";
+import { PawIcon } from "@/shared/ui/icon/icons/paw";
 import { PhoneIcon } from "@/shared/ui/icon/icons/phone";
 import { PinIcon } from "@/shared/ui/icon/icons/pin";
+import { RestroomIcon } from "@/shared/ui/icon/icons/restroom";
+import { ShoppingBagIcon } from "@/shared/ui/icon/icons/shopping-bag";
 import { UsersIcon } from "@/shared/ui/icon/icons/users";
+import { WheelchairIcon } from "@/shared/ui/icon/icons/wheelchair";
 import { WifiIcon } from "@/shared/ui/icon/icons/wifi";
 import { SectionHeader } from "@/shared/ui/layout/section-header";
 import { useToast } from "@/shared/ui/overlay/toast";
@@ -29,13 +43,13 @@ import {
 } from "../model/opening-hours";
 import {
   evidenceText,
-  FACILITY_LABELS,
+  facilityIconGroup,
   missingEvidenceNotes,
   OPEN_STATUS_LABELS,
+  type FacilityIconGroup,
 } from "../model/place-labels";
 import type {
   DayCode,
-  Facility,
   Hours,
   LatLng,
   Menu,
@@ -186,24 +200,30 @@ export function HomeTab({
   );
 }
 
-// 메뉴 탭(6-02, 와이어프레임 DetailMenu). 카테고리별로 묶는다
+// 메뉴 탭(6-02, 와이어프레임 DetailMenu). 원래 순서대로 보이고, 이어지는 같은 카테고리마다 머리글을 붙인다.
+// 카테고리 없는 메뉴는 머리글 없이 그 자리에 보인다. 메뉴 이름은 한 장소 안에서도 겹칠 수 있어 순번을 key로 쓴다
 export function MenuTab({ detail }: TabProps) {
-  // Map.groupBy는 Next 16 기본 대상(Safari 16.4, Chrome 111)에 없다
-  const categories = new Map<string, Menu[]>();
+  const groups: { category?: string; menus: Menu[] }[] = [];
   for (const menu of detail.menus) {
-    categories.set(menu.category, [
-      ...(categories.get(menu.category) ?? []),
-      menu,
-    ]);
+    const last = groups[groups.length - 1];
+    if (last && last.category === menu.category) {
+      last.menus.push(menu);
+    } else {
+      groups.push({ category: menu.category, menus: [menu] });
+    }
   }
   return (
     <div className="flex flex-col px-5 pt-2 pb-7">
-      {[...categories].map(([category, menus]) => (
-        <section key={category} className="flex flex-col">
-          <h2 className="mt-6 text-label-md text-ink-muted">{category}</h2>
+      {groups.map((group, index) => (
+        <section key={index} className="flex flex-col">
+          {group.category && (
+            <h2 className="mt-6 text-label-md text-ink-muted">
+              {group.category}
+            </h2>
+          )}
           <ul className="divide-y divide-line border-b border-line">
-            {menus.map((menu) => (
-              <li key={menu.name}>
+            {group.menus.map((menu, menuIndex) => (
+              <li key={menuIndex}>
                 <MenuRow menu={menu} />
               </li>
             ))}
@@ -215,16 +235,146 @@ export function MenuTab({ detail }: TabProps) {
   );
 }
 
-// 시설 칩의 아이콘. 공통 아이콘에 주차 아이콘이 없어 주차는 글자만 둔다
-const FACILITY_ICONS: Partial<Record<Facility, ReactElement>> = {
-  WIFI: <WifiIcon size="md" />,
-  GROUP: <UsersIcon size="md" />,
-  RESERVATION: <CalendarIcon size="md" />,
+// 시설 칩의 아이콘. 묶음에 없는 시설은 기본 아이콘(체크)이다
+const FACILITY_ICONS: Record<FacilityIconGroup, ComponentType<IconProps>> = {
+  parking: ParkingIcon,
+  wifi: WifiIcon,
+  group: UsersIcon,
+  reservation: CalendarIcon,
+  takeout: ShoppingBagIcon,
+  restroom: RestroomIcon,
+  kids: BabyIcon,
+  wheelchair: WheelchairIcon,
+  pet: PawIcon,
+  menu: LeafIcon,
 };
 
-// 정보 탭(6-04, 와이어프레임 DetailInfo)
+function FacilityIcon({ name }: { name: string }) {
+  const group = facilityIconGroup(name);
+  const Icon = group ? FACILITY_ICONS[group] : CheckIcon;
+  return <Icon size="md" data-icon={group ?? "default"} />;
+}
+
+// 노선이 숫자면 "2호선", 아니면 끝에 "선"을 붙인다("신분당" → "신분당선")
+function subwayLine(line: string) {
+  if (/^\d+$/.test(line)) return `${line}호선`;
+  return line.endsWith("선") ? line : `${line}선`;
+}
+
+function dotted(parts: (string | false | undefined)[]) {
+  return parts.filter(Boolean).join(" · ");
+}
+
+function yesNo(value: boolean | undefined, yes: string, no: string) {
+  if (value === undefined) return undefined;
+  return value ? yes : no;
+}
+
+function ExternalLink({
+  href,
+  children,
+}: {
+  href: string;
+  children: ReactNode;
+}) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="break-all text-primary-strong underline"
+    >
+      {children}
+    </a>
+  );
+}
+
+// 정보 탭의 "제목 · 내용" 줄. 이 순서가 화면 순서이고, 내용이 없는 항목은 줄째 뺀다
+function infoLines(detail: PlaceDetail): [string, ReactNode[]][] {
+  const { parking, pet, corkage } = detail;
+  const lines: [string, (ReactNode | false | undefined)[]][] = [
+    [
+      "지하철",
+      detail.subways.map((subway) =>
+        dotted([
+          subway.station,
+          subway.line && subwayLine(subway.line),
+          subway.exit && `${subway.exit}번 출구`,
+          subway.walkMinutes !== undefined && `도보 ${subway.walkMinutes}분`,
+        ]),
+      ),
+    ],
+    ["찾아오는 길", [detail.directions]],
+    [
+      "주차",
+      [
+        parking &&
+          dotted([
+            yesNo(parking.free, "무료", "유료"),
+            parking.valet && "발렛",
+            parking.note,
+          ]),
+      ],
+    ],
+    [
+      "예약",
+      [
+        detail.bookingUrl && (
+          <ExternalLink href={detail.bookingUrl}>네이버 예약</ExternalLink>
+        ),
+      ],
+    ],
+    [
+      "반려동물",
+      [pet && dotted([yesNo(pet.allowed, "동반 가능", "동반 불가"), pet.note])],
+    ],
+    ["노키즈존", [detail.noKidsZone && "운영"]],
+    [
+      "콜키지",
+      [
+        corkage &&
+          dotted([yesNo(corkage.allowed, "가능", "불가"), corkage.note]),
+      ],
+    ],
+    ["좌석", detail.seats.map((seat) => dotted([seat.name, seat.description]))],
+    ["업체 소개", [detail.description]],
+    [
+      "결제 수단",
+      [detail.paymentMethods.length > 0 && detail.paymentMethods.join(", ")],
+    ],
+    [
+      "방송",
+      detail.broadcasts.map((broadcast) =>
+        dotted([
+          broadcast.channel,
+          broadcast.program,
+          broadcast.episode && `${broadcast.episode}회`,
+          broadcast.airedOn,
+          broadcast.menu,
+        ]),
+      ),
+    ],
+    [
+      "다른 링크",
+      detail.extraLinks.map((url) => (
+        <ExternalLink key={url} href={url}>
+          {url}
+        </ExternalLink>
+      )),
+    ],
+  ];
+  return lines
+    .map(([title, values]): [string, ReactNode[]] => [
+      title,
+      values.filter((value) => !!value),
+    ])
+    .filter(([, values]) => values.length > 0);
+}
+
+// 정보 탭(6-04, 와이어프레임 DetailInfo). 기존 항목 아래, 안내 문구 위에 값이 있는 항목만 "제목 · 내용" 줄로 더한다
 export function InfoTab({ detail, here, now }: TabProps & { now: Date }) {
   const { place } = detail;
+  const lines = infoLines(detail);
   return (
     <div className="flex flex-col">
       <Section>
@@ -272,14 +422,45 @@ export function InfoTab({ detail, here, now }: TabProps & { now: Date }) {
                   key={facility}
                   className="flex h-9 items-center gap-1.5 rounded-sm border border-line bg-surface px-3 text-body-sm text-ink"
                 >
-                  {FACILITY_ICONS[facility]}
-                  {FACILITY_LABELS[facility]}
+                  <FacilityIcon name={facility} />
+                  {facility}
                 </li>
               ))}
             </ul>
           </>
         )}
-        <Note className={cn(detail.facilities.length > 0 && "mt-3.5")}>
+        {lines.length > 0 && (
+          <dl
+            className={cn(
+              "flex flex-col gap-2.5 text-body-md",
+              detail.facilities.length > 0 && "mt-5",
+            )}
+          >
+            {lines.map(([title, values]) => (
+              <div key={title} className="flex gap-1.5">
+                <dt className="shrink-0 text-ink-muted">{title}</dt>
+                <dd className="flex min-w-0 gap-1.5">
+                  <span aria-hidden className="text-ink-muted">
+                    ·
+                  </span>
+                  <span
+                    data-info-value
+                    className="flex min-w-0 flex-col gap-0.5 whitespace-pre-line text-ink"
+                  >
+                    {values.map((value, index) => (
+                      <span key={index}>{value}</span>
+                    ))}
+                  </span>
+                </dd>
+              </div>
+            ))}
+          </dl>
+        )}
+        <Note
+          className={cn(
+            (detail.facilities.length > 0 || lines.length > 0) && "mt-3.5",
+          )}
+        >
           정보가 실제와 다를 수 있어요
         </Note>
       </Section>

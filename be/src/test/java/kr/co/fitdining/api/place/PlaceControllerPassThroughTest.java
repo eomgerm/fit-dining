@@ -18,8 +18,8 @@ import kr.co.fitdining.api.place.dto.PlaceCard.Reason;
 import kr.co.fitdining.api.place.dto.PlaceCard.ReasonTag;
 import kr.co.fitdining.api.place.dto.PlaceCard.ScoreItem;
 import kr.co.fitdining.api.place.dto.PlaceCard;
+import kr.co.fitdining.api.place.dto.PlaceDetailResponse.Break;
 import kr.co.fitdining.api.place.dto.PlaceDetailResponse.DayCode;
-import kr.co.fitdining.api.place.dto.PlaceDetailResponse.Facility;
 import kr.co.fitdining.api.place.dto.PlaceDetailResponse.Hours;
 import kr.co.fitdining.api.place.dto.PlaceDetailResponse.Menu;
 import kr.co.fitdining.api.place.dto.PlaceDetailResponse;
@@ -71,8 +71,9 @@ class PlaceControllerPassThroughTest {
 
 	static final PlaceDetailResponse DETAIL = new PlaceDetailResponse(PLACE, "주소", List.of(), List.of("p.jpg"),
 			"010", null, OpenStatus.BREAK,
-			List.of(new Hours(DayCode.SUN, "25:00", "01:00", null, null, List.of(), false)),
-			null, List.of(new Menu("분류", "이름", -100, null)), List.of(Facility.WIFI, Facility.WIFI));
+			List.of(new Hours(DayCode.SUN, "25:00", "01:00", List.of(new Break("03:00", "02:00")), List.of(), false)),
+			null, List.of(new Menu("분류", "이름", null, -100, null, List.of(), false, null)), List.of("무선 인터넷", "무선 인터넷"),
+			List.of(), null, null, null, false, null, null, List.of(), null, List.of(), List.of(), List.of());
 
 	private static Map<String, Object> conditions() {
 		Map<String, Object> conditions = new LinkedHashMap<>();

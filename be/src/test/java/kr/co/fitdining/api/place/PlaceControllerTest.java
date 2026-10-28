@@ -69,11 +69,11 @@ class PlaceControllerTest {
 		@Test
 		@DisplayName("자동완성_이름접두일치가있으면_장소가맨위이고_추천받기가맨뒤다")
 		void suggest_namePrefixMatch_placesFirstAndActionLast() throws Exception {
-			mockMvc.perform(get("/api/v1/places/suggest").param("q", "역삼"))
+			mockMvc.perform(get("/api/v1/places/suggest").param("q", "커피"))
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$", hasSize(6)))
 					.andExpect(jsonPath("$[0:5].type", contains("PLACE", "PLACE", "PLACE", "PLACE", "PLACE")))
-					.andExpect(jsonPath("$[0:5].place.id", contains(8, 16, 21, 25, 30)))
+					.andExpect(jsonPath("$[0:5].place.id", contains(18, 33, 8, 27, 36)))
 					.andExpect(jsonPath("$[5].type").value("ACTION"))
 					.andExpect(jsonPath("$[5].label").value("이 조건으로 추천받기"))
 					.andExpect(jsonPath("$[5].place").doesNotExist())
@@ -83,20 +83,21 @@ class PlaceControllerTest {
 		@Test
 		@DisplayName("자동완성_이름접두일치가없으면_추천받기가맨위다")
 		void suggest_noNamePrefixMatch_actionFirst() throws Exception {
-			mockMvc.perform(get("/api/v1/places/suggest").param("q", "쌀국수"))
+			mockMvc.perform(get("/api/v1/places/suggest").param("q", "국밥"))
 					.andExpect(status().isOk())
-					.andExpect(jsonPath("$", hasSize(4)))
+					.andExpect(jsonPath("$", hasSize(5)))
 					.andExpect(jsonPath("$[0].type").value("ACTION"))
-					.andExpect(jsonPath("$[1:].place.id", contains(1, 2, 28)));
+					.andExpect(jsonPath("$[1:].place.id", contains(9, 13, 14, 31)));
 		}
 
 		@Test
 		@DisplayName("자동완성_메뉴이름으로만일치하면_matchedMenu에그메뉴를담는다")
 		void suggest_menuOnlyMatch_setsMatchedMenu() throws Exception {
-			mockMvc.perform(get("/api/v1/places/suggest").param("q", "쌀국수"))
-					.andExpect(jsonPath("$[1].matchedMenu").doesNotExist())
-					.andExpect(jsonPath("$[2].place.name").value("포레스트 키친"))
-					.andExpect(jsonPath("$[2].matchedMenu").value("양지 쌀국수"))
+			mockMvc.perform(get("/api/v1/places/suggest").param("q", "국밥"))
+					.andExpect(jsonPath("$[1].place.name").value("농민백암순대 본점"))
+					.andExpect(jsonPath("$[1].matchedMenu").value("국밥"))
+					.andExpect(jsonPath("$[2].matchedMenu").value("한우우거지국밥"))
+					.andExpect(jsonPath("$[3].place.name").value("미례국밥 강남삼성타운점"))
 					.andExpect(jsonPath("$[3].matchedMenu").doesNotExist());
 		}
 
@@ -104,18 +105,18 @@ class PlaceControllerTest {
 		@DisplayName("자동완성_업종이나메뉴일치는_순서에영향이없고_접두일치뒤에온다")
 		void suggest_categoryMatch_comesAfterPrefixMatches() throws Exception {
 			mockMvc.perform(get("/api/v1/places/suggest").param("q", "카페"))
-					.andExpect(jsonPath("$[0:5].place.id", contains(3, 14, 19, 26, 4)))
+					.andExpect(jsonPath("$[0:5].place.id", contains(7, 1, 3, 4, 6)))
 					.andExpect(jsonPath("$[5].type").value("ACTION"));
 		}
 
 		@Test
 		@DisplayName("자동완성_앞뒤공백과대소문자는_무시한다")
 		void suggest_paddedMixedCaseQuery_matchesIgnoringCase() throws Exception {
-			mockMvc.perform(get("/api/v1/places/suggest").param("q", "  ipa "))
+			mockMvc.perform(get("/api/v1/places/suggest").param("q", "  cLASSIC "))
 					.andExpect(jsonPath("$", hasSize(2)))
 					.andExpect(jsonPath("$[0].type").value("ACTION"))
-					.andExpect(jsonPath("$[1].place.id").value(15))
-					.andExpect(jsonPath("$[1].matchedMenu").value("IPA"));
+					.andExpect(jsonPath("$[1].place.id").value(2))
+					.andExpect(jsonPath("$[1].matchedMenu").value("Classic Cocktail"));
 		}
 
 		@Test
@@ -124,7 +125,7 @@ class PlaceControllerTest {
 			mockMvc.perform(get("/api/v1/places/suggest").param("q", "Bar"))
 					.andExpect(jsonPath("$", hasSize(6)))
 					.andExpect(jsonPath("$[0].type").value("ACTION"))
-					.andExpect(jsonPath("$[1:].place.id", contains(6, 10, 15, 17, 21)));
+					.andExpect(jsonPath("$[1:].place.id", contains(2, 10, 11, 12, 15)));
 		}
 	}
 
@@ -138,7 +139,7 @@ class PlaceControllerTest {
 			String first = mockMvc.perform(search("{\"query\":\"역삼에서 조용히 대화하기 좋은 카페\"}"))
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.items", hasSize(20)))
-					.andExpect(jsonPath("$.totalCount").value(30))
+					.andExpect(jsonPath("$.totalCount").value(36))
 					.andExpect(jsonPath("$.nearby").value(false))
 					.andExpect(jsonPath("$.nextCursor").isString())
 					.andReturn().getResponse().getContentAsString();
@@ -147,14 +148,14 @@ class PlaceControllerTest {
 			String second = mockMvc.perform(search(
 							"{\"query\":\"역삼에서 조용히 대화하기 좋은 카페\",\"cursor\":\"" + cursor + "\"}"))
 					.andExpect(status().isOk())
-					.andExpect(jsonPath("$.items", hasSize(10)))
+					.andExpect(jsonPath("$.items", hasSize(16)))
 					.andExpect(jsonPath("$.nextCursor").doesNotExist())
 					.andReturn().getResponse().getContentAsString();
 
 			List<Integer> firstIds = JsonPath.read(first, "$.items[*].place.id");
 			List<Integer> secondIds = JsonPath.read(second, "$.items[*].place.id");
 			assertThat(firstIds).doesNotContainAnyElementsOf(secondIds);
-			assertThat(Stream.concat(firstIds.stream(), secondIds.stream()).distinct()).hasSize(30);
+			assertThat(Stream.concat(firstIds.stream(), secondIds.stream()).distinct()).hasSize(36);
 		}
 
 		@Test
@@ -199,7 +200,7 @@ class PlaceControllerTest {
 			String body = mockMvc.perform(search("{\"query\":\"내 근처 조용한 카페\"}"))
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.nearby").value(true))
-					.andExpect(jsonPath("$.items", hasSize(30)))
+					.andExpect(jsonPath("$.items", hasSize(36)))
 					.andExpect(jsonPath("$.nextCursor").doesNotExist())
 					.andReturn().getResponse().getContentAsString();
 			List<Integer> scores = JsonPath.read(body, "$.items[*].score");
@@ -245,9 +246,9 @@ class PlaceControllerTest {
 		void search_cursorRequest_ignoresQueryAndScenario() throws Exception {
 			mockMvc.perform(search("{\"query\":\"근처\",\"cursor\":\"" + cursor("20") + "\"}")
 							.header("X-Mock-Scenario", "empty"))
-					.andExpect(jsonPath("$.items", hasSize(10)))
+					.andExpect(jsonPath("$.items", hasSize(16)))
 					.andExpect(jsonPath("$.nearby").value(false))
-					.andExpect(jsonPath("$.totalCount").value(30))
+					.andExpect(jsonPath("$.totalCount").value(36))
 					.andExpect(jsonPath("$.emptyReason").doesNotExist())
 					.andExpect(jsonPath("$.changeSummary").doesNotExist());
 		}
@@ -255,7 +256,7 @@ class PlaceControllerTest {
 		@Test
 		@DisplayName("추천검색_남은항목이정확히한페이지면_다음커서가없다")
 		void search_cursorToExactlyFullLastPage_hasNoNextCursor() throws Exception {
-			mockMvc.perform(search("{\"query\":\"카페\",\"cursor\":\"" + cursor("10") + "\"}"))
+			mockMvc.perform(search("{\"query\":\"카페\",\"cursor\":\"" + cursor("16") + "\"}"))
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.items", hasSize(20)))
 					.andExpect(jsonPath("$.nextCursor").doesNotExist());
@@ -291,7 +292,7 @@ class PlaceControllerTest {
 		@Test
 		@DisplayName("추천검색_오프셋이장소수이상이면_빈페이지다")
 		void search_cursorPastEnd_returnsEmptyPage() throws Exception {
-			mockMvc.perform(search("{\"query\":\"카페\",\"cursor\":\"" + cursor("30") + "\"}"))
+			mockMvc.perform(search("{\"query\":\"카페\",\"cursor\":\"" + cursor("36") + "\"}"))
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.items", hasSize(0)))
 					.andExpect(jsonPath("$.nextCursor").doesNotExist())
@@ -329,7 +330,7 @@ class PlaceControllerTest {
 			mockMvc.perform(get("/api/v1/places/{id}", 1))
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.place.id").value(1))
-					.andExpect(jsonPath("$.place.name").value("하노이 쌀국수 역삼점"))
+					.andExpect(jsonPath("$.place.name").value("모너트 MONERT"))
 					.andExpect(jsonPath("$.hours", hasSize(7)))
 					.andExpect(jsonPath("$.hours[*].dayOfWeek", contains("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")))
 					.andExpect(jsonPath("$.menus[0].category").isString())
@@ -577,10 +578,25 @@ class PlaceControllerTest {
 		private static final Set<String> REASON_TAG = Set.of("source", "label");
 		private static final Set<String> SCORE_ITEM = Set.of("source", "label", "matched", "evidenceCount");
 		private static final Set<String> DETAIL = Set.of("place", "address", "tags", "photos", "phone", "website",
-				"openStatus", "hours", "closedDayNote", "menus", "facilities");
-		private static final Set<String> HOURS = Set.of("dayOfWeek", "open", "close", "breakStart", "breakEnd",
-				"lastOrders", "closed");
-		private static final Set<String> MENU = Set.of("category", "name", "price", "photoUrl");
+				"openStatus", "hours", "closedDayNote", "menus", "facilities", "subways", "directions", "parking", "pet",
+				"noKidsZone", "corkage", "bookingUrl", "seats", "description", "paymentMethods", "broadcasts",
+				"extraLinks");
+		private static final Set<String> HOURS = Set.of("dayOfWeek", "open", "close", "breaks", "lastOrders", "closed");
+		private static final Set<String> BREAK = Set.of("start", "end");
+		private static final Set<String> MENU = Set.of("category", "name", "description", "price", "priceText", "labels",
+				"representative", "photoUrl");
+		private static final Set<String> SUBWAY = Set.of("station", "line", "exit", "walkMinutes");
+		private static final Set<String> PARKING = Set.of("free", "note", "valet");
+		private static final Set<String> POLICY = Set.of("allowed", "note");
+		private static final Set<String> SEAT = Set.of("name", "description");
+		private static final Set<String> BROADCAST = Set.of("channel", "program", "episode", "airedOn", "menu");
+
+		/** {@code ?}가 없는 필드. 모든 장소의 응답에 있어야 한다. */
+		private static final Set<String> DETAIL_REQUIRED = Set.of("place", "address", "tags", "photos", "openStatus",
+				"hours", "menus", "facilities", "subways", "noKidsZone", "seats", "paymentMethods", "broadcasts",
+				"extraLinks");
+		private static final Set<String> HOURS_REQUIRED = Set.of("dayOfWeek", "breaks", "lastOrders", "closed");
+		private static final Set<String> MENU_REQUIRED = Set.of("name", "labels", "representative");
 
 		@Autowired
 		JsonMapper jsonMapper;
@@ -623,14 +639,49 @@ class PlaceControllerTest {
 		}
 
 		@Test
-		@DisplayName("장소상세_응답키는_문서화된필드를벗어나지않는다")
+		@DisplayName("장소상세_모든장소의응답키는_문서화된필드를벗어나지않고_필수필드가있다")
 		void getPlace_responseKeys_withinDocumentedFields() throws Exception {
-			for (int id = 1; id <= 30; id++) {
+			int count = read(search("{\"query\":\"근처\"}")).get("totalCount").asInt();
+			assertThat(count).isPositive();
+			for (int id = 1; id <= count; id++) {
 				JsonNode detail = read(get("/api/v1/places/{id}", id));
 				assertKeys(detail, DETAIL);
+				assertRequired(detail, DETAIL_REQUIRED);
 				assertKeys(detail.get("place"), SUMMARY);
-				detail.get("hours").forEach(hours -> assertKeys(hours, HOURS));
-				detail.get("menus").forEach(menu -> assertKeys(menu, MENU));
+				assertThat(detail.get("hours")).hasSize(7);
+				for (JsonNode hours : detail.get("hours")) {
+					assertKeys(hours, HOURS);
+					assertRequired(hours, HOURS_REQUIRED);
+					assertThat(hours.get("breaks").isArray()).isTrue();
+					assertThat(hours.get("lastOrders").isArray()).isTrue();
+					for (JsonNode pause : hours.get("breaks")) {
+						assertKeys(pause, BREAK);
+						assertRequired(pause, BREAK);
+					}
+				}
+				for (JsonNode menu : detail.get("menus")) {
+					assertKeys(menu, MENU);
+					assertRequired(menu, MENU_REQUIRED);
+				}
+				detail.get("facilities").forEach(facility -> assertThat(facility.isString()).isTrue());
+				for (JsonNode subway : detail.get("subways")) {
+					assertKeys(subway, SUBWAY);
+					assertRequired(subway, Set.of("station"));
+				}
+				if (detail.has("parking")) {
+					assertKeys(detail.get("parking"), PARKING);
+					assertRequired(detail.get("parking"), Set.of("valet"));
+				}
+				for (String policy : List.of("pet", "corkage")) {
+					if (detail.has(policy)) {
+						assertKeys(detail.get(policy), POLICY);
+					}
+				}
+				for (JsonNode seat : detail.get("seats")) {
+					assertKeys(seat, SEAT);
+					assertRequired(seat, Set.of("name"));
+				}
+				detail.get("broadcasts").forEach(broadcast -> assertKeys(broadcast, BROADCAST));
 			}
 		}
 
@@ -662,6 +713,10 @@ class PlaceControllerTest {
 
 		private static void assertKeys(JsonNode node, Set<String> documented) {
 			assertThat(node.propertyNames()).isSubsetOf(documented);
+		}
+
+		private static void assertRequired(JsonNode node, Set<String> required) {
+			assertThat(node.propertyNames()).containsAll(required);
 		}
 	}
 

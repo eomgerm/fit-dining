@@ -29,14 +29,14 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 ### Mock 엔진
 
 13. Mock 스위치는 환경변수 `PLACE_MOCK_ENABLED`(속성 `place.mock.enabled`, 코드 기본값 꺼짐)이고 local과 dev에서만 켠다. `be/.env.example`에 `PLACE_MOCK_ENABLED=true`로 넣는다. `docs/infra/contracts/env.md`와 `infra/` 아래 파일은 고치지 않고, 계약 등록은 인프라 담당에게 알린다(D-63).
-14. Mock은 `classpath:mock/places.json`을 Spring의 JSON 매퍼로 읽는다. 파일은 `{"places": [{"card": PlaceCard, "detail": PlaceDetailResponse}]}` 형태로 DTO 필드와 정확히 맞추고(전역 알 수 없는 속성 거부를 받는다), `card.place`와 `detail.place`는 같은 값이다. 장소는 25~39곳이고 `id`는 파일에 1부터 차례로 적는다. 사진 URL은 비워 둔다(FE가 자리표시 그라데이션을 그린다)(D-63, D-64, D-60).
+14. Mock은 `classpath:mock/places.json`을 Spring의 JSON 매퍼로 읽는다. 파일은 `{"places": [{"card": PlaceCard, "detail": PlaceDetailResponse}]}` 형태로 DTO 필드와 정확히 맞추고(전역 알 수 없는 속성 거부를 받는다), `card.place`와 `detail.place`는 같은 값이다. 장소는 30~40곳이고 `id`는 파일에 1부터 차례로 적는다. 파일은 정제한 네이버 수집 데이터로 생성 스크립트가 만들고(규칙은 place-catalog spec의 "적재·mock 변형 규칙"), 사진은 원본 URL이며 없으면 FE가 자리표시 그라데이션을 그린다(D-63, D-64, D-60, place-catalog#D-19).
 15. Mock은 요청 헤더 `X-Mock-Scenario`를 현재 요청(`RequestContextHolder`)에서 읽는다. `PlaceSearchEngine`의 메서드 인자에는 시나리오를 넣지 않는다. 헤더는 검색에만 적용되고 알 수 없는 값은 정상 결과다(D-63, D-62).
 16. Mock 검색은 질의, `mapBounds`, `preferences`를 무시하고 모든 장소를 `score` 내림차순(같으면 파일 순서)으로 돌려준다. `totalCount`는 장소 수다. 질의에 "근처"가 부분 문자열로 있으면 `nearby: true`, 전체 항목, 커서 없음이다. 헤더 `empty`이면 `items: []`, `totalCount: 0`, `emptyReason`이 있고, `empty`와 "근처"가 함께 있으면 `empty`가 이기고 `nearby`는 false다(D-63, D-52).
 17. Mock의 `conditions`는 `previousConditions`가 있으면(`null`이 아니면, 빈 객체 `{}`도 포함) 그대로, 없으면 `{}`다. `previousConditions`가 있으면 `changeSummary`는 "요청하신 조건을 반영했어요"이고 없으면 생략한다(D-63, D-50).
 18. Mock의 `cursor`는 십진수 오프셋 문자열의 base64url 인코딩(패딩 없음)이다. 빈 문자열은 없는 것(첫 페이지)으로 본다. 패딩이 있거나 base64url이 아니거나, 풀어낸 값이 `0` 또는 `[1-9][0-9]*` 형식의 `int`가 아니면 400이다. 오프셋이 장소 수 이상이면 빈 페이지이고 `nextCursor`와 `emptyReason`이 없다. `cursor`가 있으면 항목을 고를 때 `query`, `mapBounds`, 헤더, "근처"를 무시하고 오프셋만 따른다. 커서 응답은 `nearby: false`, `totalCount`는 장소 수, `emptyReason`과 `changeSummary`는 없고 `conditions`는 17번을 따른다. FE는 커서 응답의 `totalCount`, `conditions`, `changeSummary`를 쓰지 않는다(D-50, D-63).
 19. Mock 자동완성은 "이름 접두 일치"(이름이 `q`와 같거나 `q`로 시작) 장소를 먼저, 그다음 "포함 일치"(이름이나 메뉴 이름에 `q`가 들어 있거나, `q`가 업종 한글 이름(식당, 카페, 술집)이나 코드의 부분 문자열인) 장소를 담는다. 각 단계 안은 파일 순서이고 장소 항목은 최대 5개다. 매칭은 `q`의 앞뒤 공백을 제거하고 대소문자를 구분하지 않는다. 역 이름은 매칭하지 않는다. 이름으로 일치하지 않고 메뉴 이름으로만 일치한 항목은 `matchedMenu`에 파일 순서상 첫 번째로 일치한 메뉴 이름을 담는다. 이름으로 일치한 항목에는 담지 않는다(D-63, D-64).
 20. 자동완성의 `ACTION` 항목(`label` "이 조건으로 추천받기")은 항상 포함된다. 이름 접두 일치가 있으면 맨 뒤, 없으면 맨 위다. `PLACE` 항목에는 `label`이 없다(D-63, D-64).
-21. Mock의 영업 상태(`openStatus`)는 요청 시각(`Asia/Seoul`)과 그 장소의 오늘 `hours`로 계산한다. 구간은 모두 시작 포함, 끝 제외다. 휴무일이거나 `[open, close)` 밖이면 `CLOSED`, `[breakStart, breakEnd)` 안이면 `BREAK`, `[close - 60분, close)` 안이면 `CLOSING_SOON`, 그 밖에는 `OPEN`이다. 브레이크 시작 전은 `CLOSING_SOON`으로 보지 않는다. `places.json`의 `openStatus`는 `UNKNOWN`으로 적어 두고 응답할 때 계산값으로 바꾼다(카드와 상세 모두). Mock 데이터의 영업시간은 자정을 넘지 않는다. 시각은 주입한 `java.time.Clock`으로 읽어 테스트에서 고정할 수 있게 한다(없으면 `Asia/Seoul` 시스템 시계)(D-64).
+21. Mock의 영업 상태(`openStatus`)는 요청 시각(`Asia/Seoul`)과 그 장소의 `hours`로 place-catalog spec의 "영업 상태 규칙"대로 계산한다. 구간은 모두 시작 포함, 끝 제외이고, 어제 영업의 자정 넘은 부분과 다음 날로 이어지는 영업(24시간)을 한 구간으로 본다. 영업 구간 밖이면 `CLOSED`(오늘이나 어제가 정보 없음이면 `UNKNOWN`), 브레이크(하루에 여럿일 수 있다) 안이면 `BREAK`, 구간 끝 60분 전부터 끝 전이면 `CLOSING_SOON`, 그 밖에는 `OPEN`이다. 브레이크 시작 전은 `CLOSING_SOON`으로 보지 않는다. `places.json`의 `openStatus`는 `UNKNOWN`으로 적어 두고 응답할 때 계산값으로 바꾼다(카드와 상세 모두). 시각은 주입한 `java.time.Clock`으로 읽어 테스트에서 고정할 수 있게 한다(없으면 `Asia/Seoul` 시스템 시계)(D-64).
 22. Mock의 추천 이유, 주의점, 핏 점수 설명, 주소, `emptyReason`은 고정 한글 문자열이다. `labels`는 2개, 상세 `tags`는 2~4개, `scoreItems`는 2~4개이고 그중 하나 이상은 `matched: false`다. 요일은 `MON`~`SUN`, 시각은 `HH:mm`이다(D-63, D-64).
 
 ### FE 검색 흐름
@@ -69,9 +69,9 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 
 43. 지금 보는 화면 상태는 메모리에 두고, 검색 thread만 기기에 저장한다(53번, D-27, D-91). 검색 응답(불러온 페이지와 커서)은 TanStack Query 캐시에 요청 기록 항목마다 무한 쿼리 하나로 둔다(`staleTime`, `gcTime` 무한). 첫 페이지는 성공했을 때만 기록에 넣도록 화면을 바꾸기 전에 받는다. `fe/src/domains/place/model/search-store.ts`(React 없는 모듈)에는 지금 thread의 id와 요청 기록(항목 id, 첫 페이지 요청 본문, 첫 페이지 `conditions`와 `totalCount`, 기록 줄의 업종, 시각, 기준 항목), 지금 보는 항목, 선택된 카드, 위치 결과, 지역 고정 상태, 장소 id별 가장 최근 카드, 열린 과거 결과 화면(57번)을 두고, `ui`의 훅이 `useSyncExternalStore`로 구독한다. 재로드하면 이 화면 상태는 사라지고 첫 화면에서 시작하며, 다시 연 thread의 첫 페이지는 저장한 응답을 캐시에 넣어 쓴다(D-27, D-50, D-52, D-67, D-91).
 44. `?id`는 상세 화면이 `useSearchParams`로 읽는다. `cacheComponents`가 켜져 있으면 Suspense가 필요할 수 있으므로 `pnpm install` 뒤 `fe/node_modules/next/dist/docs/`를 확인한다(`fe/AGENTS.md`). `?id`가 정규식 `^[1-9][0-9]*$`에 맞고 `Number.isSafeInteger(Number(id))`일 때만 요청하고, 아니면 "장소를 찾을 수 없어요" 화면을 보여 준다(D-38, D-64).
-45. 상세 화면(6-01, 모양은 58번)은 사진 슬라이드(없으면 자리표시), 업종 · 거리, 이름, 핏 점수와 ⓘ, 영업 상태(상세 응답의 `openStatus`)와 오늘 안내("오늘"은 `Asia/Seoul` 기준. `OPEN`, `CLOSING_SOON`이면 "오늘 <close>까지", `BREAK`이면 "<breakEnd>에 다시 열어요", 개점 전이면 "<open>에 열어요", 휴무일이면 "오늘 휴무", 마감 뒤에는 생략), 상세 `tags`, 탭(홈, 메뉴, 정보)을 보여 준다. 리뷰는 장소 상세가 직접 그리지 않고, 렌더 함수 props `slots`로 받은 자리에 그린다. `reviewTab`이 있으면 탭은 홈, 메뉴, 리뷰, 정보 순서이고, `homeReviews`는 홈 탭 맨 아래(리뷰 탭으로 바꾸는 함수를 받음), `bottomAction`은 하단 막대(`BottomBar`)의 저장 버튼 옆에 그린다. 자리가 없으면 탭은 홈, 메뉴, 정보이고 하단 막대에는 저장 버튼만 있다. 자리는 `src/app/place/place-detail-with-reviews.tsx`가 리뷰 도메인으로 채운다(D-49, D-64, D-86, D-92).
+45. 상세 화면(6-01, 모양은 58번)은 사진 슬라이드(없으면 자리표시), 업종 · 거리, 이름, 핏 점수와 ⓘ, 영업 상태(상세 응답의 `openStatus`)와 오늘 안내("오늘"은 `Asia/Seoul` 기준. `OPEN`, `CLOSING_SOON`이면 "오늘 <close>까지"(마감 `00:00`은 "오늘 24:00까지", 자정을 넘으면 "내일 <close>까지", 지금이 어제 영업의 새벽 부분이면 "<close>까지", 다음 날로 이어지는 24시간이면 "24시간 영업"), `BREAK`이면 지금 들어가 있는 브레이크의 "<끝>에 다시 열어요", 개점 전이면 "<open>에 열어요", 휴무일이면 "오늘 휴무", 마감 뒤와 `UNKNOWN`이면 생략. 문구 규칙은 place-catalog AC-17), 상세 `tags`, 탭(홈, 메뉴, 정보)을 보여 준다. 리뷰는 장소 상세가 직접 그리지 않고, 렌더 함수 props `slots`로 받은 자리에 그린다. `reviewTab`이 있으면 탭은 홈, 메뉴, 리뷰, 정보 순서이고, `homeReviews`는 홈 탭 맨 아래(리뷰 탭으로 바꾸는 함수를 받음), `bottomAction`은 하단 막대(`BottomBar`)의 저장 버튼 옆에 그린다. 자리가 없으면 탭은 홈, 메뉴, 정보이고 하단 막대에는 저장 버튼만 있다. 자리는 `src/app/place/place-detail-with-reviews.tsx`가 리뷰 도메인으로 채운다(D-49, D-64, D-86, D-92).
 46. 핏 점수, ⓘ 시트(6-05), "AI 추천 이유", 주의점은 `search-store`의 카드에서 가져온다. 과거 결과 화면(57번)에서 들어왔으면 그 스냅샷의 카드를, 그 밖에는 지금 보는 요청에 그 장소의 카드가 있으면 그 카드를, 없으면 가장 최근에 받은 그 장소의 카드를 쓴다. 카드가 없으면(주소 직접 열기, 재로드) 이 영역들을 숨기고 장소 정보만 보여 준다. ⓘ 시트는 `scoreItems`를 "요청 · <label>" 또는 "내 취향 · <label>"로 나열하고, `matched`이면 "앱 리뷰 <evidenceCount>개가 근거예요", 아니면 "확인할 근거가 부족해서 점수에 넣지 않았어요"를 보여 준다(D-64, D-27, D-90).
-47. 홈 탭은 추천 이유(제목, 출처 칩 "요청 · <label>"/"내 취향 · <label>", 인용과 출처), 주의점, 주소와 거리, 오늘 영업시간(펼치면 요일별), 전화, 웹사이트, "정보 더보기"(정보 탭으로 이동), 메뉴 미리보기(가로 목록, "메뉴 <개수>")를 보여 준다. 메뉴 탭은 카테고리별 메뉴(사진, 이름, 가격; 가격이 없으면 생략)와 "정보가 실제와 다를 수 있어요"를, 정보 탭은 요일별 영업시간(브레이크타임, 라스트오더, 휴무), `closedDayNote`, 주소와 거리, 위치 지도(59번), 연락처, 시설(한글 이름: 주차, 무선 인터넷, 단체 이용, 예약)을 보여 준다(D-49, D-64, D-92, D-93).
+47. 홈 탭은 추천 이유(제목, 출처 칩 "요청 · <label>"/"내 취향 · <label>", 인용과 출처), 주의점, 주소와 거리, 오늘 영업시간(펼치면 요일별), 전화, 웹사이트, "정보 더보기"(정보 탭으로 이동), 메뉴 미리보기(가로 목록, "메뉴 <개수>")를 보여 준다. 메뉴 탭은 메뉴를 원래 순서대로, 이어지는 같은 카테고리마다 머리글을 붙여(카테고리 없는 메뉴는 머리글 없이) 사진, 이름과 라벨·"대표" 칩, 설명, 가격 원문(없으면 생략)으로 보이고 "정보가 실제와 다를 수 있어요"를, 정보 탭은 요일별 영업시간(브레이크타임, 라스트오더, 휴무, 정보 없음, 24시간 영업), `closedDayNote`, 주소와 거리, 위치 지도(59번), 연락처, 시설(네이버 이름 그대로), 그 아래 값이 있는 항목만 place-catalog spec의 "정보 탭 줄"(지하철, 찾아오는 길, 주차, 예약 등)을 보여 준다(D-49, D-64, D-92, D-93, place-catalog#D-18).
 
 ### 실행 환경과 테스트
 
@@ -88,7 +88,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 55. 주변 카드의 기준 지점은 기기 위치가 있으면 그 위치, 없으면(시도 전, 실패) 역삼역(위도 37.5006, 경도 127.0364)이다. 역삼역 기준일 때 카드의 거리는 "역삼역 350m"처럼 쓴다. 카드는 위쪽 사진(없으면 자리표시), 순위, 이름, 업종 · 거리 · 영업 상태, 핏 점수, 라벨 2개이며 주의점은 없다. 가운데 카드가 선택된 카드이고, 넘기면 그 카드를 선택하고 지도를 그 핀으로 `panTo`한다. 핀이나 가운데가 아닌 카드를 누르면 그 카드로 넘긴다. 선택된 카드를 누르면 `/place?id=<id>`로 간다. 첫 화면의 "내 위치" 버튼은 카드 목록 바로 위 오른쪽(목록이 없으면 검색창 위 오른쪽)에 있다(D-82, D-83).
 56. 첫 화면과 결과 화면(결과 패널 중간 상태)의 지도 오른쪽 위에 "저장한 장소"(북마크 아이콘)와 "내 정보"(사람 아이콘) `Fab`을 세로로 두고, 누르면 "준비 중이에요" 토스트를 띄운다. "내 주변 추천" 라벨은 그리지 않는다(D-85, D-80).
 57. 과거 결과(와이어프레임 `PastResult`): 요청 기록에서 지금 보는 요청이 아닌 줄의 "결과 보기"는 지금 보는 요청을 바꾸지 않고 과거 결과 화면을 연다. 결과는 다시 받지 않는다. 이번 페이지 세션에 받은 요청은 캐시에 받아 둔 페이지를 그대로 보이며 다음 페이지를 더 부르지 않고, 다시 연 thread의 요청은 저장한 첫 페이지를 보인다. 영업 상태는 그때 값이다(D-79). 근처 응답이면 지금 보는 요청과 같이 위치로 거른다(41번). 화면은 지도 왼쪽 위 "현재 검색으로" 버튼, 결과 패널 위쪽 "<시각> 결과 · “<문장>”"(시각은 53번과 같은 문구), 순위가 붙은 카드 목록과 핀, 패널 아래 "이 조건으로 다시 검색" 버튼과 "새 결과는 기록 끝에 추가되고, 이 결과는 그대로 남아요."다. 패널 머리글(요청 기록, 새 검색), 후속 입력창, "이 지역에서 검색"은 없고, "내 위치"와 지도 위 버튼(56번)은 있다. 카드와 핀은 38번대로 동작하며 선택은 과거 결과를 열거나 닫을 때 비운다. "현재 검색으로"는 요청 기록을 펼친 결과 패널로 돌아간다. "이 조건으로 다시 검색"은 그 요청의 첫 페이지 요청 본문을 그대로 같은 종류와 기준 요청으로 보내고, 성공하면 새 요청이 지금 thread 끝에 쌓여 지금 보는 요청이 되며 과거 결과 화면이 닫힌다. 원래 요청과 결과는 그대로 남는다. 과거 결과 화면은 `search-store`에 있어 상세에 갔다가 돌아와도 그대로다(D-90).
-58. 장소 상세의 모양(와이어프레임 `Detail`, `DetailMenu`, `DetailInfo`): 상단 막대 없이 사진(없으면 자리표시)이 화면 폭 가득 크게 보이고 아래쪽이 바탕색으로 흐려지며, 사진 위 왼쪽에 "뒤로", 오른쪽에 "공유" `Fab`을 띄우고 사진이 둘 이상이면 넘김 점을 둔다. 업종 · 거리, 이름, 핏 점수, 영업 상태와 오늘 안내, 상세 `tags`(강조 색 없음)는 흐려진 사진 위 바탕에 둔다. 핏 점수는 "<점수> 핏 점수 ⓘ" 전체가 ⓘ 시트를 여는 하나의 버튼이다. 탭은 화면 위쪽에 붙는다. 홈 탭은 섹션(추천 이유와 주의, 장소 정보, 메뉴, 리뷰 자리) 사이를 두꺼운 띠로 나누고, 추천 이유 아래에 `matched: false`인 `scoreItems`마다 "이 장소는 ‘<label>’ 취향을 확인할 근거가 부족해요"(출처가 REQUEST면 "요청을")를 흐린 안내로, 그 아래 주의점을 주의 안내로 보인다. 장소 정보의 영업시간 줄은 "<영업 상태> · 오늘 08:00 – 22:00"이고 펼치면 정보 탭과 같은 요일별 표다. 전화 줄은 ›, 웹사이트 줄은 바깥 링크 아이콘이 붙고, "정보 더보기 ›"는 가운데 둥근 테두리 버튼이다. 메뉴 머리글은 "메뉴 <개수> ›" 링크로 메뉴 탭을 연다. 메뉴 탭은 카테고리 이름을 작은 흐린 글씨로, 줄마다 64px 사진, 굵은 이름, 오른쪽 가격을 두고 줄 사이를 선으로 나눈다. 정보 탭 영업시간은 위에 "<영업 상태> · <오늘 안내>"(45번)를 두고, 요일별 표에서 오늘 줄은 "<요일> · 오늘"로 굵게, 브레이크타임은 "15:00 – 16:00 브레이크타임", 라스트오더는 "14:30, 21:30 라스트오더" 줄로, 휴무일은 "휴무"로 쓴다. 시각 범위는 "08:00 – 22:00"으로 쓴다. 주소 줄에는 "주소 복사" 버튼(클립보드에 넣고 "주소를 복사했어요", 실패하면 "주소를 복사하지 못했어요")을 두고, 시설은 아이콘이 붙은 테두리 칩(무선 인터넷, 단체 이용, 예약에 아이콘, 주차는 글자만)이며 맨 아래에 "정보가 실제와 다를 수 있어요"를 둔다. 하단 막대는 "저장"(북마크 테두리 버튼)과 리뷰 자리의 `bottomAction`을 나란히 둔다. "공유"와 "저장"은 누르면 "준비 중이에요" 토스트를 띄운다. 리뷰 자리 안의 모양은 바꾸지 않는다(D-92, D-94).
+58. 장소 상세의 모양(와이어프레임 `Detail`, `DetailMenu`, `DetailInfo`): 상단 막대 없이 사진(없으면 자리표시)이 화면 폭 가득 크게 보이고 아래쪽이 바탕색으로 흐려지며, 사진 위 왼쪽에 "뒤로", 오른쪽에 "공유" `Fab`을 띄우고 사진이 둘 이상이면 넘김 점을 둔다. 업종 · 거리, 이름, 핏 점수, 영업 상태와 오늘 안내, 상세 `tags`(강조 색 없음)는 흐려진 사진 위 바탕에 둔다. 핏 점수는 "<점수> 핏 점수 ⓘ" 전체가 ⓘ 시트를 여는 하나의 버튼이다. 탭은 화면 위쪽에 붙는다. 홈 탭은 섹션(추천 이유와 주의, 장소 정보, 메뉴, 리뷰 자리) 사이를 두꺼운 띠로 나누고, 추천 이유 아래에 `matched: false`인 `scoreItems`마다 "이 장소는 ‘<label>’ 취향을 확인할 근거가 부족해요"(출처가 REQUEST면 "요청을")를 흐린 안내로, 그 아래 주의점을 주의 안내로 보인다. 장소 정보의 영업시간 줄은 "<영업 상태> · 오늘 08:00 – 22:00"이고 펼치면 정보 탭과 같은 요일별 표다. 전화 줄은 ›, 웹사이트 줄은 바깥 링크 아이콘이 붙고, "정보 더보기 ›"는 가운데 둥근 테두리 버튼이다. 메뉴 머리글은 "메뉴 <개수> ›" 링크로 메뉴 탭을 연다. 메뉴 탭은 카테고리 이름을 작은 흐린 글씨로, 줄마다 64px 사진, 굵은 이름과 옆의 작은 라벨·"대표" 칩, 이름 아래 흐린 설명(두 줄까지, 넘치면 말줄임), 오른쪽 가격 원문을 두고 줄 사이를 선으로 나눈다. 정보 탭 영업시간은 위에 "<영업 상태> · <오늘 안내>"(45번)를 두고, 요일별 표에서 오늘 줄은 "<요일> · 오늘"로 굵게, 브레이크타임은 하나마다 "15:00 – 16:00 브레이크타임", 라스트오더는 "14:30, 21:30 라스트오더" 줄로, 휴무일은 "휴무", 정보 없는 요일은 "정보 없음", `00:00`–`00:00`은 "24시간 영업"으로 쓴다. 시각 범위는 "08:00 – 22:00"으로 쓰고, 마감 `00:00`은 "24:00", 자정을 넘는 영업은 "17:00 – 02:00"이다. 주소 줄에는 "주소 복사" 버튼(클립보드에 넣고 "주소를 복사했어요", 실패하면 "주소를 복사하지 못했어요")을 두고, 시설은 아이콘이 붙은 테두리 칩(이름 그대로, 비슷한 시설을 묶은 아이콘, 묶음에 없는 이름은 기본 아이콘)이고, 그 아래 "제목 · 내용" 줄, 맨 아래에 "정보가 실제와 다를 수 있어요"를 둔다. 하단 막대는 "저장"(북마크 테두리 버튼)과 리뷰 자리의 `bottomAction`을 나란히 둔다. "공유"와 "저장"은 누르면 "준비 중이에요" 토스트를 띄운다. 리뷰 자리 안의 모양은 바꾸지 않는다(D-92, D-94).
 59. 정보 탭 위치 지도: 주소 줄 아래에 높이를 CSS로 정한 작은 `PlaceMap`을 두고 그 장소 핀 하나만 찍으며 중심은 그 장소다. 정보 탭을 열었을 때만 만들고(지도 사용량은 지도 생성 횟수), 지도 키가 없거나 인증이 실패하면 지도 자리를 그리지 않는다. 내 위치 점과 "이 지역에서 검색"은 없다(D-93).
 
 ## Usage
@@ -113,7 +113,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 - [x] AC-7: 요청 본문에 정의되지 않은 속성(예: `lat`, `lng`)이 있으면 400 ProblemDetail이고, 정의된 필드만 있는 요청은 정상 처리된다. (D-10, D-41)
 - [x] AC-8: 세 엔드포인트의 정상 응답 JSON 키는 문서화된 DTO 필드 집합을 벗어나지 않으며 외부 리뷰를 담는 필드가 없다. `conditions` 객체의 내부 키와 ProblemDetail 표준 키는 검사 대상이 아니다. (D-41, D-64)
 - [x] AC-9: Mock이 꺼진 환경(다른 구현도 없음)에서 세 엔드포인트는 503 ProblemDetail을 돌려준다. Mock이 켜진 환경에서는 정상 응답한다. (D-63)
-- [x] AC-10: `GET /api/v1/places/{id}`는 알려진 `id`에 `hours`(7일), `menus`(카테고리 포함), `facilities`, `tags`, `photos`, `openStatus`를 돌려주고, 모르는 `id`에는 404, 정수가 아닌 `id`에는 400 ProblemDetail을 돌려준다. 상세 응답에는 `score`, `reasons`, `scoreItems`가 없다. (D-32, D-10, D-64)
+- [x] AC-10: `GET /api/v1/places/{id}`는 알려진 `id`에 `hours`(7일), `menus`(카테고리는 있을 때만), `facilities`(시설 이름), `tags`, `photos`, `openStatus`를 돌려주고, 모르는 `id`에는 404, 정수가 아닌 `id`에는 400 ProblemDetail을 돌려준다. 상세 응답에는 `score`, `reasons`, `scoreItems`가 없다. (D-32, D-10, D-64)
 - [x] AC-11: 빈 값, 공백뿐인 값, 200자를 넘는 `q`와 `query`는 400 ProblemDetail이다. (D-10, D-64)
 - [x] AC-12: `Authorization` 헤더가 있든 없든 세 엔드포인트의 응답이 같다. `preferences`는 받아 두되 Mock은 결과에 반영하지 않는다. (D-33)
 - [x] AC-13: 검색과 자동완성 요청을 처리한 뒤(잘못된 요청으로 400이 난 경우 포함) BE 로그 출력에 요청 본문, `preferences`, `q`, `query` 값이 나타나지 않는다. (D-20)
@@ -128,7 +128,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 - [x] AC-22: FE 개발 서버(`localhost:3000`)에서 `/api/v1/places/suggest?q=역삼`을 부르면 BE(`localhost:8080`)의 응답이 그대로 오고, BE에는 CORS 설정이 없다. `next build` 산출물(`.next/routes-manifest.json`)에는 rewrites와 `localhost`가 없다. (D-69)
 - [x] AC-23: 지도가 있으면 지금 보이는 카드마다 핀이 하나씩 있고, 핀에는 그 카드와 같은 순위 번호가 보인다. 근처 필터로 걸러진 카드의 핀은 보이지 않는다. (D-70)
 - [x] AC-24: 핀을 누르면 해당 카드가 선택되고 핀이 강조되며 목록이 그 카드로 스크롤된다. 선택되지 않은 카드를 누르면 지도가 그 핀으로 이동하고 카드와 핀이 선택된다. 한 번에 선택된 카드는 하나다. (D-70)
-- [x] AC-25: Mock의 `openStatus`는 고정한 시각에서 영업시간 밖 또는 휴무일이면 `CLOSED`, 브레이크타임이면 `BREAK`, 마감 60분 이내면 `CLOSING_SOON`, 그 밖의 영업시간이면 `OPEN`이다. (D-64)
+- [x] AC-25: Mock의 `openStatus`는 고정한 시각에서 영업시간 밖 또는 휴무일이면 `CLOSED`, 브레이크타임이면 `BREAK`, 마감 60분 이내면 `CLOSING_SOON`, 그 밖의 영업시간이면 `OPEN`이다. 자정 넘김, 이어진 24시간, 정보 없는 요일(`UNKNOWN`)은 place-catalog AC-11을 따른다. (D-64)
 - [x] AC-26: 결과가 있으면 위쪽 검색창 대신 패널 아래 후속 입력창이 보이고, 그 입력은 기준 요청의 첫 페이지 `conditions`를 `previousConditions`로 담아 보낸다. "새 검색"을 누르면 결과와 조건이 비워지고 위쪽 검색창으로 돌아가며 다음 요청에는 `previousConditions`가 없다. (D-50)
 - [x] AC-27: 요청 기록에는 이번 세션의 요청이 입력 문장, 업종과 곳 수, 시각과 함께 쌓인다. "결과 보기"는 네트워크 요청 없이 그 요청의 결과를 과거 결과 화면으로 보여 주고 지금 보는 요청을 바꾸지 않으며, "여기서 이어 검색" 뒤의 후속 입력은 그 요청의 `conditions`를 `previousConditions`로 보낸다. (D-50, D-90)
 - [x] AC-28: 위치를 얻기 전에는 자동완성, 결과 카드, 상세에 거리가 보이지 않는다(첫 화면 주변 카드의 "역삼역 <거리>"는 AC-33). "내 위치"를 눌러 위치를 얻으면 지도에 내 위치 점이 생기고 세 곳 모두 거리가 보인다. 이 과정에서 서버로 가는 요청에는 좌표가 없다. (D-52)
@@ -247,12 +247,18 @@ kr.co.fitdining.api.place.dto (D-64. 파일은 아래 들여쓰지 않은 7개�
     enum EvidenceSource: REQUEST | PREFERENCE              (화면: "요청 ·", "내 취향 ·")
   PlaceDetailResponse  : place(PlaceSummary), address, tags(String[]), photos(String[] URL),
                    phone?, website?, openStatus(OpenStatus), hours(Hours[7]), closedDayNote?(String),
-                   menus(Menu[]), facilities(Facility[])
-    Hours        : dayOfWeek(DayCode), open?(HH:mm), close?(HH:mm), breakStart?, breakEnd?,
+                   menus(Menu[]), facilities(String[] 시설 이름), subways(Subway[]), directions?,
+                   parking?(Parking), pet?(Pet), noKidsZone(Boolean), corkage?(Corkage), bookingUrl?,
+                   seats(Seat[]), description?, paymentMethods(String[]), broadcasts(Broadcast[]),
+                   extraLinks(String[])
+    Hours        : dayOfWeek(DayCode), open?(HH:mm), close?(HH:mm), breaks(Break[]),
                    lastOrders(String[] HH:mm), closed(Boolean)
-    Menu         : category, name, price?(Integer 원), photoUrl?
+                   (close가 open 이하면 다음 날 마감, 24시간은 00:00–00:00, 시각 없이 closed false면 정보 없음)
+    Break        : start(HH:mm), end(HH:mm)
+    Menu         : category?, name, description?, price?(Integer 원, 정가일 때만), priceText?, labels(String[]),
+                   representative(Boolean), photoUrl?
     enum DayCode : MON | TUE | WED | THU | FRI | SAT | SUN
-    enum Facility: PARKING | WIFI | GROUP | RESERVATION     (화면: 주차, 무선 인터넷, 단체 이용, 예약)
+    Subway, Parking, Pet, Corkage, Seat, Broadcast는 place-catalog spec의 Interfaces를 따른다
 ```
 
 ```text
@@ -268,7 +274,7 @@ src/domains/place/             의존은 ui → api → model 방향만
   model/search-request.ts      다음 요청 본문을 만드는 순수 함수(새 검색, 후속, 커서, 이 지역에서 검색)
   model/search-store.ts        React 없는 store: 요청 기록 메타, 지금 보는 항목, 선택된 카드, 위치 결과,
                                지역 고정 상태, 장소별 최근 카드. 바뀌면 구독자에게 알린다
-  model/place-labels.ts        업종, 영업 상태, 시설, 근거 출처의 한글 이름 (D-72)
+  model/place-labels.ts        업종, 영업 상태, 근거 출처의 한글 이름, 시설 이름 → 아이콘 묶음 표 (D-72)
   model/opening-hours.ts       Asia/Seoul 기준 오늘 영업시간, 오늘 안내, 요일별 영업시간 문구 (D-72)
   model/highlight.ts           자동완성 후보에서 입력과 같은 부분 나누기 (D-72)
   model/place-id.ts            상세 ?id 검사 (D-72)
@@ -315,7 +321,7 @@ GET /config.json  : { env: "dev" | "prod", naverMapClientId?: string }, Cache-Co
 ## Seams & test plan
 
 - **BE 컨트롤러 경계** (example), AC-1, AC-2, AC-3, AC-4, AC-5, AC-7, AC-9, AC-10, AC-11, AC-12, AC-13, AC-14: `@WebMvcTest`로 MockMvc가 세 엔드포인트를 호출한다. `PlaceService`와 Mock 엔진은 `@Import`로 넣고, 일부는 가짜 `PlaceSearchEngine`을 꽂아 컨트롤러와 Service가 반환값을 가공하지 않는지 본다. 테스트 이름은 팀 BE 컨벤션(`method_scenario_expected`, 한글 `@DisplayName`)을 따른다. 로그 검증은 출력 캡처를 쓴다. 잡는 것: 경로, 상태 코드, 요청 검증, 페이징, 로그 누출. 놓치는 것: 실제 JSON 직렬화 설정이 전체 앱에서 같은지(기동 테스트는 AC-21). Prior art: 없음(`be/src/test`에는 `ApiApplicationTests`의 기동 테스트뿐).
-- **Mock 데이터와 영업 상태** (example), AC-2, AC-4, AC-6, AC-8, AC-25: `places.json`을 읽어 장소가 25곳 이상이고 점수, 라벨, `scoreItems`, `hours` 규칙을 지키며 응답 JSON 키가 문서화된 집합을 넘지 않는지 확인한다. 고정 `Clock`으로 영업 상태 경계(마감 60분 전, 브레이크 시작, 휴무일)를 확인한다. 잡는 것: 데이터 오타, 규칙 위반, 시각 계산 오류. 놓치는 것: 실제 AI 데이터의 품질.
+- **Mock 데이터와 영업 상태** (example), AC-2, AC-4, AC-6, AC-8, AC-25: `places.json`을 읽어 장소가 30~40곳이고 점수, 라벨, `scoreItems`, `hours` 규칙을 지키며 응답 JSON 키가 문서화된 집합을 넘지 않는지 확인한다. 고정 `Clock`과 테스트 안에서 만든 영업시간으로 영업 상태 경계(마감 60분 전, 브레이크 시작, 휴무일, 자정 넘김, 이어진 24시간, 정보 없음)를 확인한다. 잡는 것: 데이터 오타, 규칙 위반, 시각 계산 오류. 놓치는 것: 실제 AI 데이터의 품질.
 - **FE 순수 로직** (example), AC-16, AC-26, AC-27: Node 환경의 Vitest. 근처 필터와 거리 표시(haversine, 반경 이하 포함, "350m"과 "1.2km" 경계)는 `fe/src/domains/place/model/nearby.test.ts`에서, 요청 본문 생성 함수는 새 검색, 후속(기준 요청의 `conditions`), 커서, "이 지역에서 검색", "여기서 이어 검색"의 본문과 좌표 미포함을, `search-store`는 기록 쌓기(커서는 새 항목이 아님, 실패는 쌓지 않음), "결과 보기", 칩의 기준 요청 사슬을 확인한다. 잡는 것: 거리 계산 오류, 잘못된 후속 기준, 기록 규칙 위반. 놓치는 것: 화면과의 연결. Prior art: `fe/src/shared/api/client.test.ts`.
 - **FE 훅** (example), AC-15: jsdom 환경에서 `renderHook`, 가짜 타이머, `QueryClientProvider`, 가짜 `fetch`로 `use-suggest`의 요청 횟수(300ms 뒤 한 번), 빈 입력 미요청, 이전 요청 취소(`signal` 중단), 늦은 응답 무시를 확인한다. 잡는 것: 요청 폭주, 오래된 후보 표시. 놓치는 것: 실제 브라우저 입력기(한글 조합) 동작.
 - **FE 설정 라우트** (example), AC-30: Vitest에서 `process.env`를 바꿔 가며 `route.ts`의 `GET`을 직접 호출해 돌려주는 키가 `env`, `naverMapClientId`뿐인지, 값이 없으면 생략되는지 확인한다. 잡는 것: 환경변수 누출, 키 이름 오타. 놓치는 것: 빌드 때 미리 렌더링되는지(수동 확인).
