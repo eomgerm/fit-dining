@@ -165,6 +165,14 @@ CODE_WORDS = {
 섞이는 짧은 낱말은 넣지 않는다. 시설 `GROUP`은 모임과 헷갈리지 않게 "단체석"으로만
 찾는다."""
 
+_LOCATION = re.compile(
+    rf"(?:{'|'.join(STATION_WORDS)})[역동]?(?:\s*(?:근처|주변|부근|인근|쪽))?(?:에서|에|의)?"
+    r"|(?:내\s*|지금\s*)?(?:근처|주변|부근|인근)(?:에서|에|의)?|가까운"
+)
+"""벡터용 문장에서 지울 위치 말. 역 이름(뒤의 "역", "근처", 조사 포함)과 근처를 뜻하는
+말이다. 위치는 거르기(역, 지도 영역)가 맡는다. 벡터에 남으면 이름이나 요약에 역 이름이
+든 장소가 요청과 상관없이 올라간다(10-28 실제 장소 62곳 측정)."""
+
 _NEGATED = re.compile(r"\S+\s*(?:말고|대신|아니고)")
 """"카페 말고 술집"의 "카페 말고"처럼 빼 달라는 말. 업종과 역을 찾을 때 지운다."""
 
@@ -177,7 +185,8 @@ class Conditions:
 
     Attributes:
         text: 정렬 LLM에 넣을 요청문. 후속 조건이면 이전 요청과 합친 한 문장이다.
-        embedding_text: 후보 추출에 쓸 문장. 부정 표현을 긍정형으로 바꿨다.
+        embedding_text: 후보 추출에 쓸 문장. 부정 표현을 긍정형으로 바꿨고 위치 말(역
+            이름, 근처)은 뺐다.
         codes: 요청 조건 코드. 취향 코드표의 코드와 시설 코드다.
             인원은 목적 코드로 바꿨다.
         category_group: 업종. 요청에 없으면 None이다.
@@ -294,13 +303,21 @@ def interpret_by_rules(query: str, previous: Conditions | None = None) -> Condit
     nearby = station is None and _has(query, NEARBY_WORDS)
     if previous is None:
         return Conditions(
-            query, query, _known_codes(codes), category_group, station, nearby
+            query,
+            _without_location(query, category_group),
+            _known_codes(codes),
+            category_group,
+            station,
+            nearby,
         )
+    category_group = category_group or previous.category_group
     return Conditions(
         text=_join(previous.text, query),
-        embedding_text=_join(previous.embedding_text, query),
+        embedding_text=_without_location(
+            _join(previous.embedding_text, query), category_group
+        ),
         codes=_known_codes([*previous.codes, *codes]),
-        category_group=category_group or previous.category_group,
+        category_group=category_group,
         # 새로 말한 쪽을 따른다. 역을 말하면 근처 검색이 아니고, 근처를 말하면 이전 역을
         # 버린다.
         station=station or (None if nearby else previous.station),
@@ -358,6 +375,10 @@ def _parse(
     if not isinstance(nearby, bool):
         raise TypeError("nearby가 참거짓이 아니다")
 
+    category_group = data.get("category_group")
+    if category_group not in CATEGORY_NAMES:
+        category_group = None
+
     # 새 검색은 사용자가 쓴 요청문을 그대로 정렬에 넣는다.
     text = query
     summary = None
@@ -370,16 +391,19 @@ def _parse(
             summary = DEFAULT_CHANGE_SUMMARY
         # "넓은 곳이면 좋겠어"처럼 조건을 더하는 후속에서 LLM이 이전 문장을 그대로 낼
         # 때가 있다. 그러면 새 요청이 정렬과 후보 추출에서 빠지므로 뒤에 붙인다(규칙
-        # 해석과 같다).
+        # 해석과 같다). 벡터용 문장은 위치 말만 다른 것도 같은 문장으로 본다.
         if text.strip() == previous.text.strip():
             text = _join(previous.text, query)
-        if embedding_text.strip() == previous.embedding_text.strip():
+        if _without_location(embedding_text, category_group) == _without_location(
+            previous.embedding_text, category_group
+        ):
             embedding_text = _join(previous.embedding_text, query)
     # 짧은 요청에서 "..."처럼 글자 없는 문장을 내는 일이 있다(10-27 평가 216번 중
     # 12번). 그대로 인코딩하면 유사도가 무의미해져서 요청문으로 대신한다.
     if not any(ch.isalnum() for ch in embedding_text):
         embedding_text = text
-    category_group = data.get("category_group")
+    # 프롬프트 예시는 위치를 남기는 문장이라 LLM이 위치를 넣을 수 있다. 여기서 지운다.
+    embedding_text = _without_location(embedding_text, category_group)
     station = data.get("station") if data.get("station") in STATION_NAMES else None
     if station is not None and nearby:
         if previous is not None and station == previous.station and not previous.nearby:
@@ -392,11 +416,23 @@ def _parse(
         text=text.strip()[:MAX_TEXT_LENGTH],
         embedding_text=embedding_text.strip()[:MAX_TEXT_LENGTH],
         codes=_known_codes(codes),
-        category_group=category_group if category_group in CATEGORY_NAMES else None,
+        category_group=category_group,
         station=station,
         nearby=nearby,
     )
     return conditions, summary
+
+
+def _without_location(text: str, category_group: str | None) -> str:
+    """벡터용 문장에서 위치 말을 지운다.
+
+    지우고 남는 글자가 없으면("강남역", "근처") 업종 이름으로, 업종도 없으면 지우기 전
+    문장으로 대신한다. 빈 문장을 인코딩하면 유사도가 무의미해진다.
+    """
+    stripped = " ".join(_LOCATION.sub(" ", text).split())
+    if any(ch.isalnum() for ch in stripped):
+        return stripped
+    return CATEGORY_NAMES.get(category_group or "", text)
 
 
 def _known_codes(codes: list) -> tuple[str, ...]:

@@ -136,13 +136,13 @@ class TestLlm:
     def test_empty_embedding_text_uses_query(
         self, fake_gms: FakeGms, embedding_text: str
     ) -> None:
-        """LLM해석_벡터용문장에글자가없으면_LLM결과는쓰고문장만요청문으로대신한다"""
+        """LLM해석_벡터용문장에글자가없으면_LLM결과는쓰고문장만위치를뺀요청문으로대신한다"""
         fake_gms(lambda messages: answer(embedding_text=embedding_text))
 
         result = interpret("강남역 카페")
 
         assert result.llm_error is None
-        assert result.conditions.embedding_text == "강남역 카페"
+        assert result.conditions.embedding_text == "카페"
         assert result.conditions.codes == ("QUIET",)
 
     def test_empty_embedding_text_in_follow_up_uses_text(
@@ -155,7 +155,7 @@ class TestLlm:
 
         result = interpret("더 조용하게", PREVIOUS)
 
-        assert result.conditions.embedding_text == "역삼역 조용한 술집"
+        assert result.conditions.embedding_text == "조용한 술집"
 
     def test_follow_up_unchanged_text_gets_query(self, fake_gms: FakeGms) -> None:
         """LLM해석_후속인데이전문장을그대로내면_새요청을뒤에붙인다"""
@@ -170,10 +170,40 @@ class TestLlm:
         conditions = interpret("넓은 곳이면 좋겠어", PREVIOUS).conditions
 
         assert conditions.text == "역삼역 모임하기 좋은 술집 넓은 곳이면 좋겠어"
-        assert (
-            conditions.embedding_text == "역삼역 모임하기 좋은 술집 넓은 곳이면 좋겠어"
-        )
+        assert conditions.embedding_text == "모임하기 좋은 술집 넓은 곳이면 좋겠어"
         assert conditions.codes == ("PURPOSE_GROUP", "SPACIOUS_SEATING")
+
+    def test_location_removed_from_embedding_text(self, fake_gms: FakeGms) -> None:
+        """LLM해석_벡터용문장에역이름이있으면_지우고역은조건에만남긴다"""
+        fake_gms(
+            lambda messages: answer(
+                embedding_text="강남역에서 넓고 조용한 카페", station="GANGNAM"
+            )
+        )
+
+        conditions = interpret("강남역 넓고 조용한 카페").conditions
+
+        assert conditions.embedding_text == "넓고 조용한 카페"
+        assert conditions.station == "GANGNAM"
+
+    def test_follow_up_repeat_with_location_gets_query(self, fake_gms: FakeGms) -> None:
+        """LLM해석_후속에서이전벡터용문장에역만붙여내면_같은문장으로보고새요청을붙인다"""
+        previous = Conditions(
+            "역삼역 모임하기 좋은 술집", "모임하기 좋은 술집", ("PURPOSE_GROUP",), "BAR"
+        )
+        fake_gms(
+            lambda messages: answer(
+                text="역삼역 모임하기 좋은 넓은 술집",
+                embedding_text="역삼역 모임하기 좋은 술집",
+                codes=["PURPOSE_GROUP", "SPACIOUS_SEATING"],
+                category_group="BAR",
+                station="YEOKSAM",
+            )
+        )
+
+        conditions = interpret("넓은 곳이면 좋겠어", previous).conditions
+
+        assert conditions.embedding_text == "모임하기 좋은 술집 넓은 곳이면 좋겠어"
 
     def test_follow_up_to_nearby_drops_station(self, fake_gms: FakeGms) -> None:
         """LLM해석_역검색뒤근처로바꿨는데이전역을남기면_역을버리고근처검색으로본다"""
@@ -270,11 +300,26 @@ class TestRules:
 
         assert conditions == Conditions(
             text="선릉 주차되는 가성비 이자카야 맛집",
-            embedding_text="선릉 주차되는 가성비 이자카야 맛집",
+            embedding_text="주차되는 가성비 이자카야 맛집",
             codes=("VALUE_FOR_MONEY", "PARKING"),
             category_group="BAR",
             station="SEOLLEUNG",
         )
+
+    @pytest.mark.parametrize(
+        ("query", "embedding_text"),
+        [
+            ("역삼역 근처 술집", "술집"),
+            ("근처 조용한 카페", "조용한 카페"),
+            ("선릉에서 전망이 좋은 카페", "전망이 좋은 카페"),
+            ("역삼동 아늑한 카페", "아늑한 카페"),
+            ("강남역 카페", "카페"),
+            ("강남역", "강남역"),
+        ],
+    )
+    def test_location_removed(self, query: str, embedding_text: str) -> None:
+        """규칙해석_벡터용문장의위치말은_지우고남는게없으면업종이름이나요청문을쓴다"""
+        assert interpret_by_rules(query).embedding_text == embedding_text
 
     @pytest.mark.parametrize(
         ("query", "codes"),
@@ -332,7 +377,7 @@ class TestRules:
 
         assert conditions == Conditions(
             text="역삼역 모임하기 좋은 술집 조용한 식당으로",
-            embedding_text="역삼역 모임하기 좋은 술집 조용한 식당으로",
+            embedding_text="모임하기 좋은 술집 조용한 식당으로",
             codes=("PURPOSE_GROUP", "QUIET"),
             category_group="RESTAURANT",
             station="YEOKSAM",

@@ -98,13 +98,13 @@ BE는 검색마다 `modal_llm_calls_total`과 `modal_embedding_calls_total`을 �
 ```json
 {
   "query": "넓은 곳이면 좋겠어",
-  "previousConditions": {"text": "역삼역 조용하게 대화하기 좋은 식당", "embeddingText": "역삼역에서 조용하게 대화하기 좋은 식당", "codes": ["QUIET", "PURPOSE_TALK"], "categoryGroup": "RESTAURANT", "station": "YEOKSAM", "nearby": false}
+  "previousConditions": {"text": "역삼역 조용하게 대화하기 좋은 식당", "embeddingText": "조용하게 대화하기 좋은 식당", "codes": ["QUIET", "PURPOSE_TALK"], "categoryGroup": "RESTAURANT", "station": "YEOKSAM", "nearby": false}
 }
 ```
 
 ```json
 {
-  "conditions": {"text": "역삼역 조용하게 대화하기 좋은 식당 넓은 곳이면 좋겠어", "embeddingText": "역삼역 조용하게 대화하기 좋은 넓은 곳", "codes": ["QUIET", "PURPOSE_TALK", "SPACIOUS_SEATING"], "categoryGroup": "RESTAURANT", "station": "YEOKSAM", "nearby": false},
+  "conditions": {"text": "역삼역 조용하게 대화하기 좋은 식당 넓은 곳이면 좋겠어", "embeddingText": "조용하게 대화하기 좋은 넓은 곳", "codes": ["QUIET", "PURPOSE_TALK", "SPACIOUS_SEATING"], "categoryGroup": "RESTAURANT", "station": "YEOKSAM", "nearby": false},
   "nearby": false,
   "changeSummary": "넓은 곳이면 좋겠어요",
   "items": [
@@ -153,7 +153,7 @@ BE는 검색마다 `modal_llm_calls_total`과 `modal_embedding_calls_total`을 �
 
 ```json
 {
-  "conditions": {"text": "근처 카페", "embeddingText": "근처 카페", "codes": [], "categoryGroup": "CAFE", "nearby": true},
+  "conditions": {"text": "근처 카페", "embeddingText": "카페", "codes": [], "categoryGroup": "CAFE", "nearby": true},
   "nearby": true,
   "items": [{"placeId": 29, "score": 100, "labels": ["자리가 넉넉해요", "조용해요"], "reasons": [], "scoreItems": []}],
   "interpretedBy": "LLM",

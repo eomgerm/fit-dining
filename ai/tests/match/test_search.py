@@ -166,7 +166,8 @@ class TestFilter:
 
         run(store)
 
-        assert encoder == [["강남역 조용한 카페"]]
+        # 벡터용 문장의 위치 말은 해석이 지운다. 역은 거르기에만 쓴다.
+        assert encoder == [["조용한 카페"]]
         assert store.calls == [
             (
                 PlaceFilter(
