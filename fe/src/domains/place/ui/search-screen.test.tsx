@@ -752,6 +752,18 @@ describe("SearchScreen", () => {
       expect(searchBodies[0]).toEqual({ query: "근처 카페" });
     });
 
+    it("반경 안에 남는 항목이 없으면 지원 지역 안내를 보여 준다", async () => {
+      stubGeolocation({ lat: 35.1, lng: 129.04 });
+      renderScreen();
+
+      await newSearch("근처 카페");
+
+      expect(await screen.findByText("추천 장소가 없어요")).toBeTruthy();
+      expect(
+        screen.getByText(/지금은 강남역·역삼역·선릉역 근처만 추천해요/),
+      ).toBeTruthy();
+    });
+
     it("위치를 얻지 못하면 거르지 않고 지역 기준 안내를 보여 준다", async () => {
       stubGeolocation("denied");
       renderScreen();
@@ -792,7 +804,7 @@ describe("SearchScreen", () => {
       await screen.findByText("요청을 이해하는 중");
     }
 
-    it("첫 페이지를 받는 동안 단계 문구를 차례로 바꾸고 후속 입력창을 막는다", async () => {
+    it("첫 페이지를 받는 동안 단계 문구를 차례로 바꾸고, 3초가 지나면 '조금만 더 걸려요'로 바꾸며 후속 입력창을 막는다", async () => {
       renderScreen();
       await newSearch("역삼 카페");
       const held = holdSearches();
@@ -801,15 +813,60 @@ describe("SearchScreen", () => {
       const input = screen.getByRole("textbox", { name: "후속 조건" });
       expect(input.hasAttribute("disabled")).toBe(true);
       expect(screen.queryByRole("button", { name: "최근 검색" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "검색 취소" })).toBeNull();
       expect(
         await screen.findByText("주변 장소를 찾는 중", {}, { timeout: 2500 }),
       ).toBeTruthy();
       expect(
-        await screen.findByText("취향과 맞춰 보는 중", {}, { timeout: 2500 }),
+        await screen.findByText("조금만 더 걸려요", {}, { timeout: 2500 }),
       ).toBeTruthy();
+      expect(screen.getByRole("button", { name: "검색 취소" })).toBeTruthy();
 
       held[0]();
       await waitFor(() => expect(input.hasAttribute("disabled")).toBe(false));
+    });
+
+    it("'검색 취소'를 누르면 요청을 끊고 이전 결과로 돌아간다", async () => {
+      renderScreen();
+      await newSearch("역삼 카페");
+      holdSearches();
+      await startFollowUp("더 조용하게");
+
+      fireEvent.click(
+        await screen.findByRole(
+          "button",
+          { name: "검색 취소" },
+          { timeout: 3500 },
+        ),
+      );
+
+      expect(
+        await screen.findByRole("heading", { name: "“역삼 카페”" }),
+      ).toBeTruthy();
+      expect(screen.getByRole("list", { name: "추천 장소" })).toBeTruthy();
+      expect(stores.current.getSnapshot().entries).toHaveLength(1);
+    });
+
+    it("첫 검색에서 '검색 취소'를 누르면 첫 화면으로 돌아간다", async () => {
+      holdSearches();
+      renderScreen();
+      fireEvent.change(screen.getByRole("textbox", { name: "장소 검색" }), {
+        target: { value: "역삼 카페" },
+      });
+      fireEvent.submit(screen.getByRole("search"));
+
+      fireEvent.click(
+        await screen.findByRole(
+          "button",
+          { name: "검색 취소" },
+          { timeout: 3500 },
+        ),
+      );
+
+      expect(
+        await screen.findByRole("textbox", { name: "장소 검색" }),
+      ).toBeTruthy();
+      expect(screen.queryByRole("region", { name: "추천 결과" })).toBeNull();
     });
 
     it("'새 검색'을 누르면 진행 중이던 요청의 결과가 늦게 와도 화면과 기록을 바꾸지 않는다", async () => {
@@ -1024,7 +1081,7 @@ describe("SearchScreen", () => {
 
       expect(
         await screen.findByText(
-          "위치 권한이 꺼져 있어요. 브라우저 설정에서 허용해 주세요",
+          /위치 권한이 꺼져 있어요\. 브라우저 설정에서 허용해 주세요\./,
         ),
       ).toBeTruthy();
       expect(getCurrentPosition).not.toHaveBeenCalled();
@@ -1035,7 +1092,7 @@ describe("SearchScreen", () => {
       await nearbyList();
       expect(
         screen.queryByText(
-          "위치 권한이 꺼져 있어요. 브라우저 설정에서 허용해 주세요",
+          /위치 권한이 꺼져 있어요\. 브라우저 설정에서 허용해 주세요\./,
         ),
       ).toBeNull();
     });
@@ -1233,6 +1290,118 @@ describe("SearchScreen", () => {
         ).toBeTruthy();
         vi.restoreAllMocks();
       });
+    });
+  });
+
+  // 요청이 실패하는 화면(4-E03, 5-E01, 5-E03, 5-E04). 400은 재시도하지 않아 곧바로 실패한다
+  describe("불러오기 실패", () => {
+    // match에 맞는 요청을 times번 실패시키고 그 뒤로는 원래대로 응답한다
+    function failRequests(
+      match: (url: string, body?: { query?: string }) => boolean,
+      { times = 1, offline = false } = {},
+    ) {
+      const original = globalThis.fetch;
+      let left = times;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>(async (input, init) => {
+          const url = String(input);
+          const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+          if (left > 0 && match(url, body)) {
+            left -= 1;
+            if (offline) throw new TypeError("Failed to fetch");
+            return Response.json(
+              { status: 400, title: "Bad Request" },
+              { status: 400 },
+            );
+          }
+          return original(input, init);
+        }),
+      );
+    }
+    const isSearch = (url: string, body?: { query?: string }) =>
+      url.includes("/search") && body?.query !== NEARBY_QUERY;
+
+    it("추천을 받지 못하면 결과 패널에 안내와 '다시 시도'를 보이고, 다시 시도하면 결과를 보인다", async () => {
+      failRequests(isSearch);
+      renderScreen();
+      fireEvent.change(screen.getByRole("textbox", { name: "장소 검색" }), {
+        target: { value: "역삼 카페" },
+      });
+      fireEvent.submit(screen.getByRole("search"));
+
+      const panel = await screen.findByRole("region", { name: "추천 결과" });
+      expect(
+        await within(panel).findByText("추천을 불러오지 못했어요"),
+      ).toBeTruthy();
+      expect(
+        within(panel).getByText("잠시 후 다시 시도해 주세요."),
+      ).toBeTruthy();
+      expect(
+        within(panel).getByRole("heading", { name: "“역삼 카페”" }),
+      ).toBeTruthy();
+
+      fireEvent.click(within(panel).getByRole("button", { name: "다시 시도" }));
+
+      expect(
+        await screen.findByRole("list", { name: "추천 장소" }),
+      ).toBeTruthy();
+      expect(screen.queryByText("추천을 불러오지 못했어요")).toBeNull();
+      expect(searchBodies).toHaveLength(1);
+    });
+
+    // 연결 실패는 두 번 더 보낸 뒤(약 3초) 실패한다
+    it("연결이 없어 추천을 받지 못하면 연결 안내를 보인다", async () => {
+      renderScreen();
+      await newSearch("역삼 카페");
+      failRequests(isSearch, { times: 3, offline: true });
+
+      await followUp("더 조용하게");
+
+      expect(
+        await screen.findByText(
+          "인터넷에 연결되어 있지 않아요",
+          {},
+          { timeout: 5000 },
+        ),
+      ).toBeTruthy();
+      expect(
+        screen.getByText("연결을 확인하고 다시 시도해 주세요."),
+      ).toBeTruthy();
+      expect(screen.queryByRole("list", { name: "추천 장소" })).toBeNull();
+    }, 8000);
+
+    it("주변 추천을 받지 못하면 카드 자리에 안내를 보이고, 다시 시도하면 카드를 보인다", async () => {
+      failRequests((url, body) => body?.query === NEARBY_QUERY);
+      renderScreen();
+
+      expect(
+        await screen.findByText("주변 추천을 불러오지 못했어요"),
+      ).toBeTruthy();
+      expect(screen.getByText("역삼역 주변 추천")).toBeTruthy();
+
+      fireEvent.click(screen.getByRole("button", { name: "다시 시도" }));
+
+      expect(await nearbyList()).toBeTruthy();
+      expect(screen.queryByText("주변 추천을 불러오지 못했어요")).toBeNull();
+    });
+
+    it("자동완성 후보를 받지 못하면 '이 조건으로 추천받기'와 안내만 보인다", async () => {
+      failRequests((url) => url.startsWith("/api/v1/places/suggest"));
+      renderScreen();
+
+      fireEvent.focus(screen.getByRole("textbox", { name: "장소 검색" }));
+      fireEvent.change(screen.getByRole("textbox", { name: "장소 검색" }), {
+        target: { value: "역삼 쌀국수" },
+      });
+
+      const list = await screen.findByRole("list", { name: "검색 추천" });
+      expect(
+        await within(list).findByText("지금은 후보를 보여 드릴 수 없어요"),
+      ).toBeTruthy();
+      expect(
+        within(list).getByRole("button", { name: "이 조건으로 추천받기" }),
+      ).toBeTruthy();
     });
   });
 });

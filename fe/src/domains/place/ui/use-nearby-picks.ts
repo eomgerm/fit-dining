@@ -13,7 +13,10 @@ const recorded = new WeakSet<PlaceSearchResponse>();
 // 첫 화면 주변 카드. 기기 위치가 있으면 그 위치, 없으면 역삼역을 기준 지점으로 거른다
 export function useNearbyPicks(enabled: boolean) {
   const here = useHere();
-  const { data } = useQuery({ ...placeQueries.nearby(), enabled });
+  const { data, error, refetch } = useQuery({
+    ...placeQueries.nearby(),
+    enabled,
+  });
 
   // 상세 화면이 핏 점수와 추천 이유를 쓰도록 받은 카드를 둔다
   useEffect(() => {
@@ -28,5 +31,8 @@ export function useNearbyPicks(enabled: boolean) {
     origin,
     // 기준 지점이 역삼역이면 거리 앞에 "역삼역"을 붙인다
     originLabel: here ? undefined : "역삼역",
+    // 받은 카드가 없을 때의 실패만 알린다. 다시 받다가 실패해도 이전 카드는 그대로 보인다
+    error: data ? null : error,
+    retry: () => void refetch(),
   };
 }

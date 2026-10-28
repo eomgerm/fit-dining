@@ -64,5 +64,6 @@ export async function locateIfGranted(): Promise<OpenLocationResult> {
 
 export const LOCATION_FAILED_MESSAGE = "위치를 확인할 수 없어요";
 
+// 4-E01. 두 줄로 보인다
 export const LOCATION_DENIED_MESSAGE =
-  "위치 권한이 꺼져 있어요. 브라우저 설정에서 허용해 주세요";
+  "위치 권한이 꺼져 있어요.\n브라우저 설정에서 허용해 주세요.";

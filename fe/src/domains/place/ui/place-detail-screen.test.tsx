@@ -300,4 +300,23 @@ describe("PlaceDetailScreen", () => {
 
     expect(await screen.findByText("장소를 찾을 수 없어요")).toBeTruthy();
   });
+
+  // 400은 재시도하지 않아 곧바로 실패한다
+  it("장소 정보를 받지 못하면 안내와 '다시 시도'를 보이고, 다시 시도하면 장소를 보인다", async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json({ status: 400 }, { status: 400 }),
+    );
+    renderDetail();
+
+    expect(
+      await screen.findByText("장소 정보를 불러오지 못했어요"),
+    ).toBeTruthy();
+    expect(screen.getByText("잠시 후 다시 시도해 주세요.")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "다시 시도" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "카페 온담" }),
+    ).toBeTruthy();
+  });
 });

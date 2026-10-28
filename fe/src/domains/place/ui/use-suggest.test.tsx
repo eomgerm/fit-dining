@@ -103,7 +103,10 @@ describe("useSuggest", () => {
     calls[0].respond([place("하노이 쌀국수 역삼점"), action]);
     await wait(0);
 
-    expect(result.current).toEqual([place("하노이 쌀국수 역삼점"), action]);
+    expect(result.current.suggestions).toEqual([
+      place("하노이 쌀국수 역삼점"),
+      action,
+    ]);
   });
 
   it("비었거나 공백뿐인 입력은 요청하지 않는다", async () => {
@@ -113,7 +116,7 @@ describe("useSuggest", () => {
     await wait(1000);
 
     expect(calls).toHaveLength(0);
-    expect(result.current).toEqual([]);
+    expect(result.current.suggestions).toEqual([]);
   });
 
   it("새 요청을 보내면 이전 요청을 취소한다", async () => {
@@ -135,14 +138,14 @@ describe("useSuggest", () => {
     await wait(300);
     calls[0].respond([action]);
     await wait(0);
-    expect(result.current).toEqual([action]);
+    expect(result.current.suggestions).toEqual([action]);
     rerender({ input: "역삼" });
     await wait(300);
     expect(calls[1].signal.aborted).toBe(false);
 
     rerender({ input: " " });
 
-    expect(result.current).toEqual([]);
+    expect(result.current.suggestions).toEqual([]);
     expect(calls[1].signal.aborted).toBe(true);
   });
 
@@ -155,11 +158,11 @@ describe("useSuggest", () => {
 
     calls[0].respond([place("역 앞 오래된 후보"), action]);
     await wait(0);
-    expect(result.current).toEqual([]);
+    expect(result.current.suggestions).toEqual([]);
 
     calls[1].respond([place("역삼 새 후보"), action]);
     await wait(0);
-    expect(result.current).toEqual([place("역삼 새 후보"), action]);
+    expect(result.current.suggestions).toEqual([place("역삼 새 후보"), action]);
   });
 
   it("입력을 지운 뒤 다시 쓰면 지우기 전 입력의 후보를 보여 주지 않는다", async () => {
@@ -173,6 +176,6 @@ describe("useSuggest", () => {
     await wait(0);
     rerender({ input: "카" });
 
-    expect(result.current).toEqual([]);
+    expect(result.current.suggestions).toEqual([]);
   });
 });

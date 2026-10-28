@@ -26,9 +26,10 @@ function ToastList() {
       key={toast.id}
       toast={toast}
       // 끌어서 닫을 때 손가락을 따라 움직이도록 Base UI의 swipe 변수를 쓴다
-      className="absolute bottom-0 flex h-10 max-w-full translate-x-(--toast-swipe-movement-x) translate-y-(--toast-swipe-movement-y) items-center rounded-full bg-ink px-4 text-surface shadow-2 transition duration-200 ease-enter data-ending-style:opacity-0 data-ending-style:duration-150 data-ending-style:ease-exit data-limited:opacity-0 data-starting-style:translate-y-4 data-starting-style:opacity-0 data-swiping:duration-0 motion-reduce:data-starting-style:translate-y-0"
+      className="absolute bottom-0 flex min-h-10 max-w-full translate-x-(--toast-swipe-movement-x) translate-y-(--toast-swipe-movement-y) items-center rounded-xl bg-ink px-4 py-2 text-surface shadow-2 transition duration-200 ease-enter data-ending-style:opacity-0 data-ending-style:duration-150 data-ending-style:ease-exit data-limited:opacity-0 data-starting-style:translate-y-4 data-starting-style:opacity-0 data-swiping:duration-0 motion-reduce:data-starting-style:translate-y-0"
     >
-      <Toast.Description className="truncate text-body-sm" />
+      {/* 문구의 \n에서 줄을 나눈다. 한 줄이면 rounded-xl이 알약 모양이 된다(4-E01) */}
+      <Toast.Description className="text-center text-body-sm whitespace-pre-line" />
     </Toast.Root>
   ));
 }

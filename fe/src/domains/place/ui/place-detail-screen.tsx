@@ -24,6 +24,7 @@ import { placeQueries } from "../api/place-queries";
 import { todayNotice } from "../model/opening-hours";
 import { parsePlaceId } from "../model/place-id";
 import type { PlaceCard, PlaceDetail } from "../model/place-types";
+import { LoadFailed } from "./load-failed";
 import { HomeTab, InfoTab, MenuTab } from "./place-detail-tabs";
 import {
   OpenStatusText,
@@ -127,9 +128,12 @@ function PlaceDetailContent({
         {notFound ? (
           <NotFound />
         ) : (
-          <p role="alert" className="p-4 text-body-sm text-danger">
-            장소 정보를 불러오지 못했어요. 잠시 뒤 다시 시도해 주세요
-          </p>
+          <LoadFailed
+            error={query.error}
+            title="장소 정보를 불러오지 못했어요"
+            onRetry={() => query.refetch()}
+            className="mt-40"
+          />
         )}
       </>
     );

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useRef, useState, type ReactNode } from "react";
+import { useRef, useState } from "react";
 
 import { cn } from "@/shared/lib/cn";
 import { IconButton } from "@/shared/ui/button/icon-button";
@@ -12,6 +12,7 @@ import { HistoryIcon } from "@/shared/ui/icon/icons/history";
 import { PinIcon } from "@/shared/ui/icon/icons/pin";
 import { SearchIcon } from "@/shared/ui/icon/icons/search";
 import { SparkleIcon } from "@/shared/ui/icon/icons/sparkle";
+import { WarningIcon } from "@/shared/ui/icon/icons/warning";
 
 import { highlightParts } from "../model/highlight";
 import type { PlaceSuggestion } from "../model/place-types";
@@ -21,14 +22,18 @@ import { PlaceMeta } from "./place-parts";
 import { useHere } from "./use-search-store";
 import { useSuggest } from "./use-suggest";
 
+// 후보를 받지 못했을 때 혼자 보이는 "이 조건으로 추천받기"(BE ACTION과 같은 문구)
+const FALLBACK_ACTION: PlaceSuggestion = {
+  type: "ACTION",
+  label: "이 조건으로 추천받기",
+};
+
 type SearchBarProps = {
   // 새 검색. 공백뿐인 입력은 부르지 않는다
   onSearch: (input: string) => void;
   disabled?: boolean;
   // 최근 검색 시트를 연다
   onOpenRecent: () => void;
-  // 검색창 위 한 줄(오류 문구)
-  message?: ReactNode;
 };
 
 // 결과가 없을 때 화면 아래쪽에 떠 있는 검색창(5-01, 와이어프레임 Start, Typing).
@@ -37,13 +42,16 @@ export function SearchBar({
   onSearch,
   disabled,
   onOpenRecent,
-  message,
 }: SearchBarProps) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [input, setInput] = useState("");
   const [focused, setFocused] = useState(false);
-  const suggestions = actionFirst(useSuggest(input));
+  const suggest = useSuggest(input);
+  // 후보를 받지 못해도 지금 입력으로 추천받기는 할 수 있다(5-E01)
+  const suggestions = suggest.failed
+    ? [FALLBACK_ACTION]
+    : actionFirst(suggest.suggestions);
   const here = useHere();
   const empty = !input.trim();
   // 초점이 있고 입력이 있는 동안. 막을 누르면 초점이 풀려 닫힌다
@@ -72,7 +80,6 @@ export function SearchBar({
           className="fixed inset-0 bg-scrim"
         />
       )}
-      {message}
       <form
         role="search"
         onSubmit={(event) => {
@@ -168,6 +175,16 @@ export function SearchBar({
               </button>
             </li>
           ))}
+          {suggest.failed && (
+            <li className="flex min-h-14 items-center gap-3 px-4 py-2.5">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-surface-sunken text-ink-muted">
+                <WarningIcon size="md" />
+              </span>
+              <span className="text-body-sm text-ink-muted">
+                지금은 후보를 보여 드릴 수 없어요
+              </span>
+            </li>
+          )}
         </ul>
       )}
     </div>

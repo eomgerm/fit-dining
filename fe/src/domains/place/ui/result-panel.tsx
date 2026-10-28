@@ -12,6 +12,7 @@ import { Tag } from "@/shared/ui/display/tag";
 import { ChevronDownIcon } from "@/shared/ui/icon/icons/chevron-down";
 import { ChevronUpIcon } from "@/shared/ui/icon/icons/chevron-up";
 import { MapIcon } from "@/shared/ui/icon/icons/map";
+import { PinOffIcon } from "@/shared/ui/icon/icons/pin-off";
 import { PlusIcon } from "@/shared/ui/icon/icons/plus";
 import { RequestHistoryIcon } from "@/shared/ui/icon/icons/request-history";
 import { SearchIcon } from "@/shared/ui/icon/icons/search";
@@ -28,6 +29,9 @@ import { SearchSteps } from "./search-steps";
 // 중간(5-04), 전체(5-05), 요청 기록 펼침(와이어프레임 RequestHistory)
 export type PanelState = "middle" | "full" | "history";
 
+// 추천하는 지역(5-E05)
+const SUPPORTED_AREAS = "강남역·역삼역·선릉역";
+
 // 손잡이를 이만큼 끌면 상태를 바꾼다
 const DRAG_THRESHOLD_PX = 30;
 
@@ -38,6 +42,10 @@ type ResultPanelProps = {
   sentence: string;
   // 첫 페이지를 받는 중(5-03)
   searching: boolean;
+  // 검색이 3초 넘게 걸릴 때 보이는 "검색 취소"(5-E02)
+  onCancelSearch: () => void;
+  // 검색이 실패했을 때 결과 목록 대신 보인다(5-E03, 5-E04)
+  failure?: ReactNode;
   firstPage?: PlaceSearchResponse;
   chips: string[];
   cards: PlaceCardData[];
@@ -55,8 +63,6 @@ type ResultPanelProps = {
   onToggleHistory: () => void;
   // 요청 기록을 펼쳤을 때 결과 목록 자리에 그린다
   history: ReactNode;
-  // 오류 문구 한 줄
-  message?: ReactNode;
   // 패널 아래 고정되는 후속 입력창
   footer: ReactNode;
   // 패널 위쪽 가장자리에 붙는 지도 버튼("내 위치")
@@ -69,6 +75,8 @@ export function ResultPanel({
   onStateChange,
   sentence,
   searching,
+  onCancelSearch,
+  failure,
   firstPage,
   chips,
   cards,
@@ -83,11 +91,12 @@ export function ResultPanel({
   onNewSearch,
   onToggleHistory,
   history,
-  message,
   footer,
   edge,
 }: ResultPanelProps) {
   const dragStartY = useRef<number | undefined>(undefined);
+  // 받은 결과를 보여 주는 중. 검색 중이거나 실패했으면 이전 결과의 요약과 칩을 숨긴다
+  const showingResults = !searching && !failure;
   const full = state === "full";
   const historyOpen = state === "history";
 
@@ -152,33 +161,35 @@ export function ResultPanel({
         <div className="min-h-0 flex-1 overflow-y-auto pb-4">{history}</div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-4">
-          {!searching && firstPage?.changeSummary && (
+          {showingResults && firstPage?.changeSummary && (
             <Badge icon={<SparkleIcon size="sm" />} className="self-start">
               {firstPage.changeSummary}
             </Badge>
           )}
           <h2 className="text-title-md text-ink">“{sentence}”</h2>
-          {!searching && chips.length > 0 && (
+          {showingResults && chips.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {chips.map((chip, index) => (
                 <Tag key={index}>추가 조건 · {chip}</Tag>
               ))}
             </div>
           )}
-          {message}
-          <PanelResults
-            searching={searching}
-            firstPage={firstPage}
-            cards={cards}
-            selectedId={selectedId}
-            here={here}
-            locating={locating}
-            unfilteredNearby={unfilteredNearby}
-            hasNextPage={hasNextPage}
-            onLoadMore={onLoadMore}
-            loadMoreFailed={loadMoreFailed}
-            onCardPress={onCardPress}
-          />
+          {failure || (
+            <PanelResults
+              searching={searching}
+              onCancelSearch={onCancelSearch}
+              firstPage={firstPage}
+              cards={cards}
+              selectedId={selectedId}
+              here={here}
+              locating={locating}
+              unfilteredNearby={unfilteredNearby}
+              hasNextPage={hasNextPage}
+              onLoadMore={onLoadMore}
+              loadMoreFailed={loadMoreFailed}
+              onCardPress={onCardPress}
+            />
+          )}
         </div>
       )}
 
@@ -201,6 +212,7 @@ export function ResultPanel({
 // 결과 목록. 과거 결과 화면도 다음 페이지 없이 같은 목록을 쓴다
 export function PanelResults({
   searching,
+  onCancelSearch,
   firstPage,
   cards,
   selectedId,
@@ -211,24 +223,25 @@ export function PanelResults({
   onLoadMore,
   loadMoreFailed,
   onCardPress,
-}: Pick<
-  ResultPanelProps,
-  | "searching"
-  | "firstPage"
-  | "cards"
-  | "selectedId"
-  | "here"
-  | "locating"
-  | "unfilteredNearby"
-  | "hasNextPage"
-  | "onLoadMore"
-  | "loadMoreFailed"
-  | "onCardPress"
->) {
+}: Partial<Pick<ResultPanelProps, "onCancelSearch">> &
+  Pick<
+    ResultPanelProps,
+    | "searching"
+    | "firstPage"
+    | "cards"
+    | "selectedId"
+    | "here"
+    | "locating"
+    | "unfilteredNearby"
+    | "hasNextPage"
+    | "onLoadMore"
+    | "loadMoreFailed"
+    | "onCardPress"
+  >) {
   if (searching) {
     return (
       <div aria-busy className="flex flex-col gap-3">
-        <SearchSteps />
+        <SearchSteps onCancel={onCancelSearch} />
         <PlaceCardSkeleton />
         <PlaceCardSkeleton />
         <PlaceCardSkeleton />
@@ -259,9 +272,18 @@ export function PanelResults({
         <Note>위치를 확인할 수 없어 지역 기준으로 보여 드려요</Note>
       )}
       {cards.length === 0 && (
-        <p className="py-6 text-center text-body-sm text-ink-muted">
-          가까운 곳에서 찾지 못했어요
-        </p>
+        // 근처 필터로 다 걸러졌거나 비어 있으면 지원 지역 밖일 수 있다(5-E05)
+        <EmptyState
+          icon={<PinOffIcon />}
+          title="추천 장소가 없어요"
+          description={
+            <>
+              지원 지역이 아닐 수 있어요.
+              <br />
+              지금은 {SUPPORTED_AREAS} 근처만 추천해요.
+            </>
+          }
+        />
       )}
       <ol aria-label="추천 장소" className="flex flex-col gap-3">
         {cards.map((card, index) => (

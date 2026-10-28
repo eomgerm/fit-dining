@@ -1,6 +1,10 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQueryClient,
+  type QueryKey,
+} from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
@@ -33,6 +37,7 @@ import {
 import { appendTurn } from "../model/search-threads";
 import { FollowUpInput } from "./follow-up-input";
 import { HistoryTimeline } from "./history-timeline";
+import { isOfflineError, LoadFailed } from "./load-failed";
 import {
   LOCATION_DENIED_MESSAGE,
   LOCATION_FAILED_MESSAGE,
@@ -57,7 +62,6 @@ type SearchInput = {
   request: PlaceSearchRequest;
 };
 
-const ERROR_MESSAGE = "결과를 불러오지 못했어요. 잠시 뒤 다시 시도해 주세요";
 const NOT_READY_MESSAGE = "준비 중이에요";
 
 // 첫 화면(와이어프레임 Start)과 검색·추천 결과 화면(5-01, 5-03~5-07)
@@ -85,6 +89,8 @@ export function SearchScreen() {
   const [mapMoved, setMapMoved] = useState(false);
   // 검색 중에 "새 검색"이나 다른 결과로 바꾸면 올린다. 그 전에 보낸 요청의 결과는 버린다
   const searchGeneration = useRef(0);
+  // 받는 중인 첫 페이지의 쿼리 키. 검색을 버리면 그 요청을 끊는다
+  const pendingKey = useRef<QueryKey | undefined>(undefined);
   // 지도를 마지막으로 옮겨 준 기기 위치. 새 위치를 얻을 때만 지도를 옮긴다
   const centeredOn = useRef<LatLng | undefined>(undefined);
 
@@ -95,6 +101,7 @@ export function SearchScreen() {
       const generation = searchGeneration.current;
       const id = nextEntryId();
       const options = placeQueries.search(id, request);
+      pendingKey.current = options.queryKey;
       try {
         const data = await queryClient.fetchInfiniteQuery(options);
         if (generation !== searchGeneration.current) {
@@ -133,9 +140,12 @@ export function SearchScreen() {
   });
 
   const searching = search.isPending;
-  const showPanel = Boolean(viewing) || searching;
+  // 실패하면 결과 패널에 실패 안내를 띄운다(5-E03, 5-E04). 첫 검색이 실패해도 패널을 연다
+  const failed = search.isError;
+  const showPanel = Boolean(viewing) || searching || failed;
   const firstScreen = !showPanel && !past;
   const nearby = useNearbyPicks(firstScreen);
+  const nearbyOffline = isOfflineError(nearby.error);
   // 가운데 카드가 선택된 카드다. 고른 적이 없으면 첫 카드
   const selectedNearbyId = nearby.cards.some(
     ({ place }) => place.id === selectedPlaceId,
@@ -202,11 +212,23 @@ export function SearchScreen() {
     });
   }
 
-  // 진행 중인 검색을 버리고 그 결과가 화면을 바꾸지 않게 한다
+  // 진행 중인 검색을 버리고 그 결과가 화면을 바꾸지 않게 한다. 받는 중인 요청도 끊는다
   function abandonSearch() {
     searchGeneration.current += 1;
+    if (pendingKey.current) {
+      void queryClient.cancelQueries({
+        queryKey: pendingKey.current,
+        exact: true,
+      });
+      pendingKey.current = undefined;
+    }
     search.reset();
     setMapMoved(false);
+  }
+
+  // 실패한 요청을 같은 종류와 기준 요청으로 다시 보낸다
+  function handleRetrySearch() {
+    if (search.variables) run(search.variables);
   }
 
   // 지금 thread를 닫는다. 다음 새 검색이 새 thread를 연다
@@ -302,11 +324,6 @@ export function SearchScreen() {
     : showPanel
       ? results.cards
       : nearby.cards;
-  const errorLine = search.isError && (
-    <p role="alert" className="text-body-sm text-danger">
-      {ERROR_MESSAGE}
-    </p>
-  );
   const myLocationButton = mapReady && (
     <Fab label="내 위치" onClick={handleMyLocation}>
       <MyLocationIcon className="text-icon" />
@@ -380,11 +397,22 @@ export function SearchScreen() {
           state={panel}
           onStateChange={setPanel}
           sentence={
-            searching
+            searching || failed
               ? (search.variables?.request.query ?? "")
               : (viewing?.sentence ?? "")
           }
           searching={searching}
+          // "검색 취소"(5-E02). 이전 결과가 있으면 그 결과로, 없으면 첫 화면으로 돌아간다
+          onCancelSearch={abandonSearch}
+          failure={
+            failed && (
+              <LoadFailed
+                error={search.error}
+                title="추천을 불러오지 못했어요"
+                onRetry={handleRetrySearch}
+              />
+            )
+          }
           firstPage={results.firstPage}
           chips={followUpChips(entries, viewing?.id)}
           cards={results.cards}
@@ -401,7 +429,6 @@ export function SearchScreen() {
           history={
             <HistoryTimeline onView={handleView} onContinue={handleContinue} />
           }
-          message={errorLine}
           edge={myLocationButton}
           footer={
             <FollowUpInput
@@ -413,29 +440,57 @@ export function SearchScreen() {
           }
         />
       ) : (
-        // 아래부터 검색창, 주변 카드, "내 위치" 순서로 쌓는다(와이어프레임 Start)
-        <div className="absolute inset-x-0 bottom-0 flex flex-col gap-3 pb-4">
-          {myLocationButton && (
-            <div className="flex justify-end px-4">{myLocationButton}</div>
+        <>
+          {nearbyOffline && (
+            // 연결이 없으면 지도 대신 연결 안내만 보인다(4-E02)
+            <div className="absolute inset-0 flex flex-col justify-center bg-surface pb-20">
+              <LoadFailed
+                error={nearby.error}
+                title="주변 추천을 불러오지 못했어요"
+                onRetry={nearby.retry}
+              />
+            </div>
           )}
-          {nearby.cards.length > 0 && selectedNearbyId !== undefined && (
-            <NearbyCarousel
-              cards={nearby.cards}
-              selectedId={selectedNearbyId}
-              origin={nearby.origin}
-              originLabel={nearby.originLabel}
-              onSelect={handleNearbySelect}
-              onOpen={({ place }) => router.push(`/place?id=${place.id}`)}
-            />
-          )}
-          <div className="px-4">
-            <SearchBar
-              onSearch={handleNewSearch}
-              onOpenRecent={() => setRecentOpen(true)}
-              message={errorLine}
-            />
+          {/* 아래부터 검색창, 주변 카드, 기준 지역과 "내 위치" 순서로 쌓는다(와이어프레임 Start) */}
+          <div className="absolute inset-x-0 bottom-0 flex flex-col gap-3 pb-4">
+            {!nearbyOffline && (
+              <div className="flex items-center justify-between gap-2 px-4">
+                <span className="flex h-11 items-center rounded-full bg-surface px-4 text-label-md text-ink shadow-2">
+                  {nearby.originLabel
+                    ? `${nearby.originLabel} 주변 추천`
+                    : "내 주변 추천"}
+                </span>
+                {myLocationButton}
+              </div>
+            )}
+            {nearby.error && !nearbyOffline && (
+              // 주변 추천을 받지 못하면 카드 자리에 안내를 띄운다(4-E03)
+              <div className="mx-4 rounded-lg bg-surface pb-6 shadow-2">
+                <LoadFailed
+                  error={nearby.error}
+                  title="주변 추천을 불러오지 못했어요"
+                  onRetry={nearby.retry}
+                />
+              </div>
+            )}
+            {nearby.cards.length > 0 && selectedNearbyId !== undefined && (
+              <NearbyCarousel
+                cards={nearby.cards}
+                selectedId={selectedNearbyId}
+                origin={nearby.origin}
+                originLabel={nearby.originLabel}
+                onSelect={handleNearbySelect}
+                onOpen={({ place }) => router.push(`/place?id=${place.id}`)}
+              />
+            )}
+            <div className="px-4">
+              <SearchBar
+                onSearch={handleNewSearch}
+                onOpenRecent={() => setRecentOpen(true)}
+              />
+            </div>
           </div>
-        </div>
+        </>
       )}
 
       <RecentSearchSheet
