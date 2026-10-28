@@ -68,3 +68,8 @@ Glossary: none · ADRs: none
 - Status: settled
 - Decision: V6은 `reviews.place_id`에 FK를 더하지 않는다. 리뷰 등록이 Mock 검색 엔진으로 장소를 확인하고 V6 직후 `places`가 비어 있어, FK를 더하면 dev 리뷰 작성과 리뷰 테스트가 실패한다. 이 문제를 고치는 일은 이 일감 밖이라 spec의 Open questions에 남긴다.
 - Rejected: V6에서 FK 추가(`NOT VALID` 포함) → 첫 적재 전까지 새 리뷰 INSERT가 모두 실패하고, 리뷰 기능과 테스트까지 범위가 넓어진다.
+
+## D-14 특징 코드표 `feature_codes`
+- Status: settled
+- Decision: 특징 코드표를 `feature_codes`에 둔다. PK는 `code`다. 코드, 층, 설명 문구, 문구 벡터를 담고 V6이 23행을 넣는다. 벡터는 39의 `encode_queries`로 미리 만들어 SQL에 넣는다(모델과 리비전은 컬럼 주석). `reason_tags.feature_code`는 이 테이블을 FK로 가리킨다. `places.food_type`은 FK 대신 지금의 CHECK를 둔다. FK로는 `FOOD_SPICY`나 `QUIET`도 통과해 음식 종류 5개로 좁힐 수 없다.
+- Rejected: 별도 `code_id` PK → 코드를 쓰는 곳(`reason_tags`, jsonb)이 모두 코드 문자열이라 id를 둘 곳이 없다. `code_vectors.json` 파일로 → 41이 페르소나 벡터와 DB 안에서 바로 비교할 수 없다. 벡터를 NULL로 두고 적재 작업이 채움 → 코드 23개뿐이라 미리 만들어 넣는 편이 단순하다. jsonb 안의 코드와 `priorities`·`purposes` 배열에 FK → 배열과 jsonb에는 FK를 걸 수 없고, 걸려면 행으로 쪼개야 한다.

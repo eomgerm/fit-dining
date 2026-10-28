@@ -361,7 +361,7 @@ LLM이 준 항목이 대조에서 모두 버려지면 출력 검사 실패로 �
 | `evidence` | 2단계의 장부 행. 41이 업종이나 출처로 근거를 고를 때 쓴다 |
 | `embedding` | 모델, 리비전, 취향 쪽 인코딩 방식 |
 
-`code_vectors.json`은 `{model, revision, prompt, vectors: {코드: 벡터}}` 형식이다. 사용자 취향의 DB 저장 형식은 [profile-storage](../profile-storage/spec.md)에 있다.
+`code_vectors.json`은 `{model, revision, prompt, vectors: {코드: 벡터}}` 형식이다. 운영에서는 같은 벡터를 DB `feature_codes.vector`에 둔다. 사용자 취향의 DB 저장 형식과 함께 [profile-storage](../profile-storage/spec.md)에 있다.
 
 ### 샘플 사용자
 

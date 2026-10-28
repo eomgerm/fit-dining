@@ -21,6 +21,19 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 
 마이그레이션: `be/src/main/resources/db/migration/V6__create_places_and_profiles.sql`. 컬럼 설명은 `COMMENT ON`으로 DB에도 남겼다.
 
+### `feature_codes`(새 테이블)
+
+| 컬럼 | 타입 | 내용 |
+|---|---|---|
+| `code` | text PK | 특징 코드(`QUIET` 등). `ai/src/fit_ai/features.py`의 `FEATURES` 23개 |
+| `layer` | text NOT NULL, CHECK | `axis` \| `importance` \| `purpose` \| `food` |
+| `phrase` | text NOT NULL | 코드 설명 문구("조용하고 차분한 곳"). `vector`를 만든 문장 |
+| `vector` | vector(1024) NOT NULL | 문구 임베딩. 질의 인코딩(`query: ` 접두사), L2 정규화. 41이 사용자의 코드를 페르소나와 비교할 때 쓴다 |
+| `created_at`, `updated_at` | timestamptz NOT NULL, 기본 `now()` | |
+
+- V6이 23행을 넣는다. 벡터는 `encode_queries`(39 임베딩 함수)로 미리 만들어 SQL에 넣었다(D-14).
+- `reason_tags.feature_code`는 `fk_reason_tags_feature_code`로 이 테이블을 가리킨다.
+
 ### `user_preferences`(기존 V2에 컬럼 추가)
 
 | 컬럼 | 타입 | 내용 | 쓰는 쪽 |
@@ -80,7 +93,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 
 | Anchor | Action | Decision |
 |---|---|---|
-| `be/src/main/resources/db/migration/V6__create_places_and_profiles.sql` | new | D-3~D-13 |
+| `be/src/main/resources/db/migration/V6__create_places_and_profiles.sql` | new | D-3~D-14 |
 | `be/src/test/java/kr/co/fitdining/api/support/PostgresTestSupport.java#migrate` | `vector` 확장 생성 추가 | Assumption 5 |
 | `be/src/test/java/kr/co/fitdining/api/auth/AuthServiceTests.java#migrate_withoutAuthEnvironment_startsAndCloses` | 새로 만드는 `fit_dev` DB에 `vector` 확장 생성 추가 | Assumption 5 |
 | `be/src/test/java/kr/co/fitdining/api/place/ProfileSchemaTest.java#ProfileSchemaTest` | new | D-4, D-7, D-10 |
@@ -92,6 +105,8 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 - 음식 종류 코드가 아닌 `food_type`(`FOOD_SPICY`)은 `ck_places_food_type`으로 거부된다.
 - 장소를 지우면 페르소나도 지워진다.
 - `features` 없이 저장한 취향의 `features`는 `[]`이다.
+- 코드표에 없는 `feature_code`의 이유 태그는 `fk_reason_tags_feature_code`로 거부된다.
+- `feature_codes`에 23행이 있고 벡터는 모두 길이 1이다.
 
 ## Out of scope
 
@@ -111,16 +126,18 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 4. **`vector` 확장이 없는 DB에서는 V6이 실패한다.** 서버와 로컬은 인프라 스크립트가 만들고, 테스트는 `PostgresTestSupport`가 만든다. 다른 경로로 DB를 만들면 확장을 먼저 만들어야 한다.
 5. **`places`에 분석 컬럼 없이 행을 넣을 수 없다.** 분석 컬럼이 NOT NULL이라 수집과 분석 결과를 함께 적재해야 한다. 수집 담당과 적재 순서를 맞춘다.
 6. **칩에 코드가 없다.** 해석 API(`POST /api/v1/onboarding/taste-analysis`, -59)는 `TasteChip(polarity, label)`만 돌려준다. `tastes[].code`를 채우려면 해석 결과의 `code`가 칩과 함께 저장 요청까지 와야 한다. -59·-58 담당과 정한다.
-7. **코드 문구 벡터(`code_vectors.json`)의 위치가 정해지지 않았다.** 사용자와 무관한 고정 값이라 이 설계의 테이블에 넣지 않았다. 41이 파일로 읽을지 테이블로 둘지 정한다.
-8. **장소 검색 D-36과 다르다.** D-36은 pgvector를 임시로 두고 OpenSearch가 벡터를 최종 관리한다고 정했다. 이 spec은 1차 MVP에서 pgvector만 쓴다(D-2). 검색 담당과 D-36을 정리한다.
+7. **코드표가 두 곳에 있다.** AI의 `FEATURES`와 DB의 `feature_codes`다. 코드나 문구를 바꾸면 벡터를 다시 만들어 새 마이그레이션으로 고쳐야 한다. 어긋남을 잡는 자동 검사는 없다.
+8. **온보딩 태그 코드가 코드표와 다르다.** BE enum과 FE 선택지(`fe/src/domains/onboarding/model/answers.ts`, `fe/src/domains/auth/model/signup.ts`)는 `SPACIOUS`, `VALUE`, `CONVERSATION`, `SOLO`, `DATE`, `GATHERING`, `WORK_STUDY`를 쓰고, 코드표는 `SPACIOUS_SEATING`, `VALUE_FOR_MONEY`, `PURPOSE_*`를 쓴다. 통일하려면 공개 API(-58 가입·조회), FE, 저장된 `user_preferences`를 함께 바꿔야 한다. 그전까지는 AI 경계에서 대응표로 바꾼다.
+9. **장소 검색 D-36과 다르다.** D-36은 pgvector를 임시로 두고 OpenSearch가 벡터를 최종 관리한다고 정했다. 이 spec은 1차 MVP에서 pgvector만 쓴다(D-2). 검색 담당과 D-36을 정리한다.
 
 ### 다른 담당과 맞출 것
 
 | 담당 | 항목 |
 |---|---|
 | 40 | 반영함: 특징 키 `is_label`, 출력의 `analyzed_review_count`, `report.json`의 근거 3개 이상 페르소나가 없는 장소 수, `place_id`가 네이버 ID라는 주석과 스펙. 남은 일은 적재 코드 몫이다. `review_ids`가 3개 미만인 페르소나는 넣지 않고, 네이버 리뷰 ID인 `review_ids`는 `{}`로 바꾸고, `place_id`를 서비스 ID로, `group`(식당·카페·술집)을 `category_group`으로, `like`를 `liked`로 옮긴다 |
-| -58·-59(이현우) | `tastes` 원소의 `code`, `vector` 추가와 위 문제 2·3·6. BE enum과 코드표 이름이 다르다(`SPACIOUS`↔`SPACIOUS_SEATING`, `VALUE`↔`VALUE_FOR_MONEY`, `CONVERSATION`·`SOLO`·`DATE`·`GATHERING`·`WORK_STUDY`↔`PURPOSE_*`). AI 경계에서 대응표로 바꾼다 |
-| 41 | 벡터 거리 연산자를 정하면 벡터 인덱스를 만든다(D-11). 점수에 쓸 페르소나가 없는 장소의 처리 |
+| -58·-59(이현우) | `tastes` 원소의 `code`, `vector` 추가와 위 문제 2·3·6. 온보딩 태그 코드 통일(문제 8) |
+| 41 | 벡터 거리 연산자를 정하면 벡터 인덱스를 만든다(D-11). 점수에 쓸 페르소나가 없는 장소의 처리. 코드 문구 벡터는 `feature_codes.vector`에서 읽는다 |
 | 장소 수집 | `places`의 나머지 컬럼, `category_group` 이름, 적재 순서(문제 5) |
 | 갱신 로직(티켓 20, 장소 쪽 미정) | 앱 리뷰 추가·삭제를 `features`와 페르소나에 반영하는 방식. 새 리뷰를 어느 페르소나에 붙일지, 앱 리뷰만으로 새 페르소나를 만들지(만든다면 근거 3개 판단에 필요한 컬럼 추가) |
+| 리뷰 | `reason_tags.feature_code`에 FK가 생겼다. 시드에 새 태그를 넣을 때 `feature_codes`에 있는 코드만 쓴다 |
 | 팀 | `is_label`의 업종 그룹 평균 조건 채택 여부. 빠지면 `analyzed_review_count`를 지운다(D-8) |
