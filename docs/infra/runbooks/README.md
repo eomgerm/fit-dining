@@ -11,8 +11,15 @@
 | RB-04 | 디스크 | [RB-04.md](RB-04.md) |
 | RB-05 | 인증서와 TLS | [RB-05.md](RB-05.md) |
 | RB-06 | 백업이 안 올 때, Postgres 장애, DB 복원, 복원 리허설 | [RB-06.md](RB-06.md) |
+| RB-07 | OpenSearch(검색), 재색인, 새벽 배치 | [RB-07.md](RB-07.md) |
+| RB-08 | 시크릿 회전 | [RB-08.md](RB-08.md) |
+| RB-09 | CPU 버스트 소진 의심 | [RB-09.md](RB-09.md) |
+| RB-10 | 서비스 종료(11/18): 최종 백업, 합성 덤프, 실데이터 삭제 | [RB-10.md](RB-10.md) |
+| RB-11 | Modal 장애·예산, 임베딩 모델 교체 | [RB-11.md](RB-11.md) |
+| RB-12 | 서버 A 소실 시 재구축(DR) | [RB-12.md](RB-12.md) |
+| RB-13 | dev DB 초기화 | [RB-13.md](RB-13.md) |
 
-RB-07 이후(재색인, 시크릿 회전, CPU 버스트, 종료, Modal 모델 교체, A 소실, dev DB 초기화)는 아직 쓰지 않았다(Jira S15P31A302-84).
+RB-08, RB-10, RB-12, RB-13은 알림이 아니라 사람이 시작하는 절차다. **RB-12는 서버에서 한 번도 따라 해 보지 않았다.** 맨 위의 "검증 기준"과 맨 아래 "알려진 빈칸"을 먼저 읽는다. RB-10과 RB-13은 데이터를 지우는 절차라서 운영 데이터에는 실행해 보지 않았다. 각 파일 맨 아래에 실제로 돌려 본 것과 못 돌린 것을 적었다.
 
 ## 모든 런북이 따르는 약속
 
@@ -50,11 +57,30 @@ ssh -i <A 키> -N -L 3000:127.0.0.1:3000 -L 9090:127.0.0.1:9090 -L 8888:127.0.0.
 
 ```bash
 # 노트북, 저장소 루트에서. HEAD가 올릴 커밋이다(보통 origin/develop)
-git archive HEAD infra docs/infra/contracts | ssh -i <키> ubuntu@<서버> \
-  'rm -rf ~/fit-repo.new && mkdir ~/fit-repo.new && tar -x -C ~/fit-repo.new && rm -rf ~/fit-repo && mv ~/fit-repo.new ~/fit-repo'
+git archive HEAD infra docs/infra/contracts | ssh -i <키> ubuntu@<서버> 'mkdir -p ~/fit-repo && tar -x --overwrite -C ~/fit-repo'
 ```
 
 이 사본은 읽고 실행만 한다. 서버의 자동 작업(백업 타이머 등)은 root만 쓸 수 있는 `/usr/local/lib/fit/repo` 사본을 쓰므로 `~/fit-repo`를 바꿔도 영향이 없다.
+
+**디렉터리를 지우고 바꿔 끼우지 않는다(`rm -rf` 뒤 `mv`).** A의 컨테이너들은 `~/fit-repo` 안의 설정(Caddyfile, Prometheus 규칙, Grafana 프로비저닝, Alertmanager 템플릿, Garage 설정)을 **디렉터리째 붙잡아** 떠 있다. 디렉터리를 지우고 새로 만들면 컨테이너는 지워진 옛 디렉터리를 계속 보고, 새 설정은 컨테이너가 다시 만들어질 때까지 안 보인다. 2026-10-28 A에서 서버의 임시 디렉터리로 같은 상황을 만들어 확인했다.
+
+| 갱신 방법 | 디렉터리째 붙잡은 컨테이너 | 파일 하나를 붙잡은 컨테이너(`prometheus.yml` 등) |
+|---|---|---|
+| `rm -rf` 뒤 `mv` | **파일이 안 보인다** | 옛 파일이 보인다 |
+| `tar -x`(기본) | 새 파일이 보인다 | **옛 파일이 보인다** |
+| `tar -x --overwrite` 또는 `cp -f` | 새 파일이 보인다 | 새 파일이 보인다 |
+
+그래서 위 명령은 `--overwrite`다. 사본을 갱신해도 **설정은 컨테이너가 다시 읽어야 반영된다**(해당 서비스의 reload나 `up -d --force-recreate`, 각 스택 README).
+
+이전에 `rm -rf`로 갱신한 서버는 이미 어긋나 있을 수 있다. 컨테이너가 보는 파일과 호스트의 파일이 같은지 본다.
+
+```bash
+sudo docker exec fit-edge-caddy-1 sha256sum /etc/caddy/Caddyfile         # 파일이 없다고 나오면 어긋난 것이다
+sha256sum ~/fit-repo/infra/edge/conf/Caddyfile                            # 위와 같아야 한다
+sudo docker inspect -f 'health={{.State.Health.Status}}' fit-data-garage-1   # unhealthy면 설정 디렉터리를 못 읽는 것이다
+```
+
+어긋난 컨테이너는 해당 스택을 `up -d --force-recreate <서비스>`로 다시 만든다(엣지는 짧게 끊긴다. 서비스별 명령은 `envset.py`가 파일마다 안내하는 것과 같다).
 
 ## 알림과 런북
 
@@ -69,4 +95,8 @@ git archive HEAD infra docs/infra/contracts | ssh -i <키> ubuntu@<서버> \
 | RB-05 | `FitCertExpiringSoon`(14일 미만), `FitCertExpiringCritical`(7일 미만), `FitTlsProbeFailed`, `FitBackupCaddyStale` |
 | RB-06 | `FitPostgresDown`(장애, 1분), `FitPostgresConnectionsHigh`, `FitBackupPgStale`(8시간), `FitBackupPhotosStale`, `FitBackupVerifyFailed`, `FitBackupVerifyStale`, `FitBackupOutboxStuck`, `FitBackupMetricMissing`, `FitVaultStale`(장애, 8시간), `FitVaultRestoreCheckOverdue`, `FitVaultQuarantine`, `FitVaultIngestFailing`, `FitVaultIngestStale`, `FitVaultMetricMissing` |
 
-배치, Modal 지표 알림(`FitBatch*`, `FitModal*`)은 RB-07과 RB-11이다.
+| RB-07 | `FitOpensearchDown`(장애, 2분), `FitOpensearchRed`(장애, 2분), `FitOpensearchHeapHigh`(90%), `FitSearchLatencyHigh`(p95 4초), `FitBatchStale`(26시간), `FitBatchMetricMissing` |
+| RB-09 | `FitCpuHigh30m`(주의, 40%), `FitCpuHigh2h`(장애, 40%) |
+| RB-11 | `FitModalFallbackHigh`(폴백 30%), `FitModalBudgetHigh`(예산 80%), `FitModalMetricMissing` |
+
+RB-08, RB-10, RB-12, RB-13에는 알림이 없다(사람이 시작한다).
