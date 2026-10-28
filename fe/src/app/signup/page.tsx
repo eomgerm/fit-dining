@@ -8,7 +8,7 @@ import { TextButton } from "@/shared/ui/button/text-button";
 import { Carousel } from "@/shared/ui/display/carousel";
 import { CarouselDots } from "@/shared/ui/display/carousel-dots";
 import { AlertDialog } from "@/shared/ui/overlay/alert-dialog";
-import { useToast } from "@/shared/ui/overlay/toast";
+import { TermsModal } from "@/domains/auth/ui/terms-modal";
 import { SocialButtons } from "@/domains/auth/ui/social-buttons";
 import { SocialError } from "@/domains/auth/ui/social-error";
 import { BookmarkFilledIcon } from "@/shared/ui/icon/icons/bookmark-filled";
@@ -111,7 +111,6 @@ function Illustration({ index }: { index: number }) {
   );
 }
 export default function SignupPage() {
-  const toast = useToast();
   const [index, setIndex] = useState(0);
   const [skip, setSkip] = useState(false);
   return (
@@ -161,21 +160,9 @@ export default function SignupPage() {
               가입하면 내 취향이 쌓여 더 정확한 장소 추천을 받아볼 수 있어요.
             </span>
             <span className="mt-3 block text-caption-sm">
-              시작하면{" "}
-              <TextButton
-                type="button"
-                onClick={() => toast("이용약관은 준비 중이에요.")}
-              >
-                이용약관
-              </TextButton>
-              과{" "}
-              <TextButton
-                type="button"
-                onClick={() => toast("개인정보처리방침은 준비 중이에요.")}
-              >
-                개인정보처리방침
-              </TextButton>
-              에 동의한 것으로 간주해요.
+              시작하면 <TermsModal kind="terms">이용약관</TermsModal>과{" "}
+              <TermsModal kind="privacy">개인정보처리방침</TermsModal>에 동의한
+              것으로 간주해요.
             </span>
           </>
         }

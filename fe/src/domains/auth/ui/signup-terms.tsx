@@ -1,9 +1,8 @@
 "use client";
 import { Button } from "@/shared/ui/button/button";
-import { TextButton } from "@/shared/ui/button/text-button";
+import { TermsModal } from "./terms-modal";
 import { Checkbox } from "@/shared/ui/form/checkbox";
 import { BottomSheet } from "@/shared/ui/overlay/bottom-sheet";
-import { useToast } from "@/shared/ui/overlay/toast";
 import type { Dispatch, SetStateAction } from "react";
 export type Agreements = {
   ageOver14: boolean;
@@ -30,7 +29,6 @@ export function SignupTerms({
   setAgreements: Dispatch<SetStateAction<Agreements>>;
   start: () => void;
 }) {
-  const toast = useToast();
   const allAgreed = Object.values(agreements).every(Boolean);
   return (
     <BottomSheet
@@ -77,12 +75,9 @@ export function SignupTerms({
               </span>
             </Checkbox>
             {field !== "ageOver14" && (
-              <TextButton
-                disabled={busy}
-                onClick={() => toast("약관 본문은 준비 중이에요.")}
-              >
+              <TermsModal kind={field} disabled={busy}>
                 보기
-              </TextButton>
+              </TermsModal>
             )}
           </div>
         ),

@@ -114,11 +114,40 @@ it("does not show the login link for a field error containing duplicate wording"
   await screen.findByText("이미 가입 안내와 무관한 검증 오류");
   expect(screen.queryByRole("link", { name: "로그인하기" })).toBeNull();
 });
-it("shows a preparation toast when viewing terms", async () => {
+it("약관 모달을 열고 닫아도 페이지 이동 없이 입력값과 동의 상태를 유지한다", async () => {
   form();
-  await screen.findByRole("button", { name: "동의하고 시작하기" });
+  await screen.findByRole("button", {
+    name: "동의하고 시작하기",
+  });
+  fireEvent.click(screen.getByRole("checkbox", { name: "전체 동의" }));
   fireEvent.click(screen.getAllByRole("button", { name: "보기" })[0]);
-  expect(await screen.findByText("약관 본문은 준비 중이에요.")).toBeTruthy();
+  await screen.findByRole("dialog", {
+    name: "서비스 이용약관",
+  });
+  fireEvent.click(screen.getByRole("button", { name: "닫기" }));
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("dialog", {
+        name: "서비스 이용약관",
+      }),
+    ).toBeNull(),
+  );
+  expect(
+    screen
+      .getByRole("checkbox", { name: "전체 동의" })
+      .getAttribute("aria-checked"),
+  ).toBe("true");
+  for (const [label, value] of [
+    ["이메일", "new@example.com"],
+    ["비밀번호", "password1"],
+    ["비밀번호 확인", "password1"],
+    ["닉네임", "새이름"],
+  ]) {
+    expect((screen.getByLabelText(label) as HTMLInputElement).value).toBe(
+      value,
+    );
+  }
+  expect(mocks.replace).not.toHaveBeenCalled();
   expect(mocks.signup).not.toHaveBeenCalled();
 });
 
