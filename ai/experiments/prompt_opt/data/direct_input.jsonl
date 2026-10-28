@@ -1,0 +1,80 @@
+{"id": "simple-01", "split": "train", "slice": "simple", "text": "일식집 자주 가요", "items": [{"kind": "taste", "code": "FOOD_JAPANESE", "like": true}]}
+{"id": "simple-02", "split": "test", "slice": "simple", "text": "활기차고 사람 북적북적한 데가 좋아요", "items": [{"kind": "taste", "code": "LIVELY", "like": true}]}
+{"id": "simple-03", "split": "val", "slice": "simple", "text": "분위기 아늑한 곳 좋아합니다", "items": [{"kind": "taste", "code": "COZY", "like": true}]}
+{"id": "simple-04", "split": "train", "slice": "simple", "text": "인테리어 예쁜 카페 찾아다녀요", "items": [{"kind": "taste", "code": "PRETTY_SPACE", "like": true}]}
+{"id": "simple-05", "split": "test", "slice": "simple", "text": "뷰 좋은 곳 좋아해요", "items": [{"kind": "taste", "code": "VIEW_OUTDOOR", "like": true}]}
+{"id": "simple-06", "split": "val", "slice": "simple", "text": "중식 좋아합니다", "items": [{"kind": "taste", "code": "FOOD_CHINESE", "like": true}]}
+{"id": "simple-07", "split": "train", "slice": "simple", "text": "음악 좋은 술집 좋아함", "items": [{"kind": "taste", "code": "GOOD_MUSIC", "like": true}]}
+{"id": "simple-08", "split": "test", "slice": "simple", "text": "친구들이랑 수다 떨기 좋은 데", "items": [{"kind": "taste", "code": "PURPOSE_TALK", "like": true}]}
+{"id": "simple-09", "split": "train", "slice": "simple", "text": "양 많이 주는 집이 최고", "items": [{"kind": "taste", "code": "GENEROUS_PORTION", "like": true}]}
+{"id": "simple-10", "split": "test", "slice": "simple", "text": "컨셉 특이한 가게 가보는 거 좋아해요", "items": [{"kind": "taste", "code": "UNIQUE_CONCEPT", "like": true}]}
+{"id": "simple-11", "split": "val", "slice": "simple", "text": "가성비 좋은 데 위주로 다녀요", "items": [{"kind": "taste", "code": "VALUE_FOR_MONEY", "like": true}]}
+{"id": "simple-12", "split": "train", "slice": "simple", "text": "공부하거나 노트북 작업하기 좋은 카페", "items": [{"kind": "taste", "code": "PURPOSE_WORK", "like": true}]}
+{"id": "simple-13", "split": "test", "slice": "simple", "text": "동남아 음식 좋아해요", "items": [{"kind": "taste", "code": "FOOD_ASIAN", "like": true}]}
+{"id": "simple-14", "split": "val", "slice": "simple", "text": "한식이 제일 좋아요", "items": [{"kind": "taste", "code": "FOOD_KOREAN", "like": true}]}
+{"id": "complaint-01", "split": "train", "slice": "complaint", "text": "줄 서서 먹는 건 진짜 싫어요", "items": [{"kind": "taste", "code": "SHORT_WAIT", "like": true}]}
+{"id": "complaint-02", "split": "test", "slice": "complaint", "text": "음식 늦게 나오면 짜증나요", "items": [{"kind": "taste", "code": "FAST_SERVING", "like": true}]}
+{"id": "complaint-03", "split": "val", "slice": "complaint", "text": "너무 조용한 곳은 오히려 불편해요", "items": [{"kind": "taste", "code": "LIVELY", "like": true}], "note": "조용한 곳 비선호 → 반대 극"}
+{"id": "complaint-04", "split": "train", "slice": "complaint", "text": "양 적게 주는 곳은 별로예요", "items": [{"kind": "taste", "code": "GENEROUS_PORTION", "like": true}]}
+{"id": "complaint-05", "split": "test", "slice": "complaint", "text": "테이블 다닥다닥 붙어있는 곳 싫어요", "items": [{"kind": "taste", "code": "SPACIOUS_SEATING", "like": true}]}
+{"id": "complaint-06", "split": "val", "slice": "complaint", "text": "가격에 비해 별로인 곳은 안 가요", "items": [{"kind": "taste", "code": "VALUE_FOR_MONEY", "like": true}]}
+{"id": "complaint-07", "split": "train", "slice": "complaint", "text": "시끌벅적한 술집은 피곤해요", "items": [{"kind": "taste", "code": "QUIET", "like": true}]}
+{"id": "complaint-08", "split": "test", "slice": "complaint", "text": "음악이 너무 구리면 못 있겠어요", "items": [{"kind": "taste", "code": "GOOD_MUSIC", "like": true}]}
+{"id": "complaint-09", "split": "train", "slice": "complaint", "text": "삭막하고 썰렁한 분위기 싫어요", "items": [{"kind": "taste", "code": "COZY", "like": true}]}
+{"id": "complaint-10", "split": "test", "slice": "complaint", "text": "혼자 가면 눈치 보이는 곳 싫어요", "items": [{"kind": "taste", "code": "PURPOSE_SOLO", "like": true}]}
+{"id": "complaint-11", "split": "val", "slice": "complaint", "text": "평범하고 뻔한 가게는 재미없어요", "items": [{"kind": "taste", "code": "UNIQUE_CONCEPT", "like": true}]}
+{"id": "complaint-12", "split": "train", "slice": "complaint", "text": "뷰 없는 지하 가게는 답답해요", "items": [{"kind": "taste", "code": "VIEW_OUTDOOR", "like": true}]}
+{"id": "dislike-01", "split": "train", "slice": "dislike", "text": "매운 음식은 잘 못 먹어요", "items": [{"kind": "taste", "code": "FOOD_SPICY", "like": false}]}
+{"id": "dislike-02", "split": "test", "slice": "dislike", "text": "일식은 별로 안 좋아해요", "items": [{"kind": "taste", "code": "FOOD_JAPANESE", "like": false}]}
+{"id": "dislike-03", "split": "val", "slice": "dislike", "text": "느끼한 양식은 안 땡겨요", "items": [{"kind": "taste", "code": "FOOD_WESTERN", "like": false}]}
+{"id": "dislike-04", "split": "train", "slice": "dislike", "text": "너무 활기찬 데는 기 빨려요", "items": [{"kind": "taste", "code": "QUIET", "like": true}], "note": "LIVELY 비선호 → 반대 극"}
+{"id": "dislike-05", "split": "test", "slice": "dislike", "text": "데이트하러 가는 분위기 있는 곳은 부담스러워요", "items": [{"kind": "taste", "code": null, "like": false}], "note": "방문 목적 비선호 → 코드 뗌(D-06)"}
+{"id": "dislike-06", "split": "val", "slice": "dislike", "text": "단체 회식하는 가게는 별로예요", "items": [{"kind": "taste", "code": null, "like": false}], "note": "방문 목적 비선호 → 코드 뗌(D-06)"}
+{"id": "dislike-07", "split": "train", "slice": "dislike", "text": "중국집은 안 가요", "items": [{"kind": "taste", "code": "FOOD_CHINESE", "like": false}]}
+{"id": "dislike-08", "split": "test", "slice": "dislike", "text": "인스타 감성 카페 같은 데는 관심 없어요", "items": [{"kind": "taste", "code": null, "like": false}], "note": "중요 기준 비선호 → 코드 뗌(D-06)"}
+{"id": "double_negation-01", "split": "train", "slice": "double_negation", "text": "안 시끄러운 곳이면 좋겠어요", "items": [{"kind": "taste", "code": "QUIET", "like": true}]}
+{"id": "double_negation-02", "split": "test", "slice": "double_negation", "text": "웨이팅 없는 데가 좋아요", "items": [{"kind": "taste", "code": "SHORT_WAIT", "like": true}]}
+{"id": "double_negation-03", "split": "val", "slice": "double_negation", "text": "좁지 않은 곳이요", "items": [{"kind": "taste", "code": "SPACIOUS_SEATING", "like": true}]}
+{"id": "double_negation-04", "split": "train", "slice": "double_negation", "text": "맵지 않은 음식이 좋아요", "items": [{"kind": "taste", "code": "FOOD_SPICY", "like": false}]}
+{"id": "double_negation-05", "split": "test", "slice": "double_negation", "text": "양식이 싫은 건 아닌데 한식을 더 좋아해요", "items": [{"kind": "taste", "code": "FOOD_KOREAN", "like": true}], "note": "양식은 선호도 비선호도 아님"}
+{"id": "double_negation-06", "split": "val", "slice": "double_negation", "text": "혼밥 못 할 곳은 아니었으면 해요", "items": [{"kind": "taste", "code": "PURPOSE_SOLO", "like": true}]}
+{"id": "double_negation-07", "split": "train", "slice": "double_negation", "text": "음식 빨리 안 나오면 안 돼요", "items": [{"kind": "taste", "code": "FAST_SERVING", "like": true}]}
+{"id": "double_negation-08", "split": "test", "slice": "double_negation", "text": "가격이 아깝지 않은 곳", "items": [{"kind": "taste", "code": "VALUE_FOR_MONEY", "like": true}]}
+{"id": "no_code-01", "split": "train", "slice": "no_code", "text": "회 먹는 거 좋아해요", "items": [{"kind": "taste", "code": null, "like": true}], "note": "FOOD_JAPANESE 아님(구체 메뉴)"}
+{"id": "no_code-02", "split": "test", "slice": "no_code", "text": "국밥 좋아합니다", "items": [{"kind": "taste", "code": null, "like": true}], "note": "FOOD_KOREAN 아님(구체 메뉴)"}
+{"id": "no_code-03", "split": "val", "slice": "no_code", "text": "담백한 맛 좋아해요", "items": [{"kind": "taste", "code": null, "like": true}]}
+{"id": "no_code-04", "split": "train", "slice": "no_code", "text": "디저트 종류 많은 카페 좋아해요", "items": [{"kind": "taste", "code": null, "like": true}]}
+{"id": "no_code-05", "split": "test", "slice": "no_code", "text": "고깃집 좋아해요", "items": [{"kind": "taste", "code": null, "like": true}]}
+{"id": "no_code-06", "split": "val", "slice": "no_code", "text": "파스타 좋아해요", "items": [{"kind": "taste", "code": null, "like": true}], "note": "FOOD_WESTERN 아님(구체 메뉴)"}
+{"id": "no_code-07", "split": "train", "slice": "no_code", "text": "곱창은 못 먹어요", "items": [{"kind": "taste", "code": null, "like": false}]}
+{"id": "no_code-08", "split": "test", "slice": "no_code", "text": "비 오는 날엔 파전에 막걸리죠", "items": [{"kind": "taste", "code": null, "like": true}]}
+{"id": "kind_boundary-01", "split": "train", "slice": "kind_boundary", "text": "주차 안 되면 싫어요", "items": [{"kind": "facility", "code": null, "like": true}]}
+{"id": "kind_boundary-02", "split": "test", "slice": "kind_boundary", "text": "콘센트 많은 카페 좋아요", "items": [{"kind": "facility", "code": null, "like": true}], "note": "PURPOSE_WORK로 넘겨짚지 않음"}
+{"id": "kind_boundary-03", "split": "val", "slice": "kind_boundary", "text": "노키즈존이었으면 좋겠어요", "items": [{"kind": "facility", "code": null, "like": true}]}
+{"id": "kind_boundary-04", "split": "train", "slice": "kind_boundary", "text": "강아지 데려갈 수 있는 곳", "items": [{"kind": "facility", "code": null, "like": true}]}
+{"id": "kind_boundary-05", "split": "test", "slice": "kind_boundary", "text": "맛있으면 다 좋아요", "items": [{"kind": "quality", "code": null, "like": true}]}
+{"id": "kind_boundary-06", "split": "val", "slice": "kind_boundary", "text": "직원들 불친절하면 다신 안 가요", "items": [{"kind": "quality", "code": null, "like": true}]}
+{"id": "kind_boundary-07", "split": "train", "slice": "kind_boundary", "text": "1인 만오천 원 이하", "items": [{"kind": "budget", "code": null, "like": true}]}
+{"id": "kind_boundary-08", "split": "test", "slice": "kind_boundary", "text": "비싼 데는 부담돼요", "items": [{"kind": "budget", "code": null, "like": true}], "note": "가성비(비율)가 아니라 가격 자체"}
+{"id": "kind_boundary-09", "split": "train", "slice": "kind_boundary", "text": "가성비 좋은 곳, 2만원 넘지 않게", "items": [{"kind": "taste", "code": "VALUE_FOR_MONEY", "like": true}, {"kind": "budget", "code": null, "like": true}]}
+{"id": "kind_boundary-10", "split": "test", "slice": "kind_boundary", "text": "테라스 있는 곳 좋아해요", "items": [{"kind": "taste", "code": "VIEW_OUTDOOR", "like": true}], "note": "있다/없다지만 코드가 있음"}
+{"id": "kind_boundary-11", "split": "val", "slice": "kind_boundary", "text": "와이파이 잘 되는 조용한 카페", "items": [{"kind": "facility", "code": null, "like": true}, {"kind": "taste", "code": "QUIET", "like": true}]}
+{"id": "kind_boundary-12", "split": "train", "slice": "kind_boundary", "text": "깨끗한 곳이면 돼요", "items": [{"kind": "quality", "code": null, "like": true}]}
+{"id": "multi-01", "split": "train", "slice": "multi", "text": "조용하고 아늑한 데서 친구랑 얘기하는 거 좋아해요", "items": [{"kind": "taste", "code": "QUIET", "like": true}, {"kind": "taste", "code": "COZY", "like": true}, {"kind": "taste", "code": "PURPOSE_TALK", "like": true}]}
+{"id": "multi-02", "split": "test", "slice": "multi", "text": "혼밥 자주 하는데 빨리 나오는 곳이 좋아요", "items": [{"kind": "taste", "code": "PURPOSE_SOLO", "like": true}, {"kind": "taste", "code": "FAST_SERVING", "like": true}]}
+{"id": "multi-03", "split": "val", "slice": "multi", "text": "매운 거 좋아하고 양 많은 곳 선호", "items": [{"kind": "taste", "code": "FOOD_SPICY", "like": true}, {"kind": "taste", "code": "GENEROUS_PORTION", "like": true}]}
+{"id": "multi-04", "split": "train", "slice": "multi", "text": "데이트할 때 뷰 좋은 양식집 가요", "items": [{"kind": "taste", "code": "PURPOSE_DATE", "like": true}, {"kind": "taste", "code": "VIEW_OUTDOOR", "like": true}, {"kind": "taste", "code": "FOOD_WESTERN", "like": true}]}
+{"id": "multi-05", "split": "test", "slice": "multi", "text": "회식 장소로 넓고 주차 되는 곳", "items": [{"kind": "taste", "code": "PURPOSE_GROUP", "like": true}, {"kind": "taste", "code": "SPACIOUS_SEATING", "like": true}, {"kind": "facility", "code": null, "like": true}]}
+{"id": "multi-06", "split": "val", "slice": "multi", "text": "시끄러운 건 괜찮은데 웨이팅은 싫어요", "items": [{"kind": "taste", "code": "SHORT_WAIT", "like": true}], "note": "시끄러운 건 괜찮다 ≠ 활기찬 곳 선호"}
+{"id": "multi-07", "split": "train", "slice": "multi", "text": "중식 좋아하는데 너무 기름진 건 별로", "items": [{"kind": "taste", "code": "FOOD_CHINESE", "like": true}, {"kind": "taste", "code": null, "like": false}]}
+{"id": "multi-08", "split": "test", "slice": "multi", "text": "인테리어 예쁘고 음악 좋은 카페에서 작업해요", "items": [{"kind": "taste", "code": "PRETTY_SPACE", "like": true}, {"kind": "taste", "code": "GOOD_MUSIC", "like": true}, {"kind": "taste", "code": "PURPOSE_WORK", "like": true}]}
+{"id": "multi-09", "split": "train", "slice": "multi", "text": "가성비 좋은 한식, 친절하면 더 좋고", "items": [{"kind": "taste", "code": "VALUE_FOR_MONEY", "like": true}, {"kind": "taste", "code": "FOOD_KOREAN", "like": true}, {"kind": "quality", "code": null, "like": true}]}
+{"id": "multi-10", "split": "test", "slice": "multi", "text": "조용한데 좋아요ㅋㅋ 사람 많은 곳 별로고 매운건 못먹음", "items": [{"kind": "taste", "code": "QUIET", "like": true}, {"kind": "taste", "code": "FOOD_SPICY", "like": false}], "note": "사람 많은 곳 비선호도 QUIET로 합쳐짐"}
+{"id": "multi-11", "split": "val", "slice": "multi", "text": "일식이나 동남아 음식 좋아하고 컨셉 특이한 가게 좋아함", "items": [{"kind": "taste", "code": "FOOD_JAPANESE", "like": true}, {"kind": "taste", "code": "FOOD_ASIAN", "like": true}, {"kind": "taste", "code": "UNIQUE_CONCEPT", "like": true}]}
+{"id": "multi-12", "split": "train", "slice": "multi", "text": "전망 좋은 곳에서 데이트, 웨이팅 짧으면 최고", "items": [{"kind": "taste", "code": "VIEW_OUTDOOR", "like": true}, {"kind": "taste", "code": "PURPOSE_DATE", "like": true}, {"kind": "taste", "code": "SHORT_WAIT", "like": true}]}
+{"id": "empty-01", "split": "train", "slice": "empty", "text": "아무거나 잘 먹어요", "items": []}
+{"id": "empty-02", "split": "test", "slice": "empty", "text": "딱히 가리는 거 없어요", "items": []}
+{"id": "empty-03", "split": "val", "slice": "empty", "text": "잘 모르겠어요", "items": []}
+{"id": "empty-04", "split": "train", "slice": "empty", "text": "ㅎㅎ", "items": []}
+{"id": "empty-05", "split": "test", "slice": "empty", "text": "추천해 주세요!", "items": []}
+{"id": "empty-06", "split": "val", "slice": "empty", "text": "그때그때 달라요", "items": []}
