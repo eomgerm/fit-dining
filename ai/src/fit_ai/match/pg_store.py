@@ -3,9 +3,9 @@
 
 장소는 거르기와 유사도 계산(pgvector `<=>`, 코사인 거리)을 SQL 한 번으로 한다. 장소가
 300곳 남짓이라 인덱스 없이 전부 계산해도 빠르고 결과가 정확하다. 장소 뷰는 로컬 개발
-DB(`scripts/dev_db.py`)의 임시 모양이고, 실제 DB는 저장 설계의 `places`,
-`place_personas`로 다시 맞춘다. 취향 표의 모양은 저장 설계(docs/specs/profile-storage/
-spec.md, BE 마이그레이션 V6)를 따른다.
+DB(`scripts/dev_db.py`)의 임시 모양이고, 실제 DB는 저장 설계의 `places`(장소 정보),
+`place_profiles`(요약·특징), `place_personas`로 다시 맞춘다. 취향 표의 모양은 저장
+설계(docs/specs/profile-storage/spec.md, BE 마이그레이션 V6)를 따른다.
 """
 
 from collections.abc import Sequence

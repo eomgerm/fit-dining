@@ -43,7 +43,7 @@ Status: draft · Jira: S15P31A302-41 · 작성일: 2026-10-23 · 고친 날: 202
 
 ## 3. 전체 흐름
 
-장소 프로필은 40이 미리 만들어 Postgres에 넣는다. AI는 BE 장소 정보와 40 프로필을 합친 뷰 `ai_place_search`를 읽는다. 이 뷰는 실제 DB가 없을 때 쓰는 임시 모양이고, 실제 DB는 저장 설계(`docs/specs/profile-storage/spec.md`, V6)의 `places`, `place_personas`로 다시 맞춘다. 회원 취향은 AI가 `user_preferences`에서 읽고, 비회원 취향은 BE가 검색 요청에 실어 보낸다.
+장소 프로필은 40이 미리 만들어 Postgres에 넣는다. AI는 BE 장소 정보와 40 프로필을 합친 뷰 `ai_place_search`를 읽는다. 이 뷰는 실제 DB가 없을 때 쓰는 임시 모양이고, 실제 DB는 저장 설계(`docs/specs/profile-storage/spec.md`, V6)의 `places`(장소 정보: 업종, 역, 좌표, 시설), `place_profiles`(요약, 특징별 리뷰 수), `place_personas`로 다시 맞춘다. 회원 취향은 AI가 `user_preferences`에서 읽고, 비회원 취향은 BE가 검색 요청에 실어 보낸다.
 
 일반 검색(예: "역삼역 모임하기 좋은 술집")은 이렇게 흐른다.
 
