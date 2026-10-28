@@ -6,6 +6,7 @@
 - 형식: `KEY=VALUE`만 쓴다. 공백, 따옴표, `#`, `$`, 백슬래시, 백틱, CRLF를 금지한다. `check_env_files.py`가 검사한다.
 - 일치: 아래 표와 예제 파일의 키는 `infra/ci/check_env_contract.py`가 맞춰 본다. 예제 파일에 있는 키는 표에 있어야 하고, 필수 키는 예제 파일에 있어야 한다. 키를 바꾸면 이 표와 예제 파일을 함께 고친다.
 - 자리표시자: 예제의 `REPLACE_ME`는 비밀이 아직 없다는 표시다. BE는 이 값이나 비어 있는 값으로는 기동을 거부한다(BE 계약 #8).
+- 데모 계정 키(`AUTH_DEMO_EMAIL`, `AUTH_DEMO_PASSWORD`, `AUTH_DEMO_NICKNAME`)는 세 값이 한 묶음이다. **간소 모드가 꺼져 있으면(prod, 또는 `AUTH_SIMPLE_ENABLED=false`인 dev) 셋 중 하나라도 있을 때 세 값이 모두 있고 가입 규칙에 맞아야 하며, 아니면 BE가 기동을 거부한다**(예: 비밀번호만 있으면 거부). 간소 모드에서는 이메일과 닉네임에 기본값이 있어 비밀번호만 줘도 된다. 간소 모드를 끄려고 하면 `AUTH_DEMO_PASSWORD`를 같이 지우거나 나머지 두 값을 함께 넣는다. (BE 코드 `AuthSettings`를 읽고 쓴 규칙이며 서버에서 간소 모드를 끄고 기동해 본 것은 아니다.)
 - 소셜 로그인 키(`AUTH_{GOOGLE,KAKAO,NAVER}_CLIENT_ID`와 `_CLIENT_SECRET`)는 제공자마다 한 쌍이고 선택이다(BE 구현은 S15P31A302-95). 쌍의 두 값이 다 있으면 그 제공자 로그인이 켜지고, 둘 다 없으면 꺼지며, 하나만 있으면 BE가 기동을 거부한다. 값을 아직 모르면 서버 env에 키를 넣지 않는다. 예제 파일에는 두지 않고(선택 키), `REPLACE_ME`를 넣으면 배포 preflight가 막는다.
 - `$`가 필요한 값(bcrypt 해시 등)은 base64로 인코딩해 둔다(design.md 13.2절).
 - `*_BASE_URL` 값은 끝에 `/`를 붙이지 않는다(예: `https://gms.ssafy.io/gmsapi`).
@@ -53,7 +54,9 @@
 | `AUTH_COOKIE_SECURE` | app | O | RT 쿠키의 `Secure` 속성 여부(`true` 또는 `false`). dev와 prod 서버는 Caddy 뒤 HTTPS라 둘 다 `true`다. 로컬(`http://localhost`)만 `false`다. 기본값이 없고 `true`·`false`가 아닌 값은 BE가 기동을 거부한다(BE 계약 #8, 쿠키는 #21) |
 | `AUTH_SIMPLE_ENABLED` | app | X | 인증 간소 모드 스위치. 기본 `false`, local·dev에서만 허용하며 prod는 `true`이면 기동을 거부한다 |
 | `AUTH_DEV_KEY` | app | X | 개발 토큰 발급 키. 비밀. 간소 모드 dev 서버에서 32자 이상 필수이며 local은 선택이고 길이 제한이 없다. prod는 값이 있으면 기동을 거부한다 |
-| `AUTH_DEMO_PASSWORD` | app | X | 데모 계정 비밀번호. 비밀. 간소 모드 dev 서버에서 필수이며 local 기본값은 `fitdining-dev1`이다 |
+| `AUTH_DEMO_EMAIL` | app | X | 데모 계정 이메일. 간소 모드에서는 비어 있으면 `dev@fitdining.local`이다. 간소 모드가 아니면 `AUTH_DEMO_PASSWORD`, `AUTH_DEMO_NICKNAME`과 셋 다 함께 줄 때만 쓴다(아래 규칙). 쓰지 않을 때는 키를 넣지 않는다(빈 값으로 두지 않는다) |
+| `AUTH_DEMO_PASSWORD` | app | X | 데모 계정 비밀번호. 비밀. 간소 모드 dev 서버에서 필수이며 local 기본값은 `fitdining-dev1`이다. 가입 비밀번호 규칙을 지켜야 한다(영문과 숫자를 포함해 8자 이상, UTF-8 72바이트 이하). 간소 모드가 아니면 `AUTH_DEMO_EMAIL`, `AUTH_DEMO_NICKNAME`과 함께 줄 때만 쓴다(아래 규칙) |
+| `AUTH_DEMO_NICKNAME` | app | X | 데모 계정 닉네임. 간소 모드에서는 비어 있으면 `개발자`다. 2~15자(가입 규칙). 간소 모드가 아니면 위 두 값과 셋 다 함께 줄 때만 쓴다 |
 | `AUTH_GOOGLE_CLIENT_ID` | app | X | 구글 소셜 로그인의 OAuth 클라이언트 ID. `AUTH_GOOGLE_CLIENT_SECRET`과 한 쌍이다(위 규칙). 제공자 콘솔에 콜백 `https://<호스트>/api/auth/oauth/google/callback`을 등록해야 한다. 호스트는 `AUTH_FRONTEND_ORIGIN`과 같다 |
 | `AUTH_GOOGLE_CLIENT_SECRET` | app | X | 구글 OAuth 클라이언트 시크릿. 비밀 |
 | `AUTH_KAKAO_CLIENT_ID` | app | X | 카카오 로그인의 REST API 키. `AUTH_KAKAO_CLIENT_SECRET`과 한 쌍이다. 콜백 `https://<호스트>/api/auth/oauth/kakao/callback`을 등록한다 |
