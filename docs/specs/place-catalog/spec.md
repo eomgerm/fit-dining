@@ -78,14 +78,14 @@ VALUES (:place_id, 'MON', '10:00', '22:00', false, '[]', '{}'),
 
 스키마(마이그레이션)
 
-- [ ] AC-1: 마이그레이션 계정으로 Flyway를 실행하면 새 마이그레이션이 `flyway_schema_history`에 성공으로 기록되고, 아래 Interfaces의 8개 테이블이 각각 정확히 그 열만 가진다. 각 열의 타입(배열의 원소 타입 포함), NULL 허용 여부, 기본값이 Interfaces와 같고, 8개 테이블의 PK 열은 `GENERATED ALWAYS` identity다. 이름을 붙인 제약과 인덱스는 Interfaces에 적힌 이름 그대로 있다. 8개 테이블의 제약은 PK와 Interfaces에 적힌 것뿐이고(좌표 UNIQUE 같은 것은 없다), 인덱스는 PK와 UNIQUE 제약이 만든 인덱스와 Interfaces의 `CREATE INDEX`뿐이다. `place_naver_snapshots`와 `place_review_photos` 테이블은 없다. (D-1, D-2, D-3, D-4, D-6, D-7, D-8, D-9, D-11, D-12, D-13, D-16)
-- [ ] AC-2: 앱 계정으로 `places`에 `place_id` 없이 넣으면 `place_id`가 발급되고, 일반 INSERT로 `place_id`를 직접 넣으면 거부된다. 같은 `naver_place_id`를 두 번 넣거나 빈 문자열 `naver_place_id`를 넣으면 거부된다. 필수 열(`naver_place_id`, `name`, `category_group`, `lat`, `lng`)만 넣으면 배열 열은 빈 배열이고, `created_at`과 `updated_at`은 그 INSERT 트랜잭션의 `now()`다. (D-2, D-13, D-22)
-- [ ] AC-3: `category_group`이 `RESTAURANT`, `CAFE`, `BAR` 밖이거나, `lat`이 -90~90 밖이거나, `lng`이 -180~180 밖이면 거부된다. 좌표가 같은 서로 다른 `naver_place_id`의 두 장소는 모두 받아들인다. (D-13, D-22)
-- [ ] AC-4: `place_hours`에서 같은 장소, 같은 요일 줄을 두 번 넣으면 거부된다. 요일이 `MON`~`SUN` 밖이거나, 개점과 마감 중 하나만 있거나, `closed = true`인데 개점이 있거나, 개점이나 마감이 `24:00`이거나, `breaks`가 JSON 배열이 아니면 거부된다. 마감이 개점보다 이른 줄(`17:00`–`02:00`)과 개점과 마감이 같은 줄(`00:00`–`00:00`)은 받아들인다. 필수 열만 넣으면 `closed`는 false, `breaks`는 빈 JSON 배열, `last_orders`는 빈 배열이다. (D-10, D-13)
-- [ ] AC-5: `place_photos.source`가 `business`, `menuBoard` 밖이면 거부된다. `place_photos`에서 같은 장소, 같은 출처, 같은 `sort_order` 사진과, `place_menus`에서 같은 장소, 같은 `sort_order` 메뉴는 두 번째가 거부된다. 출처가 다르면 같은 `sort_order`를 받아들인다. 두 테이블 모두 음수 `sort_order`는 거부된다. 메뉴의 필수 열만 넣으면 `representative`는 false, `labels`와 `photo_urls`는 빈 배열이다. (D-7, D-8, D-9, D-13, D-16)
-- [ ] AC-6: 앱 계정으로 `places` 행을 지우면 그 장소의 7개 자식 테이블 행이 모두 지워지고 다른 장소의 행은 남는다. 존재하지 않는 `place_id`를 가리키는 자식 행은 거부된다. (D-13, D-22)
-- [ ] AC-7: 7개 자식 테이블은 모두 첫 열이 `place_id`인 인덱스를 가진다. UNIQUE 제약이 만든 인덱스도 인정한다. (D-13)
-- [ ] AC-8: 앱 계정으로 8개 테이블 각각에 SELECT, INSERT, UPDATE, DELETE를 실제로 실행하면 모두 성공한다. (D-1)
+- [x] AC-1: 마이그레이션 계정으로 Flyway를 실행하면 새 마이그레이션이 `flyway_schema_history`에 성공으로 기록되고, 아래 Interfaces의 8개 테이블이 각각 정확히 그 열만 가진다. 각 열의 타입(배열의 원소 타입 포함), NULL 허용 여부, 기본값이 Interfaces와 같고, 8개 테이블의 PK 열은 `GENERATED ALWAYS` identity다. 이름을 붙인 제약과 인덱스는 Interfaces에 적힌 이름 그대로 있다. 8개 테이블의 제약은 PK와 Interfaces에 적힌 것뿐이고(좌표 UNIQUE 같은 것은 없다), 인덱스는 PK와 UNIQUE 제약이 만든 인덱스와 Interfaces의 `CREATE INDEX`뿐이다. `place_naver_snapshots`와 `place_review_photos` 테이블은 없다. (D-1, D-2, D-3, D-4, D-6, D-7, D-8, D-9, D-11, D-12, D-13, D-16)
+- [x] AC-2: 앱 계정으로 `places`에 `place_id` 없이 넣으면 `place_id`가 발급되고, 일반 INSERT로 `place_id`를 직접 넣으면 거부된다. 같은 `naver_place_id`를 두 번 넣거나 빈 문자열 `naver_place_id`를 넣으면 거부된다. 필수 열(`naver_place_id`, `name`, `category_group`, `lat`, `lng`)만 넣으면 배열 열은 빈 배열이고, `created_at`과 `updated_at`은 그 INSERT 트랜잭션의 `now()`다. (D-2, D-13, D-22)
+- [x] AC-3: `category_group`이 `RESTAURANT`, `CAFE`, `BAR` 밖이거나, `lat`이 -90~90 밖이거나, `lng`이 -180~180 밖이면 거부된다. 좌표가 같은 서로 다른 `naver_place_id`의 두 장소는 모두 받아들인다. (D-13, D-22)
+- [x] AC-4: `place_hours`에서 같은 장소, 같은 요일 줄을 두 번 넣으면 거부된다. 요일이 `MON`~`SUN` 밖이거나, 개점과 마감 중 하나만 있거나, `closed = true`인데 개점이 있거나, 개점이나 마감이 `24:00`이거나, `breaks`가 JSON 배열이 아니면 거부된다. 마감이 개점보다 이른 줄(`17:00`–`02:00`)과 개점과 마감이 같은 줄(`00:00`–`00:00`)은 받아들인다. 필수 열만 넣으면 `closed`는 false, `breaks`는 빈 JSON 배열, `last_orders`는 빈 배열이다. (D-10, D-13)
+- [x] AC-5: `place_photos.source`가 `business`, `menuBoard` 밖이면 거부된다. `place_photos`에서 같은 장소, 같은 출처, 같은 `sort_order` 사진과, `place_menus`에서 같은 장소, 같은 `sort_order` 메뉴는 두 번째가 거부된다. 출처가 다르면 같은 `sort_order`를 받아들인다. 두 테이블 모두 음수 `sort_order`는 거부된다. 메뉴의 필수 열만 넣으면 `representative`는 false, `labels`와 `photo_urls`는 빈 배열이다. (D-7, D-8, D-9, D-13, D-16)
+- [x] AC-6: 앱 계정으로 `places` 행을 지우면 그 장소의 7개 자식 테이블 행이 모두 지워지고 다른 장소의 행은 남는다. 존재하지 않는 `place_id`를 가리키는 자식 행은 거부된다. (D-13, D-22)
+- [x] AC-7: 7개 자식 테이블은 모두 첫 열이 `place_id`인 인덱스를 가진다. UNIQUE 제약이 만든 인덱스도 인정한다. (D-13)
+- [x] AC-8: 앱 계정으로 8개 테이블 각각에 SELECT, INSERT, UPDATE, DELETE를 실제로 실행하면 모두 성공한다. (D-1)
 - [ ] AC-9: 기존 BE 테스트 전체(`ddl-auto=validate` 기동을 확인하는 `ApiApplicationTests` 포함)와 기존 FE 테스트 전체가 통과한다. 이번 변경으로 고친 기존 테스트는 Existing code에 적힌 범위 안에서만 고쳤다. (D-1, D-19)
 
 상세 응답과 영업 상태(mock)
