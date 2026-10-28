@@ -68,6 +68,8 @@ export default function SocialSignupPage() {
       <header className="-mx-3 flex min-h-14 items-center gap-2">
         <IconButton
           label="회원가입으로 돌아가기"
+          role="link"
+          nativeButton={false}
           render={<Link href="/signup" />}
         >
           <ChevronLeftIcon />

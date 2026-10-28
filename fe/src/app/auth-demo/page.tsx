@@ -161,7 +161,13 @@ export default function AuthDemoPage() {
         {busy ? "처리 중입니다." : message}
       </p>
       <footer className="mt-auto flex justify-center pt-10">
-        <TextButton render={<Link href="/login" />}>로그인 페이지</TextButton>
+        <TextButton
+          role="link"
+          nativeButton={false}
+          render={<Link href="/login" />}
+        >
+          로그인 페이지
+        </TextButton>
       </footer>
     </main>
   );

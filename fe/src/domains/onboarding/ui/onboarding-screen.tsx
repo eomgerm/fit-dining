@@ -18,6 +18,7 @@ import { MoonIcon } from "@/shared/ui/icon/icons/moon";
 import { SunIcon } from "@/shared/ui/icon/icons/sun";
 import { SparklesIcon } from "@/shared/ui/icon/icons/sparkles";
 import { WarningIcon } from "@/shared/ui/icon/icons/warning";
+import { EditIcon } from "@/shared/ui/icon/icons/edit";
 import { AlertDialog } from "@/shared/ui/overlay/alert-dialog";
 import { cn } from "@/shared/lib/cn";
 import { analyzeTaste } from "../api/analyze-taste";
@@ -448,7 +449,7 @@ export function OnboardingScreen({
         onOpenChange={setDialog}
         title="작성 중인 내용이 있어요"
         description="AI 분석을 하지 않고 시작하면 적은 내용은 저장되지 않아요."
-        icon={<WarningIcon />}
+        icon={<EditIcon className="text-primary-strong" />}
         action={
           <>
             <Button variant="outline" size="md" onClick={complete}>

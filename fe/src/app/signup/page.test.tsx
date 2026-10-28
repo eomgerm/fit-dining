@@ -69,3 +69,51 @@ it("가입 없이 시작하면 답변을 지우고 비회원 표시만 저장한
   expect(sessionStorage.getItem(ANSWERS_KEY)).toBeNull();
   expect(localStorage.getItem(GUEST_KEY)).toBe("1");
 });
+
+it("링크 버튼에 nativeButton 경고가 없다", () => {
+  const error = vi.spyOn(console, "error");
+  const warn = vi.spyOn(console, "warn");
+  try {
+    render(
+      <ToastProvider>
+        <SignupPage />
+      </ToastProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "건너뛰기" }));
+    expect(
+      screen.getByRole("link", { name: "가입 없이 시작" }).getAttribute("href"),
+    ).toBe("/location");
+    expect(
+      [...error.mock.calls, ...warn.mock.calls].flat().join(" "),
+    ).not.toContain("nativeButton");
+  } finally {
+    error.mockRestore();
+    warn.mockRestore();
+  }
+});
+it("처음 화면 링크와 건너뛰기를 표시한다", () => {
+  render(
+    <ToastProvider>
+      <SignupPage />
+    </ToastProvider>,
+  );
+  expect(
+    screen.getByRole("link", { name: "처음 화면으로" }).getAttribute("href"),
+  ).toBe("/");
+  const skip = screen.getByRole("button", { name: "건너뛰기" });
+  expect(skip.className).toContain("min-w-18");
+  expect(skip.className).toContain("text-ink-muted");
+  expect(skip.className).not.toContain("underline");
+});
+it("비회원 안내에 사람 아이콘을 표시한다", async () => {
+  render(
+    <ToastProvider>
+      <SignupPage />
+    </ToastProvider>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "건너뛰기" }));
+  const dialog = await screen.findByRole("alertdialog");
+  const icon = dialog.querySelector("svg");
+  expect(icon?.querySelectorAll("path")).toHaveLength(2);
+  expect(icon?.parentElement?.className).toContain("bg-primary-soft");
+});

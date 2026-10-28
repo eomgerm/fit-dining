@@ -4,14 +4,18 @@ import { startAsGuest } from "@/domains/onboarding/model/storage";
 import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/shared/ui/button/button";
+import { IconButton } from "@/shared/ui/button/icon-button";
 import { TextButton } from "@/shared/ui/button/text-button";
 import { Carousel } from "@/shared/ui/display/carousel";
 import { CarouselDots } from "@/shared/ui/display/carousel-dots";
 import { AlertDialog } from "@/shared/ui/overlay/alert-dialog";
 import { TermsModal } from "@/domains/auth/ui/terms-modal";
+import { TopBarAction } from "@/shared/ui/layout/top-bar";
 import { SocialButtons } from "@/domains/auth/ui/social-buttons";
 import { SocialError } from "@/domains/auth/ui/social-error";
 import { BookmarkFilledIcon } from "@/shared/ui/icon/icons/bookmark-filled";
+import { ChevronLeftIcon } from "@/shared/ui/icon/icons/chevron-left";
+import { UserIcon } from "@/shared/ui/icon/icons/user";
 
 const slides = [
   {
@@ -116,8 +120,16 @@ export default function SignupPage() {
   return (
     <main className="mx-auto flex min-h-svh w-full max-w-110 flex-col bg-surface px-5 pb-6 text-ink sm:px-8">
       <SocialError />
-      <header className="flex min-h-14 justify-end">
-        <TextButton onClick={() => setSkip(true)}>건너뛰기</TextButton>
+      <header className="flex min-h-14 items-center justify-between px-2">
+        <IconButton
+          label="처음 화면으로"
+          role="link"
+          nativeButton={false}
+          render={<Link href="/" />}
+        >
+          <ChevronLeftIcon />
+        </IconButton>
+        <TopBarAction onClick={() => setSkip(true)}>건너뛰기</TopBarAction>
       </header>
       <h1 className="mt-3 text-center text-title-md">
         가입하고 모든 기능을 이용해 보세요
@@ -146,7 +158,11 @@ export default function SignupPage() {
       />
       <div className="mt-auto flex flex-col gap-3 pt-5">
         <SocialButtons from="signup" />
-        <TextButton render={<Link href="/signup/email" />}>
+        <TextButton
+          role="link"
+          nativeButton={false}
+          render={<Link href="/signup/email" />}
+        >
           이메일로 가입하기
         </TextButton>
       </div>
@@ -154,6 +170,7 @@ export default function SignupPage() {
         open={skip}
         onOpenChange={setSkip}
         title="가입하지 않고 시작할까요?"
+        icon={<UserIcon />}
         description={
           <>
             <span>
@@ -172,6 +189,8 @@ export default function SignupPage() {
               variant="outline"
               size="md"
               onClick={startAsGuest}
+              role="link"
+              nativeButton={false}
               render={<Link href="/location" />}
             >
               가입 없이 시작

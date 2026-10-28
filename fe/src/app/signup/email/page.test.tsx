@@ -22,6 +22,28 @@ beforeEach(() => {
   sessionStorage.clear();
 });
 afterEach(cleanup);
+it("링크 버튼에 nativeButton 경고가 없다", () => {
+  const error = vi.spyOn(console, "error");
+  const warn = vi.spyOn(console, "warn");
+  try {
+    render(
+      <ToastProvider>
+        <SignupEmailPage />
+      </ToastProvider>,
+    );
+    expect(
+      screen
+        .getByRole("link", { name: "회원가입으로 돌아가기" })
+        .getAttribute("href"),
+    ).toBe("/signup");
+    expect(
+      [...error.mock.calls, ...warn.mock.calls].flat().join(" "),
+    ).not.toContain("nativeButton");
+  } finally {
+    error.mockRestore();
+    warn.mockRestore();
+  }
+});
 function form() {
   render(
     <ToastProvider>

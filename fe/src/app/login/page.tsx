@@ -77,7 +77,12 @@ export default function LoginPage() {
     <main className="mx-auto flex min-h-svh w-full max-w-110 flex-col bg-surface px-5 pb-6 text-ink sm:px-8">
       <SocialError />
       <header className="-mx-3 flex min-h-14 items-center justify-end">
-        <IconButton label="로그인 닫기" render={<Link href="/" />}>
+        <IconButton
+          label="로그인 닫기"
+          role="link"
+          nativeButton={false}
+          render={<Link href="/" />}
+        >
           <CloseIcon />
         </IconButton>
       </header>
@@ -158,7 +163,11 @@ export default function LoginPage() {
             {message}
           </p>
         )}
-        <Button className="mt-3 w-full" type="submit" disabled={busy}>
+        <Button
+          className="mt-3 w-full"
+          type="submit"
+          disabled={busy || !email || !password}
+        >
           {busy && (
             <span
               className="mr-2 size-4 animate-spin rounded-full border-2 border-current border-r-transparent motion-reduce:animate-none"
@@ -168,7 +177,11 @@ export default function LoginPage() {
           {busy ? "로그인 확인 중" : "로그인"}
         </Button>
         <div className="flex justify-center">
-          <TextButton render={<Link href="/signup" />}>
+          <TextButton
+            role="link"
+            nativeButton={false}
+            render={<Link href="/signup" />}
+          >
             이메일로 가입하기
           </TextButton>
         </div>

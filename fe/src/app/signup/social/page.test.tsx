@@ -28,6 +28,24 @@ beforeEach(() => {
   sessionStorage.clear();
 });
 afterEach(cleanup);
+it("링크 버튼에 nativeButton 경고가 없다", () => {
+  const error = vi.spyOn(console, "error");
+  const warn = vi.spyOn(console, "warn");
+  try {
+    render(
+      <ToastProvider>
+        <SocialSignupPage />
+      </ToastProvider>,
+    );
+    expect(screen.getByRole("link").getAttribute("href")).toBe("/signup");
+    expect(
+      [...error.mock.calls, ...warn.mock.calls].flat().join(" "),
+    ).not.toContain("nativeButton");
+  } finally {
+    error.mockRestore();
+    warn.mockRestore();
+  }
+});
 function form() {
   render(
     <ToastProvider>

@@ -89,6 +89,8 @@ export default function SignupEmailPage() {
       <header className="-mx-3 flex min-h-14 items-center gap-2">
         <IconButton
           label="회원가입으로 돌아가기"
+          role="link"
+          nativeButton={false}
           render={<Link href="/signup" />}
         >
           <ChevronLeftIcon />
@@ -173,7 +175,13 @@ export default function SignupEmailPage() {
           </p>
         )}
         {emailTaken && (
-          <TextButton render={<Link href="/login" />}>로그인하기</TextButton>
+          <TextButton
+            role="link"
+            nativeButton={false}
+            render={<Link href="/login" />}
+          >
+            로그인하기
+          </TextButton>
         )}
         <Button
           className="mt-auto w-full"

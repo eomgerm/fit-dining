@@ -33,6 +33,26 @@ function reachTaste() {
   click("다음");
 }
 describe("온보딩 화면", () => {
+  it("작성 중인 내용 다이얼로그에 연필 아이콘을 표시한다", async () => {
+    render(<OnboardingScreen onComplete={vi.fn()} />);
+    reachTaste();
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "국물" },
+    });
+    click("시작하기");
+    const dialog = await screen.findByRole("alertdialog", {
+      name: "작성 중인 내용이 있어요",
+    });
+    const icon = dialog.querySelector("svg");
+    expect(icon?.getAttribute("aria-hidden")).toBe("true");
+    expect(icon?.classList.contains("text-primary-strong")).toBe(true);
+    expect(
+      Array.from(icon?.querySelectorAll("path") ?? [], (path) =>
+        path.getAttribute("d"),
+      ),
+    ).toEqual(["M4 20H8L19 9L15 5L4 16V20Z", "M13.5 6.5L17.5 10.5"]);
+  });
+
   it("첫 렌더에서는 시작하기로 포커스를 옮기지 않는다", () => {
     render(<OnboardingScreen onComplete={vi.fn()} />);
     expect(document.activeElement).not.toBe(
