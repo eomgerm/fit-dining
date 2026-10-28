@@ -58,6 +58,23 @@ uv run --env-file .env python scripts/build_sample_taste_profiles.py
 
 `samples/taste/`에 `profiles.json`(샘플 사용자 7명)과 `code_vectors.json`을 만듭니다. `profiles.json`은 41이 읽을 출력 형식의 스냅숏이라 커밋합니다. GMS 응답이 실행마다 조금 달라질 수 있으니 프롬프트나 출력 형식을 바꿀 때만 다시 만듭니다. `code_vectors.json`은 장소 벡터와 같은 환경에서 만들어야 해서(아래 "GPU로 돌리기") 그때 커밋합니다. `GMS_ENABLED`가 `true`가 아니면 직접 입력은 해석 대기(`like: null`)로 남습니다. 규칙은 `docs/specs/taste-profile/spec.md`에 있습니다.
 
+## 프롬프트 최적화
+
+MLflow의 GEPA(`mlflow.genai.optimize_prompts`)로 GMS 프롬프트를 최적화합니다. mlflow와 gepa는 실행할 때만 `--with`로 덧씌웁니다. `pyproject.toml`과 `uv.lock`에 넣지 않으므로 배포 이미지에 들어가지 않습니다.
+
+```bash
+uv run --env-file .env --with mlflow==3.17.2 --with "gepa[full]==0.1.4" \
+  python experiments/prompt_opt/direct_input.py
+```
+
+기록은 `~/fit-ai-data/mlflow/`(SQLite와 아티팩트)에 남습니다. trace에 입력 원문이 들어가므로 레포 안에 두지 않습니다. 결과는 MLflow UI로 봅니다.
+
+```bash
+uv run --with mlflow==3.17.2 mlflow ui --backend-store-uri sqlite:///$HOME/fit-ai-data/mlflow/mlflow.db
+```
+
+judge·반성 모델과 연결 방식은 `experiments/prompt_opt/common.py`에 있습니다. GMS 호출 수는 스크립트의 `MAX_METRIC_CALLS`로 제한합니다.
+
 ## GPU로 돌리기
 
 기본 `uv sync`는 PyPI의 torch를 씁니다(Windows는 CPU, Linux는 CUDA 13 빌드). GPU를 쓰려면 CUDA 12.8 빌드를 고릅니다. 드라이버가 CUDA 12.8 이상이면 됩니다(`nvidia-smi` 오른쪽 위 `CUDA Version`).

@@ -27,6 +27,10 @@ id_rsa
 /ai/data/
 # 장소 프로필 샘플에는 네이버 리뷰 원문 구절이 들어간다(place-profile spec 7단계)
 /ai/samples/place/
+# MLflow 기록에는 입력 원문이 들어간다. ~/fit-ai-data/mlflow/에 두고, 실수로 생긴 것도 무시한다
+mlflow.db
+mlruns/
+mlartifacts/
 
 ### 도구 산출물 ###
 .tmp-selftest/
