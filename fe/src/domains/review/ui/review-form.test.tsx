@@ -58,15 +58,18 @@ const withAccessToken: WithAccessToken = (send) => send("token");
 const unauthorized = () =>
   new ApiError("http", "로그인이 필요합니다", { status: 401 });
 
-function flow(data: ReviewFormResponse) {
+function flow(
+  data: ReviewFormResponse,
+  props: { onClose?: () => void; onReload?: () => void } = {},
+) {
   return (
     <ReviewWriteFlow
       placeId={3}
       form={data}
       withAccessToken={withAccessToken}
       onSuccess={() => {}}
-      onClose={() => {}}
-      onReload={() => {}}
+      onClose={props.onClose ?? (() => {})}
+      onReload={props.onReload ?? (() => {})}
     />
   );
 }
@@ -186,6 +189,36 @@ describe("ReviewWriteFlow", () => {
       await screen.findByText("같은 날에 또 리뷰를 작성할 수 없어요."),
     ).toBeTruthy();
     expect(api.createReview).not.toHaveBeenCalled();
+  });
+
+  it("다시 받은 데이터 때문에 방문일만 비었으면 X에 7-E03 없이 나간다", () => {
+    const onClose = vi.fn();
+    const view = mount(flow(form(), { onClose }));
+
+    view.rerender(flow(form(["2026-10-21"]), { onClose }));
+    fireEvent.click(screen.getByRole("button", { name: "닫기" }));
+
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(screen.queryByText("작성한 내용이 사라져요")).toBeNull();
+  });
+
+  it("등록이 404면 장소를 찾을 수 없다고 하고 다시 받지 않은 채 나가게 한다", async () => {
+    api.createReview.mockRejectedValue(
+      new ApiError("http", "장소 없음", { status: 404 }),
+    );
+    const onClose = vi.fn();
+    const onReload = vi.fn();
+    mount(flow(form(), { onClose, onReload }));
+    fireEvent.click(screen.getByRole("button", { name: "조용해서 좋았어요" }));
+    fireEvent.click(screen.getByRole("button", { name: "다음" }));
+    fireEvent.click(screen.getByRole("button", { name: "다음" }));
+    fireEvent.click(screen.getByRole("button", { name: "건너뛰고 등록하기" }));
+
+    expect(await screen.findByText("장소를 찾을 수 없어요")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "나가기" }));
+
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(onReload).not.toHaveBeenCalled();
   });
 });
 

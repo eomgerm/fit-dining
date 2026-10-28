@@ -179,7 +179,8 @@ export function ReviewWriteFlow({
     setDraft((current) => ({ ...current, ...patch }));
 
   function close() {
-    if (isDirty(draft, initial)) setConfirmingClose(true);
+    // 다시 받은 데이터 때문에 비워진 방문일은 쓴 내용으로 보지 않는다
+    if (isDirty(draft, reconcileDraft(initial, form))) setConfirmingClose(true);
     else onClose();
   }
 
@@ -345,24 +346,27 @@ export function ReviewWriteFlow({
         onOpenChange={setFailureOpen}
         onRetry={submit}
         onChangeDate={changeDateAfterDuplicate}
+        onLeave={onClose}
       />
     </FormFrame>
   );
 }
 
-// 7-E05, 7-E06과 409·401·400 안내. 어느 경우든 입력은 그대로 남는다
+// 7-E05, 7-E06과 409·401·404·400 안내. 없는 장소(404)만 빼고 입력은 그대로 남는다
 export function SubmitFailureDialog({
   failure,
   open,
   onOpenChange,
   onRetry,
   onChangeDate,
+  onLeave,
 }: {
   failure: SubmitFailure;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onRetry: () => void;
   onChangeDate: () => void;
+  onLeave: () => void;
 }) {
   const onDismiss = () => onOpenChange(false);
   const ok = (
@@ -404,6 +408,22 @@ export function SubmitFailureDialog({
         action={
           <Button size="md" onClick={onChangeDate}>
             방문일 바꾸기
+          </Button>
+        }
+      />
+    );
+  }
+  if (failure === "placeNotFound") {
+    return (
+      <AlertDialog
+        open={open}
+        onOpenChange={onOpenChange}
+        icon={<PinOffIcon />}
+        title="장소를 찾을 수 없어요"
+        description="장소 정보가 바뀌어 리뷰를 남길 수 없어요."
+        action={
+          <Button size="md" onClick={onLeave}>
+            나가기
           </Button>
         }
       />

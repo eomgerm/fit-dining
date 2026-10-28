@@ -19,9 +19,13 @@ describe("submitFailure", () => {
     expect(submitFailure(http(401))).toBe("signedOut");
   });
 
+  it("404는 없어진 장소다", () => {
+    expect(submitFailure(http(404))).toBe("placeNotFound");
+  });
+
   it("그 밖의 4xx는 입력 확인, 알 수 없는 오류는 7-E05다", () => {
     expect(submitFailure(http(400))).toBe("invalid");
-    expect(submitFailure(http(404))).toBe("invalid");
+    expect(submitFailure(http(403))).toBe("invalid");
     expect(submitFailure(new Error("x"))).toBe("server");
   });
 });
