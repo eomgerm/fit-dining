@@ -72,6 +72,24 @@ class ProfileSchemaTest extends PostgresTestSupport {
 	}
 
 	@Test
+	@DisplayName("이유태그_코드표에없는특징코드면_거부된다")
+	void insertReasonTag_unknownFeatureCode_rejected() {
+		assertThatThrownBy(() -> jdbc.update("""
+				INSERT INTO reason_tags (code, feature_code, sentiment, label, display_group, sort_order)
+				VALUES ('PROFILE_SCHEMA_TEST_GOOD', 'NOT_A_FEATURE', 'GOOD', '시험', '시험', 999)"""))
+				.isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining("fk_reason_tags_feature_code");
+	}
+
+	@Test
+	@DisplayName("특징코드_AI코드표23개가_시드되어있다")
+	void featureCodes_seededFromAiCodeTable() {
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM feature_codes", Integer.class)).isEqualTo(23);
+		// 문구 벡터는 L2 정규화해 넣었다
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM feature_codes WHERE abs(vector_norm(vector) - 1) > 0.001",
+				Integer.class)).isZero();
+	}
+
+	@Test
 	@DisplayName("장소삭제_페르소나도함께지워진다")
 	void delete_place_cascadesPersonas() {
 		long placeId = insertPlace(null);
