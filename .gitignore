@@ -32,6 +32,9 @@ mlflow.db
 mlruns/
 mlartifacts/
 
+### 네이버 장소 수집 정제본(CSV)과 ERD: 리뷰 원문·작성자 해시가 있어 레포에 넣지 않는다 ###
+/data/naver-places/
+
 ### 도구 산출물 ###
 .tmp-selftest/
 .tmp-gitleaks/
