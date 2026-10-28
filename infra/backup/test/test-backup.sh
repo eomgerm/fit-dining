@@ -494,9 +494,49 @@ run_restore_checks() {
   ok_if "복원된 데이터를 조회한다(3행)" "$(has "$out" 'sql_result=3')"
   ok_if "RTO를 초 단위로 알려 준다(내려받기 5초를 더한다)" "$([[ "$out" =~ RTO:\ ([0-9]+)초 ]] && [ "${BASH_REMATCH[1]}" -ge 5 ] && echo 1 || echo 0)"
   runa "bash $M/restore-check.sh -i /root/ids/id3.txt /tmp/$f"
-  ok_if "수신자가 아닌 개인키로는 복호화에 실패한다" "$([ "$rc" != 0 ] && [ "$(has "$out" '복호화에 실패')" = 1 ] && echo 1 || echo 0)"
+  ok_if "수신자가 아닌 개인키로는 복호화에 실패하고 키가 수신자가 아니라고 알려 준다" "$([ "$rc" != 0 ] && [ "$(has "$out" '복호화에 실패')" = 1 ] && [ "$(has "$out" '수신자가 아니다')" = 1 ] && echo 1 || echo 0)"
   runa "bash $M/restore-check.sh /tmp/$f"
-  ok_if "개인키(-i)가 없으면 거부한다" "$(nonzero "$rc")"
+  ok_if "개인키(-i)가 없으면 거부하고 -i를 달라고 알려 준다" "$([ "$rc" != 0 ] && [ "$(has "$out" '개인키 파일(-i)을 준다')" = 1 ] && echo 1 || echo 0)"
+  runa "bash $M/restore-check.sh -i /root/ids/nokey.txt /tmp/$f"
+  ok_if "개인키 파일이 없으면 그렇다고 알려 준다(키가 틀렸다고 하지 않는다)" "$([ "$rc" != 0 ] && [ "$(has "$out" '개인키 파일이 없다')" = 1 ] && [ "$(has "$out" '수신자')" = 0 ] && echo 1 || echo 0)"
+  runa "bash $M/restore-check.sh -i /root/ids/id2.txt /tmp/pg-20200101T000000Z.dump.age"
+  ok_if "백업 파일이 없으면 그렇다고 알려 준다(사용법만 나오지 않는다)" "$([ "$rc" != 0 ] && [ "$(has "$out" '백업 파일이 없다')" = 1 ] && [ "$(has "$out" '수신자')" = 0 ] && echo 1 || echo 0)"
+  runa "head -c 3000 /dev/urandom > /tmp/pg-20200102T000000Z.dump.age && bash $M/restore-check.sh -i /root/ids/id2.txt /tmp/pg-20200102T000000Z.dump.age"
+  ok_if "깨진 백업 파일은 age의 말을 그대로 보여 주고 키 탓으로 돌리지 않는다" "$([ "$rc" != 0 ] && [ "$(has "$out" '복호화에 실패했다(age의 말)')" = 1 ] && [ "$(has "$out" '수신자')" = 0 ] && echo 1 || echo 0)"
+  # Windows의 age.exe 흉내: /로 시작하는 경로를 열지 못하고 C:/... 만 읽는다. cygpath가 있어야 restore-check.sh가 경로를 바꿔 준다.
+  # 진짜 age의 위치(REAL_AGE)는 PATH를 바꾸기 전에 구한다(바꾼 뒤에 구하면 흉내 age가 자기 자신을 부른다)
+  mkdir -p "$T/winage" "$T/wincyg"
+  cat >"$T/winage/age" <<'STUB'
+#!/bin/sh
+# Windows age.exe 흉내. 인자로 온 경로가 /로 시작하면 열지 못한다. C:/x 는 /x로 읽어 진짜 age를 부른다
+n=$#
+i=0
+while [ "$i" -lt "$n" ]; do
+  a="$1"
+  shift
+  case "$a" in
+    /*) echo "age: error: failed to open input file \"$a\": The system cannot find the path specified." >&2; exit 1 ;;
+    C:/*) set -- "$@" "${a#C:}" ;;
+    *) set -- "$@" "$a" ;;
+  esac
+  i=$((i + 1))
+done
+exec "${REAL_AGE:-/usr/bin/age}" "$@"
+STUB
+  cat >"$T/wincyg/cygpath" <<'STUB'
+#!/bin/sh
+# cygpath -m 흉내: /x 를 C:/x 로 바꾼다
+[ "$1" = -m ] && shift
+case "$1" in /*) printf 'C:%s\n' "$1" ;; *) printf '%s\n' "$1" ;; esac
+STUB
+  cp "$T/winage/age" "$T/wincyg/age"
+  docker cp "$T/winage" "$A:/tmp/winage" >/dev/null
+  docker cp "$T/wincyg" "$A:/tmp/wincyg" >/dev/null
+  runa "chmod +x /tmp/winage/age /tmp/wincyg/age /tmp/wincyg/cygpath"
+  runa "R=\$(command -v age); PATH=/tmp/winage:\$PATH REAL_AGE=\$R bash $M/restore-check.sh -i /root/ids/id2.txt /tmp/$f"
+  ok_if "대조군: cygpath 없이 /로 시작하는 경로를 못 여는 age는 실패하고 age의 말이 보인다" "$([ "$rc" != 0 ] && [ "$(has "$out" 'The system cannot find the path')" = 1 ] && [ "$(has "$out" '수신자')" = 0 ] && echo 1 || echo 0)"
+  runa "R=\$(command -v age); PATH=/tmp/wincyg:\$PATH REAL_AGE=\$R bash $M/restore-check.sh -i /root/ids/id2.txt --sql 'SELECT count(*) FROM t_backup_probe' /tmp/$f"
+  ok_if "Windows 흉내(cygpath로 경로를 바꿔야 열리는 age)에서도 복호화하고 복원해 성공한다" "$([ "$rc" = 0 ] && [ "$(has "$out" 'sql_result=3')" = 1 ] && echo 1 || echo 0)"
   runa "cp /tmp/$f /tmp/notabackup.age && bash $M/restore-check.sh -i /root/ids/id1.txt /tmp/notabackup.age"
   ok_if "백업 이름 형식이 아니면 거부한다" "$(nonzero "$rc")"
   f="$(qb "ls /srv/vault/store/photos | grep '\\.tar\\.age\$' | head -n 1")"

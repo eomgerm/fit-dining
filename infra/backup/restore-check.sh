@@ -41,8 +41,12 @@ while [ $# -gt 0 ]; do
       ;;
   esac
 done
-[ -n "$FILE" ] && [ -s "$FILE" ] || die "사용: restore-check.sh -i <개인키> [옵션] <백업 파일.age>"
-[ -n "$IDENTITY" ] && [ -s "$IDENTITY" ] || die "개인키 파일(-i)이 필요하다"
+[ -n "$FILE" ] || die "사용: restore-check.sh -i <개인키> [옵션] <백업 파일.age>"
+[ -f "$FILE" ] || die "백업 파일이 없다: $FILE"
+[ -s "$FILE" ] || die "백업 파일이 비어 있다: $FILE"
+[ -n "$IDENTITY" ] || die "개인키 파일(-i)을 준다"
+[ -f "$IDENTITY" ] || die "개인키 파일이 없다: $IDENTITY"
+[ -s "$IDENTITY" ] || die "개인키 파일이 비어 있다: $IDENTITY"
 [[ "$FETCH" =~ ^[0-9]+$ ]] || die "--fetch-seconds에는 숫자를 준다"
 command -v age >/dev/null 2>&1 || die "age가 없다(https://github.com/FiloSottile/age 에서 설치한다)"
 command -v docker >/dev/null 2>&1 || die "docker가 없다(Docker Desktop을 켠다)"
@@ -54,7 +58,14 @@ trap 'rm -rf "$WORK"' EXIT
 START="$(date +%s)"
 
 log "복호화한다: $NAME"
-age -d -i "$IDENTITY" -o "$WORK/plain" "$FILE" || die "복호화에 실패했다(개인키가 수신자 중 하나가 아니다)"
+# Windows의 age.exe는 Git Bash의 /c/... 경로를 열지 못하므로 age에 주는 경로만 C:/... 모양으로 바꾼다(Linux·macOS에서는 그대로다)
+if ! err="$(age -d -i "$(native_path "$IDENTITY")" -o "$(native_path "$WORK/plain")" "$(native_path "$FILE")" 2>&1)"; then
+  # age가 실제로 한 말을 보고 원인을 가른다. 파일을 못 연 것이나 깨진 파일을 키 탓으로 돌리지 않는다
+  case "$err" in
+    *"no identity matched"*) die "복호화에 실패했다: 이 개인키는 이 백업의 수신자가 아니다($IDENTITY)" ;;
+    *) die "복호화에 실패했다(age의 말): $(printf '%s\n' "$err" | head -n 1 | cut -c1-240)" ;;
+  esac
+fi
 
 case "$NAME" in
   pg-*)
