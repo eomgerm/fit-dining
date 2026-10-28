@@ -69,24 +69,77 @@ ALTER TABLE reason_tags
 
 CREATE TABLE places (
     place_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    naver_place_id text NOT NULL CONSTRAINT uk_places_naver_place_id UNIQUE CONSTRAINT ck_places_naver_place_id CHECK (naver_place_id <> ''),
     name text NOT NULL,
     category_group text NOT NULL CONSTRAINT ck_places_category_group CHECK (category_group IN ('RESTAURANT', 'CAFE', 'BAR')),
     food_type text CONSTRAINT ck_places_food_type CHECK (food_type IN ('FOOD_KOREAN', 'FOOD_CHINESE', 'FOOD_JAPANESE', 'FOOD_WESTERN', 'FOOD_ASIAN')),
-    summary_text text NOT NULL,
-    summary_vector vector(1024) NOT NULL,
-    features jsonb NOT NULL DEFAULT '[]' CONSTRAINT ck_places_features CHECK (jsonb_typeof(features) = 'array'),
-    analyzed_review_count integer NOT NULL CONSTRAINT ck_places_analyzed_review_count CHECK (analyzed_review_count >= 0),
+    station text NOT NULL CONSTRAINT ck_places_station CHECK (station IN ('GANGNAM', 'YEOKSAM', 'SEOLLEUNG')),
+    thumbnail_url text,
+    category text,
+    category_code text,
+    category_code_path text[] NOT NULL DEFAULT '{}',
+    lat double precision NOT NULL CONSTRAINT ck_places_lat CHECK (lat BETWEEN -90 AND 90),
+    lng double precision NOT NULL CONSTRAINT ck_places_lng CHECK (lng BETWEEN -180 AND 180),
+    address text,
+    jibun_address text,
+    full_address text,
+    district text,
+    dong text,
+    directions text,
+    description text,
+    phone text,
+    website text,
+    extra_links text[] NOT NULL DEFAULT '{}',
+    booking_url text,
+    facilities text[] NOT NULL DEFAULT '{}',
+    parking_free boolean,
+    parking_note text,
+    pet_allowed boolean,
+    pet_note text,
+    corkage_allowed boolean,
+    corkage_note text,
+    payment_methods text[] NOT NULL DEFAULT '{}',
+    keywords text[] NOT NULL DEFAULT '{}',
+    menu_updated_on date,
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now()
 );
-COMMENT ON TABLE places IS '장소. 최소 구성이며 나머지 수집 컬럼은 장소 수집 담당이 더한다. 분석 컬럼(place-profile/v0)은 릴리즈 전에 네이버 리뷰로 한 번 채우고, 이후 04:00 배치가 앱 리뷰로만 갱신한다. 네이버 장소 ID, 리뷰 원문, 리뷰별 추출 결과는 저장하지 않는다';
+COMMENT ON TABLE places IS '장소. 수집한 값과 그 값에서 규칙으로 바로 나오는 분류만 둔다. 분석 결과는 place_profiles에 있다. 네이버 리뷰 원문과 리뷰별 추출 결과는 저장하지 않는다';
 COMMENT ON COLUMN places.place_id IS '서비스 자체 장소 ID';
+COMMENT ON COLUMN places.naver_place_id IS '네이버 장소 ID. 적재 재실행 때 중복을 막고, 재수집 대상과 40 출력을 이 값으로 찾는다';
 COMMENT ON COLUMN places.category_group IS '업종 그룹. is_label 업종 그룹 평균의 단위';
-COMMENT ON COLUMN places.food_type IS '음식 종류 코드. 네이버 업종 코드로 정한다. 카페·술집·뷔페·처음 보는 코드는 null';
-COMMENT ON COLUMN places.summary_text IS '장소 요약 문장. 이름, 업종, 메뉴, 시설, 가까운 역. 가격 제외';
-COMMENT ON COLUMN places.summary_vector IS '장소 요약 임베딩(문서 인코딩, L2 정규화)';
-COMMENT ON COLUMN places.features IS '근거가 있는 특징만. [{code, layer, like_count, dislike_count, is_label}], 카드 노출 순서로 정렬. is_label은 PRD의 태그 라벨 여부(40 출력의 label)';
-COMMENT ON COLUMN places.analyzed_review_count IS '분석한 리뷰 수(화면의 리뷰 수 아님). 첫 값은 네이버 리뷰 수, 이후 앱 리뷰만큼 더하고 뺀다. is_label 업종 그룹 평균 조건(40 제안)의 분모이며 이 조건이 빠지면 삭제';
+COMMENT ON COLUMN places.food_type IS '음식 종류 코드. 네이버 업종 코드로 정한다(ai의 rules.food_type). 카페·술집·뷔페·처음 보는 코드는 null';
+COMMENT ON COLUMN places.station IS '장소가 속한 수집 지역 역(PlaceSummary.Station)';
+COMMENT ON COLUMN places.thumbnail_url IS '대표 사진 URL. 없으면 FE가 자리표시를 그린다';
+COMMENT ON COLUMN places.category IS '네이버 업종 이름';
+COMMENT ON COLUMN places.address IS '도로명 주소';
+COMMENT ON COLUMN places.full_address IS '층 등 상세를 포함한 주소';
+COMMENT ON COLUMN places.district IS '구. 주소에서 뽑는다';
+COMMENT ON COLUMN places.dong IS '동. 주소에서 뽑는다';
+COMMENT ON COLUMN places.directions IS '찾아오는 길(업체 작성)';
+COMMENT ON COLUMN places.description IS '업체 소개';
+COMMENT ON COLUMN places.phone IS '대표 전화. 일반 번호가 없으면 안심번호';
+COMMENT ON COLUMN places.extra_links IS '대표 홈페이지 말고 업체가 등록한 링크 URL';
+COMMENT ON COLUMN places.booking_url IS '네이버 예약 페이지';
+COMMENT ON COLUMN places.facilities IS '네이버 편의시설 이름 그대로';
+COMMENT ON COLUMN places.keywords IS '업체가 등록한 키워드. 리뷰 투표 키워드가 아니다';
+COMMENT ON COLUMN places.updated_at IS '수집·재수집 때만 바뀐다';
+
+CREATE TABLE place_profiles (
+    place_id bigint PRIMARY KEY CONSTRAINT fk_place_profiles_place_id REFERENCES places(place_id) ON DELETE CASCADE,
+    summary_text text NOT NULL,
+    summary_vector vector(1024) NOT NULL,
+    features jsonb NOT NULL DEFAULT '[]' CONSTRAINT ck_place_profiles_features CHECK (jsonb_typeof(features) = 'array'),
+    analyzed_review_count integer NOT NULL CONSTRAINT ck_place_profiles_analyzed_review_count CHECK (analyzed_review_count >= 0),
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now()
+);
+COMMENT ON TABLE place_profiles IS '장소 분석 결과(place-profile/v0). 리뷰나 임베딩 모델로 만든 값이다. 릴리즈 전에 네이버 리뷰로 한 번 채우고, 이후 04:00 배치가 앱 리뷰로만 갱신한다. 행이 없는 장소는 추천에서 빠진다';
+COMMENT ON COLUMN place_profiles.summary_text IS '장소 요약 문장. 이름, 업종, 메뉴, 시설, 가까운 역. 가격 제외';
+COMMENT ON COLUMN place_profiles.summary_vector IS '장소 요약 임베딩(문서 인코딩, L2 정규화)';
+COMMENT ON COLUMN place_profiles.features IS '근거가 있는 특징만. [{code, layer, like_count, dislike_count, is_label}], 카드 노출 순서로 정렬. is_label은 PRD의 태그 라벨 여부';
+COMMENT ON COLUMN place_profiles.analyzed_review_count IS '분석한 리뷰 수(화면의 리뷰 수 아님). 첫 값은 네이버 리뷰 수, 이후 앱 리뷰만큼 더하고 뺀다. is_label 업종 그룹 평균 조건(40 제안)의 분모이며 이 조건이 빠지면 삭제';
+COMMENT ON COLUMN place_profiles.updated_at IS '첫 적재와 04:00 배치 때 바뀐다';
 
 CREATE TABLE place_personas (
     place_id bigint NOT NULL CONSTRAINT fk_place_personas_place_id REFERENCES places(place_id) ON DELETE CASCADE,

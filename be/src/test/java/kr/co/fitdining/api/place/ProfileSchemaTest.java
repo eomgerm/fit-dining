@@ -38,14 +38,21 @@ class ProfileSchemaTest extends PostgresTestSupport {
 		jdbc.update("DELETE FROM auth_users WHERE id = ?", USER_ID);
 	}
 
-	private long insertPlace(String foodType) {
+	private long insertPlace(String naverPlaceId, String foodType) {
 		long id = jdbc.queryForObject("""
-				INSERT INTO places (name, category_group, food_type, summary_text, summary_vector, features, analyzed_review_count)
-				VALUES ('테스트 식당', 'RESTAURANT', ?, '테스트 식당. 식당, 한식.', ?::vector,
-				        '[{"code": "PURPOSE_GROUP", "layer": "purpose", "like_count": 7, "dislike_count": 0, "is_label": true}]', 100)
-				RETURNING place_id""", Long.class, foodType, VECTOR);
+				INSERT INTO places (naver_place_id, name, category_group, food_type, station, lat, lng)
+				VALUES (?, '테스트 식당', 'RESTAURANT', ?, 'GANGNAM', 37.4979, 127.0276)
+				RETURNING place_id""", Long.class, naverPlaceId, foodType);
 		placeIds.add(id);
 		return id;
+	}
+
+	private void insertProfile(long placeId) {
+		jdbc.update("""
+				INSERT INTO place_profiles (place_id, summary_text, summary_vector, features, analyzed_review_count)
+				VALUES (?, '테스트 식당. 식당, 한식.', ?::vector,
+				        '[{"code": "PURPOSE_GROUP", "layer": "purpose", "like_count": 7, "dislike_count": 0, "is_label": true}]', 100)""",
+				placeId, VECTOR);
 	}
 
 	private void insertPersona(long placeId) {
@@ -55,9 +62,10 @@ class ProfileSchemaTest extends PostgresTestSupport {
 	}
 
 	@Test
-	@DisplayName("장소와페르소나_정상값은_저장되고근거앱리뷰는빈배열이다")
-	void insert_validPlaceAndPersona_saved() {
-		long placeId = insertPlace("FOOD_KOREAN");
+	@DisplayName("장소와프로필과페르소나_정상값은_저장되고근거앱리뷰는빈배열이다")
+	void insert_validPlaceProfileAndPersona_saved() {
+		long placeId = insertPlace("1001", "FOOD_KOREAN");
+		insertProfile(placeId);
 		insertPersona(placeId);
 
 		assertThat(jdbc.queryForObject("SELECT cardinality(review_ids) FROM place_personas WHERE place_id = ?",
@@ -67,8 +75,17 @@ class ProfileSchemaTest extends PostgresTestSupport {
 	@Test
 	@DisplayName("장소_음식종류코드가아니면_거부된다")
 	void insert_unknownFoodType_rejected() {
-		assertThatThrownBy(() -> insertPlace("FOOD_SPICY")).isInstanceOf(DataIntegrityViolationException.class)
+		assertThatThrownBy(() -> insertPlace("1002", "FOOD_SPICY")).isInstanceOf(DataIntegrityViolationException.class)
 				.hasMessageContaining("ck_places_food_type");
+	}
+
+	@Test
+	@DisplayName("장소_네이버장소ID가겹치면_거부된다")
+	void insert_duplicateNaverPlaceId_rejected() {
+		insertPlace("1003", null);
+
+		assertThatThrownBy(() -> insertPlace("1003", null)).isInstanceOf(DataIntegrityViolationException.class)
+				.hasMessageContaining("uk_places_naver_place_id");
 	}
 
 	@Test
@@ -90,13 +107,16 @@ class ProfileSchemaTest extends PostgresTestSupport {
 	}
 
 	@Test
-	@DisplayName("장소삭제_페르소나도함께지워진다")
-	void delete_place_cascadesPersonas() {
-		long placeId = insertPlace(null);
+	@DisplayName("장소삭제_프로필과페르소나도함께지워진다")
+	void delete_place_cascadesProfileAndPersonas() {
+		long placeId = insertPlace("1004", null);
+		insertProfile(placeId);
 		insertPersona(placeId);
 
 		jdbc.update("DELETE FROM places WHERE place_id = ?", placeId);
 
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM place_profiles WHERE place_id = ?", Integer.class,
+				placeId)).isZero();
 		assertThat(jdbc.queryForObject("SELECT count(*) FROM place_personas WHERE place_id = ?", Integer.class,
 				placeId)).isZero();
 	}
