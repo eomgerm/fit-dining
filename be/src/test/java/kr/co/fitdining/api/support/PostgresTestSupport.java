@@ -47,6 +47,8 @@ public abstract class PostgresTestSupport {
             sql.execute("GRANT USAGE ON SCHEMA public TO fit_dev_app");
             sql.execute("ALTER DEFAULT PRIVILEGES FOR ROLE fit_migrator IN SCHEMA public GRANT SELECT,INSERT,UPDATE,DELETE ON TABLES TO fit_dev_app");
             sql.execute("ALTER DEFAULT PRIVILEGES FOR ROLE fit_migrator IN SCHEMA public GRANT USAGE,SELECT ON SEQUENCES TO fit_dev_app");
+            // 서버와 로컬도 관리자가 확장을 만든다(infra/data/ensure-databases.sh). fit_migrator는 만들 수 없다.
+            sql.execute("CREATE EXTENSION IF NOT EXISTS vector");
         }
         Flyway.configure().dataSource(POSTGRES.getJdbcUrl(), "fit_migrator", "test-migrator").load().migrate();
     }

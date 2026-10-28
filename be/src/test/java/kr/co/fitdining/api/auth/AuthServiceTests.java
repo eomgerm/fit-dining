@@ -516,6 +516,11 @@ class AuthServiceTests extends PostgresTestSupport {
             statement.execute("CREATE DATABASE fit_dev OWNER fit_migrator");
         }
         String migrateUrl = POSTGRES.getJdbcUrl().replace("/" + POSTGRES.getDatabaseName(), "/fit_dev");
+        // 확장은 DB마다 관리자가 만든다(infra/data/ensure-databases.sh).
+        try (var connection = DriverManager.getConnection(migrateUrl, POSTGRES.getUsername(), POSTGRES.getPassword());
+                var statement = connection.createStatement()) {
+            statement.execute("CREATE EXTENSION IF NOT EXISTS vector");
+        }
         try (var context = new SpringApplicationBuilder(ApiApplication.class).web(WebApplicationType.NONE)
                 .profiles("migrate").properties(
                         "auth.jwt-secret=${UNDEFINED_AUTH_KEY}", "auth.frontend-origin=${UNDEFINED_AUTH_ORIGIN}",
