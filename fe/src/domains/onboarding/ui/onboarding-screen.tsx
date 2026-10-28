@@ -40,6 +40,53 @@ const titles = [
   "더 알려 주고 싶은\n취향이 있나요?",
 ];
 
+function IntroBackground() {
+  const [allowMotion, setAllowMotion] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (!window.matchMedia) return;
+    const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
+    function update() {
+      setAllowMotion(!preference.matches);
+      setPlaying(false);
+    }
+    update();
+    preference.addEventListener("change", update);
+    return () => preference.removeEventListener("change", update);
+  }, []);
+
+  return (
+    <>
+      <Image
+        src="/onboarding/intro-poster.jpg"
+        alt=""
+        fill
+        sizes="(max-width: 440px) 100vw, 440px"
+        className="object-cover"
+        loading="eager"
+      />
+      {allowMotion && !failed && (
+        <video
+          src="/onboarding/intro.mp4"
+          autoPlay
+          muted
+          loop
+          playsInline
+          aria-hidden="true"
+          onPlaying={() => setPlaying(true)}
+          onError={() => setFailed(true)}
+          className={cn(
+            "absolute inset-0 size-full object-cover",
+            !playing && "opacity-0",
+          )}
+        />
+      )}
+    </>
+  );
+}
+
 export function OnboardingScreen({
   onComplete,
 }: {
@@ -123,14 +170,7 @@ export function OnboardingScreen({
   if (step === 0)
     return (
       <main className="relative mx-auto flex min-h-svh w-full max-w-110 flex-col bg-secondary">
-        <Image
-          src="/onboarding/intro-poster.jpg"
-          alt=""
-          fill
-          sizes="(max-width: 440px) 100vw, 440px"
-          className="object-cover"
-          loading="eager"
-        />
+        <IntroBackground />
         <div className="absolute inset-0 bg-linear-to-b from-photo-shade/50 via-transparent to-photo-shade" />
         <h1 className="relative m-5">
           <Image

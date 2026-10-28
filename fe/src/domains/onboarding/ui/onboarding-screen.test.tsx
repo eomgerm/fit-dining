@@ -7,18 +7,29 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OnboardingScreen } from "./onboarding-screen";
 
 const mocks = vi.hoisted(() => ({ analyze: vi.fn() }));
 vi.mock("../api/analyze-taste", () => ({
   analyzeTaste: mocks.analyze,
 }));
+beforeEach(() => {
+  vi.stubGlobal(
+    "matchMedia",
+    vi.fn(() => ({
+      matches: false,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })),
+  );
+});
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
   vi.restoreAllMocks();
   mocks.analyze.mockReset();
+  vi.unstubAllGlobals();
 });
 function click(name: string) {
   fireEvent.click(screen.getByRole("button", { name }));
@@ -33,6 +44,42 @@ function reachTaste() {
   click("다음");
 }
 describe("온보딩 화면", () => {
+  it("장식 영상을 반복 자동재생하고 시작하기에서 언마운트한다", () => {
+    const { container } = render(<OnboardingScreen onComplete={vi.fn()} />);
+    const video = container.querySelector("video")!;
+    expect(video.src).toContain("/onboarding/intro.mp4");
+    expect(video.autoplay).toBe(true);
+    expect(video.muted).toBe(true);
+    expect(video.loop).toBe(true);
+    expect(video.playsInline).toBe(true);
+    expect(video.hasAttribute("poster")).toBe(false);
+    expect(container.querySelector('img[alt=""]')).toBeTruthy();
+    expect(video.getAttribute("aria-hidden")).toBe("true");
+    expect(video.classList.contains("opacity-0")).toBe(true);
+    fireEvent.playing(video);
+    expect(video.classList.contains("opacity-0")).toBe(false);
+    click("시작하기");
+    expect(container.querySelector("video")).toBeNull();
+  });
+  it("움직임 줄이기에서는 포스터만 보여 준다", () => {
+    vi.mocked(window.matchMedia).mockReturnValue({
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    } as unknown as MediaQueryList);
+    const { container } = render(<OnboardingScreen onComplete={vi.fn()} />);
+    expect(window.matchMedia).toHaveBeenCalledWith(
+      "(prefers-reduced-motion: reduce)",
+    );
+    expect(container.querySelector("video")).toBeNull();
+    expect(container.querySelector('img[alt=""]')).toBeTruthy();
+  });
+  it("영상 오류가 나면 포스터를 유지한다", () => {
+    const { container } = render(<OnboardingScreen onComplete={vi.fn()} />);
+    fireEvent.error(container.querySelector("video")!);
+    expect(container.querySelector("video")).toBeNull();
+    expect(container.querySelector('img[alt=""]')).toBeTruthy();
+  });
   it("작성 중인 내용 다이얼로그에 연필 아이콘을 표시한다", async () => {
     render(<OnboardingScreen onComplete={vi.fn()} />);
     reachTaste();
@@ -52,7 +99,6 @@ describe("온보딩 화면", () => {
       ),
     ).toEqual(["M4 20H8L19 9L15 5L4 16V20Z", "M13.5 6.5L17.5 10.5"]);
   });
-
   it("첫 렌더에서는 시작하기로 포커스를 옮기지 않는다", () => {
     render(<OnboardingScreen onComplete={vi.fn()} />);
     expect(document.activeElement).not.toBe(
