@@ -1,11 +1,27 @@
 // 리뷰 API의 요청·응답 모양(spec Interfaces)
 
+export type TagView = {
+  code: string;
+  // 장소 업종의 문구
+  label: string;
+  sentiment: "GOOD" | "BAD";
+};
+
 export type ReviewItem = {
   reviewId: number;
-  // Asia/Seoul 오프셋이 붙은 작성 시각(예: 2026-10-20T15:00:00+09:00)
+  // Asia/Seoul 오프셋이 붙은 작성 시각(예: 2026-10-20T15:00:00+09:00). 화면은 방문일을 보인다
   createdAt: string;
+  // KST 날짜(예: 2026-10-20)
+  visitedAt: string;
+  // 탈퇴한 회원이면 없다(D-38)
+  nickname?: string;
+  revisitIntent: boolean;
+  // 좋았어요가 먼저다
+  tags: TagView[];
   // 본문 없이 남긴 리뷰면 없다
   description?: string;
+  // 로그인한 사용자 자신의 리뷰
+  mine: boolean;
 };
 
 export type ReviewListResponse = {
@@ -64,15 +80,15 @@ export function reviewWriteHref(placeId: number) {
   return `/place/review?id=${placeId}`;
 }
 
-const kstMonthDay = new Intl.DateTimeFormat("ko-KR", {
-  timeZone: "Asia/Seoul",
-  month: "long",
-  day: "numeric",
-});
+// 목록 날짜(6-03). "2026-10-12" → "10월 12일 방문"
+export function formatVisitedDay(visitedAt: string) {
+  const [, month, day] = visitedAt.split("-").map(Number);
+  return `${month}월 ${day}일 방문`;
+}
 
-// 목록 날짜(AC-7). Figma의 "10월 12일 방문" 꼴을 따라 "10월 20일"이다
-export function formatKstDate(createdAt: string) {
-  return kstMonthDay.format(new Date(createdAt));
+// 목록의 작성자 자리. 탈퇴한 회원이면 닉네임이 없다(D-38)
+export function authorLabel(item: Pick<ReviewItem, "nickname">) {
+  return item.nickname ?? "탈퇴한 회원";
 }
 
 // 주소의 id는 BE와 같이 양의 정수만 받는다(AC-2). 아니면 null

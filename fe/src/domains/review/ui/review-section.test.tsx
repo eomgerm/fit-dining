@@ -2,15 +2,21 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { reviewKeys } from "../api/queries";
+import { reviewKeys, type WithOptionalAccessToken } from "../api/queries";
 import type { ReviewListResponse } from "../model/review";
 import { ReviewSection } from "./review-section";
+
+const anonymous: WithOptionalAccessToken = (send) => send();
 
 // 서버 렌더에서는 쿼리가 돌지 않아 처음 불러오는 중 모양이 나온다. 두 모양의 차이만 확인한다
 function render(onShowAll?: () => void) {
   return renderToStaticMarkup(
     <QueryClientProvider client={new QueryClient()}>
-      <ReviewSection placeId={1} onShowAll={onShowAll} />
+      <ReviewSection
+        placeId={1}
+        onShowAll={onShowAll}
+        withOptionalAccessToken={anonymous}
+      />
     </QueryClientProvider>,
   );
 }
@@ -37,6 +43,11 @@ describe("ReviewSection", () => {
     const item = (reviewId: number) => ({
       reviewId,
       createdAt: "2026-10-21T12:00:00+09:00",
+      visitedAt: "2026-10-21",
+      nickname: "밤산책",
+      revisitIntent: false,
+      tags: [],
+      mine: false,
     });
     const pages: ReviewListResponse[] = [
       { totalCount: 21, items: [item(2)], nextCursor: "next" },
@@ -49,7 +60,7 @@ describe("ReviewSection", () => {
 
     const html = renderToStaticMarkup(
       <QueryClientProvider client={client}>
-        <ReviewSection placeId={1} />
+        <ReviewSection placeId={1} withOptionalAccessToken={anonymous} />
       </QueryClientProvider>,
     );
 

@@ -13,18 +13,28 @@ export type WithAccessToken = <T>(
   send: (accessToken: string) => Promise<T>,
 ) => Promise<T>;
 
+// 로그인이 선택인 요청. 세션이 없으면 AT 없이 보낸다
+export type WithOptionalAccessToken = <T>(
+  send: (accessToken?: string) => Promise<T>,
+) => Promise<T>;
+
 export const reviewKeys = {
   all: ["reviews"] as const,
   list: (placeId: number) => [...reviewKeys.all, "list", placeId] as const,
   form: (placeId: number) => [...reviewKeys.all, "form", placeId] as const,
 };
 
-// 커서로 이어 받는 장소별 리뷰 목록
-export function useReviewList(placeId: number) {
+// 커서로 이어 받는 장소별 리뷰 목록. 리뷰 탭과 홈 미리보기가 같은 캐시를 쓰므로 늘 같은 방식으로 받는다
+export function useReviewList(
+  placeId: number,
+  withOptionalAccessToken: WithOptionalAccessToken,
+) {
   return useInfiniteQuery({
     queryKey: reviewKeys.list(placeId),
     queryFn: ({ pageParam, signal }) =>
-      fetchReviews(placeId, pageParam, signal),
+      withOptionalAccessToken((accessToken) =>
+        fetchReviews(placeId, pageParam, signal, accessToken),
+      ),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor,
   });

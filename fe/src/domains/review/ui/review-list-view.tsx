@@ -2,23 +2,28 @@ import type { Ref } from "react";
 
 import { Button } from "@/shared/ui/button/button";
 import { TextButton } from "@/shared/ui/button/text-button";
+import { Badge } from "@/shared/ui/display/badge";
 import { EmptyState } from "@/shared/ui/display/empty-state";
+import { Tag } from "@/shared/ui/display/tag";
 import { ChatIcon } from "@/shared/ui/icon/icons/chat";
+import { CheckIcon } from "@/shared/ui/icon/icons/check";
+import { ChevronRightIcon } from "@/shared/ui/icon/icons/chevron-right";
 import { WifiOffIcon } from "@/shared/ui/icon/icons/wifi-off";
-import {
-  SectionHeader,
-  SectionHeaderAction,
-} from "@/shared/ui/layout/section-header";
+import { SectionHeader } from "@/shared/ui/layout/section-header";
 import { cn } from "@/shared/lib/cn";
 
-import { formatKstDate, type ReviewItem } from "../model/review";
+import {
+  authorLabel,
+  formatVisitedDay,
+  type ReviewItem,
+} from "../model/review";
 
 export type ReviewListViewProps = {
   status: "pending" | "error" | "success";
   // 불러온 뒤에만 있다
   totalCount?: number;
   items: ReviewItem[];
-  // 있으면 머리글 오른쪽에 "전체 보기"를 둔다(홈 탭 미리보기). 리뷰가 없으면 숨긴다
+  // 있으면 홈 탭 미리보기다. 머리글 "리뷰 N >"가 이 함수를 부르는 버튼이 된다. 리뷰가 없으면 버튼이 아니다
   onShowAll?: () => void;
   // 처음 불러오는 중에 보일 자리 표시 줄 수
   skeletonRows?: number;
@@ -49,21 +54,38 @@ export function ReviewListView({
   endRef,
   className,
 }: ReviewListViewProps) {
+  const count = status === "success" ? totalCount : undefined;
+  const loaded = status === "success" && items.length > 0;
   return (
     <section aria-label="리뷰" className={cn("flex flex-col", className)}>
-      <SectionHeader
-        title="리뷰"
-        count={status === "success" ? totalCount : undefined}
-        action={
-          onShowAll &&
-          status === "success" &&
-          items.length > 0 && (
-            <SectionHeaderAction onClick={onShowAll}>
-              전체 보기
-            </SectionHeaderAction>
-          )
-        }
-      />
+      {onShowAll && loaded ? (
+        // 6-01: 같은 홈 탭의 "메뉴 N >"처럼 머리글 전체가 리뷰 탭을 여는 버튼이다
+        <h2>
+          <button
+            type="button"
+            onClick={onShowAll}
+            className="-my-2 flex min-h-11 items-center gap-0.5 text-title-lg text-ink"
+          >
+            리뷰
+            <span className="ml-1.5 text-ink-muted">{count}</span>
+            <ChevronRightIcon size="md" />
+          </button>
+        </h2>
+      ) : (
+        <SectionHeader
+          title="리뷰"
+          count={count}
+          action={
+            !onShowAll &&
+            loaded && (
+              // 정렬은 최신순 하나뿐이라 누를 수 없는 글자로 둔다
+              <span className="self-center text-caption-md text-ink-muted">
+                최신순
+              </span>
+            )
+          }
+        />
+      )}
       <div className={onShowAll ? "mt-3" : "mt-1"}>
         {status === "pending" && <ReviewListSkeleton rows={skeletonRows} />}
         {status === "error" && (
@@ -110,18 +132,53 @@ export function ReviewListView({
   );
 }
 
-// Figma 6-03 'rv': 위아래 16, 줄 사이 8, 아래 구분선
+// 화면에서는 간격으로 떨어지지만 스크린리더가 "아쉬움대기가 길었어요"로 붙여 읽지 않게 공백을 둔다
+const BAD_PREFIX = (
+  <>
+    아쉬움<span className="sr-only"> </span>
+  </>
+);
+
+// Figma 6-03 'rv': 위아래 16, 줄 사이 8, 아래 구분선.
+// 내 리뷰는 닉네임 옆에 "내 리뷰" 태그를 붙인다(6-06).
+// 좋았어요 태그는 강조 태그, 아쉬웠어요 태그는 앞에 "아쉬움"을 붙인 기본 태그다(D-24)
 function ReviewRow({ item }: { item: ReviewItem }) {
   return (
     <li className="flex flex-col gap-2 border-b border-line py-4">
+      <div className="flex min-w-0 items-center gap-2">
+        <p className="truncate text-title-sm text-ink">{authorLabel(item)}</p>
+        {item.mine && <Tag>내 리뷰</Tag>}
+        {item.revisitIntent && (
+          <Badge icon={<CheckIcon size="md" />}>재방문 의사 있어요</Badge>
+        )}
+      </div>
       <time
-        dateTime={item.createdAt}
+        dateTime={item.visitedAt}
         className="text-caption-md text-ink-muted"
       >
-        {formatKstDate(item.createdAt)} 작성
+        {formatVisitedDay(item.visitedAt)}
       </time>
+      {item.tags.length > 0 && (
+        <ul className="flex flex-wrap gap-1">
+          {item.tags.map((tag) => (
+            <li key={tag.code}>
+              <Tag
+                variant={tag.sentiment === "GOOD" ? "match" : "default"}
+                prefix={tag.sentiment === "BAD" ? BAD_PREFIX : undefined}
+              >
+                {tag.label}
+              </Tag>
+            </li>
+          ))}
+        </ul>
+      )}
       {item.description === undefined ? (
-        <p className="text-body-sm text-ink-subtle">내용 없이 남긴 리뷰예요</p>
+        // 태그도 없는 예전 리뷰(Walking Skeleton)만 안내 문구를 보인다
+        item.tags.length === 0 && (
+          <p className="text-body-sm text-ink-subtle">
+            내용 없이 남긴 리뷰예요
+          </p>
+        )
       ) : (
         <p className="text-body-sm wrap-anywhere whitespace-pre-line text-ink">
           {item.description}

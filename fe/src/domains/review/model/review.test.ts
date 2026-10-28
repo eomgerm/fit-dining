@@ -1,16 +1,23 @@
 import { describe, expect, it } from "vitest";
 
-import { formatKstDate, parsePlaceId, reviewWriteHref } from "./review";
+import {
+  authorLabel,
+  formatVisitedDay,
+  parsePlaceId,
+  reviewWriteHref,
+} from "./review";
 
-describe("formatKstDate", () => {
-  it("BE가 보낸 KST 오프셋 시각을 Figma처럼 월·일로 보인다", () => {
-    expect(formatKstDate("2026-10-20T15:00:00+09:00")).toBe("10월 20일");
-    expect(formatKstDate("2026-10-08T09:00:00+09:00")).toBe("10월 8일");
+describe("formatVisitedDay", () => {
+  it("방문일을 Figma 6-03처럼 월·일과 '방문'으로 보인다", () => {
+    expect(formatVisitedDay("2026-10-12")).toBe("10월 12일 방문");
+    expect(formatVisitedDay("2026-01-08")).toBe("1월 8일 방문");
   });
+});
 
-  it("UTC 15시는 KST로 다음 날 0시라 날짜가 바뀐다", () => {
-    expect(formatKstDate("2026-10-20T14:59:59Z")).toBe("10월 20일");
-    expect(formatKstDate("2026-10-20T15:00:00Z")).toBe("10월 21일");
+describe("authorLabel", () => {
+  it("닉네임을 보이고, 닉네임이 없으면 탈퇴한 회원이다", () => {
+    expect(authorLabel({ nickname: "밤산책" })).toBe("밤산책");
+    expect(authorLabel({})).toBe("탈퇴한 회원");
   });
 });
 

@@ -4,15 +4,17 @@ import { useEffect, useState } from "react";
 
 import { cn } from "@/shared/lib/cn";
 
-import { useReviewList } from "../api/queries";
+import { useReviewList, type WithOptionalAccessToken } from "../api/queries";
 import { PREVIEW_SIZE } from "../model/review";
 import { ReviewListView } from "./review-list-view";
 
 type ReviewSectionProps = {
   placeId: number;
-  // 있으면 홈 탭 미리보기(Figma 6-01)다. 최신 3건만 보이고, 머리글의 "전체 보기"가 이 함수를 부른다.
+  // 있으면 홈 탭 미리보기(Figma 6-01)다. 최신 3건만 보이고, 머리글 "리뷰 N >"가 이 함수를 부른다.
   // 장소 상세가 리뷰 탭으로 바꾸는 함수를 넘긴다. 없으면 리뷰 탭 전체 목록(6-03)이다
   onShowAll?: () => void;
+  // 로그인했으면 AT를 붙여 내 리뷰에 "내 리뷰" 태그가 붙게 받는다. 리뷰 도메인은 인증 도메인을 부를 수 없어 app이 넘긴다
+  withOptionalAccessToken: WithOptionalAccessToken;
   // 폭·바깥 여백 같은 배치용 클래스
   className?: string;
 };
@@ -25,6 +27,7 @@ type ReviewSectionProps = {
 export function ReviewSection({
   placeId,
   onShowAll,
+  withOptionalAccessToken,
   className,
 }: ReviewSectionProps) {
   const {
@@ -35,7 +38,7 @@ export function ReviewSection({
     isFetchNextPageError,
     fetchNextPage,
     refetch,
-  } = useReviewList(placeId);
+  } = useReviewList(placeId, withOptionalAccessToken);
   const endRef = useOnVisible(() => fetchNextPage());
   const pages = data?.pages ?? [];
   const isPreview = onShowAll !== undefined;

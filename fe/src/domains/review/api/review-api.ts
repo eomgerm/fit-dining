@@ -7,15 +7,20 @@ import type {
   ReviewListResponse,
 } from "../model/review";
 
-// 장소의 리뷰를 최신순으로 20건씩 받는다. cursor는 직전 응답의 nextCursor다
+// 장소의 리뷰를 최신순으로 20건씩 받는다. cursor는 직전 응답의 nextCursor다.
+// 로그인은 선택이고, AT를 붙이면 내 리뷰에 mine이 붙는다(D-42)
 export function fetchReviews(
   placeId: number,
   cursor?: string,
   signal?: AbortSignal,
+  accessToken?: string,
 ) {
   return request<ReviewListResponse>(`/v1/places/${placeId}/reviews`, {
     query: { cursor },
     signal,
+    headers: accessToken
+      ? { Authorization: `Bearer ${accessToken}` }
+      : undefined,
   });
 }
 
