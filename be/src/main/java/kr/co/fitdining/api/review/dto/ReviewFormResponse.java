@@ -21,8 +21,13 @@ public record ReviewFormResponse(
 		Boolean writable
 ) {
 
-	/** @param thumbnailUrl 장소 대표 사진. 없으면 생략하고 FE가 기본 이미지를 그린다. */
-	public record Place(String name, CategoryGroup categoryGroup, Station station, String thumbnailUrl) {
+	/**
+	 * @param thumbnailUrl 장소 대표 사진. 없으면 생략하고 FE가 기본 이미지를 그린다.
+	 * @param lat 위도. FE가 기기 위치와 견줘 방문을 확인하는 데만 쓴다(D-43).
+	 * @param lng 경도
+	 */
+	public record Place(String name, CategoryGroup categoryGroup, Station station, String thumbnailUrl, Double lat,
+			Double lng) {
 	}
 
 	public record VisitDate(LocalDate min, LocalDate max, @JsonProperty("default") LocalDate defaultDate) {

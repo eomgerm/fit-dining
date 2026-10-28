@@ -277,7 +277,7 @@ class ReviewControllerTest {
 		void reviewForm_loggedIn_returnsForm() throws Exception {
 			LocalDate today = LocalDate.of(2026, 10, 21);
 			when(reviewService.reviewForm(3L, USER_ID)).thenReturn(new ReviewFormResponse(
-					new ReviewFormResponse.Place("카페 온담", CategoryGroup.CAFE, Station.YEOKSAM, null),
+					new ReviewFormResponse.Place("카페 온담", CategoryGroup.CAFE, Station.YEOKSAM, null, 37.5, 127.03),
 					new ReviewFormResponse.VisitDate(today.minusMonths(1), today, today), List.of(today),
 					new ReviewFormResponse.Tags(
 							List.of(new ReviewFormResponse.FormTag("QUIET_GOOD", "조용해서 좋았어요", "NOISE", "분위기")),
@@ -288,6 +288,8 @@ class ReviewControllerTest {
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.place.categoryGroup").value("CAFE"))
 					.andExpect(jsonPath("$.place.thumbnailUrl").doesNotExist())
+					.andExpect(jsonPath("$.place.lat").value(37.5))
+					.andExpect(jsonPath("$.place.lng").value(127.03))
 					.andExpect(jsonPath("$.visitDate.default").value("2026-10-21"))
 					.andExpect(jsonPath("$.visitDate.min").value("2026-09-21"))
 					.andExpect(jsonPath("$.reviewedDates[0]").value("2026-10-21"))

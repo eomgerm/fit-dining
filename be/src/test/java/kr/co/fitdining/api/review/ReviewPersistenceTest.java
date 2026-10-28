@@ -556,6 +556,8 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 			ReviewFormResponse form = service.reviewForm(CAFE, user);
 
 			assertThat(form.place().categoryGroup()).isEqualTo(CategoryGroup.CAFE);
+			assertThat(form.place().lat()).isNotNull();
+			assertThat(form.place().lng()).isNotNull();
 			assertThat(form.visitDate().min()).isEqualTo(LocalDate.of(2026, 9, 21));
 			assertThat(form.visitDate().max()).isEqualTo(LocalDate.of(2026, 10, 21));
 			assertThat(form.visitDate().defaultDate()).isEqualTo(LocalDate.of(2026, 10, 21));

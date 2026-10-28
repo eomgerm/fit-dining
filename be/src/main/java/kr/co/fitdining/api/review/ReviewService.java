@@ -122,7 +122,8 @@ public class ReviewService {
 					tag.code(), tag.label(), ReasonTagRule.group(tag), tag.displayGroup()));
 		}
 		return new ReviewFormResponse(
-				new ReviewFormResponse.Place(place.name(), place.categoryGroup(), place.station(), place.thumbnailUrl()),
+				new ReviewFormResponse.Place(place.name(), place.categoryGroup(), place.station(), place.thumbnailUrl(),
+						place.lat(), place.lng()),
 				new ReviewFormResponse.VisitDate(visitDates.min(), visitDates.max(), visitDates.max()),
 				reviews.findReviewedDates(userId, placeId, visitDates.min()),
 				new ReviewFormResponse.Tags(good, bad), LIMITS, true);
