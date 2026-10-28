@@ -1,11 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  disabledTagCodes,
-  type FormTag,
-  hasGoodTag,
-  toggleTag,
-} from "./review-tags";
+import type { FormTag } from "./review";
+import { disabledTagCodes, hasGoodTag, toggleTag } from "./review-tags";
 
 const tag = (code: string, group: string): FormTag => ({
   code,

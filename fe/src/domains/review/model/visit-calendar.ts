@@ -19,18 +19,17 @@ export function monthOf(date: string): YearMonth {
   return { year: value.getUTCFullYear(), month: value.getUTCMonth() + 1 };
 }
 
-// min이 든 달부터 max가 든 달까지
+// min이 든 달부터 max가 든 달까지. min이 max보다 뒤거나 날짜가 깨졌으면 비어 있다
 export function monthsBetween(min: string, max: string): YearMonth[] {
   const end = monthOf(max);
   const months: YearMonth[] = [];
-  for (let { year, month } = monthOf(min); ; month++) {
-    if (month > 12) {
-      year++;
-      month = 1;
-    }
+  let { year, month } = monthOf(min);
+  while (year < end.year || (year === end.year && month <= end.month)) {
     months.push({ year, month });
-    if (year === end.year && month === end.month) return months;
+    month = (month % 12) + 1;
+    if (month === 1) year++;
   }
+  return months;
 }
 
 // 일요일부터 시작하는 주 단위 칸. 그 달이 아닌 칸은 null

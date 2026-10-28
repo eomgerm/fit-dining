@@ -22,6 +22,12 @@ describe("monthsBetween", () => {
       { year: 2027, month: 2 },
     ]);
   });
+
+  it("min이 max보다 뒤거나 날짜가 깨졌으면 멈추지 않고 빈 목록을 준다", () => {
+    expect(monthsBetween("2026-11-01", "2026-10-01")).toEqual([]);
+    expect(monthsBetween("bad", "2026-10-01")).toEqual([]);
+    expect(monthsBetween("2026-09-01", "bad")).toEqual([]);
+  });
 });
 
 describe("calendarWeeks", () => {

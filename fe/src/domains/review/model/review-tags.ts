@@ -1,7 +1,5 @@
 import type { FormTag } from "./review";
 
-export type { FormTag };
-
 export function toggleTag(selected: readonly string[], code: string) {
   return selected.includes(code)
     ? selected.filter((c) => c !== code)
@@ -34,10 +32,9 @@ export function hasGoodTag(
 export function groupByDisplayGroup(tags: readonly FormTag[]) {
   const groups = new Map<string, FormTag[]>();
   for (const tag of tags) {
-    groups.set(tag.displayGroup, [
-      ...(groups.get(tag.displayGroup) ?? []),
-      tag,
-    ]);
+    const items = groups.get(tag.displayGroup);
+    if (items) items.push(tag);
+    else groups.set(tag.displayGroup, [tag]);
   }
   return [...groups].map(([name, items]) => ({ name, tags: items }));
 }
