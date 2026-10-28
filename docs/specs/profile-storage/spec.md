@@ -26,7 +26,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 | 컬럼 | 타입 | 내용 | 쓰는 쪽 |
 |---|---|---|---|
 | `mood`, `priorities`, `purposes` | 기존 | 온보딩 원본 | 온보딩(-58). 바꾸지 않는다 |
-| `tastes` | jsonb(기존) | 온보딩 원본 칩. 원소에 `code`, `vector`가 더해진다: `[{polarity, label, code, vector}]`. `code`는 코드표 코드 또는 null, `vector`는 `code`가 null이고 LIKE인 칩만 | `polarity`, `label`은 온보딩. `code`, `vector`는 온보딩 때 39 |
+| `tastes` | jsonb(기존) | 온보딩 원본 칩. 칩 하나는 39가 직접 입력을 해석한 항목 하나다(taste-profile spec 1단계 "칩 표시"). 원소에 `code`, `vector`가 더해진다: `[{polarity, label, code, vector}]`. `code`는 코드표 코드 또는 null, 코드 없는 칩의 `label`은 39의 `positive_text`이고, `vector`는 코드 없는 LIKE 칩만 | `polarity`, `label`은 온보딩. `code`, `vector`는 온보딩 때 39 |
 | `features` | jsonb, NOT NULL, 기본 `[]`, 배열 CHECK | 취향 프로필 결과 `[{code, layer, like, weight}]`, `weight`는 1~3 | 온보딩 때 39, 이후 04:00 배치 |
 
 원본을 남기는 이유: `weight`는 min(긍정 − 부정, 3)이고 같은 장소는 최신 평가 하나만 센다(taste-profile spec 4단계). 상한에서 정보가 잘려 `features`만으로는 리뷰를 빼거나 더해 다시 계산할 수 없다. 코드표에 없는 칩의 `vector`도 검색에 쓴다(D-3).
@@ -105,19 +105,22 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 
 ### 이번 변경으로 생기는 문제
 
-1. **리뷰와 `places`가 연결되지 않는다.** `reviews.place_id`에는 FK가 없다(V4는 `CHECK (place_id > 0)`뿐). 리뷰 등록은 장소 존재를 Mock 검색 엔진(`places.json`, ID 1부터)으로 확인하고(`ReviewService.create`), V6 직후 `places`는 비어 있다. 첫 적재가 서비스 ID를 새로 매기면 Mock ID로 쓴 dev 리뷰는 엉뚱한 장소나 없는 장소를 가리킨다. FK를 더할 때 이 리뷰들 때문에 마이그레이션이 실패할 수 있다. 리뷰·장소 담당이 첫 적재와 함께 정한다(D-13).
+1. **리뷰와 `places`가 연결되지 않는다.** `reviews.place_id`에는 FK가 없다(V4는 `CHECK (place_id > 0)`뿐). 리뷰 등록은 장소 존재를 Mock 검색 엔진(`places.json`, ID 1부터)으로 확인하고(`ReviewService.create`), V6 직후 `places`는 비어 있다. 첫 적재가 서비스 ID를 새로 매기면 Mock ID로 쓴 dev 리뷰는 엉뚱한 장소나 없는 장소를 가리킨다. FK를 더할 때 이 리뷰들 때문에 마이그레이션이 실패할 수 있다. 리뷰·장소 담당이 첫 적재와 함께 정한다(D-13). Mock ID를 그대로 살리려고 `OVERRIDING SYSTEM VALUE`로 넣으면 identity 시퀀스를 최댓값 뒤로 맞춰야 한다. 아니면 이후 자동 채번이 PK 중복으로 실패한다.
 2. **`tastes` 원소에 키가 늘면 기존 코드가 읽지 못할 수 있다.** `UserPreferences`는 `tastes`를 `List<Preferences.TasteChip>`(`polarity`, `label`)으로 읽고, 앱 설정은 `spring.jackson.deserialization.fail-on-unknown-properties: true`다. 배치가 `code`, `vector`를 쓰면 엔티티 읽기와 `GET /api/v1/users/{userId}/preferences`가 실패하거나 응답에 `vector`가 섞일 수 있다. V6은 기존 데이터를 바꾸지 않아 지금은 문제가 없다. 배치 구현 전에 -58 담당과 정한다.
 3. **`user_preferences.updated_at`의 뜻이 넓어진다.** 배치가 `features`를 갱신할 때도 바뀐다. `GET /preferences` 응답의 `updatedAt`이 사용자 동작 없이 바뀐다. -58 담당과 정한다.
 4. **`vector` 확장이 없는 DB에서는 V6이 실패한다.** 서버와 로컬은 인프라 스크립트가 만들고, 테스트는 `PostgresTestSupport`가 만든다. 다른 경로로 DB를 만들면 확장을 먼저 만들어야 한다.
 5. **`places`에 분석 컬럼 없이 행을 넣을 수 없다.** 분석 컬럼이 NOT NULL이라 수집과 분석 결과를 함께 적재해야 한다. 수집 담당과 적재 순서를 맞춘다.
-6. **장소 검색 D-36과 다르다.** D-36은 pgvector를 임시로 두고 OpenSearch가 벡터를 최종 관리한다고 정했다. 이 spec은 1차 MVP에서 pgvector만 쓴다(D-2). 검색 담당과 D-36을 정리한다.
+6. **칩에 코드가 없다.** 해석 API(`POST /api/v1/onboarding/taste-analysis`, -59)는 `TasteChip(polarity, label)`만 돌려준다. `tastes[].code`를 채우려면 해석 결과의 `code`가 칩과 함께 저장 요청까지 와야 한다. -59·-58 담당과 정한다.
+7. **해석 대기를 둘 곳이 없다.** 39는 해석에 실패한 직접 입력을 `like: null`로 보관하고 다음 배치에서 다시 해석한다(taste-profile spec 1단계). 지금 온보딩은 해석이 실패하면 503을 돌려주고 아무것도 저장하지 않아, `tastes`에는 해석 대기 상태가 없다. 대기를 살릴지(살린다면 `tastes`에 원문과 상태를 어떻게 둘지) 39·-59 담당과 정한다.
+8. **코드 문구 벡터(`code_vectors.json`)의 위치가 정해지지 않았다.** 사용자와 무관한 고정 값이라 이 설계의 테이블에 넣지 않았다. 41이 파일로 읽을지 테이블로 둘지 정한다.
+9. **장소 검색 D-36과 다르다.** D-36은 pgvector를 임시로 두고 OpenSearch가 벡터를 최종 관리한다고 정했다. 이 spec은 1차 MVP에서 pgvector만 쓴다(D-2). 검색 담당과 D-36을 정리한다.
 
 ### 다른 담당과 맞출 것
 
 | 담당 | 항목 |
 |---|---|
-| 40 | 출력 키 `label`을 `is_label`로 바꾼다. 분석한 리뷰 수(`analyzed_review_count`)를 출력에 더한다. 근거 3개 미만 페르소나는 적재하지 않는다. 출력의 `place_id`는 네이버 ID라 첫 적재 때 서비스 ID로 바꾼다. 네이버 리뷰 ID인 `review_ids`는 적재하지 않는다. 점수에 쓸 페르소나가 0개인 장소 수를 `report.json`에 더한다 |
-| 39·-58 | `tastes` 원소의 `code`, `vector` 추가와 위 문제 2·3. BE enum과 코드표 이름이 다르다(`SPACIOUS`↔`SPACIOUS_SEATING`, `VALUE`↔`VALUE_FOR_MONEY`, `CONVERSATION`·`SOLO`·`DATE`·`GATHERING`·`WORK_STUDY`↔`PURPOSE_*`). AI 경계에서 대응표로 바꾼다 |
+| 40 | 반영함: 특징 키 `is_label`, 출력의 `analyzed_review_count`, `report.json`의 근거 3개 이상 페르소나가 없는 장소 수, `place_id`가 네이버 ID라는 주석과 스펙. 남은 일은 적재 코드 몫이다. `review_ids`가 3개 미만인 페르소나는 넣지 않고, 네이버 리뷰 ID인 `review_ids`는 `{}`로 바꾸고, `place_id`를 서비스 ID로, `group`(식당·카페·술집)을 `category_group`으로, `like`를 `liked`로 옮긴다 |
+| 39·-58·-59 | `tastes` 원소의 `code`, `vector` 추가와 위 문제 2·3·6·7. BE enum과 코드표 이름이 다르다(`SPACIOUS`↔`SPACIOUS_SEATING`, `VALUE`↔`VALUE_FOR_MONEY`, `CONVERSATION`·`SOLO`·`DATE`·`GATHERING`·`WORK_STUDY`↔`PURPOSE_*`). AI 경계에서 대응표로 바꾼다 |
 | 41 | 벡터 거리 연산자를 정하면 벡터 인덱스를 만든다(D-11). 점수에 쓸 페르소나가 없는 장소의 처리 |
 | 장소 수집 | `places`의 나머지 컬럼, `category_group` 이름, 적재 순서(문제 5) |
 | 갱신 로직(티켓 20, 장소 쪽 미정) | 앱 리뷰 추가·삭제를 `features`와 페르소나에 반영하는 방식. 새 리뷰를 어느 페르소나에 붙일지, 앱 리뷰만으로 새 페르소나를 만들지(만든다면 근거 3개 판단에 필요한 컬럼 추가) |
