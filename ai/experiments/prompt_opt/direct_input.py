@@ -22,7 +22,7 @@ from fit_ai import gms
 from fit_ai.taste import direct_input as di
 
 NAME = "taste-direct-input"
-MAX_METRIC_CALLS = 500
+MAX_METRIC_CALLS = 1500  # val 101개라 한 번 전체 평가에 101번 든다
 TEST_RUNS = 3  # temperature 0이어도 실행마다 점수가 흔들려 평균을 본다
 DATA = Path(__file__).parent / "data" / "direct_input.jsonl"
 KEYS = ("kind", "code", "like")
