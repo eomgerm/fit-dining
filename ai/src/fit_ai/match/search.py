@@ -29,7 +29,7 @@ from fit_ai.match.cards import Card, build_card
 from fit_ai.match.conditions import CATEGORY_NAMES, STATION_NAMES
 from fit_ai.match.interpretation import Conditions, Interpretation, interpret
 from fit_ai.match.ranking import RankingError, rank_by_similarity, rank_with_llm
-from fit_ai.match.taste import TasteProfile, select_tastes
+from fit_ai.match.taste_select import TasteProfile, select_tastes
 
 FACILITY_PHRASES = {
     "PARKING": ("주차할 수 있는", "주차"),

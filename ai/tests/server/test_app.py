@@ -31,7 +31,7 @@ from fit_ai.match.search import (
     SearchResult,
     SearchTrace,
 )
-from fit_ai.match.taste import TasteProfile
+from fit_ai.match.taste_select import TasteProfile
 from server import app as server_app
 from server.app import Dependencies, create_app
 

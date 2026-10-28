@@ -34,7 +34,7 @@ from fit_ai.match.search import (
     SearchResult,
     search,
 )
-from fit_ai.match.taste import TasteProfile
+from fit_ai.match.taste_select import TasteProfile
 from server.schemas import (
     CardBody,
     ConditionsBody,

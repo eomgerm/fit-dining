@@ -26,7 +26,7 @@ from fit_ai.match.ranking import (
     rank_by_similarity,
     rank_with_llm,
 )
-from fit_ai.match.taste import FreeText, TasteFeature
+from fit_ai.match.taste_select import FreeText, TasteFeature
 
 
 def make_candidate(

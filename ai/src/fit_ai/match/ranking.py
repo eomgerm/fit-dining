@@ -19,7 +19,7 @@ from fit_ai.features import FEATURES
 from fit_ai.match.candidates import Candidate
 from fit_ai.match.conditions import CATEGORY_NAMES, CONDITIONS, Layer
 from fit_ai.match.place import Place, Verdict
-from fit_ai.match.taste import FreeText, TasteFeature
+from fit_ai.match.taste_select import FreeText, TasteFeature
 
 LLM_TOP_K = 10
 """LLM이 고를 후보 수. gpt-4o-mini는 20곳을 다 쓰게 하면 10곳에서 멈추거나 3초를

@@ -6,7 +6,7 @@
 import pytest
 
 from fit_ai.match.conditions import Layer
-from fit_ai.match.taste import TasteFeature, TasteProfile, select_tastes
+from fit_ai.match.taste_select import TasteFeature, TasteProfile, select_tastes
 
 # spec 샘플 5번 사용자에 소음, 음식 종류 취향과 취향 문장을 더했다.
 PROFILE = {

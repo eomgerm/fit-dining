@@ -33,7 +33,7 @@ from fit_ai.match.search import (
     empty_reason,
     search,
 )
-from fit_ai.match.taste import TasteFeature, TasteProfile
+from fit_ai.match.taste_select import TasteFeature, TasteProfile
 
 QUERY = "강남역 조용한 카페"
 

@@ -132,7 +132,7 @@ AI가 뷰 `ai_place_search`를 SQL 한 번으로 읽어 거르고 뽑는다. 뷰
 
 정할 것: 소음 축 읽기, 카드 라벨에 40 `label`을 쓸지.
 
-### 4.3 정렬 (`match/ranking.py`, `match/place.py`, `match/taste.py`)
+### 4.3 정렬 (`match/ranking.py`, `match/place.py`, `match/taste_select.py`)
 
 취향 프로필은 이렇게 쓴다.
 
@@ -250,7 +250,7 @@ LLM 없이 정렬할 때(근처 검색, LLM 실패)도 같은 등급을 쓰고, 
 
 - 요청 해석과 규칙 해석(`interpretation.py`). 질의 54개 평가 98%
 - DB 후보 추출(`pg_store.py`)과 장소 프로필 읽기(`place.py`)
-- 취향 프로필 읽기와 겹치는 취향 빼기(`taste.py`)
+- 취향 프로필 읽기와 겹치는 취향 빼기(`taste_select.py`)
 - 체크표(`Place.judge`), 코드 등급과 LLM 순서 정렬(`ranking.py`), 카드(`cards.py`), 해석부터 카드까지 잇는 검색과 결과 없음 이유(`search.py`)
 - 검색 API(`server/`, [api.md](api.md)). 엔드포인트는 `/v1/search` 하나다
 - 공유 모듈(`fit_ai.features`, `embedding`, `gms`)로 바꾸고 39 구조로 옮겼다. 인코더와 GMS는 감싸지 않고 공유 모듈을 바로 부른다. 검색 흐름을 `server/`에서 `search.py`로 옮기고 판정은 `place.py`, 카드 모양은 `cards.py`로 합쳤다(10-27)
