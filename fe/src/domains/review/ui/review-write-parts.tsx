@@ -6,6 +6,7 @@ import { Textarea } from "@/shared/ui/form/textarea";
 import { TextField } from "@/shared/ui/form/text-field";
 import { CalendarIcon } from "@/shared/ui/icon/icons/calendar";
 import { CameraIcon } from "@/shared/ui/icon/icons/camera";
+import { CheckIcon } from "@/shared/ui/icon/icons/check";
 import { ChevronDownIcon } from "@/shared/ui/icon/icons/chevron-down";
 import { HeartIcon } from "@/shared/ui/icon/icons/heart";
 import { SectionHeader } from "@/shared/ui/layout/section-header";
@@ -16,7 +17,14 @@ import { groupByDisplayGroup } from "../model/review-tags";
 import { formatVisitDate } from "../model/visit-calendar";
 
 // 7-01·7-02 머리의 장소 줄. 대표 사진이 없으면 장소 카드와 같은 그라데이션을 그린다
-export function PlaceRow({ place }: { place: ReviewFormResponse["place"] }) {
+// verified면 장소 이름 아래에 "방문 확인 완료"를 보인다(7-01, D-43)
+export function PlaceRow({
+  place,
+  verified = false,
+}: {
+  place: ReviewFormResponse["place"];
+  verified?: boolean;
+}) {
   return (
     <div className="flex items-center gap-3">
       {place.thumbnailUrl ? (
@@ -35,7 +43,15 @@ export function PlaceRow({ place }: { place: ReviewFormResponse["place"] }) {
           className="size-12 shrink-0 rounded-md bg-linear-to-br from-primary-line to-primary-disabled"
         />
       )}
-      <p className="truncate text-title-sm text-ink">{place.name}</p>
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <p className="truncate text-title-sm text-ink">{place.name}</p>
+        {verified && (
+          <p className="flex items-center gap-0.5 text-caption-md text-success">
+            <CheckIcon size="sm" />
+            방문 확인 완료
+          </p>
+        )}
+      </div>
     </div>
   );
 }

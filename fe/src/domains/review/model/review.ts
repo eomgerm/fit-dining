@@ -60,6 +60,9 @@ export type ReviewFormResponse = {
     categoryGroup: string;
     station: string;
     thumbnailUrl?: string;
+    // 기기 위치와 견줘 방문을 확인하는 데만 쓴다(D-43)
+    lat?: number;
+    lng?: number;
   };
   visitDate: { min: string; max: string; default: string };
   reviewedDates: string[];

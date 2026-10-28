@@ -5,6 +5,7 @@ import {
   cleanup,
   fireEvent,
   render,
+  renderHook,
   screen,
   waitFor,
 } from "@testing-library/react";
@@ -18,6 +19,11 @@ import { ToastProvider } from "@/shared/ui/overlay/toast";
 import { reviewKeys, type WithAccessToken } from "../api/queries";
 import type { ReviewFormResponse } from "../model/review";
 import { ReviewForm, ReviewWriteFlow } from "./review-form";
+import {
+  clearVisitEntry,
+  saveVisitEntry,
+  useVisitEntry,
+} from "./visit-entry-store";
 
 const api = vi.hoisted(() => ({
   fetchReviews: vi.fn(),
@@ -119,6 +125,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  clearVisitEntry(3);
   vi.restoreAllMocks();
 });
 
@@ -141,6 +148,54 @@ describe("ReviewWriteFlow", () => {
 
   it("오늘 이미 쓴 장소면 방문일을 고르라고 한다", () => {
     expect(markup(form(["2026-10-21"]))).toContain("방문일을 골라 주세요");
+  });
+
+  it("장소 상세에서 방문을 확인하고 들어오면 장소 이름 아래에 방문 확인 완료를 보인다", () => {
+    expect(markup()).not.toContain("방문 확인 완료");
+
+    saveVisitEntry(3, { verified: true, pickDate: false });
+    mount(flow(form()));
+
+    expect(screen.getByText("방문 확인 완료")).toBeTruthy();
+  });
+
+  it("방문 확인 결과는 흐름으로 옮긴 뒤 저장소에서 지워, 새로 열면 남지 않는다", () => {
+    saveVisitEntry(3, { verified: true, pickDate: false });
+    const view = mount(flow(form()));
+    expect(screen.getByText("방문 확인 완료")).toBeTruthy();
+    expect(renderHook(() => useVisitEntry(3)).result.current).toBeUndefined();
+
+    view.unmount();
+    mount(flow(form()));
+
+    expect(screen.queryByText("방문 확인 완료")).toBeNull();
+  });
+
+  it("방문일을 오늘이 아닌 날로 바꾸면 방문 확인 완료를 숨긴다", async () => {
+    saveVisitEntry(3, { verified: true, pickDate: false });
+    mount(flow(form()));
+
+    fireEvent.click(screen.getByRole("button", { name: /방문일/ }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "10월 20일 (화)" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "10월 20일 (화) 선택" }),
+    );
+
+    await waitFor(() =>
+      expect(screen.queryByText("방문 확인 완료")).toBeNull(),
+    );
+  });
+
+  it("7-E01의 다른 날 고르기로 들어오면 방문일 시트를 연다", async () => {
+    saveVisitEntry(3, { verified: false, pickDate: true });
+    mount(flow(form(["2026-10-21"])));
+
+    expect(
+      await screen.findByText("같은 날에 또 리뷰를 작성할 수 없어요."),
+    ).toBeTruthy();
+    expect(screen.queryByText("방문 확인 완료")).toBeNull();
   });
 
   it("1/2단계는 장소·방문일 줄과 질문까지 고정하고 태그 목록만 스크롤한다", () => {
@@ -247,6 +302,18 @@ describe("ReviewForm", () => {
     expect(onClose).toHaveBeenCalledOnce();
     await waitFor(() => expect(pressed("조용해서 좋았어요")).toBe("false"));
     expect(screen.queryByText("작성한 내용이 사라져요")).toBeNull();
+  });
+
+  it("X로 나가면 장소 상세에서 넘긴 방문 확인을 지운다", async () => {
+    saveVisitEntry(3, { verified: true, pickDate: false });
+    mountForm();
+    expect(await screen.findByText("방문 확인 완료")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "닫기" }));
+
+    await waitFor(() =>
+      expect(screen.queryByText("방문 확인 완료")).toBeNull(),
+    );
   });
 
   it("처음 불러올 때 401이면 로그인 화면으로 보낸다", async () => {

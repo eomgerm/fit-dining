@@ -45,6 +45,7 @@ import {
   VisitDateButton,
 } from "./review-write-parts";
 import { submitFailure, type SubmitFailure } from "./submit-failure";
+import { clearVisitEntry, useVisitEntry } from "./visit-entry-store";
 import { VisitDateSheet } from "./visit-calendar";
 
 type ReviewFormProps = {
@@ -77,6 +78,7 @@ export function ReviewForm({
   }, [signedOut, onSignedOut]);
 
   const close = () => {
+    clearVisitEntry(placeId);
     setRound(round + 1);
     onClose();
   };
@@ -89,6 +91,7 @@ export function ReviewForm({
         form={form.data}
         withAccessToken={withAccessToken}
         onSuccess={(reviewId) => {
+          clearVisitEntry(placeId);
           setRound(round + 1);
           onSuccess(reviewId);
         }}
@@ -161,6 +164,22 @@ export function ReviewWriteFlow({
   }
   const [page, setPage] = useState<Page>("good");
   const [sheetOpen, setSheetOpen] = useState(false);
+  // 장소 상세에서 확인한 결과(D-43)는 새로 들어올 때만 이 흐름으로 옮기고 저장소에서 지운다.
+  // 7-E01의 "다른 날 고르기"로 들어오면 방문일 시트를 연다
+  const entry = useVisitEntry(placeId);
+  const [verified, setVerified] = useState(false);
+  const [openedEntry, setOpenedEntry] = useState<number>();
+  if (entry && entry.seq !== openedEntry) {
+    setOpenedEntry(entry.seq);
+    setVerified(entry.verified);
+    if (entry.pickDate) {
+      setPage("good");
+      setSheetOpen(true);
+    }
+  }
+  useEffect(() => {
+    if (entry) clearVisitEntry(placeId);
+  }, [entry, placeId]);
   const [confirmingClose, setConfirmingClose] = useState(false);
   // 닫히는 동안 문구가 바뀌지 않게 마지막 실패 종류는 남겨 둔다
   const [failure, setFailure] = useState<SubmitFailure>("server");
@@ -268,7 +287,11 @@ export function ReviewWriteFlow({
         page !== "detail" && (
           <>
             <section className="flex flex-col gap-4 bg-surface px-5 pt-2 pb-5">
-              <PlaceRow place={form.place} />
+              <PlaceRow
+                place={form.place}
+                // 지난 방문은 지금 위치로 확인할 수 없어 방문일이 오늘일 때만 보인다
+                verified={verified && draft.visitedAt === today}
+              />
               <VisitDateButton
                 value={draft.visitedAt}
                 today={today}
