@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode, type Ref } from "react";
 
 import { isApiError } from "@/shared/api/api-error";
 import { Button } from "@/shared/ui/button/button";
@@ -170,9 +170,10 @@ export function ReviewWriteFlow({
   const allTags = [...form.tags.good, ...form.tags.bad];
   const disabled = disabledTagCodes(draft.tagCodes, allTags);
   const today = form.visitDate.max;
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    window.scrollTo(0, 0);
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
   }, [page]);
 
   const update = (patch: Partial<ReviewDraft>) =>
@@ -230,86 +231,93 @@ export function ReviewWriteFlow({
       </IconButton>
     );
 
+  const footer =
+    page === "detail" ? (
+      <BottomBar>
+        <Button
+          disabled={createReview.isPending}
+          onClick={submit}
+          className="w-full"
+        >
+          {createReview.isPending
+            ? "등록하는 중"
+            : hasDetail(draft)
+              ? "등록하기"
+              : "건너뛰고 등록하기"}
+        </Button>
+      </BottomBar>
+    ) : (
+      <BottomBar tone="surface-warm">
+        <Button
+          disabled={page === "good" && !canLeaveGoodPage(draft, form)}
+          onClick={() => setPage(page === "good" ? "bad" : "detail")}
+          className="w-full"
+        >
+          다음
+        </Button>
+      </BottomBar>
+    );
+
   return (
     <FormFrame
       start={header}
       step={page === "detail" ? 2 : 1}
       warm={page !== "detail"}
+      scrollRef={scrollRef}
       pinned={
         page !== "detail" && (
-          <section className="flex flex-col gap-4 bg-surface px-5 pt-2 pb-5">
-            <PlaceRow place={form.place} />
-            <VisitDateButton
-              value={draft.visitedAt}
-              today={today}
-              onClick={() => setSheetOpen(true)}
-            />
-          </section>
+          <>
+            <section className="flex flex-col gap-4 bg-surface px-5 pt-2 pb-5">
+              <PlaceRow place={form.place} />
+              <VisitDateButton
+                value={draft.visitedAt}
+                today={today}
+                onClick={() => setSheetOpen(true)}
+              />
+            </section>
+            <div className="px-5 pt-7 pb-5">
+              {page === "good" ? (
+                <SectionHeader title="어떤 점이 좋았나요?" />
+              ) : (
+                <SectionHeader
+                  title="아쉬운 점도 있었나요?"
+                  description="없으면 바로 넘어가도 돼요."
+                />
+              )}
+            </div>
+          </>
         )
       }
+      footer={footer}
     >
       {page === "detail" ? (
-        <>
-          <DetailFields
-            revisitIntent={draft.revisitIntent}
-            description={draft.description}
-            spentPerPerson={draft.spentPerPerson}
-            limits={form.limits}
-            onRevisitIntentChange={(revisitIntent) => update({ revisitIntent })}
-            onDescriptionChange={(description) => update({ description })}
-            onSpentPerPersonChange={(raw) => {
-              const spentPerPerson = normalizeSpent(
-                raw,
-                form.limits.spentPerPersonMax,
-              );
-              if (spentPerPerson !== null) update({ spentPerPerson });
-            }}
-            onAddPhoto={() => toast("사진은 아직 올릴 수 없어요")}
-          />
-          <BottomBar>
-            <Button
-              disabled={createReview.isPending}
-              onClick={submit}
-              className="w-full"
-            >
-              {createReview.isPending
-                ? "등록하는 중"
-                : hasDetail(draft)
-                  ? "등록하기"
-                  : "건너뛰고 등록하기"}
-            </Button>
-          </BottomBar>
-        </>
+        <DetailFields
+          revisitIntent={draft.revisitIntent}
+          description={draft.description}
+          spentPerPerson={draft.spentPerPerson}
+          limits={form.limits}
+          onRevisitIntentChange={(revisitIntent) => update({ revisitIntent })}
+          onDescriptionChange={(description) => update({ description })}
+          onSpentPerPersonChange={(raw) => {
+            const spentPerPerson = normalizeSpent(
+              raw,
+              form.limits.spentPerPersonMax,
+            );
+            if (spentPerPerson !== null) update({ spentPerPerson });
+          }}
+          onAddPhoto={() => toast("사진은 아직 올릴 수 없어요")}
+        />
       ) : (
-        <>
-          <section className="flex flex-col gap-5 px-5 pt-7 pb-6">
-            {page === "good" ? (
-              <SectionHeader title="어떤 점이 좋았나요?" />
-            ) : (
-              <SectionHeader
-                title="아쉬운 점도 있었나요?"
-                description="없으면 바로 넘어가도 돼요."
-              />
-            )}
-            <ReasonTagGroups
-              tags={page === "good" ? form.tags.good : form.tags.bad}
-              selected={draft.tagCodes}
-              disabled={disabled}
-              onToggle={(code) =>
-                update({ tagCodes: toggleTag(draft.tagCodes, code) })
-              }
-            />
-          </section>
-          <BottomBar tone="surface-warm">
-            <Button
-              disabled={page === "good" && !canLeaveGoodPage(draft, form)}
-              onClick={() => setPage(page === "good" ? "bad" : "detail")}
-              className="w-full"
-            >
-              다음
-            </Button>
-          </BottomBar>
-        </>
+        <div className="px-5 pb-6">
+          <ReasonTagGroups
+            tags={page === "good" ? form.tags.good : form.tags.bad}
+            selected={draft.tagCodes}
+            disabled={disabled}
+            onToggle={(code) =>
+              update({ tagCodes: toggleTag(draft.tagCodes, code) })
+            }
+          />
+        </div>
       )}
       <VisitDateSheet
         open={sheetOpen}
@@ -467,29 +475,34 @@ function CloseButton({ onClick }: { onClick: () => void }) {
   );
 }
 
+// 화면 높이를 뷰포트에 맞추고 가운데(children)만 스크롤해 스크롤 막대가 움직이는 범위와 같다
 function FormFrame({
   start,
   step,
   warm,
   pinned,
+  footer,
+  scrollRef,
   children,
 }: {
   start: ReactNode;
   step: 1 | 2;
   warm?: boolean;
-  // 상단 막대 아래에 붙어 스크롤해도 남는 내용(7-01·7-02의 장소·방문일 줄)
+  // 상단 막대 아래에서 스크롤하지 않는 내용(7-01·7-02의 장소·방문일 줄과 질문)
   pinned?: ReactNode;
+  footer?: ReactNode;
+  scrollRef?: Ref<HTMLDivElement>;
   children?: ReactNode;
 }) {
   return (
     <div
       className={
         warm
-          ? "flex flex-1 flex-col bg-surface-warm"
-          : "flex flex-1 flex-col bg-surface"
+          ? "flex h-dvh flex-col bg-surface-warm"
+          : "flex h-dvh flex-col bg-surface"
       }
     >
-      <div className="sticky top-0 z-1">
+      <div className="shrink-0">
         <TopBar tone="surface" start={start}>
           <StepProgress
             step={step}
@@ -500,7 +513,13 @@ function FormFrame({
         </TopBar>
         {pinned}
       </div>
-      {children}
+      <div
+        ref={scrollRef}
+        className="relative flex min-h-0 flex-1 flex-col overflow-y-auto"
+      >
+        {children}
+      </div>
+      {footer}
     </div>
   );
 }
