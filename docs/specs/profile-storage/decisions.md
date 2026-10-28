@@ -19,10 +19,10 @@ Glossary: none · ADRs: none
 - Decision: 온보딩 원본(-58)과 취향 프로필 결과를 같은 행에 둔다. 칩마다 `code`, `vector`를 `tastes` 원소에 더하고, 결과는 `features` 컬럼에 둔다. 원본은 온보딩 때만 쓴다.
 - Rejected: 취향 프로필·칩 벡터·근거를 별도 테이블 3개로 → 사용자당 한 번에 읽고 쓰는 값이라 나눌 이유가 없다. 원본 없이 `features`만 → 가중치 상한과 같은 장소 최신 1건 규칙 때문에 다시 계산할 수 없고, 코드 없는 칩의 벡터도 검색에 쓴다. `priorities`, `purposes`를 별도 테이블이나 enum 타입으로 → 기존 V2 구조이고 값이 적어 얻는 것이 없다.
 
-## D-4 장소 분석 결과는 `places` 컬럼
+## D-4 수집 값은 `places`, 분석 결과는 `place_profiles`
 - Status: settled
-- Decision: 장소 특징 분석 결과(`food_type`, `summary_text`, `summary_vector`, `features`, `analyzed_review_count`)를 `places`에 둔다. 릴리즈 전에 모두 채우므로 `food_type`(값이 없을 수 있음)을 빼고 NOT NULL이다. `places`가 아직 없어 V6에서 최소 구성(ID, 이름, 업종 그룹, 분석 컬럼)으로 만들고, 나머지 수집 컬럼은 수집 담당이 더한다.
-- Rejected: `place_profiles` 별도 테이블 → 장소와 1:1이고 항상 함께 읽는다. 분석 컬럼 NULL 허용 → 분석 없이 장소가 공개되는 일이 없다. `places`를 수집 담당이 만들 때까지 대기 → 페르소나 FK와 분석 컬럼을 둘 곳이 없다.
+- Decision: `places`에는 수집한 값과 그 값에서 규칙으로 바로 나오는 분류(`category_group`, `food_type`)를 둔다. 수집 담당의 초안 컬럼을 V6에 합쳤다. 리뷰나 임베딩 모델로 만든 값(`summary_text`, `summary_vector`, `features`, `analyzed_review_count`)은 `places`와 1:1인 `place_profiles`에 NOT NULL로 둔다. 장소는 수집 데이터만으로 먼저 넣을 수 있고, 프로필 행이 없는 장소는 추천에서 빠진다. `summary_text`는 수집 값으로 만들지만 `summary_vector`의 입력이라 함께 둔다.
+- Rejected: 분석 결과를 `places` 컬럼으로 → 분석 컬럼이 NOT NULL이라 수집 데이터를 먼저 넣을 수 없고, 수집과 04:00 배치가 같은 행의 `updated_at`을 바꿔 무엇이 바뀌었는지 알 수 없다. 화면에 쓰지 않는 수집 값을 `place_metadata`로 분리 → 화면에 쓰는 값은 계속 바뀌어 컬럼을 테이블 사이로 옮기는 마이그레이션이 생기고, 쓰는 쪽과 갱신 주기가 `places`와 같다. 분석 컬럼 NULL 허용 → 분석 없는 장소를 추천 쿼리마다 걸러야 한다.
 
 ## D-5 페르소나는 행으로 분리
 - Status: settled
@@ -31,7 +31,7 @@ Glossary: none · ADRs: none
 
 ## D-6 네이버 데이터와 중간 결과는 저장하지 않음
 - Status: settled
-- Decision: 네이버 리뷰 원문, 네이버 장소 ID, 네이버 리뷰 ID, 40의 리뷰별 추출 결과(`evidence`)를 저장하지 않는다. 첫 생성 뒤 네이버 리뷰는 분석에 쓰지 않는다. 앱 리뷰의 추출 결과도 저장하지 않고, 삭제된 리뷰는 soft delete로 남은 원문을 다시 읽어 뺀다.
+- Decision: 네이버 리뷰 원문, 네이버 리뷰 ID, 40의 리뷰별 추출 결과(`evidence`)를 저장하지 않는다. 첫 생성 뒤 네이버 리뷰는 분석에 쓰지 않는다. 앱 리뷰의 추출 결과도 저장하지 않고, 삭제된 리뷰는 soft delete로 남은 원문을 다시 읽어 뺀다.
 - Rejected: `evidence`를 행으로 보관(`quote` 포함 또는 제외) → 네이버 쪽은 다시 쓸 일이 없고, 앱 리뷰는 원문이 남는다. 외부 리뷰 원문의 이용 범위도 정해지지 않았다(PRD OQ-20).
 
 ## D-7 근거 3개 이상인 페르소나만 적재, `review_ids`는 앱 리뷰만
@@ -39,7 +39,7 @@ Glossary: none · ADRs: none
 - Decision: 첫 적재 때 네이버 근거 리뷰가 3개 이상인 페르소나만 넣는다. 네이버 근거는 지워지지 않으므로 이 페르소나들은 계속 점수에 쓰인다. `review_ids`는 앱 리뷰 ID(`bigint[]`)만 담고 처음엔 비어 있다. 앱 리뷰 삭제 때 고칠 페르소나를 찾는 데 쓴다. 네이버에서 나온 근거는 보여 주지 않는다.
 - Rejected: 근거 개수 컬럼(`review_count`) → 3개 미만을 적재하지 않으면 필요 없다. 네이버 리뷰 ID를 `text[]`로 → 가리킬 원본이 없다. 3개 미만도 적재 → 점수에 쓰지 않아 남길 이유가 없다.
 
-## D-8 `places.analyzed_review_count`
+## D-8 `place_profiles.analyzed_review_count`
 - Status: settled
 - Decision: 분석한 리뷰 수를 둔다. 첫 값은 네이버 리뷰 수이고 이후 앱 리뷰만큼 더하고 뺀다. `is_label`의 업종 그룹 평균 조건의 분모이며, 네이버 리뷰를 저장하지 않아 다른 곳에서 되살릴 수 없다. 화면의 리뷰 수와 헷갈리지 않게 `review_count` 대신 이 이름을 쓴다. 업종 그룹 평균 조건이 팀 합의에서 빠지면 지운다.
 - Rejected: 배치 때마다 계산 → 네이버 리뷰 수는 첫 적재 뒤 알 수 없다.
@@ -51,7 +51,7 @@ Glossary: none · ADRs: none
 
 ## D-10 이름과 제약
 - Status: settled
-- Decision: 새 테이블은 V4~V5 방식을 따른다. PK는 `<대상>_id`, 제약은 `ck_`/`fk_`/`uk_`, 인덱스는 `idx_`다. jsonb 키는 39·40 출력 이름(snake_case)을 그대로 쓴다. 좋아함을 나타내는 이름은 지금대로 둔다(`tastes[].polarity`, jsonb의 `like`, 예약어를 피한 `place_personas.liked`). 장소 특징의 태그 라벨 여부만 `label`에서 `is_label`로 바꾼다. 저장소에서 `label`은 화면 문구(`reason_tags.label`, `TasteChip.label`)를 뜻하기 때문이다. `features`(두 테이블), `vector`, `summary_vector`는 그대로 둔다. 장소 삭제 시 페르소나는 함께 지운다(`ON DELETE CASCADE`). CHECK는 `features` 배열 여부, `analyzed_review_count >= 0`, `food_type`과 `category_group`의 값 목록이다.
+- Decision: 새 테이블은 V4~V5 방식을 따른다. PK는 `<대상>_id`, 제약은 `ck_`/`fk_`/`uk_`, 인덱스는 `idx_`다. jsonb 키는 39·40 출력 이름(snake_case)을 그대로 쓴다. 좋아함을 나타내는 이름은 지금대로 둔다(`tastes[].polarity`, jsonb의 `like`, 예약어를 피한 `place_personas.liked`). 장소 특징의 태그 라벨 여부만 `label`에서 `is_label`로 바꾼다. 저장소에서 `label`은 화면 문구(`reason_tags.label`, `TasteChip.label`)를 뜻하기 때문이다. `features`(두 테이블), `vector`, `summary_vector`는 그대로 둔다. 장소 삭제 시 프로필과 페르소나는 함께 지운다(`ON DELETE CASCADE`). CHECK는 `features` 배열 여부, `analyzed_review_count >= 0`, `food_type`·`category_group`·`station`의 값 목록, 좌표 범위, 빈 `naver_place_id` 금지다.
 - Rejected: `polarity` 또는 boolean으로 모두 통일 → 공개 API(`TasteChip.polarity`)나 39·40 출력을 바꿔야 한다. `isLabel`(camelCase) → jsonb 키가 모두 snake_case다. V1~V3 방식 이름 → 최신 마이그레이션과 다르다.
 
 ## D-11 벡터 인덱스는 나중에
@@ -59,10 +59,10 @@ Glossary: none · ADRs: none
 - Decision: 벡터 인덱스(HNSW)를 만들지 않는다. 41이 거리 연산자를 정하면 그에 맞는 연산자 클래스로 만든다. 장소 300곳, 페르소나 2,100행 이하라 전체를 읽어도 된다.
 - Rejected: `vector_cosine_ops`로 미리 생성 → 41의 쿼리 연산자와 다르면 쓰이지 않는다.
 
-## D-12 장소 ID는 서비스 자체 ID
+## D-12 장소 ID는 서비스 자체 ID, 네이버 장소 ID는 유니크 컬럼
 - Status: settled
-- Decision: `places.place_id`는 서비스가 매기는 `bigint` identity다. 네이버 장소 ID는 저장하지 않고, 첫 적재 때만 40 출력의 네이버 ID를 서비스 ID로 바꾼다.
-- Rejected: 네이버 장소 ID를 PK로 → 서비스는 네이버 ID를 쓰지 않는다. `naver_place_id` 컬럼 → 첫 적재 뒤 쓸 곳이 없다.
+- Decision: `places.place_id`는 서비스가 매기는 `bigint` identity다. 네이버 장소 ID는 `naver_place_id`(UNIQUE)로 둔다. 적재를 다시 실행할 때 중복을 막고(`ON CONFLICT`), 재수집 때 고칠 행을 찾고, 40 출력(네이버 ID가 `place_id`)을 장소와 잇는 데 쓴다.
+- Rejected: 네이버 장소 ID를 PK로 → 서비스 API는 자체 ID를 쓴다. 네이버 장소 ID를 저장하지 않음 → 적재 재실행과 재수집 때 같은 장소를 찾을 키가 없다.
 
 ## D-13 `reviews.place_id` FK는 이번에 더하지 않음
 - Status: settled

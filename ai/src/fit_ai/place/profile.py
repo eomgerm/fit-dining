@@ -125,7 +125,7 @@ def build_profile(
 ) -> dict:
     return {
         "schema": SCHEMA,
-        # 네이버 장소 ID다. 첫 적재 때 서비스 ID(places.place_id)로 바꾼다(profile-storage D-12)
+        # 네이버 장소 ID다. 적재 때 places.naver_place_id로 서비스 장소를 찾는다(profile-storage D-12)
         "place_id": int(place_id),
         "food_type": food_type,
         "analyzed_review_count": analyzed_review_count,

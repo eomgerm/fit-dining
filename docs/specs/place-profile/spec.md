@@ -507,7 +507,7 @@ LLM이 만든 사용자 페르소나끼리는 유사도가 0.94~0.99였다. 실�
 
 | 필드 | 내용 |
 |---|---|
-| `place_id` | 네이버 장소 ID(정수). 서비스는 네이버 ID를 저장하지 않으므로 첫 적재 때 서비스 ID(`places.place_id`)로 바꾼다(profile-storage D-12). 41 베이스라인이 이 키를 읽어 이름은 그대로 둔다 |
+| `place_id` | 네이버 장소 ID(정수). 적재 때 `places.naver_place_id`로 장소를 찾아 서비스 ID(`places.place_id`)로 잇는다(profile-storage D-12). 41 베이스라인이 이 키를 읽어 이름은 그대로 둔다 |
 | `food_type` | 1단계 음식 종류 코드 또는 `null` |
 | `analyzed_review_count` | 분석한 리뷰 수(2단계에서 합친 뒤). `is_label` 비율의 분모 |
 | `embedding` | 모델, 리비전, 인코딩 방식. 39와 같은 블록이고 `prompt`만 `document`다 |
