@@ -3,8 +3,10 @@ import { request } from "@/shared/api/client";
 import type {
   ReviewCreateRequest,
   ReviewCreateResponse,
+  ReviewDetailResponse,
   ReviewFormResponse,
   ReviewListResponse,
+  ReviewUpdateRequest,
 } from "../model/review";
 
 // 장소의 리뷰를 최신순으로 20건씩 받는다. cursor는 직전 응답의 nextCursor다.
@@ -45,6 +47,37 @@ export function createReview(
   return request<ReviewCreateResponse>(`/v1/places/${placeId}/reviews`, {
     method: "POST",
     body,
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+// 수정 화면 데이터. 본인 리뷰만 받는다(D-44)
+export function fetchReview(
+  reviewId: number,
+  accessToken: string,
+  signal?: AbortSignal,
+) {
+  return request<ReviewDetailResponse>(`/v1/reviews/${reviewId}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    signal,
+  });
+}
+
+export function updateReview(
+  reviewId: number,
+  body: ReviewUpdateRequest,
+  accessToken: string,
+) {
+  return request<void>(`/v1/reviews/${reviewId}`, {
+    method: "PATCH",
+    body,
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+export function deleteReview(reviewId: number, accessToken: string) {
+  return request<void>(`/v1/reviews/${reviewId}`, {
+    method: "DELETE",
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 }

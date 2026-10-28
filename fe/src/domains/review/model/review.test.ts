@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   authorLabel,
   formatVisitedDay,
+  isDescriptionChanged,
   parsePlaceId,
+  parseReviewId,
+  reviewEditHref,
   reviewWriteHref,
 } from "./review";
 
@@ -38,5 +41,33 @@ describe("parsePlaceId", () => {
 describe("reviewWriteHref", () => {
   it("장소 상세 주소 규칙을 따른다", () => {
     expect(reviewWriteHref(7)).toBe("/place/review?id=7");
+  });
+});
+
+describe("reviewEditHref", () => {
+  it("id는 장소 id로 두고 리뷰 id는 review로 싣는다", () => {
+    expect(reviewEditHref(3, 12)).toBe("/place/review/edit?id=3&review=12");
+  });
+});
+
+describe("parseReviewId", () => {
+  it("장소 id와 같이 양의 정수만 받는다", () => {
+    expect(parseReviewId("12")).toBe(12);
+    expect(parseReviewId("0")).toBeNull();
+    expect(parseReviewId(null)).toBeNull();
+  });
+});
+
+describe("isDescriptionChanged", () => {
+  it("저장된 본문과 다르면 바뀐 것이다", () => {
+    expect(isDescriptionChanged("국물이 진해요", "국물이 진해요!")).toBe(true);
+    expect(isDescriptionChanged(undefined, "새로 쓴 본문")).toBe(true);
+    expect(isDescriptionChanged("국물이 진해요", "")).toBe(true);
+  });
+
+  it("같거나, 본문 없음과 공백뿐인 입력이면 바뀌지 않은 것이다", () => {
+    expect(isDescriptionChanged("국물이 진해요", "국물이 진해요")).toBe(false);
+    expect(isDescriptionChanged(undefined, "")).toBe(false);
+    expect(isDescriptionChanged(undefined, "  ")).toBe(false);
   });
 });

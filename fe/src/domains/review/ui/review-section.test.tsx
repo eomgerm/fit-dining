@@ -2,21 +2,32 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { reviewKeys, type WithOptionalAccessToken } from "../api/queries";
+import { ToastProvider } from "@/shared/ui/overlay/toast";
+
+import {
+  reviewKeys,
+  type WithAccessToken,
+  type WithOptionalAccessToken,
+} from "../api/queries";
 import type { ReviewListResponse } from "../model/review";
 import { ReviewSection } from "./review-section";
 
 const anonymous: WithOptionalAccessToken = (send) => send();
+const withAccessToken: WithAccessToken = (send) => send("token");
 
 // 서버 렌더에서는 쿼리가 돌지 않아 처음 불러오는 중 모양이 나온다. 두 모양의 차이만 확인한다
 function render(onShowAll?: () => void) {
   return renderToStaticMarkup(
     <QueryClientProvider client={new QueryClient()}>
-      <ReviewSection
-        placeId={1}
-        onShowAll={onShowAll}
-        withOptionalAccessToken={anonymous}
-      />
+      <ToastProvider>
+        <ReviewSection
+          placeId={1}
+          onShowAll={onShowAll}
+          withOptionalAccessToken={anonymous}
+          withAccessToken={withAccessToken}
+          onEdit={() => {}}
+        />
+      </ToastProvider>
     </QueryClientProvider>,
   );
 }
@@ -60,7 +71,14 @@ describe("ReviewSection", () => {
 
     const html = renderToStaticMarkup(
       <QueryClientProvider client={client}>
-        <ReviewSection placeId={1} withOptionalAccessToken={anonymous} />
+        <ToastProvider>
+          <ReviewSection
+            placeId={1}
+            withOptionalAccessToken={anonymous}
+            withAccessToken={withAccessToken}
+            onEdit={() => {}}
+          />
+        </ToastProvider>
       </QueryClientProvider>,
     );
 

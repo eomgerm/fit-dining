@@ -142,6 +142,26 @@ describe("ReviewListView", () => {
     expect(render({ totalCount: 2, items })).not.toContain("<h2><button");
   });
 
+  it("수정·삭제를 넘기면 내 리뷰에만 방문일로 구분되는 ⋯ 메뉴를 둔다(6-06)", () => {
+    const html = render({
+      totalCount: 2,
+      items: [{ ...items[0], mine: true }, items[1]],
+      onEdit: noop,
+      onDelete: noop,
+    });
+    expect(html.match(/aria-label="[^"]*리뷰 메뉴"/g)).toEqual([
+      'aria-label="10월 12일 방문 리뷰 메뉴"',
+    ]);
+  });
+
+  it("수정·삭제를 넘기지 않으면 ⋯ 메뉴가 없다", () => {
+    const html = render({
+      totalCount: 1,
+      items: [{ ...items[0], mine: true }],
+    });
+    expect(html).not.toContain("리뷰 메뉴");
+  });
+
   it("다음 페이지를 받는 중이면 자리 표시 한 줄을 더 보인다", () => {
     const html = render({
       totalCount: 21,

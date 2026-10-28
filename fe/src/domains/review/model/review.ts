@@ -75,12 +75,39 @@ export type ReviewFormResponse = {
   writable: boolean;
 };
 
+// 수정 화면 데이터(D-44). 고칠 수 있는 필드만 담는다. 사진은 S15P31A302-54에서 더한다
+export type ReviewDetailResponse = {
+  reviewId: number;
+  // 수정한 뒤 돌아갈 장소 상세와 다시 받을 목록의 장소
+  placeId: number;
+  // 본문 없이 남긴 리뷰면 없다
+  description?: string;
+  limits: { descriptionMax: number; photoMax: number };
+};
+
+// 작성자는 본문과 사진만 고친다(D-6). 빈 문자열이나 공백이면 본문 없음으로 저장된다
+export type ReviewUpdateRequest = {
+  description: string;
+};
+
 // 홈 탭 미리보기에 보이는 리뷰 수(Figma 6-01)
 export const PREVIEW_SIZE = 3;
 
 // 작성 화면 주소. 장소 상세의 "방문 평가 남기기"가 이 주소로 연결한다(D-31)
 export function reviewWriteHref(placeId: number) {
   return `/place/review?id=${placeId}`;
+}
+
+// 수정 화면 주소. 내 리뷰 ⋯ 메뉴의 "수정하기"가 연다(D-44).
+// id는 장소 상세·작성 화면처럼 장소 id다. Next가 숨겨 둔 장소 상세도 지금 주소의 id를 읽어,
+// 다른 값이면 다른 장소를 불러오고 보던 탭을 잃는다
+export function reviewEditHref(placeId: number, reviewId: number) {
+  return `/place/review/edit?id=${placeId}&review=${reviewId}`;
+}
+
+// 공백뿐인 본문은 본문 없음으로 저장되므로(D-6) 그 둘은 바뀐 것으로 보지 않는다
+export function isDescriptionChanged(saved: string | undefined, draft: string) {
+  return (draft.trim() === "" ? undefined : draft) !== saved;
 }
 
 // 목록 날짜(6-03). "2026-10-12" → "10월 12일 방문"
@@ -96,6 +123,14 @@ export function authorLabel(item: Pick<ReviewItem, "nickname">) {
 
 // 주소의 id는 BE와 같이 양의 정수만 받는다(AC-2). 아니면 null
 export function parsePlaceId(value: string | null) {
+  return parsePositiveId(value);
+}
+
+export function parseReviewId(value: string | null) {
+  return parsePositiveId(value);
+}
+
+function parsePositiveId(value: string | null) {
   if (value === null || !/^[1-9][0-9]*$/.test(value)) return null;
   const id = Number(value);
   return Number.isSafeInteger(id) ? id : null;

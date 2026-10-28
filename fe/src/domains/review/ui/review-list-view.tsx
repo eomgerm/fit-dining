@@ -1,6 +1,7 @@
 import type { Ref } from "react";
 
 import { Button } from "@/shared/ui/button/button";
+import { IconButton } from "@/shared/ui/button/icon-button";
 import { TextButton } from "@/shared/ui/button/text-button";
 import { Badge } from "@/shared/ui/display/badge";
 import { EmptyState } from "@/shared/ui/display/empty-state";
@@ -8,8 +9,10 @@ import { Tag } from "@/shared/ui/display/tag";
 import { ChatIcon } from "@/shared/ui/icon/icons/chat";
 import { CheckIcon } from "@/shared/ui/icon/icons/check";
 import { ChevronRightIcon } from "@/shared/ui/icon/icons/chevron-right";
+import { MoreIcon } from "@/shared/ui/icon/icons/more";
 import { WifiOffIcon } from "@/shared/ui/icon/icons/wifi-off";
 import { SectionHeader } from "@/shared/ui/layout/section-header";
+import { Menu, MenuItem } from "@/shared/ui/overlay/menu";
 import { cn } from "@/shared/lib/cn";
 
 import {
@@ -25,6 +28,9 @@ export type ReviewListViewProps = {
   items: ReviewItem[];
   // 있으면 홈 탭 미리보기다. 머리글 "리뷰 N >"가 이 함수를 부르는 버튼이 된다. 리뷰가 없으면 버튼이 아니다
   onShowAll?: () => void;
+  // 둘 다 있으면 내 리뷰에 ⋯ 메뉴(수정하기·삭제하기, 6-06)를 둔다
+  onEdit?: (reviewId: number) => void;
+  onDelete?: (reviewId: number) => void;
   // 처음 불러오는 중에 보일 자리 표시 줄 수
   skeletonRows?: number;
   onRetry: () => void;
@@ -35,6 +41,8 @@ export type ReviewListViewProps = {
   onRetryNextPage?: () => void;
   // 목록 끝에 두는 빈 요소. 보이면 다음 페이지를 받는다
   endRef?: Ref<HTMLDivElement>;
+  // 리뷰 섹션. 삭제 확인 창이 닫힐 때 지운 리뷰의 ⋯ 버튼 대신 여기로 포커스를 보낸다
+  ref?: Ref<HTMLElement>;
   className?: string;
 };
 
@@ -45,6 +53,8 @@ export function ReviewListView({
   totalCount,
   items,
   onShowAll,
+  onEdit,
+  onDelete,
   skeletonRows = 3,
   onRetry,
   hasNextPage = false,
@@ -52,12 +62,18 @@ export function ReviewListView({
   isFetchNextPageError = false,
   onRetryNextPage,
   endRef,
+  ref,
   className,
 }: ReviewListViewProps) {
   const count = status === "success" ? totalCount : undefined;
   const loaded = status === "success" && items.length > 0;
   return (
-    <section aria-label="리뷰" className={cn("flex flex-col", className)}>
+    <section
+      ref={ref}
+      aria-label="리뷰"
+      tabIndex={-1}
+      className={cn("flex flex-col outline-none", className)}
+    >
       {onShowAll && loaded ? (
         // 6-01: 같은 홈 탭의 "메뉴 N >"처럼 머리글 전체가 리뷰 탭을 여는 버튼이다
         <h2>
@@ -111,7 +127,12 @@ export function ReviewListView({
         {status === "success" && items.length > 0 && (
           <ul className="flex flex-col">
             {items.map((item) => (
-              <ReviewRow key={item.reviewId} item={item} />
+              <ReviewRow
+                key={item.reviewId}
+                item={item}
+                onEdit={onEdit}
+                onDelete={onDelete}
+              />
             ))}
           </ul>
         )}
@@ -142,7 +163,15 @@ const BAD_PREFIX = (
 // Figma 6-03 'rv': 위아래 16, 줄 사이 8, 아래 구분선.
 // 내 리뷰는 닉네임 옆에 "내 리뷰" 태그를 붙인다(6-06).
 // 좋았어요 태그는 강조 태그, 아쉬웠어요 태그는 앞에 "아쉬움"을 붙인 기본 태그다(D-24)
-function ReviewRow({ item }: { item: ReviewItem }) {
+function ReviewRow({
+  item,
+  onEdit,
+  onDelete,
+}: {
+  item: ReviewItem;
+  onEdit?: (reviewId: number) => void;
+  onDelete?: (reviewId: number) => void;
+}) {
   return (
     <li className="flex flex-col gap-2 border-b border-line py-4">
       <div className="flex min-w-0 items-center gap-2">
@@ -150,6 +179,28 @@ function ReviewRow({ item }: { item: ReviewItem }) {
         {item.mine && <Tag>내 리뷰</Tag>}
         {item.revisitIntent && (
           <Badge icon={<CheckIcon size="md" />}>재방문 의사 있어요</Badge>
+        )}
+        {item.mine && onEdit && onDelete && (
+          // 남의 리뷰의 ⋯(신고)는 S15P31A302-55에서 붙인다(D-42)
+          <div className="-my-1.5 -mr-2.5 ml-auto">
+            <Menu
+              trigger={
+                // 같은 장소에 방문일만 다른 내 리뷰가 여럿일 수 있어 방문일로 구분한다
+                <IconButton
+                  label={`${formatVisitedDay(item.visitedAt)} 리뷰 메뉴`}
+                >
+                  <MoreIcon size="md" className="text-ink-muted" />
+                </IconButton>
+              }
+            >
+              <MenuItem onClick={() => onEdit(item.reviewId)}>
+                수정하기
+              </MenuItem>
+              <MenuItem tone="danger" onClick={() => onDelete(item.reviewId)}>
+                삭제하기
+              </MenuItem>
+            </Menu>
+          </div>
         )}
       </div>
       <time
