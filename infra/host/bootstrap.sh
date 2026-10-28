@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 서버 한 대를 설계 3절의 상태로 만든다. 몇 번 실행해도 같은 결과다(멱등). root로 실행한다.
-#   sudo ROLE=app bash infra/host/bootstrap.sh    # 서버 A(Lightsail x86)
+#   sudo ROLE=app bash infra/host/bootstrap.sh    # 서버 A(EC2 x86)
 #   sudo ROLE=ops bash infra/host/bootstrap.sh    # 서버 B(EC2 Arm)
 # 환경변수(선택)
 #   FIT_PEER_IP      상대 서버의 공인 IP(공백으로 여러 개). fail2ban이 이 주소는 차단하지 않는다

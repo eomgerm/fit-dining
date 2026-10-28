@@ -1,6 +1,6 @@
 # 호스트 (bootstrap)
 
-서버 A(`app`, Lightsail x86)와 B(`ops`, EC2 Arm)를 설계 3절의 상태로 만들고 점검한다. 설계는 [design.md](../../docs/infra/design.md) 3절이다. Ubuntu 22.04와 24.04에서 시험했다.
+서버 A(`app`, EC2 x86)와 B(`ops`, EC2 Arm)를 설계 3절의 상태로 만들고 점검한다. 설계는 [design.md](../../docs/infra/design.md) 3절이다. Ubuntu 22.04와 24.04에서 시험했다.
 
 ## 서버에서 하는 순서
 
@@ -15,7 +15,7 @@
    ```
 
 5. 점검한다. 전부 PASS여야 한다: `sudo bash ~/host/verify-host.sh`
-6. 서버 밖(노트북)에서 포트를 확인한다: `Test-NetConnection <호스트> -Port 22`(열림), `80`, `443`(Caddy 전에는 닫힘). 클라우드 방화벽(Lightsail 네트워킹 탭, EC2 보안 그룹)도 같은 포트만 열려 있는지 사람이 본다.
+6. 서버 밖(노트북)에서 포트를 확인한다: `Test-NetConnection <호스트> -Port 22`(열림), `80`, `443`(Caddy 전에는 닫힘). 클라우드 방화벽(EC2 보안 그룹)도 같은 포트만 열려 있는지 사람이 본다.
 7. A의 `fit-dev` 계정에 팀원 공개키를 한 줄씩 넣는다(`/home/fit-dev/.ssh/authorized_keys`). 팀원은 `ssh -N -L 5432:127.0.0.1:5432 fit-dev@<호스트>`처럼 터널만 만들 수 있다.
 
 몇 번을 다시 실행해도 같은 결과다. 마지막 줄이 `변경 없음`이면 이미 설계대로다.

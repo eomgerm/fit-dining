@@ -17,7 +17,7 @@ Fit Dining(Next.js SSR 프런트(PWA), Spring Boot 백엔드, OpenSearch 검색,
 
 | 자원 | 역할 | 올라가는 것 |
 |---|---|---|
-| A: Lightsail xlarge (x86, 16GB) | 서비스 | Caddy, FE(Next.js SSR, prod·dev), BE(prod·dev), Postgres, OpenSearch, Redis, Garage, 관측성, 배포 러너 |
+| A: EC2 t3.xlarge (x86, 16GB) | 서비스 | Caddy, FE(Next.js SSR, prod·dev), BE(prod·dev), Postgres, OpenSearch, Redis, Garage, 관측성, 배포 러너 |
 | B: EC2 c6g.large (Arm, 4GB) | 감시·CI·백업 | 외부 감시, CI verify 러너, 백업 금고 |
 | SSAFY 공용 GPU 서버 | 학습 전용 | 인프라가 다루지 않는다. A·B와 연결하지 않는다 |
 | Modal (serverless GPU) | AI 추론 전부 | FastAPI, 임베딩, 리랭커, 소형 LLM. A·B에는 AI 구성요소가 없다 |
@@ -82,12 +82,12 @@ Fit Dining(Next.js SSR 프런트(PWA), Spring Boot 백엔드, OpenSearch 검색,
 
 | 자원 | 스펙 | 역할 |
 |---|---|---|
-| A. Lightsail Xlarge-16GB | x86_64, 4 vCPU, 16GB, 320GB SSD, 전송 6TB (확인) | 서비스 본체(BE, FE, 엣지), 배포 러너 |
+| A. EC2 t3.xlarge | x86_64, 4 vCPU, 15.7GB, 디스크 309GB (확인: 2026-10-22 서버, 유형은 인스턴스 메타데이터). 전송량 한도 (미확인) | 서비스 본체(BE, FE, 엣지), 배포 러너 |
 | B. EC2 c6g.large | Arm(Graviton2), 2 vCPU, 4GiB, EBS 전용, GPU 없음 (확인). 디스크 크기 (미확인) | 외부 감시, CI verify 러너, 백업 금고 |
 | SSAFY GPU 서버 | 공용, 학습 전용(기획서). 고정 공인 IP 없음, VPC/VPN 없음(A503 기준) | 학습만. 서비스 경로에 넣지 않고 A·B와 연결하지 않는다. 학습 결과는 AI 팀이 직접 Modal에 올린다 |
 | Modal | serverless GPU | AI 추론 전부(임베딩, 리랭커, 소형 LLM)와 FastAPI. A·B에는 AI 구성요소가 없다. 호출 쪽 계약(11.2절)은 인프라와 BE가 맡는다 |
 
-- **A의 CPU 크레딧:** baseline은 vCPU당 40%(2023-06-29 이후 생성한 인스턴스 기준)라서 지속 약 1.6 vCPU다. 초과분은 유휴 때 적립한 burst 용량을 쓰고, 오래 burst하면 적립분을 다 써서 다시 baseline(지속 가능 구간)으로 돌아간다 (확인: AWS 문서, 실측은 RB-09).
+- **A의 CPU 크레딧:** baseline은 vCPU당 40%(t3.xlarge는 시간당 96크레딧을 얻고 최대 2304크레딧을 쌓는다)라서 지속 약 1.6 vCPU다. 초과분은 유휴 때 적립한 burst 용량을 쓰고, 오래 burst하면 적립분을 다 써서 다시 baseline(지속 가능 구간)으로 돌아간다 (확인: AWS 문서, 실측은 RB-09).
 - **A의 CPU 크레딧 실측(2026-10-27):** A는 SSAFY가 준 서버라 AWS 콘솔이 없다. 크레딧 잔액과 크레딧 모드(standard·unlimited)는 콘솔과 CloudWatch로만 보이고 인스턴스 메타데이터에도 해당 키가 없어 확인하지 못했다 (미확인). 서버 안에서는 인스턴스 유형 `t3.xlarge`(확인: 메타데이터)와 CPU steal(확인: A의 Prometheus `job=node`)을 읽는다. 최근 3일 steal은 평균 0.8%, 5분 평균의 최댓값 6.7%였고 같은 기간 CPU 사용률은 평균 5.8%, 5분 평균의 최댓값 42.9%였다. 부하가 낮은 동안 크레딧 때문에 제한된 징후는 없다. 다만 이 값은 크레딧 모드의 증거가 아니고, 크레딧이 바닥나 제한되면 steal로 보일 것이라는 것은 추정이며(미확인), 동시 사용자 100명 피크에서의 동작은 알려 주지 않는다. 그 부분은 경량 부하 시험과 RB-09로 본다. 알림은 `FitCpuHigh30m`(30분 평균 CPU 40% 초과, warning)뿐이고 steal 알림은 없다. steal은 Prometheus에서 `node_cpu_seconds_total{mode="steal"}`로 볼 수 있다.
 - **B의 성능:** T 계열이 아니라 고정 성능이다. burst 크레딧이 없다 (확인).
 
@@ -100,7 +100,7 @@ Fit Dining(Next.js SSR 프런트(PWA), Spring Boot 백엔드, OpenSearch 검색,
 - **GitLab:** lab.ssafy.com은 Community Edition v18.11.5이고 Premium 기능은 쓸 수 없다 (확인: 팀원 확인). 공용 러너가 없다 (확인: A503 문서). 프로젝트 러너 생성에는 Maintainer 권한이 필요하다 (확인: GitLab 문서).
 - **AWS·S3:** AWS 콘솔·IAM·S3 사용 흔적이 선배 팀 양쪽에 없다. S3는 쓸 수 없다고 가정한다.
 - **아웃바운드:** 제한이 없었다(Docker Hub, HuggingFace 등 접근 가능).
-- **공인 IP:** Lightsail의 기본 공인 IP는 stop/start하면 바뀌고, 정적 IP는 인스턴스에 붙여 두면 무료다 (확인: AWS 문서). EC2의 공인 IP도 Elastic IP가 없으면 stop/start로 바뀐다. `remote_ip` 허용, 금고 전송, DNS가 이 IP에 기대므로 인스턴스는 멈추지 않고 M0에서 둘 다 고정 IP를 붙인다.
+- **공인 IP:** EC2의 공인 IP는 Elastic IP가 없으면 stop/start로 바뀐다 (확인: AWS 문서). `remote_ip` 허용, 금고 전송, DNS가 이 IP에 기대므로 인스턴스는 멈추지 않는다. 고정 IP(Elastic IP)를 붙일 수 있는지는 콘솔 권한에 달려 있다(아래 실측 항목).
 - **A의 공인 IP 실측(2026-10-27, 위험 19):** 인스턴스 메타데이터(IMDSv2)에서 `t3.xlarge`(온디맨드, ap-northeast-2a)와 공인 IP `3.35.170.47`을 읽었고, `PROD_HOST`와 `DEV_HOST`의 A 레코드(TTL 600초)도 같은 IP를 가리킨다 (확인). 이 IP가 Elastic IP인지는 확인하지 못했다 (미확인). A는 SSAFY가 준 서버라 콘솔이 없고, 메타데이터의 `public-ipv4`와 `ipv4-associations`는 자동으로 받은 IP에도 같은 값을 주며 Elastic IP 여부를 알려 주는 키가 없다. Elastic IP가 아니면 stop/start 때 IP가 바뀐다. 이 IP를 박아 둔 곳은 B의 금고 계정 `from="3.35.170.47"`과 fail2ban `ignoreip`, 가비아의 A 레코드다 (확인: 2026-10-27 B). B의 클라우드 방화벽에 A의 IP가 들어 있는지는 확인하지 못했다 (미확인). 대체 수단은 세 가지다. (1) 인스턴스를 멈추지 않는다. (2) IP나 DNS가 어긋나면 B의 프로브가 `https://<PROD_HOST>/healthz`와 `/`에서 2분 넘게 200을 못 받아 `FitExternalDown`(critical)이 울린다. (3) IP가 바뀌면 금고 전송이 `from=`에 막혀 pg 백업이 8시간 넘게 안 들어오고 `FitVaultStale`(critical)이 울린다. 복구는 가비아에서 A 레코드를 새 IP로 고치고(TTL 600초) B의 금고 `from=`와 fail2ban 허용 IP를 새 IP로 바꾸는 것이다.
 - **작업 방식:** 선배 팀에서 AI 에이전트는 EC2에 접속하지 못했다. 서버에서의 실행은 사람이 하고, 런북은 값을 출력하지 않는 확인 명령을 포함한다.
 - **Docker Engine 29:** 최소 API 버전이 1.44로 올라 구버전 클라이언트(Traefik, Testcontainers, docker-java 계열)를 거부한다 (확인). 29.3에서 최소 API가 낮아졌다는 보고는 단일 출처라 (미확인).
@@ -138,7 +138,7 @@ Fit Dining(Next.js SSR 프런트(PWA), Spring Boot 백엔드, OpenSearch 검색,
         | 443                         ^ https (BE -> AI)
         v                             |
 +-------------------------------------------+      +--------------------------------------+
-| A: Lightsail xlarge (x86 / 16GB)          |      | B: EC2 c6g.large (Arm / 4GB)         |
+| A: EC2 t3.xlarge (x86 / 16GB)             |      | B: EC2 c6g.large (Arm / 4GB)         |
 |  edge  Caddy                              |      |  ops   Prometheus-B, Alertmanager-B, |
 |  app   be, fe (prod blue|green, dev)      |----->|        blackbox, node-exporter,      |
 |  data  postgres opensearch redis garage   | dump |        port-audit                    |
@@ -572,7 +572,7 @@ Garage는 단일 노드라도 레이아웃 설정이 필요하다(`layout assign
 5. **복원 리허설:** 사람이 노트북(Docker Desktop, `age`)에서 B 사본을 내려받아 복호화·복원하고 걸린 시간(RTO)을 `restore-check.sh`로 잰다. 주 1회 하고 11/06 전에는 최소 2회 한다. 결과는 B에서 `vault-ingest.sh record-restore <epoch> <RTO>`로 기록해 지표(`fit_vault_last_restore_check_*`)로 낸다. 내려받은 암호화 덤프 최신 1벌은 노트북에 남긴다(3번째 사본, 13.4절). 절차는 `infra/backup/README.md`다.
 6. **A 로컬 보관:** 같은 보관 정책(4시간 단위 48시간 + 일 단위 14일)을 쓴다(`/srv/fit/backups/{pg,photos,caddy}`, 보낼 파일은 `outbox/`).
 7. **그 외 대상:** 사진(`files-backup.sh photos`: prod 버킷 전체를 S3 API로 읽어 tar)과 Caddy 인증서 볼륨(`files-backup.sh caddy`: 데이터 볼륨을 읽기 전용으로 tar)도 암호화해 같은 경로로 B에 보낸다. OpenSearch는 Postgres에서 재색인한다. `/etc/fit/*.env`는 자동화하지 않고 인프라 담당이 변경 때마다 암호화해 팀 비밀번호 관리자에 둔다. 백업하는 DB는 `fit_prod`뿐이다(dev DB와 dev 사진은 하지 않는다).
-8. **선택(P2):** GitLab Package Registry에 암호화 사본을 2차로 올린다. Lightsail 스냅샷은 권한이 있으면 일 1회 자동으로 켠다(권한 (미확인)).
+8. **선택(P2):** GitLab Package Registry에 암호화 사본을 2차로 올린다. 디스크 스냅샷은 AWS 콘솔이 있어야 켤 수 있는데 A는 SSAFY가 준 서버라 콘솔 계정이 없어 쓰지 못한다(확인).
 9. **B 소실:** 금고 내용은 사라지지만 A에 로컬 사본이 있다. B를 재구축한다(RB-01).
 10. **A 소실(RB-12):** bootstrap → 금고에서 복원(사람, 개인키 사용) → OpenSearch 재색인 → 사진 복원 → env를 팀 비밀번호 관리자에서 복구 → 배포 순서다.
 11. **마이그레이션 전 덤프:** `pg-backup.sh predeploy <환경> <sha>`가 평문 덤프를 `/srv/fit/predeploy/`에 두고 환경별 최근 5개만 남긴다. 개인키가 서버에 없어 암호화하면 급할 때 복원할 수 없고, 이 덤프는 A의 DB 볼륨과 같은 신뢰 범위에 있으며 B로 보내지 않는다. 디렉터리는 배포 러너(`gitlab-runner`, docker 그룹)가 쓸 수 있도록 root 전용 백업 디렉터리 밖에 두고(`root:docker 2770`) 파일은 640이다.
@@ -975,7 +975,7 @@ AI 팀과 M1 전에 합의한다. FastAPI는 Modal에서 돌고 A·B에는 AI �
 
 - **P0 (11/06 필수):** A·B bootstrap과 하드닝(정적 IP·EIP 포함), TLS·엣지(FE 서빙 포함), 롤백 가능한 prod 배포, 백업 → 금고 + 덤프 시점 검증 + 사람 복원 리허설, 메모리 한도와 스왑, B의 외부 감시(프로브, 포트 노출 감사, 감시 체계 감시) + critical 알림, 핵심 런북, 서버 전용 시크릿, 브랜치 보호·병합 설정(10.8절), 배포 순서 보장(`oldest_first`, outdated 배포 보호, 다운그레이드 가드), 외부 호출 계약(Modal 키워드 폴백·예산·속도 제한, 킬스위치), PWA 산출물 검사
 - **P1:** Blue/Green(폴백은 헬스 게이트 교체형), 대시보드, daily digest, dev 알림 분리, 개발자 터널, gitleaks·마이그레이션 게이트·arch 검사, Garage(폴백 R2), cAdvisor(컨테이너 메모리·재시작 알림), 경량 부하 시험(k6)
-- **P2:** Dozzle, GitLab Package Registry 2차 사본, Lightsail 스냅샷, `verify-x86`, Modal 배포 잡, 정식 부하 시험(경량 부하 시험은 P1)
+- **P2:** Dozzle, GitLab Package Registry 2차 사본, 디스크 스냅샷(콘솔 필요), `verify-x86`, Modal 배포 잡, 정식 부하 시험(경량 부하 시험은 P1)
 
 ## 15. 리스크
 
@@ -1013,7 +1013,7 @@ AI 팀과 M1 전에 합의한다. FastAPI는 Modal에서 돌고 A·B에는 AI �
 | 1 | A·B 실제 스펙(RAM, vCPU, 디스크, 스왑, OS, Docker 버전, 아키텍처, CPU 소진 후 동작) | 인프라 | M0 |
 | 2 | 서버 수령일 | 인프라 | 즉시 확인 |
 | 3 | 가비아 도메인의 호스트 구성(`PROD_HOST`, `DEV_HOST`)과 DNS 설정 시점, B의 공인 IP | 인프라 | M0 |
-| 4 | Lightsail/EC2 방화벽 접근 권한, Lightsail 스냅샷 권한 | 인프라 | M0 |
+| 4 | EC2 보안 그룹(클라우드 방화벽)과 디스크 스냅샷 권한. 콘솔 계정이 없다(확인) | 인프라 | M0 |
 | 5 | GitLab Package Registry 사용 가능 여부. Create project runner 메뉴는 보인다 (확인) | 인프라, 팀장 | 사전~M0 |
 | 6 | A↔B SSH 연결성 | 인프라 | M0 |
 | 7 | AI 팀 합의: Modal 엔드포인트 계약(12.2·12.3절), 콜드 스타트와 상시 가동 컨테이너 수·비용 상한, 키워드 폴백, 외부 호출 계약 | AI 팀, 인프라 | M1 전 |
@@ -1089,7 +1089,7 @@ docs/infra/
 
 | 분야 | 결정 | 선택 | 대안 |
 |---|---|---|---|
-| 구성 | 서버 | 기본 지급 Lightsail xlarge 1대(A) + EC2 c6g.large 1대(B) + 공용 GPU 서버(학습 전용) + Modal | |
+| 구성 | 서버 | 기본 지급 EC2 t3.xlarge 1대(A) + EC2 c6g.large 1대(B) + 공용 GPU 서버(학습 전용) + Modal | |
 | 구성 | 접근법 | 경량 단일 서버형 | 선배 팀 구성 이식형, prod 전용 + 로컬 dev |
 | 구성 | 1차 공개 | 11/06 | 10/28, 10/22 이전 |
 | 구성 | 스택 | Spring Boot + FastAPI(Modal) | NestJS + FastAPI, Python 단일 |
@@ -1137,9 +1137,9 @@ docs/infra/
 
 ## 부록 C. 출처
 
-- [Lightsail instance bundles](https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-bundles.html)
-- [Baseline CPU performance and burst capacity](https://docs.aws.amazon.com/lightsail/latest/userguide/baseline-cpu-performance.html)
-- [Identify when your Lightsail instance bursts](https://docs.aws.amazon.com/lightsail/latest/userguide/identifying-instance-burst.html)
+- [Burstable performance instances](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/burstable-performance-instances.html)
+- [Key concepts for burstable performance instances](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/burstable-credits-baseline-concepts.html)
+- [Monitor CPU credits for burstable instances](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/burstable-performance-instances-monitoring-cpu-credits.html)
 - [AWS EC2 C6g instances](https://aws.amazon.com/ec2/instance-types/c6g/)
 - [Caddy reverse_proxy](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy)
 - [Caddy global options](https://caddyserver.com/docs/caddyfile/options)
