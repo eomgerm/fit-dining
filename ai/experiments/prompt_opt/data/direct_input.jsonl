@@ -78,3 +78,14 @@
 {"id": "empty-04", "split": "train", "slice": "empty", "text": "ㅎㅎ", "items": []}
 {"id": "empty-05", "split": "test", "slice": "empty", "text": "추천해 주세요!", "items": []}
 {"id": "empty-06", "split": "val", "slice": "empty", "text": "그때그때 달라요", "items": []}
+{"id": "complaint-13", "split": "train", "slice": "complaint", "text": "인테리어 대충 해놓은 가게는 정이 안 가요", "items": [{"kind": "taste", "code": "PRETTY_SPACE", "like": true}]}
+{"id": "complaint-14", "split": "train", "slice": "complaint", "text": "노트북 펴기 눈치 보이는 카페는 안 가요", "items": [{"kind": "taste", "code": "PURPOSE_WORK", "like": true}]}
+{"id": "complaint-15", "split": "train", "slice": "complaint", "text": "분위기 없는 데서 데이트하면 아쉬워요", "items": [{"kind": "taste", "code": "PURPOSE_DATE", "like": true}]}
+{"id": "kind_boundary-13", "split": "train", "slice": "kind_boundary", "text": "맛없는 집은 두 번 안 가요", "items": [{"kind": "quality", "code": null, "like": true}]}
+{"id": "kind_boundary-14", "split": "train", "slice": "kind_boundary", "text": "위생 별로인 곳은 싫어요", "items": [{"kind": "quality", "code": null, "like": true}]}
+{"id": "kind_boundary-15", "split": "train", "slice": "kind_boundary", "text": "가격대 높은 곳은 손이 안 가요", "items": [{"kind": "budget", "code": null, "like": true}]}
+{"id": "kind_boundary-16", "split": "train", "slice": "kind_boundary", "text": "와이파이 안 터지는 카페는 별로", "items": [{"kind": "facility", "code": null, "like": true}]}
+{"id": "dislike-09", "split": "train", "slice": "dislike", "text": "혼밥하는 분위기는 싫어요", "items": [{"kind": "taste", "code": null, "like": false}]}
+{"id": "no_code-09", "split": "train", "slice": "no_code", "text": "쌀국수 좋아해요", "items": [{"kind": "taste", "code": null, "like": true}]}
+{"id": "no_code-10", "split": "train", "slice": "no_code", "text": "삼겹살 땡겨요", "items": [{"kind": "taste", "code": null, "like": true}]}
+{"id": "empty-07", "split": "train", "slice": "empty", "text": "다 좋아요", "items": []}

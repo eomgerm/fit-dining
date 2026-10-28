@@ -42,7 +42,7 @@ def setup(experiment: str) -> None:
 
 
 def optimize(
-    name, template, predict_fn, train, scorers, *, max_metric_calls: int, val=None
+    name, template, predict_fn, train, scorers, *, max_metric_calls: int, **gepa_kwargs
 ):
     """프롬프트를 등록하고 GEPA로 한 번 최적화한다.
 
@@ -50,8 +50,8 @@ def optimize(
     프롬프트를 읽어야 한다. 최적화 중에는 이름이 같은 프롬프트의 템플릿이 후보로 바뀐다.
     GMS 호출은 대략 max_metric_calls × (1 + LLM judge 수)에 반성 호출 몇 번이 더해진다.
 
-    `val`이 없으면 GEPA는 train으로 후보를 고른다. MLflow는 val을 받지 않아
-    gepa_kwargs로 넘긴다. 모양은 MLflow가 train을 바꾼 것과 같은 inputs·expectations 레코드다.
+    `gepa_kwargs`는 `gepa.optimize`에 그대로 간다. `valset`이 없으면 GEPA는 train으로
+    후보를 고른다. valset 모양은 MLflow가 train을 바꾼 것과 같은 inputs·expectations 레코드다.
     """
     prompt = mlflow.genai.register_prompt(name=name, template=template)
     return mlflow.genai.optimize_prompts(
@@ -61,7 +61,7 @@ def optimize(
         optimizer=GepaPromptOptimizer(
             reflection_model=REFLECTION_MODEL,
             max_metric_calls=max_metric_calls,
-            gepa_kwargs={"valset": val} if val else None,
+            gepa_kwargs=gepa_kwargs,
         ),
         scorers=scorers,
     )
