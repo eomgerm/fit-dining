@@ -102,7 +102,7 @@ def test_drops_blank_quote(quote):
 
 
 def test_all_items_dropped_is_output_check_failure():
-    # 모델 형식 실수로 취향을 잃지 않게 재요청하고, 그래도 안 되면 해석 대기로 남긴다
+    # 모델 형식 실수로 취향을 잃지 않게 재요청하고, 그래도 안 되면 해석 실패다
     text = "시끄럽지 않은 데가 좋아요"
     with pytest.raises(ValueError):
         parse_items({"items": [item(text + ".", code="QUIET")]}, text)

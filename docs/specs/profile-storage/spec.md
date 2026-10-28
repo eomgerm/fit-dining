@@ -111,16 +111,14 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 4. **`vector` 확장이 없는 DB에서는 V6이 실패한다.** 서버와 로컬은 인프라 스크립트가 만들고, 테스트는 `PostgresTestSupport`가 만든다. 다른 경로로 DB를 만들면 확장을 먼저 만들어야 한다.
 5. **`places`에 분석 컬럼 없이 행을 넣을 수 없다.** 분석 컬럼이 NOT NULL이라 수집과 분석 결과를 함께 적재해야 한다. 수집 담당과 적재 순서를 맞춘다.
 6. **칩에 코드가 없다.** 해석 API(`POST /api/v1/onboarding/taste-analysis`, -59)는 `TasteChip(polarity, label)`만 돌려준다. `tastes[].code`를 채우려면 해석 결과의 `code`가 칩과 함께 저장 요청까지 와야 한다. -59·-58 담당과 정한다.
-7. **39 spec과 코드에 해석 대기가 남아 있다.** 해석 실패 확률이 낮아 해석 대기를 두지 않기로 했다. 온보딩은 해석이 실패하면 503을 돌려주고 아무것도 저장하지 않으므로 `tastes`에도 대기 상태가 없다. 그런데 taste-profile spec(152, 167, 169, 360행)과 `ai/src/fit_ai/taste/profile.py`의 `pending`은 아직 "원문을 `like: null`로 보관하고 다음 배치에서 다시 해석"한다고 되어 있다. 39에서 지운다.
-8. **코드 문구 벡터(`code_vectors.json`)의 위치가 정해지지 않았다.** 사용자와 무관한 고정 값이라 이 설계의 테이블에 넣지 않았다. 41이 파일로 읽을지 테이블로 둘지 정한다.
-9. **장소 검색 D-36과 다르다.** D-36은 pgvector를 임시로 두고 OpenSearch가 벡터를 최종 관리한다고 정했다. 이 spec은 1차 MVP에서 pgvector만 쓴다(D-2). 검색 담당과 D-36을 정리한다.
+7. **코드 문구 벡터(`code_vectors.json`)의 위치가 정해지지 않았다.** 사용자와 무관한 고정 값이라 이 설계의 테이블에 넣지 않았다. 41이 파일로 읽을지 테이블로 둘지 정한다.
+8. **장소 검색 D-36과 다르다.** D-36은 pgvector를 임시로 두고 OpenSearch가 벡터를 최종 관리한다고 정했다. 이 spec은 1차 MVP에서 pgvector만 쓴다(D-2). 검색 담당과 D-36을 정리한다.
 
 ### 다른 담당과 맞출 것
 
 | 담당 | 항목 |
 |---|---|
 | 40 | 반영함: 특징 키 `is_label`, 출력의 `analyzed_review_count`, `report.json`의 근거 3개 이상 페르소나가 없는 장소 수, `place_id`가 네이버 ID라는 주석과 스펙. 남은 일은 적재 코드 몫이다. `review_ids`가 3개 미만인 페르소나는 넣지 않고, 네이버 리뷰 ID인 `review_ids`는 `{}`로 바꾸고, `place_id`를 서비스 ID로, `group`(식당·카페·술집)을 `category_group`으로, `like`를 `liked`로 옮긴다 |
-| 39 | 해석 대기 제거(문제 7) |
 | -58·-59(이현우) | `tastes` 원소의 `code`, `vector` 추가와 위 문제 2·3·6. BE enum과 코드표 이름이 다르다(`SPACIOUS`↔`SPACIOUS_SEATING`, `VALUE`↔`VALUE_FOR_MONEY`, `CONVERSATION`·`SOLO`·`DATE`·`GATHERING`·`WORK_STUDY`↔`PURPOSE_*`). AI 경계에서 대응표로 바꾼다 |
 | 41 | 벡터 거리 연산자를 정하면 벡터 인덱스를 만든다(D-11). 점수에 쓸 페르소나가 없는 장소의 처리 |
 | 장소 수집 | `places`의 나머지 컬럼, `category_group` 이름, 적재 순서(문제 5) |

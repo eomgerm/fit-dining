@@ -137,13 +137,9 @@ def build_profile(
     rows: list[Row],
     *,
     original_text: str | None = None,
-    pending: bool = False,
     encode: Callable[[list[str]], list[list[float]]] = encode_queries,
 ) -> dict:
-    """`pending`이면 직접 입력이 해석되지 않은 것이다. 원문을 like=None으로 보관한다."""
     free_texts = _free_texts(rows, encode)
-    if pending and original_text:
-        free_texts.append({"text": original_text, "like": None, "vector": None})
     return {
         "schema": SCHEMA,
         "user_id": user_id,

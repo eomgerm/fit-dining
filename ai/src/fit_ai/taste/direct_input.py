@@ -146,7 +146,7 @@ def parse_items(resp: dict, text: str) -> list[dict]:
             }
         )
     # 모델이 준 항목이 검사에서 모두 버려졌으면 형식 실수로 취향을 잃은 것이다.
-    # 출력 검사 실패로 알려 다시 요청하고, 그래도 실패하면 해석 대기로 남긴다
+    # 출력 검사 실패로 알려 다시 요청하고, 그래도 실패하면 해석 실패다
     if resp["items"] and not out:
         raise ValueError("응답 항목이 모두 검사에서 버려졌다")
     return out
@@ -159,7 +159,7 @@ def interpret(
     *,
     call: Callable = gms.call_json,
 ) -> list[Row] | None:
-    """해석 실패(GMS 꺼짐 포함)면 None. 호출하는 쪽은 원문만 보관한다."""
+    """해석 실패(GMS 꺼짐 포함)면 None. 원문은 저장하지 않고 사용자가 다시 시도한다(디자인 C-02)."""
     if len(text) > MAX_LEN:
         raise ValueError(f"직접 입력은 {MAX_LEN}자까지다")
     items = call(

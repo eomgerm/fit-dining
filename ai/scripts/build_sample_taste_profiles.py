@@ -2,7 +2,7 @@
 
     cd ai && uv run --env-file .env python scripts/build_sample_taste_profiles.py
 
-GMS가 꺼져 있으면 직접 입력은 해석 대기(like: null)로 남는다.
+GMS가 꺼져 있으면 직접 입력은 해석에 실패해 태그 근거만 남는다.
 """
 
 import json
@@ -63,21 +63,17 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO)
     gms.check_config()
     if os.environ.get("GMS_ENABLED") != "true":
-        log.warning("GMS_ENABLED가 true가 아니라 직접 입력은 해석 대기로 남는다")
+        log.warning("GMS_ENABLED가 true가 아니라 직접 입력은 해석하지 않는다")
 
     profiles = {}
     for no, user_id, tags, text, reviews in SAMPLES:
         rows = onboarding_rows(user_id, tags, T0) + reviews
-        parsed = None
         if text:
             parsed = interpret(
                 text, user_id, T0, call=fail if no == 6 else gms.call_json
             )
             rows += parsed or []
-        pending = text is not None and parsed is None
-        profiles[str(no)] = build_profile(
-            user_id, rows, original_text=text, pending=pending
-        )
+        profiles[str(no)] = build_profile(user_id, rows, original_text=text)
 
     phrases = [f.phrase for f in FEATURES.values()]
     code_vectors = {

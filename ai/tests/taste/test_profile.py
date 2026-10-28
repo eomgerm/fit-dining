@@ -130,10 +130,11 @@ def test_profile_free_texts_get_vectors_only_when_liked_with_positive_text():
     assert profile["features"] == [feat("PURPOSE_SOLO", True, 1)]
 
 
-def test_profile_header_and_pending_original_text():
+def test_profile_header_and_failed_interpretation_keeps_no_sentence():
+    # 해석이 실패하면 온보딩은 다시 시도를 안내하고 원문을 저장하지 않는다(디자인 C-02)
     rows = onboarding_rows("u6", ["LIVELY"], T0)
     text = "프로젝트 끝나고 시끌벅적하게 한잔하는 곳"
-    profile = build_profile("u6", rows, original_text=text, pending=True)
+    profile = build_profile("u6", rows, original_text=text)
     assert profile["schema"] == "taste-profile/v0"
     assert profile["user_id"] == "u6"
     assert profile["original_text"] == text
@@ -142,4 +143,4 @@ def test_profile_header_and_pending_original_text():
         "revision": "55ec6e9358a56d56af759bc8372e970caf8c305f",
         "prompt": "query",
     }
-    assert profile["free_texts"] == [{"text": text, "like": None, "vector": None}]
+    assert profile["free_texts"] == []
