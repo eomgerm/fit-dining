@@ -301,7 +301,7 @@ BE는 `be/.env.example`을 `be/.env`로 복사한 설정을 읽는다. 환경변
 | `AUTH_DEMO_EMAIL`, `AUTH_DEMO_PASSWORD`, `AUTH_DEMO_NICKNAME` | 선택, 세 값을 모두 생략하거나 모두 유효하게 설정. 가입 입력 규칙 적용. 이메일 정규화 후 없을 때만 시드하며 기존 비밀번호·닉네임은 덮어쓰지 않음 |
 | `AUTH_TERMS_VERSION` | 선택, 기본 `2026-10-23`, `auth.terms-version`에 연결 |
 | `BE_INTERNAL_URL` | FE 개발 서버용 선택값, 기본 `http://localhost:8080` |
-| `PLACE_MOCK_ENABLED`, `REVIEW_MOCK_ENABLED` | 로컬 장소·리뷰 데이터용 선택값. 앱 기본 false, BE 예제 환경 파일은 true |
+| `PLACE_MOCK_ENABLED` | 로컬 장소 데이터용 선택값. 앱 기본 false, BE 예제 환경 파일은 true |
 
 PowerShell에서 `be/` 기준 마이그레이션과 웹 실행:
 
