@@ -42,7 +42,7 @@ function form() {
   });
   fireEvent.click(screen.getByRole("button", { name: "다음" }));
 }
-it("requires all agreements, submits once, and navigates home", async () => {
+it("requires all agreements, submits once, and navigates to location guidance", async () => {
   let complete!: () => void;
   mocks.signup.mockImplementation(
     () =>
@@ -66,7 +66,7 @@ it("requires all agreements, submits once, and navigates home", async () => {
     agreements: { ageOver14: true, terms: true, privacy: true },
   });
   complete();
-  await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/"));
+  await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/location"));
 });
 it("closes the sheet and shows duplicate email beside its field", async () => {
   mocks.signup.mockRejectedValue(
@@ -164,7 +164,7 @@ it("온보딩 답변을 가입 요청에 포함하고 성공하면 지운다", a
   await screen.findByRole("button", { name: "동의하고 시작하기" });
   fireEvent.click(screen.getByRole("checkbox", { name: "전체 동의" }));
   fireEvent.click(screen.getByRole("button", { name: "동의하고 시작하기" }));
-  await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/"));
+  await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/location"));
   expect(mocks.signup).toHaveBeenCalledWith(
     expect.objectContaining({ preferences }),
   );

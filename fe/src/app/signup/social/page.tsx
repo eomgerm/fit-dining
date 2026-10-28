@@ -48,7 +48,7 @@ export default function SocialSignupPage() {
         ...(preferences ? { preferences } : {}),
       });
       clearAnswers();
-      router.replace("/");
+      router.replace("/location");
     } catch (failure) {
       if (failure instanceof AuthError && failure.status === 401) {
         router.replace("/signup?error=social");

@@ -65,7 +65,7 @@ export default function SignupEmailPage() {
       });
       clearAnswers();
       setFields({ email: "", password: "", confirmation: "", nickname: "" });
-      router.replace("/");
+      router.replace("/location");
     } catch (error) {
       const failure = signupFailure(error);
       setErrors(failure.fields);

@@ -57,7 +57,7 @@ it("validates nickname before opening terms", () => {
   ).toBe(true);
   expect(screen.queryByRole("dialog")).toBeNull();
 });
-it("requires agreements and navigates home on success", async () => {
+it("requires agreements and navigates to location guidance on success", async () => {
   mocks.signup.mockResolvedValue({});
   form();
   expect(
@@ -66,7 +66,7 @@ it("requires agreements and navigates home on success", async () => {
     ).hasAttribute("disabled"),
   ).toBe(true);
   await submit();
-  await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/"));
+  await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/location"));
   expect(mocks.signup).toHaveBeenCalledWith({
     nickname: "새이름",
     agreements: { ageOver14: true, terms: true, privacy: true },
@@ -117,7 +117,7 @@ it("sends onboarding answers and clears them only after successful signup", asyn
   );
   expect(readAnswers()).toEqual(answers);
   finish();
-  await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/"));
+  await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/location"));
   expect(sessionStorage.getItem(ANSWERS_KEY)).toBeNull();
 });
 it("keeps onboarding answers when signup fails", async () => {

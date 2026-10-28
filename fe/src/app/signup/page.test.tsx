@@ -50,7 +50,7 @@ it.each([
     expect(trigger.hasAttribute("href")).toBe(false);
     expect(
       screen.getByRole("link", { name: "가입 없이 시작" }).getAttribute("href"),
-    ).toBe("/");
+    ).toBe("/location");
   },
 );
 

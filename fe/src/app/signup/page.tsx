@@ -172,7 +172,7 @@ export default function SignupPage() {
               variant="outline"
               size="md"
               onClick={startAsGuest}
-              render={<Link href="/" />}
+              render={<Link href="/location" />}
             >
               가입 없이 시작
             </Button>
