@@ -3,7 +3,9 @@ package kr.co.fitdining.api.place;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import kr.co.fitdining.api.support.PostgresTestSupport;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -26,19 +28,24 @@ class ProfileSchemaTest extends PostgresTestSupport {
 		jdbc = new JdbcTemplate(appSource());
 	}
 
+	private final List<Long> placeIds = new ArrayList<>();
+
 	@AfterEach
 	void cleanUp() {
-		jdbc.update("DELETE FROM places");
+		// 컨테이너를 모든 테스트 클래스가 함께 쓰므로 이 클래스가 넣은 행만 지운다
+		placeIds.forEach(id -> jdbc.update("DELETE FROM places WHERE place_id = ?", id));
 		jdbc.update("DELETE FROM user_preferences WHERE user_id = ?", USER_ID);
 		jdbc.update("DELETE FROM auth_users WHERE id = ?", USER_ID);
 	}
 
 	private long insertPlace(String foodType) {
-		return jdbc.queryForObject("""
+		long id = jdbc.queryForObject("""
 				INSERT INTO places (name, category_group, food_type, summary_text, summary_vector, features, analyzed_review_count)
 				VALUES ('테스트 식당', 'RESTAURANT', ?, '테스트 식당. 식당, 한식.', ?::vector,
 				        '[{"code": "PURPOSE_GROUP", "layer": "purpose", "like_count": 7, "dislike_count": 0, "is_label": true}]', 100)
 				RETURNING place_id""", Long.class, foodType, VECTOR);
+		placeIds.add(id);
+		return id;
 	}
 
 	private void insertPersona(long placeId) {
