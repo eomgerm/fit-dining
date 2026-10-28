@@ -24,7 +24,7 @@ type CarouselProps = {
   onIndexChange?: (index: number) => void;
   // 칸 폭·간격(예: "basis-full", "basis-78 pr-3")
   slideClassName?: string;
-  options?: Pick<EmblaOptions, "align" | "loop">;
+  options?: Pick<EmblaOptions, "align" | "loop" | "duration">;
   className?: string;
 };
 
@@ -47,6 +47,22 @@ export function Carousel({
     containScroll: false,
   });
   const slides = Children.toArray(children);
+
+  useEffect(() => {
+    const duration = options?.duration;
+    if (!api || duration === undefined) return;
+    const handlePointerUp = () => {
+      // Embla 8.6.0 DragHandler는 options.duration 대신 힘에 따른 속도를 정한 뒤
+      // pointerUp을 보낸다. 그 차이를 보존하려고 비공식 internalEngine을 사용한다.
+      // ScrollBody.duration/useDuration 및 이벤트 순서는 Embla 업그레이드 시 재확인한다.
+      const { scrollBody } = api.internalEngine();
+      scrollBody.useDuration(scrollBody.duration() * (duration / 25));
+    };
+    api.on("pointerUp", handlePointerUp);
+    return () => {
+      api.off("pointerUp", handlePointerUp);
+    };
+  }, [api, options?.duration]);
 
   useEffect(() => {
     if (!api || !onIndexChange) return;
