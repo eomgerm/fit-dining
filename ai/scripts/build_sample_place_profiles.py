@@ -223,6 +223,7 @@ def main() -> None:
                 r["personas"],
                 r["evidence"],
                 embedding,
+                analyzed_review_count=r["n_reviews"],
             )
         )
         report_places.append(
@@ -236,7 +237,7 @@ def main() -> None:
                 "merged": r["merged"],
                 "dropped_by_gms_failure": r["failed"],
                 "dropped_items_by_check": r["dropped"],
-                "labels": [f["code"] for f in place_feats if f["label"]],
+                "labels": [f["code"] for f in place_feats if f["is_label"]],
                 "card_order": [f["code"] for f in place_feats[:2]],
                 "personas": [
                     {
@@ -252,7 +253,7 @@ def main() -> None:
     code_stats = {}
     for code in FEATURES:
         rows = [
-            (f["like_count"], f["dislike_count"], f["label"])
+            (f["like_count"], f["dislike_count"], f["is_label"])
             for pr in profiles
             for f in pr["features"]
             if f["code"] == code
@@ -298,6 +299,14 @@ def main() -> None:
             g: {c: round(m, 4) for c, m in ms.items()} for g, ms in means.items()
         },
         "unknown_restaurant_codes": unknown,
+        # 근거 3개 이상인 페르소나만 적재하므로(profile-storage D-7) 이 장소들은 페르소나 없이 적재된다
+        "places_without_scored_personas": sum(
+            1
+            for pr in profiles
+            if not any(
+                len(x["review_ids"]) >= profile.MIN_EVIDENCE for x in pr["personas"]
+            )
+        ),
         "persona_similarity": {
             "within_place": similarity_stats(within),
             "nearest_other_place": similarity_stats(nearest_other),

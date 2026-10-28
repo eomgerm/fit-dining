@@ -129,12 +129,12 @@ def test_messages_point_out_standout_features_without_dropping_the_others():
     # 가성비처럼 온보딩 취향인 특징도 페르소나가 있어야 사용자와 맞댈 수 있다.
     # 빼지 않고, 같은 특징이라도 이 장소의 메뉴·상황으로 구별되게 쓰게 한다
     feature_rows = [
-        {"code": "GOOD_MUSIC", "like_count": 30, "dislike_count": 0, "label": True},
+        {"code": "GOOD_MUSIC", "like_count": 30, "dislike_count": 0, "is_label": True},
         {
             "code": "VALUE_FOR_MONEY",
             "like_count": 9,
             "dislike_count": 0,
-            "label": False,
+            "is_label": False,
         },
     ]
     messages, _ = build_messages("요약", EVIDENCE, feature_rows)

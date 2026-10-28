@@ -127,7 +127,7 @@ def build_messages(
 
     mixed = [r for r, es in by_review.items() if any(e["direction"] == -1 for e in es)]
     liked = [r for r in by_review if r not in mixed]
-    standout = [f["code"] for f in feature_rows if f["label"]]
+    standout = [f["code"] for f in feature_rows if f["is_label"]]
     votes = ", ".join(
         f"{k} {n}건" for k, n in sorted(keywords.items(), key=lambda kv: -kv[1])
     )

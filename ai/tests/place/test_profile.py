@@ -1,4 +1,10 @@
-from fit_ai.place.profile import count, features, group_means, summary_text
+from fit_ai.place.profile import (
+    build_profile,
+    count,
+    features,
+    group_means,
+    summary_text,
+)
 
 
 def ev(review_id, code, direction=1, source="naver_text"):
@@ -58,22 +64,22 @@ def test_label_needs_three_majority_and_above_group_mean():
     }
     means = {"PURPOSE_TALK": 0.158, "PRETTY_SPACE": 0.292, "SPACIOUS_SEATING": 0.01}
     out = {f["code"]: f for f in features(counts, 100, means)}
-    assert out["PURPOSE_TALK"]["label"] is True
-    assert out["PRETTY_SPACE"]["label"] is False
-    assert out["LIVELY"]["label"] is False
-    assert out["SPACIOUS_SEATING"]["label"] is False
+    assert out["PURPOSE_TALK"]["is_label"] is True
+    assert out["PRETTY_SPACE"]["is_label"] is False
+    assert out["LIVELY"]["is_label"] is False
+    assert out["SPACIOUS_SEATING"]["is_label"] is False
     assert out["PURPOSE_TALK"] == {
         "code": "PURPOSE_TALK",
         "layer": "purpose",
         "like_count": 30,
         "dislike_count": 0,
-        "label": True,
+        "is_label": True,
     }
 
 
 def test_label_needs_at_least_three_reviews_even_above_the_mean():
     out = features({"COZY": (2, 0)}, 10, {"COZY": 0.01})
-    assert out[0]["label"] is False
+    assert out[0]["is_label"] is False
 
 
 def test_features_are_ordered_labels_then_base_then_rest_by_ratio_to_mean():
@@ -113,7 +119,7 @@ def test_place_exactly_at_the_group_mean_gets_no_label():
     }
     means = group_means(rates)["카페"]
     out = features({"COZY": (5, 0)}, 100, means)
-    assert out[0]["label"] is False
+    assert out[0]["is_label"] is False
 
 
 def test_summary_text_uses_representative_menus_first_and_no_price():
@@ -178,3 +184,11 @@ def test_summary_text_skips_missing_menu_and_facilities():
         "menu": None,
     }
     assert summary_text(place) == "카페. 카페, 카페. 역삼역 근처."
+
+
+def test_profile_keeps_analyzed_review_count_for_the_label_denominator():
+    # 네이버 리뷰를 저장하지 않아 적재 뒤에는 이 값을 다시 구할 수 없다(profile-storage D-8)
+    out = build_profile(
+        "1", None, "카페.", [0.1], [], [], [], {}, analyzed_review_count=37
+    )
+    assert out["analyzed_review_count"] == 37

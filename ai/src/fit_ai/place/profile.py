@@ -84,7 +84,7 @@ def features(
             "layer": FEATURES[code].layer,
             "like_count": like,
             "dislike_count": dislike,
-            "label": label,
+            "is_label": label,
         }
         for *_, code, like, dislike, label in rows
     ]
@@ -120,11 +120,15 @@ def build_profile(
     personas: list[dict],
     evidence: list[Evidence],
     embedding: dict,
+    *,
+    analyzed_review_count: int,
 ) -> dict:
     return {
         "schema": SCHEMA,
-        "place_id": int(place_id),  # ERD places.place_id(bigint)
+        # 네이버 장소 ID다. 첫 적재 때 서비스 ID(places.place_id)로 바꾼다(profile-storage D-12)
+        "place_id": int(place_id),
         "food_type": food_type,
+        "analyzed_review_count": analyzed_review_count,
         "embedding": embedding,
         "summary": {"text": summary, "vector": summary_vector},
         "features": feature_rows,
