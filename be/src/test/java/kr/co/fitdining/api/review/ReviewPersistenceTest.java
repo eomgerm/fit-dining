@@ -344,7 +344,7 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 					List.of("NOT_A_TAG"));
 
 			for (List<String> tagCodes : invalid) {
-				assertThatThrownBy(() -> service.create(1, user, request(TODAY, tagCodes, null)))
+				assertThatThrownBy(() -> service.create(5, user, request(TODAY, tagCodes, null)))
 						.as(tagCodes.toString()).isInstanceOf(InvalidReasonTagsException.class);
 			}
 
@@ -512,12 +512,12 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 		void list_tagLabel_followsPlaceCategory() {
 			String user = createUsers(1).getFirst();
 			ReviewCreateRequest solo = request(LocalDate.ofInstant(clock.instant, SEOUL), List.of("PURPOSE_SOLO_GOOD"), null);
-			service.create(1, user, solo);
-			service.create(6, user, solo);
+			service.create(5, user, solo);
+			service.create(2, user, solo);
 
-			assertThat(service.list(1, null, null).items().getFirst().tags()).extracting(TagView::label)
+			assertThat(service.list(5, null, null).items().getFirst().tags()).extracting(TagView::label)
 					.containsExactly("혼밥하기 좋았어요");
-			assertThat(service.list(6, null, null).items().getFirst().tags()).extracting(TagView::label)
+			assertThat(service.list(2, null, null).items().getFirst().tags()).extracting(TagView::label)
 					.containsExactly("혼술하기 좋았어요");
 		}
 
