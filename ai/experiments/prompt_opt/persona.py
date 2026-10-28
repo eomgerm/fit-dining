@@ -1,0 +1,407 @@
+"""장소 페르소나 생성 프롬프트를 GEPA로 최적화한다(S15P31A302-106).
+
+평가셋은 data/persona.jsonl이다. 실제 네이버 리뷰가 아닌 합성 장소라 레포에 둔다.
+한 행이 장소 하나다. 리뷰 번호는 순서대로 r1, r2 …이고, 항목은
+[칸, 코드, 방향, 리뷰 구절, 정리 문장]이다. 키워드 투표는 {키워드: 개수}다.
+
+채점은 둘이다.
+- persona_rules(코드): 버려진 페르소나, like와 인용 리뷰 방향, 근거 특징을 빠짐없이 다뤘는지, 형식
+- grounded(LLM judge): 문장을 인용 리뷰가 뒷받침하는지, 근거에 없는 내용을 단정했는지,
+  이 장소에만 맞는 구체적인 설명인지, 페르소나끼리 겹치는지
+
+    python persona.py              # 최적화
+    python persona.py baseline 2   # 지금 프롬프트를 2번 돌려 split·slice별 점수와 낮은 것
+    python persona.py show r-001   # 평가셋 개수와 그 장소의 모델 입력(GMS 안 부름)
+"""
+
+import json
+import re
+import sys
+from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
+from functools import cache
+from pathlib import Path
+
+import mlflow
+from common import JUDGE_MODEL, optimize, setup
+from mlflow.entities import Feedback
+from mlflow.genai.judges import make_judge
+from mlflow.genai.scorers import scorer
+
+from fit_ai import gms
+from fit_ai.features import FEATURES
+from fit_ai.place import persona as ps
+from fit_ai.place.extract import SLOTS
+from fit_ai.place.profile import Evidence
+from fit_ai.place.rules import KEYWORD_CODES
+
+NAME = "place-persona"
+REFLECTION_MODEL = "openai:/gpt-6.1-sol"
+# 한 번 평가에 생성 1번과 judge 1번이 든다. val 전체 평가 한 번이 102번이다
+MAX_METRIC_CALLS = 1000
+TEST_RUNS = 3
+DATA = Path(__file__).parent / "data" / "persona.jsonl"
+SPLITS = ("train", "val", "test")
+# 반성 한 번에 보는 장소 수. 페르소나 출력이 길어 107(6개)보다 적게 둔다
+REFLECTION_MINIBATCH = 4
+# 리뷰 두 개 이상에 나온 (코드, 방향)은 그 방향 페르소나가 다뤄야 한다
+COVER_MIN = 2
+
+REFLECTION_TEMPLATE = """너는 프롬프트 개선 담당이다. 아래 지시문을 받은 작은 모델(gpt-4o-mini)이
+음식점·카페·술집의 리뷰 근거를 읽고 "이 장소를 좋아할(또는 아쉬워할) 손님" 페르소나를
+2~7개 만든다. 페르소나 문장은 추천 이유로 사용자 화면에 나간다.
+
+현재 지시문:
+```
+<curr_param>
+```
+
+이 지시문으로 처리한 장소 입력, 모델 출력, 채점 피드백:
+```
+<side_info>
+```
+
+채점 기준:
+- persona_rules(코드): 버려진 페르소나가 없는가, like true는 좋았어요·false는 아쉬웠어요
+  근거가 있는 리뷰를 인용했는가, 리뷰 두 개 이상에 나온 특징을 그 방향 페르소나가 다뤘는가,
+  name 2~4단어·description과 reason 각 3문장인가.
+- grounded(judge): 문장마다 인용한 리뷰 근거가 뒷받침하는가, 근거에 없는 메뉴·시간대·동행·
+  공간을 단정하지 않았는가, 이 장소의 근거로 구체적인가, 페르소나끼리 겹치지 않는가.
+
+모델 출력 뒤에 붙는 코드 규칙(지시문으로 바꿀 수 없다):
+- review_ids가 비었거나 입력에 없는 번호가 있으면 그 페르소나가 버려진다.
+- 문장이 리뷰 원문과 연속 20자 이상 겹치거나 따옴표 안 구절이 원문에 있으면 버려진다.
+- 개수가 2~7개를 벗어나면 다시 요청하고, 또 벗어나면 그 장소는 페르소나가 없다.
+
+할 일:
+1. 낮은 점수의 원인을 일반적인 오류 유형으로 묶는다. 장소 하나에만 해당하는 원인으로 보지 않는다.
+2. 그 오류 유형을 막는 일반 규칙을 지시문에 반영한다. 맞게 동작하는 기존 규칙은 유지하고
+   필요한 부분만 고치거나 더한다.
+3. 새 지시문 전체를 ``` 블록 하나에 담아 출력한다.
+
+제약:
+- 위 장소의 메뉴·근거 문장·페르소나 이름을 지시문에 그대로, 또는 단어만 바꿔 넣지 않는다.
+  예시가 필요하면 위 사례와 다른 새 장소로 쓴다.
+- 특정 장소의 정답을 고정하는 규칙을 쓰지 않는다. 처음 보는 장소에도 통하는 원칙으로 쓴다.
+- 예시는 모두 합쳐 5개 이하로 둔다.
+- 지시문은 2,500자 이내로 쓴다. 작은 모델은 길고 복잡한 지시를 잘 따르지 못한다.
+- 응답의 JSON 스키마는 실행할 때 따로 강제되므로 출력 형식을 길게 설명하지 않는다."""
+
+JUDGE_INSTRUCTIONS = """너는 장소 페르소나 채점자다. {{ inputs }}의 place_input은 생성 모델이 받은 입력이다.
+장소 요약(참고용), 두드러진 특징, 네이버 키워드 투표, 리뷰 번호(r1, r2 …)별 근거가 있다.
+{{ outputs }}의 personas가 생성 결과이고, 각 페르소나는 name, description, reason, like,
+review_ids(근거로 든 리뷰 번호)를 가진다. dropped는 코드 검사에서 버려진 페르소나라 채점하지 않는다.
+
+페르소나마다 다음 네 항목을 통과·실패로 판정한다.
+A. 뒷받침: description과 reason의 주장 하나하나를 그 페르소나의 review_ids에 든 리뷰 근거가
+   뒷받침한다. 키워드 투표와 두드러진 특징은 보조 근거로 인정한다. 장소 요약의 업종·메뉴 이름은
+   배경으로 써도 되지만, 요약에만 있는 사실을 손님이 겪은 평가처럼 쓰면 실패다.
+B. 지어내기 없음: 입력 어디에도 없는 메뉴, 맛, 시간대, 동행, 공간, 가격, 감정을 사실처럼
+   단정하지 않는다. "~일 것이다"처럼 짐작으로 쓴 것도 근거가 없으면 실패다.
+C. 구체성: 이 장소의 메뉴나 방문 상황 근거를 들어, 다른 가게에도 그대로 붙는 흐린 설명이 아니다.
+D. 겹침 없음: 같은 장소의 다른 페르소나와 손님 유형과 근거가 거의 같지 않다.
+
+value는 통과한 (페르소나, 항목) 수를 전체 (페르소나 수 × 4)로 나눈 0~1 값이다.
+personas가 비었으면 0이다.
+rationale에는 실패한 것만 "이름 / 항목 / 이유" 한 줄씩 쓴다. 이유에는 어느 주장이 어느 근거와
+어긋나는지 구체적으로 적는다. 모두 통과했으면 "모두 통과"라고 쓴다."""
+
+_SENTENCE_END = re.compile(r"[.!?。](?=\s|$)")
+
+
+def _evidence(row: dict) -> tuple[list[Evidence], dict[str, str]]:
+    """(근거 행, 리뷰 번호 → 본문). 본문은 그 리뷰 구절을 이어 붙여 대신한다."""
+    rows, bodies = [], {}
+    for i, review in enumerate(row["reviews"], 1):
+        rid = f"r{i}"
+        for slot, code, direction, quote, text in review["items"]:
+            rows.append(
+                Evidence(
+                    review_id=rid,
+                    source=review["source"],
+                    code=code,
+                    direction=direction,
+                    slot=slot,
+                    quote=quote,
+                    text=text,
+                )
+            )
+        if review["source"] == "naver_text":
+            bodies[rid] = " ".join(it[3] for it in review["items"])
+    # 키워드만 있는 리뷰는 번호를 받지 않는다(build_messages가 개수로만 센다)
+    for k, (kw, n) in enumerate(row["keywords"].items()):
+        rows += [
+            Evidence(
+                review_id=f"k{k}-{j}",
+                source="naver_keyword",
+                code=KEYWORD_CODES[kw],
+                direction=1,
+                slot=None,
+                quote=kw,
+                text=None,
+            )
+            for j in range(n)
+        ]
+    return rows, bodies
+
+
+def _features(row: dict) -> list[dict]:
+    return [{"code": c, "label": True} for c in row["standout"]]
+
+
+def _check(row: dict) -> None:
+    """합성 데이터가 실제 파이프라인에서 나올 수 있는 모양인지."""
+    rid = row["id"]
+    if row["split"] not in SPLITS or not row["reviews"]:
+        raise ValueError(f"{rid}: split이 틀렸거나 리뷰가 없다")
+    if any(c not in FEATURES for c in row["standout"]):
+        raise ValueError(f"{rid}: 없는 두드러진 특징 코드")
+    if any(kw not in KEYWORD_CODES for kw in row["keywords"]):
+        raise ValueError(f"{rid}: 코드 대응표에 없는 키워드")
+    for review in row["reviews"]:
+        source, items = review["source"], review["items"]
+        if source not in ("naver_text", "app_text", "app_tag") or not items:
+            raise ValueError(f"{rid}: 리뷰 출처가 틀렸거나 항목이 없다")
+        for slot, code, direction, quote, text in items:
+            ok = direction in (1, -1) and bool(quote)
+            if source == "app_tag":
+                ok = ok and slot is None and code in FEATURES and text is None
+            else:  # 3단계 규칙: 그 칸의 코드면 text는 null, 코드가 없으면 text가 있다
+                ok = ok and slot in SLOTS and (code is None) == bool(text)
+                ok = ok and (code is None or code in SLOTS[slot])
+            if not ok:
+                raise ValueError(f"{rid}: 항목 모양이 3단계 규칙과 다르다 {quote}")
+
+
+@cache
+def load_all() -> dict[str, dict]:
+    rows = [json.loads(line) for line in DATA.read_text(encoding="utf-8").splitlines()]
+    for row in rows:
+        _check(row)
+    by_id = {r["id"]: r for r in rows}
+    if len(by_id) != len(rows):
+        raise ValueError("id가 겹친다")
+    return by_id
+
+
+def load(split: str | None = None) -> list[dict]:
+    return [r for r in load_all().values() if split is None or r["split"] == split]
+
+
+def _messages(row: dict) -> tuple[list[dict], dict[str, str], dict[str, str]]:
+    evidence, bodies = _evidence(row)
+    messages, ids = ps.build_messages(row["summary"], evidence, _features(row))
+    return messages, ids, bodies
+
+
+def _call(system: str, row: dict) -> dict | None:
+    """검사를 통과한 personas와, 버려진 페르소나의 이름과 이유(dropped)."""
+    messages, ids, bodies = _messages(row)
+    messages[0] = {"role": "system", "content": system}
+
+    def parse(resp: dict) -> dict:
+        kept = ps.parse_personas(resp, ids, list(bodies.values()))
+        names = {p["name"] for p in kept}
+        reviews = "\n".join(bodies.values())
+        dropped = []
+        for p in resp["personas"]:
+            if p["name"] in names:
+                continue
+            if not p["review_ids"] or any(r not in ids for r in p["review_ids"]):
+                why = f"없는 리뷰 번호 {p['review_ids']}"
+            else:
+                fields = [
+                    f
+                    for f in ("name", "description", "reason")
+                    if ps._copied(p[f], reviews)
+                ]
+                why = f"리뷰 원문을 옮겨 적음({', '.join(fields)})"
+            dropped.append(f"{p['name']}: {why}")
+        return {"personas": kept, "dropped": dropped}
+
+    return gms.call_json(
+        messages, parse, response_format=ps.RESPONSE_FORMAT, timeout=ps.TIMEOUT
+    )
+
+
+def predict(place: str, place_input: str) -> dict | None:
+    """MLflow가 inputs 키를 인자로 넘긴다. place_input은 judge에 보여 주려고 둔 것이다."""
+    system = mlflow.genai.load_prompt(f"prompts:/{NAME}@latest").format()
+    return _call(system, load_all()[place])
+
+
+def _sentences(text: str) -> int:
+    return len(_SENTENCE_END.findall(text.strip()))
+
+
+def rules(outputs: dict | None, row: dict) -> tuple[float, str]:
+    """코드로 재는 점수와 이유. 버려짐·방향·특징 누락·형식 네 비율의 평균이다."""
+    if outputs is None:
+        return 0.0, "응답이 출력 검사(JSON, 개수 2~7개)를 두 번 다 통과하지 못했다"
+    kept, dropped = outputs["personas"], outputs["dropped"]
+    why = [f"버려짐: {d}" for d in dropped]
+    # 리뷰 번호 → 그 리뷰의 (코드, 방향)과 방향
+    marks: dict[str, set[tuple[str | None, int]]] = {}
+    for i, review in enumerate(row["reviews"], 1):
+        marks[f"r{i}"] = {(code, d) for _, code, d, _, _ in review["items"]}
+
+    polarity_ok = 0
+    for p in kept:
+        want = 1 if p["like"] else -1
+        if any(d == want for r in p["review_ids"] for _, d in marks[r]):
+            polarity_ok += 1
+        else:
+            mood = "좋았어요" if p["like"] else "아쉬웠어요"
+            why.append(
+                f"방향: {p['name']}(like {p['like']})가 {mood} 근거 없는 리뷰만 들었다"
+            )
+
+    support: dict[tuple[str, int], list[str]] = defaultdict(list)
+    for r, ms in marks.items():
+        for code, d in ms:
+            if code:
+                support[(code, d)].append(r)
+    needed = {k: rs for k, rs in support.items() if len(rs) >= COVER_MIN}
+    covered = 0
+    for (code, d), rs in needed.items():
+        if any(p["like"] == (d == 1) and set(p["review_ids"]) & set(rs) for p in kept):
+            covered += 1
+        else:
+            mood = "좋았어요" if d == 1 else "아쉬웠어요"
+            why.append(
+                f"빠짐: {FEATURES[code].label}({mood}, {', '.join(rs)})을 다룬 페르소나가 없다"
+            )
+
+    format_ok = 0
+    for p in kept:
+        bad = []
+        if not 2 <= len(p["name"].split()) <= 4:
+            bad.append("name이 2~4단어가 아니다")
+        for f in ("description", "reason"):
+            if _sentences(p[f]) != 3:
+                bad.append(f"{f}가 {_sentences(p[f])}문장이다")
+        if bad:
+            why.append(f"형식: {p['name']}: {', '.join(bad)}")
+        else:
+            format_ok += 1
+
+    n = len(kept)
+    parts = [
+        n / (n + len(dropped)) if n + len(dropped) else 0.0,
+        polarity_ok / n if n else 0.0,
+        covered / len(needed) if needed else 1.0,
+        format_ok / n if n else 0.0,
+    ]
+    return sum(parts) / len(parts), "\n".join(why) or "모두 통과"
+
+
+@scorer
+def persona_rules(inputs, outputs) -> Feedback:
+    score, why = rules(outputs, load_all()[inputs["place"]])
+    return Feedback(value=score, rationale=why)
+
+
+grounded = make_judge(
+    name="grounded",
+    instructions=JUDGE_INSTRUCTIONS,
+    model=JUDGE_MODEL,
+    feedback_value_type=float,
+    generate_rationale_first=True,
+)
+
+
+def _inputs(row: dict) -> dict:
+    """judge가 생성 모델과 같은 입력을 보게 렌더링한 문장을 함께 넘긴다."""
+    return {"place": row["id"], "place_input": _messages(row)[0][1]["content"]}
+
+
+def _judge(inputs: dict, outputs: dict | None) -> tuple[float, str]:
+    if outputs is None or not outputs["personas"]:
+        return 0.0, "페르소나 없음"
+    fb = grounded(inputs=inputs, outputs=outputs)
+    return float(fb.value), fb.rationale
+
+
+def evaluate(system: str, rows: list[dict], runs: int) -> None:
+    """split·slice별 두 점수와, 둘 중 하나라도 0.8 미만인 장소의 이유를 출력한다."""
+    by = defaultdict(list)  # (run, group) → (rules, grounded)
+    low = defaultdict(list)
+
+    def one(row):
+        inputs = _inputs(row)
+        out = _call(system, row)
+        return rules(out, row), _judge(inputs, out)
+
+    with ThreadPoolExecutor(8) as pool:
+        for run in range(runs):
+            for row, ((rs, rwhy), (gs, gwhy)) in zip(
+                rows, pool.map(one, rows), strict=True
+            ):
+                for group in ("all", row["split"], row["slice"]):
+                    by[(run, group)].append((rs, gs))
+                if min(rs, gs) < 0.8:
+                    low[row["id"]].append(
+                        f"run{run} rules {rs:.2f} grounded {gs:.2f}\n"
+                        f"      {rwhy}\n      {gwhy}".replace("\n", "\n      ")
+                    )
+    print(
+        "group               "
+        + "  ".join(f"run{r} rules/grounded" for r in range(runs))
+    )
+    for g in dict.fromkeys(g for _, g in by):
+        cells = []
+        for r in range(runs):
+            s = by[(r, g)]
+            rs = sum(x for x, _ in s) / len(s)
+            gs = sum(y for _, y in s) / len(s)
+            cells.append(f"{rs:.3f} / {gs:.3f} (n={len(s)})")
+        print(f"{g:<20}" + "  ".join(cells))
+    print()
+    for row in rows:
+        for w in low.get(row["id"], []):
+            print(f"[{row['split']}] {row['id']} {row['slice']}  {w}")
+
+
+def _records(split: str) -> list[dict]:
+    return [{"inputs": _inputs(r), "expectations": {}} for r in load(split)]
+
+
+def show(rid: str | None) -> None:
+    counts = defaultdict(int)
+    for r in load():
+        counts[(r["split"], r["slice"])] += 1
+    for split in SPLITS:
+        print(split, sum(n for (s, _), n in counts.items() if s == split))
+    for (s, sl), n in sorted(counts.items()):
+        print(f"  {s:<6}{sl:<20}{n}")
+    if rid:
+        print()
+        print(_inputs(load_all()[rid])["place_input"])
+
+
+if __name__ == "__main__":
+    if sys.argv[1:2] == ["show"]:
+        show(sys.argv[2] if len(sys.argv) > 2 else None)
+        sys.exit()
+    setup("prompt-opt")
+    if sys.argv[1:2] == ["baseline"]:
+        evaluate(ps._SYSTEM, load(), int(sys.argv[2]) if len(sys.argv) > 2 else 1)
+        sys.exit()
+    result = optimize(
+        NAME,
+        ps._SYSTEM,
+        predict,
+        _records("train"),
+        [persona_rules, grounded],
+        max_metric_calls=MAX_METRIC_CALLS,
+        reflection_model=REFLECTION_MODEL,
+        valset=_records("val"),
+        reflection_prompt_template=REFLECTION_TEMPLATE,
+        reflection_minibatch_size=REFLECTION_MINIBATCH,
+    )
+    print(f"val 점수 {result.initial_eval_score} → {result.final_eval_score}")
+    optimized = result.optimized_prompts[0]
+    print(optimized.uri)
+    for label, system in [("before", ps._SYSTEM), ("after", optimized.format())]:
+        print(f"\n== test {label} ==")
+        evaluate(system, load("test"), TEST_RUNS)

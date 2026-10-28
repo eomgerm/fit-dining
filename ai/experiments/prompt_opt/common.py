@@ -42,7 +42,15 @@ def setup(experiment: str) -> None:
 
 
 def optimize(
-    name, template, predict_fn, train, scorers, *, max_metric_calls: int, **gepa_kwargs
+    name,
+    template,
+    predict_fn,
+    train,
+    scorers,
+    *,
+    max_metric_calls: int,
+    reflection_model: str = REFLECTION_MODEL,
+    **gepa_kwargs,
 ):
     """프롬프트를 등록하고 GEPA로 한 번 최적화한다.
 
@@ -59,7 +67,7 @@ def optimize(
         train_data=train,
         prompt_uris=[prompt.uri],
         optimizer=GepaPromptOptimizer(
-            reflection_model=REFLECTION_MODEL,
+            reflection_model=reflection_model,
             max_metric_calls=max_metric_calls,
             gepa_kwargs=gepa_kwargs,
         ),

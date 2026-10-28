@@ -75,6 +75,14 @@ uv run --with mlflow==3.17.2 mlflow ui --backend-store-uri sqlite:///$HOME/fit-a
 
 judge·반성 모델과 연결 방식은 `experiments/prompt_opt/common.py`에 있습니다. GMS 호출 수는 스크립트의 `MAX_METRIC_CALLS`로 제한합니다.
 
+장소 페르소나(`persona.py`)는 평가 한 번에 생성과 judge를 한 번씩 부릅니다. 먼저 `baseline`으로 지금 프롬프트 점수를 봅니다. 채점 규칙 테스트는 mlflow가 필요해 `tests/` 밖에 있습니다.
+
+```bash
+uv run --env-file .env --with mlflow==3.17.2 --with "gepa[full]==0.1.4" \
+  python experiments/prompt_opt/persona.py baseline 1
+uv run --with mlflow==3.17.2 --with "gepa[full]==0.1.4" pytest experiments/prompt_opt
+```
+
 ## 임베딩 서버(Modal)
 
 `server/embed.py`가 `POST /embed`(`docs/infra/design.md` 12.3절)를 Modal GPU(T4, 모자라면 L4·A10)에서 띄웁니다. 인코딩은 `fit_ai.embedding`을 그대로 씁니다. 모델 가중치는 고정 리비전으로 이미지에 넣습니다.
