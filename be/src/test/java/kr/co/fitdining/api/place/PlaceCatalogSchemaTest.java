@@ -12,11 +12,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Stream;
 import kr.co.fitdining.api.support.PostgresTestSupport;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -200,8 +205,8 @@ class PlaceCatalogSchemaTest extends PostgresTestSupport {
 		}
 
 		@Test
-		@DisplayName("제약_PK와문서의이름붙은제약뿐이다")
-		void constraints_onlyPrimaryKeyAndDocumented() {
+		@DisplayName("제약_8개테이블_PK와문서의이름붙은제약뿐이다")
+		void constraints_eightTables_onlyPrimaryKeyAndDocumented() {
 			for (String table : TABLES) {
 				Map<String, String> actual = new HashMap<>();
 				catalog.query("""
@@ -224,7 +229,7 @@ class PlaceCatalogSchemaTest extends PostgresTestSupport {
 
 		@Test
 		@DisplayName("PK_8개테이블모두_단수형id열하나다")
-		void primaryKeys_singularIdColumn() {
+		void primaryKeys_eightTables_singularIdColumn() {
 			for (String table : TABLES) {
 				assertThat(catalog.queryForObject("""
 						SELECT pg_get_constraintdef(oid) FROM pg_constraint
@@ -234,8 +239,8 @@ class PlaceCatalogSchemaTest extends PostgresTestSupport {
 		}
 
 		@Test
-		@DisplayName("UNIQUE제약_문서의열순서다")
-		void uniqueConstraints_documentedColumns() {
+		@DisplayName("UNIQUE제약_정의는_문서의열순서다")
+		void uniqueConstraints_definition_documentedColumnOrder() {
 			UNIQUE_COLUMNS.forEach((name, definition) -> assertThat(catalog.queryForObject(
 					"SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = ?", String.class, name))
 					.as(name).isEqualTo(definition));
@@ -243,7 +248,7 @@ class PlaceCatalogSchemaTest extends PostgresTestSupport {
 
 		@Test
 		@DisplayName("FK_자식테이블의place_id가_places를가리키고_지우면함께지운다")
-		void foreignKeys_cascadeFromPlaces() {
+		void foreignKeys_childTables_cascadeFromPlaces() {
 			for (String child : CHILDREN) {
 				Map<String, Object> fk = catalog.queryForMap("""
 						SELECT confrelid::regclass::text AS target, confdeltype::text AS on_delete,
@@ -257,8 +262,8 @@ class PlaceCatalogSchemaTest extends PostgresTestSupport {
 		}
 
 		@Test
-		@DisplayName("인덱스_PK와UNIQUE와문서의CREATE_INDEX뿐이다")
-		void indexes_onlyKeysAndDocumented() {
+		@DisplayName("인덱스_8개테이블_PK와UNIQUE와문서의CREATE_INDEX뿐이다")
+		void indexes_eightTables_onlyKeysAndDocumented() {
 			for (String table : TABLES) {
 				Set<String> expected = new HashSet<>();
 				expected.add(table + "_pkey");
@@ -278,8 +283,8 @@ class PlaceCatalogSchemaTest extends PostgresTestSupport {
 		}
 
 		@Test
-		@DisplayName("자식테이블_모두첫열이place_id인인덱스가있다")
-		void children_haveIndexLeadingWithPlaceId() {
+		@DisplayName("자식테이블_인덱스는_첫열이place_id인것이있다")
+		void childTables_indexes_leadWithPlaceId() {
 			for (String child : CHILDREN) {
 				assertThat(catalog.queryForObject("""
 						SELECT count(*) FROM pg_index i
@@ -290,8 +295,8 @@ class PlaceCatalogSchemaTest extends PostgresTestSupport {
 		}
 
 		@Test
-		@DisplayName("외부리뷰테이블_만들지않는다")
-		void reviewSnapshotTables_absent() {
+		@DisplayName("외부리뷰테이블_마이그레이션은_만들지않는다")
+		void reviewSnapshotTables_migration_notCreated() {
 			for (String table : List.of("place_naver_snapshots", "place_review_photos")) {
 				assertThat(catalog.queryForObject("SELECT to_regclass('public.' || ?)::text", String.class, table))
 						.as(table).isNull();
@@ -304,8 +309,27 @@ class PlaceCatalogSchemaTest extends PostgresTestSupport {
 	class Places {
 
 		@Test
-		@DisplayName("장소_place_id없이넣으면_발급되고_필수열만이면_배열은비고시각은트랜잭션now다")
-		void insert_requiredOnly_issuesIdAndDefaults() throws SQLException {
+		@DisplayName("장소_place_id없이넣으면_place_id가발급된다")
+		void insert_withoutPlaceId_issuesId() {
+			assertThat(insertPlace(naverId(), 37.5, 127.0)).isPositive();
+		}
+
+		@Test
+		@DisplayName("장소_필수열만넣으면_배열열은빈배열이다")
+		void insert_requiredOnly_arraysEmpty() {
+			long placeId = insertPlace(naverId(), 37.5, 127.0);
+
+			Map<String, Object> place = app.queryForMap("SELECT cardinality(category_code_path) AS category_code_path,"
+					+ " cardinality(extra_links) AS extra_links, cardinality(facilities) AS facilities,"
+					+ " cardinality(payment_methods) AS payment_methods, cardinality(keywords) AS keywords"
+					+ " FROM places WHERE place_id = ?", placeId);
+			assertThat(place).containsOnly(Map.entry("category_code_path", 0), Map.entry("extra_links", 0),
+					Map.entry("facilities", 0), Map.entry("payment_methods", 0), Map.entry("keywords", 0));
+		}
+
+		@Test
+		@DisplayName("장소_필수열만넣으면_생성수정시각은그트랜잭션의now다")
+		void insert_requiredOnly_timestampsAreTransactionNow() throws SQLException {
 			try (Connection connection = appSource().getConnection()) {
 				connection.setAutoCommit(false);
 				var sql = connection.createStatement();
@@ -313,16 +337,10 @@ class PlaceCatalogSchemaTest extends PostgresTestSupport {
 				rs.next();
 				Timestamp now = rs.getTimestamp(1);
 				rs = sql.executeQuery("INSERT INTO places (naver_place_id, name, category_group, lat, lng) VALUES ('"
-						+ naverId() + "', '이름', 'CAFE', 37.5, 127.0) RETURNING place_id, created_at, updated_at,"
-						+ " category_code_path, extra_links, facilities, payment_methods, keywords");
+						+ naverId() + "', '이름', 'CAFE', 37.5, 127.0) RETURNING created_at, updated_at");
 				rs.next();
-				assertThat(rs.getLong("place_id")).isPositive();
 				assertThat(rs.getTimestamp("created_at")).isEqualTo(now);
 				assertThat(rs.getTimestamp("updated_at")).isEqualTo(now);
-				for (String column : List.of("category_code_path", "extra_links", "facilities", "payment_methods",
-						"keywords")) {
-					assertThat((Object[]) rs.getArray(column).getArray()).as(column).isEmpty();
-				}
 				connection.commit();
 			}
 		}
@@ -335,26 +353,40 @@ class PlaceCatalogSchemaTest extends PostgresTestSupport {
 		}
 
 		@Test
-		@DisplayName("장소_같은naver_place_id두번이나빈문자열은_거부된다")
-		void insert_duplicateOrEmptyNaverId_rejected() {
+		@DisplayName("장소_같은naver_place_id를두번넣으면_거부된다")
+		void insert_duplicateNaverId_rejected() {
 			String naverId = naverId();
 			insertPlace(naverId, 37.5, 127.0);
+
 			assertRejected("23505", insertPlaceSql(), naverId, 37.5, 127.0);
-			assertRejected("23514", insertPlaceSql(), "", 37.5, 127.0);
 		}
 
 		@Test
-		@DisplayName("장소_업종이나좌표범위밖은_거부되고_같은좌표의다른장소는받아들인다")
-		void insert_categoryAndCoordinates_checked() {
-			assertRejected("23514", "INSERT INTO places (naver_place_id, name, category_group, lat, lng)"
-					+ " VALUES (?, '이름', 'PUB', 37.5, 127.0)", naverId());
-			assertRejected("23514", insertPlaceSql(), naverId(), 90.0001, 127.0);
-			assertRejected("23514", insertPlaceSql(), naverId(), -90.0001, 127.0);
-			assertRejected("23514", insertPlaceSql(), naverId(), 37.5, 180.0001);
-			assertRejected("23514", insertPlaceSql(), naverId(), 37.5, -180.0001);
+		@DisplayName("장소_빈문자열naver_place_id는_거부된다")
+		void insert_emptyNaverId_rejected() {
+			assertRejected("23514", insertPlaceSql(), "", 37.5, 127.0);
+		}
 
+		@ParameterizedTest(name = "{0} {1} {2}")
+		@CsvSource({
+				"PUB, 37.5, 127.0",
+				"CAFE, 90.0001, 127.0",
+				"CAFE, -90.0001, 127.0",
+				"CAFE, 37.5, 180.0001",
+				"CAFE, 37.5, -180.0001"
+		})
+		@DisplayName("장소_업종이나좌표가범위밖이면_거부된다")
+		void insert_outOfRange_rejected(String categoryGroup, double lat, double lng) {
+			assertRejected("23514", "INSERT INTO places (naver_place_id, name, category_group, lat, lng)"
+					+ " VALUES (?, '이름', ?, ?, ?)", naverId(), categoryGroup, lat, lng);
+		}
+
+		@Test
+		@DisplayName("장소_좌표가같은서로다른장소는_모두받아들인다")
+		void insert_sameCoordinates_bothAccepted() {
 			long first = insertPlace(naverId(), 37.123456, 127.654321);
 			long second = insertPlace(naverId(), 37.123456, 127.654321);
+
 			assertThat(first).isNotEqualTo(second);
 		}
 	}
@@ -368,75 +400,112 @@ class PlaceCatalogSchemaTest extends PostgresTestSupport {
 		void insert_duplicateDay_rejected() {
 			long placeId = insertPlace(naverId(), 37.5, 127.0);
 			app.update("INSERT INTO place_hours (place_id, day_of_week) VALUES (?, 'MON')", placeId);
+
 			assertRejected("23505", "INSERT INTO place_hours (place_id, day_of_week) VALUES (?, 'MON')", placeId);
 		}
 
-		@Test
-		@DisplayName("영업시간_요일과시각과휴무와브레이크모양이틀리면_거부된다")
-		void insert_invalidRows_rejected() {
+		@ParameterizedTest(name = "{0}")
+		@MethodSource("kr.co.fitdining.api.place.PlaceCatalogSchemaTest#invalidHours")
+		@DisplayName("영업시간_요일시각휴무브레이크모양이틀리면_거부된다")
+		void insert_invalidRow_rejected(String scenario, String columns, String values) {
 			long placeId = insertPlace(naverId(), 37.5, 127.0);
-			assertRejected("23514", "INSERT INTO place_hours (place_id, day_of_week) VALUES (?, 'HOL')", placeId);
-			assertRejected("23514", "INSERT INTO place_hours (place_id, day_of_week, open_time) VALUES (?, 'MON', '10:00')",
+
+			assertRejected("23514", "INSERT INTO place_hours (place_id, " + columns + ") VALUES (?, " + values + ")",
 					placeId);
-			assertRejected("23514", "INSERT INTO place_hours (place_id, day_of_week, close_time) VALUES (?, 'MON', '10:00')",
-					placeId);
-			assertRejected("23514", "INSERT INTO place_hours (place_id, day_of_week, open_time, close_time, closed)"
-					+ " VALUES (?, 'MON', '10:00', '22:00', true)", placeId);
-			assertRejected("23514", "INSERT INTO place_hours (place_id, day_of_week, open_time, close_time)"
-					+ " VALUES (?, 'MON', '24:00', '22:00')", placeId);
-			assertRejected("23514", "INSERT INTO place_hours (place_id, day_of_week, open_time, close_time)"
-					+ " VALUES (?, 'MON', '10:00', '24:00')", placeId);
-			assertRejected("23514", "INSERT INTO place_hours (place_id, day_of_week, breaks)"
-					+ " VALUES (?, 'MON', '{\"start\": \"15:00\"}')", placeId);
+		}
+
+		@ParameterizedTest(name = "{0}–{1}")
+		@CsvSource({"17:00, 02:00", "00:00, 00:00"})
+		@DisplayName("영업시간_마감이개점보다이르거나같으면_받아들인다")
+		void insert_closeNotAfterOpen_accepted(String open, String close) {
+			long placeId = insertPlace(naverId(), 37.5, 127.0);
+
+			assertThat(app.update("INSERT INTO place_hours (place_id, day_of_week, open_time, close_time)"
+					+ " VALUES (?, 'MON', ?::time, ?::time)", placeId, open, close)).isEqualTo(1);
 		}
 
 		@Test
-		@DisplayName("영업시간_자정넘김과24시간은_받아들이고_필수열만이면_기본값이다")
-		void insert_overnightAndAllDay_accepted() {
+		@DisplayName("영업시간_필수열만넣으면_휴무아님과빈브레이크와빈라스트오더다")
+		void insert_requiredOnly_defaults() {
 			long placeId = insertPlace(naverId(), 37.5, 127.0);
-			app.update("INSERT INTO place_hours (place_id, day_of_week, open_time, close_time)"
-					+ " VALUES (?, 'MON', '17:00', '02:00'), (?, 'TUE', '00:00', '00:00')", placeId, placeId);
 			app.update("INSERT INTO place_hours (place_id, day_of_week) VALUES (?, 'WED')", placeId);
 
 			Map<String, Object> wed = app.queryForMap("SELECT closed, breaks::text AS breaks,"
-					+ " cardinality(last_orders) AS last_orders FROM place_hours WHERE place_id = ? AND day_of_week = 'WED'",
-					placeId);
-			assertThat(wed.get("closed")).isEqualTo(false);
-			assertThat(wed.get("breaks")).isEqualTo("[]");
-			assertThat(wed.get("last_orders")).isEqualTo(0);
+					+ " cardinality(last_orders) AS last_orders FROM place_hours WHERE place_id = ?", placeId);
+			assertThat(wed).containsOnly(Map.entry("closed", false), Map.entry("breaks", "[]"),
+					Map.entry("last_orders", 0));
 		}
 	}
 
 	@Nested
-	@DisplayName("place_photos, place_menus")
-	class PhotosAndMenus {
+	@DisplayName("place_photos")
+	class PlacePhotos {
+
+		private static final String INSERT =
+				"INSERT INTO place_photos (place_id, source, sort_order, url) VALUES (?, ?, ?, 'https://p')";
 
 		@Test
-		@DisplayName("사진_출처가밖이면거부되고_같은출처같은순서는두번째가거부되며_출처가다르면받아들인다")
-		void photos_sourceAndOrder_checked() {
-			long placeId = insertPlace(naverId(), 37.5, 127.0);
-			String insert = "INSERT INTO place_photos (place_id, source, sort_order, url) VALUES (?, ?, ?, 'https://p')";
-			assertRejected("23514", insert, placeId, "placeReview", 0);
-			app.update(insert, placeId, "business", 0);
-			assertRejected("23505", insert, placeId, "business", 0);
-			app.update(insert, placeId, "menuBoard", 0);
-			assertRejected("23514", insert, placeId, "business", -1);
+		@DisplayName("사진_출처가business와menuBoard밖이면_거부된다")
+		void insert_unknownSource_rejected() {
+			assertRejected("23514", INSERT, insertPlace(naverId(), 37.5, 127.0), "placeReview", 0);
 		}
 
 		@Test
-		@DisplayName("메뉴_같은순서두번과음수순서는거부되고_필수열만이면기본값이다")
-		void menus_orderAndDefaults() {
+		@DisplayName("사진_같은장소같은출처같은순서는_두번째가거부된다")
+		void insert_sameSourceAndOrder_rejected() {
 			long placeId = insertPlace(naverId(), 37.5, 127.0);
-			String insert = "INSERT INTO place_menus (place_id, sort_order, name) VALUES (?, ?, '메뉴')";
-			app.update(insert, placeId, 0);
-			assertRejected("23505", insert, placeId, 0);
-			assertRejected("23514", insert, placeId, -1);
+			app.update(INSERT, placeId, "business", 0);
+
+			assertRejected("23505", INSERT, placeId, "business", 0);
+		}
+
+		@Test
+		@DisplayName("사진_출처가다르면_같은순서를받아들인다")
+		void insert_otherSourceSameOrder_accepted() {
+			long placeId = insertPlace(naverId(), 37.5, 127.0);
+			app.update(INSERT, placeId, "business", 0);
+
+			assertThat(app.update(INSERT, placeId, "menuBoard", 0)).isEqualTo(1);
+		}
+
+		@Test
+		@DisplayName("사진_음수순서는_거부된다")
+		void insert_negativeOrder_rejected() {
+			assertRejected("23514", INSERT, insertPlace(naverId(), 37.5, 127.0), "business", -1);
+		}
+	}
+
+	@Nested
+	@DisplayName("place_menus")
+	class PlaceMenus {
+
+		private static final String INSERT = "INSERT INTO place_menus (place_id, sort_order, name) VALUES (?, ?, '메뉴')";
+
+		@Test
+		@DisplayName("메뉴_같은장소같은순서는_두번째가거부된다")
+		void insert_sameOrder_rejected() {
+			long placeId = insertPlace(naverId(), 37.5, 127.0);
+			app.update(INSERT, placeId, 0);
+
+			assertRejected("23505", INSERT, placeId, 0);
+		}
+
+		@Test
+		@DisplayName("메뉴_음수순서는_거부된다")
+		void insert_negativeOrder_rejected() {
+			assertRejected("23514", INSERT, insertPlace(naverId(), 37.5, 127.0), -1);
+		}
+
+		@Test
+		@DisplayName("메뉴_필수열만넣으면_대표아님과빈라벨과빈사진이다")
+		void insert_requiredOnly_defaults() {
+			long placeId = insertPlace(naverId(), 37.5, 127.0);
+			app.update(INSERT, placeId, 0);
 
 			Map<String, Object> menu = app.queryForMap("SELECT representative, cardinality(labels) AS labels,"
 					+ " cardinality(photo_urls) AS photo_urls FROM place_menus WHERE place_id = ?", placeId);
-			assertThat(menu.get("representative")).isEqualTo(false);
-			assertThat(menu.get("labels")).isEqualTo(0);
-			assertThat(menu.get("photo_urls")).isEqualTo(0);
+			assertThat(menu).containsOnly(Map.entry("representative", false), Map.entry("labels", 0),
+					Map.entry("photo_urls", 0));
 		}
 	}
 
@@ -445,8 +514,8 @@ class PlaceCatalogSchemaTest extends PostgresTestSupport {
 	class ChildrenAndPrivileges {
 
 		@Test
-		@DisplayName("장소삭제_그장소의자식행만모두지워진다")
-		void deletePlace_cascadesOnlyItsChildren() {
+		@DisplayName("장소삭제_자식행이있으면_그장소의자식행만모두지워진다")
+		void deletePlace_withChildren_removesOnlyItsChildren() {
 			long deleted = insertPlaceWithChildren();
 			long kept = insertPlaceWithChildren();
 
@@ -469,7 +538,7 @@ class PlaceCatalogSchemaTest extends PostgresTestSupport {
 
 		@Test
 		@DisplayName("앱계정_8개테이블에_SELECT_INSERT_UPDATE_DELETE가모두된다")
-		void appAccount_dmlOnAllTables() {
+		void appAccount_eightTables_dmlSucceeds() {
 			long placeId = insertPlaceWithChildren();
 
 			app.update("UPDATE places SET name = '바뀐 이름', updated_at = now() WHERE place_id = ?", placeId);
@@ -483,6 +552,18 @@ class PlaceCatalogSchemaTest extends PostgresTestSupport {
 			}
 			assertThat(app.update("DELETE FROM places WHERE place_id = ?", placeId)).isEqualTo(1);
 		}
+	}
+
+	static Stream<Arguments> invalidHours() {
+		return Stream.of(
+				Arguments.of("요일이 MON~SUN 밖", "day_of_week", "'HOL'"),
+				Arguments.of("개점만 있음", "day_of_week, open_time", "'MON', '10:00'"),
+				Arguments.of("마감만 있음", "day_of_week, close_time", "'MON', '10:00'"),
+				Arguments.of("휴무인데 개점이 있음", "day_of_week, open_time, close_time, closed",
+						"'MON', '10:00', '22:00', true"),
+				Arguments.of("개점 24:00", "day_of_week, open_time, close_time", "'MON', '24:00', '22:00'"),
+				Arguments.of("마감 24:00", "day_of_week, open_time, close_time", "'MON', '10:00', '24:00'"),
+				Arguments.of("breaks가 배열이 아님", "day_of_week, breaks", "'MON', '{\"start\": \"15:00\"}'"));
 	}
 
 	private static Map<String, String> columns(String... pairs) {
