@@ -54,7 +54,9 @@ bash infra/backup/restore-check.sh -i ~/fit-backup-key.txt --fetch-seconds <1에
 - 사진과 인증서 백업(`photos-*.tar.age`, `caddy-*.tar.age`)은 복호화해 tar 목록을 확인한다.
 - BE가 아직 마이그레이션하기 전의 빈 DB 덤프는 `--allow-empty`를 붙인다.
 - 내려받은 암호화 덤프 최신 1벌은 노트북에 남긴다(설계 13.4절, 세 번째 사본).
-- Windows Git Bash에서는 `age`(WinGet 설치 경로)를 `PATH`에 넣고, `-i`와 백업 파일에 `C:/...` 경로를 주고, `TMPDIR=C:/Users/<이름>/AppData/Local/Temp`를 내보낸다. `restore-check.sh`가 `/tmp/...`를 만드는데 윈도 `age.exe`가 그 경로를 열지 못한다.
+- Windows Git Bash에서는 `age`(WinGet 설치 경로)를 `PATH`에 넣으면 된다. 경로는 `/c/...`로 줘도 `C:/...`로 줘도 된다. 윈도 `age.exe`는 Git Bash의 `/c/...` 경로를 열지 못해서, `restore-check.sh`가 `age`에 주는 경로만 `cygpath`로 `C:/...` 모양으로 바꾼다(2026-10-28 이 PC에서 `/c/...` 경로와 기본 임시 폴더로 끝까지 확인했다. 예전에 쓰던 `TMPDIR` 우회는 필요 없다).
+- 오류는 원인별로 다르게 나온다: 백업 파일이 없으면 `백업 파일이 없다`, 개인키 파일이 없으면 `개인키 파일이 없다`, `-i`를 안 주면 `개인키 파일(-i)을 준다`, 키가 수신자가 아니면 `이 개인키는 이 백업의 수신자가 아니다`다. 그 밖의 `age` 오류(깨진 파일 등)는 `복호화에 실패했다(age의 말): …`로 age가 한 말을 그대로 보여 준다.
+- 노트북에서 이진 파일을 받을 때는 PowerShell의 `>`를 쓰지 않는다. 암호화 파일이 글자로 바뀌어 깨진다. Git Bash를 쓴다.
 - prod DB에 테이블이 생기기 전에 실제 테이블이 있는 덤프가 필요하면 A에서 dev DB를 평문 없이 바로 암호화한다. 운영 백업 줄기(`pg/`, `outbox/`, 금고)와 섞이지 않게 별도 폴더에 두고, 파일 이름은 `pg-<UTC 시각>.dump.age` 형식이어야 `restore-check.sh`가 받는다.
 
   ```bash
