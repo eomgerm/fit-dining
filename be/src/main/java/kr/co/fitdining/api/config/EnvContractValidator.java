@@ -25,7 +25,7 @@ public class EnvContractValidator implements EnvironmentPostProcessor, Ordered {
 	private static final Set<String> SERVER_PROFILES = Set.of("dev", "prod", "migrate");
 	private static final List<String> REQUIRED = List.of(
 			"SPRING_DATASOURCE_URL", "SPRING_DATASOURCE_USERNAME", "SPRING_DATASOURCE_PASSWORD");
-	private static final List<String> MOCK_SWITCHES = List.of("PLACE_MOCK_ENABLED", "REVIEW_MOCK_ENABLED");
+	private static final List<String> MOCK_SWITCHES = List.of("PLACE_MOCK_ENABLED");
 	// Spring이 true로 읽는 값(StringToBooleanConverter)
 	private static final Set<String> TRUE_VALUES = Set.of("true", "on", "yes", "1");
 

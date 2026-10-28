@@ -52,7 +52,6 @@ class AuthApplicationFlowTests extends PostgresTestSupport {
     }
     @DynamicPropertySource static void properties(DynamicPropertyRegistry registry) throws Exception {
         registry.add("place.mock.enabled", () -> "true");
-        registry.add("review.mock.enabled", () -> "true");
         registry.add("AUTH_DEMO_EMAIL", () -> "demo@example.com");
         registry.add("AUTH_DEMO_NICKNAME", () -> "demo");
         registry.add("AUTH_DEMO_PASSWORD", () -> "example-test-password1");

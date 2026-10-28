@@ -27,7 +27,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 @AutoConfigureMockMvc
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
-    "place.mock.enabled=true", "review.mock.enabled=true",
+    "place.mock.enabled=true",
     "AUTH_GOOGLE_CLIENT_ID=test-client", "AUTH_GOOGLE_CLIENT_SECRET=test-secret"
 })
 class SocialDevelopSyncTests extends PostgresTestSupport {

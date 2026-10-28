@@ -58,10 +58,6 @@ place:
   mock:
     enabled: ${PLACE_MOCK_ENABLED:false}
 
-review:
-  mock:
-    enabled: ${REVIEW_MOCK_ENABLED:false}
-
 auth:
   terms-version: ${AUTH_TERMS_VERSION:2026-10-23}
   simple:

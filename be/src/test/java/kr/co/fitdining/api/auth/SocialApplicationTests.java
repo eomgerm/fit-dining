@@ -26,7 +26,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 
 @AutoConfigureMockMvc
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
-    "place.mock.enabled=true", "review.mock.enabled=true"
+    "place.mock.enabled=true"
 })
 class SocialApplicationTests extends PostgresTestSupport {
     @Autowired SocialAccounts accounts;

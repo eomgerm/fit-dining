@@ -179,9 +179,9 @@ class EnvContractValidatorTest {
 		@DisplayName("검증_prod에서Mock스위치를켜면_거부한다")
 		void validate_prodWithMockEnabled_rejects(String value) {
 			Map<String, String> env = prodEnv();
-			env.put("REVIEW_MOCK_ENABLED", value);
+			env.put("PLACE_MOCK_ENABLED", value);
 
-			assertThat(validate(env, "prod")).singleElement().asString().contains("REVIEW_MOCK_ENABLED");
+			assertThat(validate(env, "prod")).singleElement().asString().contains("PLACE_MOCK_ENABLED");
 		}
 
 		@Test
