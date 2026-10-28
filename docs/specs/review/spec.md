@@ -30,7 +30,7 @@ Walking Skeleton
 
 1차 후속
 
-3. **작성 흐름**: 같은 작성 화면(`/place/review?id=`)이 Figma 2단계 흐름으로 바뀐다. 비회원은 로그인 후 돌아온다. 작성 진입 때 위치 확인과 함께 `GET /api/v1/places/{placeId}/review-form`으로 작성 화면 데이터를 받는다. 오늘 이미 리뷰를 썼으면 7-E01 모달, 근처 확인에 실패하면 7-E02 모달이 뜬다. 작성은 Figma 2단계 흐름이다. 1/2단계에서 방문일과 좋았던 점(1개 이상), 아쉬웠던 점(선택)을 고르고, 2/2단계에서 재방문 의사, 본문, 사진, 1인당 금액을 입력한다. 같은 방문일로 이미 썼으면 409를 받아 방문일을 바꾸라고 안내한다(D-28, D-5, D-31, D-12).
+3. **작성 흐름**: 같은 작성 화면(`/place/review?id=`)이 Figma 2단계 흐름으로 바뀐다. 비회원은 로그인 후 돌아온다. 작성 진입 때 `GET /api/v1/places/{placeId}/review-form`으로 작성 화면 데이터를 먼저 받고, 오늘 쓴 장소가 아니면 위치를 확인한다. 오늘 이미 리뷰를 썼으면 7-E01 모달, 근처 확인에 실패하면 7-E02 모달이 장소 상세 위에 뜬다(D-43). 작성은 Figma 2단계 흐름이다. 1/2단계에서 방문일과 좋았던 점(1개 이상), 아쉬웠던 점(선택)을 고르고, 2/2단계에서 재방문 의사, 본문, 사진, 1인당 금액을 입력한다. 같은 방문일로 이미 썼으면 409를 받아 방문일을 바꾸라고 안내한다(D-28, D-5, D-31, D-12).
 4. **목록**: 리뷰 탭(6-03)에서 작성일 대신 방문일이 보이고 닉네임, 재방문 의사, 태그, 사진이 더해진다. 본인 리뷰는 닉네임 옆에 "내 리뷰" 태그가 붙고(6-06), 탈퇴한 회원의 리뷰는 "탈퇴한 회원"으로 보인다. 본인 리뷰에는 수정·삭제, 남의 리뷰에는 신고 메뉴가 뜬다(D-24, D-42).
 5. **사진**: 사진을 고르면 앱이 원본과 썸네일 두 벌로 줄이고 EXIF를 지운 뒤 `POST /api/v1/review-photos/upload-urls`로 받은 주소에 바로 올린다. 등록 요청에는 객체 키만 담는다. 목록은 썸네일을 보여 준다(D-9).
 6. **수정·삭제**: 본인 리뷰는 본문과 사진만 고칠 수 있고, 삭제하면 목록에서 즉시 빠진다. 같은 방문일로 다시 쓸 수 있다(D-28, D-6).
@@ -65,8 +65,8 @@ Walking Skeleton
 - [ ] AC-19: 신고는 리뷰당 한 번만 가능하다. 두 번째는 409, 본인 리뷰 신고는 400 ProblemDetail이고, 신고만으로 숨겨지지 않는다. "기타"를 고르면 설명 입력창이 나타나고 설명 없이도 신고된다. 설명은 100자까지 입력되고 글자 수(예: 0/100)를 보인다. "기타"가 아닌 사유에 설명을 보내거나 설명이 100자를 넘으면 400이다. (D-11)
 - [ ] AC-20: 운영자가 숨기면 공개 목록에서 빠지고 작성자 본인에게는 `hidden: true`(이때 목록 항목에 더한다)로 보이며, 그 리뷰의 사진은 공개 경로로 읽히지 않는다. 작성자 본인에게는 "운영 정책에 따라 숨김 처리됨" 표시와 함께 사진도 보인다. 숨김은 분석 제외를 자동 적용하지 않는다. (D-11, D-39)
 - [ ] AC-21: 숨김, 분석 제외, 작성 차단과 각 해제는 처리자·시각·동작을 처리 기록에 남긴다. 작성 차단된 사용자는 `review-form`에서 작성 불가로 안내받고 등록은 403 ProblemDetail이다. (D-11)
-- [ ] AC-22: "방문 평가 남기기"를 누르면 위치 확인이 시작되고 "측정 거리 + GPS 정확도 ≤ 100m"면 작성 화면에 "방문 확인 완료"가 보인다. 실패하면 7-E02 모달이 뜨고 "그냥 쓰기"로 작성할 수 있다. 좌표와 결과를 어떤 요청·로그·분석 이벤트에도 싣지 않는다. (D-12)
-- [ ] AC-23: 오늘 이미 리뷰를 쓴 장소에서 "방문 평가 남기기"를 누르면 7-E01 모달이 뜨고, "다른 날 고르기"를 누르면 방문일 선택(7-03)이 열리며 이미 쓴 날은 "작성함"으로 막혀 있다. (D-4, D-12)
+- [x] AC-22: "방문 평가 남기기"를 누르면 위치 확인이 시작되고 "측정 거리 + GPS 정확도 ≤ 100m"면 작성 화면에 "방문 확인 완료"가 보인다. 실패(권한 거절, 시간 초과, 범위 밖)하면 7-E02 모달이 뜨고 "다시 확인"으로 위치만 다시 받거나 "그냥 쓰기"로 작성할 수 있다. 로그인하지 않았거나 작성 화면 데이터를 받지 못하면 위치를 묻지 않는다. 권한 창에 답하지 않아도 20초 뒤 7-E02가 뜨고, 확인하는 동안 상세를 떠나면 그 결과로 화면을 옮기지 않는다. 좌표와 결과를 어떤 요청(주소 포함)·로그·분석 이벤트에도 싣지 않는다. (D-12, D-43)
+- [x] AC-23: 오늘 이미 리뷰를 쓴 장소에서 "방문 평가 남기기"를 누르면 위치와 상관없이 7-E01 모달이 뜨고, "다른 날 고르기"를 누르면 작성 화면에서 방문일 선택(7-03)이 열리며 이미 쓴 날은 "작성함"으로 막혀 있다. "닫기"는 장소 상세에 남는다. 이때 위치는 묻지 않는다. (D-4, D-12, D-43)
 - [ ] AC-25: 리뷰는 `reviews` 테이블에 저장된다. 목록은 목록 인덱스(`idx_reviews_place_id_created_at_review_id`)로 범위와 정렬을 처리하고, `totalCount`는 첫 페이지 응답에만 있다. (D-35)
 - [ ] AC-26: 작성 화면은 로그인하지 않았으면 로그인 화면으로 바뀐다. 등록 요청의 AT가 만료됐으면 한 번 갱신해 다시 보내고, 갱신에 실패하면 다시 로그인하라는 안내를 보이며 입력을 남긴다. (D-15, D-35)
 - [x] AC-27: 회원이 탈퇴해도 그 회원의 리뷰는 목록과 리뷰 수에 남고, 탈퇴 뒤 남은 토큰으로는 리뷰를 등록할 수 없다(401). (D-38)
@@ -87,8 +87,8 @@ Walking Skeleton
 | `be/src/main/java/kr/co/fitdining/api/review/ReviewService.java#ReviewService.list` (작성자와 태그를 페이지 단위로 읽는다) | modify | 1차 | D-42 |
 | `be/src/main/java/kr/co/fitdining/api/review/store/ReviewRepository.java#ReviewRepository.findTags` | new | 1차 | D-42 |
 | `fe/src/app/place/review/page.tsx#ReviewWritePage` (2단계 흐름 `ReviewForm`을 그린다) | new | WS | D-31, D-41 |
-| `fe/src/app/place/review/with-access-token.ts#withAccessToken` (등록 요청에 AT를 붙이고 만료면 한 번 갱신) | new | 1차 | D-35 |
-| `fe/src/app/place/review/with-access-token.ts#withOptionalAccessToken` (목록 요청에 세션이 있을 때만 AT를 붙인다) | new | 1차 | D-42 |
+| `fe/src/domains/auth/api/with-access-token.ts#withAccessToken` (등록 요청에 AT를 붙이고 만료면 한 번 갱신. S15P31A302-104가 인증 도메인으로 옮겼다) | new | 1차 | D-35 |
+| `fe/src/app/place/with-optional-access-token.ts#withOptionalAccessToken` (목록 요청에 세션이 있을 때만 AT를 붙인다) | new | 1차 | D-42 |
 | `fe/src/domains/review/ui/review-list-view.tsx#ReviewListView` (6-03 항목) | modify | 1차 | D-24, D-42 |
 | `fe/src/domains/place/ui/place-detail-screen.tsx#PlaceDetailSlots` (검색 담당의 상세 화면에 리뷰 탭과 세 자리의 렌더 함수 props를 연다) | modify | WS | D-32 |
 | `fe/src/app/place/place-detail-with-reviews.tsx#PlaceDetailWithReviews` (세 자리를 리뷰 컴포넌트로 채운다. `app/place/page.tsx`가 그린다) | new | WS | D-32 |
@@ -104,9 +104,11 @@ Walking Skeleton
 | `fe/src/domains/review/model/review-draft.ts#toCreateRequest` | new | 1차 | D-6, D-41 |
 | `fe/src/domains/review/model/review-draft.ts#reconcileDraft` (다시 받은 작성 화면 데이터에 입력을 맞춘다) | new | 1차 | D-4, D-41 |
 | `fe/src/domains/review/model/review-tags.ts#disabledTagCodes` | new | 1차 | D-5, D-36 |
-| `fe/src/domains/review/model/nearby-check.ts#isNearby` | new | 1차 | D-12 |
+| `fe/src/domains/review/model/nearby-check.ts#isNearby` | new | 1차 | D-12, D-43 |
+| `fe/src/domains/review/ui/review-entry-button.tsx#ReviewEntryButton` (장소 상세 하단 "방문 평가 남기기", 7-E01·7-E02) | new | 1차 | D-12, D-43 |
+| `fe/src/domains/review/ui/visit-entry-store.ts#useVisitEntry` (확인 결과를 작성 화면에 메모리로 넘긴다) | new | 1차 | D-43 |
 
-BE는 팀이 정한 루트 패키지 `kr.co.fitdining.api`(검색 D-32) 아래 `review`에 두고, DTO는 `review.dto`에 둔다(D-23). 모듈 경계 규칙이 정해지면 그에 맞춘다. FE는 master의 공통 구조(`app → domains → shared`)를 따라 리뷰 코드를 `src/domains/review`에 둔다. 장소 상세는 검색 담당이 만들고(`src/domains/place`), 리뷰 담당이 상세 화면에 리뷰 자리 세 곳(`slots`)을 렌더 함수 props로 열어 `src/app/place/place-detail-with-reviews.tsx`에서 `ReviewSection`(리뷰 탭, `onShowAll`을 주면 홈 탭 미리보기)과 `reviewWriteHref`(하단 버튼)로 채운다. 도메인끼리는 import하지 않기 때문이다. 작성 화면(`src/app/place/review`)은 리뷰 담당이 만든다(D-32).
+BE는 팀이 정한 루트 패키지 `kr.co.fitdining.api`(검색 D-32) 아래 `review`에 두고, DTO는 `review.dto`에 둔다(D-23). 모듈 경계 규칙이 정해지면 그에 맞춘다. FE는 master의 공통 구조(`app → domains → shared`)를 따라 리뷰 코드를 `src/domains/review`에 둔다. 장소 상세는 검색 담당이 만들고(`src/domains/place`), 리뷰 담당이 상세 화면에 리뷰 자리 세 곳(`slots`)을 렌더 함수 props로 열어 `src/app/place/place-detail-with-reviews.tsx`에서 `ReviewSection`(리뷰 탭, `onShowAll`을 주면 홈 탭 미리보기)과 `ReviewEntryButton`(하단 버튼, 위치 확인 뒤 `reviewWriteHref`로 간다)으로 채운다. 도메인끼리는 import하지 않기 때문이다. 작성 화면(`src/app/place/review`)은 리뷰 담당이 만든다(D-32).
 
 ## Interfaces
 
@@ -143,7 +145,7 @@ Walking Skeleton
   ReviewCreateRequest  : + visitedAt(date), tagCodes(1..), revisitIntent,
                          photos?({key, thumbKey}[], ..5), spentPerPerson?(0..1,000,000 정수)
   TagView              : code, label, sentiment(GOOD|BAD)
-  ReviewFormResponse   : place({name, categoryGroup, station, thumbnailUrl?}), visitDate({min, max, default}),
+  ReviewFormResponse   : place({name, categoryGroup, station, thumbnailUrl?, lat?, lng?}), visitDate({min, max, default}),
                          reviewedDates(date[]), tags({good: FormTag[], bad: FormTag[]}),
                          limits({descriptionMax: 500, photoMax: 5, spentPerPersonMax: 1000000}),
                          writable(bool)
@@ -198,6 +200,7 @@ Walking Skeleton
 - **영속성** (example), AC-9, AC-12, AC-13, AC-17: 방문일 경계와 KST 자정 직후의 오늘, 태그 저장과 규칙 위반 때 아무것도 남지 않는지, 409 뒤 태그 행이 남지 않는지, 동시 등록, 삭제 후 재작성을 `ReviewPersistenceTest`에서 확인한다(D-29, D-40).
 - **목록 항목과 쿼리 수** (example), AC-10, AC-14: `ReviewPersistenceTest`가 항목의 방문일·닉네임·재방문 의사·태그(업종 문구, 시드 순서를 바꿔도 좋았어요 먼저)·`mine`, 탈퇴한 작성자의 닉네임 생략, 없는 장소 예외를 확인한다. Hibernate 통계로 첫 페이지 쿼리 4번과 다음 페이지 3번을, 순차 스캔을 끈 `EXPLAIN`으로 태그 조회가 `review_reason_tags` 기본키를 타는지를, HTTP로 토큰 유무에 따른 `mine`과 틀린 토큰의 401을 본다. FE는 항목의 작성자 자리, 배지, 태그 모양과 읽기용 공백, "최신순"을 정적 렌더로, 선택 인증 요청(세션 없음과 그 기억, 3초 제한, 만료 뒤 갱신, 갱신 실패, 거부된 AT와 갱신한 AT의 거부)과 목록 요청에 AT가 실리는지를 Vitest로 확인한다(D-42).
 - **FE 순수 로직과 정적 렌더** (example), AC-13, AC-15, AC-22: `src/domains/review/model`의 태그 선택 함수(같은 그룹 비활성화, 소음 축 4개), 입력 상태(첫 방문일, "다음" 조건, 버튼 문구, 금액 입력, 등록 요청, 다시 받은 데이터에 맞추기), 달력 칸 계산, 근처 판정 함수와 `ui`의 등록 실패 분류를 Vitest(`pnpm test`)로 확인한다. 태그 칩 비활성, 달력의 "작성함"과 범위 밖 날, 2/2단계 문구는 정적 렌더로 확인한다. 1/2단계 상단(질문까지) 고정과 태그 목록만의 스크롤, "나가기" 뒤 빈 입력, 다시 받은 데이터로 비워진 방문일과 "X", 등록 404, 쓰는 중의 401, 다시 받은 데이터 반영, 방문일이 빠진 등록, 범위 밖 방문일을 받은 7-03은 jsdom 렌더(Testing Library)로 확인한다(D-31, D-41). 놓치는 것: Next가 숨겨 둔 화면을 다시 여는 동작, 시트·다이얼로그 모양과 닫힘 모션은 수동 확인.
+- **방문 위치 확인** (example), AC-22, AC-23: 근처 판정(거리와 정확도의 합 100m 경계, 장소 좌표 없음)과 진입 판단(오늘 쓴 날이 위치보다 먼저)을 Vitest로 확인한다. `ReviewEntryButton`의 근처·7-E01(위치를 묻지 않음)·7-E02·"다시 확인"·로그인 전·데이터 실패(다시 시도하지 않고 위치를 묻지 않음)·확인 중 떠나기·권한 창 마감은 앱과 같은 재시도 설정의 jsdom 렌더로 확인한다. 작성 화면의 "방문 확인 완료"(오늘일 때만)·방문일 시트 열기·결과를 옮긴 뒤 지우기·"X" 뒤 지우기도 jsdom으로 본다(D-43). 놓치는 것: 실제 기기의 위치 권한 창과 정확도(브라우저에서 위치를 바꿔 넣어 수동 확인).
 - **사진** (manual), AC-18, AC-20: `infra/edge/test` 환경에서 Caddy를 거친 presigned 업로드(원본·썸네일)와 공개 읽기를 확인한다.
 - **수동 확인** AC-22, AC-23: Figma 흐름(상세 → 위치 확인·오늘 작성 여부 모달 → 1/2·2/2단계 → 상세로 복귀, 검색 상태 유지).
 
@@ -252,5 +255,5 @@ FE 공통 담당
 
 ### 리뷰 담당이 준비할 것
 
-- 작성 화면에 남은 것: 근처 판정 함수와 "방문 확인 완료", 7-E01·7-E02(S15P31A302-51), 사진 업로드와 7-E04(S15P31A302-54), 로그인 뒤 작성 화면으로 돌아오기(D-12, D-41).
+- 작성 화면에 남은 것: 사진 업로드와 7-E04(S15P31A302-54), 로그인 뒤 작성 화면으로 돌아오기(D-41).
 - 1차 후속 전: Figma에 없는 화면(숨김 처리된 내 리뷰 표시, 작성 차단 안내)을 추가한다.
