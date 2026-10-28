@@ -1,10 +1,13 @@
 package kr.co.fitdining.api.review.store;
 
+import jakarta.persistence.LockModeType;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -80,5 +83,15 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
 	@Query(value = REVIEWED_DATES, nativeQuery = true)
 	List<LocalDate> findReviewedDates(@Param("userId") String userId, @Param("placeId") long placeId,
 			@Param("from") LocalDate from);
+
+	Optional<Review> findByReviewIdAndDeletedAtIsNull(long reviewId);
+
+	/**
+	 * 수정과 삭제가 읽는 내 리뷰. 행을 잠가, 먼저 끝난 삭제 뒤의 수정은 리뷰를 찾지 못한다(D-44).
+	 * 잠그지 않으면 삭제 전에 읽은 수정이 {@code deleted_at}을 되돌려 쓴다. 작성자가 다른 행은 조건에 맞지 않아
+	 * 잠그지도 기다리지도 않는다.
+	 */
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	Optional<Review> findLockedByReviewIdAndUserIdAndDeletedAtIsNull(long reviewId, String userId);
 
 }

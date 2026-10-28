@@ -13,6 +13,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.LinkedHashSet;
+import java.util.Objects;
 import java.util.Set;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -83,6 +84,26 @@ public class Review {
 		this.spentPerPerson = spentPerPerson;
 		this.createdAt = createdAt;
 		this.updatedAt = createdAt;
+	}
+
+	/**
+	 * 본문을 고친다. 작성자가 고칠 수 있는 것은 본문과 사진뿐이다(D-6). 작성 시각은 그대로라 목록 순서가 바뀌지 않는다.
+	 * 같은 본문이면 아무것도 바꾸지 않아, 읽는 쪽이 {@code updated_at}을 변경으로 보지 않는다(D-34).
+	 *
+	 * @param description 본문. 공백뿐이면 서비스가 null로 바꿔 넘긴다.
+	 */
+	public void changeDescription(String description, Instant now) {
+		if (Objects.equals(this.description, description)) {
+			return;
+		}
+		this.description = description;
+		this.updatedAt = now;
+	}
+
+	/** 목록과 리뷰 수에서 빼고, 같은 방문일로 다시 쓸 수 있게 한다(D-28). */
+	public void delete(Instant now) {
+		this.deletedAt = now;
+		this.updatedAt = now;
 	}
 
 }

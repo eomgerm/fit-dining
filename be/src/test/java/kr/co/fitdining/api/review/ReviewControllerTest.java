@@ -6,10 +6,13 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -28,13 +31,17 @@ import kr.co.fitdining.api.place.exception.PlaceNotFoundException;
 import kr.co.fitdining.api.place.exception.PlaceSearchUnavailableException;
 import kr.co.fitdining.api.review.dto.ReviewCreateRequest;
 import kr.co.fitdining.api.review.dto.ReviewCreateResponse;
+import kr.co.fitdining.api.review.dto.ReviewDetailResponse;
 import kr.co.fitdining.api.review.dto.ReviewFormResponse;
 import kr.co.fitdining.api.review.dto.ReviewItem;
 import kr.co.fitdining.api.review.dto.ReviewListResponse;
+import kr.co.fitdining.api.review.dto.ReviewUpdateRequest;
 import kr.co.fitdining.api.review.dto.TagView;
 import kr.co.fitdining.api.review.exception.DuplicateReviewException;
 import kr.co.fitdining.api.review.exception.InvalidReasonTagsException;
 import kr.co.fitdining.api.review.exception.InvalidVisitDateException;
+import kr.co.fitdining.api.review.exception.ReviewForbiddenException;
+import kr.co.fitdining.api.review.exception.ReviewNotFoundException;
 import kr.co.fitdining.api.review.store.InvalidReviewCursorException;
 import kr.co.fitdining.api.review.tag.ReasonTag;
 import org.junit.jupiter.api.BeforeEach;
@@ -44,6 +51,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -390,6 +398,170 @@ class ReviewControllerTest {
 		}
 	}
 
+	/** 본인 리뷰만 다루는 세 엔드포인트. 인증·권한·형식 시험을 엔드포인트마다 한 번씩 돌린다. */
+	enum OwnEndpoint {
+		DETAIL {
+			@Override
+			MockHttpServletRequestBuilder request(Object reviewId) {
+				return get("/api/v1/reviews/{reviewId}", reviewId);
+			}
+
+			@Override
+			void failWith(ReviewService service, long reviewId, RuntimeException failure) {
+				when(service.detail(reviewId, USER_ID)).thenThrow(failure);
+			}
+		},
+		UPDATE {
+			@Override
+			MockHttpServletRequestBuilder request(Object reviewId) {
+				return patch("/api/v1/reviews/{reviewId}", reviewId).contentType(MediaType.APPLICATION_JSON)
+						.content("{\"description\":\"본문\"}");
+			}
+
+			@Override
+			void failWith(ReviewService service, long reviewId, RuntimeException failure) {
+				doThrow(failure).when(service).update(eq(reviewId), eq(USER_ID), any());
+			}
+		},
+		DELETE {
+			@Override
+			MockHttpServletRequestBuilder request(Object reviewId) {
+				return delete("/api/v1/reviews/{reviewId}", reviewId);
+			}
+
+			@Override
+			void failWith(ReviewService service, long reviewId, RuntimeException failure) {
+				doThrow(failure).when(service).delete(reviewId, USER_ID);
+			}
+		};
+
+		/** 토큰 없는 요청 */
+		abstract MockHttpServletRequestBuilder request(Object reviewId);
+
+		abstract void failWith(ReviewService service, long reviewId, RuntimeException failure);
+	}
+
+	@Nested
+	@DisplayName("내 리뷰 조회·수정·삭제")
+	class OwnReview {
+
+		@Test
+		@DisplayName("조회_내리뷰면_수정화면필드만돌려준다")
+		void detail_own_returnsEditableFieldsOnly() throws Exception {
+			when(reviewService.detail(7L, USER_ID)).thenReturn(new ReviewDetailResponse(7L, 3L, "고칠 본문",
+					new ReviewDetailResponse.Limits(500, 5)));
+
+			String body = mockMvc.perform(withToken(get("/api/v1/reviews/{reviewId}", 7)))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.placeId").value(3))
+					.andExpect(jsonPath("$.description").value("고칠 본문"))
+					.andExpect(jsonPath("$.limits.descriptionMax").value(500))
+					.andExpect(jsonPath("$.limits.photoMax").value(5))
+					.andReturn().getResponse().getContentAsString();
+
+			assertThat(Set.copyOf(jsonMapper.readTree(body).propertyNames()))
+					.isEqualTo(Set.of("reviewId", "placeId", "description", "limits"));
+		}
+
+		@Test
+		@DisplayName("조회_본문없는리뷰면_description키를생략한다")
+		void detail_noDescription_omitsDescription() throws Exception {
+			when(reviewService.detail(7L, USER_ID)).thenReturn(new ReviewDetailResponse(7L, 3L, null,
+					new ReviewDetailResponse.Limits(500, 5)));
+
+			String body = mockMvc.perform(withToken(get("/api/v1/reviews/{reviewId}", 7)))
+					.andExpect(status().isOk())
+					.andReturn().getResponse().getContentAsString();
+
+			assertThat(Set.copyOf(jsonMapper.readTree(body).propertyNames()))
+					.isEqualTo(Set.of("reviewId", "placeId", "limits"));
+		}
+
+		@Test
+		@DisplayName("수정_500자본문이면_204이고작성자와함께넘긴다")
+		void update_maxLengthDescription_returnsNoContent() throws Exception {
+			mockMvc.perform(update(7, "{\"description\":\"" + "가".repeat(500) + "\"}"))
+					.andExpect(status().isNoContent());
+
+			verify(reviewService).update(7L, USER_ID, new ReviewUpdateRequest("가".repeat(500)));
+		}
+
+		@ParameterizedTest
+		@ValueSource(strings = {"{}", "{\"description\":null}", "{\"visitedAt\":\"2026-10-21\"}",
+				"{\"description\":\"본문\",\"tagCodes\":[\"QUIET_GOOD\"]}", "{\"description\":\"본문\",\"revisitIntent\":true}",
+				"{\"description\":\"본문\",\"spentPerPerson\":1}", "{\"description\":\"본문\",\"userId\":\"user-2\"}"})
+		@DisplayName("수정_고칠필드가없거나다른필드가있으면_400이고고치지않는다")
+		void update_noFieldOrOtherField_returnsBadRequest(String body) throws Exception {
+			expectProblem(update(7, body), 400);
+
+			verify(reviewService, never()).update(anyLong(), anyString(), any());
+		}
+
+		@Test
+		@DisplayName("수정_본문이500자를넘으면_400이다")
+		void update_tooLongDescription_returnsBadRequest() throws Exception {
+			expectProblem(update(7, "{\"description\":\"" + "가".repeat(501) + "\"}"), 400);
+		}
+
+		@Test
+		@DisplayName("삭제_내리뷰면_204다")
+		void delete_own_returnsNoContent() throws Exception {
+			mockMvc.perform(withToken(delete("/api/v1/reviews/{reviewId}", 7))).andExpect(status().isNoContent());
+
+			verify(reviewService).delete(7L, USER_ID);
+		}
+
+		@ParameterizedTest
+		@EnumSource(OwnEndpoint.class)
+		@DisplayName("조회수정삭제_Authorization헤더가없으면_401이고처리하지않는다")
+		void ownEndpoint_noAuthorization_returnsUnauthorized(OwnEndpoint endpoint) throws Exception {
+			expectProblem(endpoint.request(7), 401);
+
+			verify(reviewService, never()).detail(anyLong(), anyString());
+			verify(reviewService, never()).update(anyLong(), anyString(), any());
+			verify(reviewService, never()).delete(anyLong(), anyString());
+		}
+
+		@ParameterizedTest
+		@EnumSource(OwnEndpoint.class)
+		@DisplayName("조회수정삭제_남의리뷰면_403이다")
+		void ownEndpoint_othersReview_returnsForbidden(OwnEndpoint endpoint) throws Exception {
+			endpoint.failWith(reviewService, 8L, new ReviewForbiddenException());
+
+			expectProblem(withToken(endpoint.request(8)), 403);
+		}
+
+		@ParameterizedTest
+		@EnumSource(OwnEndpoint.class)
+		@DisplayName("조회수정삭제_없거나삭제한리뷰면_404다")
+		void ownEndpoint_missingReview_returnsNotFound(OwnEndpoint endpoint) throws Exception {
+			endpoint.failWith(reviewService, 9L, new ReviewNotFoundException());
+
+			expectProblem(withToken(endpoint.request(9)), 404);
+		}
+
+		@ParameterizedTest(name = "{0} {1}")
+		@MethodSource("kr.co.fitdining.api.review.ReviewControllerTest#invalidReviewIds")
+		@DisplayName("조회수정삭제_reviewId가양의정수가아니면_400이다")
+		void ownEndpoint_invalidReviewId_returnsBadRequest(OwnEndpoint endpoint, String reviewId) throws Exception {
+			expectProblem(withToken(endpoint.request(reviewId)), 400);
+		}
+	}
+
+	static Stream<Arguments> invalidReviewIds() {
+		return Stream.of(OwnEndpoint.values()).flatMap(endpoint -> Stream.of("0", "-1", "abc", "9223372036854775808")
+				.map(reviewId -> Arguments.of(endpoint, reviewId)));
+	}
+
+	private static MockHttpServletRequestBuilder withToken(MockHttpServletRequestBuilder request) {
+		return request.header("Authorization", "Bearer " + TOKEN);
+	}
+
+	private static MockHttpServletRequestBuilder update(Object reviewId, String body) {
+		return withToken(patch("/api/v1/reviews/{reviewId}", reviewId).contentType(MediaType.APPLICATION_JSON)
+				.content(body));
+	}
+
 	@Nested
 	@DisplayName("응답 형태")
 	class ResponseShape {
@@ -445,6 +617,14 @@ class ReviewControllerTest {
 		}
 
 		@Test
+		@DisplayName("수정_정상요청후_로그에본문과토큰이없다")
+		void update_success_doesNotLogDescriptionOrToken(CapturedOutput output) throws Exception {
+			mockMvc.perform(update(7, "{\"description\":\"" + LOG_SECRET + "\"}")).andExpect(status().isNoContent());
+
+			assertThat(output.getAll()).doesNotContain(LOG_SECRET).doesNotContain(TOKEN);
+		}
+
+		@Test
 		@DisplayName("등록_인증실패로401이나도_로그에토큰이없다")
 		void create_unauthorized_doesNotLogToken(CapturedOutput output) throws Exception {
 			when(auth.authenticate(LOG_SECRET)).thenThrow(new AuthFailure("인증을 확인해주세요."));
@@ -457,7 +637,7 @@ class ReviewControllerTest {
 
 		@ParameterizedTest(name = "{0}")
 		@MethodSource("kr.co.fitdining.api.review.ReviewControllerTest#badRequestsWithSecret")
-		@DisplayName("등록과목록_잘못된요청으로400이나도_로그에입력값이없다")
+		@DisplayName("등록목록수정_잘못된요청으로400이나도_로그에입력값이없다")
 		void request_badRequest_doesNotLogInput(String scenario, MockHttpServletRequestBuilder request,
 				CapturedOutput output) throws Exception {
 			mockMvc.perform(request).andExpect(status().isBadRequest());
@@ -475,7 +655,9 @@ class ReviewControllerTest {
 						+ "\",\"spentPerPerson\":1000001"))),
 				Arguments.of("정의되지 않은 속성", create(1, "{\"description\":\"" + LOG_SECRET + "\",\"userId\":1}")),
 				Arguments.of("문자열 자리의 객체", create(1, "{\"description\":{\"text\":\"" + LOG_SECRET + "\"}}")),
-				Arguments.of("깨진 JSON", create(1, "{\"description\":\"" + LOG_SECRET + "\"")));
+				Arguments.of("깨진 JSON", create(1, "{\"description\":\"" + LOG_SECRET + "\"")),
+				Arguments.of("수정 501자 본문", update(7, "{\"description\":\"" + LOG_SECRET + "가".repeat(501) + "\"}")),
+				Arguments.of("수정 다른 필드", update(7, "{\"description\":\"" + LOG_SECRET + "\",\"spentPerPerson\":1}")));
 	}
 
 	private void expectProblem(MockHttpServletRequestBuilder request, int status) throws Exception {

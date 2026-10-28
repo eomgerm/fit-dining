@@ -71,4 +71,15 @@ public class ReviewExceptionHandler {
 		return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "이 날짜에는 이미 리뷰를 남겼어요.");
 	}
 
+	@ExceptionHandler(ReviewNotFoundException.class)
+	public ProblemDetail handleReviewNotFound() {
+		return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "리뷰를 찾을 수 없어요.");
+	}
+
+	@ExceptionHandler(ReviewForbiddenException.class)
+	public ProblemDetail handleForbidden() {
+		log.info("Rejected review request: reason=ReviewForbiddenException");
+		return ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, "내 리뷰만 변경할 수 있어요.");
+	}
+
 }

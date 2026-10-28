@@ -18,12 +18,16 @@ import kr.co.fitdining.api.place.dto.PlaceSummary;
 import kr.co.fitdining.api.place.dto.PlaceSummary.CategoryGroup;
 import kr.co.fitdining.api.review.dto.ReviewCreateRequest;
 import kr.co.fitdining.api.review.dto.ReviewCreateResponse;
+import kr.co.fitdining.api.review.dto.ReviewDetailResponse;
 import kr.co.fitdining.api.review.dto.ReviewFormResponse;
 import kr.co.fitdining.api.review.dto.ReviewItem;
 import kr.co.fitdining.api.review.dto.ReviewListResponse;
+import kr.co.fitdining.api.review.dto.ReviewUpdateRequest;
 import kr.co.fitdining.api.review.dto.TagView;
 import kr.co.fitdining.api.review.exception.DuplicateReviewException;
 import kr.co.fitdining.api.review.exception.InvalidVisitDateException;
+import kr.co.fitdining.api.review.exception.ReviewForbiddenException;
+import kr.co.fitdining.api.review.exception.ReviewNotFoundException;
 import kr.co.fitdining.api.review.store.Review;
 import kr.co.fitdining.api.review.store.ReviewCursor;
 import kr.co.fitdining.api.review.store.ReviewRepository;
@@ -34,10 +38,11 @@ import kr.co.fitdining.api.review.tag.ReasonTagRule;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 본문 정규화, 작성 시각과 방문일, 중복 금지, 커서 페이지 계산, 작성 화면 데이터를 맡는다. 등록과 작성 화면 데이터는
- * 장소 기능으로 장소를 확인한다(D-37).
+ * 본문 정규화, 작성 시각과 방문일, 중복 금지, 커서 페이지 계산, 작성 화면 데이터, 내 리뷰 수정·삭제를 맡는다.
+ * 등록과 작성 화면 데이터는 장소 기능으로 장소를 확인한다(D-37).
  */
 @Service
 public class ReviewService {
@@ -51,8 +56,13 @@ public class ReviewService {
 
 	private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
 
+	static final int PHOTO_MAX = 5;
+
 	static final ReviewFormResponse.Limits LIMITS = new ReviewFormResponse.Limits(
-			ReviewCreateRequest.DESCRIPTION_MAX, 5, ReviewCreateRequest.SPENT_PER_PERSON_MAX);
+			ReviewCreateRequest.DESCRIPTION_MAX, PHOTO_MAX, ReviewCreateRequest.SPENT_PER_PERSON_MAX);
+
+	static final ReviewDetailResponse.Limits DETAIL_LIMITS = new ReviewDetailResponse.Limits(
+			ReviewCreateRequest.DESCRIPTION_MAX, PHOTO_MAX);
 
 	private final ReviewRepository reviews;
 	private final AuthUserRepository users;
@@ -89,10 +99,8 @@ public class ReviewService {
 			throw new InvalidVisitDateException();
 		}
 		ReasonTagRule.validate(request.tagCodes(), tags.findExposed(place.categoryGroup()));
-		// PostgreSQL은 마이크로초까지만 저장하므로 커서 비교가 어긋나지 않게 자른다(D-27).
-		Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
 		Review review = new Review(placeId, userId, request.visitedAt(), request.tagCodes(), request.revisitIntent(),
-				normalize(request.description()), request.spentPerPerson(), now);
+				normalize(request.description()), request.spentPerPerson(), now());
 		try {
 			// 저장 전 조회는 동시 요청을 막지 못한다. 제약 위반을 그 자리에서 받으려고 flush한다(D-28).
 			return new ReviewCreateResponse(reviews.saveAndFlush(review).getReviewId());
@@ -127,6 +135,68 @@ public class ReviewService {
 				new ReviewFormResponse.VisitDate(visitDates.min(), visitDates.max(), visitDates.max()),
 				reviews.findReviewedDates(userId, placeId, visitDates.min()),
 				new ReviewFormResponse.Tags(good, bad), LIMITS, true);
+	}
+
+	/**
+	 * 수정 화면(6-07)이 쓰는 내 리뷰 하나(D-44).
+	 *
+	 * @throws AuthFailure 탈퇴했거나 없는 사용자일 때(401)
+	 * @throws ReviewNotFoundException 없거나 삭제한 리뷰일 때
+	 * @throws ReviewForbiddenException 남의 리뷰일 때
+	 */
+	public ReviewDetailResponse detail(long reviewId, String userId) {
+		requireActiveUser(userId);
+		Review review = own(reviews.findByReviewIdAndDeletedAtIsNull(reviewId), userId);
+		return new ReviewDetailResponse(review.getReviewId(), review.getPlaceId(), review.getDescription(),
+				DETAIL_LIMITS);
+	}
+
+	/**
+	 * 본문을 고친다(D-6, D-44).
+	 *
+	 * @param request 수정 요청. 형식 검증은 컨트롤러가 인증 뒤에 한다.
+	 * @throws AuthFailure 탈퇴했거나 없는 사용자일 때(401)
+	 * @throws ReviewNotFoundException 없거나 삭제한 리뷰일 때
+	 * @throws ReviewForbiddenException 남의 리뷰일 때
+	 */
+	@Transactional
+	public void update(long reviewId, String userId, ReviewUpdateRequest request) {
+		requireActiveUser(userId);
+		lockOwn(reviewId, userId).changeDescription(normalize(request.description()), now());
+	}
+
+	/**
+	 * 리뷰를 지운다. 목록과 리뷰 수에서 바로 빠지고 같은 방문일로 다시 쓸 수 있다(D-28).
+	 *
+	 * @throws AuthFailure 탈퇴했거나 없는 사용자일 때(401)
+	 * @throws ReviewNotFoundException 없거나 이미 삭제한 리뷰일 때
+	 * @throws ReviewForbiddenException 남의 리뷰일 때
+	 */
+	@Transactional
+	public void delete(long reviewId, String userId) {
+		requireActiveUser(userId);
+		lockOwn(reviewId, userId).delete(now());
+	}
+
+	/** 본인 리뷰만 잠가 읽는다. 못 찾았을 때만 한 번 더 읽어 없는 리뷰(404)와 남의 리뷰(403)를 나눈다(D-44). */
+	private Review lockOwn(long reviewId, String userId) {
+		return reviews.findLockedByReviewIdAndUserIdAndDeletedAtIsNull(reviewId, userId)
+				.orElseThrow(() -> reviews.findByReviewIdAndDeletedAtIsNull(reviewId).isPresent()
+						? new ReviewForbiddenException()
+						: new ReviewNotFoundException());
+	}
+
+	private static Review own(Optional<Review> found, String userId) {
+		Review review = found.orElseThrow(ReviewNotFoundException::new);
+		if (!review.getUserId().equals(userId)) {
+			throw new ReviewForbiddenException();
+		}
+		return review;
+	}
+
+	/** PostgreSQL은 마이크로초까지만 저장하므로 커서 비교가 어긋나지 않게 자른다(D-27). */
+	private Instant now() {
+		return clock.instant().truncatedTo(ChronoUnit.MICROS);
 	}
 
 	/** 토큰 검증은 DB를 보지 않아 탈퇴 뒤에도 남은 토큰이 만료 전까지 유효하다(D-38). */

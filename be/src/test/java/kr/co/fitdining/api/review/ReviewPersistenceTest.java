@@ -25,6 +25,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.IntStream;
 import javax.sql.DataSource;
 import kr.co.fitdining.api.auth.domain.AuthFailure;
@@ -35,13 +36,17 @@ import kr.co.fitdining.api.auth.repository.AuthUserRepository;
 import kr.co.fitdining.api.place.dto.PlaceSummary.CategoryGroup;
 import kr.co.fitdining.api.place.exception.PlaceNotFoundException;
 import kr.co.fitdining.api.review.dto.ReviewCreateRequest;
+import kr.co.fitdining.api.review.dto.ReviewDetailResponse;
 import kr.co.fitdining.api.review.dto.ReviewFormResponse;
 import kr.co.fitdining.api.review.dto.ReviewItem;
 import kr.co.fitdining.api.review.dto.ReviewListResponse;
+import kr.co.fitdining.api.review.dto.ReviewUpdateRequest;
 import kr.co.fitdining.api.review.dto.TagView;
 import kr.co.fitdining.api.review.exception.DuplicateReviewException;
 import kr.co.fitdining.api.review.exception.InvalidReasonTagsException;
 import kr.co.fitdining.api.review.exception.InvalidVisitDateException;
+import kr.co.fitdining.api.review.exception.ReviewForbiddenException;
+import kr.co.fitdining.api.review.exception.ReviewNotFoundException;
 import kr.co.fitdining.api.review.store.ReviewRepository;
 import kr.co.fitdining.api.review.tag.ReasonTag;
 import kr.co.fitdining.api.support.PostgresTestSupport;
@@ -53,6 +58,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -65,6 +72,8 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.datasource.SingleConnectionDataSource;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -139,6 +148,9 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 
 	@Autowired
 	EntityManagerFactory entityManagerFactory;
+
+	@Autowired
+	PlatformTransactionManager transactionManager;
 
 	@Value("${local.server.port}")
 	int port;
@@ -607,6 +619,266 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 		}
 	}
 
+	/** 본인 리뷰만 다루는 세 동작. 권한·없는 리뷰·탈퇴 시험을 동작마다 한 번씩 돌린다. */
+	enum Operation {
+		DETAIL {
+			@Override
+			void run(ReviewService service, long reviewId, String userId) {
+				service.detail(reviewId, userId);
+			}
+		},
+		UPDATE {
+			@Override
+			void run(ReviewService service, long reviewId, String userId) {
+				service.update(reviewId, userId, new ReviewUpdateRequest("바꾼 본문"));
+			}
+		},
+		DELETE {
+			@Override
+			void run(ReviewService service, long reviewId, String userId) {
+				service.delete(reviewId, userId);
+			}
+		};
+
+		abstract void run(ReviewService service, long reviewId, String userId);
+	}
+
+	@Nested
+	@DisplayName("수정과 삭제")
+	class EditAndDelete {
+
+		private static final long WAIT_SECONDS = 5;
+
+		private long write(String user, String description) {
+			return service.create(1, user, body(description)).reviewId();
+		}
+
+		private Map<String, Object> row(long reviewId) {
+			return jdbc.queryForMap("select description, visit_date, revisit_intent, spent_per_person, created_at,"
+					+ " updated_at, deleted_at from reviews where review_id = ?", reviewId);
+		}
+
+		/** 다른 트랜잭션이 행 잠금을 기다리기 시작할 때까지 기다린다. 시간에 기대지 않고 잠금 대기를 직접 확인한다. */
+		private void awaitLockWaiter() throws InterruptedException {
+			long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(WAIT_SECONDS);
+			while (jdbc.queryForObject("select count(*) from pg_locks where not granted", Integer.class) == 0) {
+				assertThat(System.nanoTime()).as("행 잠금을 기다리는 트랜잭션").isLessThan(deadline);
+				Thread.sleep(20);
+			}
+		}
+
+		/** 작성자의 삭제가 행을 잠근 채 커밋을 기다리게 한다. {@code commit}을 풀어야 커밋한다. */
+		private Future<?> deleteHoldingLock(ExecutorService pool, long reviewId, String user, CountDownLatch locked,
+				CountDownLatch commit) {
+			TransactionTemplate tx = new TransactionTemplate(transactionManager);
+			return pool.submit(() -> tx.executeWithoutResult(status -> {
+				try {
+					service.delete(reviewId, user);
+					reviews.flush();
+				} finally {
+					locked.countDown();
+				}
+				try {
+					commit.await(WAIT_SECONDS, TimeUnit.SECONDS);
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+				}
+			}));
+		}
+
+		@Test
+		@DisplayName("조회_내리뷰면_장소와본문과제한값을돌려준다")
+		void detail_own_returnsPlaceDescriptionAndLimits() {
+			String user = createUsers(1).getFirst();
+			long id = write(user, "고칠 본문");
+
+			ReviewDetailResponse detail = service.detail(id, user);
+
+			assertThat(detail.reviewId()).isEqualTo(id);
+			assertThat(detail.placeId()).isEqualTo(1L);
+			assertThat(detail.description()).isEqualTo("고칠 본문");
+			assertThat(detail.limits().descriptionMax()).isEqualTo(500);
+			assertThat(detail.limits().photoMax()).isEqualTo(5);
+		}
+
+		@Test
+		@DisplayName("수정_본문만바뀌고_다른필드와목록순서는그대로이며수정시각이바뀐다")
+		void update_changesDescriptionOnly_keepsOrder() {
+			List<String> authors = createUsers(2);
+			long older = write(authors.get(0), "먼저 쓴 리뷰");
+			clock.instant = NOON.plusSeconds(60);
+			write(authors.get(1), "나중에 쓴 리뷰");
+			Map<String, Object> before = row(older);
+			clock.instant = NOON.plusSeconds(120);
+
+			service.update(older, authors.get(0), new ReviewUpdateRequest("고친 리뷰"));
+
+			Map<String, Object> after = row(older);
+			assertThat(after.get("description")).isEqualTo("고친 리뷰");
+			assertThat(((java.sql.Timestamp) after.get("updated_at")).toInstant())
+					.isEqualTo(Instant.parse("2026-10-21T03:02:00.123456Z"));
+			for (String column : List.of("visit_date", "revisit_intent", "spent_per_person", "created_at")) {
+				assertThat(after.get(column)).isEqualTo(before.get(column));
+			}
+			assertThat(jdbc.queryForList("select code from review_reason_tags where review_id = ?", String.class, older))
+					.containsExactly("QUIET_GOOD");
+			assertThat(service.list(1, null, null).items()).extracting(ReviewItem::description)
+					.containsExactly("나중에 쓴 리뷰", "고친 리뷰");
+		}
+
+		@Test
+		@DisplayName("수정_공백뿐이면_본문없이저장한다")
+		void update_blankDescription_storedWithoutDescription() {
+			String user = createUsers(1).getFirst();
+			long id = write(user, "처음 본문");
+
+			service.update(id, user, new ReviewUpdateRequest(" \n "));
+
+			assertThat(row(id).get("description")).isNull();
+		}
+
+		@Test
+		@DisplayName("수정_같은본문이면_수정시각을바꾸지않는다")
+		void update_sameDescription_keepsUpdatedAt() {
+			String user = createUsers(1).getFirst();
+			long id = write(user, "그대로인 본문");
+			Object before = row(id).get("updated_at");
+			clock.instant = NOON.plusSeconds(60);
+
+			service.update(id, user, new ReviewUpdateRequest("그대로인 본문"));
+
+			assertThat(row(id).get("updated_at")).isEqualTo(before);
+		}
+
+		@Test
+		@DisplayName("삭제_내리뷰면_목록과리뷰수에서빠진다")
+		void delete_own_removedFromListAndCount() {
+			String user = createUsers(1).getFirst();
+			long id = write(user, "지울 리뷰");
+			clock.instant = NOON.plusSeconds(60);
+
+			service.delete(id, user);
+
+			Map<String, Object> deleted = row(id);
+			assertThat(deleted.get("deleted_at")).isEqualTo(deleted.get("updated_at")).isNotNull();
+			assertThat(service.list(1, null, null).totalCount()).isZero();
+		}
+
+		@Test
+		@DisplayName("삭제_지운뒤에는_같은방문일로다시쓸수있다")
+		void delete_own_sameVisitDateWritableAgain() {
+			String user = createUsers(1).getFirst();
+			long id = write(user, "지울 리뷰");
+
+			service.delete(id, user);
+
+			assertThat(service.reviewForm(1, user).reviewedDates()).isEmpty();
+			assertThatCode(() -> write(user, "다시 쓴 리뷰")).doesNotThrowAnyException();
+			assertThat(service.list(1, null, null).items()).extracting(ReviewItem::description)
+					.containsExactly("다시 쓴 리뷰");
+		}
+
+		@ParameterizedTest
+		@EnumSource(Operation.class)
+		@DisplayName("조회수정삭제_남의리뷰면_403이고바뀌지않는다")
+		void operation_othersReview_forbiddenAndUnchanged(Operation operation) {
+			List<String> authors = createUsers(2);
+			long id = write(authors.get(0), "남의 리뷰");
+			Map<String, Object> before = row(id);
+
+			assertThatThrownBy(() -> operation.run(service, id, authors.get(1)))
+					.isInstanceOf(ReviewForbiddenException.class);
+			assertThat(row(id)).isEqualTo(before);
+		}
+
+		@ParameterizedTest
+		@EnumSource(Operation.class)
+		@DisplayName("조회수정삭제_삭제한리뷰면_404다")
+		void operation_deletedReview_notFound(Operation operation) {
+			String user = createUsers(1).getFirst();
+			long id = write(user, "지운 리뷰");
+			service.delete(id, user);
+
+			assertThatThrownBy(() -> operation.run(service, id, user)).isInstanceOf(ReviewNotFoundException.class);
+		}
+
+		@ParameterizedTest
+		@EnumSource(Operation.class)
+		@DisplayName("조회수정삭제_없는리뷰면_404다")
+		void operation_missingReview_notFound(Operation operation) {
+			String user = createUsers(1).getFirst();
+			long id = write(user, "있는 리뷰");
+
+			assertThatThrownBy(() -> operation.run(service, id + 1000, user))
+					.isInstanceOf(ReviewNotFoundException.class);
+		}
+
+		@ParameterizedTest
+		@EnumSource(Operation.class)
+		@DisplayName("조회수정삭제_탈퇴한사용자면_401이고바뀌지않는다")
+		void operation_withdrawnUser_unauthorized(Operation operation) {
+			String user = createUsers(1).getFirst();
+			long id = write(user, "탈퇴 전 리뷰");
+			withdrawAccount(user);
+			Map<String, Object> before = row(id);
+
+			assertThatThrownBy(() -> operation.run(service, id, user)).isInstanceOf(AuthFailure.class);
+			assertThat(row(id)).isEqualTo(before);
+		}
+
+		/** 잠그지 않으면 삭제 전에 읽은 수정이 모든 컬럼을 다시 써 {@code deleted_at}을 null로 되돌린다(D-44). */
+		@Test
+		@DisplayName("수정_삭제가먼저잠갔으면_기다렸다가404이고리뷰는삭제된채다")
+		void update_whileDeleting_waitsAndNotFound() throws Exception {
+			String user = createUsers(1).getFirst();
+			long id = write(user, "지울 리뷰");
+			CountDownLatch locked = new CountDownLatch(1);
+			CountDownLatch commit = new CountDownLatch(1);
+			ExecutorService pool = Executors.newFixedThreadPool(2);
+			try {
+				Future<?> deleting = deleteHoldingLock(pool, id, user, locked, commit);
+				assertThat(locked.await(WAIT_SECONDS, TimeUnit.SECONDS)).isTrue();
+				Future<?> updating = pool.submit(() -> service.update(id, user, new ReviewUpdateRequest("늦은 수정")));
+				awaitLockWaiter();
+
+				commit.countDown();
+				deleting.get(WAIT_SECONDS, TimeUnit.SECONDS);
+				assertThatThrownBy(() -> updating.get(WAIT_SECONDS, TimeUnit.SECONDS))
+						.hasCauseInstanceOf(ReviewNotFoundException.class);
+			} finally {
+				commit.countDown();
+				pool.shutdownNow();
+			}
+			Map<String, Object> after = row(id);
+			assertThat(after.get("deleted_at")).isNotNull();
+			assertThat(after.get("description")).isEqualTo("지울 리뷰");
+		}
+
+		/** 잠금은 본인 리뷰에만 건다. 남의 요청은 작성자가 잠근 행을 기다리지 않고 바로 403이다(D-44). */
+		@ParameterizedTest
+		@EnumSource(value = Operation.class, names = {"UPDATE", "DELETE"})
+		@DisplayName("수정삭제_작성자가잠근동안남이보내면_기다리지않고403이다")
+		void operation_othersWhileOwnerLocks_forbiddenWithoutWaiting(Operation operation) throws Exception {
+			List<String> authors = createUsers(2);
+			long id = write(authors.get(0), "작성자가 지우는 리뷰");
+			CountDownLatch locked = new CountDownLatch(1);
+			CountDownLatch commit = new CountDownLatch(1);
+			ExecutorService pool = Executors.newFixedThreadPool(2);
+			try {
+				deleteHoldingLock(pool, id, authors.get(0), locked, commit);
+				assertThat(locked.await(WAIT_SECONDS, TimeUnit.SECONDS)).isTrue();
+
+				Future<?> others = pool.submit(() -> operation.run(service, id, authors.get(1)));
+
+				assertThatThrownBy(() -> others.get(WAIT_SECONDS, TimeUnit.SECONDS))
+						.hasCauseInstanceOf(ReviewForbiddenException.class);
+			} finally {
+				commit.countDown();
+				pool.shutdownNow();
+			}
+		}
+	}
+
 	@Nested
 	@DisplayName("회원 탈퇴")
 	class Withdrawal {
@@ -792,6 +1064,75 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 			assertThat(send("POST", path, token, "{}").statusCode()).isEqualTo(400);
 			assertThat(send("POST", path, token, json("2026-10-22", "내일")).statusCode()).isEqualTo(400);
 			assertThat(count("reviews")).isZero();
+		}
+
+		/** 로그인한 두 사용자의 토큰과, 첫 사용자가 HTTP로 등록한 리뷰의 주소 */
+		private record Written(String mine, String other, String path) {
+		}
+
+		private Written writeOverHttp() throws Exception {
+			createUsers(2);
+			String mine = auth.login(USER_PREFIX + "0@example.com", PASSWORD, "127.0.0.1").accessToken();
+			String other = auth.login(USER_PREFIX + "1@example.com", PASSWORD, "127.0.0.1").accessToken();
+			long id = mapper.readTree(send("POST", "/api/v1/places/1/reviews", mine, json("2026-10-18", "처음 본문"))
+					.body()).get("reviewId").asLong();
+			return new Written(mine, other, "/api/v1/reviews/" + id);
+		}
+
+		private JsonNode firstPage() throws Exception {
+			return mapper.readTree(send("GET", "/api/v1/places/1/reviews", null, null).body());
+		}
+
+		@Test
+		@DisplayName("수정_내토큰으로_204이고조회와목록에반영된다")
+		void update_ownToken_noContentAndReflected() throws Exception {
+			Written review = writeOverHttp();
+
+			HttpResponse<String> updated = send("PATCH", review.path(), review.mine(), "{\"description\":\"고친 본문\"}");
+
+			assertThat(updated.statusCode()).isEqualTo(204);
+			JsonNode detail = mapper.readTree(send("GET", review.path(), review.mine(), null).body());
+			assertThat(detail.get("description").asString()).isEqualTo("고친 본문");
+			assertThat(detail.get("placeId").asLong()).isEqualTo(1);
+			assertThat(firstPage().get("items").get(0).get("description").asString()).isEqualTo("고친 본문");
+		}
+
+		@Test
+		@DisplayName("수정_다른필드를보내면_400이고바뀌지않는다")
+		void update_otherField_badRequest() throws Exception {
+			Written review = writeOverHttp();
+
+			assertThat(send("PATCH", review.path(), review.mine(), "{\"spentPerPerson\":1}").statusCode())
+					.isEqualTo(400);
+			assertThat(jdbc.queryForObject("select spent_per_person from reviews", Integer.class)).isEqualTo(15000);
+		}
+
+		@Test
+		@DisplayName("수정_남의토큰이면_403이다")
+		void update_othersToken_forbidden() throws Exception {
+			Written review = writeOverHttp();
+
+			assertThat(send("PATCH", review.path(), review.other(), "{\"description\":\"남이 고침\"}").statusCode())
+					.isEqualTo(403);
+		}
+
+		@Test
+		@DisplayName("삭제_내토큰으로_204이고목록에서빠지며다시지우면404다")
+		void delete_ownToken_noContentThenNotFound() throws Exception {
+			Written review = writeOverHttp();
+
+			assertThat(send("DELETE", review.path(), review.mine(), null).statusCode()).isEqualTo(204);
+			assertThat(firstPage().get("totalCount").asInt()).isZero();
+			assertThat(send("DELETE", review.path(), review.mine(), null).statusCode()).isEqualTo(404);
+		}
+
+		@Test
+		@DisplayName("삭제_남의토큰이면_403이고목록에남는다")
+		void delete_othersToken_forbidden() throws Exception {
+			Written review = writeOverHttp();
+
+			assertThat(send("DELETE", review.path(), review.other(), null).statusCode()).isEqualTo(403);
+			assertThat(firstPage().get("totalCount").asInt()).isEqualTo(1);
 		}
 
 		@Test
