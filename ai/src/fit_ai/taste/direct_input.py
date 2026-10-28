@@ -159,7 +159,7 @@ def interpret(
     *,
     call: Callable = gms.call_json,
 ) -> list[Row] | None:
-    """해석 실패(GMS 꺼짐 포함)면 None. 원문은 저장하지 않고 사용자가 다시 시도한다(디자인 C-02)."""
+    """해석 실패(GMS 꺼짐 포함)면 None. 원문은 저장하지 않고 사용자가 그 자리에서 다시 시도한다."""
     if len(text) > MAX_LEN:
         raise ValueError(f"직접 입력은 {MAX_LEN}자까지다")
     items = call(

@@ -131,7 +131,7 @@ def test_profile_free_texts_get_vectors_only_when_liked_with_positive_text():
 
 
 def test_profile_header_and_failed_interpretation_keeps_no_sentence():
-    # 해석이 실패하면 온보딩은 다시 시도를 안내하고 원문을 저장하지 않는다(디자인 C-02)
+    # 해석이 실패하면 사용자가 그 자리에서 다시 시도하고, 원문은 저장하지 않는다
     rows = onboarding_rows("u6", ["LIVELY"], T0)
     text = "프로젝트 끝나고 시끌벅적하게 한잔하는 곳"
     profile = build_profile("u6", rows, original_text=text)
