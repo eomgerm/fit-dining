@@ -19,6 +19,16 @@ public class UserService {
     private final AuthRefreshTokenRepository tokens;
     private final Clock clock;
     private final kr.co.fitdining.api.auth.repository.AuthSocialAccountRepository socialAccounts;
+    public record Profile(String userId, String nickname, String loginMethod) {}
+    @Transactional(readOnly = true)
+    public Profile profile(String userId, Identity identity) {
+        requireOwner(userId, identity);
+        var user = users.findById(userId).filter(value -> value.getDeletedAt() == null)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "사용자 정보가 없습니다."));
+        String method = socialAccounts.findByUserId(userId)
+                .map(account -> account.getId().getProvider()).orElse("email");
+        return new Profile(user.getId(), user.getNickname(), method);
+    }
     @Transactional(readOnly = true)
     public UserPreferences preferences(String userId, Identity identity) {
         requireOwner(userId, identity);

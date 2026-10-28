@@ -16,6 +16,11 @@ import org.springframework.http.ResponseEntity;
 public class UserController {
     private final UserService service;
     @Value("${auth.cookie-secure}") private boolean secure;
+    @GetMapping
+    public UserService.Profile profile(@PathVariable String userId,
+            @RequestAttribute("auth.identity") Identity identity) {
+        return service.profile(userId, identity);
+    }
     @DeleteMapping
     public ResponseEntity<Void> withdraw(@PathVariable String userId,
             @RequestAttribute("auth.identity") Identity identity, HttpServletResponse response) {

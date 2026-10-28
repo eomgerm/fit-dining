@@ -32,6 +32,38 @@ class PreferencesFlowTests extends PostgresTestSupport {
         return new JdbcTemplate(new DriverManagerDataSource(POSTGRES.getJdbcUrl(), "fit_migrator", "test-migrator"));
     }
     String id() { return UUID.randomUUID().toString().substring(0, 10); }
+    @Test
+    void profile_emailOwnershipAndWithdrawal() throws Exception {
+        String name = id();
+        var signup = request("POST", "/api/auth/signup", signupBody(name, ""), null);
+        assertEquals(201, signup.statusCode(), signup.body());
+        var session = mapper.readTree(signup.body());
+        String user = session.get("userId").asString(), token = session.get("accessToken").asString();
+        String path = "/api/v1/users/" + user;
+        var read = request("GET", path, null, token);
+        assertEquals(200, read.statusCode(), read.body());
+        var profile = mapper.readTree(read.body());
+        assertEquals(user, profile.get("userId").asString());
+        assertEquals(name, profile.get("nickname").asString());
+        assertEquals("email", profile.get("loginMethod").asString());
+        assertEquals(3, profile.size());
+        assertEquals(401, request("GET", path, null, null).statusCode());
+        assertEquals(403, request("GET", "/api/v1/users/other", null, token).statusCode());
+        assertEquals(204, request("DELETE", path, null, token).statusCode());
+        assertEquals(404, request("GET", path, null, token).statusCode());
+    }
+    @ParameterizedTest @ValueSource(strings = {"google", "kakao", "naver"})
+    void profile_socialProvider(String provider) throws Exception {
+        var signup = request("POST", "/api/auth/signup", signupBody(id(), ""), null);
+        assertEquals(201, signup.statusCode(), signup.body());
+        var session = mapper.readTree(signup.body());
+        String user = session.get("userId").asString();
+        jdbc.update("insert into auth_social_accounts(provider, provider_user_id, user_id, created_at) values (?, ?, ?, now())",
+                provider, id(), user);
+        var read = request("GET", "/api/v1/users/" + user, null, session.get("accessToken").asString());
+        assertEquals(200, read.statusCode(), read.body());
+        assertEquals(provider, mapper.readTree(read.body()).get("loginMethod").asString());
+    }
     HttpResponse<String> request(String method, String path, String body, String token) throws Exception {
         var builder = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
                 .header("Origin", "http://localhost:3000");

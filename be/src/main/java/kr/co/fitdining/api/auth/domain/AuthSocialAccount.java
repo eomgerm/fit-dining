@@ -34,6 +34,7 @@ public class AuthSocialAccount {
     /** Composite provider identity; no email linking is performed. */
     @Embeddable
     @NoArgsConstructor
+    @Getter
     public static class Key implements Serializable {
         @Column(nullable = false)
         private String provider;

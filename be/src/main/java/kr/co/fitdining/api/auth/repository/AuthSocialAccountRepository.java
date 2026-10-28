@@ -5,6 +5,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 /** Provider identity lookup. */
 public interface AuthSocialAccountRepository extends JpaRepository<AuthSocialAccount, AuthSocialAccount.Key> {
+    java.util.Optional<AuthSocialAccount> findByUserId(String userId);
+
     /** Deletes provider links in the withdrawal transaction. */
     void deleteByUserId(String userId);
 }
