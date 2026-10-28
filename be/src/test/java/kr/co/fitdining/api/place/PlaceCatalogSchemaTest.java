@@ -28,11 +28,12 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 /**
  * 장소 카탈로그 마이그레이션이 만든 테이블 8개를 카탈로그로 정확히 비교하고, 앱 계정으로 실제 DML을 실행해
- * 제약, 기본값, 권한, CASCADE를 확인한다.
+ * 제약, 기본값, 권한, CASCADE를 확인한다. {@code places}는 V6(profile-storage)이 만들고 열을 더 가지므로 문서의 열과
+ * 제약이 들어 있는지만 본다. 자식 테이블 7개는 V7이 만든다.
  */
 class PlaceCatalogSchemaTest extends PostgresTestSupport {
 
-	private static final String MIGRATION = "V6__create_place_catalog.sql";
+	private static final String MIGRATION = "V7__create_place_catalog.sql";
 
 	private static final List<String> CHILDREN = List.of("place_hours", "place_menus", "place_photos", "place_subways",
 			"place_bus_stops", "place_seats", "place_broadcasts");
@@ -200,7 +201,11 @@ class PlaceCatalogSchemaTest extends PostgresTestSupport {
 					actual.put(rs.getString("column_name"), rs.getString("udt_name") + "|" + rs.getString("is_nullable")
 							+ "|" + (defaultValue == null ? "" : defaultValue));
 				}, table);
-				assertThat(actual).as(table).isEqualTo(COLUMNS.get(table));
+				if (CHILDREN.contains(table)) {
+					assertThat(actual).as(table).isEqualTo(COLUMNS.get(table));
+				} else {
+					assertThat(actual).as(table).containsAllEntriesOf(COLUMNS.get(table));
+				}
 			}
 		}
 
@@ -223,7 +228,11 @@ class PlaceCatalogSchemaTest extends PostgresTestSupport {
 					case "ck" -> "c";
 					default -> "f";
 				}));
-				assertThat(actual).as(table).isEqualTo(expected);
+				if (CHILDREN.contains(table)) {
+					assertThat(actual).as(table).isEqualTo(expected);
+				} else {
+					assertThat(actual).as(table).containsAllEntriesOf(expected);
+				}
 			}
 		}
 
@@ -273,9 +282,14 @@ class PlaceCatalogSchemaTest extends PostgresTestSupport {
 						expected.add(name);
 					}
 				});
-				assertThat(catalog.queryForList(
+				List<String> actual = catalog.queryForList(
 						"SELECT indexname FROM pg_indexes WHERE schemaname = 'public' AND tablename = ?", String.class,
-						table)).as(table).containsExactlyInAnyOrderElementsOf(expected);
+						table);
+				if (CHILDREN.contains(table)) {
+					assertThat(actual).as(table).containsExactlyInAnyOrderElementsOf(expected);
+				} else {
+					assertThat(actual).as(table).containsAll(expected);
+				}
 			}
 			CREATED_INDEXES.forEach((name, definition) -> assertThat(catalog.queryForObject(
 					"SELECT indexdef FROM pg_indexes WHERE indexname = ?", String.class, name))
@@ -336,8 +350,8 @@ class PlaceCatalogSchemaTest extends PostgresTestSupport {
 				var rs = sql.executeQuery("SELECT now()");
 				rs.next();
 				Timestamp now = rs.getTimestamp(1);
-				rs = sql.executeQuery("INSERT INTO places (naver_place_id, name, category_group, lat, lng) VALUES ('"
-						+ naverId() + "', '이름', 'CAFE', 37.5, 127.0) RETURNING created_at, updated_at");
+				rs = sql.executeQuery("INSERT INTO places (naver_place_id, name, category_group, station, lat, lng) VALUES ('"
+						+ naverId() + "', '이름', 'CAFE', 'GANGNAM', 37.5, 127.0) RETURNING created_at, updated_at");
 				rs.next();
 				assertThat(rs.getTimestamp("created_at")).isEqualTo(now);
 				assertThat(rs.getTimestamp("updated_at")).isEqualTo(now);
@@ -348,8 +362,8 @@ class PlaceCatalogSchemaTest extends PostgresTestSupport {
 		@Test
 		@DisplayName("장소_place_id를직접넣으면_거부된다")
 		void insert_explicitPlaceId_rejected() {
-			assertRejected("428C9", "INSERT INTO places (place_id, naver_place_id, name, category_group, lat, lng)"
-					+ " VALUES (999999, ?, '이름', 'CAFE', 37.5, 127.0)", naverId());
+			assertRejected("428C9", "INSERT INTO places (place_id, naver_place_id, name, category_group, station, lat, lng)"
+					+ " VALUES (999999, ?, '이름', 'CAFE', 'GANGNAM', 37.5, 127.0)", naverId());
 		}
 
 		@Test
@@ -377,8 +391,8 @@ class PlaceCatalogSchemaTest extends PostgresTestSupport {
 		})
 		@DisplayName("장소_업종이나좌표가범위밖이면_거부된다")
 		void insert_outOfRange_rejected(String categoryGroup, double lat, double lng) {
-			assertRejected("23514", "INSERT INTO places (naver_place_id, name, category_group, lat, lng)"
-					+ " VALUES (?, '이름', ?, ?, ?)", naverId(), categoryGroup, lat, lng);
+			assertRejected("23514", "INSERT INTO places (naver_place_id, name, category_group, station, lat, lng)"
+					+ " VALUES (?, '이름', ?, 'GANGNAM', ?, ?)", naverId(), categoryGroup, lat, lng);
 		}
 
 		@Test
@@ -583,8 +597,10 @@ class PlaceCatalogSchemaTest extends PostgresTestSupport {
 		return "t-" + UUID.randomUUID();
 	}
 
+	/** V6의 {@code places}가 요구하는 {@code station}까지 넣는다. */
 	private static String insertPlaceSql() {
-		return "INSERT INTO places (naver_place_id, name, category_group, lat, lng) VALUES (?, '이름', 'CAFE', ?, ?)";
+		return "INSERT INTO places (naver_place_id, name, category_group, station, lat, lng)"
+				+ " VALUES (?, '이름', 'CAFE', 'GANGNAM', ?, ?)";
 	}
 
 	private static long insertPlace(String naverId, double lat, double lng) {
