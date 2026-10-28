@@ -1378,7 +1378,6 @@ describe("SearchScreen", () => {
       expect(
         await screen.findByText("주변 추천을 불러오지 못했어요"),
       ).toBeTruthy();
-      expect(screen.getByText("역삼역 주변 추천")).toBeTruthy();
 
       fireEvent.click(screen.getByRole("button", { name: "다시 시도" }));
 

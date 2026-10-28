@@ -451,17 +451,10 @@ export function SearchScreen() {
               />
             </div>
           )}
-          {/* 아래부터 검색창, 주변 카드, 기준 지역과 "내 위치" 순서로 쌓는다(와이어프레임 Start) */}
+          {/* 아래부터 검색창, 주변 카드, "내 위치" 순서로 쌓는다(와이어프레임 Start) */}
           <div className="absolute inset-x-0 bottom-0 flex flex-col gap-3 pb-4">
-            {!nearbyOffline && (
-              <div className="flex items-center justify-between gap-2 px-4">
-                <span className="flex h-11 items-center rounded-full bg-surface px-4 text-label-md text-ink shadow-2">
-                  {nearby.originLabel
-                    ? `${nearby.originLabel} 주변 추천`
-                    : "내 주변 추천"}
-                </span>
-                {myLocationButton}
-              </div>
+            {myLocationButton && !nearbyOffline && (
+              <div className="flex justify-end px-4">{myLocationButton}</div>
             )}
             {nearby.error && !nearbyOffline && (
               // 주변 추천을 받지 못하면 카드 자리에 안내를 띄운다(4-E03)
