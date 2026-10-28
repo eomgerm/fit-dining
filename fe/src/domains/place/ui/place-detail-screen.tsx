@@ -18,6 +18,7 @@ import { ShareIcon } from "@/shared/ui/icon/icons/share";
 import { BottomBar } from "@/shared/ui/layout/bottom-bar";
 import { Tab, TabList, TabPanel, Tabs } from "@/shared/ui/layout/tabs";
 import { useToast } from "@/shared/ui/overlay/toast";
+import { Tooltip } from "@/shared/ui/overlay/tooltip";
 
 import { placeQueries } from "../api/place-queries";
 import { todayNotice } from "../model/opening-hours";
@@ -30,13 +31,15 @@ import {
   PlaceMeta,
   PlacePhoto,
 } from "./place-parts";
-import { ScoreSheet } from "./score-sheet";
 import { useHere } from "./use-search-store";
 import { useStoredCard } from "./use-stored-card";
 
 type DetailTab = "home" | "menu" | "review" | "info";
 
 const NOT_READY_MESSAGE = "준비 중이에요";
+// 핏 점수 (i) 말풍선(6-05)
+const SCORE_HELP =
+  "이번 요청과 내 취향에 얼마나 맞는지 0~100으로 나타낸 점수예요. 만족할 확률은 아니에요.";
 
 // 리뷰가 들어갈 자리. 도메인끼리는 import하지 않으므로 app이 리뷰 도메인으로 채운다(리뷰 D-32)
 export type PlaceDetailSlots = {
@@ -147,7 +150,6 @@ function PlaceDetailView({
   const toast = useToast();
   const [now] = useState(() => new Date());
   const [tab, setTab] = useState<DetailTab>("home");
-  const [scoreOpen, setScoreOpen] = useState(false);
   const [photoIndex, setPhotoIndex] = useState(0);
   const { place } = detail;
 
@@ -192,20 +194,21 @@ function PlaceDetailView({
         <div className="flex items-end justify-between gap-3">
           <h1 className="text-headline-lg text-ink">{place.name}</h1>
           {card && (
-            <button
-              type="button"
-              aria-label={`핏 점수 ${card.score}, 설명 보기`}
-              onClick={() => setScoreOpen(true)}
-              className="flex min-h-11 shrink-0 flex-col items-end"
-            >
-              <span className="text-headline-md text-primary-strong">
-                {card.score}
-              </span>
-              <span className="flex items-center gap-0.5 text-caption-sm text-ink-muted">
-                핏 점수
-                <InfoIcon size="sm" />
-              </span>
-            </button>
+            <Tooltip label="핏 점수 설명" content={SCORE_HELP}>
+              <button
+                type="button"
+                aria-label={`핏 점수 ${card.score}, 설명 보기`}
+                className="flex min-h-11 shrink-0 flex-col items-end"
+              >
+                <span className="text-headline-md text-primary-strong">
+                  {card.score}
+                </span>
+                <span className="flex items-center gap-0.5 text-caption-sm text-ink-muted">
+                  핏 점수
+                  <InfoIcon size="sm" />
+                </span>
+              </button>
+            </Tooltip>
           )}
         </div>
         <OpenStatusText
@@ -273,10 +276,6 @@ function PlaceDetailView({
           )}
         </div>
       </BottomBar>
-
-      {card && (
-        <ScoreSheet card={card} open={scoreOpen} onOpenChange={setScoreOpen} />
-      )}
     </>
   );
 }

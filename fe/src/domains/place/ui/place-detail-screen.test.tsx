@@ -195,13 +195,8 @@ describe("PlaceDetailScreen", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "핏 점수 84, 설명 보기" }),
     );
-    const sheet = await screen.findByRole("dialog", { name: "핏 점수 84" });
-    expect(within(sheet).getByText("요청 · 조용해요")).toBeTruthy();
-    expect(within(sheet).getByText("앱 리뷰 3개가 근거예요")).toBeTruthy();
-    expect(within(sheet).getByText("내 취향 · 가성비")).toBeTruthy();
-    expect(
-      within(sheet).getByText("확인할 근거가 부족해서 점수에 넣지 않았어요"),
-    ).toBeTruthy();
+    const tip = await screen.findByRole("dialog", { name: "핏 점수 설명" });
+    expect(within(tip).getByText(/0~100으로 나타낸 점수예요/)).toBeTruthy();
   });
 
   it("검색 카드가 없으면 핏 점수와 추천 이유를 숨기고 장소 정보만 보여 준다", async () => {
