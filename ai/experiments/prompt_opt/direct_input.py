@@ -5,6 +5,7 @@
 
     python direct_input.py            # 최적화
     python direct_input.py baseline 2 # 지금 프롬프트를 2번 돌려 split·slice별 점수와 틀린 것
+    python direct_input.py test 6     # 등록된 프롬프트 6번 버전을 test로 TEST_RUNS번
 """
 
 import json
@@ -192,6 +193,10 @@ if __name__ == "__main__":
     setup("prompt-opt")
     if sys.argv[1:2] == ["baseline"]:
         evaluate(di._SYSTEM, load(), int(sys.argv[2]) if len(sys.argv) > 2 else 1)
+        sys.exit()
+    if sys.argv[1:2] == ["test"]:  # 등록된 프롬프트 버전을 test로 잰다
+        prompt = mlflow.genai.load_prompt(f"prompts:/{NAME}/{sys.argv[2]}")
+        evaluate(prompt.format(codes=di._CODES), load("test"), TEST_RUNS)
         sys.exit()
     result = optimize(
         NAME,
