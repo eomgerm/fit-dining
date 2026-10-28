@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -30,10 +31,12 @@ import kr.co.fitdining.api.review.dto.ReviewCreateResponse;
 import kr.co.fitdining.api.review.dto.ReviewFormResponse;
 import kr.co.fitdining.api.review.dto.ReviewItem;
 import kr.co.fitdining.api.review.dto.ReviewListResponse;
+import kr.co.fitdining.api.review.dto.TagView;
 import kr.co.fitdining.api.review.exception.DuplicateReviewException;
 import kr.co.fitdining.api.review.exception.InvalidReasonTagsException;
 import kr.co.fitdining.api.review.exception.InvalidVisitDateException;
 import kr.co.fitdining.api.review.store.InvalidReviewCursorException;
+import kr.co.fitdining.api.review.tag.ReasonTag;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -235,9 +238,29 @@ class ReviewControllerTest {
 		@Test
 		@DisplayName("목록_Authorization헤더없이_200이다")
 		void list_noAuthorization_returnsOk() throws Exception {
-			when(reviewService.list(3L, null)).thenReturn(new ReviewListResponse(0, List.of(), null));
+			when(reviewService.list(3L, null, null)).thenReturn(new ReviewListResponse(0, List.of(), null));
 
 			mockMvc.perform(list(3)).andExpect(status().isOk()).andExpect(jsonPath("$.totalCount").value(0));
+		}
+
+		@Test
+		@DisplayName("목록_로그인했으면_조회한사용자를넘긴다")
+		void list_loggedIn_passesViewer() throws Exception {
+			when(reviewService.list(3L, null, USER_ID)).thenReturn(new ReviewListResponse(0, List.of(), null));
+
+			mockMvc.perform(list(3).header("Authorization", "Bearer " + TOKEN)).andExpect(status().isOk());
+
+			verify(reviewService).list(3L, null, USER_ID);
+		}
+
+		@Test
+		@DisplayName("목록_헤더가있는데토큰이유효하지않으면_401이고조회하지않는다")
+		void list_invalidToken_returnsUnauthorized() throws Exception {
+			when(auth.authenticate("forged")).thenThrow(new AuthFailure("인증을 확인해주세요."));
+
+			expectProblem(list(3).header("Authorization", "Bearer forged"), 401);
+			expectProblem(list(3).header("Authorization", "Basic " + TOKEN), 401);
+			verify(reviewService, never()).list(anyLong(), any(), any());
 		}
 	}
 
@@ -284,9 +307,11 @@ class ReviewControllerTest {
 		void placeNotFound_returnsNotFound() throws Exception {
 			when(reviewService.reviewForm(anyLong(), anyString())).thenThrow(new PlaceNotFoundException());
 			when(reviewService.create(anyLong(), anyString(), any())).thenThrow(new PlaceNotFoundException());
+			when(reviewService.list(anyLong(), any(), any())).thenThrow(new PlaceNotFoundException());
 
 			expectProblem(form(999), 404);
 			expectProblem(create(999, VALID), 404);
+			expectProblem(list(999), 404);
 		}
 
 		@Test
@@ -346,7 +371,7 @@ class ReviewControllerTest {
 		@Test
 		@DisplayName("목록_커서를해석할수없으면_400이다")
 		void list_invalidCursor_returnsBadRequest() throws Exception {
-			when(reviewService.list(eq(3L), anyString())).thenThrow(new InvalidReviewCursorException());
+			when(reviewService.list(eq(3L), anyString(), isNull())).thenThrow(new InvalidReviewCursorException());
 
 			expectProblem(list(3).param("cursor", "not-a-cursor!"), 400);
 		}
@@ -354,7 +379,7 @@ class ReviewControllerTest {
 		@Test
 		@DisplayName("목록_다음페이지면_리뷰수를생략한다")
 		void list_nextPage_omitsTotalCount() throws Exception {
-			when(reviewService.list(3L, "next")).thenReturn(new ReviewListResponse(null, List.of(), null));
+			when(reviewService.list(3L, "next", null)).thenReturn(new ReviewListResponse(null, List.of(), null));
 
 			mockMvc.perform(list(3).param("cursor", "next"))
 					.andExpect(status().isOk())
@@ -368,21 +393,29 @@ class ReviewControllerTest {
 	class ResponseShape {
 
 		private static final Set<String> LIST = Set.of("totalCount", "items", "nextCursor");
-		private static final Set<String> ITEM = Set.of("reviewId", "createdAt", "description");
+		private static final Set<String> ITEM = Set.of("reviewId", "createdAt", "visitedAt", "nickname",
+				"revisitIntent", "tags", "description", "mine");
+		private static final Set<String> TAG = Set.of("code", "label", "sentiment");
 
 		@Test
 		@DisplayName("목록_응답키는_문서화된필드를벗어나지않는다")
 		void list_responseKeys_documentedOnly() throws Exception {
-			when(reviewService.list(3L, null)).thenReturn(new ReviewListResponse(1,
-					List.of(new ReviewItem(1L, OffsetDateTime.parse("2026-10-21T12:00:00+09:00"), "좋았어요")),
+			when(reviewService.list(3L, null, null)).thenReturn(new ReviewListResponse(1,
+					List.of(new ReviewItem(1L, OffsetDateTime.parse("2026-10-21T12:00:00+09:00"), LocalDate.of(2026, 10, 20),
+							"밤산책", true, List.of(new TagView("QUIET_GOOD", "조용해서 좋았어요", ReasonTag.Sentiment.GOOD)),
+							"좋았어요", false)),
 					"next"));
 
 			JsonNode page = jsonMapper.readTree(mockMvc.perform(list(3)).andExpect(status().isOk())
 					.andReturn().getResponse().getContentAsString());
 
 			assertThat(Set.copyOf(page.propertyNames())).isSubsetOf(LIST);
-			page.get("items").forEach(item -> assertThat(Set.copyOf(item.propertyNames())).isSubsetOf(ITEM));
-			assertThat(page.get("items").get(0).get("createdAt").asString()).isEqualTo("2026-10-21T12:00:00+09:00");
+			page.get("items").forEach(item -> assertThat(Set.copyOf(item.propertyNames())).isEqualTo(ITEM));
+			JsonNode item = page.get("items").get(0);
+			assertThat(Set.copyOf(item.get("tags").get(0).propertyNames())).isEqualTo(TAG);
+			assertThat(item.get("createdAt").asString()).isEqualTo("2026-10-21T12:00:00+09:00");
+			assertThat(item.get("visitedAt").asString()).isEqualTo("2026-10-20");
+			assertThat(item.get("tags").get(0).get("sentiment").asString()).isEqualTo("GOOD");
 		}
 
 		@Test

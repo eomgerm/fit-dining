@@ -48,18 +48,21 @@ public class ReviewController {
 	private final Validator validator;
 
 	/**
-	 * 장소의 리뷰를 최신순으로 돌려준다. 인증 없이 조회한다.
+	 * 장소의 리뷰를 최신순으로 돌려준다. 로그인은 선택이고, 로그인했으면 내 리뷰에 {@code mine}이 붙는다(D-42).
 	 *
 	 * <p>오류: {@code placeId}가 양의 정수가 아니면 400. {@code cursor}를 해석할 수 없으면 400.
+	 * {@code Authorization} 헤더가 있는데 토큰이 유효하지 않으면 401. 없는 장소면 404.
 	 *
 	 * @param placeId 장소 id
 	 * @param cursor 다음 페이지 요청일 때, 직전 응답의 {@code nextCursor}
+	 * @param authorization 선택. {@code Bearer <AT>}
 	 * @return 리뷰 목록. 리뷰 수는 첫 페이지에만 있다.
 	 */
 	@GetMapping("/reviews")
 	public ReviewListResponse list(@PathVariable @Positive long placeId,
-			@RequestParam(required = false) String cursor) {
-		return reviewService.list(placeId, cursor);
+			@RequestParam(required = false) String cursor,
+			@RequestHeader(name = HttpHeaders.AUTHORIZATION, required = false) String authorization) {
+		return reviewService.list(placeId, cursor, authorization == null ? null : userId(authorization));
 	}
 
 	/**

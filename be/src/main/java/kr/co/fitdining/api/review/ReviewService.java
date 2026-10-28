@@ -6,22 +6,28 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import kr.co.fitdining.api.auth.domain.AuthFailure;
+import kr.co.fitdining.api.auth.domain.AuthUser;
 import kr.co.fitdining.api.auth.repository.AuthUserRepository;
 import kr.co.fitdining.api.place.PlaceService;
 import kr.co.fitdining.api.place.dto.PlaceSummary;
+import kr.co.fitdining.api.place.dto.PlaceSummary.CategoryGroup;
 import kr.co.fitdining.api.review.dto.ReviewCreateRequest;
 import kr.co.fitdining.api.review.dto.ReviewCreateResponse;
 import kr.co.fitdining.api.review.dto.ReviewFormResponse;
 import kr.co.fitdining.api.review.dto.ReviewItem;
 import kr.co.fitdining.api.review.dto.ReviewListResponse;
+import kr.co.fitdining.api.review.dto.TagView;
 import kr.co.fitdining.api.review.exception.DuplicateReviewException;
 import kr.co.fitdining.api.review.exception.InvalidVisitDateException;
 import kr.co.fitdining.api.review.store.Review;
 import kr.co.fitdining.api.review.store.ReviewCursor;
 import kr.co.fitdining.api.review.store.ReviewRepository;
+import kr.co.fitdining.api.review.store.ReviewTagRow;
 import kr.co.fitdining.api.review.tag.ReasonTag;
 import kr.co.fitdining.api.review.tag.ReasonTagRepository;
 import kr.co.fitdining.api.review.tag.ReasonTagRule;
@@ -130,14 +136,18 @@ public class ReviewService {
 	}
 
 	/**
-	 * 장소의 리뷰를 최신순으로 한 페이지 돌려준다. 리뷰 수는 첫 페이지에서만 센다.
+	 * 장소의 리뷰를 최신순으로 한 페이지 돌려준다. 리뷰 수는 첫 페이지에서만 센다. 작성자와 태그는 페이지 단위로
+	 * 한 번씩 읽어 페이지 하나가 쿼리 4번(목록, 리뷰 수, 작성자, 태그)이다(D-42).
 	 *
 	 * @param placeId 장소 id
 	 * @param cursor 다음 페이지 요청일 때 직전 응답의 {@code nextCursor}
+	 * @param viewerId 조회한 사용자 id. 로그인 없이 조회하면 null이다.
 	 * @return 리뷰 목록
+	 * @throws kr.co.fitdining.api.place.exception.PlaceNotFoundException 없는 장소일 때
 	 */
-	public ReviewListResponse list(long placeId, String cursor) {
+	public ReviewListResponse list(long placeId, String cursor, String viewerId) {
 		ReviewCursor after = cursor == null || cursor.isEmpty() ? null : ReviewCursor.decode(cursor);
+		CategoryGroup category = places.getPlace(placeId).place().categoryGroup();
 		// 한 건을 더 읽어 다음 페이지가 있는지 판단한다.
 		List<Review> rows = after == null
 				? reviews.findFirstPage(placeId, PAGE_SIZE + 1)
@@ -148,7 +158,29 @@ public class ReviewService {
 		Integer totalCount = after == null
 				? Math.toIntExact(reviews.countByPlaceIdAndDeletedAtIsNull(placeId))
 				: null;
-		return new ReviewListResponse(totalCount, page.stream().map(ReviewService::toItem).toList(), nextCursor);
+		return new ReviewListResponse(totalCount, items(page, category, viewerId), nextCursor);
+	}
+
+	private List<ReviewItem> items(List<Review> page, CategoryGroup category, String viewerId) {
+		if (page.isEmpty()) {
+			return List.of();
+		}
+		Map<String, String> nicknames = new HashMap<>();
+		for (AuthUser user : users.findAllById(page.stream().map(Review::getUserId).distinct().toList())) {
+			if (user.getDeletedAt() == null) {
+				nicknames.put(user.getId(), user.getNickname());
+			}
+		}
+		Map<Long, List<TagView>> tagsByReview = new HashMap<>();
+		for (ReviewTagRow row : reviews.findTags(page.stream().map(Review::getReviewId).toList(), category.name())) {
+			tagsByReview.computeIfAbsent(row.getReviewId(), id -> new ArrayList<>()).add(new TagView(row.getCode(),
+					row.getLabel(), ReasonTag.Sentiment.valueOf(row.getSentiment())));
+		}
+		return page.stream().map(review -> new ReviewItem(review.getReviewId(),
+				review.getCreatedAt().atZone(SEOUL).toOffsetDateTime(), review.getVisitDate(),
+				nicknames.get(review.getUserId()), review.isRevisitIntent(),
+				tagsByReview.getOrDefault(review.getReviewId(), List.of()), review.getDescription(),
+				review.getUserId().equals(viewerId))).toList();
 	}
 
 	/** 공백뿐인 본문은 본문 없음(null)이다(D-6). 길이 검증은 원문 기준이라 그 밖에는 그대로 둔다. */
@@ -164,11 +196,6 @@ public class ReviewService {
 			}
 		}
 		return false;
-	}
-
-	private static ReviewItem toItem(Review review) {
-		return new ReviewItem(review.getReviewId(), review.getCreatedAt().atZone(SEOUL).toOffsetDateTime(),
-				review.getDescription());
 	}
 
 }

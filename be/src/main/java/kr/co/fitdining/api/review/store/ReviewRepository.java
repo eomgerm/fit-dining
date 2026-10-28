@@ -2,6 +2,7 @@ package kr.co.fitdining.api.review.store;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -27,6 +28,16 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
 			  AND (created_at, review_id) < (:createdAt, :reviewId)
 			ORDER BY created_at DESC, review_id DESC
 			LIMIT :limit""";
+
+	/** 목록 페이지 리뷰들의 태그. 문구는 장소 업종의 것을 쓰고, 좋았어요를 먼저 두고 그 안에서는 시드의 순서를 따른다. */
+	String REVIEW_TAGS = """
+			SELECT rt.review_id AS "reviewId", t.code AS "code", t.sentiment AS "sentiment",
+			       COALESCE(c.label, t.label) AS "label"
+			FROM review_reason_tags rt
+			JOIN reason_tags t ON t.code = rt.code
+			LEFT JOIN reason_tag_categories c ON c.category = :category AND c.code = rt.code
+			WHERE rt.review_id IN (:reviewIds)
+			ORDER BY rt.review_id, t.sentiment = 'BAD', t.sort_order""";
 
 	String REVIEWED_DATES = """
 			SELECT visit_date FROM reviews
@@ -57,6 +68,14 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
 	 * @return 삭제한 리뷰를 뺀 리뷰 수
 	 */
 	long countByPlaceIdAndDeletedAtIsNull(long placeId);
+
+	/**
+	 * @param reviewIds 목록 페이지의 리뷰 id
+	 * @param category 장소 업종({@code RESTAURANT}, {@code CAFE}, {@code BAR})
+	 * @return 리뷰별 태그. 페이지 크기와 상관없이 한 번에 읽는다.
+	 */
+	@Query(value = REVIEW_TAGS, nativeQuery = true)
+	List<ReviewTagRow> findTags(@Param("reviewIds") Collection<Long> reviewIds, @Param("category") String category);
 
 	@Query(value = REVIEWED_DATES, nativeQuery = true)
 	List<LocalDate> findReviewedDates(@Param("userId") String userId, @Param("placeId") long placeId,

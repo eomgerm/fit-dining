@@ -3,7 +3,9 @@ package kr.co.fitdining.api.review;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 
+import jakarta.persistence.EntityManagerFactory;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -36,12 +38,16 @@ import kr.co.fitdining.api.review.dto.ReviewCreateRequest;
 import kr.co.fitdining.api.review.dto.ReviewFormResponse;
 import kr.co.fitdining.api.review.dto.ReviewItem;
 import kr.co.fitdining.api.review.dto.ReviewListResponse;
+import kr.co.fitdining.api.review.dto.TagView;
 import kr.co.fitdining.api.review.exception.DuplicateReviewException;
 import kr.co.fitdining.api.review.exception.InvalidReasonTagsException;
 import kr.co.fitdining.api.review.exception.InvalidVisitDateException;
 import kr.co.fitdining.api.review.store.ReviewRepository;
+import kr.co.fitdining.api.review.tag.ReasonTag;
 import kr.co.fitdining.api.support.PostgresTestSupport;
 import kr.co.fitdining.api.user.UserService;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -79,6 +85,7 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 	@DynamicPropertySource
 	static void placeMock(DynamicPropertyRegistry registry) {
 		registry.add("place.mock.enabled", () -> "true");
+		registry.add("spring.jpa.properties.hibernate.generate_statistics", () -> "true");
 	}
 
 	@TestConfiguration
@@ -129,6 +136,9 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 
 	@Autowired
 	UserService userService;
+
+	@Autowired
+	EntityManagerFactory entityManagerFactory;
 
 	@Value("${local.server.port}")
 	int port;
@@ -196,7 +206,7 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 			assertThat(((java.sql.Timestamp) row.get("created_at")).toInstant())
 					.isEqualTo(Instant.parse("2026-10-21T15:30:00.123456Z"));
 			assertThat(row.get("revisit_intent")).isEqualTo(false);
-			ReviewItem item = service.list(1, null).items().getFirst();
+			ReviewItem item = service.list(1, null, null).items().getFirst();
 			assertThat(item.createdAt().toString()).isEqualTo("2026-10-22T00:30:00.123456+09:00");
 		}
 
@@ -207,7 +217,7 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 
 			service.create(1, user, body(" \n "));
 
-			assertThat(service.list(1, null).items().getFirst().description()).isNull();
+			assertThat(service.list(1, null, null).items().getFirst().description()).isNull();
 		}
 
 		@Test
@@ -218,7 +228,7 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 
 			assertThatThrownBy(() -> service.create(1, user, body("두 번째")))
 					.isInstanceOf(DuplicateReviewException.class);
-			assertThat(service.list(1, null).totalCount()).isEqualTo(1);
+			assertThat(service.list(1, null, null).totalCount()).isEqualTo(1);
 		}
 
 		@Test
@@ -230,7 +240,7 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 			clock.instant = NOON.plusSeconds(24 * 60 * 60);
 
 			assertThatCode(() -> service.create(1, user, body(null))).doesNotThrowAnyException();
-			assertThat(service.list(1, null).totalCount()).isEqualTo(2);
+			assertThat(service.list(1, null, null).totalCount()).isEqualTo(2);
 		}
 
 		@Test
@@ -241,7 +251,7 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 			jdbc.update("update reviews set deleted_at = now()");
 
 			assertThatCode(() -> service.create(1, user, body("다시 쓴 리뷰"))).doesNotThrowAnyException();
-			assertThat(service.list(1, null).items()).extracting(ReviewItem::description).containsExactly("다시 쓴 리뷰");
+			assertThat(service.list(1, null, null).items()).extracting(ReviewItem::description).containsExactly("다시 쓴 리뷰");
 		}
 
 		@Test
@@ -367,9 +377,9 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 				service.create(1, user, body(null));
 			}
 
-			ReviewListResponse first = service.list(1, null);
-			ReviewListResponse second = service.list(1, first.nextCursor());
-			ReviewListResponse third = service.list(1, second.nextCursor());
+			ReviewListResponse first = service.list(1, null, null);
+			ReviewListResponse second = service.list(1, first.nextCursor(), null);
+			ReviewListResponse third = service.list(1, second.nextCursor(), null);
 
 			assertThat(first.totalCount()).isEqualTo(45);
 			assertThat(second.totalCount()).isNull();
@@ -393,7 +403,7 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 			clock.instant = NOON.plusSeconds(60);
 			service.create(1, authors.get(1), body("나중"));
 
-			assertThat(service.list(1, null).items()).extracting(ReviewItem::description).containsExactly("나중", "먼저");
+			assertThat(service.list(1, null, null).items()).extracting(ReviewItem::description).containsExactly("나중", "먼저");
 		}
 
 		@Test
@@ -403,7 +413,7 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 				service.create(1, user, body(null));
 			}
 
-			ReviewListResponse page = service.list(1, null);
+			ReviewListResponse page = service.list(1, null, null);
 
 			assertThat(page.items()).hasSize(20);
 			assertThat(page.nextCursor()).isNull();
@@ -412,7 +422,7 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 		@Test
 		@DisplayName("목록_리뷰가없으면_빈목록과0이다")
 		void list_noReviews_emptyAndZero() {
-			ReviewListResponse page = service.list(1, null);
+			ReviewListResponse page = service.list(1, null, null);
 
 			assertThat(page.totalCount()).isZero();
 			assertThat(page.items()).isEmpty();
@@ -428,7 +438,7 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 			}
 			jdbc.update("update reviews set deleted_at = now() where user_id = ?", authors.get(0));
 
-			ReviewListResponse page = service.list(1, null);
+			ReviewListResponse page = service.list(1, null, null);
 
 			assertThat(page.totalCount()).isEqualTo(1);
 			assertThat(page.items()).extracting(ReviewItem::description).containsExactly(authors.get(1));
@@ -440,7 +450,95 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 			String user = createUsers(1).getFirst();
 			service.create(2, user, body(null));
 
-			assertThat(service.list(1, null).totalCount()).isZero();
+			assertThat(service.list(1, null, null).totalCount()).isZero();
+		}
+
+		@Test
+		@DisplayName("목록_항목에방문일닉네임재방문의사태그가있고_내리뷰만mine이다")
+		void list_items_carryVisitFieldsAndMine() {
+			List<String> authors = createUsers(2);
+			LocalDate yesterday = LocalDate.ofInstant(clock.instant, SEOUL).minusDays(1);
+			service.create(3, authors.get(0), new ReviewCreateRequest(yesterday, List.of("SHORT_WAIT_BAD", "QUIET_GOOD"),
+					true, "내 리뷰", null));
+			clock.instant = NOON.plusSeconds(60);
+			service.create(3, authors.get(1), body("남의 리뷰"));
+
+			List<ReviewItem> signedIn = service.list(3, null, authors.get(0)).items();
+
+			assertThat(signedIn).extracting(ReviewItem::description, ReviewItem::mine)
+					.containsExactly(tuple("남의 리뷰", false), tuple("내 리뷰", true));
+			ReviewItem own = signedIn.get(1);
+			assertThat(own.visitedAt()).isEqualTo(yesterday);
+			assertThat(own.nickname()).isEqualTo("리뷰테스트0");
+			assertThat(own.revisitIntent()).isTrue();
+			assertThat(own.tags()).containsExactly(
+					new TagView("QUIET_GOOD", "조용해서 좋았어요", ReasonTag.Sentiment.GOOD),
+					new TagView("SHORT_WAIT_BAD", "대기가 길었어요", ReasonTag.Sentiment.BAD));
+			assertThat(service.list(3, null, null).items()).extracting(ReviewItem::mine).containsOnly(false);
+		}
+
+		/** 태그가 확정되면 시드 순서가 바뀔 수 있어, 아쉬웠어요의 순서를 앞으로 당겨도 좋았어요가 먼저인지 본다. */
+		@Test
+		@DisplayName("목록_태그는_시드순서와상관없이좋았어요가먼저다")
+		void list_tags_goodFirstRegardlessOfSeedOrder() {
+			String user = createUsers(1).getFirst();
+			service.create(3, user, request(LocalDate.ofInstant(clock.instant, SEOUL),
+					List.of("QUIET_GOOD", "SHORT_WAIT_BAD"), null));
+			Integer badOrder = jdbc.queryForObject("select sort_order from reason_tags where code = 'SHORT_WAIT_BAD'",
+					Integer.class);
+			jdbc.update("update reason_tags set sort_order = 0 where code = 'SHORT_WAIT_BAD'");
+			try {
+				assertThat(service.list(3, null, null).items().getFirst().tags()).extracting(TagView::code)
+						.containsExactly("QUIET_GOOD", "SHORT_WAIT_BAD");
+			} finally {
+				jdbc.update("update reason_tags set sort_order = ? where code = 'SHORT_WAIT_BAD'", badOrder);
+			}
+		}
+
+		@Test
+		@DisplayName("목록_태그문구는_장소업종의문구다")
+		void list_tagLabel_followsPlaceCategory() {
+			String user = createUsers(1).getFirst();
+			ReviewCreateRequest solo = request(LocalDate.ofInstant(clock.instant, SEOUL), List.of("PURPOSE_SOLO_GOOD"), null);
+			service.create(1, user, solo);
+			service.create(6, user, solo);
+
+			assertThat(service.list(1, null, null).items().getFirst().tags()).extracting(TagView::label)
+					.containsExactly("혼밥하기 좋았어요");
+			assertThat(service.list(6, null, null).items().getFirst().tags()).extracting(TagView::label)
+					.containsExactly("혼술하기 좋았어요");
+		}
+
+		@Test
+		@DisplayName("목록_없는장소면_예외다")
+		void list_unknownPlace_throws() {
+			assertThatThrownBy(() -> service.list(999, null, null)).isInstanceOf(PlaceNotFoundException.class);
+		}
+
+		/** 작성자와 태그를 리뷰마다 읽으면 페이지 크기만큼 쿼리가 는다. Hibernate가 보낸 SQL 수로 확인한다(D-42). */
+		@Test
+		@DisplayName("목록_작성자와태그를페이지단위로읽어_첫페이지는쿼리4번다음페이지는3번이다")
+		void list_batchesAuthorsAndTags_fixedQueryCount() {
+			LocalDate today = LocalDate.ofInstant(clock.instant, SEOUL);
+			for (String user : createUsers(25)) {
+				service.create(1, user, request(today, List.of("QUIET_GOOD", "SHORT_WAIT_BAD"), null));
+			}
+			Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
+
+			statistics.clear();
+			ReviewListResponse first = service.list(1, null, null);
+			long firstPage = statistics.getPrepareStatementCount();
+			statistics.clear();
+			ReviewListResponse second = service.list(1, first.nextCursor(), null);
+			long secondPage = statistics.getPrepareStatementCount();
+
+			assertThat(first.items()).hasSize(20).allSatisfy(item -> {
+				assertThat(item.nickname()).isNotNull();
+				assertThat(item.tags()).hasSize(2);
+			});
+			assertThat(second.items()).hasSize(5);
+			assertThat(firstPage).isEqualTo(4);
+			assertThat(secondPage).isEqualTo(3);
 		}
 	}
 
@@ -524,9 +622,10 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 			withdrawAccount(authors.get(0));
 
 			assertThat(users.existsByIdAndDeletedAtIsNull(authors.get(0))).isFalse();
-			ReviewListResponse page = service.list(1, null);
+			ReviewListResponse page = service.list(1, null, null);
 			assertThat(page.totalCount()).isEqualTo(2);
 			assertThat(page.items()).extracting(ReviewItem::description).containsExactly("다른 사람 리뷰", "탈퇴자 리뷰");
+			assertThat(page.items()).extracting(ReviewItem::nickname).containsExactly("리뷰테스트1", null);
 			assertThat(before.get("deleted_at")).isNull();
 			assertThat(jdbc.queryForMap(select, authors.get(0))).isEqualTo(before);
 		}
@@ -553,7 +652,7 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 			withdrawAccount(accounts.get(0));
 
 			assertThatCode(() -> service.create(1, accounts.get(1), body("재가입 뒤 리뷰"))).doesNotThrowAnyException();
-			assertThat(service.list(1, null).items()).extracting(ReviewItem::description)
+			assertThat(service.list(1, null, null).items()).extracting(ReviewItem::description)
 					.containsExactly("재가입 뒤 리뷰", "탈퇴 전 리뷰");
 		}
 	}
@@ -602,6 +701,14 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 					"from", java.sql.Date.valueOf("2026-09-21")));
 
 			assertThat(plan).contains("uk_reviews_user_id_place_id_visit_date");
+		}
+
+		@Test
+		@DisplayName("목록태그_리뷰태그기본키로읽는다")
+		void reviewTags_usesPrimaryKey() throws Exception {
+			String plan = explain(ReviewRepository.REVIEW_TAGS, Map.of("reviewIds", List.of(1L, 2L), "category", "CAFE"));
+
+			assertThat(plan).contains("review_reason_tags_pkey");
 		}
 	}
 
@@ -652,6 +759,24 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 			assertThat(row.get("visit_date").toString()).isEqualTo("2026-10-18");
 			assertThat(jdbc.queryForList("select code from review_reason_tags order by code", String.class))
 					.containsExactly("QUIET_GOOD", "SHORT_WAIT_BAD");
+		}
+
+		@Test
+		@DisplayName("목록_로그인하면내리뷰에mine이붙고_틀린토큰은401이다")
+		void list_withToken_marksMine() throws Exception {
+			createUsers(1);
+			String token = auth.login(USER_PREFIX + "0@example.com", PASSWORD, "127.0.0.1").accessToken();
+			String path = "/api/v1/places/1/reviews";
+			send("POST", path, token, json("2026-10-18", "내 리뷰"));
+
+			JsonNode signedIn = mapper.readTree(send("GET", path, token, null).body()).get("items").get(0);
+			JsonNode anonymous = mapper.readTree(send("GET", path, null, null).body()).get("items").get(0);
+
+			assertThat(signedIn.get("mine").asBoolean()).isTrue();
+			assertThat(signedIn.get("nickname").asString()).isEqualTo("리뷰테스트0");
+			assertThat(signedIn.get("visitedAt").asString()).isEqualTo("2026-10-18");
+			assertThat(anonymous.get("mine").asBoolean()).isFalse();
+			assertThat(send("GET", path, "forged", null).statusCode()).isEqualTo(401);
 		}
 
 		@Test
