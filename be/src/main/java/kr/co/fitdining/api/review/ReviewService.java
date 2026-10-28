@@ -45,7 +45,8 @@ public class ReviewService {
 
 	private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
 
-	static final ReviewFormResponse.Limits LIMITS = new ReviewFormResponse.Limits(500, 5, 1_000_000);
+	static final ReviewFormResponse.Limits LIMITS = new ReviewFormResponse.Limits(
+			ReviewCreateRequest.DESCRIPTION_MAX, 5, ReviewCreateRequest.SPENT_PER_PERSON_MAX);
 
 	private final ReviewRepository reviews;
 	private final AuthUserRepository users;

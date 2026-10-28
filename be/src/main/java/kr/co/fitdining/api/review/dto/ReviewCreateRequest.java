@@ -20,7 +20,13 @@ public record ReviewCreateRequest(
 		@NotNull LocalDate visitedAt,
 		@NotEmpty List<String> tagCodes,
 		@NotNull Boolean revisitIntent,
-		@Size(max = 500) String description,
-		@Min(0) @Max(1_000_000) Integer spentPerPerson
+		@Size(max = DESCRIPTION_MAX) String description,
+		@Min(0) @Max(SPENT_PER_PERSON_MAX) Integer spentPerPerson
 ) {
+
+	/** 작성 화면 데이터의 제한값도 이 값을 쓴다. DB 제약(V4)은 따로 맞춘다. */
+	public static final int DESCRIPTION_MAX = 500;
+
+	public static final int SPENT_PER_PERSON_MAX = 1_000_000;
+
 }
