@@ -122,7 +122,8 @@ type VisitDateSheetProps = {
   onConfirm: (date: string) => void;
 };
 
-// 7-03 방문일 고르기. 시트 안에서 고른 날은 "선택"을 눌러야 반영된다
+// 7-03 방문일 고르기. 시트 안에서 고른 날은 "선택"을 눌러야 반영된다.
+// 닫히는 동안에도 달력을 그려 두고, 다 닫히면 시트가 내용을 치워 다시 열 때 지금 값으로 시작한다
 export function VisitDateSheet({
   open,
   onOpenChange,
@@ -130,7 +131,7 @@ export function VisitDateSheet({
 }: VisitDateSheetProps) {
   return (
     <BottomSheet title="방문일" open={open} onOpenChange={onOpenChange}>
-      {open && <VisitDatePicker {...props} />}
+      <VisitDatePicker {...props} />
     </BottomSheet>
   );
 }

@@ -234,6 +234,18 @@ export function ReviewWriteFlow({
       start={header}
       step={page === "detail" ? 2 : 1}
       warm={page !== "detail"}
+      pinned={
+        page !== "detail" && (
+          <section className="flex flex-col gap-4 bg-surface px-5 pt-2 pb-5">
+            <PlaceRow place={form.place} />
+            <VisitDateButton
+              value={draft.visitedAt}
+              today={today}
+              onClick={() => setSheetOpen(true)}
+            />
+          </section>
+        )
+      }
     >
       {page === "detail" ? (
         <>
@@ -269,14 +281,6 @@ export function ReviewWriteFlow({
         </>
       ) : (
         <>
-          <section className="flex flex-col gap-4 bg-surface px-5 pt-2 pb-5">
-            <PlaceRow place={form.place} />
-            <VisitDateButton
-              value={draft.visitedAt}
-              today={today}
-              onClick={() => setSheetOpen(true)}
-            />
-          </section>
           <section className="flex flex-col gap-5 px-5 pt-7 pb-6">
             {page === "good" ? (
               <SectionHeader title="어떤 점이 좋았나요?" />
@@ -447,11 +451,14 @@ function FormFrame({
   start,
   step,
   warm,
+  pinned,
   children,
 }: {
   start: ReactNode;
   step: 1 | 2;
   warm?: boolean;
+  // 상단 막대 아래에 붙어 스크롤해도 남는 내용(7-01·7-02의 장소·방문일 줄)
+  pinned?: ReactNode;
   children?: ReactNode;
 }) {
   return (
@@ -462,14 +469,17 @@ function FormFrame({
           : "flex flex-1 flex-col bg-surface"
       }
     >
-      <TopBar tone="surface" start={start} className="sticky top-0 z-1">
-        <StepProgress
-          step={step}
-          total={2}
-          label="방문 평가 진행"
-          className="mx-auto w-64"
-        />
-      </TopBar>
+      <div className="sticky top-0 z-1">
+        <TopBar tone="surface" start={start}>
+          <StepProgress
+            step={step}
+            total={2}
+            label="방문 평가 진행"
+            className="mx-auto w-64"
+          />
+        </TopBar>
+        {pinned}
+      </div>
       {children}
     </div>
   );

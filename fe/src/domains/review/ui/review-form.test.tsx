@@ -140,6 +140,20 @@ describe("ReviewWriteFlow", () => {
     expect(markup(form(["2026-10-21"]))).toContain("방문일을 골라 주세요");
   });
 
+  it("1/2단계의 장소·방문일 줄은 상단 막대와 함께 고정된다", () => {
+    mount(flow(form()));
+    const pinned = screen.getByRole("banner").parentElement!;
+
+    expect(pinned.classList.contains("sticky")).toBe(true);
+    expect(pinned.contains(screen.getByText("카페 온담"))).toBe(true);
+    expect(
+      pinned.contains(screen.getByRole("button", { name: /방문일/ })),
+    ).toBe(true);
+    expect(pinned.contains(screen.getByText("어떤 점이 좋았나요?"))).toBe(
+      false,
+    );
+  });
+
   it("다시 받은 데이터에서 이미 쓴 날이 된 방문일을 비운다", () => {
     const view = mount(flow(form()));
 
