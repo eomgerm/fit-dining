@@ -225,7 +225,7 @@ BE `TasteAnalyzer`가 직접 입력마다 AI API를 한 번 부른다(`ai/server
 | 503 | `INTERPRET_FAILED` | GMS가 꺼짐(`GMS_ENABLED`), 호출이나 출력 검사가 두 번 실패. 사용자가 다시 시도한다 |
 | 500 | `INTERNAL_ERROR` | 예상하지 못한 오류 |
 
-GMS 한 번의 타임아웃은 `GMS_TIMEOUT_SECONDS`(기본 5초)이고 실패하면 한 번 더 부른다. 실제 GMS로 부르면 1~2초 걸렸다. BE 기본 타임아웃(`fitdining.onboarding.timeout-ms`, 3초)보다 길어질 수 있으므로 BE에 연결할 때 함께 정한다.
+GMS 한 번의 타임아웃은 `GMS_TIMEOUT_SECONDS`(기본 5초)이고 실패하면 한 번 더 부른다. 실제 GMS로 부르면 지금 프롬프트에서 2.2~3.0초(입력 4개) 걸렸다. 최적화 전 프롬프트는 1.1~1.9초였다. BE 기본 타임아웃(`fitdining.onboarding.timeout-ms`, 3초)에 걸리므로 BE에 연결할 때 함께 정한다.
 
 해석 품질 평가(정답셋 만들기)는 이번 범위가 아니다. 샘플 입력으로 동작만 확인한다.
 
