@@ -75,6 +75,19 @@ uv run --with mlflow==3.17.2 mlflow ui --backend-store-uri sqlite:///$HOME/fit-a
 
 judge·반성 모델과 연결 방식은 `experiments/prompt_opt/common.py`에 있습니다. GMS 호출 수는 스크립트의 `MAX_METRIC_CALLS`로 제한합니다.
 
+## 임베딩 서버(Modal)
+
+`server/embed.py`가 `POST /embed`(`docs/infra/design.md` 12.3절)를 Modal L4 GPU에서 띄웁니다. 인코딩은 `fit_ai.embedding`을 그대로 씁니다. 모델 가중치는 고정 리비전으로 이미지에 넣습니다.
+
+```bash
+uv run modal token new                              # 처음 한 번
+APP_ENV=dev uv run modal deploy -m server.embed     # 앱 fit-dev-embed. prod는 APP_ENV=prod
+```
+
+- 요청: `{"texts": [...], "kind": "query|passage"}`. 텍스트는 1~64개, 각 2000자 이하이고 넘으면 422입니다.
+- 응답: `{"model": "<모델>@<리비전>", "dim": 1024, "vectors": [...]}`, 헤더 `X-Model-Version`. 벡터는 단위 길이이고 소수 6자리로 반올림됩니다.
+- 인증: `requires_proxy_auth=True`. BE는 Modal 대시보드에서 만든 프록시 토큰을 `Modal-Key`·`Modal-Secret` 헤더로 보냅니다.
+
 ## GPU로 돌리기
 
 기본 `uv sync`는 PyPI의 torch를 씁니다(Windows는 CPU, Linux는 CUDA 13 빌드). GPU를 쓰려면 CUDA 12.8 빌드를 고릅니다. 드라이버가 CUDA 12.8 이상이면 됩니다(`nvidia-smi` 오른쪽 위 `CUDA Version`).
