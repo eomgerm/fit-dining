@@ -80,10 +80,12 @@ judge·반성 모델과 연결 방식은 `experiments/prompt_opt/common.py`에 �
 `server/embed.py`가 `POST /embed`(`docs/infra/design.md` 12.3절)를 Modal L4 GPU에서 띄웁니다. 인코딩은 `fit_ai.embedding`을 그대로 씁니다. 모델 가중치는 고정 리비전으로 이미지에 넣습니다.
 
 ```bash
-uv run modal token new                          # 처음 한 번
+uv run modal token new                              # 처음 한 번
 uv run modal serve --env fit-test -m server.embed   # AI 팀 시험용. 끄면 내려간다
 uv run modal deploy --env fit-dev -m server.embed   # BE dev가 부른다. prod는 --env fit-prod
 ```
+
+한국어 Windows에서는 앞에 `PYTHONUTF8=1`을 붙입니다. Modal이 `pyproject.toml`을 시스템 인코딩(cp949)으로 읽다가 한글 주석에서 실패합니다.
 
 Modal Environment는 `fit-test`·`fit-dev`·`fit-prod`이고 앱 이름은 모두 `fit-embed`입니다(설계 11.2절). 같은 커밋을 fit-test에서 대조한 뒤 fit-dev, fit-prod 순서로 올립니다.
 
