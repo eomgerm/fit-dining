@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import { cn } from "@/shared/lib/cn";
 import { Button } from "@/shared/ui/button/button";
@@ -25,6 +25,7 @@ import { distanceMeters, formatDistance } from "../model/nearby";
 import { CATEGORY_LABELS, OPEN_STATUS_LABELS } from "../model/place-labels";
 import type { CategoryGroup, LatLng } from "../model/place-types";
 import { PlacePhoto, statusVariants } from "./place-parts";
+import { PanelHandle } from "./result-panel";
 import type { SavedPanelState } from "./saved-view-state";
 
 // 패널에 보일 것. failed는 서버 오류·시간 초과·401이 아닌 4xx, offline은 연결 실패다(D-14)
@@ -36,7 +37,6 @@ export type SavedContent =
   | { kind: "loaded"; items: BookmarkItem[] };
 
 const TITLE = "저장한 장소";
-const DRAG_THRESHOLD_PX = 30;
 
 export function savedCardElementId(placeId: number) {
   return `saved-card-${placeId}`;
@@ -74,8 +74,6 @@ export function SavedPlacesView({
   onRecommend,
   edge,
 }: SavedPlacesViewProps) {
-  const dragStartY = useRef<number | undefined>(undefined);
-
   // 연결이 없으면 지도 없이 전체 페이지로 안내한다(SavedNetError)
   if (content.kind === "offline") {
     return (
@@ -127,22 +125,7 @@ export function SavedPlacesView({
         {!full && edge && (
           <div className="absolute right-4 bottom-full mb-3">{edge}</div>
         )}
-        <button
-          type="button"
-          aria-label={full ? "패널 줄이기" : "패널 펼치기"}
-          onClick={() => onPanelChange(full ? "middle" : "full")}
-          onPointerDown={(event) => (dragStartY.current = event.clientY)}
-          onPointerUp={(event) => {
-            if (dragStartY.current === undefined) return;
-            const delta = event.clientY - dragStartY.current;
-            dragStartY.current = undefined;
-            if (delta < -DRAG_THRESHOLD_PX) onPanelChange("full");
-            if (delta > DRAG_THRESHOLD_PX) onPanelChange("middle");
-          }}
-          className="flex h-6 shrink-0 touch-none items-center justify-center"
-        >
-          <span className="h-1 w-9 rounded-full bg-line-strong" />
-        </button>
+        <PanelHandle expanded={full} onChange={onPanelChange} />
 
         <div className="flex shrink-0 items-center gap-1 px-4 pb-2">
           {full && (

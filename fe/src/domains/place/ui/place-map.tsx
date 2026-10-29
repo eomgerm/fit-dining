@@ -104,14 +104,9 @@ const BOOKMARK_SVG =
 
 // 선택된 핀은 순위 번호가 든 물방울, 나머지는 순위 번호가 든 흰 원이다.
 // 저장한 장소 핀은 순위 없이 북마크가 든 주황 원이고, 선택되면 북마크가 든 물방울이다(와이어프레임 Saved).
-// 순위가 없으면(정보 탭의 위치 지도) 가운데에 흰 원이 든 조금 작은 물방울이다
-function pinIcon(
-  naver: NaverMaps,
-  rank: number | undefined,
-  selected: boolean,
-  bookmark = false,
-) {
-  if (bookmark) {
+// 표시가 없으면(정보 탭의 위치 지도) 가운데에 흰 원이 든 조금 작은 물방울이다
+function pinIcon(naver: NaverMaps, mark: PinMark, selected: boolean) {
+  if (mark === "bookmark") {
     if (selected)
       return dropPin(naver, SELECTED_PIN_SIZE, "size-10", BOOKMARK_SVG);
     return {
@@ -119,7 +114,7 @@ function pinIcon(
       anchor: new naver.Point(BOOKMARK_PIN_SIZE / 2, BOOKMARK_PIN_SIZE / 2),
     };
   }
-  if (rank === undefined) {
+  if (mark === undefined) {
     return dropPin(
       naver,
       LOCATION_PIN_SIZE,
@@ -127,9 +122,9 @@ function pinIcon(
       '<span class="size-3 rounded-full bg-surface"></span>',
     );
   }
-  if (selected) return dropPin(naver, SELECTED_PIN_SIZE, "size-10", `${rank}`);
+  if (selected) return dropPin(naver, SELECTED_PIN_SIZE, "size-10", `${mark}`);
   return {
-    content: `<div class="flex size-7 items-center justify-center rounded-full border border-icon-subtle bg-surface text-label-sm text-ink shadow-1">${rank}</div>`,
+    content: `<div class="flex size-7 items-center justify-center rounded-full border border-icon-subtle bg-surface text-label-sm text-ink shadow-1">${mark}</div>`,
     anchor: new naver.Point(PIN_SIZE / 2, PIN_SIZE / 2),
   };
 }
@@ -144,8 +139,10 @@ function ignoreSdkError(call: () => void) {
   } catch {}
 }
 
-// bookmark면 순위 없는 북마크 모양이다(저장한 장소 화면)
-export type MapPin = LatLng & { id: number; rank?: number; bookmark?: boolean };
+// 핀 안의 표시. 순위 번호, 저장한 장소의 북마크, 없음(위치 하나만 보이는 지도) 중 하나다
+export type PinMark = number | "bookmark" | undefined;
+
+export type MapPin = LatLng & { id: number; mark?: PinMark };
 
 export type PlaceMapHandle = {
   // 지도가 없으면 undefined
@@ -188,10 +185,7 @@ export function PlaceMap({
   // 처음 중심은 지도를 만들 때 한 번만 쓴다
   const initialCenter = useRef(center ?? DEFAULT_CENTER);
   const markersRef = useRef(
-    new Map<
-      number,
-      { marker: NaverMarker; rank?: number; bookmark?: boolean; zIndex: number }
-    >(),
+    new Map<number, { marker: NaverMarker; mark?: PinMark; zIndex: number }>(),
   );
   // 인증이 실패하면 SDK 내부 값이 비어 어떤 호출이든 던지므로, 그 뒤에는 SDK를 부르지 않는다
   const active = failed ? undefined : loaded;
@@ -279,10 +273,7 @@ export function PlaceMap({
   const handlePinClick = useEffectEvent((id: number) => onPinClick(id));
   // 부모가 매번 새 배열을 넘겨도 내용이 같으면 핀을 다시 만들지 않는다
   const pinsKey = pins
-    .map(
-      ({ id, rank, bookmark, lat, lng }) =>
-        `${id}:${rank}:${bookmark ? "b" : ""}:${lat}:${lng}`,
-    )
+    .map(({ id, mark, lat, lng }) => `${id}:${mark}:${lat}:${lng}`)
     .join("|");
   const currentPins = useEffectEvent(() => pins);
 
@@ -293,16 +284,16 @@ export function PlaceMap({
     const listeners: unknown[] = [];
     guard(() => {
       const pins = currentPins();
-      for (const { id, rank, bookmark, lat, lng } of pins) {
+      for (const { id, mark, lat, lng } of pins) {
         // 앞 순위 핀이 위에 그려진다
-        const zIndex = pins.length - (rank ?? 0);
+        const zIndex = pins.length - (typeof mark === "number" ? mark : 0);
         const marker = new naver.Marker({
           position: new naver.LatLng(lat, lng),
           map,
-          icon: pinIcon(naver, rank, false, bookmark),
+          icon: pinIcon(naver, mark, false),
           zIndex,
         });
-        markers.set(id, { marker, rank, bookmark, zIndex });
+        markers.set(id, { marker, mark, zIndex });
         listeners.push(
           naver.Event.addListener(marker, "click", () => handlePinClick(id)),
         );
@@ -324,16 +315,12 @@ export function PlaceMap({
       selectedId === undefined ? undefined : markers.get(selectedId);
     if (!selected) return;
     guard(() => {
-      selected.marker.setIcon(
-        pinIcon(active.naver, selected.rank, true, selected.bookmark),
-      );
+      selected.marker.setIcon(pinIcon(active.naver, selected.mark, true));
       selected.marker.setZIndex(markers.size + 1);
     });
     return () =>
       ignoreSdkError(() => {
-        selected.marker.setIcon(
-          pinIcon(active.naver, selected.rank, false, selected.bookmark),
-        );
+        selected.marker.setIcon(pinIcon(active.naver, selected.mark, false));
         selected.marker.setZIndex(selected.zIndex);
       });
   }, [active, pinsKey, selectedId]);

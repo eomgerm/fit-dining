@@ -153,6 +153,19 @@ describe("누른 계정의 AT로만 보내기", () => {
     expect(auth.refresh).not.toHaveBeenCalled();
   });
 
+  it("같은 계정이어도 보내려는 AT가 지금 세션의 AT가 아니면 보내지 않는다", async () => {
+    auth.session = { userId: "a", accessToken: "t1" };
+    // 복원이 돌려준 세션이 그사이 바뀐 경우(다른 계정으로 갔다가 같은 계정으로 다시 로그인)
+    auth.restore.mockResolvedValue({ userId: "a", accessToken: "stale" });
+    const { result } = renderAccess();
+    const request = vi.fn(async () => "sent");
+
+    await expect(result.current.send("a", request)).rejects.toBeInstanceOf(
+      BookmarkAccountChanged,
+    );
+    expect(request).not.toHaveBeenCalled();
+  });
+
   it("AT가 만료돼 RT로 갱신했더니 다른 계정이면 다시 보내지 않는다", async () => {
     auth.session = { userId: "a", accessToken: "t1" };
     auth.refresh.mockImplementation(async () => {

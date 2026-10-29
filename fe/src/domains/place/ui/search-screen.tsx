@@ -18,7 +18,6 @@ import { useToast } from "@/shared/ui/overlay/toast";
 
 import { placeQueries } from "../api/place-queries";
 import {
-  guestAccess,
   parseCategory,
   placeDetailHref,
   SAVED_VIEW,
@@ -75,15 +74,9 @@ type SearchInput = {
   request: PlaceSearchRequest;
 };
 
-const GUEST = guestAccess(() => {});
-
 // 첫 화면(와이어프레임 Start)과 검색·추천 결과 화면(5-01, 5-03~5-07), 저장한 장소 화면(?view=saved, 와이어프레임 Saved).
-// bookmarks는 저장한 장소의 인증이다. 인증 도메인을 쓰는 app이 넘기고, 없으면 비로그인처럼 보인다
-export function SearchScreen({
-  bookmarks = GUEST,
-}: {
-  bookmarks?: BookmarkAccess;
-}) {
+// bookmarks는 저장한 장소의 인증이다. 인증 도메인을 쓰는 app이 넘긴다
+export function SearchScreen({ bookmarks }: { bookmarks: BookmarkAccess }) {
   const router = useRouter();
   const params = useSearchParams();
   // 저장한 장소 화면은 메인의 지도와 하단 패널이 내 저장 장소만 보이도록 바뀐 상태다(D-12)
@@ -422,19 +415,30 @@ export function SearchScreen({
     : showPanel
       ? results.cards
       : nearby.cards;
-  const pins = savedView
-    ? savedItems.map(({ place }) => ({
-        id: place.id,
-        lat: place.lat,
-        lng: place.lng,
-        bookmark: true,
-      }))
-    : pinCards.map(({ place }, index) => ({
-        id: place.id,
-        rank: index + 1,
-        lat: place.lat,
-        lng: place.lng,
-      }));
+  // 지도는 메인과 저장한 장소 화면이 함께 쓴다. 화면마다 핀, 선택, 크기만 다르다
+  const map = savedView
+    ? {
+        full: false,
+        pins: savedItems.map(({ place: { id, lat, lng } }) => ({
+          id,
+          lat,
+          lng,
+          mark: "bookmark" as const,
+        })),
+        selectedId: savedSelectedId,
+        onPinClick: handleSavedPinClick,
+      }
+    : {
+        full: firstScreen,
+        pins: pinCards.map(({ place: { id, lat, lng } }, index) => ({
+          id,
+          lat,
+          lng,
+          mark: index + 1,
+        })),
+        selectedId: firstScreen ? selectedNearbyId : selectedPlaceId,
+        onPinClick: handlePinClick,
+      };
   const myLocationButton = mapReady && (
     <Fab label="내 위치" onClick={handleMyLocation}>
       <MyLocationIcon className="text-icon" />
@@ -447,51 +451,47 @@ export function SearchScreen({
         ref={mapRef}
         // 패널이 있으면 지도를 패널 위쪽에 맞춰 지도 중심과 핀이 가려지지 않게 한다(조금 겹친다)
         className={
-          firstScreen && !savedView
-            ? "absolute inset-0"
-            : "absolute inset-x-0 top-0 h-1/2"
+          map.full ? "absolute inset-0" : "absolute inset-x-0 top-0 h-1/2"
         }
-        pins={pins}
-        selectedId={
-          savedView
-            ? savedSelectedId
-            : firstScreen
-              ? selectedNearbyId
-              : selectedPlaceId
-        }
+        pins={map.pins}
+        selectedId={map.selectedId}
         myLocation={here}
-        onPinClick={savedView ? handleSavedPinClick : handlePinClick}
+        onPinClick={map.onPinClick}
         onUserMove={() => setMapMoved(true)}
         onReadyChange={setMapReady}
       />
 
-      {!savedView && (firstScreen || past || panel !== "full") && (
-        <div className="absolute top-4 right-4 flex flex-col gap-2">
-          <Fab label="저장한 장소" onClick={handleOpenSaved}>
-            <BookmarkIcon className="text-icon" />
-          </Fab>
-          <Fab label="내 정보" onClick={() => router.push("/my")}>
-            <UserIcon className="text-icon" />
-          </Fab>
-        </div>
-      )}
+      {/* 저장한 장소 화면에는 [뒤로]와 "내 위치"만 있다(D-12) */}
+      {!savedView && (
+        <>
+          {(firstScreen || past || panel !== "full") && (
+            <div className="absolute top-4 right-4 flex flex-col gap-2">
+              <Fab label="저장한 장소" onClick={handleOpenSaved}>
+                <BookmarkIcon className="text-icon" />
+              </Fab>
+              <Fab label="내 정보" onClick={() => router.push("/my")}>
+                <UserIcon className="text-icon" />
+              </Fab>
+            </div>
+          )}
 
-      {!savedView &&
-        mapReady &&
-        mapMoved &&
-        viewing &&
-        !past &&
-        !searching &&
-        panel === "middle" && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRegionSearch}
-            className="absolute top-4 left-1/2 -translate-x-1/2"
-          >
-            <RefreshIcon size="sm" className="mr-1" />이 지역에서 검색
-          </Button>
-        )}
+          {mapReady &&
+            mapMoved &&
+            viewing &&
+            !past &&
+            !searching &&
+            panel === "middle" && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRegionSearch}
+                className="absolute top-4 left-1/2 -translate-x-1/2"
+              >
+                <RefreshIcon size="sm" className="mr-1" />이 지역에서 검색
+              </Button>
+            )}
+        </>
+      )}
 
       {savedView ? (
         <SavedPlacesView

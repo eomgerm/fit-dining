@@ -42,17 +42,6 @@ export class BookmarkAccountChanged extends Error {
   }
 }
 
-// 인증을 넘겨받지 못했을 때의 비로그인 사용자
-export function guestAccess(login: (returnTo: string) => void): BookmarkAccess {
-  return {
-    session: { status: "guest" },
-    currentUserId: () => undefined,
-    send: () => Promise.reject(new BookmarkAccountChanged()),
-    endSession: () => {},
-    login,
-  };
-}
-
 export const SAVED_VIEW = "saved";
 
 // 저장한 장소 화면 주소. 업종 탭을 고르지 않았으면 category가 없다

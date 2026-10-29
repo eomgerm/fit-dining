@@ -14,12 +14,22 @@ import { createQueryClient } from "@/shared/api/query-client";
 import type { RuntimeConfig } from "@/shared/lib/runtime-config";
 import { ToastProvider } from "@/shared/ui/overlay/toast";
 
+import type { BookmarkAccess } from "../model/bookmark";
 import type { Menu, PlaceCard, PlaceDetail } from "../model/place-types";
 import { createSearchStore, type SearchStore } from "../model/search-store";
 import {
   PlaceDetailScreen,
   type PlaceDetailSlots,
 } from "./place-detail-screen";
+
+// 인증은 북마크 테스트(place-detail-bookmark, saved-places)가 본다. 여기서는 비로그인이다
+const guest: BookmarkAccess = {
+  session: { status: "guest" },
+  currentUserId: () => undefined,
+  send: () => Promise.reject(new Error("비로그인")),
+  endSession: () => {},
+  login: () => {},
+};
 
 const params = vi.hoisted(() => ({ id: "1" as string | null }));
 vi.mock("next/navigation", () => ({
@@ -160,7 +170,7 @@ function renderDetail(slots?: PlaceDetailSlots) {
   return render(
     <QueryClientProvider client={createQueryClient()}>
       <ToastProvider>
-        <PlaceDetailScreen slots={slots} />
+        <PlaceDetailScreen slots={slots} bookmarks={guest} />
       </ToastProvider>
     </QueryClientProvider>,
   );
@@ -563,7 +573,7 @@ describe("PlaceDetailScreen", () => {
     expect(await screen.findByText("준비 중이에요")).toBeTruthy();
   });
 
-  it("인증을 넘기지 않으면 '저장'은 비로그인처럼 로그인 안내를 띄운다", async () => {
+  it("비로그인이면 '저장'은 로그인 안내를 띄운다", async () => {
     renderDetail();
     await screen.findByRole("heading", { name: "카페 온담" });
 

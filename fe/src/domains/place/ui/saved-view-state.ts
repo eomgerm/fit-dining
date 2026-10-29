@@ -1,6 +1,7 @@
 import type { PanelState } from "./result-panel";
 
-export type SavedPanelState = "middle" | "full";
+// 저장한 장소 패널은 중간과 전체 높이만 있다(요청 기록 펼침이 없다)
+export type SavedPanelState = Exclude<PanelState, "history">;
 
 // 저장한 장소 화면을 앱 안에서 연 곳. 메인에서 열었으면 그때의 패널 상태도 둔다
 type SavedEntry = { from: "main"; mainPanel: PanelState } | { from: "my" };

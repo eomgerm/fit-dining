@@ -15,10 +15,20 @@ import { createQueryClient } from "@/shared/api/query-client";
 import type { RuntimeConfig } from "@/shared/lib/runtime-config";
 import { ToastProvider } from "@/shared/ui/overlay/toast";
 
+import type { BookmarkAccess } from "../model/bookmark";
 import type { PlaceCard, PlaceSearchResponse } from "../model/place-types";
 import { NEARBY_QUERY } from "../model/search-request";
 import { createSearchStore, type SearchStore } from "../model/search-store";
 import { SearchScreen } from "./search-screen";
+
+// 인증은 북마크 테스트(place-detail-bookmark, saved-places)가 본다. 여기서는 비로그인이다
+const guest: BookmarkAccess = {
+  session: { status: "guest" },
+  currentUserId: () => undefined,
+  send: () => Promise.reject(new Error("비로그인")),
+  endSession: () => {},
+  login: () => {},
+};
 
 // 화면이 쓰는 모듈 store를 테스트마다 새 store로 바꾼다
 const stores = vi.hoisted(() => ({
@@ -109,7 +119,7 @@ function renderScreen() {
   return render(
     <QueryClientProvider client={createQueryClient()}>
       <ToastProvider>
-        <SearchScreen />
+        <SearchScreen bookmarks={guest} />
       </ToastProvider>
     </QueryClientProvider>,
   );

@@ -105,13 +105,19 @@ function UserBookmarkButton({
   }, [sessionEnded]);
 
   const stillMine = () => access.currentUserId() === userId;
+  // 세션이 끝난 401이라도 그사이 다른 계정으로 바뀌었으면 새 계정의 세션을 지우지 않고 결과를 버린다(AC-15).
+  // 갱신 실패로 이미 로그인 정보가 지워졌으면(사용자 없음) 이 계정의 세션 종료다
+  const endSessionIfMine = () => {
+    const current = access.currentUserId();
+    if (current === undefined || current === userId) onSessionEnded(true);
+  };
 
   async function recheck(networkToast: boolean) {
     setRechecking(true);
     const result = await status.refetch();
     setRechecking(false);
     if (!result.isError) return;
-    if (isSessionEnded(result.error)) onSessionEnded(true);
+    if (isSessionEnded(result.error)) endSessionIfMine();
     else if (networkToast && stillMine()) toast(NETWORK_MESSAGE);
   }
 
@@ -120,7 +126,7 @@ function UserBookmarkButton({
       await write.mutateAsync(save);
     } catch (error) {
       if (error instanceof BookmarkAccountChanged) return;
-      if (isSessionEnded(error)) return onSessionEnded(true);
+      if (isSessionEnded(error)) return endSessionIfMine();
       if (!stillMine()) return;
       const failed = save
         ? "저장하지 못했어요. 다시 시도해 주세요."

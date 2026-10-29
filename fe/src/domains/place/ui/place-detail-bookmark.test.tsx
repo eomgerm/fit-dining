@@ -424,6 +424,23 @@ describe("계정 전환", () => {
     });
   });
 
+  it("요청 중에 다른 계정으로 바뀐 뒤 그 요청이 401로 끝나면 새 계정의 세션을 지우지 않는다", async () => {
+    reply("GET", ok({ bookmarked: false }), ok({ bookmarked: false }));
+    const put = deferred();
+    reply("PUT", put.reply);
+    await renderDetail();
+
+    fireEvent.click(await button("저장"));
+    await waitFor(() => expect(bookmarkCalls("PUT")).toHaveLength(1));
+    act(() => harness.setSession(user("b")));
+    await act(async () => put.resolve(status(401)()));
+
+    expect(await button("저장")).toBeTruthy();
+    expect(harness.endSession).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(harness.current).toBe("b");
+  });
+
   it("보내는 순간 계정이 다르면 보내지 않고 결과를 버린다", async () => {
     reply("GET", ok({ bookmarked: false }));
     await renderDetail();

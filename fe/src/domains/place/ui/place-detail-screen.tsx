@@ -21,7 +21,6 @@ import { Tooltip } from "@/shared/ui/overlay/tooltip";
 
 import { placeQueries } from "../api/place-queries";
 import {
-  guestAccess,
   placeDetailHref,
   SAVED_VIEW,
   type BookmarkAccess,
@@ -59,13 +58,13 @@ export type PlaceDetailSlots = {
 };
 
 // 장소 상세(6-01, 6-02, 6-04, 6-05, 와이어프레임 Detail·DetailMenu·DetailInfo·DetailSaved). ?id가 올바른 정수일 때만 요청한다.
-// bookmarks는 저장 버튼의 인증이다. 인증 도메인을 쓰는 app이 넘기고, 없으면 비로그인처럼 보인다
+// bookmarks는 저장 버튼의 인증이다. 인증 도메인을 쓰는 app이 넘긴다
 export function PlaceDetailScreen({
   slots,
   bookmarks,
 }: {
   slots?: PlaceDetailSlots;
-  bookmarks?: BookmarkAccess;
+  bookmarks: BookmarkAccess;
 }) {
   const params = useSearchParams();
   const id = parsePlaceId(params.get("id"));
@@ -126,7 +125,7 @@ function PlaceDetailContent({
 }: {
   id: number;
   slots?: PlaceDetailSlots;
-  bookmarks?: BookmarkAccess;
+  bookmarks: BookmarkAccess;
   fromSaved: boolean;
 }) {
   const query = useQuery(placeQueries.detail(id));
@@ -185,10 +184,9 @@ function PlaceDetailView({
   detail: PlaceDetail;
   card?: PlaceCard;
   slots?: PlaceDetailSlots;
-  bookmarks?: BookmarkAccess;
+  bookmarks: BookmarkAccess;
   returnTo: string;
 }) {
-  const router = useRouter();
   const here = useHere();
   const toast = useToast();
   const [now] = useState(() => new Date());
@@ -307,7 +305,7 @@ function PlaceDetailView({
         <div className="flex gap-2.5">
           <BookmarkButton
             placeId={place.id}
-            access={bookmarks ?? guestAccess(() => router.push("/login"))}
+            access={bookmarks}
             returnTo={returnTo}
           />
           {slots?.bottomAction && (

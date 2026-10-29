@@ -94,7 +94,6 @@ export function ResultPanel({
   footer,
   edge,
 }: ResultPanelProps) {
-  const dragStartY = useRef<number | undefined>(undefined);
   // 받은 결과를 보여 주는 중. 검색 중이거나 실패했으면 이전 결과의 요약과 칩을 숨긴다
   const showingResults = !searching && !failure;
   const full = state === "full";
@@ -114,22 +113,7 @@ export function ResultPanel({
       {state === "middle" && edge && (
         <div className="absolute right-4 bottom-full mb-3">{edge}</div>
       )}
-      <button
-        type="button"
-        aria-label={state === "middle" ? "패널 펼치기" : "패널 줄이기"}
-        onClick={() => onStateChange(state === "middle" ? "full" : "middle")}
-        onPointerDown={(event) => (dragStartY.current = event.clientY)}
-        onPointerUp={(event) => {
-          if (dragStartY.current === undefined) return;
-          const delta = event.clientY - dragStartY.current;
-          dragStartY.current = undefined;
-          if (delta < -DRAG_THRESHOLD_PX) onStateChange("full");
-          if (delta > DRAG_THRESHOLD_PX) onStateChange("middle");
-        }}
-        className="flex h-6 shrink-0 touch-none items-center justify-center"
-      >
-        <span className="h-1 w-9 rounded-full bg-line-strong" />
-      </button>
+      <PanelHandle expanded={state !== "middle"} onChange={onStateChange} />
 
       <div className="flex shrink-0 items-center justify-between px-4">
         <button
@@ -206,6 +190,36 @@ export function ResultPanel({
       )}
       <div className="shrink-0 border-t border-line px-3 py-2">{footer}</div>
     </section>
+  );
+}
+
+// 패널 위쪽 손잡이. 누르면 중간과 전체를 오가고, 위아래로 끌어도 바뀐다. 저장한 장소 패널도 쓴다
+export function PanelHandle({
+  expanded,
+  onChange,
+}: {
+  // 중간 높이가 아니다(전체, 요청 기록 펼침)
+  expanded: boolean;
+  onChange: (state: Exclude<PanelState, "history">) => void;
+}) {
+  const dragStartY = useRef<number | undefined>(undefined);
+  return (
+    <button
+      type="button"
+      aria-label={expanded ? "패널 줄이기" : "패널 펼치기"}
+      onClick={() => onChange(expanded ? "middle" : "full")}
+      onPointerDown={(event) => (dragStartY.current = event.clientY)}
+      onPointerUp={(event) => {
+        if (dragStartY.current === undefined) return;
+        const delta = event.clientY - dragStartY.current;
+        dragStartY.current = undefined;
+        if (delta < -DRAG_THRESHOLD_PX) onChange("full");
+        if (delta > DRAG_THRESHOLD_PX) onChange("middle");
+      }}
+      className="flex h-6 shrink-0 touch-none items-center justify-center"
+    >
+      <span className="h-1 w-9 rounded-full bg-line-strong" />
+    </button>
   );
 }
 
