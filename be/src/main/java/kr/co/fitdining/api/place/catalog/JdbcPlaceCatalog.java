@@ -10,6 +10,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumMap;
@@ -34,23 +35,24 @@ import kr.co.fitdining.api.place.dto.PlaceDetailResponse.Subway;
 import kr.co.fitdining.api.place.dto.PlaceSummary;
 import kr.co.fitdining.api.place.dto.PlaceSummary.CategoryGroup;
 import kr.co.fitdining.api.place.dto.PlaceSummary.Station;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
-import tools.jackson.core.type.TypeReference;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
  * 장소 카탈로그(place-catalog V6, V7)를 JdbcClient의 SQL로 읽는 {@link PlaceCatalog} 구현. 읽기 전용이라 JPA 엔티티를
  * 만들지 않는다(place-lookup-db D-4). 응답 모양과 영업 상태 규칙은 place-catalog spec을 따른다.
  */
+@Slf4j
 @Component
 @ConditionalOnCatalogMode
 public class JdbcPlaceCatalog implements PlaceCatalog {
 
 	private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
 	private static final DateTimeFormatter HH_MM = DateTimeFormatter.ofPattern("HH:mm");
-	private static final TypeReference<List<Break>> BREAKS = new TypeReference<>() {
-	};
 	private static final Map<DayCode, String> DAY_NAMES = Map.of(
 			DayCode.MON, "월", DayCode.TUE, "화", DayCode.WED, "수", DayCode.THU, "목",
 			DayCode.FRI, "금", DayCode.SAT, "토", DayCode.SUN, "일");
@@ -59,7 +61,8 @@ public class JdbcPlaceCatalog implements PlaceCatalog {
 
 	private static final String PLACE_SQL = """
 			SELECT place_id, name, category_group, station, lat, lng, thumbnail_url,
-			       COALESCE(address, full_address, jibun_address) AS address, directions, description, phone, website,
+			       COALESCE(NULLIF(btrim(address), ''), NULLIF(btrim(full_address), ''),
+			                NULLIF(btrim(jibun_address), '')) AS address, directions, description, phone, website,
 			       extra_links, booking_url, facilities, parking_free, parking_note, pet_allowed, pet_note,
 			       corkage_allowed, corkage_note, payment_methods
 			FROM places WHERE place_id = :id""";
@@ -202,9 +205,47 @@ public class JdbcPlaceCatalog implements PlaceCatalog {
 		return new Hours(DayCode.valueOf(rs.getString("day_of_week")),
 				open == null ? null : HH_MM.format(open),
 				close == null ? null : HH_MM.format(close),
-				breaks == null || breaks.isBlank() ? List.of() : jsonMapper.readValue(breaks, BREAKS),
+				breaks(breaks),
 				times(rs, "last_orders"),
 				rs.getBoolean("closed"));
+	}
+
+	/**
+	 * 브레이크 목록(jsonb)을 읽는다. 스키마는 원소의 모양을 정하지 않으므로 시작과 끝이 시각인 항목만 받고 나머지는
+	 * 버린다. 알 수 없는 속성은 무시한다. 한 곳의 깨진 값이 그 장소의 상세와 첫 화면 주변 카드 전체를 무너뜨리지 않게 한다.
+	 */
+	private List<Break> breaks(String json) {
+		if (json == null || json.isBlank()) {
+			return List.of();
+		}
+		JsonNode root;
+		try {
+			root = jsonMapper.readTree(json);
+		} catch (JacksonException e) {
+			log.warn("Ignored unreadable place_hours.breaks");
+			return List.of();
+		}
+		List<Break> breaks = new ArrayList<>();
+		for (JsonNode node : root) {
+			String start = time(node.get("start"));
+			String end = time(node.get("end"));
+			if (start != null && end != null) {
+				breaks.add(new Break(start, end));
+			}
+		}
+		return breaks;
+	}
+
+	private static String time(JsonNode node) {
+		if (node == null || !node.isString()) {
+			return null;
+		}
+		try {
+			LocalTime.parse(node.asString());
+			return node.asString();
+		} catch (DateTimeParseException e) {
+			return null;
+		}
 	}
 
 	private static PlaceSummary summary(ResultSet rs) throws SQLException {

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -23,6 +24,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.json.JsonMapper;
 
 /** 실제 Postgres(마이그레이션 적용)에 시드한 행으로 {@link JdbcPlaceCatalog}의 읽기와 변환을 확인한다. */
@@ -298,6 +300,97 @@ class JdbcPlaceCatalogTest extends PostgresTestSupport {
 		assertThat(documents.get(0).naverCategory()).isEqualTo("베트남음식");
 		assertThat(documents.get(1).menuNames()).isEmpty();
 		assertThat(documents.get(1).naverCategory()).isNull();
+	}
+
+
+	@Test
+	@DisplayName("장소상세_깨진브레이크는그것만버리고_나머지와다른장소는그대로읽는다")
+	void findPlace_malformedBreaks_dropsOnlyThoseEntries() {
+		// 앱의 JSON 설정처럼 알 수 없는 속성을 거부하는 매퍼로 읽는다.
+		JdbcPlaceCatalog strict = new JdbcPlaceCatalog(JdbcClient.create(appSource()),
+				JsonMapper.builder().enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).build(), Optional.of(CLOCK));
+		long broken = place("깨진 시간표", "RESTAURANT", "GANGNAM");
+		long healthy = place("멀쩡한 가게", "RESTAURANT", "GANGNAM");
+		hours(broken, "WED", "11:00", "22:00", false,
+				"[{\"start\":\"15:00\"},{\"start\":\"16:00\",\"end\":\"17:00\",\"seq\":1},{\"end\":\"09:00\"},"
+						+ "\"junk\",{\"start\":\"x\",\"end\":\"y\"}]", "{}");
+		hours(healthy, "WED", "11:00", "22:00", false, "[]", "{}");
+
+		// 끝이 없거나 시각이 아닌 항목은 버리고, 알 수 없는 속성이 붙은 항목은 읽는다.
+		assertThat(strict.findPlace(broken).orElseThrow().hours().get(2).breaks())
+				.containsExactly(new Break("16:00", "17:00"));
+		// 한 곳의 깨진 값이 첫 화면 주변 카드 전체를 무너뜨리지 않는다.
+		assertThat(strict.nearbyCandidates()).extracting(card -> card.place().id()).containsExactly(broken, healthy);
+	}
+
+	@Test
+	@DisplayName("장소상세_주소가빈문자열이면_다음주소로대신한다")
+	void findPlace_blankAddress_fallsBackToNextAddress() {
+		long id = place("주소 가게", "CAFE", "GANGNAM");
+		jdbc.update("UPDATE places SET address = '', full_address = '서울 강남구 풀주소' WHERE place_id = ?", id);
+
+		assertThat(catalog.findPlace(id).orElseThrow().address()).isEqualTo("서울 강남구 풀주소");
+	}
+
+	@Test
+	@DisplayName("장소상세_시계가UTC여도_서울시각으로영업상태를계산한다")
+	void findPlace_utcClock_usesSeoulTime() {
+		// 2026-10-21T03:00Z는 서울 12:00이다. UTC 그대로 03:00으로 계산하면 개점 전이라 CLOSED다.
+		JdbcPlaceCatalog utc = new JdbcPlaceCatalog(JdbcClient.create(appSource()), JsonMapper.builder().build(),
+				Optional.of(Clock.fixed(Instant.parse("2026-10-21T03:00:00Z"), ZoneOffset.UTC)));
+		long id = place("낮 식당", "RESTAURANT", "GANGNAM");
+		hours(id, "WED", "11:00", "22:00", false, "[]", "{}");
+
+		assertThat(utc.findPlace(id).orElseThrow().openStatus()).isEqualTo(OpenStatus.OPEN);
+		assertThat(utc.nearbyCandidates().get(0).openStatus()).isEqualTo(OpenStatus.OPEN);
+	}
+
+	@Test
+	@DisplayName("장소상세_거리가같은지하철은_원본순서인PK순이다")
+	void findPlace_subwaysWithSameDistance_inPrimaryKeyOrder() {
+		long id = place("역 가게", "CAFE", "GANGNAM");
+		jdbc.update("""
+				INSERT INTO place_subways (place_id, station, walk_minutes, walk_meters)
+				VALUES (?, '둘째로넣음', 2, 100), (?, '첫째로넣음', 2, 100)""", id, id);
+		// 먼저 넣은 행(PK가 작은 행)의 인덱스 열을 바꿨다 되돌리면 새 튜플과 새 인덱스 항목이 뒤에 붙어, 읽히는 순서가
+		// PK 순서와 달라진다. 그래도 PK 순이어야 한다.
+		jdbc.update("UPDATE place_subways SET walk_meters = 101 WHERE place_id = ? AND station = '둘째로넣음'", id);
+		jdbc.update("UPDATE place_subways SET walk_meters = 100 WHERE place_id = ? AND station = '둘째로넣음'", id);
+
+		assertThat(catalog.findPlace(id).orElseThrow().subways()).extracting(PlaceDetailResponse.Subway::station)
+				.containsExactly("둘째로넣음", "첫째로넣음");
+	}
+
+	@Test
+	@DisplayName("장소상세_주차와콜키지의값은그대로옮긴다")
+	void findPlace_parkingAndCorkage_mapped() {
+		long id = place("정책 가게", "BAR", "SEOLLEUNG");
+		jdbc.update("""
+				UPDATE places SET parking_free = FALSE, parking_note = '2시간 무료', corkage_allowed = TRUE,
+				    corkage_note = '병당 2만원' WHERE place_id = ?""", id);
+
+		PlaceDetailResponse detail = catalog.findPlace(id).orElseThrow();
+
+		assertThat(detail.parking().free()).isFalse();
+		assertThat(detail.parking().note()).isEqualTo("2시간 무료");
+		assertThat(detail.parking().valet()).isFalse();
+		assertThat(detail.corkage().allowed()).isTrue();
+		assertThat(detail.corkage().note()).isEqualTo("병당 2만원");
+	}
+
+	@Test
+	@DisplayName("목록읽기_행의물리적순서가바뀌어도_place_id오름차순이다")
+	void listReads_afterRowsAreRewritten_stayInPlaceIdOrder() {
+		long first = place("가", "CAFE", "GANGNAM");
+		long second = place("나", "CAFE", "GANGNAM");
+		long third = place("다", "CAFE", "GANGNAM");
+		// UPDATE는 새 행 버전을 뒤에 쓴다. ORDER BY가 없으면 첫 장소가 마지막에 읽힌다.
+		jdbc.update("UPDATE places SET name = name || '' WHERE place_id = ?", first);
+
+		assertThat(catalog.nearbyCandidates()).extracting(card -> card.place().id())
+				.containsExactly(first, second, third);
+		assertThat(catalog.loadSearchDocuments()).extracting(document -> document.place().id())
+				.containsExactly(first, second, third);
 	}
 
 }

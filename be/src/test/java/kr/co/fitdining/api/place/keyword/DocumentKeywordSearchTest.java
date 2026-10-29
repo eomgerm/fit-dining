@@ -15,6 +15,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import kr.co.fitdining.api.place.catalog.PlaceSearchDocument;
 import kr.co.fitdining.api.place.exception.PlaceSearchUnavailableException;
 import org.junit.jupiter.api.DisplayName;
@@ -92,8 +93,56 @@ class DocumentKeywordSearchTest extends PlaceKeywordSearchContract {
 	}
 
 	@Test
-	@DisplayName("스냅샷_갱신에실패하면_마지막스냅샷으로응답하고계속다시시도한다")
-	void search_refreshFails_keepsServingLastSnapshot() {
+	@DisplayName("스냅샷_읽은지정확히60초가되면_그요청이다시읽는다")
+	void search_exactlyAtRefreshInterval_loadsAgain() {
+		search.search("쌀국수", 0, 5);
+
+		clock.advance(Duration.ofSeconds(60));
+		search.search("쌀국수", 0, 5);
+
+		assertThat(catalog.loads).hasValue(2);
+	}
+
+	@Test
+	@DisplayName("스냅샷_락을잡는사이다른요청이이미갱신했으면_다시읽지않는다")
+	void search_refreshedByAnotherRequestBeforeLock_doesNotLoadAgain() {
+		AtomicReference<Runnable> onNextInstant = new AtomicReference<>();
+		// 만료를 본 요청이 락을 잡기 전에, 다른 요청이 갱신을 끝낸 상황을 만든다. 만료 판정에 쓴 시각을 돌려주기 직전에
+		// 같은 스레드에서 다른 요청의 갱신을 먼저 실행한다.
+		Clock hooked = new Clock() {
+			@Override
+			public ZoneId getZone() {
+				return clock.getZone();
+			}
+
+			@Override
+			public Clock withZone(ZoneId zone) {
+				return this;
+			}
+
+			@Override
+			public Instant instant() {
+				Instant now = clock.instant();
+				Runnable hook = onNextInstant.getAndSet(null);
+				if (hook != null) {
+					hook.run();
+				}
+				return now;
+			}
+		};
+		DocumentKeywordSearch hookedSearch = new DocumentKeywordSearch(catalog, Optional.of(hooked));
+		hookedSearch.search("쌀국수", 0, 5);
+		clock.advance(Duration.ofSeconds(61));
+		onNextInstant.set(() -> hookedSearch.search("쌀국수", 0, 5));
+
+		hookedSearch.search("쌀국수", 0, 5);
+
+		assertThat(catalog.loads).hasValue(2);
+	}
+
+	@Test
+	@DisplayName("스냅샷_갱신에실패하면_마지막스냅샷으로응답하고5초뒤에다시시도한다")
+	void search_refreshFails_keepsServingLastSnapshotAndRetriesAfterBackoff() {
 		List<PlaceKeywordHit> before = search.search("쌀국수", 0, 5);
 		catalog.source = () -> {
 			throw new IllegalStateException("db down");
@@ -101,22 +150,66 @@ class DocumentKeywordSearchTest extends PlaceKeywordSearchContract {
 		clock.advance(Duration.ofSeconds(61));
 
 		assertThat(search.search("쌀국수", 0, 5)).isEqualTo(before);
+		assertThat(catalog.loads).hasValue(2);
+
+		// 실패 직후의 요청은 DB를 다시 부르지 않고 마지막 스냅샷으로 응답한다.
+		assertThat(search.search("쌀국수", 0, 5)).isEqualTo(before);
+		assertThat(catalog.loads).hasValue(2);
+
+		clock.advance(Duration.ofSeconds(5));
 		assertThat(search.search("쌀국수", 0, 5)).isEqualTo(before);
 		assertThat(catalog.loads).hasValue(3);
 	}
 
 	@Test
-	@DisplayName("스냅샷_한번도읽지못했으면_503예외이고다음요청이다시읽는다")
-	void search_neverLoaded_throwsUnavailableThenRecovers() {
+	@DisplayName("스냅샷_한번도읽지못했으면_503예외이고5초뒤에다시읽어복구한다")
+	void search_neverLoaded_throwsUnavailableThenRecoversAfterBackoff() {
 		catalog.source = () -> {
 			throw new IllegalStateException("db down");
 		};
 
 		assertThatThrownBy(() -> search.search("쌀국수", 0, 5)).isInstanceOf(PlaceSearchUnavailableException.class);
+		assertThat(catalog.loads).hasValue(1);
 
+		// 실패 직후에는 DB를 다시 부르지 않고 바로 503이다.
 		catalog.source = () -> CATALOG;
+		assertThatThrownBy(() -> search.search("쌀국수", 0, 5)).isInstanceOf(PlaceSearchUnavailableException.class);
+		assertThat(catalog.loads).hasValue(1);
+
+		clock.advance(Duration.ofSeconds(5));
 		assertThat(search.search("쌀국수", 0, 5)).isNotEmpty();
 		assertThat(catalog.loads).hasValue(2);
+	}
+
+	@Test
+	@DisplayName("스냅샷_최초읽기가실패하면_기다리던요청은_다시읽지않고함께503이다")
+	void search_firstLoadFails_waitingRequestsFailTogetherWithoutReloading() throws Exception {
+		CountDownLatch entered = new CountDownLatch(1);
+		CountDownLatch gate = new CountDownLatch(1);
+		catalog.source = () -> {
+			entered.countDown();
+			await(gate);
+			throw new IllegalStateException("db down");
+		};
+		ExecutorService executor = Executors.newFixedThreadPool(3);
+		try {
+			Future<List<PlaceKeywordHit>> first = executor.submit(() -> search.search("쌀국수", 0, 5));
+			await(entered);
+			Future<List<PlaceKeywordHit>> second = executor.submit(() -> search.search("쌀국수", 0, 5));
+			Future<List<PlaceKeywordHit>> third = executor.submit(() -> search.search("쌀국수", 0, 5));
+			Thread.sleep(200);
+
+			gate.countDown();
+			for (Future<List<PlaceKeywordHit>> request : List.of(first, second, third)) {
+				assertThatThrownBy(() -> request.get(5, TimeUnit.SECONDS)).hasCauseInstanceOf(
+						PlaceSearchUnavailableException.class);
+			}
+			// 기다리던 요청이 차례로 DB를 다시 부르면 3번이다.
+			assertThat(catalog.loads).hasValue(1);
+		} finally {
+			gate.countDown();
+			executor.shutdownNow();
+		}
 	}
 
 	@Test

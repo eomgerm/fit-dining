@@ -2,6 +2,7 @@ package kr.co.fitdining.api.place.keyword;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.text.Normalizer;
 import java.util.List;
 import kr.co.fitdining.api.place.catalog.PlaceSearchDocument;
 import kr.co.fitdining.api.place.dto.PlaceSummary;
@@ -167,6 +168,72 @@ public abstract class PlaceKeywordSearchContract {
 	void search_noMatchOrBlank_empty() {
 		assertThat(search("존재하지않는검색어")).isEmpty();
 		assertThat(search("   ")).isEmpty();
+	}
+
+	@Test
+	@DisplayName("키워드검색_같은순위는_입력순서와무관하게id오름차순이다")
+	void search_equalRank_orderedByIdEvenWhenInputIsDescending() {
+		PlaceKeywordSearch search = create(List.of(
+				doc(3, "다 식당", Station.GANGNAM, CategoryGroup.RESTAURANT, null),
+				doc(1, "가 식당", Station.GANGNAM, CategoryGroup.RESTAURANT, null),
+				doc(2, "나 식당", Station.GANGNAM, CategoryGroup.RESTAURANT, null)));
+
+		// 세 장소 모두 업종(식당)으로만 맞아 같은 순위다. 문서를 id 역순으로 넣어도 1, 2, 3이다.
+		assertThat(ids(search.search("restaurant", 0, 5))).containsExactly(1L, 2L, 3L);
+	}
+
+	@Test
+	@DisplayName("키워드검색_업종으로맞은장소가_위치로만맞은장소보다id가커도앞선다")
+	void search_categoryMatch_beforeLocationOnlyMatch() {
+		PlaceKeywordSearch search = create(List.of(
+				doc(1, "하루 주점", Station.YEOKSAM, CategoryGroup.BAR, null),
+				doc(2, "저녁 식당", Station.GANGNAM, CategoryGroup.RESTAURANT, "역삼맛집")));
+
+		// 1번은 위치로만(순위 4), 2번은 네이버 업종 이름으로(순위 3) 맞는다.
+		assertThat(ids(search.search("역삼", 0, 5))).containsExactly(2L, 1L);
+	}
+
+	@Test
+	@DisplayName("키워드검색_위치로채워진단어는_메뉴에도있어도_matchedMenu를고르는기준이아니다")
+	void search_matchedMenu_ignoresWordsCoveredByLocation() {
+		PlaceKeywordSearch search = create(List.of(doc(1, "하루 식당", Station.YEOKSAM, CategoryGroup.RESTAURANT, null,
+				"역삼 라멘", "소고기 쌀국수")));
+
+		// 역삼은 위치로 채워지므로 메뉴를 고르는 기준은 쌀국수 하나다. 역삼 라멘이 먼저라도 소고기 쌀국수를 고른다.
+		assertThat(search.search("역삼 쌀국수", 0, 5).get(0).matchedMenu()).isEqualTo("소고기 쌀국수");
+	}
+
+	@Test
+	@DisplayName("키워드검색_업종으로채워진단어는_메뉴에도있어도_matchedMenu를고르는기준이아니다")
+	void search_matchedMenu_ignoresWordsCoveredByCategory() {
+		PlaceKeywordSearch search = create(List.of(doc(1, "하루 집", Station.GANGNAM, CategoryGroup.RESTAURANT, null,
+				"식당 라멘", "소고기 쌀국수")));
+
+		// 식당은 업종(그룹 이름)으로 채워지므로 메뉴를 고르는 기준은 쌀국수 하나다. 식당 라멘이 먼저라도 소고기 쌀국수를 고른다.
+		assertThat(search.search("식당 쌀국수", 0, 5).get(0).matchedMenu()).isEqualTo("소고기 쌀국수");
+	}
+
+	@Test
+	@DisplayName("키워드검색_결합문자로쓴입력도_완성형과같게맞는다")
+	void search_decomposedInput_matchesLikeComposed() {
+		String decomposed = Normalizer.normalize("쌀국수", Normalizer.Form.NFD);
+
+		assertThat(decomposed).isNotEqualTo("쌀국수");
+		assertThat(ids(search(decomposed))).containsExactly(1L, 2L, 3L);
+	}
+
+	@Test
+	@DisplayName("키워드검색_줄바꿈없는공백문자뿐인입력은_빈목록이다")
+	void search_onlyNoBreakSpaces_empty() {
+		assertThat(search(" ")).isEmpty();
+		assertThat(search("　  ")).isEmpty();
+	}
+
+	@Test
+	@DisplayName("키워드검색_앞뒤에줄바꿈없는공백이붙어도_같은결과다")
+	void search_surroundingNoBreakSpaces_sameAsPlain() {
+		assertThat(search(" 역삼 ")).isEqualTo(search("역삼"));
+		assertThat(ids(search("역삼 쌀국수"))).containsExactly(1L, 2L);
 	}
 
 	@Test

@@ -9,7 +9,11 @@ import kr.co.fitdining.api.place.engine.MockPlaceSearchEngine;
 import kr.co.fitdining.api.place.engine.PlaceSearchEngine;
 import kr.co.fitdining.api.place.keyword.PlaceKeywordSearch;
 import org.junit.jupiter.api.DisplayName;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
@@ -58,6 +62,30 @@ class PlaceEngineWiringTest {
 			assertThat(context).hasNotFailed();
 			assertThat(context.getBeansOfType(PlaceSearchEngine.class).values()).singleElement()
 					.isInstanceOf(CatalogPlaceSearchEngine.class);
+		});
+	}
+
+	static Stream<Arguments> oddSwitchValues() {
+		return Stream.of(
+				Arguments.of("", CatalogPlaceSearchEngine.class),
+				Arguments.of("1", CatalogPlaceSearchEngine.class),
+				Arguments.of("0", CatalogPlaceSearchEngine.class),
+				Arguments.of("yes", CatalogPlaceSearchEngine.class),
+				Arguments.of("on", CatalogPlaceSearchEngine.class),
+				Arguments.of("no", CatalogPlaceSearchEngine.class),
+				Arguments.of("False", CatalogPlaceSearchEngine.class),
+				Arguments.of("True", MockPlaceSearchEngine.class),
+				Arguments.of("TRUE", MockPlaceSearchEngine.class));
+	}
+
+	@ParameterizedTest(name = "place.mock.enabled=\"{0}\" → {1}")
+	@MethodSource("oddSwitchValues")
+	@DisplayName("엔진배선_스위치값이무엇이든_엔진빈은정확히하나다")
+	void wiring_anySwitchValue_exactlyOneEngine(String value, Class<?> expected) {
+		runner().withPropertyValues("place.mock.enabled=" + value).run(context -> {
+			assertThat(context).hasNotFailed();
+			assertThat(context.getBeansOfType(PlaceSearchEngine.class).values()).singleElement()
+					.isInstanceOf(expected);
 		});
 	}
 

@@ -32,7 +32,8 @@ final class KeywordMatcher {
 	}
 
 	static List<PlaceKeywordHit> search(List<IndexedDocument> documents, String query, int offset, int limit) {
-		String phrase = WHITESPACE.matcher(normalize(query).strip()).replaceAll(" ");
+		// 공백을 먼저 접고 나서 자른다. strip()만으로는 NBSP나 U+3000이 남아 빈 단어가 생긴다.
+		String phrase = WHITESPACE.matcher(normalize(query)).replaceAll(" ").strip();
 		if (phrase.isEmpty()) {
 			return List.of();
 		}
