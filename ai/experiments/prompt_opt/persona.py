@@ -373,6 +373,24 @@ def evaluate(system: str, rows: list[dict], runs: int, label: str) -> None:
     for row in rows:
         for w in low.get(row["id"], []):
             print(f"[{row['split']}] {row['id']} {row['slice']}  {w}")
+    log_run(label, system)
+
+
+def log_run(label: str, system: str) -> None:
+    """OUT/persona-{label}.jsonl을 MLflow run 하나로 올린다. 실행 회차는 step이다."""
+    path = OUT / f"persona-{label}.jsonl"
+    by = defaultdict(list)  # (run, group) → (rules, grounded)
+    for line in path.read_text(encoding="utf-8").splitlines():
+        rec = json.loads(line)
+        row = load_all()[rec["id"]]
+        for group in ("all", row["split"], row["slice"]):
+            by[(rec["run"], group)].append((rec["rules"], rec["grounded"]))
+    with mlflow.start_run(run_name=f"persona-{label}"):
+        mlflow.log_text(system, "system.txt")
+        mlflow.log_artifact(str(path))
+        for (run, g), s in by.items():
+            mlflow.log_metric(f"{g}/rules", sum(x for x, _ in s) / len(s), step=run)
+            mlflow.log_metric(f"{g}/grounded", sum(y for _, y in s) / len(s), step=run)
 
 
 def leaks(system: str) -> list[str]:
