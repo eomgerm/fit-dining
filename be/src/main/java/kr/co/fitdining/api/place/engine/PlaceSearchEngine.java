@@ -8,8 +8,9 @@ import kr.co.fitdining.api.place.dto.PlaceSearchResponse;
 import kr.co.fitdining.api.place.dto.PlaceSuggestResponse;
 
 /**
- * 장소 검색의 교체 지점. 지금은 Mock 구현만 있고, AI 파트의 검색이 확정되면 구현을 바꾼다.
- * 구현이 바뀌면 시그니처도 바뀔 수 있다(D-62).
+ * 장소 검색의 교체 지점. 구현은 Mock({@code place.mock.enabled=true})과 카탈로그 DB 모드 둘이고 환경마다 정확히
+ * 하나만 쓰인다. AI 파트의 검색이 확정되면 DB 모드의 추천 검색 분기를 바꾼다. 구현이 바뀌면 시그니처도 바뀔 수
+ * 있다(D-62).
  *
  * <p>컨트롤러와 {@code PlaceService}는 구현이 돌려준 값을 검증하거나 가공하지 않고 그대로 응답한다.
  */
@@ -30,6 +31,8 @@ public interface PlaceSearchEngine {
 	 * @return 추천 결과. 첫 페이지에 결과가 없으면 빈 {@code items}와 {@code emptyReason}을 담고,
 	 *         커서로 넘어간 페이지가 비면 {@code emptyReason} 없이 빈 {@code items}만 담는다.
 	 * @throws InvalidCursorException {@code cursor}를 해석할 수 없을 때. 400으로 응답한다.
+	 * @throws kr.co.fitdining.api.place.exception.PlaceSearchUnavailableException 이 구현이 지금 이 요청에
+	 *         응답할 수 없을 때. 503으로 응답한다.
 	 */
 	PlaceSearchResponse search(PlaceSearchRequest request);
 

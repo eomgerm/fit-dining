@@ -47,9 +47,9 @@ curl -X POST http://localhost:8080/api/v1/places/search -H "Content-Type: applic
 - [x] AC-4: 마지막 단어의 마지막 글자는 덜 쓴 글자로 맞는다. `쌀구`와 `쌀ㄱ`는 "쌀국수"를 담은 이름이나 메뉴에 맞고, `알`은 "아라"를 담은 이름에 맞고, `달`은 "닭"을, `고`는 "과"를 담은 이름이나 메뉴에 맞는다. 마지막 글자가 아닌 글자에는 완화가 없어서 `살국`은 "쌀국수"에 맞지 않는다. (D-9)
 - [x] AC-5: 순위는 0(이름이 입력 전체로 시작) → 1(모든 단어가 이름에) → 2(일부는 이름, 나머지는 메뉴·업종·위치) → 3(이름에는 없고 메뉴나 업종으로) → 4(모두 위치로만) 순이고 같은 순위 안에서는 `place_id` 오름차순이다. (D-10)
 - [x] AC-6: `PLACE` 후보는 최대 5개다. "이 조건으로 추천받기"(`ACTION`, `label`)는 항상 하나 있고, 순위 0 후보가 있으면 맨 뒤, 없으면 맨 위다. `PLACE` 후보에는 `label`이 없다. 결과가 없으면 `ACTION`만 온다. (D-10, place-search 20번)
-- [x] AC-7: `matchedMenu`는 이름·업종·위치로 채워지지 않는 단어가 있을 때만 있고, 그 단어를 가장 많이 담은 메뉴(동점이면 원본 순서가 앞선 메뉴)다. 이름으로 맞은 단어만 있으면 없다. 단일 단어 입력에서는 현재 Mock과 같은 결과다. (D-10)
-- [x] AC-8: 대소문자를 구분하지 않고(`Locale.ROOT`), 앞뒤와 연속 공백을 정규화하며, `%`, `_`, `\`와 정규식 문자는 글자 그대로 맞는다. (D-6)
-- [x] AC-9: 스냅샷은 첫 요청에서 읽고 60초가 지난 뒤 처음 오는 요청이 새로 읽는다. 동시 요청이 겹쳐도 갱신은 한 번이다. 갱신에 실패하면 마지막 스냅샷으로 응답하고, 한 번도 못 읽었으면 503이다. 기동 때는 읽지 않는다. (D-11)
+- [x] AC-7: `matchedMenu`는 이름·업종·위치로 채워지지 않는 단어가 있을 때만 있고, 그 단어를 가장 많이 담은 메뉴(동점이면 원본 순서가 앞선 메뉴)다. 이름으로 맞은 단어만 있으면 없다. (Mock은 단어가 업종으로 맞아도 그 단어를 담은 메뉴가 있으면 `matchedMenu`를 담지만, 이 규칙은 이름·업종·위치로 채워진 단어를 메뉴로 설명하지 않는다.) (D-10)
+- [x] AC-8: 대소문자를 구분하지 않고(`Locale.ROOT`), 앞뒤와 연속 공백을 정규화하고(NBSP, U+3000 같은 줄바꿈 없는 공백도 공백이다. 공백뿐인 입력은 결과가 없다), 결합 문자로 쓴 한글도 완성형과 같게 맞추며, `%`, `_`, `\`와 정규식 문자는 글자 그대로 맞는다. (D-6)
+- [x] AC-9: 스냅샷은 첫 요청에서 읽고 60초가 지난 뒤 처음 오는 요청이 새로 읽는다. 동시 요청이 겹쳐도 갱신은 한 번이다. 갱신에 실패하면 마지막 스냅샷으로 응답하고, 한 번도 못 읽었으면 503이다. 읽기가 실패한 뒤 5초 동안은 DB를 다시 읽지 않는다(기다리던 요청도 함께 실패한다). 기동 때는 읽지 않는다. (D-11)
 - [x] AC-10: 자동완성을 처리한 뒤(오류 포함) BE 로그 출력에 `q` 값이 나타나지 않는다. (place-search AC-13, D-11)
 - [x] AC-11: `PlaceKeywordSearchContract`의 모든 검사를 `DocumentKeywordSearch`가 통과한다. 다른 구현이 생기면 같은 검사를 그대로 상속한다. (D-5)
 
@@ -58,7 +58,7 @@ curl -X POST http://localhost:8080/api/v1/places/search -H "Content-Type: applic
 - [x] AC-12: `GET /places/{id}`는 카탈로그 DB의 장소를 place-catalog spec의 `PlaceDetailResponse` 모양으로 돌려준다. 응답 키는 문서화된 필드를 벗어나지 않고, `hours`는 월~일 7개이며 요일마다 `breaks`와 `lastOrders`가 있다. 없는 id는 404, 정수가 아닌 id는 400이다. (D-2)
 - [x] AC-13: `openStatus`는 place-catalog spec의 영업 상태 규칙대로 서울 시각(주입한 `Clock`)으로 계산하고, 카드와 상세와 Mock이 같은 계산기(`OpenStatusCalculator`)를 쓴다. 기존 Mock의 영업 상태 테스트가 그대로 통과한다. (D-2)
 - [x] AC-14: `closedDayNote`는 정기휴무 요일을 월요일부터 세어 "매주 일요일 휴무", 여럿이면 "매주 토·일요일 휴무"로 읽을 때 계산하고, 정기휴무가 없으면 생략한다. 날짜가 붙은 휴무(DB에서 정보 없음으로 저장된 요일)는 정기휴무가 아니다.
-- [x] AC-15: 읽을 때의 변환이 규칙대로다. 요일 행이 없는 요일은 `closed: false`에 시각이 없다. `photos`는 업체 사진 다음 메뉴판 사진이고 각각 `sort_order` 순이다. `subways`는 도보 거리 오름차순(값이 없으면 뒤), 같으면 PK 순이다. `noKidsZone`과 `parking.valet`은 `facilities`의 "노키즈존", "발렛파킹"으로 정하고, `parking`, `pet`, `corkage`는 place-catalog spec대로 값이 없으면 생략한다. `tags`는 빈 목록이다.
+- [x] AC-15: 읽을 때의 변환이 규칙대로다. 요일 행이 없는 요일은 `closed: false`에 시각이 없다. `photos`는 업체 사진 다음 메뉴판 사진이고 각각 `sort_order` 순이다. `subways`는 도보 거리 오름차순(값이 없으면 뒤), 같으면 PK 순이다. `noKidsZone`과 `parking.valet`은 `facilities`의 "노키즈존", "발렛파킹"으로 정하고, `parking`, `pet`, `corkage`는 place-catalog spec대로 값이 없으면 생략한다. `tags`는 빈 목록이다. `breaks`는 시작과 끝이 모두 시각인 항목만 읽고 나머지는 버린다. `address`가 비었으면 `full_address`, `jibun_address` 순으로 대신한다.
 - [ ] AC-16: (선택) `places.json`의 36곳을 같은 모양으로 테이블에 넣었을 때 `findPlace`의 응답이 JSON 상세와 `tags`, `openStatus`를 뺀 모든 필드에서 같다. 두 데이터가 같은 규칙으로 만들어졌으므로 `closedDayNote` 계산을 검증한다. (이 반복에서 구현하지 않았다. 후속)
 
 주변 카드
@@ -69,15 +69,15 @@ curl -X POST http://localhost:8080/api/v1/places/search -H "Content-Type: applic
 
 전환과 오류
 
-- [x] AC-20: `place.mock.enabled=true`이면 지금과 똑같이 `MockPlaceSearchEngine`이 응답하고 기존 Mock 테스트가 모두 통과한다. false이거나 없으면 `CatalogPlaceSearchEngine`이 응답한다. DB 모드 빈(`CatalogPlaceSearchEngine`, `JdbcPlaceCatalog`, `DocumentKeywordSearch`)은 Mock이 꺼졌을 때만 등록된다. (D-2)
+- [x] AC-20: `place.mock.enabled=true`이면 지금과 똑같이 `MockPlaceSearchEngine`이 응답하고 기존 Mock 테스트가 모두 통과한다. 그 밖의 값(false, 없음, 빈 값, `yes`, `1` 등)이면 `CatalogPlaceSearchEngine`이 응답하고, 어떤 값이든 엔진 빈은 정확히 하나다. DB 모드 빈(`CatalogPlaceSearchEngine`, `JdbcPlaceCatalog`, `DocumentKeywordSearch`)은 Mock 엔진 조건의 부정일 때만 등록된다. (D-2)
 - [x] AC-21: DB 접근 오류는 503 ProblemDetail이고 `detail`에 일반 문구만 있으며 예외는 서버 로그에만 남는다. (D-14)
 - [x] AC-22: `PlaceService`는 엔진을 직접 주입받고(엔진 빈이 항상 하나), 컨트롤러와 `ReviewService`는 바뀌지 않는다. (D-2)
 
 FE
 
-- [x] AC-23: 후보 줄의 이름과 "메뉴: ..." 글에서 입력을 공백으로 나눈 단어마다 대소문자 무시 부분 문자열을 강조하고 겹치는 구간을 합친다. 조합 중인 마지막 글자는 강조하지 않는다. (D-6, D-9)
+- [x] AC-23: 후보 줄의 이름과 "메뉴: ..." 글에서 입력을 공백으로 나눈 단어마다 대소문자 무시 부분 문자열을 강조하고 겹치는 구간을 합친다. 마지막 단어가 글자 그대로 맞지 않으면(한글 조합 중이면) 그 단어 전체를 강조하지 않는다. (D-6, D-9)
 - [x] AC-24: 점수가 없는 카드는 검색 결과 카드와 주변 캐러셀에 핏 점수 영역을 그리지 않고, 상세에는 핏 점수 버튼을 그리지 않는다. 추천 이유와 주의 영역은 비어 있으면 그대로 숨는다. (D-12)
-- [x] AC-25: 첫 화면 주변 카드는 모든 카드에 점수가 없을 때 기준 지점에서 반경 안의 카드를 거리 오름차순으로 정렬해 앞 10곳을 고른다. 점수가 있는 카드가 있으면 서버 순서를 그대로 따른다. (D-12)
+- [x] AC-25: 첫 화면 주변 카드는 모든 카드에 점수가 없을 때 기준 지점에서 반경 안의 카드를 거리 오름차순으로 정렬해 앞 10곳을 고른다. 점수가 있는 카드가 있으면 서버 순서를 그대로 따른다. 입력한 "근처" 검색의 결과 목록(순위 번호와 지도 핀)도 응답의 모든 카드에 점수가 없으면 같은 기준(위치가 있으면 그 위치, 없으면 역삼역)으로 가까운 순이다. (D-12)
 
 문서와 범위
 
@@ -97,7 +97,7 @@ PlaceController → PlaceService → PlaceSearchEngine            (기존 인터
                                           └─ PlaceKeywordSearch   자동완성 (지금: 문서 스냅샷 + Java 매처, 나중: OpenSearch)
 ```
 
-패키지는 `kr.co.fitdining.api.place` 아래다. `engine/CatalogPlaceSearchEngine`, `catalog/{PlaceCatalog, JdbcPlaceCatalog, PlaceSearchDocument, OpenStatusCalculator}`, `keyword/{PlaceKeywordSearch, PlaceKeywordHit, DocumentKeywordSearch, KeywordMatcher, HangulComposition, SearchDocumentSnapshot}`다.
+패키지는 `kr.co.fitdining.api.place` 아래다. `engine/CatalogPlaceSearchEngine`, `catalog/{PlaceCatalog, JdbcPlaceCatalog, PlaceSearchDocument, OpenStatusCalculator, ConditionalOnCatalogMode, CatalogModeCondition}`, `keyword/{PlaceKeywordSearch, PlaceKeywordHit, DocumentKeywordSearch, KeywordMatcher, HangulComposition, IndexedDocument}`다.
 
 ```java
 public interface PlaceCatalog {
@@ -152,7 +152,7 @@ public record PlaceSearchDocument(PlaceSummary place, List<String> menuNames, St
 
 ### 스냅샷 (D-11)
 
-`DocumentKeywordSearch`는 `PlaceCatalog.loadSearchDocuments()`의 결과로 만든 정규화된 문서 목록을 `SearchDocumentSnapshot`으로 들고 있다. 첫 요청이 읽고, 읽은 뒤 60초가 지난 다음 처음 오는 요청이 다시 읽는다(주입한 `Clock`). 갱신은 한 번에 하나만 돌고, 기존 스냅샷이 있으면 다른 요청은 기다리지 않고 그것을 쓴다. 스냅샷이 아직 없는 최초 읽기 동안 들어온 요청은 그 결과를 기다린다. 갱신이 실패하면 기존 스냅샷을 유지하고, 스냅샷이 아직 없으면 예외로 503이다. 기동 때는 읽지 않는다.
+`DocumentKeywordSearch`는 `PlaceCatalog.loadSearchDocuments()`의 결과로 만든 정규화된 문서 목록(`IndexedDocument`)을 스냅샷으로 들고 있다. 첫 요청이 읽고, 읽은 뒤 60초가 지난 다음 처음 오는 요청이 다시 읽는다(주입한 `Clock`). 갱신은 한 번에 하나만 돌고, 기존 스냅샷이 있으면 다른 요청은 기다리지 않고 그것을 쓴다. 스냅샷이 아직 없는 최초 읽기 동안 들어온 요청은 그 결과를 기다린다. 갱신이 실패하면 기존 스냅샷을 유지하고, 스냅샷이 아직 없으면 예외로 503이다. 실패한 뒤 5초 동안은 DB를 다시 읽지 않는다(기존 스냅샷이 있으면 같은 문서를 5초 뒤 만료로 두고, 없으면 락을 기다리던 요청도 읽지 않고 함께 503이다). 기동 때는 읽지 않는다.
 
 ### 상세 읽기 (D-2, D-4)
 
@@ -164,6 +164,8 @@ public record PlaceSearchDocument(PlaceSummary place, List<String> menuNames, St
 - `photos`는 `source`가 `business`인 것 다음 `menuBoard`인 것이고 각각 `sort_order` 순이다. `thumbnailUrl`은 `places.thumbnail_url`이다.
 - `subways`는 `walk_meters` 오름차순(NULL은 뒤), 같으면 `place_subway_id` 순이다. 좌석과 방송은 PK 순이다.
 - `tags`는 빈 목록이다(AI 쪽이 준다, place-catalog D-17).
+- `breaks`(jsonb)는 원소의 모양을 스키마가 정하지 않으므로 시작과 끝이 모두 시각인 항목만 읽고 나머지는 버린다. 알 수 없는 속성은 무시한다. 한 곳의 깨진 값이 그 장소의 상세와 첫 화면 주변 카드 전체를 무너뜨리지 않게 한다.
+- `address`는 `address`, `full_address`, `jibun_address` 중 비어 있지 않은 첫 값이다(없으면 빈 문자열).
 
 ### 주변 카드 (D-12, D-13)
 
@@ -193,7 +195,7 @@ public record PlaceSearchDocument(PlaceSummary place, List<String> menuNames, St
 | `place.mock.enabled` | 엔진 | `search` ("근처" 아님) | 상세, 자동완성, 주변 카드 |
 |---|---|---|---|
 | true | `MockPlaceSearchEngine` | Mock | Mock |
-| false 또는 없음 | `CatalogPlaceSearchEngine` | 503 | 카탈로그 DB |
+| true가 아닌 값(false, 없음, 빈 값 등) | `CatalogPlaceSearchEngine` | 503 | 카탈로그 DB |
 
 ## Constraints
 
@@ -243,13 +245,13 @@ public record PlaceSearchDocument(PlaceSummary place, List<String> menuNames, St
 
 - 키워드 매처 단위 테스트(example), AC-1~AC-8: Docker 없이 문서 목록을 직접 만들어 표 기반으로 검증한다. Interfaces의 예(`역삼 쌀국수`, `쌀구`, `쌀ㄱ`, `알`→아라, `살국`), 순위 0~4와 동순위 `place_id` 순, `matchedMenu`, 5개 상한, `ACTION` 위치, 대소문자와 공백, 와일드카드 문자를 케이스로 둔다. 잡는 것: 규칙 오류, 순위 뒤바뀜. 놓치는 것: 실제 입력기의 조합 동작. Prior art: 없음(새 모듈).
 - 포트 계약 테스트(example), AC-11: `PlaceKeywordSearchContract`를 추상 클래스로 만들고 `DocumentKeywordSearchTest`가 상속한다. 같은 픽스처와 기대를 다른 구현이 상속하면 교체가 검증된다.
-- 스냅샷 테스트(example), AC-9: 가짜 `Clock`과 가짜 `PlaceCatalog`로 TTL 경과, 갱신 실패 시 마지막 값 유지, 최초 실패 503, 동시 갱신 한 번을 확인한다.
+- 스냅샷 테스트(example), AC-9: 가짜 `Clock`과 가짜 `PlaceCatalog`로 TTL 경과, 갱신 실패 시 마지막 값 유지, 최초 실패 503, 실패 뒤 5초 백오프, 동시 갱신 한 번을 확인한다.
 - 엔진 조립 테스트(example), AC-6, AC-17~AC-19: 가짜 두 포트로 `suggest`의 `ACTION` 위치, "근처" 분기, 비근처와 `cursor`의 503을 확인한다.
 - Postgres 통합 테스트(example), AC-12~AC-15, AC-17, AC-18: `PostgresTestSupport`를 상속해 `JdbcPlaceCatalog`를 확인한다. 자정 넘김, 24시간 영업, 브레이크, 요일 행 누락, 정기휴무에서 나오는 `closedDayNote`, 숫자 없는 가격, `facilities`에서 나오는 플래그, 사진·지하철 순서, 카탈로그 전체 후보를 시드해 기대 DTO와 비교한다. 잡는 것: 매핑과 계산 오류. 놓치는 것: 300곳 전체의 값 일치. Prior art: `PlaceCatalogSchemaTest`.
 - 오라클 테스트(example, 선택), AC-16: `places.json`의 36곳을 테이블에 넣고 DB 상세를 JSON 상세와 비교한다.
 - 영업 상태 단위 테스트(example), AC-13: 기존 Mock의 영업 상태 테스트를 `OpenStatusCalculator`로 옮겨 같은 기대로 통과시킨다. 핵심 순수 함수(`KeywordMatcher`, `OpenStatusCalculator`)는 변이를 직접 넣어 테스트가 잡는지 확인한다.
 - 컨트롤러 테스트(example), AC-20~AC-22: DB 모드의 503, 404, 400, DB 오류 503을 확인하고 Mock 모드의 기존 테스트가 그대로임을 확인한다. Prior art: `PlaceControllerTest`.
-- FE 단위·화면 테스트(example), AC-23~AC-25: `highlight.test.ts`에 다중 단어, 겹침 병합, 대소문자를 더하고, `nearby.test.ts`에 점수 없는 카드의 거리순 선택을 더하며, 점수 없는 카드와 상세를 `renderToStaticMarkup`으로 그려 점수 영역이 없는지 확인한다. `tsc`, `eslint`, `prettier`를 통과시킨다.
+- FE 단위·화면 테스트(example), AC-23~AC-25: `highlight.test.ts`에 다중 단어, 겹침 병합, 대소문자를 더하고, `nearby.test.ts`에 점수 없는 카드의 거리순 선택을 더하며, 점수 없는 카드, 주변 캐러셀, 상세를 Testing Library로 그려 점수 영역이 없는지 확인한다. `tsc`, `eslint`, `prettier`를 통과시킨다.
 - 로그 확인(manual), AC-10: 자동완성을 오류 경로까지 한 번씩 호출하고 BE 로그에 입력이 없는지 본다.
 - 문서 검토(manual), AC-26, AC-27: place-search spec의 수정 범위, 마이그레이션과 `infra/` 미변경, `data/naver-places/` 미커밋을 diff로 확인한다.
 - 기존 테스트 전체(example), AC-28: `./gradlew test`(Docker 필요), CI `be:test`, FE 테스트.
@@ -272,3 +274,6 @@ public record PlaceSearchDocument(PlaceSummary place, List<String> menuNames, St
 - AI 엔진이 공개(11-06) 전에 붙는지. 안 붙으면 "추천받기"가 동작하지 않으므로 키워드 폴백(D-13)을 후속으로 할지 정한다.
 - 주변 카드가 카탈로그 전체를 내려 주는 응답의 크기. 약 100KB 안팎으로 추정했고 측정하지 않았다.
 - 운영에서 데이터가 바뀔 때 스냅샷 갱신 주기 60초가 충분한지.
+- 입력한 "근처" 검색의 응답은 카탈로그 전체(300곳 기준 약 96KB로 추정)라서 FE가 thread 저장소(`localStorage`)에 통째로 저장한다. 브라우저 쿼터(약 5MB)를 넘으면 저장이 조용히 멈춘다. 저장하는 카드 수를 줄일지 정한다.
+- 위치를 얻지 못하면 입력한 "근처" 검색은 300곳 전체를 목록과 지도 핀으로 보인다(Mock은 100곳). 표시 개수를 제한할지 정한다.
+- 한 글자 입력(예: `역`)은 위치 이름(`강남역` 등)에 부분 문자열로 맞아 모든 장소가 후보가 된다. 규칙대로이고 후보는 5개로 잘린다.
