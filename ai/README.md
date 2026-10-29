@@ -77,7 +77,7 @@ judge·반성 모델과 연결 방식은 `experiments/prompt_opt/common.py`에 �
 
 ## 임베딩 서버(Modal)
 
-`server/embed.py`가 `POST /embed`(`docs/infra/design.md` 12.3절)를 Modal GPU(L4, 모자라면 A10·T4)에서 띄웁니다. 인코딩은 `fit_ai.embedding`을 그대로 씁니다. 모델 가중치는 고정 리비전으로 이미지에 넣습니다.
+`server/embed.py`가 `POST /embed`(`docs/infra/design.md` 12.3절)를 Modal GPU(T4, 모자라면 L4·A10)에서 띄웁니다. 인코딩은 `fit_ai.embedding`을 그대로 씁니다. 모델 가중치는 고정 리비전으로 이미지에 넣습니다.
 
 ```bash
 uv run modal token new                              # 처음 한 번
