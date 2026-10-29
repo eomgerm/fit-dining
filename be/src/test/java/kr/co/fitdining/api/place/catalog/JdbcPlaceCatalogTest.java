@@ -1,0 +1,303 @@
+package kr.co.fitdining.api.place.catalog;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+import kr.co.fitdining.api.place.dto.OpenStatus;
+import kr.co.fitdining.api.place.dto.PlaceCard;
+import kr.co.fitdining.api.place.dto.PlaceDetailResponse;
+import kr.co.fitdining.api.place.dto.PlaceDetailResponse.Break;
+import kr.co.fitdining.api.place.dto.PlaceDetailResponse.DayCode;
+import kr.co.fitdining.api.place.dto.PlaceDetailResponse.Hours;
+import kr.co.fitdining.api.place.dto.PlaceSummary.CategoryGroup;
+import kr.co.fitdining.api.place.dto.PlaceSummary.Station;
+import kr.co.fitdining.api.support.PostgresTestSupport;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import tools.jackson.databind.json.JsonMapper;
+
+/** 실제 Postgres(마이그레이션 적용)에 시드한 행으로 {@link JdbcPlaceCatalog}의 읽기와 변환을 확인한다. */
+class JdbcPlaceCatalogTest extends PostgresTestSupport {
+
+	/** 2026-10-21(수) 12:00 KST. */
+	private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-10-21T03:00:00Z"), ZoneId.of("Asia/Seoul"));
+
+	private static JdbcTemplate jdbc;
+
+	private JdbcPlaceCatalog catalog;
+
+	@BeforeAll
+	static void migrateOnce() throws Exception {
+		migrate();
+		jdbc = new JdbcTemplate(appSource());
+	}
+
+	@BeforeEach
+	void setUp() {
+		// 자식 테이블은 ON DELETE CASCADE다. 다른 테스트의 행이 남아 있어도 이 테스트는 자기 행만 본다.
+		jdbc.update("DELETE FROM places");
+		catalog = new JdbcPlaceCatalog(JdbcClient.create(appSource()), JsonMapper.builder().build(),
+				Optional.of(CLOCK));
+	}
+
+	private long place(String name, String group, String station) {
+		return jdbc.queryForObject("""
+				INSERT INTO places (naver_place_id, name, category_group, station, lat, lng)
+				VALUES (?, ?, ?, ?, 37.5, 127.03) RETURNING place_id""", Long.class,
+				UUID.randomUUID().toString(), name, group, station);
+	}
+
+	private void hours(long placeId, String day, String open, String close, boolean closed, String breaksJson,
+			String lastOrders) {
+		jdbc.update("""
+				INSERT INTO place_hours (place_id, day_of_week, open_time, close_time, closed, breaks, last_orders)
+				VALUES (?, ?, ?::time, ?::time, ?, ?::jsonb, ?::time[])""",
+				placeId, day, open, close, closed, breaksJson, lastOrders);
+	}
+
+	@Test
+	@DisplayName("장소상세_없는id는_빈값이다")
+	void findPlace_unknownId_returnsEmpty() {
+		assertThat(catalog.findPlace(-1)).isEmpty();
+	}
+
+	@Test
+	@DisplayName("장소상세_필수열만있는장소는_빈값과기본값으로채운다")
+	void findPlace_onlyRequiredColumns_fillsEmptyDefaults() {
+		long id = place("카페 온담", "CAFE", "YEOKSAM");
+
+		PlaceDetailResponse detail = catalog.findPlace(id).orElseThrow();
+
+		assertThat(detail.place().id()).isEqualTo(id);
+		assertThat(detail.place().name()).isEqualTo("카페 온담");
+		assertThat(detail.place().categoryGroup()).isEqualTo(CategoryGroup.CAFE);
+		assertThat(detail.place().station()).isEqualTo(Station.YEOKSAM);
+		assertThat(detail.place().lat()).isEqualTo(37.5);
+		assertThat(detail.place().thumbnailUrl()).isNull();
+		assertThat(detail.address()).isEmpty();
+		assertThat(detail.tags()).isEmpty();
+		assertThat(detail.photos()).isEmpty();
+		assertThat(detail.menus()).isEmpty();
+		assertThat(detail.facilities()).isEmpty();
+		assertThat(detail.subways()).isEmpty();
+		assertThat(detail.seats()).isEmpty();
+		assertThat(detail.broadcasts()).isEmpty();
+		assertThat(detail.paymentMethods()).isEmpty();
+		assertThat(detail.extraLinks()).isEmpty();
+		assertThat(detail.hours()).hasSize(7);
+		assertThat(detail.hours()).extracting(Hours::dayOfWeek).containsExactly(DayCode.values());
+		assertThat(detail.hours()).allSatisfy(day -> {
+			assertThat(day.closed()).isFalse();
+			assertThat(day.open()).isNull();
+			assertThat(day.close()).isNull();
+			assertThat(day.breaks()).isEmpty();
+			assertThat(day.lastOrders()).isEmpty();
+		});
+		assertThat(detail.openStatus()).isEqualTo(OpenStatus.UNKNOWN);
+		assertThat(detail.closedDayNote()).isNull();
+		assertThat(detail.noKidsZone()).isFalse();
+		assertThat(detail.parking()).isNull();
+		assertThat(detail.pet()).isNull();
+		assertThat(detail.corkage()).isNull();
+		assertThat(detail.phone()).isNull();
+		assertThat(detail.website()).isNull();
+		assertThat(detail.directions()).isNull();
+		assertThat(detail.description()).isNull();
+		assertThat(detail.bookingUrl()).isNull();
+	}
+
+	@Test
+	@DisplayName("장소상세_값이있는열은_그대로옮기고시설에서플래그를정한다")
+	void findPlace_filledColumns_copiesValuesAndDerivesFlags() {
+		long id = place("야마야", "RESTAURANT", "GANGNAM");
+		jdbc.update("""
+				UPDATE places SET address = '서울 강남구 1', thumbnail_url = 'https://t.example/1.jpg',
+				    phone = '02-000-0000', website = 'https://w.example', booking_url = 'https://b.example',
+				    description = '소개', directions = '1번 출구',
+				    facilities = '{무선 인터넷,노키즈존,발렛파킹}'::text[], payment_methods = '{카드,현금}'::text[],
+				    extra_links = '{https://a.example}'::text[], pet_allowed = TRUE, pet_note = '소형견만'
+				WHERE place_id = ?""", id);
+
+		PlaceDetailResponse detail = catalog.findPlace(id).orElseThrow();
+
+		assertThat(detail.address()).isEqualTo("서울 강남구 1");
+		assertThat(detail.place().thumbnailUrl()).isEqualTo("https://t.example/1.jpg");
+		assertThat(detail.phone()).isEqualTo("02-000-0000");
+		assertThat(detail.website()).isEqualTo("https://w.example");
+		assertThat(detail.bookingUrl()).isEqualTo("https://b.example");
+		assertThat(detail.description()).isEqualTo("소개");
+		assertThat(detail.directions()).isEqualTo("1번 출구");
+		assertThat(detail.facilities()).containsExactly("무선 인터넷", "노키즈존", "발렛파킹");
+		assertThat(detail.paymentMethods()).containsExactly("카드", "현금");
+		assertThat(detail.extraLinks()).containsExactly("https://a.example");
+		assertThat(detail.noKidsZone()).isTrue();
+		// 주차: 무료 여부와 안내가 없고 발렛만 있다.
+		assertThat(detail.parking()).isNotNull();
+		assertThat(detail.parking().free()).isNull();
+		assertThat(detail.parking().note()).isNull();
+		assertThat(detail.parking().valet()).isTrue();
+		assertThat(detail.pet().allowed()).isTrue();
+		assertThat(detail.pet().note()).isEqualTo("소형견만");
+		assertThat(detail.corkage()).isNull();
+	}
+
+	@Test
+	@DisplayName("장소상세_사진은업체사진다음메뉴판사진이고각각sort_order순이다")
+	void findPlace_photos_businessThenMenuBoardEachInOrder() {
+		long id = place("사진 가게", "CAFE", "GANGNAM");
+		jdbc.update("""
+				INSERT INTO place_photos (place_id, source, sort_order, url)
+				VALUES (?, 'menuBoard', 0, 'm0'), (?, 'business', 1, 'b1'), (?, 'business', 0, 'b0')""",
+				id, id, id);
+
+		assertThat(catalog.findPlace(id).orElseThrow().photos()).containsExactly("b0", "b1", "m0");
+	}
+
+	@Test
+	@DisplayName("장소상세_메뉴는sort_order순이고숫자없는가격과첫사진을옮긴다")
+	void findPlace_menus_inOrderWithPriceTextAndFirstPhoto() {
+		long id = place("메뉴 가게", "RESTAURANT", "GANGNAM");
+		jdbc.update("""
+				INSERT INTO place_menus (place_id, sort_order, category, name, price, price_text, representative,
+				    labels, photo_urls)
+				VALUES (?, 1, NULL, '치즈케이크', NULL, '가격 변동', false, '{사전예약}'::text[], '{}'::text[]),
+				       (?, 0, '커피', '아메리카노', 4500, '4,500원', true, '{}'::text[], '{u1,u2}'::text[])""", id, id);
+
+		List<PlaceDetailResponse.Menu> menus = catalog.findPlace(id).orElseThrow().menus();
+
+		assertThat(menus).extracting(PlaceDetailResponse.Menu::name).containsExactly("아메리카노", "치즈케이크");
+		assertThat(menus.get(0).category()).isEqualTo("커피");
+		assertThat(menus.get(0).price()).isEqualTo(4500);
+		assertThat(menus.get(0).priceText()).isEqualTo("4,500원");
+		assertThat(menus.get(0).representative()).isTrue();
+		assertThat(menus.get(0).photoUrl()).isEqualTo("u1");
+		assertThat(menus.get(1).category()).isNull();
+		assertThat(menus.get(1).price()).isNull();
+		assertThat(menus.get(1).priceText()).isEqualTo("가격 변동");
+		assertThat(menus.get(1).labels()).containsExactly("사전예약");
+		assertThat(menus.get(1).photoUrl()).isNull();
+	}
+
+	@Test
+	@DisplayName("장소상세_지하철은도보거리순이고거리가없으면뒤로간다")
+	void findPlace_subways_byWalkDistanceNullsLast() {
+		long id = place("역 근처", "CAFE", "GANGNAM");
+		jdbc.update("""
+				INSERT INTO place_subways (place_id, station, line, exit, walk_minutes, walk_meters)
+				VALUES (?, 'A', '2', '1번', 4, 300), (?, 'B', NULL, NULL, NULL, NULL), (?, 'C', '신분당', NULL, 2, 100)""",
+				id, id, id);
+
+		List<PlaceDetailResponse.Subway> subways = catalog.findPlace(id).orElseThrow().subways();
+
+		assertThat(subways).extracting(PlaceDetailResponse.Subway::station).containsExactly("C", "A", "B");
+		assertThat(subways.get(0).line()).isEqualTo("신분당");
+		assertThat(subways.get(1).exit()).isEqualTo("1번");
+		assertThat(subways.get(1).walkMinutes()).isEqualTo(4);
+		assertThat(subways.get(2).walkMinutes()).isNull();
+	}
+
+	@Test
+	@DisplayName("장소상세_좌석과방송은옮기고방송일은문자열이다")
+	void findPlace_seatsAndBroadcasts_mapped() {
+		long id = place("방송 맛집", "RESTAURANT", "SEOLLEUNG");
+		jdbc.update("INSERT INTO place_seats (place_id, name, description) VALUES (?, '단체석', NULL), (?, '바', '6석')",
+				id, id);
+		jdbc.update("""
+				INSERT INTO place_broadcasts (place_id, channel, program, episode, aired_on, menu)
+				VALUES (?, 'KBS', '생생정보', '12회', DATE '2024-03-05', '곱창')""", id);
+
+		PlaceDetailResponse detail = catalog.findPlace(id).orElseThrow();
+
+		assertThat(detail.seats()).extracting(PlaceDetailResponse.Seat::name).containsExactly("단체석", "바");
+		assertThat(detail.seats().get(0).description()).isNull();
+		assertThat(detail.broadcasts()).hasSize(1);
+		assertThat(detail.broadcasts().get(0).airedOn()).isEqualTo("2024-03-05");
+		assertThat(detail.broadcasts().get(0).menu()).isEqualTo("곱창");
+	}
+
+	@Test
+	@DisplayName("장소상세_영업시간은7요일이고브레이크와라스트오더와자정넘김을옮기며정기휴무를안내한다")
+	void findPlace_hours_mapsBreaksLastOrdersMidnightAndClosedDays() {
+		long id = place("야간 식당", "RESTAURANT", "GANGNAM");
+		hours(id, "TUE", null, null, true, "[]", "{}");
+		hours(id, "WED", "18:00", "02:00", false, "[{\"start\":\"22:00\",\"end\":\"23:00\"}]", "{01:30}");
+		hours(id, "THU", null, null, true, "[]", "{}");
+		hours(id, "FRI", "00:00", "00:00", false, "[]", "{}");
+
+		PlaceDetailResponse detail = catalog.findPlace(id).orElseThrow();
+
+		assertThat(detail.hours()).extracting(Hours::dayOfWeek).containsExactly(DayCode.values());
+		assertThat(detail.hours().get(1).closed()).isTrue();
+		Hours wednesday = detail.hours().get(2);
+		assertThat(wednesday.open()).isEqualTo("18:00");
+		assertThat(wednesday.close()).isEqualTo("02:00");
+		assertThat(wednesday.breaks()).containsExactly(new Break("22:00", "23:00"));
+		assertThat(wednesday.lastOrders()).containsExactly("01:30");
+		assertThat(detail.hours().get(4).open()).isEqualTo("00:00");
+		assertThat(detail.hours().get(4).close()).isEqualTo("00:00");
+		// 날짜 없는 정기휴무만 안내하고, 행이 없는 요일(정보 없음)은 포함하지 않는다.
+		assertThat(detail.closedDayNote()).isEqualTo("매주 화·목요일 휴무");
+		// 수요일 12:00은 18:00 개점 전이고 어제(화)는 휴무라 CLOSED다.
+		assertThat(detail.openStatus()).isEqualTo(OpenStatus.CLOSED);
+	}
+
+	@Test
+	@DisplayName("장소상세_영업시간안이면_서울시각기준으로OPEN이다")
+	void findPlace_insideHours_openAtSeoulTime() {
+		long id = place("낮 식당", "RESTAURANT", "GANGNAM");
+		hours(id, "WED", "11:00", "22:00", false, "[]", "{}");
+
+		assertThat(catalog.findPlace(id).orElseThrow().openStatus()).isEqualTo(OpenStatus.OPEN);
+	}
+
+	@Test
+	@DisplayName("주변후보_카탈로그전체를id순으로돌려주고점수와이유는비어있다")
+	void nearbyCandidates_everyPlace_inIdOrderWithoutScore() {
+		long first = place("가", "CAFE", "GANGNAM");
+		long second = place("나", "BAR", "SEOLLEUNG");
+		hours(second, "WED", "11:00", "22:00", false, "[]", "{}");
+
+		List<PlaceCard> cards = catalog.nearbyCandidates();
+
+		assertThat(cards).extracting(card -> card.place().id()).containsExactly(first, second);
+		assertThat(cards).allSatisfy(card -> {
+			assertThat(card.score()).isNull();
+			assertThat(card.caution()).isNull();
+			assertThat(card.labels()).isEmpty();
+			assertThat(card.reasons()).isEmpty();
+			assertThat(card.scoreItems()).isEmpty();
+		});
+		assertThat(cards.get(0).openStatus()).isEqualTo(OpenStatus.UNKNOWN);
+		assertThat(cards.get(1).openStatus()).isEqualTo(OpenStatus.OPEN);
+		assertThat(cards.get(1).place().categoryGroup()).isEqualTo(CategoryGroup.BAR);
+		assertThat(cards.get(1).place().station()).isEqualTo(Station.SEOLLEUNG);
+	}
+
+	@Test
+	@DisplayName("검색문서_메뉴는원본순서이고네이버업종과메뉴없는장소를옮긴다")
+	void loadSearchDocuments_menusInOrderAndNaverCategory() {
+		long first = place("베트남집", "RESTAURANT", "YEOKSAM");
+		long second = place("빈 가게", "CAFE", "GANGNAM");
+		jdbc.update("UPDATE places SET category = '베트남음식' WHERE place_id = ?", first);
+		jdbc.update("""
+				INSERT INTO place_menus (place_id, sort_order, name) VALUES (?, 1, 'B'), (?, 0, 'A')""", first, first);
+
+		List<PlaceSearchDocument> documents = catalog.loadSearchDocuments();
+
+		assertThat(documents).extracting(document -> document.place().id()).containsExactly(first, second);
+		assertThat(documents.get(0).menuNames()).containsExactly("A", "B");
+		assertThat(documents.get(0).naverCategory()).isEqualTo("베트남음식");
+		assertThat(documents.get(1).menuNames()).isEmpty();
+		assertThat(documents.get(1).naverCategory()).isNull();
+	}
+
+}

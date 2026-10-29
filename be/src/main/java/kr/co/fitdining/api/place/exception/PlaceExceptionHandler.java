@@ -3,6 +3,7 @@ package kr.co.fitdining.api.place.exception;
 import kr.co.fitdining.api.place.PlaceController;
 import kr.co.fitdining.api.place.engine.InvalidCursorException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -42,6 +43,13 @@ public class PlaceExceptionHandler {
 	@ExceptionHandler(PlaceSearchUnavailableException.class)
 	public ProblemDetail handleUnavailable() {
 		log.warn("Place search engine is not configured");
+		return ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, "지금은 장소 검색을 쓸 수 없어요.");
+	}
+
+	/** 카탈로그 DB를 읽지 못했다. 예외 내용은 응답에 담지 않고 서버 로그에만 남긴다(D-14). */
+	@ExceptionHandler(DataAccessException.class)
+	public ProblemDetail handleDataAccess(DataAccessException e) {
+		log.error("Place catalog access failed", e);
 		return ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, "지금은 장소 검색을 쓸 수 없어요.");
 	}
 
