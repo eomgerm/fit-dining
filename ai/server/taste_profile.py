@@ -40,7 +40,7 @@ class TasteChip(Body):
 
     polarity: Literal["LIKE", "DISLIKE"]
     label: str
-    code: Literal[tuple(FEATURES)] | None
+    code: Literal[tuple(FEATURES)] | None = None  # BE는 null 속성을 빼고 보낸다
 
 
 class ProfileBody(Body):

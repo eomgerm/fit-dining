@@ -66,7 +66,30 @@ def test_every_be_tag_is_accepted():
     }
     resp = client().post("/v1/taste/profile", json=body)
     assert resp.status_code == 200
-    assert len(resp.json()["features"]) == 14  # 고른 13개 + 소음 반대 극
+    # 고른 13개 + 소음 반대 극
+    assert {f["code"] for f in resp.json()["features"]} == {
+        "QUIET",
+        "LIVELY",
+        "SPACIOUS_SEATING",
+        "SHORT_WAIT",
+        "GENEROUS_PORTION",
+        "PRETTY_SPACE",
+        "VIEW_OUTDOOR",
+        "COZY",
+        "VALUE_FOR_MONEY",
+        "PURPOSE_TALK",
+        "PURPOSE_SOLO",
+        "PURPOSE_DATE",
+        "PURPOSE_GROUP",
+        "PURPOSE_WORK",
+    }
+
+
+def test_chip_without_code_key_is_accepted():
+    # BE는 null 속성을 직렬화하지 않아(jackson non_null) 코드 없는 칩에 code 키가 없다
+    body = {"purposes": ["SOLO"], "tastes": [{"polarity": "LIKE", "label": "국물"}]}
+    resp = client().post("/v1/taste/profile", json=body)
+    assert resp.json() == {"features": SAMPLES["4"]["features"]}
 
 
 def test_tag_and_chip_on_opposite_poles_cancel():

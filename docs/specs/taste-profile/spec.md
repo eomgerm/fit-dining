@@ -435,7 +435,7 @@ BE가 온보딩 취향을 저장할 때 AI API(`ai/server/taste_profile.py`)를 
 |---|---|
 | `mood` | BE `Preferences.Mood`. 없으면 `null`이나 생략 |
 | `priorities`, `purposes` | BE `Preferences.Priority`, `Purpose` 이름. 생략하면 빈 목록 |
-| `tastes` | 해석 API가 준 칩 `{polarity, label, code}`. 다른 속성(`vector` 등)은 받지 않는다. `code`가 있는 칩만 계산에 쓴다. `LIKE`는 +1, `DISLIKE`는 −1 |
+| `tastes` | 해석 API가 준 칩 `{polarity, label, code}`. 다른 속성(`vector` 등)은 받지 않는다. `code`는 없으면 `null`이나 생략. `code`가 있는 칩만 계산에 쓴다. `LIKE`는 +1, `DISLIKE`는 −1 |
 
 BE 태그 이름은 코드표와 달라서(profile-storage 문제 8) 이 API에서 바꾼다. `SPACIOUS` → `SPACIOUS_SEATING`, `VALUE` → `VALUE_FOR_MONEY`, `CONVERSATION` → `PURPOSE_TALK`, `SOLO` → `PURPOSE_SOLO`, `DATE` → `PURPOSE_DATE`, `GATHERING` → `PURPOSE_GROUP`, `WORK_STUDY` → `PURPOSE_WORK`이고 나머지는 같다.
 
