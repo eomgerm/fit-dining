@@ -10,7 +10,7 @@ import type { LocationState } from "./search-request";
 
 // 서버가 모르는 검색 화면 상태. 검색 응답(페이지와 커서)은 TanStack Query 캐시에 항목 id별로 있고,
 // 여기에는 지금 thread의 요청 기록 메타 정보와 화면 상태만 둔다. 메모리에만 있어 재로드하면 사라진다.
-// thread 자체는 thread-storage가 기기에 저장한다(spec 53번)
+// thread 자체는 thread-storage가 비회원은 기기에, 회원은 서버에 저장한다(spec 53번, search-thread D-8)
 
 export type EntryKind = "new" | "followUp" | "region";
 
@@ -48,6 +48,8 @@ export type SearchState = {
   latestCards: ReadonlyMap<number, PlaceCard>;
   // 화면을 열 때의 위치 권한 확인을 이번 페이지 세션에 이미 했는지. 상세에서 돌아와도 다시 하지 않는다
   openLocationChecked: boolean;
+  // 로그인 세션이 바뀌어 처음으로 되돌린 횟수. 그 전에 시작한 요청의 응답은 버린다(search-thread D-6)
+  epoch: number;
 };
 
 type AddEntryInput = {
@@ -92,6 +94,7 @@ export function createSearchStore(now: () => number = Date.now) {
     regionLocked: false,
     latestCards: new Map(),
     openLocationChecked: false,
+    epoch: 0,
   };
   const listeners = new Set<() => void>();
 
@@ -190,6 +193,20 @@ export function createSearchStore(now: () => number = Date.now) {
 
     markOpenLocationChecked() {
       update({ openLocationChecked: true });
+    },
+
+    // 로그인 세션이 바뀌면 처음 화면으로 되돌린다. 현재 위치와 위치 권한 확인은 기기의 것이라 남긴다
+    reset() {
+      update({
+        threadId: undefined,
+        entries: [],
+        viewingId: undefined,
+        pastId: undefined,
+        selectedPlaceId: undefined,
+        regionLocked: false,
+        latestCards: new Map(),
+        epoch: state.epoch + 1,
+      });
     },
   };
 }

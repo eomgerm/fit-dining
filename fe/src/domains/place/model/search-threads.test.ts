@@ -4,8 +4,10 @@ import type { PlaceSearchResponse } from "./place-types";
 import {
   appendTurn,
   formatRecentAt,
+  mergeSummaries,
   parseThreads,
   sortThreads,
+  summarizeThread,
   threadTitle,
   threadUpdatedAt,
   type SearchThread,
@@ -84,6 +86,67 @@ describe("parseThreads", () => {
     ]);
 
     expect(parseThreads(raw)).toEqual([good]);
+  });
+});
+
+// BE 기록 API가 받아 저장하는 turn은 parseThreads도 받아들인다(search-thread D-4). 방향은 "BE가 받으면 FE도 받는다"다
+describe("parseThreads와 서버 thread", () => {
+  const first = "entry-11111111-2222-3333-4444-555555555555";
+
+  it("최소 필드, baseId 있는 followUp, 안쪽 null이 든 conditions를 그대로 받는다", () => {
+    const thread = {
+      id: "thread-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      turns: [
+        {
+          id: first,
+          kind: "new",
+          at: 0,
+          request: { query: "q" },
+          response: { items: [], totalCount: 0, conditions: {} },
+        },
+        {
+          id: "entry-66666666-7777-8888-9999-000000000000",
+          kind: "followUp",
+          baseId: first,
+          at: 8.64e15,
+          request: {
+            query: " 더 조용하게",
+            previousConditions: { area: null, mood: {}, tags: [null] },
+          },
+          response: {
+            items: [{ place: { id: 1 }, unknown: null }],
+            totalCount: 1e21,
+            conditions: { area: null, quiet: true, price: {} },
+            changeSummary: null,
+          },
+        },
+      ],
+    };
+
+    expect(parseThreads(JSON.stringify([thread]))).toEqual([thread]);
+  });
+});
+
+describe("목록 요약", () => {
+  it("요약은 thread id, 첫 질문, 마지막 요청 시각이다", () => {
+    const thread: SearchThread = {
+      id: "t1",
+      turns: [turn("a", 5, "역삼 카페"), turn("b", 3, "더 조용하게")],
+    };
+
+    expect(summarizeThread(thread)).toEqual({
+      id: "t1",
+      title: "역삼 카페",
+      lastAt: 3,
+    });
+  });
+
+  it("페이지를 이으면 같은 id는 먼저 받은 것만 남긴다", () => {
+    const a = { id: "a", title: "A", lastAt: 3 };
+    const b = { id: "b", title: "B", lastAt: 2 };
+    const movedA = { id: "a", title: "A", lastAt: 1 };
+
+    expect(mergeSummaries([[a, b], [movedA, { ...b }], []])).toEqual([a, b]);
   });
 });
 

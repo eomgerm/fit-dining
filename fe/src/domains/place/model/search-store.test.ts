@@ -253,6 +253,37 @@ describe("createSearchStore", () => {
     expect(store.getSnapshot().threadId).not.toBe(first);
   });
 
+  it("로그인 세션이 바뀌어 되돌리면 thread, 기록, 과거 결과, 선택, 최신 카드를 비우고 위치는 남긴다", () => {
+    const { store } = setup();
+    const here = { lat: 37.5, lng: 127.03 };
+    store.setLocation({ status: "ok", here });
+    store.markOpenLocationChecked();
+    store.addEntry({
+      id: "a",
+      kind: "new",
+      request: { query: "역삼 카페" },
+      response: response(),
+    });
+    store.openPast("a");
+    store.select(1);
+    store.lockRegion();
+
+    store.reset();
+
+    expect(store.getSnapshot()).toMatchObject({
+      threadId: undefined,
+      entries: [],
+      viewingId: undefined,
+      pastId: undefined,
+      selectedPlaceId: undefined,
+      regionLocked: false,
+      location: { status: "ok", here },
+      openLocationChecked: true,
+      epoch: 1,
+    });
+    expect(store.getSnapshot().latestCards.size).toBe(0);
+  });
+
   it("다시 연 thread는 그때 시각의 요청들을 기록으로 두고 마지막 요청을 지금 보는 요청으로 둔다", () => {
     const { store } = setup();
     store.lockRegion();

@@ -1379,7 +1379,7 @@ describe("SearchScreen", () => {
       });
 
       it("저장된 값이 깨져 있어도 목록이 비고 검색은 동작한다", async () => {
-        localStorage.setItem("fit-dining:search-threads", "{");
+        localStorage.setItem("fit-dining:guest-search-threads", "{");
         renderScreen();
 
         const sheet = await openRecent();

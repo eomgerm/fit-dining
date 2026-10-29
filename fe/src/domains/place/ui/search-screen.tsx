@@ -42,7 +42,7 @@ import {
   searchStore,
   type EntryKind,
 } from "../model/search-store";
-import { appendTurn } from "../model/search-threads";
+import type { SearchThread } from "../model/search-threads";
 import { FollowUpInput } from "./follow-up-input";
 import { HistoryTimeline } from "./history-timeline";
 import { isOfflineError, LoadFailed } from "./load-failed";
@@ -62,7 +62,7 @@ import { ResultPanel, type PanelState } from "./result-panel";
 import { savedCardElementId, SavedPlacesView } from "./saved-places";
 import { savedViewState, type SavedPanelState } from "./saved-view-state";
 import { SearchBar } from "./search-bar";
-import { getThread, saveThread } from "./thread-storage";
+import { beginSave, saveTurn, type ThreadAuth } from "./thread-storage";
 import { useNearbyPicks } from "./use-nearby-picks";
 import { useSavedPlaces } from "./use-saved-places";
 import { useHere, useSearchStore } from "./use-search-store";
@@ -74,9 +74,15 @@ type SearchInput = {
   request: PlaceSearchRequest;
 };
 
-// 첫 화면(와이어프레임 Start)과 검색·추천 결과 화면(5-01, 5-03~5-07), 저장한 장소 화면(?view=saved, 와이어프레임 Saved).
-// bookmarks는 저장한 장소의 인증이다. 인증 도메인을 쓰는 app이 넘긴다
-export function SearchScreen({ bookmarks }: { bookmarks: BookmarkAccess }) {
+type SearchScreenProps = {
+  // 저장한 장소의 인증. 인증 도메인을 쓰는 app이 넘긴다
+  bookmarks: BookmarkAccess;
+  // 회원 검색 기록을 서버에 저장하는 인증 연결. 없으면 비회원처럼 기기에 저장한다(search-thread D-6)
+  threadAuth?: ThreadAuth;
+};
+
+// 첫 화면(와이어프레임 Start)과 검색·추천 결과 화면(5-01, 5-03~5-07), 저장한 장소 화면(?view=saved, 와이어프레임 Saved)
+export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
   const router = useRouter();
   const params = useSearchParams();
   // 저장한 장소 화면은 메인의 지도와 하단 패널이 내 저장 장소만 보이도록 바뀐 상태다(D-12)
@@ -84,7 +90,7 @@ export function SearchScreen({ bookmarks }: { bookmarks: BookmarkAccess }) {
   const savedCategory = parseCategory(params.get("category"));
   const queryClient = useQueryClient();
   const toast = useToast();
-  const { threadId, entries, selectedPlaceId } = useSearchStore();
+  const { threadId, entries, selectedPlaceId, epoch } = useSearchStore();
   const results = useViewingResults();
   const { viewing } = results;
   const pastResults = usePastResults();
@@ -132,16 +138,22 @@ export function SearchScreen({ bookmarks }: { bookmarks: BookmarkAccess }) {
   }, [savedView]);
 
   // 첫 페이지를 받은 뒤에만 기록에 넣고 화면을 바꾼다. 실패한 요청은 쌓지 않는다.
-  // 쌓은 요청은 그때 받은 첫 페이지와 함께 지금 thread에 저장한다
+  // 쌓은 요청은 그때 받은 첫 페이지와 함께 지금 thread에 저장한다. 저장 위치는 검색을 시작할 때의 로그인 세션으로 정하고,
+  // 그사이 세션이 바뀌었으면(epoch) 응답을 버린다(search-thread D-6)
   const search = useMutation({
     mutationFn: async ({ kind, baseId, request }: SearchInput) => {
       const generation = searchGeneration.current;
+      const startEpoch = searchStore.getSnapshot().epoch;
+      const target = beginSave(threadAuth);
       const id = nextEntryId();
       const options = placeQueries.search(id, request);
       pendingKey.current = options.queryKey;
       try {
         const data = await queryClient.fetchInfiniteQuery(options);
-        if (generation !== searchGeneration.current) {
+        if (
+          generation !== searchGeneration.current ||
+          startEpoch !== searchStore.getSnapshot().epoch
+        ) {
           queryClient.removeQueries({
             queryKey: options.queryKey,
             exact: true,
@@ -158,15 +170,18 @@ export function SearchScreen({ bookmarks }: { bookmarks: BookmarkAccess }) {
         });
         const thread = searchStore.getSnapshot().threadId;
         if (thread) {
-          saveThread(
-            appendTurn(getThread(thread), thread, {
+          saveTurn(
+            target,
+            thread,
+            {
               id,
               kind,
               ...(baseId && { baseId }),
               at: entry.at,
               request,
               response,
-            }),
+            },
+            threadAuth,
           );
         }
       } catch (error) {
@@ -211,6 +226,19 @@ export function SearchScreen({ bookmarks }: { bookmarks: BookmarkAccess }) {
   useEffect(() => {
     if (focusRequest > 0 && !searching) followUpRef.current?.focus();
   }, [focusRequest, searching]);
+
+  // 로그인 세션이 바뀌어 store를 비웠으면 진행 중인 검색과 열린 시트도 버리고 첫 화면으로 돌아간다
+  const clearForSession = useEffectEvent(() => {
+    abandonSearch();
+    setRecentOpen(false);
+    setPanel("middle");
+  });
+  const seenEpoch = useRef(epoch);
+  useEffect(() => {
+    if (seenEpoch.current === epoch) return;
+    seenEpoch.current = epoch;
+    clearForSession();
+  }, [epoch]);
 
   function run(input: SearchInput) {
     setPanel("middle");
@@ -309,11 +337,10 @@ export function SearchScreen({ bookmarks }: { bookmarks: BookmarkAccess }) {
     run({ kind: past.kind, baseId: past.baseId, request: past.request });
   }
 
-  // 최근 검색에서 고른 thread로 바꾼다. 저장한 첫 페이지를 캐시에 넣어 다시 받지 않는다
-  function handleOpenThread(id: string) {
+  // 최근 검색에서 받아 온 thread로 바꾼다. 저장한 첫 페이지를 캐시에 넣어 검색을 다시 부르지 않는다.
+  // 이번 페이지 세션에 이미 받은 turn은 캐시를 그대로 쓴다(spec 57번)
+  function handleOpenThread(thread: SearchThread) {
     setRecentOpen(false);
-    const thread = getThread(id);
-    if (!thread || id === threadId) return;
     abandonSearch();
     for (const turn of thread.turns) {
       const { queryKey } = placeQueries.search(turn.id, turn.request);
@@ -632,8 +659,9 @@ export function SearchScreen({ bookmarks }: { bookmarks: BookmarkAccess }) {
       <RecentSearchSheet
         open={recentOpen}
         onOpenChange={setRecentOpen}
+        threadAuth={threadAuth}
         currentThreadId={threadId}
-        onPick={handleOpenThread}
+        onOpenThread={handleOpenThread}
       />
     </main>
   );

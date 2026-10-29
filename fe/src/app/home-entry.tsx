@@ -7,6 +7,7 @@ import { SearchScreen } from "@/domains/place/ui/search-screen";
 import { OnboardingScreen } from "@/domains/onboarding/ui/onboarding-screen";
 import { isGuest, writeAnswers } from "@/domains/onboarding/model/storage";
 import { takeLoginReturn } from "./login-return";
+import { threadAuth } from "./search-thread-auth";
 import { useBookmarkAccess } from "./use-bookmark-access";
 
 export function HomeEntry() {
@@ -49,7 +50,8 @@ export function HomeEntry() {
   }, [router]);
   if (screen === "checking") return <main className="min-h-svh bg-surface" />;
   return screen === "home" ? (
-    <SearchScreen bookmarks={bookmarks} />
+    // 검색 기록 저장에 인증을 잇는다. place는 auth를 import하지 않는다(search-thread D-6)
+    <SearchScreen bookmarks={bookmarks} threadAuth={threadAuth} />
   ) : (
     <OnboardingScreen
       onComplete={(answers) => {

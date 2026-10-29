@@ -46,6 +46,23 @@ export function sortThreads(threads: SearchThread[]) {
   return [...threads].sort((a, b) => threadUpdatedAt(b) - threadUpdatedAt(a));
 }
 
+// 최근 검색 줄 하나. 회원 목록은 서버가 이 모양으로 주고, 비회원은 기기 thread에서 만든다
+export type ThreadSummary = { id: string; title: string; lastAt: number };
+
+export function summarizeThread(thread: SearchThread): ThreadSummary {
+  return {
+    id: thread.id,
+    title: threadTitle(thread),
+    lastAt: threadUpdatedAt(thread),
+  };
+}
+
+// 페이지를 차례로 잇는다. 페이지 사이에 순서가 바뀌어 같은 id가 다시 오면 먼저 받은 것만 남긴다
+export function mergeSummaries(pages: ThreadSummary[][]) {
+  const seen = new Set<string>();
+  return pages.flat().filter(({ id }) => !seen.has(id) && seen.add(id));
+}
+
 const KINDS: readonly EntryKind[] = ["new", "followUp", "region"];
 
 function isObject(value: unknown): value is Record<string, unknown> {
