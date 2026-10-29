@@ -197,7 +197,7 @@ function PlaceDetailView({
         <PlaceMeta place={place} here={here} />
         <div className="flex items-end justify-between gap-3">
           <h1 className="text-headline-lg text-ink">{place.name}</h1>
-          {card && (
+          {card?.score !== undefined && (
             <Tooltip label="핏 점수 설명" content={SCORE_HELP}>
               <button
                 type="button"

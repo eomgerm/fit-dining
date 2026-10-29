@@ -58,7 +58,8 @@ export type ScoreItem = {
 
 export type PlaceCard = {
   place: PlaceSummary;
-  score: number;
+  // AI 엔진이 붙기 전에는 BE가 생략한다. 없으면 핏 점수 영역을 그리지 않는다
+  score?: number;
   labels: string[];
   caution?: string;
   openStatus: OpenStatus;

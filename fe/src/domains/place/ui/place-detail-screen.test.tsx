@@ -231,6 +231,19 @@ describe("PlaceDetailScreen", () => {
     expect(within(tip).getByText(/0~100으로 나타낸 점수예요/)).toBeTruthy();
   });
 
+  it("검색 카드에 점수가 없으면 핏 점수를 숨기고 나머지 카드 정보는 그대로 보여 준다", async () => {
+    stores.current.recordCards([
+      { ...card, score: undefined, reasons: [], scoreItems: [] },
+    ]);
+    renderDetail();
+
+    await screen.findByRole("heading", { name: "카페 온담" });
+    expect(screen.queryByText("핏 점수")).toBeNull();
+    expect(screen.queryByRole("button", { name: /핏 점수/ })).toBeNull();
+    expect(screen.queryByText("AI 추천 이유")).toBeNull();
+    expect(screen.getByText("주말 오후에는 대기가 길어요")).toBeTruthy();
+  });
+
   it("검색 카드가 없으면 핏 점수와 추천 이유를 숨기고 장소 정보만 보여 준다", async () => {
     renderDetail();
 

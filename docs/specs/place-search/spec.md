@@ -239,8 +239,9 @@ kr.co.fitdining.api.place.dto (D-64. 파일은 아래 들여쓰지 않은 7개�
   PlaceSearchResponse  : conditions(JSON 객체, 불투명), nearby(Boolean), totalCount(Integer),
                    items(PlaceCard[]), nextCursor?, emptyReason?(EmptyReason), changeSummary?(String)
     EmptyReason  : cause, suggestion
-  PlaceCard      : place(PlaceSummary), score(Integer 0..100), labels(String[2]), caution?(String),
+  PlaceCard      : place(PlaceSummary), score?(Integer 0..100), labels(String[2]), caution?(String),
                    openStatus(OpenStatus), reasons(Reason[]), scoreItems(ScoreItem[])
+                   -- DB 모드(AI 엔진 전)에서는 score와 caution을 생략하고 labels, reasons, scoreItems는 빈 목록이다(place-lookup-db D-12)
     Reason       : title, tags(ReasonTag[]), quote?(String), quoteSource?(String, 예: "앱 리뷰")
     ReasonTag    : source(EvidenceSource), label
     ScoreItem    : source(EvidenceSource), label, matched(Boolean), evidenceCount(Integer >= 0)

@@ -40,7 +40,16 @@ export function filterNearby(
   return cards.filter((card) => distanceMeters(here, card.place) <= radiusM);
 }
 
-// 첫 화면 주변 카드. 근처 응답을 기준 지점에서 반경 안으로 거른 앞의 몇 곳
+// 첫 화면 주변 카드. 근처 응답을 기준 지점에서 반경 안으로 거른 앞의 몇 곳.
+// 점수가 있으면 서버 순서(점수순)를 따르고, 모든 카드에 점수가 없으면 기준 지점에서 가까운 순으로 정렬한다
 export function pickNearby(cards: PlaceCard[], origin: LatLng) {
-  return filterNearby(cards, origin).slice(0, NEARBY_PICK_LIMIT);
+  const within = filterNearby(cards, origin);
+  const byDistance = cards.every(({ score }) => score === undefined);
+  const ordered = byDistance
+    ? [...within].sort(
+        (a, b) =>
+          distanceMeters(origin, a.place) - distanceMeters(origin, b.place),
+      )
+    : within;
+  return ordered.slice(0, NEARBY_PICK_LIMIT);
 }

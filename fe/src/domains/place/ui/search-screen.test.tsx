@@ -472,6 +472,25 @@ describe("SearchScreen", () => {
         fireEvent.click(second);
         expect(push).toHaveBeenCalledWith("/place?id=2");
       });
+
+      it("점수가 없는 카드는 핏 점수 없이 기준 지점(역삼역)에서 가까운 순으로 보인다", async () => {
+        const far = { ...card(1), score: undefined };
+        const near = {
+          ...card(2),
+          score: undefined,
+          place: { ...card(2).place, lat: 37.5006, lng: 127.0364 },
+        };
+        stubNearbyItems([far, near]);
+        renderScreen();
+        await waitFor(() => expect(mapState()).toBe("ready"));
+        const list = await nearbyList();
+
+        const names = (await within(list).findAllByText(/^장소 \d$/)).map(
+          (node) => node.textContent,
+        );
+        expect(names).toEqual(["장소 2", "장소 1"]);
+        expect(within(list).queryByText("핏 점수")).toBeNull();
+      });
     });
 
     it("화면 크기가 바뀌면 바깥 지도 영역의 크기로 setSize를 부른다", async () => {

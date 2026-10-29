@@ -111,5 +111,45 @@ describe("nearby", () => {
         pickNearby([station, gangnam, seolleung], YEOKSAM_STATION),
       ).toEqual([station, gangnam]);
     });
+
+    it("모든 카드에 점수가 없으면 반경 안에서 기준 지점에 가까운 순으로 고른다", () => {
+      const withoutScore = (card: PlaceCard): PlaceCard => ({
+        ...card,
+        score: undefined,
+      });
+      const far = withoutScore(cardAt(1, here.lat + 0.008, here.lng)); // 약 890m
+      const middle = withoutScore(cardAt(2, here.lat + 0.004, here.lng)); // 약 445m
+      const near = withoutScore(cardAt(3, here.lat, here.lng));
+      const outside = withoutScore(cardAt(4, here.lat + 0.02, here.lng));
+
+      const picked = pickNearby([far, outside, middle, near], here);
+
+      expect(picked.map(({ place }) => place.id)).toEqual([3, 2, 1]);
+    });
+
+    it("점수가 없어도 반경 안에서 앞 NEARBY_PICK_LIMIT곳까지만 고른다", () => {
+      const cards = Array.from(
+        { length: NEARBY_PICK_LIMIT + 2 },
+        (_, index) => ({
+          ...cardAt(index + 1, here.lat + 0.0005 * (index + 1), here.lng),
+          score: undefined,
+        }),
+      ).reverse();
+
+      const picked = pickNearby(cards, here);
+
+      expect(picked.map(({ place }) => place.id)).toEqual(
+        Array.from({ length: NEARBY_PICK_LIMIT }, (_, index) => index + 1),
+      );
+    });
+
+    it("점수가 있는 카드가 있으면 서버 순서를 그대로 따른다", () => {
+      const first = cardAt(1, here.lat + 0.008, here.lng);
+      const second = cardAt(2, here.lat, here.lng);
+
+      const picked = pickNearby([first, second], here);
+
+      expect(picked.map(({ place }) => place.id)).toEqual([1, 2]);
+    });
   });
 });

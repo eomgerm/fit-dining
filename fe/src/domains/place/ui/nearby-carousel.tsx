@@ -110,7 +110,7 @@ function NearbyCard({
               status={openStatus}
             />
           </div>
-          <FitScore score={score} />
+          {score !== undefined && <FitScore score={score} />}
         </div>
         <div className="flex flex-wrap gap-1">
           {labels.map((label, labelIndex) => (

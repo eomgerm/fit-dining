@@ -60,7 +60,7 @@ export function PlaceCard({
             ))}
           </div>
         </div>
-        <FitScore score={score} />
+        {score !== undefined && <FitScore score={score} />}
       </div>
       {caution && (
         <p className="flex items-center gap-1.5 text-caption-md text-warning">
