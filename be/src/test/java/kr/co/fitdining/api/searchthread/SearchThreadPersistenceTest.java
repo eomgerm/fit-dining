@@ -27,6 +27,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -297,13 +298,14 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 
 		@Test
 		@DisplayName("추가_같은id다른내용이면서thread규칙도어기면_409conflict가먼저다")
-		void put_conflictBeforeThreadRule() throws Exception {
+		void put_sameIdBreakingThreadRule_conflictFirst() throws Exception {
 			String token = signIn(0);
 			String thread = threadId();
 			String first = turnId();
 			put(token, thread, first, newTurn(first, AT, "카페"));
 
-			HttpResponse<String> response = put(token, thread, first, turn(first, "followUp", turnId(), AT, "카페"));
+			// baseId 없는 followUp은 thread 규칙 위반(400)이지만, 같은 id 비교가 먼저다
+			HttpResponse<String> response = put(token, thread, first, turn(first, "followUp", null, AT, "카페"));
 
 			assertThat(response.statusCode()).isEqualTo(409);
 			assertThat(type(response)).isEqualTo(CONFLICT);
@@ -323,25 +325,26 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 			assertThat(count("search_threads")).isZero();
 		}
 
-		@Test
-		@DisplayName("추가_baseId없는followUp_baseId있는new_자기자신을가리키는baseId는_400이다")
-		void put_threadRuleViolations_invalid() throws Exception {
+		/** base: none(baseId 없음), first(첫 turn), self(자기 자신) */
+		@ParameterizedTest
+		@CsvSource({"followUp, none", "region, none", "new, first", "followUp, self"})
+		@DisplayName("추가_baseId없는followUp_region_baseId있는new_자기자신을가리키는baseId는_400이다")
+		void put_threadRuleViolation_invalid(String kind, String base) throws Exception {
 			String token = signIn(0);
 			String thread = threadId();
 			String first = turnId();
 			put(token, thread, first, newTurn(first, AT, "카페"));
 			String id = turnId();
+			String baseId = switch (base) {
+				case "first" -> first;
+				case "self" -> id;
+				default -> null;
+			};
 
-			List<HttpResponse<String>> responses = List.of(
-					put(token, thread, id, turn(id, "followUp", null, AT, "조건")),
-					put(token, thread, id, turn(id, "region", null, AT, "조건")),
-					put(token, thread, id, turn(id, "new", first, AT, "조건")),
-					put(token, thread, id, turn(id, "followUp", id, AT, "조건")));
+			HttpResponse<String> response = put(token, thread, id, turn(id, kind, baseId, AT, "조건"));
 
-			assertThat(responses).allSatisfy(response -> {
-				assertThat(response.statusCode()).isEqualTo(400);
-				assertThat(type(response)).isEqualTo(INVALID);
-			});
+			assertThat(response.statusCode()).isEqualTo(400);
+			assertThat(type(response)).isEqualTo(INVALID);
 			assertThat(turnIds(getThread(token, thread))).containsExactly(first);
 		}
 
@@ -409,26 +412,43 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 					user, thread, turn, seq, kind, base);
 		}
 
-		@Test
-		@DisplayName("직접쓰기_다른thread를가리키는baseId_자기자신baseId_틀린종류는_DB가거부한다")
-		void directWrites_rejectedByConstraints() {
+		private final String user = USER_PREFIX + 0;
+		private String thread;
+		private String first;
+
+		@BeforeEach
+		void seed() {
 			signIn(0);
-			String user = USER_PREFIX + 0;
-			String a = threadId();
-			String b = threadId();
-			insertThread(user, a);
-			insertThread(user, b);
-			String aFirst = turnId();
-			insertTurn(user, a, aFirst, 1, "new", null);
+			thread = threadId();
+			insertThread(user, thread);
+			first = turnId();
+			insertTurn(user, thread, first, 1, "new", null);
+		}
+
+		@Test
+		@DisplayName("직접쓰기_다른thread의turn을baseId로가리키면_DB가거부한다")
+		void directWrite_baseInOtherThread_rejected() {
+			String other = threadId();
+			insertThread(user, other);
+
+			assertThatThrownBy(() -> insertTurn(user, other, turnId(), 1, "followUp", first))
+					.isInstanceOf(DataIntegrityViolationException.class);
+		}
+
+		@Test
+		@DisplayName("직접쓰기_baseId가자기자신이면_DB가거부한다")
+		void directWrite_selfBase_rejected() {
 			String self = turnId();
 
-			assertThatThrownBy(() -> insertTurn(user, b, turnId(), 1, "followUp", aFirst))
+			assertThatThrownBy(() -> insertTurn(user, thread, self, 2, "followUp", self))
 					.isInstanceOf(DataIntegrityViolationException.class);
-			assertThatThrownBy(() -> insertTurn(user, a, self, 2, "followUp", self))
+		}
+
+		@Test
+		@DisplayName("직접쓰기_세값밖의종류면_DB가거부한다")
+		void directWrite_unknownKind_rejected() {
+			assertThatThrownBy(() -> insertTurn(user, thread, turnId(), 2, "other", null))
 					.isInstanceOf(DataIntegrityViolationException.class);
-			assertThatThrownBy(() -> insertTurn(user, a, turnId(), 2, "other", null))
-					.isInstanceOf(DataIntegrityViolationException.class);
-			assertThat(count("search_thread_turns")).isEqualTo(1);
 		}
 	}
 
@@ -444,7 +464,7 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 
 		@Test
 		@DisplayName("동시_같은thread의첫turn을여럿이만들어도_500없이thread하나에모두순서대로쌓인다")
-		void concurrentFirstTurns_oneThread() throws Exception {
+		void put_concurrentFirstTurns_oneThreadAllStored() throws Exception {
 			String token = signIn(0);
 			String thread = threadId();
 			List<String> ids = IntStream.range(0, 8).mapToObj(i -> turnId()).toList();
@@ -462,7 +482,7 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 
 		@Test
 		@DisplayName("동시_같은turn을여러번보내도_500없이한번만저장된다")
-		void concurrentSameTurn_storedOnce() throws Exception {
+		void put_concurrentSameTurn_storedOnce() throws Exception {
 			String token = signIn(0);
 			String thread = threadId();
 			String id = turnId();
@@ -477,7 +497,7 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 
 		@Test
 		@DisplayName("동시_다른turn을함께보내도_유실없이저장되고마지막요청시각은가장늦게저장된turn의at이다")
-		void concurrentOtherTurns_allSaved() throws Exception {
+		void put_concurrentOtherTurns_allStored() throws Exception {
 			String token = signIn(0);
 			String thread = threadId();
 			String first = turnId();
@@ -563,7 +583,7 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 
 		@Test
 		@DisplayName("목록_기록이없으면_빈목록이다")
-		void list_empty() throws Exception {
+		void list_noThreads_emptyItems() throws Exception {
 			String token = signIn(0);
 
 			assertThat(list(token, null)).isEqualTo(mapper.readTree("{\"items\":[]}"));
@@ -588,7 +608,7 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 
 		@Test
 		@DisplayName("주인_두계정이같은id로저장해도_각자의thread이고남의것은읽을수없다")
-		void owner_sameIdsIsolated() throws Exception {
+		void put_sameIdsOnTwoAccounts_storedSeparately() throws Exception {
 			String mine = signIn(0);
 			String theirs = signIn(1);
 			String thread = threadId();
@@ -606,15 +626,23 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 		}
 
 		@Test
-		@DisplayName("읽기_내계정에없는thread는404_형식이틀린id는400이다")
-		void get_missingOrBadId() throws Exception {
+		@DisplayName("읽기_내계정에없는thread면_404다")
+		void get_missingThread_notFound() throws Exception {
 			String token = signIn(0);
 
 			HttpResponse<String> missing = send("GET", BASE + "/" + threadId(), token, null);
-			HttpResponse<String> bad = send("GET", BASE + "/thread-ABC", token, null);
 
 			assertThat(missing.statusCode()).isEqualTo(404);
 			assertThat(type(missing)).isEqualTo(NOT_FOUND);
+		}
+
+		@Test
+		@DisplayName("읽기_형식이틀린thread_id면_400이다")
+		void get_badThreadId_invalid() throws Exception {
+			String token = signIn(0);
+
+			HttpResponse<String> bad = send("GET", BASE + "/thread-ABC", token, null);
+
 			assertThat(bad.statusCode()).isEqualTo(400);
 			assertThat(type(bad)).isEqualTo(INVALID);
 		}
@@ -624,21 +652,54 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 	@DisplayName("인증")
 	class Authentication {
 
-		@Test
+		/** 토큰이 없거나(none) 서명이 틀린(forged) 요청 */
+		@ParameterizedTest
+		@CsvSource({"list, none", "list, forged", "thread, none", "thread, forged", "turn, none", "turn, forged"})
 		@DisplayName("인증_토큰이없거나틀리면_세API모두401이다")
-		void noOrBadToken_unauthorized() throws Exception {
+		void anyApi_noOrBadToken_unauthorized(String api, String token) throws Exception {
+			String bearer = token.equals("none") ? null : token;
 			String thread = threadId();
 			String id = turnId();
-			for (String token : new String[] {null, "forged"}) {
-				assertThat(send("GET", BASE, token, null).statusCode()).isEqualTo(401);
-				assertThat(send("GET", BASE + "/" + thread, token, null).statusCode()).isEqualTo(401);
-				assertThat(put(token, thread, id, newTurn(id, AT, "카페")).statusCode()).isEqualTo(401);
-			}
+
+			HttpResponse<String> response = switch (api) {
+				case "list" -> send("GET", BASE, bearer, null);
+				case "thread" -> send("GET", BASE + "/" + thread, bearer, null);
+				default -> put(bearer, thread, id, newTurn(id, AT, "카페"));
+			};
+
+			assertThat(response.statusCode()).isEqualTo(401);
+		}
+
+		/** 탈퇴 전에 thread 하나와 turn 하나를 저장해 둔다. 이 밖의 판단(404, 400, 409)보다 401이 먼저다 */
+		@ParameterizedTest
+		@ValueSource(strings = {"list", "badCursor", "storedThread", "missingThread", "badThreadId", "brokenBody",
+				"followUp"})
+		@DisplayName("인증_탈퇴한사용자는_목록_틀린cursor_있는thread_없는thread_틀린id_깨진본문_정상추가모두401이다")
+		void anyApi_withdrawnUser_unauthorizedFirst(String request) throws Exception {
+			String token = signIn(0);
+			String thread = threadId();
+			String id = turnId();
+			put(token, thread, id, newTurn(id, AT, "카페"));
+			withdraw(0);
+			String next = turnId();
+
+			HttpResponse<String> response = switch (request) {
+				case "list" -> send("GET", BASE, token, null);
+				case "badCursor" -> send("GET", BASE + "?cursor=broken", token, null);
+				case "storedThread" -> send("GET", BASE + "/" + thread, token, null);
+				case "missingThread" -> send("GET", BASE + "/" + threadId(), token, null);
+				case "badThreadId" -> send("GET", BASE + "/thread-ABC", token, null);
+				case "brokenBody" -> put(token, thread, next, "{");
+				default -> put(token, thread, next, turn(next, "followUp", id, AT, "카페"));
+			};
+
+			assertThat(response.statusCode()).isEqualTo(401);
+			assertThat(count("search_thread_turns")).isEqualTo(1);
 		}
 
 		@Test
-		@DisplayName("인증_탈퇴한사용자는_없는thread_깨진본문_틀린cursor_틀린id에도401이고기록은남는다")
-		void withdrawn_unauthorizedBeforeEverything() throws Exception {
+		@DisplayName("탈퇴_soft_delete면_그회원의thread와turn이DB에남는다")
+		void withdraw_softDelete_recordsRemain() throws Exception {
 			String token = signIn(0);
 			String thread = threadId();
 			String id = turnId();
@@ -646,21 +707,13 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 
 			withdraw(0);
 
-			assertThat(send("GET", BASE, token, null).statusCode()).isEqualTo(401);
-			assertThat(send("GET", BASE + "?cursor=broken", token, null).statusCode()).isEqualTo(401);
-			assertThat(send("GET", BASE + "/" + thread, token, null).statusCode()).isEqualTo(401);
-			assertThat(send("GET", BASE + "/" + threadId(), token, null).statusCode()).isEqualTo(401);
-			assertThat(send("GET", BASE + "/thread-ABC", token, null).statusCode()).isEqualTo(401);
-			assertThat(put(token, thread, turnId(), "{").statusCode()).isEqualTo(401);
-			String next = turnId();
-			assertThat(put(token, thread, next, turn(next, "followUp", id, AT, "카페")).statusCode()).isEqualTo(401);
 			assertThat(count("search_threads")).isEqualTo(1);
 			assertThat(count("search_thread_turns")).isEqualTo(1);
 		}
 
 		@Test
 		@DisplayName("탈퇴_회원행이실제로지워지면_기록도함께지워진다")
-		void hardDeleteUser_cascades() throws Exception {
+		void deleteUser_hardDelete_cascadesRecords() throws Exception {
 			String token = signIn(0);
 			String thread = threadId();
 			String first = turnId();
@@ -727,21 +780,37 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 		}
 
 		@Test
-		@DisplayName("추가_질문이201자면400_200자와경계의at은받는다")
-		void put_boundaries() throws Exception {
+		@DisplayName("추가_질문이201자면_400이다")
+		void put_query201Chars_invalid() throws Exception {
+			String token = signIn(0);
+
+			HttpResponse<String> response = put(token, threadId(), TURN, newTurn(TURN, AT, "가".repeat(201)));
+
+			assertThat(response.statusCode()).isEqualTo(400);
+		}
+
+		@Test
+		@DisplayName("추가_앞공백을포함해trim전200자인질문과at0은_받는다")
+		void put_query200CharsAtZero_saved() throws Exception {
+			String token = signIn(0);
+
+			HttpResponse<String> response = put(token, threadId(), TURN, newTurn(TURN, 0, " " + "가".repeat(199)));
+
+			assertThat(response.statusCode()).isEqualTo(204);
+		}
+
+		@Test
+		@DisplayName("추가_at이JS_Date상한을지수표기로보내도_받고같은밀리초로돌려준다")
+		void put_atAtJsDateMax_savedAndReadBack() throws Exception {
 			String token = signIn(0);
 			String thread = threadId();
+			String body = newTurn(TURN, 0, "q").replace("\"at\":0", "\"at\":8.64e15");
 
-			HttpResponse<String> tooLong = put(token, thread, TURN, newTurn(TURN, AT, "가".repeat(201)));
-			HttpResponse<String> longest = put(token, thread, TURN, newTurn(TURN, 0, " " + "가".repeat(199)));
-			String latest = turnId();
-			String body = newTurn(latest, 0, "q").replace("\"at\":0", "\"at\":8.64e15");
-			HttpResponse<String> maxAt = put(token, thread, latest, body);
+			HttpResponse<String> response = put(token, thread, TURN, body);
 
-			assertThat(tooLong.statusCode()).isEqualTo(400);
-			assertThat(longest.statusCode()).isEqualTo(204);
-			assertThat(maxAt.statusCode()).isEqualTo(204);
-			assertThat(getThread(token, thread).get("turns").get(1).get("at").longValue()).isEqualTo(8_640_000_000_000_000L);
+			assertThat(response.statusCode()).isEqualTo(204);
+			assertThat(getThread(token, thread).get("turns").get(0).get("at").longValue())
+					.isEqualTo(8_640_000_000_000_000L);
 		}
 
 		@Test
@@ -786,7 +855,7 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 
 		@Test
 		@DisplayName("응답_성공과핸들러가만드는오류모두_Cache-Control_no-store다")
-		void allResponses_noStore() throws Exception {
+		void anyApi_handlerResponse_noStore() throws Exception {
 			String token = signIn(0);
 			String thread = threadId();
 			String first = turnId();

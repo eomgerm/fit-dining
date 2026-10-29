@@ -117,6 +117,7 @@ const server = {
   putStatus: (() => 204) as (body: ThreadTurn) => number,
   gate: {} as {
     search?: Promise<void>;
+    nextPage?: Promise<void>;
     thread?: Promise<void>;
     list?: Promise<void>;
   },
@@ -158,6 +159,7 @@ async function handle(url: string, init?: RequestInit): Promise<Response> {
     if (body.query === "실패")
       return Response.json({ status: 400 }, { status: 400 });
     if (body.cursor) {
+      await server.gate.nextPage;
       return Response.json({
         conditions: {},
         nearby: false,
@@ -413,6 +415,26 @@ describe("회원 검색 기록 저장", () => {
     expect(server.puts).toHaveLength(1);
   }, 10_000);
 
+  it("회원도 요청 기록과 '결과 보기'의 과거 결과가 그대로 동작한다", async () => {
+    renderApp();
+    await newSearch("역삼 카페");
+    await results();
+    await followUp("더 조용하게");
+
+    fireEvent.click(screen.getByRole("button", { name: "요청 기록" }));
+    const history = await screen.findByRole("list", { name: "요청 기록" });
+    expect(within(history).getAllByRole("listitem")).toHaveLength(2);
+    fireEvent.click(
+      within(history).getAllByRole("button", { name: "결과 보기" })[0],
+    );
+
+    const past = await screen.findByRole("region", { name: "과거 결과" });
+    expect(within(past).getByText("장소 1")).toBeTruthy();
+    expect(searchStore.getSnapshot().viewingId).toBe(
+      searchStore.getSnapshot().entries[1].id,
+    );
+  });
+
   it("저장에 실패해도 검색 결과는 그대로이고 실패를 알리지 않는다", async () => {
     server.putStatus = () => 400;
     renderApp();
@@ -612,10 +634,11 @@ describe("회원 최근 검색 시트", () => {
     sheet = await openRecent();
     await waitFor(() => expect(rowsOf(sheet)).toHaveLength(2));
     fireEvent.click(within(sheet).getByRole("button", { name: /강남 술집/ }));
+    // 닫히는 애니메이션 동안 응답이 와도 반영하지 않는다
     fireEvent.keyDown(sheet, { key: "Escape" });
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     gate.release();
     await act(() => gate.promise);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 
     expect(searchStore.getSnapshot().threadId).toBe("thread-b");
   });
@@ -734,6 +757,37 @@ describe("로그인 세션이 바뀔 때", () => {
     expect(server.puts).toEqual([]);
   });
 
+  it("바뀌기 전에 시작한 다음 페이지의 응답이 늦게 와도 화면에 남지 않는다", async () => {
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        constructor(
+          private readonly callback: (e: { isIntersecting: boolean }[]) => void,
+        ) {}
+        observe() {
+          this.callback([{ isIntersecting: true }]);
+        }
+        disconnect() {}
+      },
+    );
+    const gate = deferred();
+    server.gate.nextPage = gate.promise;
+    renderApp();
+    await newSearch("역삼 카페");
+    await results();
+    await waitFor(() =>
+      expect(server.searches.some((body) => body.cursor)).toBe(true),
+    );
+
+    act(() => setSession(member("u2")));
+    gate.release();
+    await act(() => gate.promise);
+
+    await firstScreen();
+    expect(screen.queryByText("장소 3")).toBeNull();
+    expect(searchStore.getSnapshot().latestCards.has(3)).toBe(false);
+  });
+
   it("비회원일 때 시작한 검색이 로그인 뒤에 끝나면 화면에도 기록에도 남지 않는다", async () => {
     act(() => setSession(null));
     renderApp();
@@ -762,8 +816,11 @@ describe("로그인 세션이 바뀔 때", () => {
     fireEvent.click(rowsOf(sheet)[0]);
     await waitFor(() => expect(server.reads).toHaveLength(1));
 
-    act(() => setSession(member("u2")));
-    gate.release();
+    // 세션이 바뀐 바로 그 틈에 응답이 와도 이전 계정의 thread를 들이지 않는다
+    act(() => {
+      setSession(member("u2"));
+      gate.release();
+    });
     await act(() => gate.promise);
 
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());

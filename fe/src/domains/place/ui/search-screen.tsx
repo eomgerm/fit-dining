@@ -340,6 +340,8 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
   // 최근 검색에서 받아 온 thread로 바꾼다. 저장한 첫 페이지를 캐시에 넣어 검색을 다시 부르지 않는다.
   // 이번 페이지 세션에 이미 받은 turn은 캐시를 그대로 쓴다(spec 57번)
   function handleOpenThread(thread: SearchThread) {
+    // 받는 사이 로그인 세션이 바뀌었으면 이전 세션의 thread다
+    if (searchStore.getSnapshot().epoch !== seenEpoch.current) return;
     setRecentOpen(false);
     abandonSearch();
     for (const turn of thread.turns) {

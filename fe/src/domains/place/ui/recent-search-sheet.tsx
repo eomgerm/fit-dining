@@ -31,7 +31,11 @@ export function RecentSearchSheet({
 }: RecentSearchSheetProps) {
   return (
     <BottomSheet title="최근 검색" open={open} onOpenChange={onOpenChange}>
-      <ThreadList {...listProps} onClose={() => onOpenChange(false)} />
+      <ThreadList
+        {...listProps}
+        open={open}
+        onClose={() => onOpenChange(false)}
+      />
     </BottomSheet>
   );
 }
@@ -41,11 +45,12 @@ const EMPTY_MESSAGE =
 
 // 시트가 열릴 때마다 새로 그려져 목록을 첫 페이지부터 다시 받고, "오늘"을 가르는 기준 시각도 그때 잡는다
 function ThreadList({
+  open,
   threadAuth,
   currentThreadId,
   onOpenThread,
   onClose,
-}: Omit<RecentSearchSheetProps, "open" | "onOpenChange"> & {
+}: Omit<RecentSearchSheetProps, "onOpenChange"> & {
   onClose: () => void;
 }) {
   const { state, load } = useThreadList(threadAuth);
@@ -57,7 +62,10 @@ function ThreadList({
   }>();
   const pickController = useRef<AbortController | undefined>(undefined);
 
-  // 시트를 닫으면 받던 thread를 버린다
+  // 시트를 닫으면 받던 thread를 버린다. 닫히는 애니메이션 동안에도 내용이 남아 있으므로 닫히는 순간 끊는다
+  useEffect(() => {
+    if (!open) pickController.current?.abort();
+  }, [open]);
   useEffect(() => () => pickController.current?.abort(), []);
 
   async function handlePick(id: string) {
