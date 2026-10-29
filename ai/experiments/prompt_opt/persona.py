@@ -24,7 +24,7 @@ from functools import cache
 from pathlib import Path
 
 import mlflow
-from common import JUDGE_MODEL, optimize, setup
+from common import DIR, JUDGE_MODEL, optimize, setup
 from mlflow.entities import Feedback
 from mlflow.genai.judges import make_judge
 from mlflow.genai.scorers import scorer
@@ -45,6 +45,8 @@ DATA = Path(__file__).parent / "data" / "persona.jsonl"
 SPLITS = ("train", "val", "test")
 # 반성 한 번에 보는 장소 수. 기본 3개면 장소 하나에만 맞춘 규칙이 생기기 쉽다(107)
 REFLECTION_MINIBATCH = 6
+# 평가 결과(장소별 출력·점수·이유). 사람 비교 표본을 여기서 뽑는다
+OUT = DIR.parent / "prompt_opt"
 # 지시문에 이만큼 긴 리뷰 구절이 그대로 있으면 평가셋을 외운 것으로 본다
 LEAK_MIN = 10
 # 리뷰 두 개 이상에 나온 (코드, 방향)은 그 방향 페르소나가 다뤄야 한다
@@ -86,8 +88,7 @@ REFLECTION_TEMPLATE = """너는 프롬프트 개선 담당이다. 아래 지시�
 - 위 장소의 메뉴·근거 문장·페르소나 이름을 지시문에 그대로, 또는 단어만 바꿔 넣지 않는다.
   예시가 필요하면 위 사례와 다른 새 장소로 쓴다.
 - 특정 장소의 정답을 고정하는 규칙을 쓰지 않는다. 처음 보는 장소에도 통하는 원칙으로 쓴다.
-- 예시는 모두 합쳐 5개 이하로 둔다.
-- 지시문은 2,500자 이내로 쓴다. 작은 모델은 길고 복잡한 지시를 잘 따르지 못한다.
+- 예시는 모두 합쳐 10개 이하로 둔다.
 - 응답의 JSON 스키마는 실행할 때 따로 강제되므로 출력 형식을 길게 설명하지 않는다."""
 
 JUDGE_INSTRUCTIONS = """너는 장소 페르소나 채점자다. {{ inputs }}의 place_input은 생성 모델이 받은 입력이다.
@@ -325,21 +326,30 @@ def _judge(inputs: dict, outputs: dict | None) -> tuple[float, str]:
     return float(fb.value), fb.rationale
 
 
-def evaluate(system: str, rows: list[dict], runs: int) -> None:
-    """split·slice별 두 점수와, 둘 중 하나라도 0.8 미만인 장소의 이유를 출력한다."""
+def evaluate(system: str, rows: list[dict], runs: int, label: str) -> None:
+    """split·slice별 두 점수와, 둘 중 하나라도 0.8 미만인 장소의 이유를 출력한다.
+
+    장소별 출력과 점수는 OUT/persona-{label}.jsonl에 남긴다.
+    """
     by = defaultdict(list)  # (run, group) → (rules, grounded)
     low = defaultdict(list)
 
     def one(row):
         inputs = _inputs(row)
         out = _call(system, row)
-        return rules(out, row), _judge(inputs, out)
+        return out, rules(out, row), _judge(inputs, out)
 
-    with ThreadPoolExecutor(8) as pool:
+    OUT.mkdir(parents=True, exist_ok=True)
+    log = (OUT / f"persona-{label}.jsonl").open("w", encoding="utf-8")
+    with log, ThreadPoolExecutor(8) as pool:
         for run in range(runs):
-            for row, ((rs, rwhy), (gs, gwhy)) in zip(
+            for row, (out, (rs, rwhy), (gs, gwhy)) in zip(
                 rows, pool.map(one, rows), strict=True
             ):
+                rec = {"id": row["id"], "run": run, "outputs": out}
+                rec |= {"rules": rs, "rules_why": rwhy}
+                rec |= {"grounded": gs, "grounded_why": gwhy}
+                log.write(json.dumps(rec, ensure_ascii=False) + "\n")
                 for group in ("all", row["split"], row["slice"]):
                     by[(run, group)].append((rs, gs))
                 if min(rs, gs) < 0.8:
@@ -380,9 +390,9 @@ def leaks(system: str) -> list[str]:
     return found
 
 
-def report(system: str) -> None:
+def report(system: str, label: str) -> None:
     """test 점수와 평가셋 외움 여부. test는 GEPA에 넘기지 않고 여기서만 잰다."""
-    evaluate(system, load("test"), TEST_RUNS)
+    evaluate(system, load("test"), TEST_RUNS, label)
     print("평가셋에서 옮긴 구절:", leaks(system) or "없음")
 
 
@@ -409,10 +419,12 @@ if __name__ == "__main__":
         sys.exit()
     setup("prompt-opt")
     if sys.argv[1:2] == ["baseline"]:
-        evaluate(ps._SYSTEM, load(), int(sys.argv[2]) if len(sys.argv) > 2 else 1)
+        runs = int(sys.argv[2]) if len(sys.argv) > 2 else 1
+        evaluate(ps._SYSTEM, load(), runs, "baseline")
         sys.exit()
     if sys.argv[1:2] == ["test"]:
-        report(mlflow.genai.load_prompt(f"prompts:/{NAME}/{sys.argv[2]}").format())
+        v = sys.argv[2]
+        report(mlflow.genai.load_prompt(f"prompts:/{NAME}/{v}").format(), f"test-v{v}")
         sys.exit()
     result = optimize(
         NAME,
@@ -431,4 +443,4 @@ if __name__ == "__main__":
     print(optimized.uri)
     for label, system in [("before", ps._SYSTEM), ("after", optimized.format())]:
         print(f"\n== test {label} ==")
-        report(system)
+        report(system, f"test-{label}")
