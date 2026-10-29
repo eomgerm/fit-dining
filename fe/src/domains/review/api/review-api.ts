@@ -6,6 +6,7 @@ import type {
   ReviewDetailResponse,
   ReviewFormResponse,
   ReviewListResponse,
+  ReviewReportRequest,
   ReviewUpdateRequest,
 } from "../model/review";
 
@@ -78,6 +79,19 @@ export function updateReview(
 export function deleteReview(reviewId: number, accessToken: string) {
   return request<void>(`/v1/reviews/${reviewId}`, {
     method: "DELETE",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+// 남의 리뷰 신고. 같은 리뷰는 한 번만 신고할 수 있다(D-11)
+export function reportReview(
+  reviewId: number,
+  body: ReviewReportRequest,
+  accessToken: string,
+) {
+  return request<void>(`/v1/reviews/${reviewId}/reports`, {
+    method: "POST",
+    body,
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 }

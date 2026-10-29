@@ -31,6 +31,7 @@ import { ReviewSection } from "./review-section";
 const api = vi.hoisted(() => ({
   fetchReviews: vi.fn(),
   deleteReview: vi.fn(),
+  reportReview: vi.fn(),
 }));
 vi.mock("../api/review-api", () => api);
 
@@ -62,8 +63,9 @@ const signedIn: WithOptionalAccessToken = (send) => send("token");
 const withAccessToken: WithAccessToken = (send) => send("token");
 const http = (status: number) => new ApiError("http", "", { status });
 
-function mount() {
+function mount(accessToken: WithAccessToken = withAccessToken) {
   const onEdit = vi.fn();
+  const onSignIn = vi.fn();
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -73,13 +75,14 @@ function mount() {
         <ReviewSection
           placeId={3}
           withOptionalAccessToken={signedIn}
-          withAccessToken={withAccessToken}
+          withAccessToken={accessToken}
           onEdit={onEdit}
+          onSignIn={onSignIn}
         />
       </ToastProvider>
     </QueryClientProvider>,
   );
-  return { onEdit, client };
+  return { onEdit, onSignIn, client };
 }
 
 const menuButtons = () => screen.getAllByRole("button", { name: /리뷰 메뉴$/ });
@@ -97,6 +100,7 @@ const confirmButton = () => screen.getByRole("button", { name: "삭제" });
 beforeEach(() => {
   api.fetchReviews.mockReset().mockResolvedValue(page([mine, others]));
   api.deleteReview.mockReset();
+  api.reportReview.mockReset();
 });
 
 afterEach(() => {
@@ -105,13 +109,13 @@ afterEach(() => {
 });
 
 describe("ReviewSection 내 리뷰 메뉴", () => {
-  it("내 리뷰에만 방문일로 구분되는 ⋯ 메뉴가 있고, 수정하기는 그 리뷰 id로 수정 화면을 연다", async () => {
+  it("내 리뷰의 ⋯ 메뉴는 방문일로 구분되고, 수정하기는 그 리뷰 id로 수정 화면을 연다", async () => {
     const { onEdit } = mount();
 
     fireEvent.click(
       await screen.findByRole("button", { name: "10월 12일 방문 리뷰 메뉴" }),
     );
-    expect(menuButtons()).toHaveLength(1);
+    expect(menuButtons()).toHaveLength(2);
     fireEvent.click(await screen.findByRole("menuitem", { name: "수정하기" }));
 
     expect(onEdit).toHaveBeenCalledWith(2);
@@ -235,5 +239,147 @@ describe("ReviewSection 내 리뷰 메뉴", () => {
     await waitFor(() =>
       expect(screen.queryByText("리뷰를 삭제할까요?")).toBeNull(),
     );
+  });
+});
+
+describe("ReviewSection 남의 리뷰 신고", () => {
+  async function openOthersMenu() {
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "밤산책의 10월 12일 방문 리뷰 메뉴",
+      }),
+    );
+  }
+
+  async function openReport() {
+    await openOthersMenu();
+    fireEvent.click(await screen.findByRole("menuitem", { name: "신고하기" }));
+    await screen.findByRole("dialog", { name: "리뷰 신고" });
+  }
+
+  const submitButton = () => screen.getByRole("button", { name: "신고하기" });
+  const sheet = () => screen.queryByRole("dialog", { name: "리뷰 신고" });
+
+  it("남의 리뷰 ⋯ 메뉴에는 신고하기만 있다(6-10)", async () => {
+    mount();
+
+    await openOthersMenu();
+
+    const items = await screen.findAllByRole("menuitem");
+    expect(items.map((item) => item.textContent)).toEqual(["신고하기"]);
+  });
+
+  it("로그인하지 않았으면 시트를 열지 않고 로그인으로 보낸다(PRD FR-12)", async () => {
+    const { onSignIn } = mount(() => Promise.reject(http(401)));
+
+    await openOthersMenu();
+    fireEvent.click(await screen.findByRole("menuitem", { name: "신고하기" }));
+
+    await waitFor(() => expect(onSignIn).toHaveBeenCalledTimes(1));
+    expect(sheet()).toBeNull();
+  });
+
+  it("사유를 고르기 전에는 보낼 수 없고, 고르면 보낸 뒤 시트를 닫고 토스트를 띄운다(6-11, 6-12)", async () => {
+    api.reportReview.mockResolvedValue(undefined);
+    mount();
+
+    await openReport();
+    expect(submitButton().getAttribute("aria-disabled")).toBe("true");
+    fireEvent.click(screen.getByRole("radio", { name: "광고·도배" }));
+    expect(screen.queryByRole("textbox", { name: "신고 설명" })).toBeNull();
+    fireEvent.click(submitButton());
+
+    expect(await screen.findByText("신고가 접수됐어요")).toBeTruthy();
+    expect(api.reportReview).toHaveBeenCalledWith(
+      1,
+      { reason: "AD_SPAM" },
+      "token",
+    );
+    await waitFor(() => expect(sheet()).toBeNull());
+    expect(api.fetchReviews).toHaveBeenCalledTimes(1);
+  });
+
+  it("기타를 고를 때만 설명칸이 나오고 설명을 함께 보낸다", async () => {
+    api.reportReview.mockResolvedValue(undefined);
+    mount();
+
+    await openReport();
+    fireEvent.click(screen.getByRole("radio", { name: "기타" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "신고 설명" }), {
+      target: { value: "가게와 상관없는 홍보예요" },
+    });
+    expect(screen.getByText("13/100")).toBeTruthy();
+    fireEvent.click(submitButton());
+
+    await waitFor(() =>
+      expect(api.reportReview).toHaveBeenCalledWith(
+        1,
+        { reason: "OTHER", detail: "가게와 상관없는 홍보예요" },
+        "token",
+      ),
+    );
+  });
+
+  it("이미 신고한 리뷰(409)면 알리고 시트를 닫는다", async () => {
+    api.reportReview.mockRejectedValue(http(409));
+    mount();
+
+    await openReport();
+    fireEvent.click(screen.getByRole("radio", { name: "욕설·혐오·음란물" }));
+    fireEvent.click(submitButton());
+
+    expect(await screen.findByText("이미 신고한 리뷰예요")).toBeTruthy();
+    await waitFor(() => expect(sheet()).toBeNull());
+  });
+
+  it("이미 지운 리뷰(404)면 알리고 목록을 다시 받는다", async () => {
+    api.reportReview.mockRejectedValue(http(404));
+    mount();
+
+    await openReport();
+    api.fetchReviews.mockResolvedValue(page([mine]));
+    fireEvent.click(screen.getByRole("radio", { name: "장소와 무관한 내용" }));
+    fireEvent.click(submitButton());
+
+    expect(await screen.findByText("이미 삭제된 리뷰예요")).toBeTruthy();
+    await waitFor(() => expect(screen.queryByText("남이 쓴 리뷰")).toBeNull());
+  });
+
+  it("이미 지운 리뷰(404)면 시트가 닫힐 때 빠진 ⋯ 버튼 대신 리뷰 섹션으로 포커스를 보낸다", async () => {
+    api.reportReview.mockRejectedValue(http(404));
+    mount();
+
+    await openReport();
+    api.fetchReviews.mockResolvedValue(page([mine]));
+    fireEvent.click(screen.getByRole("radio", { name: "광고·도배" }));
+    fireEvent.click(submitButton());
+
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole("region", { name: "리뷰" }),
+      ),
+    );
+  });
+
+  it("연결이 끊겼으면 알리고 시트를 둬 다시 보낼 수 있다(6-E06)", async () => {
+    api.reportReview.mockRejectedValueOnce(new ApiError("network", ""));
+    api.reportReview.mockResolvedValueOnce(undefined);
+    mount();
+
+    await openReport();
+    fireEvent.click(screen.getByRole("radio", { name: "광고·도배" }));
+    onlineManager.setOnline(false);
+    fireEvent.click(submitButton());
+
+    expect(
+      await screen.findByText("인터넷에 연결되어 있지 않아요"),
+    ).toBeTruthy();
+    expect(sheet()).not.toBeNull();
+    onlineManager.setOnline(true);
+    await waitFor(() =>
+      expect(submitButton().getAttribute("aria-disabled")).not.toBe("true"),
+    );
+    fireEvent.click(submitButton());
+    expect(await screen.findByText("신고가 접수됐어요")).toBeTruthy();
   });
 });

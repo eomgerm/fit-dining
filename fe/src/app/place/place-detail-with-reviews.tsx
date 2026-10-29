@@ -15,6 +15,8 @@ export function PlaceDetailWithReviews() {
   const router = useRouter();
   const editReview = (placeId: number) => (reviewId: number) =>
     router.push(reviewEditHref(placeId, reviewId));
+  // 로그인 화면의 "뒤로"가 장소 상세로 돌아오게 쌓는다. 로그인 뒤 이 화면으로 돌아오는 것은 아직 없다
+  const signIn = () => router.push("/login");
   return (
     <PlaceDetailScreen
       slots={{
@@ -25,6 +27,7 @@ export function PlaceDetailWithReviews() {
             withOptionalAccessToken={withOptionalAccessToken}
             withAccessToken={withAccessToken}
             onEdit={editReview(placeId)}
+            onSignIn={signIn}
           />
         ),
         reviewTab: (placeId) => (
@@ -33,6 +36,7 @@ export function PlaceDetailWithReviews() {
             withOptionalAccessToken={withOptionalAccessToken}
             withAccessToken={withAccessToken}
             onEdit={editReview(placeId)}
+            onSignIn={signIn}
           />
         ),
         bottomAction: (placeId) => (

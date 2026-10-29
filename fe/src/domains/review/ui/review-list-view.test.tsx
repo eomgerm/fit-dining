@@ -154,6 +154,25 @@ describe("ReviewListView", () => {
     ]);
   });
 
+  it("신고를 넘기면 남의 리뷰에 작성자와 방문일로 구분되는 ⋯ 메뉴를 둔다(6-10)", () => {
+    const html = render({
+      totalCount: 3,
+      items: [
+        { ...items[0], mine: true },
+        items[1],
+        { ...items[1], reviewId: 3, nickname: undefined },
+      ],
+      onEdit: noop,
+      onDelete: noop,
+      onReport: noop,
+    });
+    expect(html.match(/aria-label="[^"]*리뷰 메뉴"/g)).toEqual([
+      'aria-label="10월 12일 방문 리뷰 메뉴"',
+      'aria-label="라테한잔의 10월 10일 방문 리뷰 메뉴"',
+      'aria-label="탈퇴한 회원의 10월 10일 방문 리뷰 메뉴"',
+    ]);
+  });
+
   it("수정·삭제를 넘기지 않으면 ⋯ 메뉴가 없다", () => {
     const html = render({
       totalCount: 1,

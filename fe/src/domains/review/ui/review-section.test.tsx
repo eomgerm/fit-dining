@@ -26,6 +26,7 @@ function render(onShowAll?: () => void) {
           withOptionalAccessToken={anonymous}
           withAccessToken={withAccessToken}
           onEdit={() => {}}
+          onSignIn={() => {}}
         />
       </ToastProvider>
     </QueryClientProvider>,
@@ -77,6 +78,7 @@ describe("ReviewSection", () => {
             withOptionalAccessToken={anonymous}
             withAccessToken={withAccessToken}
             onEdit={() => {}}
+            onSignIn={() => {}}
           />
         </ToastProvider>
       </QueryClientProvider>,

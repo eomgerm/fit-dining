@@ -90,6 +90,34 @@ export type ReviewUpdateRequest = {
   description: string;
 };
 
+// 신고 사유(PRD FR-12, D-11). 설명은 "기타"일 때만 받는다
+export type ReportReason = "AD_SPAM" | "ABUSE" | "UNRELATED" | "OTHER";
+
+export const REPORT_REASONS: readonly { value: ReportReason; label: string }[] =
+  [
+    { value: "AD_SPAM", label: "광고·도배" },
+    { value: "ABUSE", label: "욕설·혐오·음란물" },
+    { value: "UNRELATED", label: "장소와 무관한 내용" },
+    { value: "OTHER", label: "기타" },
+  ];
+
+export const REPORT_DETAIL_MAX = 100;
+
+export type ReviewReportRequest = {
+  reason: ReportReason;
+  detail?: string;
+};
+
+// "기타"가 아니거나 설명이 공백뿐이면 설명을 보내지 않는다
+export function reportRequest(
+  reason: ReportReason,
+  detail: string,
+): ReviewReportRequest {
+  return reason === "OTHER" && detail.trim() !== ""
+    ? { reason, detail }
+    : { reason };
+}
+
 // 홈 탭 미리보기에 보이는 리뷰 수(Figma 6-01)
 export const PREVIEW_SIZE = 3;
 

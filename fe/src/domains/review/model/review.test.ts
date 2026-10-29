@@ -6,9 +6,26 @@ import {
   isDescriptionChanged,
   parsePlaceId,
   parseReviewId,
+  reportRequest,
   reviewEditHref,
   reviewWriteHref,
 } from "./review";
+
+describe("reportRequest", () => {
+  it("설명은 '기타'일 때만 보낸다", () => {
+    expect(reportRequest("OTHER", "홍보 글이에요")).toEqual({
+      reason: "OTHER",
+      detail: "홍보 글이에요",
+    });
+    expect(reportRequest("AD_SPAM", "홍보 글이에요")).toEqual({
+      reason: "AD_SPAM",
+    });
+  });
+
+  it("공백뿐인 설명은 보내지 않는다", () => {
+    expect(reportRequest("OTHER", " \n")).toEqual({ reason: "OTHER" });
+  });
+});
 
 describe("formatVisitedDay", () => {
   it("방문일을 Figma 6-03처럼 월·일과 '방문'으로 보인다", () => {

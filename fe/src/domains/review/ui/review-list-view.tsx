@@ -1,4 +1,4 @@
-import type { Ref } from "react";
+import type { ReactNode, Ref } from "react";
 
 import { Button } from "@/shared/ui/button/button";
 import { IconButton } from "@/shared/ui/button/icon-button";
@@ -31,6 +31,8 @@ export type ReviewListViewProps = {
   // 둘 다 있으면 내 리뷰에 ⋯ 메뉴(수정하기·삭제하기, 6-06)를 둔다
   onEdit?: (reviewId: number) => void;
   onDelete?: (reviewId: number) => void;
+  // 있으면 남의 리뷰에 ⋯ 메뉴(신고하기, 6-10)를 둔다. 로그인하지 않았으면 모든 리뷰가 남의 리뷰다
+  onReport?: (reviewId: number) => void;
   // 처음 불러오는 중에 보일 자리 표시 줄 수
   skeletonRows?: number;
   onRetry: () => void;
@@ -55,6 +57,7 @@ export function ReviewListView({
   onShowAll,
   onEdit,
   onDelete,
+  onReport,
   skeletonRows = 3,
   onRetry,
   hasNextPage = false,
@@ -132,6 +135,7 @@ export function ReviewListView({
                 item={item}
                 onEdit={onEdit}
                 onDelete={onDelete}
+                onReport={onReport}
               />
             ))}
           </ul>
@@ -167,11 +171,14 @@ function ReviewRow({
   item,
   onEdit,
   onDelete,
+  onReport,
 }: {
   item: ReviewItem;
   onEdit?: (reviewId: number) => void;
   onDelete?: (reviewId: number) => void;
+  onReport?: (reviewId: number) => void;
 }) {
+  const day = formatVisitedDay(item.visitedAt);
   return (
     <li className="flex flex-col gap-2 border-b border-line py-4">
       <div className="flex min-w-0 items-center gap-2">
@@ -181,26 +188,21 @@ function ReviewRow({
           <Badge icon={<CheckIcon size="md" />}>재방문 의사 있어요</Badge>
         )}
         {item.mine && onEdit && onDelete && (
-          // 남의 리뷰의 ⋯(신고)는 S15P31A302-55에서 붙인다(D-42)
-          <div className="-my-1.5 -mr-2.5 ml-auto">
-            <Menu
-              trigger={
-                // 같은 장소에 방문일만 다른 내 리뷰가 여럿일 수 있어 방문일로 구분한다
-                <IconButton
-                  label={`${formatVisitedDay(item.visitedAt)} 리뷰 메뉴`}
-                >
-                  <MoreIcon size="md" className="text-ink-muted" />
-                </IconButton>
-              }
-            >
-              <MenuItem onClick={() => onEdit(item.reviewId)}>
-                수정하기
-              </MenuItem>
-              <MenuItem tone="danger" onClick={() => onDelete(item.reviewId)}>
-                삭제하기
-              </MenuItem>
-            </Menu>
-          </div>
+          // 같은 장소에 방문일만 다른 내 리뷰가 여럿일 수 있어 방문일로 구분한다
+          <ReviewMenu label={`${day} 리뷰 메뉴`}>
+            <MenuItem onClick={() => onEdit(item.reviewId)}>수정하기</MenuItem>
+            <MenuItem tone="danger" onClick={() => onDelete(item.reviewId)}>
+              삭제하기
+            </MenuItem>
+          </ReviewMenu>
+        )}
+        {!item.mine && onReport && (
+          // 같은 날 여러 사람이 남길 수 있어 작성자도 붙인다
+          <ReviewMenu label={`${authorLabel(item)}의 ${day} 리뷰 메뉴`}>
+            <MenuItem onClick={() => onReport(item.reviewId)}>
+              신고하기
+            </MenuItem>
+          </ReviewMenu>
         )}
       </div>
       <time
@@ -236,6 +238,28 @@ function ReviewRow({
         </p>
       )}
     </li>
+  );
+}
+
+function ReviewMenu({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="-my-1.5 -mr-2.5 ml-auto">
+      <Menu
+        trigger={
+          <IconButton label={label}>
+            <MoreIcon size="md" className="text-ink-muted" />
+          </IconButton>
+        }
+      >
+        {children}
+      </Menu>
+    </div>
   );
 }
 

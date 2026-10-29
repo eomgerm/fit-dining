@@ -10,6 +10,7 @@ import { isApiError } from "@/shared/api/api-error";
 import type {
   ReviewCreateRequest,
   ReviewDetailResponse,
+  ReviewReportRequest,
   ReviewUpdateRequest,
 } from "../model/review";
 import {
@@ -18,6 +19,7 @@ import {
   fetchReview,
   fetchReviewForm,
   fetchReviews,
+  reportReview,
   updateReview,
 } from "./review-api";
 
@@ -170,6 +172,31 @@ export function useDeleteReview(
     onError: (error) =>
       isApiError(error) && (error.status === 404 || error.kind === "timeout")
         ? refresh()
+        : undefined,
+  });
+}
+
+// 신고만으로는 리뷰가 숨지 않아 목록을 다시 받지 않는다(D-11). 그사이 지워진 리뷰(404)면 목록에서 빼도록 다시 받는다
+export function useReportReview(
+  placeId: number,
+  withAccessToken: WithAccessToken,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    networkMode: "always",
+    mutationFn: ({
+      reviewId,
+      body,
+    }: {
+      reviewId: number;
+      body: ReviewReportRequest;
+    }) =>
+      withAccessToken((accessToken) =>
+        reportReview(reviewId, body, accessToken),
+      ),
+    onError: (error) =>
+      isApiError(error) && error.status === 404
+        ? queryClient.invalidateQueries({ queryKey: reviewKeys.list(placeId) })
         : undefined,
   });
 }
