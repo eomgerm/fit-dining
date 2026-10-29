@@ -57,7 +57,8 @@ app = modal.App("fit-embed", image=image)
 
 
 # ponytail: 컨테이너 상한 2·상시 가동 0이 서버 쪽 비용 방어 전부다. 비용 상한이 정해지면 조정한다(design 12.2절 3·4)
-@app.cls(gpu="L4", max_containers=2)
+# L4가 모자라면 수 분씩 배정을 기다린다(2026-10-29 fit-dev에서 150초 넘게 대기). 앞에서부터 남는 GPU를 쓴다
+@app.cls(gpu=["L4", "A10", "T4"], max_containers=2)
 class Embedder:
     @modal.enter()
     def load(self):
