@@ -311,14 +311,42 @@ def load_sql(places: list[dict], tables: dict[str, list[dict]]) -> str:
     return "\n".join(sql) + "\n"
 
 
+def dropped(
+    clean: Path, places: list[dict], tables: dict[str, list[dict]]
+) -> dict[str, int]:
+    """버린 이유별 행 수. CSV 행 수에서 넣은 행 수를 뺀다."""
+    hours = tables["place_hours"]
+    kept_times = sum(
+        len(json.loads(h["breaks"])) + len(h["last_orders"]) for h in hours
+    )
+    n = lambda name: len(read(clean, name))
+    return {
+        "매장 외 시간표 요일": n("place_hours.csv") - len(hours),
+        "매장 외 시간표 브레이크·라스트오더": n("place_hours_breaks.csv")
+        + n("place_hours_last_orders.csv")
+        - kept_times,
+        "업체·메뉴판 외 사진(대표, 방문자, 클립, 영상, pai)": n("place_photos.csv")
+        - len(tables["place_photos"]),
+        "죽은 링크": n("place_links.csv") - sum(len(p["extra_links"]) for p in places),
+    }
+
+
 if __name__ == "__main__":
     clean = Path(sys.argv[1])
     places, tables = place_rows(clean), child_rows(clean)
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stdout.write(load_sql(places, tables))
+    sys.stderr.reconfigure(encoding="utf-8")
+    counts = {"places": len(places)} | {t: len(rows) for t, rows in tables.items()}
     print(
-        f"places {len(places)}",
-        *(f"{t} {len(rows)}" for t, rows in tables.items()),
+        "[넣은 행]",
+        *(f"  {k} {v}" for k, v in counts.items()),
+        sep="\n",
+        file=sys.stderr,
+    )
+    print(
+        "[버린 행]",
+        *(f"  {k} {v}" for k, v in dropped(clean, places, tables).items()),
         sep="\n",
         file=sys.stderr,
     )

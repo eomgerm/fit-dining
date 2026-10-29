@@ -326,6 +326,7 @@ enum Facility 삭제. PlaceSummary, PlaceCard, 검색·자동완성 응답은 �
 - 적재 스크립트, mock 생성 스크립트, 대응표는 `data/naver-places/` 안에 두고 커밋하지 않는다. 커밋하는 것은 생성된 `places.json`뿐이다(D-14, D-15, D-19, D-20).
 - mock 생성 스크립트는 같은 입력과 같은 인자면 같은 `places.json`과 대응표를 만든다(D-19).
 - 적재 스크립트는 Python이고 로컬 앱 계정으로 접속한다. 장소마다 한 트랜잭션으로 `naver_place_id`로 장소를 갱신하고(`place_id` 유지) 자식 행은 지운 뒤 다시 넣는다. 테이블을 비우고 다시 넣지 않는다(D-15).
+- 위 두 줄의 적재 스크립트 부분은 D-25로 바뀌었다. 적재는 저장소의 `ai/scripts/load_places.py`가 SQL을 만들고 `psql`로 넣는다.
 - API는 이번에도 mock만 읽는다. JPA 엔티티, 리포지토리, mock/DB 선택 설정을 만들지 않는다(D-1).
 - 사진 URL은 원본 그대로 응답한다. 리사이즈 프록시를 만들지 않는다(D-7).
 - place-search spec 수정(AC-22)은 응답 계약을 바꾸는 코드와 같은 커밋에 넣는다(D-1).
