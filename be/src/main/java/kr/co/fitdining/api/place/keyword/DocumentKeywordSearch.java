@@ -6,9 +6,11 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.locks.ReentrantLock;
+import kr.co.fitdining.api.place.catalog.ConditionalOnCatalogMode;
 import kr.co.fitdining.api.place.catalog.PlaceCatalog;
 import kr.co.fitdining.api.place.exception.PlaceSearchUnavailableException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
 
 /**
  * 카탈로그에서 읽은 검색 문서를 스냅샷으로 들고 {@link KeywordMatcher}로 거르는 {@link PlaceKeywordSearch} 구현(D-5).
@@ -17,6 +19,8 @@ import lombok.extern.slf4j.Slf4j;
  * {@link PlaceSearchUnavailableException}이다. 입력 문자열은 로그에 남기지 않는다.
  */
 @Slf4j
+@Component
+@ConditionalOnCatalogMode
 public class DocumentKeywordSearch implements PlaceKeywordSearch {
 
 	static final Duration REFRESH_AFTER = Duration.ofSeconds(60);

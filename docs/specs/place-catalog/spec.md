@@ -370,7 +370,7 @@ enum Facility 삭제. PlaceSummary, PlaceCard, 검색·자동완성 응답은 �
 
 ## Out of scope
 
-- API가 DB를 읽게 하는 일: JPA 엔티티, 리포지토리, mock/DB 선택 설정, AI 검색 응답(`placeId`)과 장소 정보 연결, 좌표로 기준 역 계산(D-1, D-6).
+- API가 DB를 읽게 하는 일: JPA 엔티티, 리포지토리, mock/DB 선택 설정, AI 검색 응답(`placeId`)과 장소 정보 연결, 좌표로 기준 역 계산(D-1, D-6). 이 일은 `docs/specs/place-lookup-db/spec.md`가 한다(JPA 엔티티는 만들지 않고 SQL 읽기 모델로 한다. AI 검색 응답과의 연결과 좌표로 기준 역 계산은 여전히 범위 밖이다).
 - dev와 운영 DB 적재, 적재 스크립트의 저장소 커밋(D-1, D-15).
 - `reviews.place_id`에서 `places.place_id`로 FK를 거는 일. 모든 환경에 장소가 적재되는 작업에서 리뷰 담당과 함께 한다(D-21).
 - 검색 카드, `PlaceSummary`, 자동완성 응답의 변경, `PlaceSummary.station` 삭제, 홈 탭 변경(D-17, D-18).

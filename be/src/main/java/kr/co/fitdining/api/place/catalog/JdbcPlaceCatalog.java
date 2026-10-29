@@ -35,6 +35,7 @@ import kr.co.fitdining.api.place.dto.PlaceSummary;
 import kr.co.fitdining.api.place.dto.PlaceSummary.CategoryGroup;
 import kr.co.fitdining.api.place.dto.PlaceSummary.Station;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Component;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -42,6 +43,8 @@ import tools.jackson.databind.json.JsonMapper;
  * 장소 카탈로그(place-catalog V6, V7)를 JdbcClient의 SQL로 읽는 {@link PlaceCatalog} 구현. 읽기 전용이라 JPA 엔티티를
  * 만들지 않는다(place-lookup-db D-4). 응답 모양과 영업 상태 규칙은 place-catalog spec을 따른다.
  */
+@Component
+@ConditionalOnCatalogMode
 public class JdbcPlaceCatalog implements PlaceCatalog {
 
 	private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");

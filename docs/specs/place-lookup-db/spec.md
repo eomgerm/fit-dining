@@ -1,6 +1,6 @@
 # 장소 조회를 Mock에서 DB로, 자동완성은 키워드 검색 (place-lookup-db)
 
-Status: draft
+Status: approved
 Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 
 ## Problem
@@ -41,49 +41,49 @@ curl -X POST http://localhost:8080/api/v1/places/search -H "Content-Type: applic
 
 키워드 검색(자동완성)
 
-- [ ] AC-1: Mock을 끄고 카탈로그를 적재한 상태에서 `GET /places/suggest?q=`는 입력의 모든 단어가 이름, 메뉴 이름, 업종, 위치 중 하나에 있는 장소만 `PLACE` 후보로 돌려준다. 이름에 "쌀국수"와 "역삼"이 모두 있는 장소는 `q=역삼 쌀국수`에 나오고, 이름에 "역삼"이 없고 역삼 소속도 아닌 장소는 메뉴에 "쌀국수"가 있어도 나오지 않는다. (D-6)
-- [ ] AC-2: 위치는 `station`의 이름(강남, 역삼, 선릉)과 "역"을 붙인 형태(강남역, 역삼역, 선릉역)로만 맞는다. `station`이 역삼인 장소는 이름과 메뉴에 "역삼"이 없어도 `q=역삼 쌀국수`(메뉴에 쌀국수)에 나오고, `q=역삼역 쌀국수`에도 나온다. `dong`, `district`, 주소만 역삼인 장소(`station`이 강남이거나 선릉)는 이름과 메뉴에 "역삼"이 없으면 나오지 않는다. (D-7)
-- [ ] AC-3: 업종은 그룹 한글명(식당, 카페, 술집), 그룹 코드(`restaurant`, `cafe`, `bar`), 네이버 업종 이름(`places.category`)으로 맞는다. (D-8)
-- [ ] AC-4: 마지막 단어의 마지막 글자는 덜 쓴 글자로 맞는다. `쌀구`와 `쌀ㄱ`는 "쌀국수"를 담은 이름이나 메뉴에 맞고, `알`은 "아라"를 담은 이름에 맞고, `달`은 "닭"을, `고`는 "과"를 담은 이름이나 메뉴에 맞는다. 마지막 글자가 아닌 글자에는 완화가 없어서 `살국`은 "쌀국수"에 맞지 않는다. (D-9)
-- [ ] AC-5: 순위는 0(이름이 입력 전체로 시작) → 1(모든 단어가 이름에) → 2(일부는 이름, 나머지는 메뉴·업종·위치) → 3(이름에는 없고 메뉴나 업종으로) → 4(모두 위치로만) 순이고 같은 순위 안에서는 `place_id` 오름차순이다. (D-10)
-- [ ] AC-6: `PLACE` 후보는 최대 5개다. "이 조건으로 추천받기"(`ACTION`, `label`)는 항상 하나 있고, 순위 0 후보가 있으면 맨 뒤, 없으면 맨 위다. `PLACE` 후보에는 `label`이 없다. 결과가 없으면 `ACTION`만 온다. (D-10, place-search 20번)
-- [ ] AC-7: `matchedMenu`는 이름·업종·위치로 채워지지 않는 단어가 있을 때만 있고, 그 단어를 가장 많이 담은 메뉴(동점이면 원본 순서가 앞선 메뉴)다. 이름으로 맞은 단어만 있으면 없다. 단일 단어 입력에서는 현재 Mock과 같은 결과다. (D-10)
-- [ ] AC-8: 대소문자를 구분하지 않고(`Locale.ROOT`), 앞뒤와 연속 공백을 정규화하며, `%`, `_`, `\`와 정규식 문자는 글자 그대로 맞는다. (D-6)
-- [ ] AC-9: 스냅샷은 첫 요청에서 읽고 60초가 지난 뒤 처음 오는 요청이 새로 읽는다. 동시 요청이 겹쳐도 갱신은 한 번이다. 갱신에 실패하면 마지막 스냅샷으로 응답하고, 한 번도 못 읽었으면 503이다. 기동 때는 읽지 않는다. (D-11)
-- [ ] AC-10: 자동완성을 처리한 뒤(오류 포함) BE 로그 출력에 `q` 값이 나타나지 않는다. (place-search AC-13, D-11)
-- [ ] AC-11: `PlaceKeywordSearchContract`의 모든 검사를 `DocumentKeywordSearch`가 통과한다. 다른 구현이 생기면 같은 검사를 그대로 상속한다. (D-5)
+- [x] AC-1: Mock을 끄고 카탈로그를 적재한 상태에서 `GET /places/suggest?q=`는 입력의 모든 단어가 이름, 메뉴 이름, 업종, 위치 중 하나에 있는 장소만 `PLACE` 후보로 돌려준다. 이름에 "쌀국수"와 "역삼"이 모두 있는 장소는 `q=역삼 쌀국수`에 나오고, 이름에 "역삼"이 없고 역삼 소속도 아닌 장소는 메뉴에 "쌀국수"가 있어도 나오지 않는다. (D-6)
+- [x] AC-2: 위치는 `station`의 이름(강남, 역삼, 선릉)과 "역"을 붙인 형태(강남역, 역삼역, 선릉역)로만 맞는다. `station`이 역삼인 장소는 이름과 메뉴에 "역삼"이 없어도 `q=역삼 쌀국수`(메뉴에 쌀국수)에 나오고, `q=역삼역 쌀국수`에도 나온다. `dong`, `district`, 주소만 역삼인 장소(`station`이 강남이거나 선릉)는 이름과 메뉴에 "역삼"이 없으면 나오지 않는다. (D-7)
+- [x] AC-3: 업종은 그룹 한글명(식당, 카페, 술집), 그룹 코드(`restaurant`, `cafe`, `bar`), 네이버 업종 이름(`places.category`)으로 맞는다. (D-8)
+- [x] AC-4: 마지막 단어의 마지막 글자는 덜 쓴 글자로 맞는다. `쌀구`와 `쌀ㄱ`는 "쌀국수"를 담은 이름이나 메뉴에 맞고, `알`은 "아라"를 담은 이름에 맞고, `달`은 "닭"을, `고`는 "과"를 담은 이름이나 메뉴에 맞는다. 마지막 글자가 아닌 글자에는 완화가 없어서 `살국`은 "쌀국수"에 맞지 않는다. (D-9)
+- [x] AC-5: 순위는 0(이름이 입력 전체로 시작) → 1(모든 단어가 이름에) → 2(일부는 이름, 나머지는 메뉴·업종·위치) → 3(이름에는 없고 메뉴나 업종으로) → 4(모두 위치로만) 순이고 같은 순위 안에서는 `place_id` 오름차순이다. (D-10)
+- [x] AC-6: `PLACE` 후보는 최대 5개다. "이 조건으로 추천받기"(`ACTION`, `label`)는 항상 하나 있고, 순위 0 후보가 있으면 맨 뒤, 없으면 맨 위다. `PLACE` 후보에는 `label`이 없다. 결과가 없으면 `ACTION`만 온다. (D-10, place-search 20번)
+- [x] AC-7: `matchedMenu`는 이름·업종·위치로 채워지지 않는 단어가 있을 때만 있고, 그 단어를 가장 많이 담은 메뉴(동점이면 원본 순서가 앞선 메뉴)다. 이름으로 맞은 단어만 있으면 없다. 단일 단어 입력에서는 현재 Mock과 같은 결과다. (D-10)
+- [x] AC-8: 대소문자를 구분하지 않고(`Locale.ROOT`), 앞뒤와 연속 공백을 정규화하며, `%`, `_`, `\`와 정규식 문자는 글자 그대로 맞는다. (D-6)
+- [x] AC-9: 스냅샷은 첫 요청에서 읽고 60초가 지난 뒤 처음 오는 요청이 새로 읽는다. 동시 요청이 겹쳐도 갱신은 한 번이다. 갱신에 실패하면 마지막 스냅샷으로 응답하고, 한 번도 못 읽었으면 503이다. 기동 때는 읽지 않는다. (D-11)
+- [x] AC-10: 자동완성을 처리한 뒤(오류 포함) BE 로그 출력에 `q` 값이 나타나지 않는다. (place-search AC-13, D-11)
+- [x] AC-11: `PlaceKeywordSearchContract`의 모든 검사를 `DocumentKeywordSearch`가 통과한다. 다른 구현이 생기면 같은 검사를 그대로 상속한다. (D-5)
 
 상세
 
-- [ ] AC-12: `GET /places/{id}`는 카탈로그 DB의 장소를 place-catalog spec의 `PlaceDetailResponse` 모양으로 돌려준다. 응답 키는 문서화된 필드를 벗어나지 않고, `hours`는 월~일 7개이며 요일마다 `breaks`와 `lastOrders`가 있다. 없는 id는 404, 정수가 아닌 id는 400이다. (D-2)
-- [ ] AC-13: `openStatus`는 place-catalog spec의 영업 상태 규칙대로 서울 시각(주입한 `Clock`)으로 계산하고, 카드와 상세와 Mock이 같은 계산기(`OpenStatusCalculator`)를 쓴다. 기존 Mock의 영업 상태 테스트가 그대로 통과한다. (D-2)
-- [ ] AC-14: `closedDayNote`는 정기휴무 요일을 월요일부터 세어 "매주 일요일 휴무", 여럿이면 "매주 토·일요일 휴무"로 읽을 때 계산하고, 정기휴무가 없으면 생략한다. 날짜가 붙은 휴무(DB에서 정보 없음으로 저장된 요일)는 정기휴무가 아니다.
-- [ ] AC-15: 읽을 때의 변환이 규칙대로다. 요일 행이 없는 요일은 `closed: false`에 시각이 없다. `photos`는 업체 사진 다음 메뉴판 사진이고 각각 `sort_order` 순이다. `subways`는 도보 거리 오름차순(값이 없으면 뒤), 같으면 PK 순이다. `noKidsZone`과 `parking.valet`은 `facilities`의 "노키즈존", "발렛파킹"으로 정하고, `parking`, `pet`, `corkage`는 place-catalog spec대로 값이 없으면 생략한다. `tags`는 빈 목록이다.
-- [ ] AC-16: (선택) `places.json`의 36곳을 같은 모양으로 테이블에 넣었을 때 `findPlace`의 응답이 JSON 상세와 `tags`, `openStatus`를 뺀 모든 필드에서 같다. 두 데이터가 같은 규칙으로 만들어졌으므로 `closedDayNote` 계산을 검증한다.
+- [x] AC-12: `GET /places/{id}`는 카탈로그 DB의 장소를 place-catalog spec의 `PlaceDetailResponse` 모양으로 돌려준다. 응답 키는 문서화된 필드를 벗어나지 않고, `hours`는 월~일 7개이며 요일마다 `breaks`와 `lastOrders`가 있다. 없는 id는 404, 정수가 아닌 id는 400이다. (D-2)
+- [x] AC-13: `openStatus`는 place-catalog spec의 영업 상태 규칙대로 서울 시각(주입한 `Clock`)으로 계산하고, 카드와 상세와 Mock이 같은 계산기(`OpenStatusCalculator`)를 쓴다. 기존 Mock의 영업 상태 테스트가 그대로 통과한다. (D-2)
+- [x] AC-14: `closedDayNote`는 정기휴무 요일을 월요일부터 세어 "매주 일요일 휴무", 여럿이면 "매주 토·일요일 휴무"로 읽을 때 계산하고, 정기휴무가 없으면 생략한다. 날짜가 붙은 휴무(DB에서 정보 없음으로 저장된 요일)는 정기휴무가 아니다.
+- [x] AC-15: 읽을 때의 변환이 규칙대로다. 요일 행이 없는 요일은 `closed: false`에 시각이 없다. `photos`는 업체 사진 다음 메뉴판 사진이고 각각 `sort_order` 순이다. `subways`는 도보 거리 오름차순(값이 없으면 뒤), 같으면 PK 순이다. `noKidsZone`과 `parking.valet`은 `facilities`의 "노키즈존", "발렛파킹"으로 정하고, `parking`, `pet`, `corkage`는 place-catalog spec대로 값이 없으면 생략한다. `tags`는 빈 목록이다.
+- [ ] AC-16: (선택) `places.json`의 36곳을 같은 모양으로 테이블에 넣었을 때 `findPlace`의 응답이 JSON 상세와 `tags`, `openStatus`를 뺀 모든 필드에서 같다. 두 데이터가 같은 규칙으로 만들어졌으므로 `closedDayNote` 계산을 검증한다. (이 반복에서 구현하지 않았다. 후속)
 
 주변 카드
 
-- [ ] AC-17: 쿼리에 "근처"가 있고 `cursor`가 없는 `POST /places/search`는 `nearby: true`로 카탈로그 전체를 `place_id` 오름차순으로 돌려준다. `nextCursor`, `emptyReason`, `changeSummary`는 없고 `totalCount`는 `items`의 수와 같다. (D-13)
-- [ ] AC-18: 카드는 `place`, `openStatus`, 빈 `labels`, 빈 `reasons`, 빈 `scoreItems`를 담고 `score`와 `caution`은 JSON에서 생략한다. (D-12)
-- [ ] AC-19: 쿼리에 "근처"가 없거나 `cursor`가 있는 요청은 503 ProblemDetail이다. (D-13)
+- [x] AC-17: 쿼리에 "근처"가 있고 `cursor`가 없는 `POST /places/search`는 `nearby: true`로 카탈로그 전체를 `place_id` 오름차순으로 돌려준다. `nextCursor`, `emptyReason`, `changeSummary`는 없고 `totalCount`는 `items`의 수와 같다. (D-13)
+- [x] AC-18: 카드는 `place`, `openStatus`, 빈 `labels`, 빈 `reasons`, 빈 `scoreItems`를 담고 `score`와 `caution`은 JSON에서 생략한다. (D-12)
+- [x] AC-19: 쿼리에 "근처"가 없거나 `cursor`가 있는 요청은 503 ProblemDetail이다. (D-13)
 
 전환과 오류
 
-- [ ] AC-20: `place.mock.enabled=true`이면 지금과 똑같이 `MockPlaceSearchEngine`이 응답하고 기존 Mock 테스트가 모두 통과한다. false이거나 없으면 `CatalogPlaceSearchEngine`이 응답한다. DB 모드 빈(`CatalogPlaceSearchEngine`, `JdbcPlaceCatalog`, `DocumentKeywordSearch`)은 Mock이 꺼졌을 때만 등록된다. (D-2)
-- [ ] AC-21: DB 접근 오류는 503 ProblemDetail이고 `detail`에 일반 문구만 있으며 예외는 서버 로그에만 남는다. (D-14)
-- [ ] AC-22: `PlaceService`는 엔진을 직접 주입받고(엔진 빈이 항상 하나), 컨트롤러와 `ReviewService`는 바뀌지 않는다. (D-2)
+- [x] AC-20: `place.mock.enabled=true`이면 지금과 똑같이 `MockPlaceSearchEngine`이 응답하고 기존 Mock 테스트가 모두 통과한다. false이거나 없으면 `CatalogPlaceSearchEngine`이 응답한다. DB 모드 빈(`CatalogPlaceSearchEngine`, `JdbcPlaceCatalog`, `DocumentKeywordSearch`)은 Mock이 꺼졌을 때만 등록된다. (D-2)
+- [x] AC-21: DB 접근 오류는 503 ProblemDetail이고 `detail`에 일반 문구만 있으며 예외는 서버 로그에만 남는다. (D-14)
+- [x] AC-22: `PlaceService`는 엔진을 직접 주입받고(엔진 빈이 항상 하나), 컨트롤러와 `ReviewService`는 바뀌지 않는다. (D-2)
 
 FE
 
-- [ ] AC-23: 후보 줄의 이름과 "메뉴: ..." 글에서 입력을 공백으로 나눈 단어마다 대소문자 무시 부분 문자열을 강조하고 겹치는 구간을 합친다. 조합 중인 마지막 글자는 강조하지 않는다. (D-6, D-9)
-- [ ] AC-24: 점수가 없는 카드는 검색 결과 카드와 주변 캐러셀에 핏 점수 영역을 그리지 않고, 상세에는 핏 점수 버튼을 그리지 않는다. 추천 이유와 주의 영역은 비어 있으면 그대로 숨는다. (D-12)
-- [ ] AC-25: 첫 화면 주변 카드는 모든 카드에 점수가 없을 때 기준 지점에서 반경 안의 카드를 거리 오름차순으로 정렬해 앞 10곳을 고른다. 점수가 있는 카드가 있으면 서버 순서를 그대로 따른다. (D-12)
+- [x] AC-23: 후보 줄의 이름과 "메뉴: ..." 글에서 입력을 공백으로 나눈 단어마다 대소문자 무시 부분 문자열을 강조하고 겹치는 구간을 합친다. 조합 중인 마지막 글자는 강조하지 않는다. (D-6, D-9)
+- [x] AC-24: 점수가 없는 카드는 검색 결과 카드와 주변 캐러셀에 핏 점수 영역을 그리지 않고, 상세에는 핏 점수 버튼을 그리지 않는다. 추천 이유와 주의 영역은 비어 있으면 그대로 숨는다. (D-12)
+- [x] AC-25: 첫 화면 주변 카드는 모든 카드에 점수가 없을 때 기준 지점에서 반경 안의 카드를 거리 오름차순으로 정렬해 앞 10곳을 고른다. 점수가 있는 카드가 있으면 서버 순서를 그대로 따른다. (D-12)
 
 문서와 범위
 
-- [ ] AC-26: place-search spec의 19·20번(매칭 규칙), 32번(후보 강조), Interfaces의 `PlaceCard` 문구, AC-1이 새 동작과 어긋나지 않고 이 spec을 가리키며, 각 수정은 그 계약을 바꾸는 코드와 같은 커밋에 있다. (D-16)
-- [ ] AC-27: 마이그레이션 추가, `infra/`와 `docs/infra/` 수정, 장소 JPA 엔티티, `data/naver-places/` 커밋이 없다. (D-4, D-15, D-16)
-- [ ] AC-28: `./gradlew test`(Docker 필요)와 FE의 `vitest`, `tsc`, `eslint`, `prettier`가 통과한다. 엔진 빈이 항상 하나가 되므로 Mock 없이 뜨는 모든 컨텍스트에서 DB 모드 빈이 만들어져도 기존 테스트 전체가 통과한다.
+- [x] AC-26: place-search spec의 19·20번(매칭 규칙), 32번(후보 강조), Interfaces의 `PlaceCard` 문구, AC-1이 새 동작과 어긋나지 않고 이 spec을 가리키며, 각 수정은 그 계약을 바꾸는 코드와 같은 커밋에 있다. (D-16)
+- [x] AC-27: 마이그레이션 추가, `infra/`와 `docs/infra/` 수정, 장소 JPA 엔티티, `data/naver-places/` 커밋이 없다. (D-4, D-15, D-16)
+- [x] AC-28: `./gradlew test`(Docker 필요)와 FE의 `vitest`, `tsc`, `eslint`, `prettier`가 통과한다. 엔진 빈이 항상 하나가 되므로 Mock 없이 뜨는 모든 컨텍스트에서 DB 모드 빈이 만들어져도 기존 테스트 전체가 통과한다.
 
 ## Interfaces
 
