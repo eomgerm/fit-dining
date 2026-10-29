@@ -1,6 +1,6 @@
 """임베딩 Modal 앱. docs/infra/design.md 12.3절의 `POST /embed`.
 
-ai/에서 `uv run modal deploy --env dev -m server.embed`로 배포한다. 환경은 Modal Environment로 나눈다(design 11.2절).
+ai/에서 `uv run modal deploy --env fit-dev -m server.embed`로 배포한다. 환경은 Modal Environment로 나눈다(design 11.2절).
 BE는 `Modal-Key`·`Modal-Secret` 헤더로 `<URL>/embed`를 호출한다.
 """
 

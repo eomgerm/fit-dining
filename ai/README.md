@@ -81,11 +81,11 @@ judge·반성 모델과 연결 방식은 `experiments/prompt_opt/common.py`에 �
 
 ```bash
 uv run modal token new                          # 처음 한 번
-uv run modal serve --env test -m server.embed   # AI 팀 시험용. 끄면 내려간다
-uv run modal deploy --env dev -m server.embed   # BE dev가 부른다. prod는 --env prod
+uv run modal serve --env fit-test -m server.embed   # AI 팀 시험용. 끄면 내려간다
+uv run modal deploy --env fit-dev -m server.embed   # BE dev가 부른다. prod는 --env fit-prod
 ```
 
-Modal Environment는 `test`·`dev`·`prod`이고 앱 이름은 모두 `fit-embed`입니다(설계 11.2절). 같은 커밋을 test에서 대조한 뒤 dev, prod 순서로 올립니다.
+Modal Environment는 `fit-test`·`fit-dev`·`fit-prod`이고 앱 이름은 모두 `fit-embed`입니다(설계 11.2절). 같은 커밋을 fit-test에서 대조한 뒤 fit-dev, fit-prod 순서로 올립니다.
 
 - 요청: `{"texts": [...], "kind": "query|passage"}`. 텍스트는 1~64개, 각 2000자 이하이고 넘으면 422입니다.
 - 응답: `{"model": "<모델>@<리비전>", "dim": 1024, "vectors": [...]}`, 헤더 `X-Model-Version`. 벡터는 단위 길이이고 소수 6자리로 반올림됩니다.

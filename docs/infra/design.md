@@ -193,7 +193,7 @@ Fit Dining(Next.js SSR 프런트(PWA), Spring Boot 백엔드, OpenSearch 검색,
 | Redis | `redis-prod` 인스턴스 | `redis-dev` 인스턴스 (인스턴스당 약 10MB라 논리 DB 번호보다 안전하다) |
 | Garage | 버킷 `fit-prod-photos`, prod 전용 키 | 버킷 `fit-dev-photos`, dev 전용 키 |
 | 비밀 | DB 비밀번호, JWT 키, 외부 API 토큰 모두 환경마다 다르게 | 〃 |
-| Modal | Environment `prod`의 앱(FastAPI, 임베딩, 리랭커, LLM)과 prod 전용 프록시 토큰 | Environment `dev`. AI 팀 시험용 `test`가 따로 있다(11.2절) |
+| Modal | Environment `fit-prod`의 앱(FastAPI, 임베딩, 리랭커, LLM)과 prod 전용 프록시 토큰 | Environment `fit-dev`. AI 팀 시험용 `fit-test`가 따로 있다(11.2절) |
 
 ## 3. 호스트 기반
 
@@ -770,8 +770,8 @@ Grafana는 팀원에게 viewer 계정을 준다. A503에서는 SSH 보유자만 
 
 **분리와 배포**
 
-- 한 워크스페이스에 Modal Environment `test`·`dev`·`prod`를 두고 앱 이름은 환경과 상관없이 같게 둔다(예: `fit-embed`). 앱·Secret·웹 URL이 Environment마다 갈린다. FastAPI와 임베딩·리랭커·LLM 엔드포인트가 모두 이 앱들이다.
-- `test`는 AI 팀 전용이다. 상시 배포하지 않고 `modal serve --env test`로 필요할 때만 띄운다. 모델 교체는 test에서 대조한 뒤 같은 커밋을 dev, prod 순서로 `modal deploy --env <env>`한다.
+- 한 워크스페이스에 Modal Environment `fit-test`·`fit-dev`·`fit-prod`를 두고 앱 이름은 환경과 상관없이 같게 둔다(예: `fit-embed`). 앱·Secret·웹 URL이 Environment마다 갈린다. FastAPI와 임베딩·리랭커·LLM 엔드포인트가 모두 이 앱들이다.
+- `fit-test`는 AI 팀 전용이다. 상시 배포하지 않고 `modal serve --env fit-test`로 필요할 때만 띄운다. 모델 교체는 fit-test에서 대조한 뒤 같은 커밋을 fit-dev, fit-prod 순서로 `modal deploy --env <env>`한다.
 - 프록시 토큰은 dev용과 prod용을 따로 만든다. RBAC가 없는 워크스페이스는 토큰이 Environment에 묶이지 않아 dev 토큰으로 prod도 부를 수 있다 (확인: Modal 문서는 RBAC 워크스페이스에서만 Environment 단위라고 한다). 그래서 prod 토큰은 B의 `prod.env`에만 둔다.
 - 호출 URL과 토큰은 BE의 서버 env에만 둔다.
 - 배포는 AI 팀이 `modal deploy`로 한다. 안정되면 deploy 러너 잡으로 옮길 수 있다(P2).
@@ -855,7 +855,7 @@ BE·AI·프런트 팀과 M1 전에 합의한다. 합의되면 `docs/infra/contra
 
 AI 팀과 M1 전에 합의한다. FastAPI는 Modal에서 돌고 A·B에는 AI 컨테이너가 없다. BE가 Modal 엔드포인트를 HTTPS로 호출한다.
 
-1. Modal Environment(`dev`, `prod`)와 토큰을 분리한다(11.2절). URL과 토큰은 BE의 서버 env(`/etc/fit/<env>.env`)에 둔다. 토큰은 코드와 repo에 두지 않는다. 엔드포인트는 모두 `requires_proxy_auth=True`로 보호하고 BE가 `Modal-Key`·`Modal-Secret` 헤더로 호출한다(11.2절).
+1. Modal Environment(`fit-dev`, `fit-prod`)와 토큰을 분리한다(11.2절). URL과 토큰은 BE의 서버 env(`/etc/fit/<env>.env`)에 둔다. 토큰은 코드와 repo에 두지 않는다. 엔드포인트는 모두 `requires_proxy_auth=True`로 보호하고 BE가 `Modal-Key`·`Modal-Secret` 헤더로 호출한다(11.2절).
 2. 엔드포인트는 임베딩(12.3절), 리랭커, 요청 해석(LLM)이다. 요청·응답 스키마, 오류 코드, 최대 입력 길이와 배치 크기 상한을 AI 팀이 명세하고, 응답에 모델 버전을 싣는다.
 3. 콜드 스타트: 첫 호출 지연의 상한과 상시 가동할 컨테이너 수를 AI 팀이 비용 상한과 함께 정한다. BE 타임아웃은 이 값에 맞춘다(11.2절).
 4. 서버 쪽 방어도 둔다: 동시성 상한과 요청당 비용 상한. BE의 일일 호출 예산과 별개다.
