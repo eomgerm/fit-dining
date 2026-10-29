@@ -23,7 +23,7 @@ import {
 
 const params = vi.hoisted(() => ({ id: "1" as string | null }));
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ back: vi.fn() }),
+  useRouter: () => ({ back: vi.fn(), push: vi.fn() }),
   useSearchParams: () =>
     new URLSearchParams(params.id ? { id: params.id } : {}),
 }));
@@ -553,17 +553,25 @@ describe("PlaceDetailScreen", () => {
     expect(screen.getByRole("table")).toBeTruthy();
   });
 
-  it.each(["공유", "저장"])(
-    "'%s' 버튼은 '준비 중이에요'를 띄운다",
-    async (name) => {
-      renderDetail();
-      await screen.findByRole("heading", { name: "카페 온담" });
+  // 저장 버튼은 북마크 기능이 대체했다(place-detail-bookmark.test.tsx)
+  it("'공유' 버튼은 '준비 중이에요'를 띄운다", async () => {
+    renderDetail();
+    await screen.findByRole("heading", { name: "카페 온담" });
 
-      fireEvent.click(screen.getByRole("button", { name }));
+    fireEvent.click(screen.getByRole("button", { name: "공유" }));
 
-      expect(await screen.findByText("준비 중이에요")).toBeTruthy();
-    },
-  );
+    expect(await screen.findByText("준비 중이에요")).toBeTruthy();
+  });
+
+  it("인증을 넘기지 않으면 '저장'은 비로그인처럼 로그인 안내를 띄운다", async () => {
+    renderDetail();
+    await screen.findByRole("heading", { name: "카페 온담" });
+
+    fireEvent.click(screen.getByRole("button", { name: "저장" }));
+
+    expect(await screen.findByText("로그인이 필요해요")).toBeTruthy();
+    expect(screen.queryByText("준비 중이에요")).toBeNull();
+  });
 
   it("정보 탭의 '주소 복사'는 주소를 클립보드에 넣고 알린다", async () => {
     const writeText = vi.fn(async () => {});

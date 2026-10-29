@@ -10,7 +10,6 @@ import { Carousel } from "@/shared/ui/display/carousel";
 import { CarouselDots } from "@/shared/ui/display/carousel-dots";
 import { EmptyState } from "@/shared/ui/display/empty-state";
 import { Tag } from "@/shared/ui/display/tag";
-import { BookmarkIcon } from "@/shared/ui/icon/icons/bookmark";
 import { ChevronLeftIcon } from "@/shared/ui/icon/icons/chevron-left";
 import { InfoIcon } from "@/shared/ui/icon/icons/info";
 import { PinOffIcon } from "@/shared/ui/icon/icons/pin-off";
@@ -21,9 +20,16 @@ import { useToast } from "@/shared/ui/overlay/toast";
 import { Tooltip } from "@/shared/ui/overlay/tooltip";
 
 import { placeQueries } from "../api/place-queries";
+import {
+  guestAccess,
+  placeDetailHref,
+  SAVED_VIEW,
+  type BookmarkAccess,
+} from "../model/bookmark";
 import { todayNotice } from "../model/opening-hours";
 import { parsePlaceId } from "../model/place-id";
 import type { PlaceCard, PlaceDetail } from "../model/place-types";
+import { BookmarkButton } from "./bookmark-button";
 import { LoadFailed } from "./load-failed";
 import { HomeTab, InfoTab, MenuTab } from "./place-detail-tabs";
 import {
@@ -52,9 +58,19 @@ export type PlaceDetailSlots = {
   bottomAction?: (placeId: number) => ReactNode;
 };
 
-// 장소 상세(6-01, 6-02, 6-04, 6-05, 와이어프레임 Detail·DetailMenu·DetailInfo). ?id가 올바른 정수일 때만 요청한다
-export function PlaceDetailScreen({ slots }: { slots?: PlaceDetailSlots }) {
-  const id = parsePlaceId(useSearchParams().get("id"));
+// 장소 상세(6-01, 6-02, 6-04, 6-05, 와이어프레임 Detail·DetailMenu·DetailInfo·DetailSaved). ?id가 올바른 정수일 때만 요청한다.
+// bookmarks는 저장 버튼의 인증이다. 인증 도메인을 쓰는 app이 넘기고, 없으면 비로그인처럼 보인다
+export function PlaceDetailScreen({
+  slots,
+  bookmarks,
+}: {
+  slots?: PlaceDetailSlots;
+  bookmarks?: BookmarkAccess;
+}) {
+  const params = useSearchParams();
+  const id = parsePlaceId(params.get("id"));
+  // 저장한 장소 화면에서 열었으면 핏 점수와 추천 이유를 보이지 않는다(D-12)
+  const fromSaved = params.get("from") === SAVED_VIEW;
   return (
     <main className="relative flex min-h-dvh flex-col bg-surface-warm">
       {id === undefined ? (
@@ -63,7 +79,12 @@ export function PlaceDetailScreen({ slots }: { slots?: PlaceDetailSlots }) {
           <NotFound />
         </>
       ) : (
-        <PlaceDetailContent id={id} slots={slots} />
+        <PlaceDetailContent
+          id={id}
+          slots={slots}
+          bookmarks={bookmarks}
+          fromSaved={fromSaved}
+        />
       )}
     </main>
   );
@@ -100,12 +121,17 @@ function NotFound() {
 function PlaceDetailContent({
   id,
   slots,
+  bookmarks,
+  fromSaved,
 }: {
   id: number;
   slots?: PlaceDetailSlots;
+  bookmarks?: BookmarkAccess;
+  fromSaved: boolean;
 }) {
   const query = useQuery(placeQueries.detail(id));
-  const card = useStoredCard(id);
+  const storedCard = useStoredCard(id);
+  const card = fromSaved ? undefined : storedCard;
 
   if (query.isPending) {
     return (
@@ -138,18 +164,31 @@ function PlaceDetailContent({
       </>
     );
   }
-  return <PlaceDetailView detail={query.data} card={card} slots={slots} />;
+  return (
+    <PlaceDetailView
+      detail={query.data}
+      card={card}
+      slots={slots}
+      bookmarks={bookmarks}
+      returnTo={placeDetailHref(id, fromSaved)}
+    />
+  );
 }
 
 function PlaceDetailView({
   detail,
   card,
   slots,
+  bookmarks,
+  returnTo,
 }: {
   detail: PlaceDetail;
   card?: PlaceCard;
   slots?: PlaceDetailSlots;
+  bookmarks?: BookmarkAccess;
+  returnTo: string;
 }) {
+  const router = useRouter();
   const here = useHere();
   const toast = useToast();
   const [now] = useState(() => new Date());
@@ -266,15 +305,11 @@ function PlaceDetailView({
 
       <BottomBar variant="divider">
         <div className="flex gap-2.5">
-          {/* 와이어프레임의 정사각형 테두리 버튼. 공통 Button에 아이콘만 있는 크기가 없어 직접 그린다 */}
-          <button
-            type="button"
-            aria-label="저장"
-            onClick={() => toast(NOT_READY_MESSAGE)}
-            className="flex size-13 shrink-0 items-center justify-center rounded-md border border-line-strong bg-surface transition active:bg-surface-sunken"
-          >
-            <BookmarkIcon className="text-icon" />
-          </button>
+          <BookmarkButton
+            placeId={place.id}
+            access={bookmarks ?? guestAccess(() => router.push("/login"))}
+            returnTo={returnTo}
+          />
           {slots?.bottomAction && (
             <div className="min-w-0 flex-1">{slots.bottomAction(place.id)}</div>
           )}

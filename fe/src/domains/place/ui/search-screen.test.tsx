@@ -35,7 +35,10 @@ vi.mock("../model/search-store", async (importOriginal) => {
 });
 
 const push = vi.fn();
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push }),
+  useSearchParams: () => new URLSearchParams(),
+}));
 
 const config = vi.hoisted(() => ({
   value: undefined as RuntimeConfig | undefined,
@@ -1256,17 +1259,17 @@ describe("SearchScreen", () => {
       fireEvent.click(screen.getByRole("button", { name: "내 정보" }));
       expect(push).toHaveBeenCalledWith("/my");
     });
-    it.each(["저장한 장소"])(
-      "'%s' 버튼은 첫 화면과 결과 화면에서 '준비 중이에요'를 띄운다",
-      async (name) => {
-        renderScreen();
-        fireEvent.click(screen.getByRole("button", { name }));
-        expect(await screen.findByText("준비 중이에요")).toBeTruthy();
+    // 저장한 장소 버튼의 동작은 북마크 기능이 대체했다(saved-places.test.tsx)
+    it("'저장한 장소' 버튼은 첫 화면과 결과 화면에 있고 '준비 중이에요'를 띄우지 않는다", async () => {
+      renderScreen();
+      fireEvent.click(screen.getByRole("button", { name: "저장한 장소" }));
+      expect(await screen.findByText("로그인이 필요해요")).toBeTruthy();
+      expect(screen.queryByText("준비 중이에요")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "취소" }));
 
-        await newSearch("역삼 카페");
-        expect(screen.getByRole("button", { name })).toBeTruthy();
-      },
-    );
+      await newSearch("역삼 카페");
+      expect(screen.getByRole("button", { name: "저장한 장소" })).toBeTruthy();
+    });
 
     describe("최근 검색", () => {
       async function openRecent() {

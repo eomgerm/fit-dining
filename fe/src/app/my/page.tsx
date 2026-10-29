@@ -6,6 +6,8 @@ import {
   getUserProfile,
   type UserProfile,
 } from "@/domains/auth/api/user-profile";
+import { savedPlacesHref } from "@/domains/place/model/bookmark";
+import { savedViewState } from "@/domains/place/ui/saved-view-state";
 import { isApiError } from "@/shared/api/api-error";
 import { IconButton } from "@/shared/ui/button/icon-button";
 import { ChevronLeftIcon } from "@/shared/ui/icon/icons/chevron-left";
@@ -48,6 +50,11 @@ export default function MyPage() {
       unsubscribe();
     };
   }, [router]);
+  // 메인과 같은 저장한 장소 화면을 연다. 그 화면의 [뒤로]는 내 정보로 돌아온다(북마크 D-9)
+  function openSaved() {
+    savedViewState.enter({ from: "my" });
+    router.push(savedPlacesHref());
+  }
   async function handleLogout() {
     if (loggingOut.current) return;
     loggingOut.current = true;
@@ -120,7 +127,9 @@ export default function MyPage() {
                 onClick={
                   label === "로그아웃"
                     ? handleLogout
-                    : () => toast("준비 중이에요")
+                    : label === "저장한 장소"
+                      ? openSaved
+                      : () => toast("준비 중이에요")
                 }
                 className={`flex min-h-13 w-full items-center justify-between border-b border-line px-5 text-left text-body-md disabled:opacity-50 ${label === "탈퇴하기" ? "text-ink-muted" : "text-ink"}`}
               >

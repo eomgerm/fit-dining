@@ -8,7 +8,8 @@ import { distanceMeters, formatDistance } from "../model/nearby";
 import { CATEGORY_LABELS, OPEN_STATUS_LABELS } from "../model/place-labels";
 import type { LatLng, OpenStatus, PlaceSummary } from "../model/place-types";
 
-const statusVariants = cva("", {
+// 영업 상태 글자색. 저장한 장소 카드도 쓴다
+export const statusVariants = cva("", {
   variants: {
     status: {
       OPEN: "text-success",

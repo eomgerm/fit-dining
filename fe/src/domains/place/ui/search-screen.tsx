@@ -5,7 +5,7 @@ import {
   useQueryClient,
   type QueryKey,
 } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import { Button } from "@/shared/ui/button/button";
@@ -17,7 +17,16 @@ import { UserIcon } from "@/shared/ui/icon/icons/user";
 import { useToast } from "@/shared/ui/overlay/toast";
 
 import { placeQueries } from "../api/place-queries";
+import {
+  guestAccess,
+  parseCategory,
+  placeDetailHref,
+  SAVED_VIEW,
+  savedPlacesHref,
+  type BookmarkAccess,
+} from "../model/bookmark";
 import type {
+  CategoryGroup,
   LatLng,
   PlaceCard,
   PlaceSearchRequest,
@@ -44,15 +53,19 @@ import {
   locateDevice,
   locateIfGranted,
 } from "./locate-device";
+import { LoginPrompt, SAVED_LOGIN_MESSAGE } from "./login-prompt";
 import { NearbyCarousel } from "./nearby-carousel";
 import { PastResultView } from "./past-result-view";
 import { placeCardElementId } from "./place-card";
 import { PlaceMap, type PlaceMapHandle } from "./place-map";
 import { RecentSearchSheet } from "./recent-search-sheet";
 import { ResultPanel, type PanelState } from "./result-panel";
+import { savedCardElementId, SavedPlacesView } from "./saved-places";
+import { savedViewState, type SavedPanelState } from "./saved-view-state";
 import { SearchBar } from "./search-bar";
 import { getThread, saveThread } from "./thread-storage";
 import { useNearbyPicks } from "./use-nearby-picks";
+import { useSavedPlaces } from "./use-saved-places";
 import { useHere, useSearchStore } from "./use-search-store";
 import { usePastResults, useViewingResults } from "./use-viewing-results";
 
@@ -62,11 +75,20 @@ type SearchInput = {
   request: PlaceSearchRequest;
 };
 
-const NOT_READY_MESSAGE = "준비 중이에요";
+const GUEST = guestAccess(() => {});
 
-// 첫 화면(와이어프레임 Start)과 검색·추천 결과 화면(5-01, 5-03~5-07)
-export function SearchScreen() {
+// 첫 화면(와이어프레임 Start)과 검색·추천 결과 화면(5-01, 5-03~5-07), 저장한 장소 화면(?view=saved, 와이어프레임 Saved).
+// bookmarks는 저장한 장소의 인증이다. 인증 도메인을 쓰는 app이 넘기고, 없으면 비로그인처럼 보인다
+export function SearchScreen({
+  bookmarks = GUEST,
+}: {
+  bookmarks?: BookmarkAccess;
+}) {
   const router = useRouter();
+  const params = useSearchParams();
+  // 저장한 장소 화면은 메인의 지도와 하단 패널이 내 저장 장소만 보이도록 바뀐 상태다(D-12)
+  const savedView = params.get("view") === SAVED_VIEW;
+  const savedCategory = parseCategory(params.get("category"));
   const queryClient = useQueryClient();
   const toast = useToast();
   const { threadId, entries, selectedPlaceId } = useSearchStore();
@@ -79,7 +101,11 @@ export function SearchScreen() {
   const mapRef = useRef<PlaceMapHandle>(null);
   const followUpRef = useRef<HTMLInputElement>(null);
   const [mapReady, setMapReady] = useState(false);
-  const [panel, setPanel] = useState<PanelState>("middle");
+  // 상세에 다녀와 저장한 장소 화면으로 다시 그려졌으면, 들어오기 전 메인의 패널 상태로 시작한다
+  const [panel, setPanel] = useState<PanelState>(() => {
+    const entry = savedView ? savedViewState.entry() : undefined;
+    return entry?.from === "main" ? entry.mainPanel : "middle";
+  });
   // 요청 기록을 접으면 펼치기 전 상태로 돌아간다
   const panelBeforeHistory = useRef<PanelState>("middle");
   const [recentOpen, setRecentOpen] = useState(false);
@@ -93,6 +119,24 @@ export function SearchScreen() {
   const pendingKey = useRef<QueryKey | undefined>(undefined);
   // 지도를 마지막으로 옮겨 준 기기 위치. 새 위치를 얻을 때만 지도를 옮긴다
   const centeredOn = useRef<LatLng | undefined>(undefined);
+
+  const saved = useSavedPlaces(bookmarks, savedView);
+  const [savedPanel, setSavedPanel] = useState<SavedPanelState>(
+    savedViewState.panel,
+  );
+  // 저장한 장소 화면에서 핀으로 가리킨 카드. 밑에 있는 메인 화면의 선택은 바꾸지 않는다
+  const [savedSelectedId, setSavedSelectedId] = useState<number>();
+  // 메인 "저장한 장소" 버튼을 비로그인 사용자가 눌렀다
+  const [savedPromptFromMain, setSavedPromptFromMain] = useState(false);
+  const [wasSaved, setWasSaved] = useState(savedView);
+  if (wasSaved !== savedView) {
+    setWasSaved(savedView);
+    if (savedView) setSavedPanel(savedViewState.panel());
+  }
+  // 메인 화면을 보이면 저장한 장소 화면에 앱 안에서 들어왔다는 기록을 지운다
+  useEffect(() => {
+    if (!savedView) savedViewState.clear();
+  }, [savedView]);
 
   // 첫 페이지를 받은 뒤에만 기록에 넣고 화면을 바꾼다. 실패한 요청은 쌓지 않는다.
   // 쌓은 요청은 그때 받은 첫 페이지와 함께 지금 thread에 저장한다
@@ -144,7 +188,7 @@ export function SearchScreen() {
   const failed = search.isError;
   const showPanel = Boolean(viewing) || searching || failed;
   const firstScreen = !showPanel && !past;
-  const nearby = useNearbyPicks(firstScreen);
+  const nearby = useNearbyPicks(firstScreen && !savedView);
   const nearbyOffline = isOfflineError(nearby.error);
   // 가운데 카드가 선택된 카드다. 고른 적이 없으면 첫 카드
   const selectedNearbyId = nearby.cards.some(
@@ -315,15 +359,82 @@ export function SearchScreen() {
       ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }
 
+  // 메인 "저장한 장소" 버튼. 비로그인 사용자에게는 로그인 안내를 띄운다(D-7)
+  function handleOpenSaved() {
+    if (bookmarks.session.status === "guest") {
+      setSavedPromptFromMain(true);
+      return;
+    }
+    savedViewState.enter({ from: "main", mainPanel: panel });
+    router.push(savedPlacesHref());
+  }
+
+  // 앱 안에서 들어왔으면 브라우저 뒤로 가기, 아니면 메인 기본 화면(D-12)
+  function handleSavedBack() {
+    if (savedViewState.entry()) router.back();
+    else router.replace("/");
+  }
+
+  function handleSavedPanelChange(next: SavedPanelState) {
+    savedViewState.setPanel(next);
+    setSavedPanel(next);
+  }
+
+  function handleSavedCategory(category?: CategoryGroup) {
+    router.replace(savedPlacesHref(category), { scroll: false });
+  }
+
+  function handleSavedPinClick(placeId: number) {
+    setSavedSelectedId(placeId);
+    document
+      .getElementById(savedCardElementId(placeId))
+      ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+
+  // "추천 받으러 가기". 보던 검색 결과를 닫고 메인 기본 화면(주변 추천)으로 간다. 최근 검색 기록은 남는다
+  function handleRecommend() {
+    abandonSearch();
+    searchStore.startNewSearch();
+    setPanel("middle");
+    savedViewState.clear();
+    router.replace("/");
+  }
+
+  function handleSavedLogin() {
+    setSavedPromptFromMain(false);
+    savedViewState.clear();
+    bookmarks.login(savedPlacesHref(savedView ? savedCategory : undefined));
+  }
+
   async function handleMyLocation() {
     if (!(await locateDevice())) toast(LOCATION_FAILED_MESSAGE);
   }
 
+  const savedItems =
+    saved.content.kind === "loaded"
+      ? saved.content.items.filter(
+          ({ place }) =>
+            !savedCategory || place.categoryGroup === savedCategory,
+        )
+      : [];
   const pinCards = past
     ? pastResults.cards
     : showPanel
       ? results.cards
       : nearby.cards;
+  const pins = savedView
+    ? savedItems.map(({ place }) => ({
+        id: place.id,
+        lat: place.lat,
+        lng: place.lng,
+        bookmark: true,
+      }))
+    : pinCards.map(({ place }, index) => ({
+        id: place.id,
+        rank: index + 1,
+        lat: place.lat,
+        lng: place.lng,
+      }));
   const myLocationButton = mapReady && (
     <Fab label="내 위치" onClick={handleMyLocation}>
       <MyLocationIcon className="text-icon" />
@@ -336,24 +447,27 @@ export function SearchScreen() {
         ref={mapRef}
         // 패널이 있으면 지도를 패널 위쪽에 맞춰 지도 중심과 핀이 가려지지 않게 한다(조금 겹친다)
         className={
-          firstScreen ? "absolute inset-0" : "absolute inset-x-0 top-0 h-1/2"
+          firstScreen && !savedView
+            ? "absolute inset-0"
+            : "absolute inset-x-0 top-0 h-1/2"
         }
-        pins={pinCards.map(({ place }, index) => ({
-          id: place.id,
-          rank: index + 1,
-          lat: place.lat,
-          lng: place.lng,
-        }))}
-        selectedId={firstScreen ? selectedNearbyId : selectedPlaceId}
+        pins={pins}
+        selectedId={
+          savedView
+            ? savedSelectedId
+            : firstScreen
+              ? selectedNearbyId
+              : selectedPlaceId
+        }
         myLocation={here}
-        onPinClick={handlePinClick}
+        onPinClick={savedView ? handleSavedPinClick : handlePinClick}
         onUserMove={() => setMapMoved(true)}
         onReadyChange={setMapReady}
       />
 
-      {(firstScreen || past || panel !== "full") && (
+      {!savedView && (firstScreen || past || panel !== "full") && (
         <div className="absolute top-4 right-4 flex flex-col gap-2">
-          <Fab label="저장한 장소" onClick={() => toast(NOT_READY_MESSAGE)}>
+          <Fab label="저장한 장소" onClick={handleOpenSaved}>
             <BookmarkIcon className="text-icon" />
           </Fab>
           <Fab label="내 정보" onClick={() => router.push("/my")}>
@@ -362,7 +476,8 @@ export function SearchScreen() {
         </div>
       )}
 
-      {mapReady &&
+      {!savedView &&
+        mapReady &&
         mapMoved &&
         viewing &&
         !past &&
@@ -378,7 +493,22 @@ export function SearchScreen() {
           </Button>
         )}
 
-      {past ? (
+      {savedView ? (
+        <SavedPlacesView
+          content={saved.content}
+          category={savedCategory}
+          onCategoryChange={handleSavedCategory}
+          selectedId={savedSelectedId}
+          here={here}
+          panel={savedPanel}
+          onPanelChange={handleSavedPanelChange}
+          onBack={handleSavedBack}
+          onRetry={saved.retry}
+          onOpen={(placeId) => router.push(placeDetailHref(placeId, true))}
+          onRecommend={handleRecommend}
+          edge={myLocationButton}
+        />
+      ) : past ? (
         <PastResultView
           past={past}
           firstPage={pastResults.firstPage}
@@ -485,6 +615,19 @@ export function SearchScreen() {
           </div>
         </>
       )}
+
+      <LoginPrompt
+        open={
+          savedPromptFromMain ||
+          (savedView && bookmarks.session.status === "guest")
+        }
+        description={SAVED_LOGIN_MESSAGE}
+        // 저장한 장소 화면에서 뜬 창이면 [취소]는 그 화면의 [뒤로]와 같다
+        onCancel={() =>
+          savedView ? handleSavedBack() : setSavedPromptFromMain(false)
+        }
+        onLogin={handleSavedLogin}
+      />
 
       <RecentSearchSheet
         open={recentOpen}

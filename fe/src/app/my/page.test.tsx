@@ -8,11 +8,12 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { savedViewState } from "@/domains/place/ui/saved-view-state";
 import { ApiError } from "@/shared/api/api-error";
 import MyPage from "./page";
 
 const mocks = vi.hoisted(() => ({
-  router: { replace: vi.fn(), back: vi.fn() },
+  router: { replace: vi.fn(), back: vi.fn(), push: vi.fn() },
   profile: vi.fn(),
   logout: vi.fn(),
   toast: vi.fn(),
@@ -129,7 +130,15 @@ it("treats logout 401 as success without a failure toast", async () => {
   expect(mocks.router.replace).not.toHaveBeenCalledWith("/login");
   expect(mocks.toast).not.toHaveBeenCalled();
 });
-it.each(["저장한 장소", "이용약관", "개인정보처리방침", "탈퇴하기"])(
+it("'저장한 장소'는 토스트 없이 저장한 장소 화면을 내 정보에서 연 것으로 연다", async () => {
+  savedViewState.clear();
+  render(<MyPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "저장한 장소" }));
+  expect(mocks.router.push).toHaveBeenCalledWith("/?view=saved");
+  expect(savedViewState.entry()).toEqual({ from: "my" });
+  expect(mocks.toast).not.toHaveBeenCalled();
+});
+it.each(["이용약관", "개인정보처리방침", "탈퇴하기"])(
   "shows preparation toast for %s",
   async (name) => {
     render(<MyPage />);
