@@ -21,6 +21,7 @@ import kr.co.fitdining.api.place.dto.PlaceSummary;
 import kr.co.fitdining.api.place.dto.PlaceSummary.CategoryGroup;
 import kr.co.fitdining.api.place.dto.PlaceSummary.Station;
 import kr.co.fitdining.api.review.dto.ReviewCreateRequest;
+import kr.co.fitdining.api.review.report.ReviewReportRepository;
 import kr.co.fitdining.api.review.store.ReviewRepository;
 import kr.co.fitdining.api.review.tag.ReasonTag;
 import kr.co.fitdining.api.review.tag.ReasonTagRepository;
@@ -64,7 +65,7 @@ class ReviewServiceTest {
 		private final PlaceService places = mock(PlaceService.class);
 		private final ReasonTagRepository tags = mock(ReasonTagRepository.class);
 		private final ReviewService service = new ReviewService(reviews, users, places, tags,
-				Optional.of(Clock.fixed(Instant.parse("2026-10-21T03:00:00Z"), ZoneOffset.UTC)));
+				mock(ReviewReportRepository.class), Optional.of(Clock.fixed(Instant.parse("2026-10-21T03:00:00Z"), ZoneOffset.UTC)));
 
 		@Test
 		@DisplayName("등록_저장중작성자FK위반이면_401이다")

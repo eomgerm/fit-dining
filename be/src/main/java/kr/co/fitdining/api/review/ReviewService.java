@@ -22,12 +22,17 @@ import kr.co.fitdining.api.review.dto.ReviewDetailResponse;
 import kr.co.fitdining.api.review.dto.ReviewFormResponse;
 import kr.co.fitdining.api.review.dto.ReviewItem;
 import kr.co.fitdining.api.review.dto.ReviewListResponse;
+import kr.co.fitdining.api.review.dto.ReviewReportRequest;
 import kr.co.fitdining.api.review.dto.ReviewUpdateRequest;
 import kr.co.fitdining.api.review.dto.TagView;
+import kr.co.fitdining.api.review.exception.DuplicateReportException;
 import kr.co.fitdining.api.review.exception.DuplicateReviewException;
 import kr.co.fitdining.api.review.exception.InvalidVisitDateException;
+import kr.co.fitdining.api.review.exception.OwnReviewReportException;
 import kr.co.fitdining.api.review.exception.ReviewForbiddenException;
 import kr.co.fitdining.api.review.exception.ReviewNotFoundException;
+import kr.co.fitdining.api.review.report.ReviewReport;
+import kr.co.fitdining.api.review.report.ReviewReportRepository;
 import kr.co.fitdining.api.review.store.Review;
 import kr.co.fitdining.api.review.store.ReviewCursor;
 import kr.co.fitdining.api.review.store.ReviewRepository;
@@ -41,7 +46,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 본문 정규화, 작성 시각과 방문일, 중복 금지, 커서 페이지 계산, 작성 화면 데이터, 내 리뷰 수정·삭제를 맡는다.
+ * 본문 정규화, 작성 시각과 방문일, 중복 금지, 커서 페이지 계산, 작성 화면 데이터, 내 리뷰 수정·삭제, 신고를 맡는다.
  * 등록과 작성 화면 데이터는 장소 기능으로 장소를 확인한다(D-37).
  */
 @Service
@@ -53,6 +58,11 @@ public class ReviewService {
 	static final String DUPLICATE_VISIT_CONSTRAINT = "uk_reviews_user_id_place_id_visit_date";
 
 	static final String AUTHOR_CONSTRAINT = "fk_reviews_user_id";
+
+	/** 같은 사람이 같은 리뷰를 두 번 신고하지 못하게 하는 유니크 제약(V8, D-11). */
+	static final String DUPLICATE_REPORT_CONSTRAINT = "uk_review_reports_review_id_reporter_id";
+
+	static final String REPORTER_CONSTRAINT = "fk_review_reports_reporter_id";
 
 	private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
 
@@ -68,14 +78,16 @@ public class ReviewService {
 	private final AuthUserRepository users;
 	private final PlaceService places;
 	private final ReasonTagRepository tags;
+	private final ReviewReportRepository reports;
 	private final Clock clock;
 
 	public ReviewService(ReviewRepository reviews, AuthUserRepository users, PlaceService places,
-			ReasonTagRepository tags, Optional<Clock> clock) {
+			ReasonTagRepository tags, ReviewReportRepository reports, Optional<Clock> clock) {
 		this.reviews = reviews;
 		this.users = users;
 		this.places = places;
 		this.tags = tags;
+		this.reports = reports;
 		this.clock = clock.orElseGet(() -> Clock.system(SEOUL));
 	}
 
@@ -176,6 +188,36 @@ public class ReviewService {
 	public void delete(long reviewId, String userId) {
 		requireActiveUser(userId);
 		lockOwn(reviewId, userId).delete(now());
+	}
+
+	/**
+	 * 남의 리뷰를 신고한다. 신고만으로 숨기지 않는다(D-11). 저장 전에 신고했는지 따로 보지 않고 유니크 제약으로 막아,
+	 * 동시에 두 번 보내도 한 건만 남는다.
+	 *
+	 * @param request 신고 요청. 형식 검증은 컨트롤러가 인증 뒤에 한다.
+	 * @throws AuthFailure 탈퇴했거나 없는 사용자일 때(401)
+	 * @throws ReviewNotFoundException 없거나 삭제한 리뷰일 때
+	 * @throws OwnReviewReportException 내 리뷰일 때
+	 * @throws DuplicateReportException 이미 신고한 리뷰일 때
+	 */
+	public void report(long reviewId, String reporterId, ReviewReportRequest request) {
+		requireActiveUser(reporterId);
+		Review review = reviews.findByReviewIdAndDeletedAtIsNull(reviewId).orElseThrow(ReviewNotFoundException::new);
+		if (review.getUserId().equals(reporterId)) {
+			throw new OwnReviewReportException();
+		}
+		try {
+			reports.saveAndFlush(new ReviewReport(reviewId, reporterId, request.reason(), normalize(request.detail()),
+					now()));
+		} catch (DataIntegrityViolationException e) {
+			if (violates(e, DUPLICATE_REPORT_CONSTRAINT)) {
+				throw new DuplicateReportException();
+			}
+			if (violates(e, REPORTER_CONSTRAINT)) {
+				throw new AuthFailure("로그인이 필요합니다.");
+			}
+			throw e;
+		}
 	}
 
 	/** 본인 리뷰만 잠가 읽는다. 못 찾았을 때만 한 번 더 읽어 없는 리뷰(404)와 남의 리뷰(403)를 나눈다(D-44). */

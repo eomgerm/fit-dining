@@ -35,13 +35,17 @@ import kr.co.fitdining.api.review.dto.ReviewDetailResponse;
 import kr.co.fitdining.api.review.dto.ReviewFormResponse;
 import kr.co.fitdining.api.review.dto.ReviewItem;
 import kr.co.fitdining.api.review.dto.ReviewListResponse;
+import kr.co.fitdining.api.review.dto.ReviewReportRequest;
 import kr.co.fitdining.api.review.dto.ReviewUpdateRequest;
 import kr.co.fitdining.api.review.dto.TagView;
+import kr.co.fitdining.api.review.exception.DuplicateReportException;
 import kr.co.fitdining.api.review.exception.DuplicateReviewException;
 import kr.co.fitdining.api.review.exception.InvalidReasonTagsException;
 import kr.co.fitdining.api.review.exception.InvalidVisitDateException;
+import kr.co.fitdining.api.review.exception.OwnReviewReportException;
 import kr.co.fitdining.api.review.exception.ReviewForbiddenException;
 import kr.co.fitdining.api.review.exception.ReviewNotFoundException;
+import kr.co.fitdining.api.review.report.ReportReason;
 import kr.co.fitdining.api.review.store.InvalidReviewCursorException;
 import kr.co.fitdining.api.review.tag.ReasonTag;
 import org.junit.jupiter.api.BeforeEach;
@@ -562,6 +566,113 @@ class ReviewControllerTest {
 				.content(body));
 	}
 
+	private static MockHttpServletRequestBuilder report(Object reviewId, String body) {
+		return withToken(post("/api/v1/reviews/{reviewId}/reports", reviewId).contentType(MediaType.APPLICATION_JSON)
+				.content(body));
+	}
+
+	@Nested
+	@DisplayName("신고")
+	class Report {
+
+		@Test
+		@DisplayName("신고_사유를고르면_201이고신고자와함께넘긴다")
+		void report_reason_returnsCreated() throws Exception {
+			mockMvc.perform(report(7, "{\"reason\":\"AD_SPAM\"}"))
+					.andExpect(status().isCreated())
+					.andExpect(content().string(""));
+
+			verify(reviewService).report(7L, USER_ID, new ReviewReportRequest(ReportReason.AD_SPAM, null));
+		}
+
+		@Test
+		@DisplayName("신고_기타에100자설명이면_201이다")
+		void report_otherWithMaxDetail_returnsCreated() throws Exception {
+			mockMvc.perform(report(7, "{\"reason\":\"OTHER\",\"detail\":\"" + "가".repeat(100) + "\"}"))
+					.andExpect(status().isCreated());
+
+			verify(reviewService).report(7L, USER_ID, new ReviewReportRequest(ReportReason.OTHER, "가".repeat(100)));
+		}
+
+		@Test
+		@DisplayName("신고_설명이100자를넘으면_400이고신고하지않는다")
+		void report_tooLongDetail_returnsBadRequest() throws Exception {
+			expectProblem(report(7, "{\"reason\":\"OTHER\",\"detail\":\"" + "가".repeat(101) + "\"}"), 400);
+
+			verify(reviewService, never()).report(anyLong(), anyString(), any());
+		}
+
+		@ParameterizedTest
+		@EnumSource(value = ReportReason.class, names = "OTHER", mode = EnumSource.Mode.EXCLUDE)
+		@DisplayName("신고_기타가아닌사유에설명이있으면_400이다")
+		void report_detailWithoutOther_returnsBadRequest(ReportReason reason) throws Exception {
+			expectProblem(report(7, "{\"reason\":\"" + reason + "\",\"detail\":\"설명\"}"), 400);
+
+			verify(reviewService, never()).report(anyLong(), anyString(), any());
+		}
+
+		@Test
+		@DisplayName("신고_기타가아닌사유에공백설명이면_설명없음으로보고201이다")
+		void report_blankDetailWithoutOther_returnsCreated() throws Exception {
+			mockMvc.perform(report(7, "{\"reason\":\"ABUSE\",\"detail\":\" \"}")).andExpect(status().isCreated());
+		}
+
+		@ParameterizedTest
+		@ValueSource(strings = {"{}", "{\"reason\":null}", "{\"detail\":\"설명\"}"})
+		@DisplayName("신고_사유가없으면_400이다")
+		void report_missingReason_returnsBadRequest(String body) throws Exception {
+			expectProblem(report(7, body), 400);
+		}
+
+		@ParameterizedTest
+		@ValueSource(strings = {"{\"reason\":\"SPAM\"}", "{\"reason\":\"AD_SPAM\",\"reviewId\":1}",
+				"{\"reason\":\"AD_SPAM\",\"detailAllowed\":true}"})
+		@DisplayName("신고_모르는사유나정의되지않은속성이면_400이다")
+		void report_unknownReasonOrProperty_returnsBadRequest(String body) throws Exception {
+			expectProblem(report(7, body), 400);
+		}
+
+		@Test
+		@DisplayName("신고_Authorization헤더가없으면_본문검증전에401이다")
+		void report_noAuthorization_returnsUnauthorizedBeforeValidation() throws Exception {
+			expectProblem(post("/api/v1/reviews/{reviewId}/reports", 7).contentType(MediaType.APPLICATION_JSON)
+					.content("{}"), 401);
+
+			verify(reviewService, never()).report(anyLong(), anyString(), any());
+		}
+
+		@Test
+		@DisplayName("신고_내리뷰면_400이다")
+		void report_ownReview_returnsBadRequest() throws Exception {
+			doThrow(new OwnReviewReportException()).when(reviewService).report(eq(7L), eq(USER_ID), any());
+
+			expectProblem(report(7, "{\"reason\":\"AD_SPAM\"}"), 400);
+		}
+
+		@Test
+		@DisplayName("신고_이미신고했으면_409다")
+		void report_alreadyReported_returnsConflict() throws Exception {
+			doThrow(new DuplicateReportException()).when(reviewService).report(eq(7L), eq(USER_ID), any());
+
+			expectProblem(report(7, "{\"reason\":\"AD_SPAM\"}"), 409);
+		}
+
+		@Test
+		@DisplayName("신고_없거나삭제한리뷰면_404다")
+		void report_missingReview_returnsNotFound() throws Exception {
+			doThrow(new ReviewNotFoundException()).when(reviewService).report(eq(9L), eq(USER_ID), any());
+
+			expectProblem(report(9, "{\"reason\":\"AD_SPAM\"}"), 404);
+		}
+
+		@ParameterizedTest
+		@ValueSource(strings = {"0", "-1", "abc", "9223372036854775808"})
+		@DisplayName("신고_reviewId가양의정수가아니면_400이다")
+		void report_invalidReviewId_returnsBadRequest(String reviewId) throws Exception {
+			expectProblem(report(reviewId, "{\"reason\":\"AD_SPAM\"}"), 400);
+		}
+	}
+
 	@Nested
 	@DisplayName("응답 형태")
 	class ResponseShape {
@@ -625,6 +736,15 @@ class ReviewControllerTest {
 		}
 
 		@Test
+		@DisplayName("신고_정상요청후_로그에설명과토큰이없다")
+		void report_success_doesNotLogDetailOrToken(CapturedOutput output) throws Exception {
+			mockMvc.perform(report(7, "{\"reason\":\"OTHER\",\"detail\":\"" + LOG_SECRET + "\"}"))
+					.andExpect(status().isCreated());
+
+			assertThat(output.getAll()).doesNotContain(LOG_SECRET).doesNotContain(TOKEN);
+		}
+
+		@Test
 		@DisplayName("등록_인증실패로401이나도_로그에토큰이없다")
 		void create_unauthorized_doesNotLogToken(CapturedOutput output) throws Exception {
 			when(auth.authenticate(LOG_SECRET)).thenThrow(new AuthFailure("인증을 확인해주세요."));
@@ -637,7 +757,7 @@ class ReviewControllerTest {
 
 		@ParameterizedTest(name = "{0}")
 		@MethodSource("kr.co.fitdining.api.review.ReviewControllerTest#badRequestsWithSecret")
-		@DisplayName("등록목록수정_잘못된요청으로400이나도_로그에입력값이없다")
+		@DisplayName("등록수정신고_잘못된요청으로400이나도_로그에입력값이없다")
 		void request_badRequest_doesNotLogInput(String scenario, MockHttpServletRequestBuilder request,
 				CapturedOutput output) throws Exception {
 			mockMvc.perform(request).andExpect(status().isBadRequest());
@@ -657,7 +777,11 @@ class ReviewControllerTest {
 				Arguments.of("문자열 자리의 객체", create(1, "{\"description\":{\"text\":\"" + LOG_SECRET + "\"}}")),
 				Arguments.of("깨진 JSON", create(1, "{\"description\":\"" + LOG_SECRET + "\"")),
 				Arguments.of("수정 501자 본문", update(7, "{\"description\":\"" + LOG_SECRET + "가".repeat(501) + "\"}")),
-				Arguments.of("수정 다른 필드", update(7, "{\"description\":\"" + LOG_SECRET + "\",\"spentPerPerson\":1}")));
+				Arguments.of("수정 다른 필드", update(7, "{\"description\":\"" + LOG_SECRET + "\",\"spentPerPerson\":1}")),
+				Arguments.of("신고 101자 설명", report(7, "{\"reason\":\"OTHER\",\"detail\":\"" + LOG_SECRET
+						+ "가".repeat(101) + "\"}")),
+				Arguments.of("신고 기타가 아닌 사유의 설명", report(7, "{\"reason\":\"ABUSE\",\"detail\":\"" + LOG_SECRET
+						+ "\"}")));
 	}
 
 	private void expectProblem(MockHttpServletRequestBuilder request, int status) throws Exception {

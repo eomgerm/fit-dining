@@ -12,7 +12,9 @@ import kr.co.fitdining.api.review.dto.ReviewCreateResponse;
 import kr.co.fitdining.api.review.dto.ReviewDetailResponse;
 import kr.co.fitdining.api.review.dto.ReviewFormResponse;
 import kr.co.fitdining.api.review.dto.ReviewListResponse;
+import kr.co.fitdining.api.review.dto.ReviewReportRequest;
 import kr.co.fitdining.api.review.dto.ReviewUpdateRequest;
+import kr.co.fitdining.api.review.exception.InvalidReportException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.http.HttpHeaders;
@@ -30,7 +32,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 장소별 리뷰 목록·등록·작성 화면 데이터와 내 리뷰 조회·수정·삭제 API. 요청 형식만 검증하고 처리는
+ * 장소별 리뷰 목록·등록·작성 화면 데이터, 내 리뷰 조회·수정·삭제, 신고 API. 요청 형식만 검증하고 처리는
  * {@link ReviewService}에 맡긴다.
  * 오류는 {@code ReviewExceptionHandler}가 ProblemDetail로 바꾼다.
  *
@@ -136,6 +138,26 @@ public class ReviewController {
 	public void delete(@PathVariable @Positive long reviewId,
 			@RequestHeader(name = HttpHeaders.AUTHORIZATION, required = false) String authorization) {
 		reviewService.delete(reviewId, userId(authorization));
+	}
+
+	/**
+	 * 남의 리뷰를 신고한다(D-11). 신고만으로 리뷰를 숨기지 않는다.
+	 *
+	 * <p>오류: 본문을 읽을 수 없거나(모르는 사유 포함), 정의되지 않은 속성이 있거나, {@code reviewId}가 양의 정수가
+	 * 아니면 인증보다 먼저 400이다. 그다음 401(인증), 400(사유 없음, 설명 100자 초과, "기타"가 아닌데 설명이 있음),
+	 * 401(탈퇴한 사용자), 404(없거나 삭제한 리뷰), 400(내 리뷰), 409(이미 신고함) 순서로 확인한다.
+	 */
+	@PostMapping("/reviews/{reviewId}/reports")
+	@ResponseStatus(HttpStatus.CREATED)
+	public void report(@PathVariable @Positive long reviewId,
+			@RequestHeader(name = HttpHeaders.AUTHORIZATION, required = false) String authorization,
+			@RequestBody ReviewReportRequest request) {
+		String userId = userId(authorization);
+		validate(request);
+		if (!request.detailAllowed()) {
+			throw new InvalidReportException();
+		}
+		reviewService.report(reviewId, userId, request);
 	}
 
 	/** {@code @Valid}는 인증보다 먼저 돌아 로그인하지 않은 요청이 400이 되므로 인증 뒤에 직접 검증한다(D-40). */

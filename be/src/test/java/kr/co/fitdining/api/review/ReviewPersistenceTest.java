@@ -40,13 +40,17 @@ import kr.co.fitdining.api.review.dto.ReviewDetailResponse;
 import kr.co.fitdining.api.review.dto.ReviewFormResponse;
 import kr.co.fitdining.api.review.dto.ReviewItem;
 import kr.co.fitdining.api.review.dto.ReviewListResponse;
+import kr.co.fitdining.api.review.dto.ReviewReportRequest;
 import kr.co.fitdining.api.review.dto.ReviewUpdateRequest;
 import kr.co.fitdining.api.review.dto.TagView;
+import kr.co.fitdining.api.review.exception.DuplicateReportException;
 import kr.co.fitdining.api.review.exception.DuplicateReviewException;
 import kr.co.fitdining.api.review.exception.InvalidReasonTagsException;
 import kr.co.fitdining.api.review.exception.InvalidVisitDateException;
+import kr.co.fitdining.api.review.exception.OwnReviewReportException;
 import kr.co.fitdining.api.review.exception.ReviewForbiddenException;
 import kr.co.fitdining.api.review.exception.ReviewNotFoundException;
+import kr.co.fitdining.api.review.report.ReportReason;
 import kr.co.fitdining.api.review.store.ReviewRepository;
 import kr.co.fitdining.api.review.tag.ReasonTag;
 import kr.co.fitdining.api.support.PostgresTestSupport;
@@ -167,6 +171,7 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 	@AfterEach
 	void cleanUp() {
 		JdbcTemplate app = new JdbcTemplate(appSource());
+		app.update("delete from review_reports");
 		app.update("delete from review_reason_tags");
 		app.update("delete from reviews");
 		app.update("delete from auth_refresh_tokens where user_id like ?", USER_PREFIX + "%");
@@ -880,6 +885,138 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 	}
 
 	@Nested
+	@DisplayName("신고")
+	class Report {
+
+		private static final String SELECT = "select reporter_id, reason, detail, created_at from review_reports";
+
+		private long write(String user) {
+			return service.create(1, user, body("신고받을 리뷰")).reviewId();
+		}
+
+		private static ReviewReportRequest reason(ReportReason reason) {
+			return new ReviewReportRequest(reason, null);
+		}
+
+		@Test
+		@DisplayName("신고_남의리뷰면_사유와설명과신고자와시각을저장한다")
+		void report_othersReview_savesReasonDetailReporterAndTime() {
+			List<String> users = createUsers(2);
+			long id = write(users.get(0));
+
+			service.report(id, users.get(1), new ReviewReportRequest(ReportReason.OTHER, "가게와 상관없는 홍보예요"));
+
+			Map<String, Object> row = jdbc.queryForMap(SELECT);
+			assertThat(row).containsEntry("reporter_id", users.get(1)).containsEntry("reason", "OTHER")
+					.containsEntry("detail", "가게와 상관없는 홍보예요");
+			assertThat(((java.sql.Timestamp) row.get("created_at")).toInstant())
+					.isEqualTo(Instant.parse("2026-10-21T03:00:00.123456Z"));
+		}
+
+		@Test
+		@DisplayName("신고_공백뿐인설명은_설명없음으로저장한다")
+		void report_blankDetail_savesWithoutDetail() {
+			List<String> users = createUsers(2);
+			long id = write(users.get(0));
+
+			service.report(id, users.get(1), new ReviewReportRequest(ReportReason.OTHER, " \n"));
+
+			assertThat(jdbc.queryForMap(SELECT).get("detail")).isNull();
+		}
+
+		@Test
+		@DisplayName("신고_같은사람이두번하면_409이고한건만남는다")
+		void report_twice_conflictsAndKeepsFirst() {
+			List<String> users = createUsers(2);
+			long id = write(users.get(0));
+			service.report(id, users.get(1), reason(ReportReason.AD_SPAM));
+
+			assertThatThrownBy(() -> service.report(id, users.get(1), reason(ReportReason.ABUSE)))
+					.isInstanceOf(DuplicateReportException.class);
+			assertThat(jdbc.queryForList("select reason from review_reports", String.class)).containsExactly("AD_SPAM");
+		}
+
+		@Test
+		@DisplayName("신고_다른사람끼리는_같은리뷰를각자신고할수있다")
+		void report_differentReporters_savesEach() {
+			List<String> users = createUsers(3);
+			long id = write(users.get(0));
+
+			service.report(id, users.get(1), reason(ReportReason.AD_SPAM));
+			service.report(id, users.get(2), reason(ReportReason.UNRELATED));
+
+			assertThat(count("review_reports")).isEqualTo(2);
+		}
+
+		@Test
+		@DisplayName("신고_내리뷰면_400이고저장하지않는다")
+		void report_ownReview_rejectedWithoutSaving() {
+			String user = createUsers(1).getFirst();
+			long id = write(user);
+
+			assertThatThrownBy(() -> service.report(id, user, reason(ReportReason.AD_SPAM)))
+					.isInstanceOf(OwnReviewReportException.class);
+			assertThat(count("review_reports")).isZero();
+		}
+
+		@Test
+		@DisplayName("신고_지운리뷰면_404다")
+		void report_deletedReview_notFound() {
+			List<String> users = createUsers(2);
+			long id = write(users.get(0));
+			service.delete(id, users.get(0));
+
+			assertThatThrownBy(() -> service.report(id, users.get(1), reason(ReportReason.AD_SPAM)))
+					.isInstanceOf(ReviewNotFoundException.class);
+		}
+
+		@Test
+		@DisplayName("신고_없는리뷰면_404다")
+		void report_missingReview_notFound() {
+			String user = createUsers(1).getFirst();
+
+			assertThatThrownBy(() -> service.report(Long.MAX_VALUE, user, reason(ReportReason.AD_SPAM)))
+					.isInstanceOf(ReviewNotFoundException.class);
+		}
+
+		@Test
+		@DisplayName("신고_탈퇴한사용자면_401이고저장하지않는다")
+		void report_withdrawnReporter_unauthorized() {
+			List<String> users = createUsers(2);
+			long id = write(users.get(0));
+			withdrawAccount(users.get(1));
+
+			assertThatThrownBy(() -> service.report(id, users.get(1), reason(ReportReason.AD_SPAM)))
+					.isInstanceOf(AuthFailure.class);
+			assertThat(count("review_reports")).isZero();
+		}
+
+		@Test
+		@DisplayName("신고_신고해도_리뷰는목록과리뷰수에그대로있다")
+		void report_reported_staysInList() {
+			List<String> users = createUsers(2);
+			long id = write(users.get(0));
+
+			service.report(id, users.get(1), reason(ReportReason.ABUSE));
+
+			ReviewListResponse page = service.list(1, null, null);
+			assertThat(page.totalCount()).isEqualTo(1);
+			assertThat(page.items()).extracting(ReviewItem::reviewId).containsExactly(id);
+		}
+
+		@Test
+		@DisplayName("신고테이블_기타가아닌사유에설명이있으면_제약으로거부한다")
+		void reviewReports_detailWithoutOther_rejectedByConstraint() {
+			List<String> users = createUsers(2);
+			long id = write(users.get(0));
+
+			assertThatThrownBy(() -> jdbc.update("insert into review_reports (review_id, reporter_id, reason, detail)"
+					+ " values (?, ?, 'AD_SPAM', '설명')", id, users.get(1)))
+					.hasMessageContaining("ck_review_reports_detail");
+		}
+	}
+
+	@Nested
 	@DisplayName("회원 탈퇴")
 	class Withdrawal {
 
@@ -1133,6 +1270,30 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 
 			assertThat(send("DELETE", review.path(), review.other(), null).statusCode()).isEqualTo(403);
 			assertThat(firstPage().get("totalCount").asInt()).isEqualTo(1);
+		}
+
+		@Test
+		@DisplayName("신고_남의토큰으로_201이고같은사람의두번째는409다")
+		void report_othersToken_createdThenConflict() throws Exception {
+			Written review = writeOverHttp();
+			String body = "{\"reason\":\"OTHER\",\"detail\":\"신고 설명\"}";
+
+			HttpResponse<String> first = send("POST", review.path() + "/reports", review.other(), body);
+			HttpResponse<String> second = send("POST", review.path() + "/reports", review.other(), body);
+
+			assertThat(first.statusCode()).isEqualTo(201);
+			assertThat(first.body()).isEmpty();
+			assertThat(second.statusCode()).isEqualTo(409);
+			assertThat(count("review_reports")).isEqualTo(1);
+		}
+
+		@Test
+		@DisplayName("신고_내토큰이면_400이다")
+		void report_ownToken_badRequest() throws Exception {
+			Written review = writeOverHttp();
+
+			assertThat(send("POST", review.path() + "/reports", review.mine(), "{\"reason\":\"AD_SPAM\"}").statusCode())
+					.isEqualTo(400);
 		}
 
 		@Test

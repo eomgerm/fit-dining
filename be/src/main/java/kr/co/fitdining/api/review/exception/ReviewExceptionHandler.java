@@ -33,7 +33,8 @@ public class ReviewExceptionHandler {
 			ConstraintViolationException.class,
 			InvalidReviewCursorException.class,
 			InvalidVisitDateException.class,
-			InvalidReasonTagsException.class
+			InvalidReasonTagsException.class,
+			InvalidReportException.class
 	})
 	public ProblemDetail handleBadRequest(Exception e) {
 		log.info("Rejected review request: reason={}", e.getClass().getSimpleName());
@@ -80,6 +81,17 @@ public class ReviewExceptionHandler {
 	public ProblemDetail handleForbidden() {
 		log.info("Rejected review request: reason=ReviewForbiddenException");
 		return ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, "내 리뷰만 변경할 수 있어요.");
+	}
+
+	@ExceptionHandler(OwnReviewReportException.class)
+	public ProblemDetail handleOwnReviewReport() {
+		log.info("Rejected review request: reason=OwnReviewReportException");
+		return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "내 리뷰는 신고할 수 없어요.");
+	}
+
+	@ExceptionHandler(DuplicateReportException.class)
+	public ProblemDetail handleDuplicateReport() {
+		return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "이미 신고한 리뷰예요.");
 	}
 
 }
