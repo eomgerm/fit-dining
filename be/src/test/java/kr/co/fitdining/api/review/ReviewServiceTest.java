@@ -21,6 +21,7 @@ import kr.co.fitdining.api.place.dto.PlaceSummary;
 import kr.co.fitdining.api.place.dto.PlaceSummary.CategoryGroup;
 import kr.co.fitdining.api.place.dto.PlaceSummary.Station;
 import kr.co.fitdining.api.review.dto.ReviewCreateRequest;
+import kr.co.fitdining.api.review.photo.ReviewPhotos;
 import kr.co.fitdining.api.review.report.ReviewReportRepository;
 import kr.co.fitdining.api.review.store.ReviewRepository;
 import kr.co.fitdining.api.review.tag.ReasonTag;
@@ -65,7 +66,7 @@ class ReviewServiceTest {
 		private final PlaceService places = mock(PlaceService.class);
 		private final ReasonTagRepository tags = mock(ReasonTagRepository.class);
 		private final ReviewService service = new ReviewService(reviews, users, places, tags,
-				mock(ReviewReportRepository.class), Optional.of(Clock.fixed(Instant.parse("2026-10-21T03:00:00Z"), ZoneOffset.UTC)));
+				mock(ReviewReportRepository.class), mock(ReviewPhotos.class), Optional.of(Clock.fixed(Instant.parse("2026-10-21T03:00:00Z"), ZoneOffset.UTC)));
 
 		@Test
 		@DisplayName("등록_저장중작성자FK위반이면_401이다")
@@ -80,7 +81,7 @@ class ReviewServiceTest {
 			when(reviews.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("x",
 					new ConstraintViolationException("fk", new SQLException(), ReviewService.AUTHOR_CONSTRAINT)));
 			ReviewCreateRequest request = new ReviewCreateRequest(LocalDate.of(2026, 10, 21), List.of("QUIET_GOOD"),
-					false, null, null);
+					false, null, null, null);
 
 			assertThatThrownBy(() -> service.create(1, "user-1", request))
 					.isInstanceOfSatisfying(AuthFailure.class, failure -> assertThat(failure.status()).isEqualTo(401));

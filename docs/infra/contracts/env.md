@@ -44,6 +44,7 @@
 | `OPENSEARCH_URL` | app | O | `http://opensearch:9200` |
 | `OPENSEARCH_INDEX_PREFIX` | app | O | `dev-` 또는 `prod-` |
 | `S3_ENDPOINT` | app | O | Garage S3 API. 서버는 `http://garage:3900` |
+| `S3_PUBLIC_ENDPOINT` | app | X | 브라우저가 리뷰 사진을 올리는 출처. BE가 사진 업로드 주소(presigned PUT)를 이 Host로 서명하고 같은 출처 상대 경로(`/fit-<env>-photos/...`)로 돌려준다. Caddy가 Host를 그대로 넘기므로 `https://<DEV_HOST>` 또는 `https://<PROD_HOST>`이고 끝에 `/`를 붙이지 않는다. 없으면 사진 없는 리뷰만 쓸 수 있고 사진 업로드는 503이다(리뷰 D-45) |
 | `S3_REGION` | app | O | `garage` |
 | `S3_BUCKET` | app, local | O | `fit-dev-photos` 또는 `fit-prod-photos` |
 | `S3_ACCESS_KEY` | app, local | O | 환경 전용 키 |

@@ -42,6 +42,12 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
 			WHERE rt.review_id IN (:reviewIds)
 			ORDER BY rt.review_id, t.sentiment = 'BAD', t.sort_order""";
 
+	/** 목록 페이지 리뷰들의 사진. 리뷰마다 화면 순서대로다. */
+	String REVIEW_PHOTOS = """
+			SELECT review_id AS "reviewId", photo_id AS "photoId" FROM review_photos
+			WHERE review_id IN (:reviewIds)
+			ORDER BY review_id, sort_order""";
+
 	String REVIEWED_DATES = """
 			SELECT visit_date FROM reviews
 			WHERE user_id = :userId AND place_id = :placeId AND deleted_at IS NULL AND visit_date >= :from
@@ -79,6 +85,13 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
 	 */
 	@Query(value = REVIEW_TAGS, nativeQuery = true)
 	List<ReviewTagRow> findTags(@Param("reviewIds") Collection<Long> reviewIds, @Param("category") String category);
+
+	/**
+	 * @param reviewIds 목록 페이지의 리뷰 id
+	 * @return 리뷰별 사진. 페이지 크기와 상관없이 한 번에 읽는다.
+	 */
+	@Query(value = REVIEW_PHOTOS, nativeQuery = true)
+	List<ReviewPhotoRow> findPhotos(@Param("reviewIds") Collection<Long> reviewIds);
 
 	@Query(value = REVIEWED_DATES, nativeQuery = true)
 	List<LocalDate> findReviewedDates(@Param("userId") String userId, @Param("placeId") long placeId,

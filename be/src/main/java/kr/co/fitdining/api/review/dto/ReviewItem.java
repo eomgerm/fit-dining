@@ -5,7 +5,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 
 /**
- * 목록의 리뷰 하나(D-24, D-42). 사진과 숨김 표시는 각 기능에서 더한다.
+ * 목록의 리뷰 하나(D-24, D-42, D-45). 숨김 표시는 운영 기능(S15P31A302-56)에서 더한다.
  *
  * @param reviewId 리뷰 id
  * @param createdAt 작성 시각. Asia/Seoul 오프셋이다. 화면은 방문일을 보이지만 직전 FE를 위해 남긴다.
@@ -14,6 +14,7 @@ import java.util.List;
  * @param revisitIntent 재방문 의사
  * @param tags 이유 태그. 좋았어요가 먼저다.
  * @param description 본문. 없으면 생략한다.
+ * @param photos 사진. 화면 순서대로이고 없으면 빈 목록이다(D-45).
  * @param mine 조회한 사용자의 리뷰인지. 로그인 없이 조회하면 false다.
  */
 public record ReviewItem(
@@ -24,6 +25,7 @@ public record ReviewItem(
 		Boolean revisitIntent,
 		List<TagView> tags,
 		String description,
+		List<PhotoView> photos,
 		Boolean mine
 ) {
 }

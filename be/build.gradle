@@ -17,9 +17,21 @@ repositories {
 	mavenCentral()
 }
 
+dependencyManagement {
+	imports {
+		mavenBom 'software.amazon.awssdk:bom:2.56.0'
+	}
+}
+
 dependencies {
 	testImplementation 'org.testcontainers:testcontainers-postgresql:2.0.5'
 	testImplementation 'org.testcontainers:testcontainers-junit-jupiter:2.0.5'
+	// 리뷰 사진(Garage S3 API). 동기 호출만 쓰므로 Apache·Netty 클라이언트 대신 JDK 클라이언트를 쓴다
+	implementation('software.amazon.awssdk:s3') {
+		exclude group: 'software.amazon.awssdk', module: 'apache-client'
+		exclude group: 'software.amazon.awssdk', module: 'netty-nio-client'
+	}
+	implementation 'software.amazon.awssdk:url-connection-client'
 	implementation 'org.springframework.security:spring-security-oauth2-jose'
 	implementation 'org.springframework.security:spring-security-crypto'
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'

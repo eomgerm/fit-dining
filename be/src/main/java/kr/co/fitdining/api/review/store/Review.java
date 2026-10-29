@@ -8,13 +8,17 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.OrderColumn;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -69,12 +73,21 @@ public class Review {
 	@Column(name = "code")
 	private Set<String> tagCodes = new LinkedHashSet<>();
 
+	/** 사진 id. 순서가 화면 순서다(D-45). */
+	@ElementCollection
+	@CollectionTable(name = "review_photos", joinColumns = @JoinColumn(name = "review_id"))
+	@OrderColumn(name = "sort_order")
+	@Column(name = "photo_id")
+	private List<UUID> photoIds = new ArrayList<>();
+
 	/**
 	 * @param description 본문. 공백뿐이면 서비스가 null로 바꿔 넘긴다.
+	 * @param photoIds 확정한 사진 id. 화면 순서대로다.
 	 * @param createdAt 작성 시각. 마이크로초로 자른 값이다.
 	 */
 	public Review(long placeId, String userId, LocalDate visitDate, Collection<String> tagCodes,
-			boolean revisitIntent, String description, Integer spentPerPerson, Instant createdAt) {
+			boolean revisitIntent, String description, Integer spentPerPerson, List<UUID> photoIds,
+			Instant createdAt) {
 		this.placeId = placeId;
 		this.userId = userId;
 		this.visitDate = visitDate;
@@ -82,6 +95,7 @@ public class Review {
 		this.revisitIntent = revisitIntent;
 		this.description = description;
 		this.spentPerPerson = spentPerPerson;
+		this.photoIds.addAll(photoIds);
 		this.createdAt = createdAt;
 		this.updatedAt = createdAt;
 	}
@@ -97,6 +111,20 @@ public class Review {
 			return;
 		}
 		this.description = description;
+		this.updatedAt = now;
+	}
+
+	/**
+	 * 사진을 바꾼다(D-45). 목록을 통째로 바꿔 끼워, 순서를 바꿀 때 행을 하나씩 고치다 사진 id 유니크 제약에 걸리지 않고
+	 * 모두 지운 뒤 다시 넣는다. 같은 목록이면 아무것도 바꾸지 않는다.
+	 *
+	 * @param photoIds 확정한 사진 id. 화면 순서대로다.
+	 */
+	public void changePhotos(List<UUID> photoIds, Instant now) {
+		if (this.photoIds.equals(photoIds)) {
+			return;
+		}
+		this.photoIds = new ArrayList<>(photoIds);
 		this.updatedAt = now;
 	}
 

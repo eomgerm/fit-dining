@@ -58,6 +58,24 @@ place:
   mock:
     enabled: ${PLACE_MOCK_ENABLED:false}
 
+review:
+  photo:
+    # BE가 부르는 Garage S3 API 주소(서버는 내부 주소)
+    endpoint: ${S3_ENDPOINT:}
+    # 브라우저가 올리는 주소의 출처. presigned URL 서명에 Host가 들어가 브라우저가 보내는 Host와 같아야 한다(D-45)
+    public-endpoint: ${S3_PUBLIC_ENDPOINT:}
+    region: ${S3_REGION:garage}
+    bucket: ${S3_BUCKET:}
+    access-key: ${S3_ACCESS_KEY:}
+    secret-key: ${S3_SECRET_KEY:}
+    path-style: ${S3_PATH_STYLE:true}
+    # Caddy가 확정 사진만 공개로 여는 같은 출처 경로(인프라 5.2절). 로컬은 APP_ENV가 없어 dev 경로를 쓰고 next dev가 넘긴다
+    read-prefix: /photos/${APP_ENV:dev}/confirmed/
+    # PRD OQ-07 제안값. 앱이 품질과 크기를 낮춰 이 안으로 맞춰 올린다(D-45)
+    max-bytes: 1048576
+    thumb-max-bytes: 102400
+    upload-ttl: PT10M
+
 auth:
   terms-version: ${AUTH_TERMS_VERSION:2026-10-23}
   simple:

@@ -12,6 +12,8 @@ import kr.co.fitdining.api.review.dto.ReviewCreateResponse;
 import kr.co.fitdining.api.review.dto.ReviewDetailResponse;
 import kr.co.fitdining.api.review.dto.ReviewFormResponse;
 import kr.co.fitdining.api.review.dto.ReviewListResponse;
+import kr.co.fitdining.api.review.dto.ReviewPhotoUploadRequest;
+import kr.co.fitdining.api.review.dto.ReviewPhotoUploadResponse;
 import kr.co.fitdining.api.review.dto.ReviewReportRequest;
 import kr.co.fitdining.api.review.dto.ReviewUpdateRequest;
 import kr.co.fitdining.api.review.exception.InvalidReportException;
@@ -32,7 +34,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 장소별 리뷰 목록·등록·작성 화면 데이터, 내 리뷰 조회·수정·삭제, 신고 API. 요청 형식만 검증하고 처리는
+ * 장소별 리뷰 목록·등록·작성 화면 데이터, 내 리뷰 조회·수정·삭제, 신고, 사진 업로드 주소 API. 요청 형식만 검증하고 처리는
  * {@link ReviewService}에 맡긴다.
  * 오류는 {@code ReviewExceptionHandler}가 ProblemDetail로 바꾼다.
  *
@@ -78,7 +80,8 @@ public class ReviewController {
 	 * <p>오류: 본문을 읽을 수 없거나 정의되지 않은 속성이 있으면 400. {@code placeId}가 양의 정수가 아니면 400.
 	 * {@code Authorization} 헤더가 없거나 토큰이 유효하지 않으면 401(만료면 {@code type}이
 	 * {@code urn:fitdining:auth:access-token-expired}). 인증 뒤 필드 형식, 방문일 범위, 태그 규칙이 틀리면 400.
-	 * 없는 장소면 404. 같은 장소에 같은 방문일로 이미 썼으면 409.
+	 * 없는 장소면 404. 사진이 있는데 사진 저장소가 없으면 503, 쓸 수 없는 사진이면 400({@code type}
+	 * {@code urn:fitdining:review:invalid-photo}). 같은 장소에 같은 방문일로 이미 썼으면 409.
 	 *
 	 * @param placeId 장소 id
 	 * @param authorization {@code Bearer <AT>}
@@ -113,11 +116,12 @@ public class ReviewController {
 	}
 
 	/**
-	 * 내 리뷰의 본문을 고친다(D-6, D-44). 등록처럼 인증한 뒤 필드 형식을 검증한다.
+	 * 내 리뷰의 본문이나 사진을 고친다(D-6, D-44, D-45). 등록처럼 인증한 뒤 필드 형식을 검증한다.
 	 *
 	 * <p>오류: 본문을 읽을 수 없거나, 다른 필드(방문일, 태그, 1인당 금액 등)가 있거나, {@code reviewId}가 양의 정수가
-	 * 아니면 인증보다 먼저 400이다. 그다음 401(인증), 400(본문이 없거나 500자 초과), 401(탈퇴한 사용자),
-	 * 404(없거나 삭제한 리뷰), 403(남의 리뷰) 순서로 확인한다.
+	 * 아니면 인증보다 먼저 400이다. 그다음 401(인증), 400(본문과 사진이 모두 없거나, 본문 500자 초과, 사진 5장 초과),
+	 * 401(탈퇴한 사용자), 404(없거나 삭제한 리뷰), 403(남의 리뷰), 503(새 사진이 있는데 사진 저장소 없음),
+	 * 400(쓸 수 없는 사진) 순서로 확인한다.
 	 */
 	@PatchMapping("/reviews/{reviewId}")
 	@ResponseStatus(HttpStatus.NO_CONTENT)
@@ -126,7 +130,25 @@ public class ReviewController {
 			@RequestBody ReviewUpdateRequest request) {
 		String userId = userId(authorization);
 		validate(request);
+		if (!request.hasChange()) {
+			throw new ConstraintViolationException("고칠 필드가 없다", Set.of());
+		}
 		reviewService.update(reviewId, userId, request);
+	}
+
+	/**
+	 * 사진 업로드 주소를 발급한다(D-9, D-45). 사진마다 1,600px 사진과 썸네일을 올릴 주소를 준다.
+	 *
+	 * <p>오류: 본문을 읽을 수 없거나 정의되지 않은 속성이 있으면 인증보다 먼저 400. 그다음 401(인증), 400(개수가 1~5
+	 * 밖), 401(탈퇴한 사용자), 503(사진 저장소 없음) 순서로 확인한다.
+	 */
+	@PostMapping("/review-photos/upload-urls")
+	public ReviewPhotoUploadResponse photoUploads(
+			@RequestHeader(name = HttpHeaders.AUTHORIZATION, required = false) String authorization,
+			@RequestBody ReviewPhotoUploadRequest request) {
+		String userId = userId(authorization);
+		validate(request);
+		return reviewService.photoUploads(userId, request.count());
 	}
 
 	/**

@@ -1,10 +1,13 @@
 package kr.co.fitdining.api.review.exception;
 
 import jakarta.validation.ConstraintViolationException;
+import java.net.URI;
 import kr.co.fitdining.api.auth.domain.AuthFailure;
 import kr.co.fitdining.api.place.exception.PlaceNotFoundException;
 import kr.co.fitdining.api.place.exception.PlaceSearchUnavailableException;
 import kr.co.fitdining.api.review.ReviewController;
+import kr.co.fitdining.api.review.photo.InvalidPhotoException;
+import kr.co.fitdining.api.review.photo.PhotoStorageUnavailableException;
 import kr.co.fitdining.api.review.store.InvalidReviewCursorException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -24,6 +27,8 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 @Slf4j
 @RestControllerAdvice(basePackageClasses = ReviewController.class)
 public class ReviewExceptionHandler {
+
+	static final URI INVALID_PHOTO_TYPE = URI.create("urn:fitdining:review:invalid-photo");
 
 	@ExceptionHandler({
 			MethodArgumentNotValidException.class,
@@ -81,6 +86,22 @@ public class ReviewExceptionHandler {
 	public ProblemDetail handleForbidden() {
 		log.info("Rejected review request: reason=ReviewForbiddenException");
 		return ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, "내 리뷰만 변경할 수 있어요.");
+	}
+
+	/** 다른 400과 구분해 앱이 "올릴 수 없는 사진"으로 안내하도록 {@code type}을 붙인다(D-45). */
+	@ExceptionHandler(InvalidPhotoException.class)
+	public ProblemDetail handleInvalidPhoto() {
+		log.info("Rejected review request: reason=InvalidPhotoException");
+		ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "올릴 수 없는 사진이 있어요.");
+		problem.setType(INVALID_PHOTO_TYPE);
+		return problem;
+	}
+
+	@ExceptionHandler(PhotoStorageUnavailableException.class)
+	public ProblemDetail handlePhotoUnavailable(PhotoStorageUnavailableException e) {
+		log.warn("Review photo storage is unavailable: reason={}",
+				e.getCause() == null ? "not configured" : e.getCause().getClass().getSimpleName());
+		return ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, "지금은 사진을 올릴 수 없어요.");
 	}
 
 	@ExceptionHandler(OwnReviewReportException.class)

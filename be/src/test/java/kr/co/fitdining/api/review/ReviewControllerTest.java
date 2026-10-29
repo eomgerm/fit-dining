@@ -2,6 +2,7 @@ package kr.co.fitdining.api.review;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -22,6 +23,8 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import kr.co.fitdining.api.auth.domain.AuthFailure;
 import kr.co.fitdining.api.auth.ports.AuthUseCases;
@@ -29,12 +32,14 @@ import kr.co.fitdining.api.place.dto.PlaceSummary.CategoryGroup;
 import kr.co.fitdining.api.place.dto.PlaceSummary.Station;
 import kr.co.fitdining.api.place.exception.PlaceNotFoundException;
 import kr.co.fitdining.api.place.exception.PlaceSearchUnavailableException;
+import kr.co.fitdining.api.review.dto.PhotoView;
 import kr.co.fitdining.api.review.dto.ReviewCreateRequest;
 import kr.co.fitdining.api.review.dto.ReviewCreateResponse;
 import kr.co.fitdining.api.review.dto.ReviewDetailResponse;
 import kr.co.fitdining.api.review.dto.ReviewFormResponse;
 import kr.co.fitdining.api.review.dto.ReviewItem;
 import kr.co.fitdining.api.review.dto.ReviewListResponse;
+import kr.co.fitdining.api.review.dto.ReviewPhotoUploadResponse;
 import kr.co.fitdining.api.review.dto.ReviewReportRequest;
 import kr.co.fitdining.api.review.dto.ReviewUpdateRequest;
 import kr.co.fitdining.api.review.dto.TagView;
@@ -45,6 +50,8 @@ import kr.co.fitdining.api.review.exception.InvalidVisitDateException;
 import kr.co.fitdining.api.review.exception.OwnReviewReportException;
 import kr.co.fitdining.api.review.exception.ReviewForbiddenException;
 import kr.co.fitdining.api.review.exception.ReviewNotFoundException;
+import kr.co.fitdining.api.review.photo.InvalidPhotoException;
+import kr.co.fitdining.api.review.photo.PhotoStorageUnavailableException;
 import kr.co.fitdining.api.review.report.ReportReason;
 import kr.co.fitdining.api.review.store.InvalidReviewCursorException;
 import kr.co.fitdining.api.review.tag.ReasonTag;
@@ -131,7 +138,7 @@ class ReviewControllerTest {
 					.andExpect(jsonPath("$.reviewId").value(7));
 
 			verify(reviewService).create(3L, USER_ID, new ReviewCreateRequest(LocalDate.of(2026, 10, 18),
-					List.of("QUIET_GOOD", "SHORT_WAIT_BAD"), true, "분위기가 좋았어요", 15000));
+					List.of("QUIET_GOOD", "SHORT_WAIT_BAD"), true, "분위기가 좋았어요", 15000, null));
 		}
 
 		@Test
@@ -453,7 +460,7 @@ class ReviewControllerTest {
 		@DisplayName("조회_내리뷰면_수정화면필드만돌려준다")
 		void detail_own_returnsEditableFieldsOnly() throws Exception {
 			when(reviewService.detail(7L, USER_ID)).thenReturn(new ReviewDetailResponse(7L, 3L, "고칠 본문",
-					new ReviewDetailResponse.Limits(500, 5)));
+					List.of(), new ReviewDetailResponse.Limits(500, 5)));
 
 			String body = mockMvc.perform(withToken(get("/api/v1/reviews/{reviewId}", 7)))
 					.andExpect(status().isOk())
@@ -464,21 +471,21 @@ class ReviewControllerTest {
 					.andReturn().getResponse().getContentAsString();
 
 			assertThat(Set.copyOf(jsonMapper.readTree(body).propertyNames()))
-					.isEqualTo(Set.of("reviewId", "placeId", "description", "limits"));
+					.isEqualTo(Set.of("reviewId", "placeId", "description", "photos", "limits"));
 		}
 
 		@Test
 		@DisplayName("조회_본문없는리뷰면_description키를생략한다")
 		void detail_noDescription_omitsDescription() throws Exception {
 			when(reviewService.detail(7L, USER_ID)).thenReturn(new ReviewDetailResponse(7L, 3L, null,
-					new ReviewDetailResponse.Limits(500, 5)));
+					List.of(), new ReviewDetailResponse.Limits(500, 5)));
 
 			String body = mockMvc.perform(withToken(get("/api/v1/reviews/{reviewId}", 7)))
 					.andExpect(status().isOk())
 					.andReturn().getResponse().getContentAsString();
 
 			assertThat(Set.copyOf(jsonMapper.readTree(body).propertyNames()))
-					.isEqualTo(Set.of("reviewId", "placeId", "limits"));
+					.isEqualTo(Set.of("reviewId", "placeId", "photos", "limits"));
 		}
 
 		@Test
@@ -487,7 +494,7 @@ class ReviewControllerTest {
 			mockMvc.perform(update(7, "{\"description\":\"" + "가".repeat(500) + "\"}"))
 					.andExpect(status().isNoContent());
 
-			verify(reviewService).update(7L, USER_ID, new ReviewUpdateRequest("가".repeat(500)));
+			verify(reviewService).update(7L, USER_ID, new ReviewUpdateRequest("가".repeat(500), null));
 		}
 
 		@ParameterizedTest
@@ -564,6 +571,128 @@ class ReviewControllerTest {
 	private static MockHttpServletRequestBuilder update(Object reviewId, String body) {
 		return withToken(patch("/api/v1/reviews/{reviewId}", reviewId).contentType(MediaType.APPLICATION_JSON)
 				.content(body));
+	}
+
+	private static final UUID PHOTO_A = UUID.fromString("3f2a1b4c-0000-4000-8000-00000000000a");
+	private static final UUID PHOTO_B = UUID.fromString("3f2a1b4c-0000-4000-8000-00000000000b");
+
+	private static MockHttpServletRequestBuilder uploadUrls(String body) {
+		return withToken(post("/api/v1/review-photos/upload-urls").contentType(MediaType.APPLICATION_JSON)
+				.content(body));
+	}
+
+	private static String photos(int count) {
+		return Stream.generate(() -> "\"" + UUID.randomUUID() + "\"").limit(count)
+				.collect(Collectors.joining(",", "[", "]"));
+	}
+
+	@Nested
+	@DisplayName("사진")
+	class Photos {
+
+		@Test
+		@DisplayName("업로드주소_개수를보내면_사진마다두주소와만료시각을돌려준다")
+		void photoUploads_count_returnsUploads() throws Exception {
+			when(reviewService.photoUploads(USER_ID, 1)).thenReturn(new ReviewPhotoUploadResponse(List.of(
+					new ReviewPhotoUploadResponse.PhotoUpload(PHOTO_A, "/fit-dev-photos/pending/a.jpg?sig",
+							"/fit-dev-photos/pending/a.thumb.jpg?sig", OffsetDateTime.parse("2026-10-21T12:10:00+09:00")))));
+
+			String body = mockMvc.perform(uploadUrls("{\"count\":1}"))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.uploads[0].photoId").value(PHOTO_A.toString()))
+					.andExpect(jsonPath("$.uploads[0].expiresAt").value("2026-10-21T12:10:00+09:00"))
+					.andReturn().getResponse().getContentAsString();
+
+			assertThat(Set.copyOf(jsonMapper.readTree(body).get("uploads").get(0).propertyNames()))
+					.isEqualTo(Set.of("photoId", "uploadUrl", "thumbUploadUrl", "expiresAt"));
+		}
+
+		@ParameterizedTest
+		@ValueSource(strings = {"{}", "{\"count\":0}", "{\"count\":6}", "{\"count\":null}"})
+		@DisplayName("업로드주소_개수가없거나1에서5밖이면_400이다")
+		void photoUploads_badCount_returnsBadRequest(String body) throws Exception {
+			expectProblem(uploadUrls(body), 400);
+
+			verify(reviewService, never()).photoUploads(anyString(), anyInt());
+		}
+
+		@Test
+		@DisplayName("업로드주소_Authorization헤더가없으면_본문검증전에401이다")
+		void photoUploads_noAuthorization_returnsUnauthorized() throws Exception {
+			expectProblem(post("/api/v1/review-photos/upload-urls").contentType(MediaType.APPLICATION_JSON)
+					.content("{}"), 401);
+		}
+
+		@Test
+		@DisplayName("업로드주소_사진저장소가없으면_503이다")
+		void photoUploads_storageUnavailable_returnsServiceUnavailable() throws Exception {
+			when(reviewService.photoUploads(USER_ID, 1)).thenThrow(new PhotoStorageUnavailableException());
+
+			expectProblem(uploadUrls("{\"count\":1}"), 503);
+		}
+
+		@Test
+		@DisplayName("등록_사진id를보내면_순서대로넘긴다")
+		void create_photos_passesIdsInOrder() throws Exception {
+			mockMvc.perform(create(3, valid(",\"photos\":[\"" + PHOTO_B + "\",\"" + PHOTO_A + "\"]")))
+					.andExpect(status().isCreated());
+
+			verify(reviewService).create(3L, USER_ID, new ReviewCreateRequest(LocalDate.of(2026, 10, 21),
+					List.of("QUIET_GOOD"), false, null, null, List.of(PHOTO_B, PHOTO_A)));
+		}
+
+		@Test
+		@DisplayName("등록_사진이5장이면_201이다")
+		void create_fivePhotos_returnsCreated() throws Exception {
+			mockMvc.perform(create(3, valid(",\"photos\":" + photos(5)))).andExpect(status().isCreated());
+		}
+
+		@ParameterizedTest
+		@ValueSource(strings = {",\"photos\":[\"not-a-uuid\"]", ",\"photos\":[null]", ",\"photos\":\"a\""})
+		@DisplayName("등록_사진id형식이틀리면_400이다")
+		void create_badPhotoId_returnsBadRequest(String photos) throws Exception {
+			expectProblem(create(3, valid(photos)), 400);
+
+			verify(reviewService, never()).create(anyLong(), anyString(), any());
+		}
+
+		@Test
+		@DisplayName("등록_사진이6장이면_400이다")
+		void create_sixPhotos_returnsBadRequest() throws Exception {
+			expectProblem(create(3, valid(",\"photos\":" + photos(6))), 400);
+		}
+
+		@Test
+		@DisplayName("등록_쓸수없는사진이면_400이고type으로구분된다")
+		void create_invalidPhoto_returnsBadRequestWithType() throws Exception {
+			when(reviewService.create(anyLong(), anyString(), any())).thenThrow(new InvalidPhotoException());
+
+			mockMvc.perform(create(3, valid(",\"photos\":[\"" + PHOTO_A + "\"]")))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.type").value("urn:fitdining:review:invalid-photo"));
+		}
+
+		@Test
+		@DisplayName("수정_사진만보내면_204이고본문은null로넘긴다")
+		void update_photosOnly_returnsNoContent() throws Exception {
+			mockMvc.perform(update(7, "{\"photos\":[\"" + PHOTO_A + "\"]}")).andExpect(status().isNoContent());
+
+			verify(reviewService).update(7L, USER_ID, new ReviewUpdateRequest(null, List.of(PHOTO_A)));
+		}
+
+		@Test
+		@DisplayName("수정_빈사진목록이면_204다")
+		void update_emptyPhotos_returnsNoContent() throws Exception {
+			mockMvc.perform(update(7, "{\"photos\":[]}")).andExpect(status().isNoContent());
+
+			verify(reviewService).update(7L, USER_ID, new ReviewUpdateRequest(null, List.of()));
+		}
+
+		@Test
+		@DisplayName("수정_사진이6장이면_400이다")
+		void update_sixPhotos_returnsBadRequest() throws Exception {
+			expectProblem(update(7, "{\"photos\":" + photos(6) + "}"), 400);
+		}
 	}
 
 	private static MockHttpServletRequestBuilder report(Object reviewId, String body) {
@@ -679,7 +808,7 @@ class ReviewControllerTest {
 
 		private static final Set<String> LIST = Set.of("totalCount", "items", "nextCursor");
 		private static final Set<String> ITEM = Set.of("reviewId", "createdAt", "visitedAt", "nickname",
-				"revisitIntent", "tags", "description", "mine");
+				"revisitIntent", "tags", "description", "photos", "mine");
 		private static final Set<String> TAG = Set.of("code", "label", "sentiment");
 
 		@Test
@@ -688,7 +817,7 @@ class ReviewControllerTest {
 			when(reviewService.list(3L, null, null)).thenReturn(new ReviewListResponse(1,
 					List.of(new ReviewItem(1L, OffsetDateTime.parse("2026-10-21T12:00:00+09:00"), LocalDate.of(2026, 10, 20),
 							"밤산책", true, List.of(new TagView("QUIET_GOOD", "조용해서 좋았어요", ReasonTag.Sentiment.GOOD)),
-							"좋았어요", false)),
+							"좋았어요", List.of(), false)),
 					"next"));
 
 			JsonNode page = jsonMapper.readTree(mockMvc.perform(list(3)).andExpect(status().isOk())
@@ -701,6 +830,21 @@ class ReviewControllerTest {
 			assertThat(item.get("createdAt").asString()).isEqualTo("2026-10-21T12:00:00+09:00");
 			assertThat(item.get("visitedAt").asString()).isEqualTo("2026-10-20");
 			assertThat(item.get("tags").get(0).get("sentiment").asString()).isEqualTo("GOOD");
+		}
+
+		@Test
+		@DisplayName("목록_사진키는_photoId와두주소다")
+		void list_photoKeys_idAndUrls() throws Exception {
+			when(reviewService.list(3L, null, null)).thenReturn(new ReviewListResponse(1,
+					List.of(new ReviewItem(1L, OffsetDateTime.parse("2026-10-21T12:00:00+09:00"), LocalDate.of(2026, 10, 20),
+							"밤산책", false, List.of(), null, List.of(new PhotoView(PHOTO_A, "/photos/dev/confirmed/a.jpg",
+									"/photos/dev/confirmed/a.thumb.jpg")), false)),
+					null));
+
+			JsonNode photo = jsonMapper.readTree(mockMvc.perform(list(3)).andExpect(status().isOk())
+					.andReturn().getResponse().getContentAsString()).get("items").get(0).get("photos").get(0);
+
+			assertThat(Set.copyOf(photo.propertyNames())).isEqualTo(Set.of("photoId", "url", "thumbUrl"));
 		}
 
 		@Test

@@ -10,6 +10,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 import kr.co.fitdining.api.auth.domain.AuthFailure;
 import kr.co.fitdining.api.auth.domain.AuthUser;
 import kr.co.fitdining.api.auth.repository.AuthUserRepository;
@@ -21,7 +23,9 @@ import kr.co.fitdining.api.review.dto.ReviewCreateResponse;
 import kr.co.fitdining.api.review.dto.ReviewDetailResponse;
 import kr.co.fitdining.api.review.dto.ReviewFormResponse;
 import kr.co.fitdining.api.review.dto.ReviewItem;
+import kr.co.fitdining.api.review.dto.PhotoView;
 import kr.co.fitdining.api.review.dto.ReviewListResponse;
+import kr.co.fitdining.api.review.dto.ReviewPhotoUploadResponse;
 import kr.co.fitdining.api.review.dto.ReviewReportRequest;
 import kr.co.fitdining.api.review.dto.ReviewUpdateRequest;
 import kr.co.fitdining.api.review.dto.TagView;
@@ -31,10 +35,14 @@ import kr.co.fitdining.api.review.exception.InvalidVisitDateException;
 import kr.co.fitdining.api.review.exception.OwnReviewReportException;
 import kr.co.fitdining.api.review.exception.ReviewForbiddenException;
 import kr.co.fitdining.api.review.exception.ReviewNotFoundException;
+import kr.co.fitdining.api.review.photo.InvalidPhotoException;
+import kr.co.fitdining.api.review.photo.PhotoStorageUnavailableException;
+import kr.co.fitdining.api.review.photo.ReviewPhotos;
 import kr.co.fitdining.api.review.report.ReviewReport;
 import kr.co.fitdining.api.review.report.ReviewReportRepository;
 import kr.co.fitdining.api.review.store.Review;
 import kr.co.fitdining.api.review.store.ReviewCursor;
+import kr.co.fitdining.api.review.store.ReviewPhotoRow;
 import kr.co.fitdining.api.review.store.ReviewRepository;
 import kr.co.fitdining.api.review.store.ReviewTagRow;
 import kr.co.fitdining.api.review.tag.ReasonTag;
@@ -47,6 +55,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 본문 정규화, 작성 시각과 방문일, 중복 금지, 커서 페이지 계산, 작성 화면 데이터, 내 리뷰 수정·삭제, 신고를 맡는다.
+ * 사진 객체는 {@link ReviewPhotos}가 다룬다.
  * 등록과 작성 화면 데이터는 장소 기능으로 장소를 확인한다(D-37).
  */
 @Service
@@ -64,35 +73,41 @@ public class ReviewService {
 
 	static final String REPORTER_CONSTRAINT = "fk_review_reports_reporter_id";
 
+	/** 한 사진이 두 리뷰에 붙지 않게 하는 유니크 제약(V9, D-45). */
+	static final String PHOTO_CONSTRAINT = "uk_review_photos_photo_id";
+
 	private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
 
-	static final int PHOTO_MAX = 5;
-
 	static final ReviewFormResponse.Limits LIMITS = new ReviewFormResponse.Limits(
-			ReviewCreateRequest.DESCRIPTION_MAX, PHOTO_MAX, ReviewCreateRequest.SPENT_PER_PERSON_MAX);
+			ReviewCreateRequest.DESCRIPTION_MAX, ReviewCreateRequest.PHOTO_MAX,
+			ReviewCreateRequest.SPENT_PER_PERSON_MAX);
 
 	static final ReviewDetailResponse.Limits DETAIL_LIMITS = new ReviewDetailResponse.Limits(
-			ReviewCreateRequest.DESCRIPTION_MAX, PHOTO_MAX);
+			ReviewCreateRequest.DESCRIPTION_MAX, ReviewCreateRequest.PHOTO_MAX);
 
 	private final ReviewRepository reviews;
 	private final AuthUserRepository users;
 	private final PlaceService places;
 	private final ReasonTagRepository tags;
 	private final ReviewReportRepository reports;
+	private final ReviewPhotos photos;
 	private final Clock clock;
 
 	public ReviewService(ReviewRepository reviews, AuthUserRepository users, PlaceService places,
-			ReasonTagRepository tags, ReviewReportRepository reports, Optional<Clock> clock) {
+			ReasonTagRepository tags, ReviewReportRepository reports, ReviewPhotos photos, Optional<Clock> clock) {
 		this.reviews = reviews;
 		this.users = users;
 		this.places = places;
 		this.tags = tags;
 		this.reports = reports;
+		this.photos = photos;
 		this.clock = clock.orElseGet(() -> Clock.system(SEOUL));
 	}
 
 	/**
-	 * 리뷰를 등록한다. 장소, 방문일, 태그를 이 순서로 확인한 뒤 리뷰와 태그를 함께 저장한다(D-40).
+	 * 리뷰를 등록한다. 장소, 방문일, 태그, 사진을 이 순서로 확인한 뒤 리뷰와 태그와 사진을 함께 저장한다(D-40, D-45).
+	 * 사진은 저장 전에 새 사진 id의 확정본으로 복사하고, 저장이 실패하면 이번에 만든 확정본만 지운다. 업로드 원본은 저장에
+	 * 성공한 뒤에만 지워, 다른 방문일로 다시 보낼 때 같은 사진을 쓸 수 있다.
 	 *
 	 * @param placeId 장소 id
 	 * @param userId 작성자 id(인증된 사용자)
@@ -103,6 +118,7 @@ public class ReviewService {
 	 * @throws kr.co.fitdining.api.place.exception.PlaceNotFoundException 없는 장소일 때
 	 * @throws InvalidVisitDateException 방문일이 범위 밖일 때
 	 * @throws kr.co.fitdining.api.review.exception.InvalidReasonTagsException 태그가 선택 규칙에 맞지 않을 때
+	 * @throws InvalidPhotoException 쓸 수 없는 사진이 있을 때
 	 */
 	public ReviewCreateResponse create(long placeId, String userId, ReviewCreateRequest request) {
 		requireActiveUser(userId);
@@ -111,8 +127,22 @@ public class ReviewService {
 			throw new InvalidVisitDateException();
 		}
 		ReasonTagRule.validate(request.tagCodes(), tags.findExposed(place.categoryGroup()));
+		List<UUID> uploadIds = distinct(request.photos());
+		List<UUID> photoIds = photos.confirm(uploadIds);
 		Review review = new Review(placeId, userId, request.visitedAt(), request.tagCodes(), request.revisitIntent(),
-				normalize(request.description()), request.spentPerPerson(), now());
+				normalize(request.description()), request.spentPerPerson(), photoIds, now());
+		ReviewCreateResponse created;
+		try {
+			created = save(review);
+		} catch (RuntimeException e) {
+			photos.discardConfirmed(photoIds);
+			throw e;
+		}
+		photos.discardPending(uploadIds);
+		return created;
+	}
+
+	private ReviewCreateResponse save(Review review) {
 		try {
 			// 저장 전 조회는 동시 요청을 막지 못한다. 제약 위반을 그 자리에서 받으려고 flush한다(D-28).
 			return new ReviewCreateResponse(reviews.saveAndFlush(review).getReviewId());
@@ -123,8 +153,22 @@ public class ReviewService {
 			if (violates(e, AUTHOR_CONSTRAINT)) {
 				throw new AuthFailure("로그인이 필요합니다.");
 			}
+			if (violates(e, PHOTO_CONSTRAINT)) {
+				throw new InvalidPhotoException();
+			}
 			throw e;
 		}
+	}
+
+	/**
+	 * 사진 업로드 주소를 발급한다(D-9, D-45).
+	 *
+	 * @throws AuthFailure 탈퇴했거나 없는 사용자일 때(401)
+	 * @throws PhotoStorageUnavailableException 사진 저장소가 없을 때
+	 */
+	public ReviewPhotoUploadResponse photoUploads(String userId, int count) {
+		requireActiveUser(userId);
+		return photos.issue(count);
 	}
 
 	/**
@@ -156,29 +200,60 @@ public class ReviewService {
 	 * @throws ReviewNotFoundException 없거나 삭제한 리뷰일 때
 	 * @throws ReviewForbiddenException 남의 리뷰일 때
 	 */
+	@Transactional(readOnly = true)
 	public ReviewDetailResponse detail(long reviewId, String userId) {
 		requireActiveUser(userId);
 		Review review = own(reviews.findByReviewIdAndDeletedAtIsNull(reviewId), userId);
 		return new ReviewDetailResponse(review.getReviewId(), review.getPlaceId(), review.getDescription(),
-				DETAIL_LIMITS);
+				review.getPhotoIds().stream().map(photos::view).toList(), DETAIL_LIMITS);
 	}
 
 	/**
-	 * 본문을 고친다(D-6, D-44).
+	 * 본문이나 사진을 고친다(D-6, D-44, D-45). 요청의 사진 중 이 리뷰에 이미 있는 id는 남기고, 나머지는 업로드 id로 보고
+	 * 행을 잠근 채 새 사진 id의 확정본으로 복사한다. 빠진 사진의 확정본은 커밋된 뒤에 지우고, 롤백되면 새로 복사한 확정본을
+	 * 지운다.
 	 *
 	 * @param request 수정 요청. 형식 검증은 컨트롤러가 인증 뒤에 한다.
 	 * @throws AuthFailure 탈퇴했거나 없는 사용자일 때(401)
 	 * @throws ReviewNotFoundException 없거나 삭제한 리뷰일 때
 	 * @throws ReviewForbiddenException 남의 리뷰일 때
+	 * @throws InvalidPhotoException 쓸 수 없는 사진이 있을 때
 	 */
 	@Transactional
 	public void update(long reviewId, String userId, ReviewUpdateRequest request) {
 		requireActiveUser(userId);
-		lockOwn(reviewId, userId).changeDescription(normalize(request.description()), now());
+		Review review = lockOwn(reviewId, userId);
+		Instant now = now();
+		if (request.description() != null) {
+			review.changeDescription(normalize(request.description()), now);
+		}
+		if (request.photos() == null) {
+			return;
+		}
+		List<UUID> requested = distinct(request.photos());
+		List<UUID> before = List.copyOf(review.getPhotoIds());
+		List<UUID> uploadIds = requested.stream().filter(id -> !before.contains(id)).toList();
+		List<UUID> added = photos.confirm(uploadIds);
+		photos.cleanUpAfterTransaction(uploadIds, added,
+				before.stream().filter(id -> !requested.contains(id)).toList());
+		Map<UUID, UUID> confirmedByUpload = new HashMap<>();
+		for (int i = 0; i < uploadIds.size(); i++) {
+			confirmedByUpload.put(uploadIds.get(i), added.get(i));
+		}
+		review.changePhotos(requested.stream().map(id -> confirmedByUpload.getOrDefault(id, id)).toList(), now);
+		try {
+			reviews.flush();
+		} catch (DataIntegrityViolationException e) {
+			if (violates(e, PHOTO_CONSTRAINT)) {
+				throw new InvalidPhotoException();
+			}
+			throw e;
+		}
 	}
 
 	/**
-	 * 리뷰를 지운다. 목록과 리뷰 수에서 바로 빠지고 같은 방문일로 다시 쓸 수 있다(D-28).
+	 * 리뷰를 지운다. 목록과 리뷰 수에서 바로 빠지고 같은 방문일로 다시 쓸 수 있다(D-28). 사진의 확정본은 커밋된 뒤에
+	 * 지운다(D-39).
 	 *
 	 * @throws AuthFailure 탈퇴했거나 없는 사용자일 때(401)
 	 * @throws ReviewNotFoundException 없거나 이미 삭제한 리뷰일 때
@@ -187,7 +262,20 @@ public class ReviewService {
 	@Transactional
 	public void delete(long reviewId, String userId) {
 		requireActiveUser(userId);
-		lockOwn(reviewId, userId).delete(now());
+		Review review = lockOwn(reviewId, userId);
+		review.delete(now());
+		photos.cleanUpAfterTransaction(List.of(), List.of(), review.getPhotoIds());
+	}
+
+	/** 같은 사진이 두 번 있으면 400이다. 없으면 빈 목록이다. */
+	private static List<UUID> distinct(List<UUID> photoIds) {
+		if (photoIds == null) {
+			return List.of();
+		}
+		if (Set.copyOf(photoIds).size() != photoIds.size()) {
+			throw new InvalidPhotoException();
+		}
+		return List.copyOf(photoIds);
 	}
 
 	/**
@@ -249,8 +337,8 @@ public class ReviewService {
 	}
 
 	/**
-	 * 장소의 리뷰를 최신순으로 한 페이지 돌려준다. 리뷰 수는 첫 페이지에서만 센다. 작성자와 태그는 페이지 단위로
-	 * 한 번씩 읽어 페이지 하나가 쿼리 4번(목록, 리뷰 수, 작성자, 태그)이다(D-42).
+	 * 장소의 리뷰를 최신순으로 한 페이지 돌려준다. 리뷰 수는 첫 페이지에서만 센다. 작성자, 태그, 사진은 페이지 단위로
+	 * 한 번씩 읽어 페이지 하나가 쿼리 5번(목록, 리뷰 수, 작성자, 태그, 사진)이다(D-42, D-45).
 	 *
 	 * @param placeId 장소 id
 	 * @param cursor 다음 페이지 요청일 때 직전 응답의 {@code nextCursor}
@@ -284,15 +372,21 @@ public class ReviewService {
 				nicknames.put(user.getId(), user.getNickname());
 			}
 		}
+		List<Long> reviewIds = page.stream().map(Review::getReviewId).toList();
 		Map<Long, List<TagView>> tagsByReview = new HashMap<>();
-		for (ReviewTagRow row : reviews.findTags(page.stream().map(Review::getReviewId).toList(), category.name())) {
+		for (ReviewTagRow row : reviews.findTags(reviewIds, category.name())) {
 			tagsByReview.computeIfAbsent(row.getReviewId(), id -> new ArrayList<>()).add(new TagView(row.getCode(),
 					row.getLabel(), ReasonTag.Sentiment.valueOf(row.getSentiment())));
+		}
+		Map<Long, List<PhotoView>> photosByReview = new HashMap<>();
+		for (ReviewPhotoRow row : reviews.findPhotos(reviewIds)) {
+			photosByReview.computeIfAbsent(row.getReviewId(), id -> new ArrayList<>()).add(photos.view(row.getPhotoId()));
 		}
 		return page.stream().map(review -> new ReviewItem(review.getReviewId(),
 				review.getCreatedAt().atZone(SEOUL).toOffsetDateTime(), review.getVisitDate(),
 				nicknames.get(review.getUserId()), review.isRevisitIntent(),
 				tagsByReview.getOrDefault(review.getReviewId(), List.of()), review.getDescription(),
+				photosByReview.getOrDefault(review.getReviewId(), List.of()),
 				review.getUserId().equals(viewerId))).toList();
 	}
 

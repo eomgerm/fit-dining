@@ -20,6 +20,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -35,6 +36,7 @@ import kr.co.fitdining.api.auth.ports.PasswordHasher;
 import kr.co.fitdining.api.auth.repository.AuthUserRepository;
 import kr.co.fitdining.api.place.dto.PlaceSummary.CategoryGroup;
 import kr.co.fitdining.api.place.exception.PlaceNotFoundException;
+import kr.co.fitdining.api.review.dto.PhotoView;
 import kr.co.fitdining.api.review.dto.ReviewCreateRequest;
 import kr.co.fitdining.api.review.dto.ReviewDetailResponse;
 import kr.co.fitdining.api.review.dto.ReviewFormResponse;
@@ -50,6 +52,9 @@ import kr.co.fitdining.api.review.exception.InvalidVisitDateException;
 import kr.co.fitdining.api.review.exception.OwnReviewReportException;
 import kr.co.fitdining.api.review.exception.ReviewForbiddenException;
 import kr.co.fitdining.api.review.exception.ReviewNotFoundException;
+import kr.co.fitdining.api.review.photo.FakePhotoStorage;
+import kr.co.fitdining.api.review.photo.InvalidPhotoException;
+import kr.co.fitdining.api.review.photo.PhotoStorageUnavailableException;
 import kr.co.fitdining.api.review.report.ReportReason;
 import kr.co.fitdining.api.review.store.ReviewRepository;
 import kr.co.fitdining.api.review.tag.ReasonTag;
@@ -93,6 +98,8 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 	private static final Instant NOON = Instant.parse("2026-10-21T03:00:00.123456789Z");
 	private static final String USER_PREFIX = "review-test-";
 	private static final String PASSWORD = "review-test-password1";
+	/** 로그인 시도 제한(주소마다 15분에 20번)은 다른 통합 테스트와 함께 세므로 이 테스트만의 주소로 로그인하고 지운다. */
+	private static final String CLIENT_ADDRESS = USER_PREFIX + "client";
 	private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
 
 	@DynamicPropertySource
@@ -107,6 +114,12 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 		@Primary
 		MutableClock reviewTestClock() {
 			return new MutableClock();
+		}
+
+		@Bean
+		@Primary
+		FakePhotoStorage reviewTestPhotoStorage() {
+			return new FakePhotoStorage();
 		}
 	}
 
@@ -148,6 +161,9 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 	MutableClock clock;
 
 	@Autowired
+	FakePhotoStorage photoStorage;
+
+	@Autowired
 	UserService userService;
 
 	@Autowired
@@ -166,16 +182,24 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 		jdbc = new JdbcTemplate(appSource());
 		cleanUp();
 		clock.instant = NOON;
+		photoStorage.reset();
 	}
 
 	@AfterEach
 	void cleanUp() {
 		JdbcTemplate app = new JdbcTemplate(appSource());
 		app.update("delete from review_reports");
+		app.update("delete from review_photos");
 		app.update("delete from review_reason_tags");
 		app.update("delete from reviews");
 		app.update("delete from auth_refresh_tokens where user_id like ?", USER_PREFIX + "%");
 		app.update("delete from auth_users where id like ?", USER_PREFIX + "%");
+		app.update("delete from auth_login_attempts where address = ?", CLIENT_ADDRESS);
+	}
+
+	/** {@link #createUsers}가 만든 n번째 사용자로 로그인한 AT */
+	private String login(int user) {
+		return auth.login(USER_PREFIX + user + "@example.com", PASSWORD, CLIENT_ADDRESS).accessToken();
 	}
 
 	/** 작성자 n명을 만든다. 같은 장소·같은 날 리뷰는 사람마다 하나라 페이지 시험에 여러 명이 필요하다. */
@@ -199,7 +223,7 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 	}
 
 	private static ReviewCreateRequest request(LocalDate visitedAt, List<String> tagCodes, String description) {
-		return new ReviewCreateRequest(visitedAt, tagCodes, false, description, null);
+		return new ReviewCreateRequest(visitedAt, tagCodes, false, description, null, null);
 	}
 
 	private int count(String table) {
@@ -313,7 +337,7 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 			String user = createUsers(1).getFirst();
 
 			long reviewId = service.create(1, user, new ReviewCreateRequest(TODAY.minusDays(3),
-					List.of("QUIET_GOOD", "SHORT_WAIT_BAD"), true, null, 1_000_000)).reviewId();
+					List.of("QUIET_GOOD", "SHORT_WAIT_BAD"), true, null, 1_000_000, null)).reviewId();
 
 			Map<String, Object> row = jdbc.queryForMap(
 					"select visit_date, revisit_intent, spent_per_person from reviews where review_id = ?", reviewId);
@@ -476,7 +500,7 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 			List<String> authors = createUsers(2);
 			LocalDate yesterday = LocalDate.ofInstant(clock.instant, SEOUL).minusDays(1);
 			service.create(3, authors.get(0), new ReviewCreateRequest(yesterday, List.of("SHORT_WAIT_BAD", "QUIET_GOOD"),
-					true, "내 리뷰", null));
+					true, "내 리뷰", null, null));
 			clock.instant = NOON.plusSeconds(60);
 			service.create(3, authors.get(1), body("남의 리뷰"));
 
@@ -532,10 +556,10 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 			assertThatThrownBy(() -> service.list(999, null, null)).isInstanceOf(PlaceNotFoundException.class);
 		}
 
-		/** 작성자와 태그를 리뷰마다 읽으면 페이지 크기만큼 쿼리가 는다. Hibernate가 보낸 SQL 수로 확인한다(D-42). */
+		/** 작성자, 태그, 사진을 리뷰마다 읽으면 페이지 크기만큼 쿼리가 는다. Hibernate가 보낸 SQL 수로 확인한다(D-42, D-45). */
 		@Test
-		@DisplayName("목록_작성자와태그를페이지단위로읽어_첫페이지는쿼리4번다음페이지는3번이다")
-		void list_batchesAuthorsAndTags_fixedQueryCount() {
+		@DisplayName("목록_작성자태그사진을페이지단위로읽어_첫페이지는쿼리5번다음페이지는4번이다")
+		void list_batchesAuthorsTagsAndPhotos_fixedQueryCount() {
 			LocalDate today = LocalDate.ofInstant(clock.instant, SEOUL);
 			for (String user : createUsers(25)) {
 				service.create(1, user, request(today, List.of("QUIET_GOOD", "SHORT_WAIT_BAD"), null));
@@ -554,8 +578,8 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 				assertThat(item.tags()).hasSize(2);
 			});
 			assertThat(second.items()).hasSize(5);
-			assertThat(firstPage).isEqualTo(4);
-			assertThat(secondPage).isEqualTo(3);
+			assertThat(firstPage).isEqualTo(5);
+			assertThat(secondPage).isEqualTo(4);
 		}
 	}
 
@@ -635,7 +659,7 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 		UPDATE {
 			@Override
 			void run(ReviewService service, long reviewId, String userId) {
-				service.update(reviewId, userId, new ReviewUpdateRequest("바꾼 본문"));
+				service.update(reviewId, userId, new ReviewUpdateRequest("바꾼 본문", null));
 			}
 		},
 		DELETE {
@@ -716,7 +740,7 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 			Map<String, Object> before = row(older);
 			clock.instant = NOON.plusSeconds(120);
 
-			service.update(older, authors.get(0), new ReviewUpdateRequest("고친 리뷰"));
+			service.update(older, authors.get(0), new ReviewUpdateRequest("고친 리뷰", null));
 
 			Map<String, Object> after = row(older);
 			assertThat(after.get("description")).isEqualTo("고친 리뷰");
@@ -737,7 +761,7 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 			String user = createUsers(1).getFirst();
 			long id = write(user, "처음 본문");
 
-			service.update(id, user, new ReviewUpdateRequest(" \n "));
+			service.update(id, user, new ReviewUpdateRequest(" \n ", null));
 
 			assertThat(row(id).get("description")).isNull();
 		}
@@ -750,7 +774,7 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 			Object before = row(id).get("updated_at");
 			clock.instant = NOON.plusSeconds(60);
 
-			service.update(id, user, new ReviewUpdateRequest("그대로인 본문"));
+			service.update(id, user, new ReviewUpdateRequest("그대로인 본문", null));
 
 			assertThat(row(id).get("updated_at")).isEqualTo(before);
 		}
@@ -843,7 +867,7 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 			try {
 				Future<?> deleting = deleteHoldingLock(pool, id, user, locked, commit);
 				assertThat(locked.await(WAIT_SECONDS, TimeUnit.SECONDS)).isTrue();
-				Future<?> updating = pool.submit(() -> service.update(id, user, new ReviewUpdateRequest("늦은 수정")));
+				Future<?> updating = pool.submit(() -> service.update(id, user, new ReviewUpdateRequest("늦은 수정", null)));
 				awaitLockWaiter();
 
 				commit.countDown();
@@ -881,6 +905,275 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 				commit.countDown();
 				pool.shutdownNow();
 			}
+		}
+	}
+
+	@Nested
+	@DisplayName("사진")
+	class Photos {
+
+		private static ReviewCreateRequest withPhotos(LocalDate visitedAt, List<UUID> photos) {
+			return new ReviewCreateRequest(visitedAt, List.of("QUIET_GOOD"), false, null, null, photos);
+		}
+
+		private LocalDate today() {
+			return LocalDate.ofInstant(clock.instant, SEOUL);
+		}
+
+		private long write(String user, List<UUID> uploads) {
+			return service.create(1, user, withPhotos(today(), uploads)).reviewId();
+		}
+
+		/** 리뷰에 붙은 확정본 사진 id. 화면 순서대로다. */
+		private List<UUID> photoIds(long reviewId) {
+			return jdbc.queryForList("select photo_id from review_photos where review_id = ? order by sort_order",
+					UUID.class, reviewId);
+		}
+
+		/** 리뷰 사진을 확정본 1,600px 크기로 본다. 올릴 때 사진마다 크기를 달리해 어느 사진인지 가린다. */
+		private List<Integer> sizes(long reviewId) {
+			return photoIds(reviewId).stream().map(photoStorage::confirmedSize).toList();
+		}
+
+		private static ReviewUpdateRequest photosOnly(List<UUID> photos) {
+			return new ReviewUpdateRequest(null, photos);
+		}
+
+		@Test
+		@DisplayName("등록_올린사진이면_새사진id로순서대로저장하고확정본을만든뒤업로드원본을지운다")
+		void create_uploadedPhotos_savesNewIdsInOrder() {
+			String user = createUsers(1).getFirst();
+			UUID first = photoStorage.upload(901, 91);
+			UUID second = photoStorage.upload(902, 92);
+
+			long id = write(user, List.of(second, first));
+
+			assertThat(sizes(id)).containsExactly(902, 901);
+			assertThat(photoIds(id)).doesNotContain(first, second);
+			assertThat(photoStorage.hasPending(first)).isFalse();
+			assertThat(photoStorage.hasPending(second)).isFalse();
+		}
+
+		@Test
+		@DisplayName("목록_사진은_순서대로같은출처읽기주소다")
+		void list_photos_inOrderWithReadPaths() {
+			String user = createUsers(1).getFirst();
+			long id = write(user, List.of(photoStorage.upload(902, 92), photoStorage.upload(901, 91)));
+			List<UUID> saved = photoIds(id);
+
+			ReviewItem item = service.list(1, null, null).items().getFirst();
+
+			assertThat(item.photos()).extracting(PhotoView::photoId).containsExactlyElementsOf(saved);
+			assertThat(item.photos().getFirst().url()).isEqualTo("/photos/dev/confirmed/" + saved.getFirst() + ".jpg");
+			assertThat(item.photos().getFirst().thumbUrl())
+					.isEqualTo("/photos/dev/confirmed/" + saved.getFirst() + ".thumb.jpg");
+		}
+
+		@Test
+		@DisplayName("목록_사진없는리뷰는_빈목록이다")
+		void list_noPhotos_emptyList() {
+			write(createUsers(1).getFirst(), List.of());
+
+			assertThat(service.list(1, null, null).items().getFirst().photos()).isEmpty();
+		}
+
+		@Test
+		@DisplayName("등록_올리지않은사진이섞이면_400이고리뷰도확정본도남지않는다")
+		void create_missingPhoto_savesNothing() {
+			String user = createUsers(1).getFirst();
+			UUID uploaded = photoStorage.upload();
+
+			assertThatThrownBy(() -> write(user, List.of(uploaded, UUID.randomUUID())))
+					.isInstanceOf(InvalidPhotoException.class);
+			assertThat(count("reviews")).isZero();
+			assertThat(photoStorage.confirmedIds()).isEmpty();
+			assertThat(photoStorage.hasPending(uploaded)).isTrue();
+		}
+
+		@Test
+		@DisplayName("등록_같은사진을두번보내면_400이다")
+		void create_samePhotoTwice_invalid() {
+			String user = createUsers(1).getFirst();
+			UUID photo = photoStorage.upload();
+
+			assertThatThrownBy(() -> write(user, List.of(photo, photo))).isInstanceOf(InvalidPhotoException.class);
+			assertThat(count("reviews")).isZero();
+		}
+
+		@Test
+		@DisplayName("등록_같은날중복으로409면_이번확정본을지우고업로드원본은남겨다시보낼수있다")
+		void create_duplicateVisit_removesOwnCopiesKeepsPending() {
+			String user = createUsers(1).getFirst();
+			write(user, List.of());
+			UUID photo = photoStorage.upload();
+
+			assertThatThrownBy(() -> write(user, List.of(photo))).isInstanceOf(DuplicateReviewException.class);
+			assertThat(photoStorage.confirmedIds()).isEmpty();
+			assertThat(photoStorage.hasPending(photo)).isTrue();
+			assertThatCode(() -> service.create(1, user, withPhotos(today().minusDays(1), List.of(photo))))
+					.doesNotThrowAnyException();
+		}
+
+		/** 첫 등록이 저장된 뒤 업로드 원본이 남은 채(지우기 실패, 커밋 직후) 같은 사진으로 다시 등록한 경우(코드 리뷰 2026-10-29) */
+		@Test
+		@DisplayName("등록_저장된리뷰의업로드로다시등록해409가나도_먼저저장된리뷰의사진은남는다")
+		void create_retryWithSavedUpload_keepsSavedPhotos() {
+			String user = createUsers(1).getFirst();
+			UUID upload = photoStorage.upload(901, 91);
+			long first = write(user, List.of(upload));
+			photoStorage.put("pending/" + upload + ".jpg", FakePhotoStorage.jpeg(901));
+			photoStorage.put("pending/" + upload + ".thumb.jpg", FakePhotoStorage.jpeg(91));
+
+			assertThatThrownBy(() -> write(user, List.of(upload))).isInstanceOf(DuplicateReviewException.class);
+			assertThat(photoStorage.hasConfirmed(photoIds(first).getFirst())).isTrue();
+			assertThat(photoStorage.confirmedIds()).containsExactlyElementsOf(photoIds(first));
+		}
+
+		@Test
+		@DisplayName("등록_남의업로드원본이남아있어도_따로복사해남의확정본을건드리지않는다")
+		void create_othersLeftoverUpload_separateCopy() {
+			List<String> users = createUsers(2);
+			UUID upload = photoStorage.upload();
+			long first = write(users.get(0), List.of(upload));
+			photoStorage.put("pending/" + upload + ".jpg", FakePhotoStorage.jpeg(1000));
+			photoStorage.put("pending/" + upload + ".thumb.jpg", FakePhotoStorage.jpeg(100));
+
+			long second = write(users.get(1), List.of(upload));
+			service.delete(second, users.get(1));
+
+			assertThat(photoIds(second)).doesNotContainAnyElementsOf(photoIds(first));
+			assertThat(photoStorage.hasConfirmed(photoIds(first).getFirst())).isTrue();
+		}
+
+		@Test
+		@DisplayName("등록_저장소에접속하지못하면_503이고저장하지않는다")
+		void create_storageDown_unavailable() {
+			String user = createUsers(1).getFirst();
+			UUID photo = photoStorage.upload();
+			photoStorage.down(true);
+
+			assertThatThrownBy(() -> write(user, List.of(photo)))
+					.isInstanceOf(PhotoStorageUnavailableException.class);
+			assertThat(count("reviews")).isZero();
+		}
+
+		@Test
+		@DisplayName("조회_내리뷰의사진을순서대로돌려준다")
+		void detail_photosInOrder() {
+			String user = createUsers(1).getFirst();
+			long id = write(user, List.of(photoStorage.upload(), photoStorage.upload()));
+
+			assertThat(service.detail(id, user).photos()).extracting(PhotoView::photoId)
+					.containsExactlyElementsOf(photoIds(id));
+		}
+
+		@Test
+		@DisplayName("수정_사진을더하고빼고순서를바꾸면_반영하고빠진확정본과새업로드원본을지운다")
+		void update_addRemoveReorder_appliesAndCleansUp() {
+			String user = createUsers(1).getFirst();
+			long id = write(user, List.of(photoStorage.upload(901, 91), photoStorage.upload(902, 92)));
+			UUID removed = photoIds(id).get(0);
+			UUID kept = photoIds(id).get(1);
+			UUID upload = photoStorage.upload(903, 93);
+			clock.instant = NOON.plusSeconds(60);
+
+			service.update(id, user, photosOnly(List.of(upload, kept)));
+
+			assertThat(sizes(id)).containsExactly(903, 902);
+			assertThat(photoIds(id).get(1)).isEqualTo(kept);
+			assertThat(photoStorage.hasPending(upload)).isFalse();
+			assertThat(photoStorage.hasConfirmed(removed)).isFalse();
+			assertThat(((java.sql.Timestamp) jdbc.queryForObject("select updated_at from reviews", Object.class))
+					.toInstant()).isEqualTo(Instant.parse("2026-10-21T03:01:00.123456Z"));
+		}
+
+		@Test
+		@DisplayName("수정_순서만바꿔도_사진유니크제약에걸리지않는다")
+		void update_swapOrder_noConstraintViolation() {
+			String user = createUsers(1).getFirst();
+			long id = write(user, List.of(photoStorage.upload(901, 91), photoStorage.upload(902, 92)));
+			List<UUID> saved = photoIds(id);
+
+			service.update(id, user, photosOnly(List.of(saved.get(1), saved.get(0))));
+
+			assertThat(sizes(id)).containsExactly(902, 901);
+		}
+
+		@Test
+		@DisplayName("수정_같은사진목록이면_updated_at을바꾸지않는다")
+		void update_samePhotos_keepsUpdatedAt() {
+			String user = createUsers(1).getFirst();
+			long id = write(user, List.of(photoStorage.upload()));
+			Object before = jdbc.queryForObject("select updated_at from reviews", Object.class);
+			clock.instant = NOON.plusSeconds(60);
+
+			service.update(id, user, photosOnly(photoIds(id)));
+
+			assertThat(jdbc.queryForObject("select updated_at from reviews", Object.class)).isEqualTo(before);
+		}
+
+		@Test
+		@DisplayName("수정_본문만보내면_사진은그대로다")
+		void update_descriptionOnly_keepsPhotos() {
+			String user = createUsers(1).getFirst();
+			long id = write(user, List.of(photoStorage.upload()));
+			List<UUID> saved = photoIds(id);
+
+			service.update(id, user, new ReviewUpdateRequest("본문만 고침", null));
+
+			assertThat(photoIds(id)).isEqualTo(saved);
+		}
+
+		@Test
+		@DisplayName("수정_빈목록이면_사진을모두빼고확정본을지운다")
+		void update_emptyList_removesAll() {
+			String user = createUsers(1).getFirst();
+			long id = write(user, List.of(photoStorage.upload()));
+			UUID saved = photoIds(id).getFirst();
+
+			service.update(id, user, photosOnly(List.of()));
+
+			assertThat(photoIds(id)).isEmpty();
+			assertThat(photoStorage.hasConfirmed(saved)).isFalse();
+		}
+
+		@Test
+		@DisplayName("수정_쓸수없는새사진이섞이면_400이고사진과확정본이그대로다")
+		void update_invalidNewPhoto_keepsPhotos() {
+			String user = createUsers(1).getFirst();
+			long id = write(user, List.of(photoStorage.upload()));
+			UUID saved = photoIds(id).getFirst();
+
+			assertThatThrownBy(() -> service.update(id, user, photosOnly(List.of(saved, UUID.randomUUID()))))
+					.isInstanceOf(InvalidPhotoException.class);
+			assertThat(photoIds(id)).containsExactly(saved);
+			assertThat(photoStorage.confirmedIds()).containsExactly(saved);
+		}
+
+		@Test
+		@DisplayName("수정_남의리뷰사진id를보내면_400이고남의확정본은그대로다")
+		void update_othersPhotoId_invalid() {
+			List<String> authors = createUsers(2);
+			long others = write(authors.get(0), List.of(photoStorage.upload()));
+			UUID othersPhoto = photoIds(others).getFirst();
+			long mine = write(authors.get(1), List.of());
+
+			assertThatThrownBy(() -> service.update(mine, authors.get(1), photosOnly(List.of(othersPhoto))))
+					.isInstanceOf(InvalidPhotoException.class);
+			assertThat(photoIds(mine)).isEmpty();
+			assertThat(photoStorage.hasConfirmed(othersPhoto)).isTrue();
+		}
+
+		@Test
+		@DisplayName("삭제_리뷰를지우면_사진확정본을지운다")
+		void delete_review_removesConfirmedPhotos() {
+			String user = createUsers(1).getFirst();
+			long id = write(user, List.of(photoStorage.upload()));
+			UUID saved = photoIds(id).getFirst();
+
+			service.delete(id, user);
+
+			assertThat(photoStorage.hasConfirmed(saved)).isFalse();
 		}
 	}
 
@@ -1152,7 +1445,7 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 		@DisplayName("등록_로그인한토큰으로_201이고목록맨위에보이며같은날두번째는409다")
 		void create_loggedIn_createdShownAndSecondConflicts() throws Exception {
 			String user = createUsers(1).getFirst();
-			String token = auth.login(USER_PREFIX + "0@example.com", PASSWORD, "127.0.0.1").accessToken();
+			String token = login(0);
 			String path = "/api/v1/places/1/reviews";
 
 			HttpResponse<String> created = send("POST", path, token, json("2026-10-18", "직접 등록"));
@@ -1176,7 +1469,7 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 		@DisplayName("목록_로그인하면내리뷰에mine이붙고_틀린토큰은401이다")
 		void list_withToken_marksMine() throws Exception {
 			createUsers(1);
-			String token = auth.login(USER_PREFIX + "0@example.com", PASSWORD, "127.0.0.1").accessToken();
+			String token = login(0);
 			String path = "/api/v1/places/1/reviews";
 			send("POST", path, token, json("2026-10-18", "내 리뷰"));
 
@@ -1194,7 +1487,7 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 		@DisplayName("등록_로그인을본문검증보다먼저확인한다")
 		void create_authenticatesBeforeValidatingBody() throws Exception {
 			createUsers(1);
-			String token = auth.login(USER_PREFIX + "0@example.com", PASSWORD, "127.0.0.1").accessToken();
+			String token = login(0);
 			String path = "/api/v1/places/1/reviews";
 
 			assertThat(send("POST", path, null, "{}").statusCode()).isEqualTo(401);
@@ -1209,8 +1502,8 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 
 		private Written writeOverHttp() throws Exception {
 			createUsers(2);
-			String mine = auth.login(USER_PREFIX + "0@example.com", PASSWORD, "127.0.0.1").accessToken();
-			String other = auth.login(USER_PREFIX + "1@example.com", PASSWORD, "127.0.0.1").accessToken();
+			String mine = login(0);
+			String other = login(1);
 			long id = mapper.readTree(send("POST", "/api/v1/places/1/reviews", mine, json("2026-10-18", "처음 본문"))
 					.body()).get("reviewId").asLong();
 			return new Written(mine, other, "/api/v1/reviews/" + id);
@@ -1273,6 +1566,43 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 		}
 
 		@Test
+		@DisplayName("사진_업로드주소를받아올린뒤등록하면_목록에사진이보인다")
+		void photo_uploadThenCreate_shownInList() throws Exception {
+			createUsers(1);
+			String token = login(0);
+			JsonNode uploads = mapper.readTree(send("POST", "/api/v1/review-photos/upload-urls", token,
+					"{\"count\":1}").body()).get("uploads");
+			String photoId = uploads.get(0).get("photoId").asString();
+			photoStorage.put("pending/" + photoId + ".jpg", FakePhotoStorage.jpeg(500));
+			photoStorage.put("pending/" + photoId + ".thumb.jpg", FakePhotoStorage.jpeg(50));
+
+			HttpResponse<String> created = send("POST", "/api/v1/places/1/reviews", token,
+					"{\"visitedAt\":\"2026-10-18\",\"tagCodes\":[\"QUIET_GOOD\"],\"revisitIntent\":false,"
+							+ "\"photos\":[\"" + photoId + "\"]}");
+
+			assertThat(created.statusCode()).isEqualTo(201);
+			JsonNode photo = firstPage().get("items").get(0).get("photos").get(0);
+			String saved = photo.get("photoId").asString();
+			assertThat(saved).isNotEqualTo(photoId);
+			assertThat(photo.get("thumbUrl").asString()).isEqualTo("/photos/dev/confirmed/" + saved + ".thumb.jpg");
+		}
+
+		@Test
+		@DisplayName("사진_쓸수없는사진으로등록하면_400이고type으로구분된다")
+		void photo_invalidPhoto_badRequestWithType() throws Exception {
+			createUsers(1);
+			String token = login(0);
+
+			HttpResponse<String> created = send("POST", "/api/v1/places/1/reviews", token,
+					"{\"visitedAt\":\"2026-10-18\",\"tagCodes\":[\"QUIET_GOOD\"],\"revisitIntent\":false,"
+							+ "\"photos\":[\"" + UUID.randomUUID() + "\"]}");
+
+			assertThat(created.statusCode()).isEqualTo(400);
+			assertThat(mapper.readTree(created.body()).get("type").asString())
+					.isEqualTo("urn:fitdining:review:invalid-photo");
+		}
+
+		@Test
 		@DisplayName("신고_남의토큰으로_201이고같은사람의두번째는409다")
 		void report_othersToken_createdThenConflict() throws Exception {
 			Written review = writeOverHttp();
@@ -1300,7 +1630,7 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 		@DisplayName("등록_탈퇴한뒤남은토큰으로는_401이다")
 		void create_afterWithdrawalWithOldToken_unauthorized() throws Exception {
 			String user = createUsers(1).getFirst();
-			String token = auth.login(USER_PREFIX + "0@example.com", PASSWORD, "127.0.0.1").accessToken();
+			String token = login(0);
 
 			withdrawAccount(user);
 
