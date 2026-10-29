@@ -238,9 +238,29 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 			assertThat(list(token, null).get("items").get(0).get("lastAt").longValue()).isEqualTo(AT);
 		}
 
+		/** 시각과 종류는 같고 요청(request)이나 응답(response)만 다르다 */
+		@ParameterizedTest
+		@ValueSource(strings = {"request", "response"})
+		@DisplayName("추가_같은id와시각에요청이나응답만다르면_409conflict이고저장된것은그대로다")
+		void put_sameIdOtherSnapshot_conflictKeepsStored(String changed) throws Exception {
+			String token = signIn(0);
+			String thread = threadId();
+			String first = turnId();
+			String stored = newTurn(first, AT, "조용한 카페");
+			put(token, thread, first, stored);
+			String other = changed.equals("request") ? newTurn(first, AT, "시끄러운 카페")
+					: stored.replace("\"totalCount\":0", "\"totalCount\":1");
+
+			HttpResponse<String> conflict = put(token, thread, first, other);
+
+			assertThat(conflict.statusCode()).isEqualTo(409);
+			assertThat(type(conflict)).isEqualTo(CONFLICT);
+			assertThat(getThread(token, thread).get("turns").get(0)).isEqualTo(mapper.readTree(stored));
+		}
+
 		@Test
 		@DisplayName("추가_안쪽null빈객체모르는필드와숫자10진값이_다시읽어도JSON값으로같다")
-		void put_snapshotKeepsJsonValues() throws Exception {
+		void put_snapshot_keepsJsonValues() throws Exception {
 			String token = signIn(0);
 			String thread = threadId();
 			String first = turnId();
@@ -539,8 +559,8 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 		}
 
 		@Test
-		@DisplayName("목록_21개면_20개와nextCursor_다음은1개이고nextCursor가없다_같은시각은thread_id역순이다")
-		void list_pagesWithTiesAcrossBoundary() throws Exception {
+		@DisplayName("목록_같은시각묶음이페이지경계를넘어도_thread_id역순으로빠짐과겹침없이이어진다")
+		void list_tiesAcrossPageBoundary_continuesWithoutGapOrDuplicate() throws Exception {
 			String token = signIn(0);
 			// 다섯 개만 시각이 다르고 나머지는 같은 시각이라 같은 시각 묶음이 페이지 경계를 넘는다
 			List<String> threads = IntStream.range(0, 21).mapToObj(i -> threadId()).toList();
@@ -590,7 +610,10 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 		}
 
 		@ParameterizedTest
-		@ValueSource(strings = {"not-a-cursor", "YWJj", "MTIzfHRocmVhZC14", "%3D%3D"})
+		// 마지막 둘은 형식은 맞지만 시각이 JS Date 상한(8.64e15)을 넘는 위조 cursor다(long 최댓값, 상한 + 1)
+		@ValueSource(strings = {"not-a-cursor", "YWJj", "MTIzfHRocmVhZC14", "%3D%3D",
+				"OTIyMzM3MjAzNjg1NDc3NTgwN3x0aHJlYWQtMTExMTExMTEtMjIyMi0zMzMzLTQ0NDQtNTU1NTU1NTU1NTU1",
+				"ODY0MDAwMDAwMDAwMDAwMXx0aHJlYWQtMTExMTExMTEtMjIyMi0zMzMzLTQ0NDQtNTU1NTU1NTU1NTU1"})
 		@DisplayName("목록_형식이틀린cursor는_400이다")
 		void list_badCursor_invalid(String cursor) throws Exception {
 			String token = signIn(0);

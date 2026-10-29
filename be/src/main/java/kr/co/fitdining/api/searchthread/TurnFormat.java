@@ -25,8 +25,9 @@ final class TurnFormat {
 	private static final Pattern TURN_ID = Pattern.compile("entry-" + UUID);
 	private static final Set<String> FIELDS = Set.of("id", "kind", "baseId", "at", "request", "response");
 	private static final Set<String> KINDS = Set.of("new", "followUp", "region");
-	/** JS {@code Date}가 나타낼 수 있는 가장 늦은 시각(밀리초) */
-	private static final BigDecimal MAX_AT = new BigDecimal("8.64e15");
+	/** JS {@code Date}가 나타낼 수 있는 가장 늦은 시각(밀리초). cursor의 시각도 이 범위다 */
+	static final long MAX_AT_MILLIS = 8_640_000_000_000_000L;
+	private static final BigDecimal MAX_AT = BigDecimal.valueOf(MAX_AT_MILLIS);
 	private static final int QUERY_MAX = 200;
 	/** PostgreSQL numeric이 받는 자릿수. 넘으면 jsonb로 바꾸지 못한다 */
 	private static final int NUMERIC_INTEGER_DIGITS = 131_072;

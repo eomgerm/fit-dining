@@ -23,7 +23,7 @@ record ThreadCursor(long lastAt, String threadId) {
 	/**
 	 * @param cursor 직전 응답의 {@code nextCursor}
 	 * @return 해석한 위치
-	 * @throws InvalidSearchThreadException 패딩이 있거나, base64url이 아니거나, 내용이 형식에 맞지 않을 때
+	 * @throws InvalidSearchThreadException 패딩이 있거나, base64url이 아니거나, 내용이 형식에 맞지 않거나, 시각이 범위 밖일 때
 	 */
 	static ThreadCursor decode(String cursor) {
 		if (cursor.contains("=")) {
@@ -46,7 +46,8 @@ record ThreadCursor(long lastAt, String threadId) {
 		} catch (NumberFormatException e) {
 			throw new InvalidSearchThreadException("cursor");
 		}
-		if (lastAt < 0 || !TurnFormat.isThreadId(threadId)) {
+		// 저장된 시각은 이 범위뿐이다. 벗어난 값은 위조이고, SQL의 시각 변환을 넘치게 하므로 여기서 막는다
+		if (lastAt < 0 || lastAt > TurnFormat.MAX_AT_MILLIS || !TurnFormat.isThreadId(threadId)) {
 			throw new InvalidSearchThreadException("cursor");
 		}
 		return new ThreadCursor(lastAt, threadId);
