@@ -1,10 +1,9 @@
 """임베딩 Modal 앱. docs/infra/design.md 12.3절의 `POST /embed`.
 
-ai/에서 `APP_ENV=dev uv run modal deploy -m server.embed`로 배포한다(앱 `fit-dev-embed`).
+ai/에서 `uv run modal deploy --env dev -m server.embed`로 배포한다. 환경은 Modal Environment로 나눈다(design 11.2절).
 BE는 `Modal-Key`·`Modal-Secret` 헤더로 `<URL>/embed`를 호출한다.
 """
 
-import os
 from typing import Annotated, Literal
 
 import modal
@@ -54,7 +53,7 @@ image = (
     .env({"HF_HUB_OFFLINE": "1"})
     .add_local_python_source("fit_ai", "server")
 )
-app = modal.App(f"fit-{os.environ.get('APP_ENV', 'dev')}-embed", image=image)
+app = modal.App("fit-embed", image=image)
 
 
 # ponytail: 컨테이너 상한 2·상시 가동 0이 서버 쪽 비용 방어 전부다. 비용 상한이 정해지면 조정한다(design 12.2절 3·4)

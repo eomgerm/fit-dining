@@ -80,9 +80,12 @@ judge·반성 모델과 연결 방식은 `experiments/prompt_opt/common.py`에 �
 `server/embed.py`가 `POST /embed`(`docs/infra/design.md` 12.3절)를 Modal L4 GPU에서 띄웁니다. 인코딩은 `fit_ai.embedding`을 그대로 씁니다. 모델 가중치는 고정 리비전으로 이미지에 넣습니다.
 
 ```bash
-uv run modal token new                              # 처음 한 번
-APP_ENV=dev uv run modal deploy -m server.embed     # 앱 fit-dev-embed. prod는 APP_ENV=prod
+uv run modal token new                          # 처음 한 번
+uv run modal serve --env test -m server.embed   # AI 팀 시험용. 끄면 내려간다
+uv run modal deploy --env dev -m server.embed   # BE dev가 부른다. prod는 --env prod
 ```
+
+Modal Environment는 `test`·`dev`·`prod`이고 앱 이름은 모두 `fit-embed`입니다(설계 11.2절). 같은 커밋을 test에서 대조한 뒤 dev, prod 순서로 올립니다.
 
 - 요청: `{"texts": [...], "kind": "query|passage"}`. 텍스트는 1~64개, 각 2000자 이하이고 넘으면 422입니다.
 - 응답: `{"model": "<모델>@<리비전>", "dim": 1024, "vectors": [...]}`, 헤더 `X-Model-Version`. 벡터는 단위 길이이고 소수 6자리로 반올림됩니다.
