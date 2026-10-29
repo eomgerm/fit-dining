@@ -143,6 +143,15 @@ describe("nearby", () => {
       );
     });
 
+    it("점수가 있는 카드와 없는 카드가 섞이면 서버 순서를 그대로 따른다", () => {
+      const scored = cardAt(1, here.lat + 0.008, here.lng); // 먼 곳, 점수 있음
+      const unscored = { ...cardAt(2, here.lat, here.lng), score: undefined };
+
+      const picked = pickNearby([scored, unscored], here);
+
+      expect(picked.map(({ place }) => place.id)).toEqual([1, 2]);
+    });
+
     it("점수가 있는 카드가 있으면 서버 순서를 그대로 따른다", () => {
       const first = cardAt(1, here.lat + 0.008, here.lng);
       const second = cardAt(2, here.lat, here.lng);

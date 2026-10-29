@@ -4,7 +4,7 @@ import { useEffect, useEffectEvent } from "react";
 import { useToast } from "@/shared/ui/overlay/toast";
 
 import { placeQueries } from "../api/place-queries";
-import { filterNearby } from "../model/nearby";
+import { filterNearby, orderNearby, YEOKSAM_STATION } from "../model/nearby";
 import { searchStore, type HistoryEntry } from "../model/search-store";
 import { LOCATION_FAILED_MESSAGE, locateDevice } from "./locate-device";
 import { useSearchStore } from "./use-search-store";
@@ -77,10 +77,14 @@ function useEntryResults(
 
   const locating =
     nearby && (location.status === "idle" || location.status === "pending");
-  const cards =
-    nearby && location.status === "ok"
-      ? filterNearby(allCards, location.here)
-      : allCards;
+  // 점수가 없는 근처 응답은 기준 지점에서 가까운 순이다. 위치가 있으면 그 위치, 없으면 역삼역이 기준이다
+  const origin = location.status === "ok" ? location.here : YEOKSAM_STATION;
+  const nearbyCards = orderNearby(
+    allCards,
+    location.status === "ok" ? filterNearby(allCards, location.here) : allCards,
+    origin,
+  );
+  const cards = nearby ? nearbyCards : allCards;
 
   return {
     firstPage,

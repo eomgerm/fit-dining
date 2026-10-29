@@ -244,6 +244,26 @@ describe("PlaceDetailScreen", () => {
     expect(screen.getByText("주말 오후에는 대기가 길어요")).toBeTruthy();
   });
 
+  it("BE가 점수를 생략한 카드(주의점도 이유도 없음)면 핏 점수와 추천 이유 영역을 모두 숨긴다", async () => {
+    stores.current.recordCards([
+      {
+        place,
+        labels: [],
+        openStatus: "OPEN",
+        reasons: [],
+        scoreItems: [],
+      },
+    ]);
+    renderDetail();
+
+    await screen.findByRole("heading", { name: "카페 온담" });
+    expect(screen.queryByText("핏 점수")).toBeNull();
+    expect(screen.queryByRole("button", { name: /핏 점수/ })).toBeNull();
+    expect(screen.queryByText("AI 추천 이유")).toBeNull();
+    expect(screen.queryByText(/근거가 부족해요/)).toBeNull();
+    expect(screen.getByText("서울 강남구 테헤란로 1")).toBeTruthy();
+  });
+
   it("검색 카드가 없으면 핏 점수와 추천 이유를 숨기고 장소 정보만 보여 준다", async () => {
     renderDetail();
 

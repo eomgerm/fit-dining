@@ -796,6 +796,61 @@ describe("SearchScreen", () => {
       expect(await screen.findByText("위치를 확인할 수 없어요")).toBeTruthy();
       expect(within(list).queryByText(/\d+m$/)).toBeNull();
     });
+
+    // 점수 없는 근처 응답을 입력한 검색에 돌려준다. id 1이 가장 멀고 2가 가장 가깝다
+    function stubUnscoredNearby() {
+      const original = globalThis.fetch;
+      const at = (id: number, lat: number) => ({
+        ...card(id),
+        score: undefined,
+        place: { ...card(id).place, lat },
+      });
+      vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>(async (input, init) =>
+          init?.body && JSON.parse(String(init.body)).query === "근처 카페"
+            ? Response.json({
+                conditions: {},
+                nearby: true,
+                totalCount: 3,
+                items: [at(1, 37.508), at(2, 37.5), at(3, 37.504)],
+              } satisfies PlaceSearchResponse)
+            : original(input, init),
+        ),
+      );
+    }
+
+    const rankedNames = (list: HTMLElement) =>
+      within(list)
+        .getAllByRole("listitem")
+        .map((item) => within(item).getByText(/^장소 \d$/).textContent);
+
+    it("점수가 없는 근처 결과는 위치에서 가까운 순으로 순위가 매겨진다", async () => {
+      stubUnscoredNearby();
+      // 역삼역 기준이면 2, 3, 1이고 이 위치 기준이면 1, 3, 2다. 위치를 기준으로 삼는지 가른다
+      stubGeolocation({ lat: 37.508, lng: 127.03 });
+      renderScreen();
+
+      const list = await newSearch("근처 카페");
+
+      await waitFor(() =>
+        expect(within(list).getAllByRole("listitem")).toHaveLength(3),
+      );
+      expect(rankedNames(list)).toEqual(["장소 1", "장소 3", "장소 2"]);
+    });
+
+    it("위치를 얻지 못해도 점수가 없는 근처 결과는 역삼역에서 가까운 순이다", async () => {
+      stubUnscoredNearby();
+      stubGeolocation("denied");
+      renderScreen();
+
+      const list = await newSearch("근처 카페");
+
+      await screen.findByText(
+        "위치를 확인할 수 없어 지역 기준으로 보여 드려요",
+      );
+      expect(rankedNames(list)).toEqual(["장소 2", "장소 3", "장소 1"]);
+    });
   });
 
   describe("검색 중", () => {
@@ -1114,6 +1169,38 @@ describe("SearchScreen", () => {
           /위치 권한이 꺼져 있어요\. 브라우저 설정에서 허용해 주세요\./,
         ),
       ).toBeNull();
+    });
+
+    it("자동완성은 입력한 단어마다 이름과 일치한 메뉴 이름에서 강조한다", async () => {
+      const original = globalThis.fetch;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>(async (input, init) =>
+          String(input).startsWith("/api/v1/places/suggest")
+            ? Response.json([
+                {
+                  type: "PLACE",
+                  place: { ...card(1).place, name: "하노이 쌀국수 역삼점" },
+                  matchedMenu: "양지 쌀국수",
+                },
+                { type: "ACTION", label: "이 조건으로 추천받기" },
+              ])
+            : original(input, init),
+        ),
+      );
+      renderScreen();
+      const bar = screen.getByRole("textbox", { name: "장소 검색" });
+
+      fireEvent.focus(bar);
+      fireEvent.change(bar, { target: { value: "역삼 쌀국수" } });
+      const list = await screen.findByRole("list", { name: "검색 추천" });
+
+      // 이름에서는 두 단어가 각각, 메뉴 이름에서는 쌀국수가 강조된다
+      expect(
+        Array.from(list.querySelectorAll("mark")).map(
+          (mark) => mark.textContent,
+        ),
+      ).toEqual(["쌀국수", "역삼", "쌀국수"]);
     });
 
     it("자동완성은 '이 조건으로 추천받기'를 맨 위에 두고, 후보가 보이는 동안 막을 깔며 막을 누르면 닫히고, 입력을 지울 수 있다", async () => {

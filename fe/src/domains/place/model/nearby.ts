@@ -40,16 +40,23 @@ export function filterNearby(
   return cards.filter((card) => distanceMeters(here, card.place) <= radiusM);
 }
 
-// 첫 화면 주변 카드. 근처 응답을 기준 지점에서 반경 안으로 거른 앞의 몇 곳.
-// 점수가 있으면 서버 순서(점수순)를 따르고, 모든 카드에 점수가 없으면 기준 지점에서 가까운 순으로 정렬한다
+// 근처 응답에서 보여 줄 카드(subset)의 순서. 응답의 모든 카드에 점수가 없으면(AI 엔진 전) 서버 순서에 의미가
+// 없어서 기준 지점에서 가까운 순으로 정렬하고, 점수가 있으면 서버 순서(점수순)를 그대로 둔다
+export function orderNearby(
+  response: PlaceCard[],
+  subset: PlaceCard[],
+  origin: LatLng,
+) {
+  if (!response.every(({ score }) => score === undefined)) return subset;
+  return [...subset].sort(
+    (a, b) => distanceMeters(origin, a.place) - distanceMeters(origin, b.place),
+  );
+}
+
+// 첫 화면 주변 카드. 근처 응답을 기준 지점에서 반경 안으로 거른 앞의 몇 곳
 export function pickNearby(cards: PlaceCard[], origin: LatLng) {
-  const within = filterNearby(cards, origin);
-  const byDistance = cards.every(({ score }) => score === undefined);
-  const ordered = byDistance
-    ? [...within].sort(
-        (a, b) =>
-          distanceMeters(origin, a.place) - distanceMeters(origin, b.place),
-      )
-    : within;
-  return ordered.slice(0, NEARBY_PICK_LIMIT);
+  return orderNearby(cards, filterNearby(cards, origin), origin).slice(
+    0,
+    NEARBY_PICK_LIMIT,
+  );
 }
