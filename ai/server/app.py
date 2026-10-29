@@ -13,7 +13,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from server import search
+from server import direct_input, search
 from server.common import Dependencies, log, problem
 
 
@@ -57,4 +57,5 @@ def create_app(deps: Dependencies) -> FastAPI:
         return not_ready if not_ready is not None else JSONResponse({"status": "ok"})
 
     app.include_router(search.router(deps))
+    app.include_router(direct_input.router(deps))
     return app

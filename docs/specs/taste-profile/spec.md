@@ -115,7 +115,7 @@ flowchart LR
 | 설정 오류 | 켜져 있는데 주소나 키가 비었거나 주소가 `http(s)://`로 시작하지 않으면 장애로 보지 않고 에러를 낸다. 실행을 시작할 때 검사해 배포 직후 드러나게 한다 |
 | 로그 | 입력 원문과 응답 본문은 로그에 남기지 않는다. 실패 종류만 남긴다 |
 
-베이스라인은 로컬 스크립트에서 GMS를 부른다. 운영에서 누가 부를지(AI 쪽인지 BE인지)는 정하지 않았다. 지금 인프라 설계는 GMS 키를 BE 환경 파일에 둔다(`docs/infra/design.md` 793행).
+온보딩 직접 입력은 AI API(아래 "해석 API")가 GMS를 부른다. 지금 인프라 설계는 GMS 키를 BE 환경 파일에 두므로(`docs/infra/design.md` 793행) AI 서버 배포 전에 계약을 고친다.
 
 ### 프롬프트에 넣는 것
 
@@ -188,6 +188,44 @@ LLM이 준 항목이 대조에서 모두 버려지면 출력 검사 실패로 �
 - 코드가 있으면 `label`을 보여 준다
 - 코드가 없으면 `positive_text`, 없으면 `quote`를 보여 준다
 - 보관만 하는 항목은 칩에서 뺀다. 보여 주면 반영된다고 오해할 수 있다
+
+### 해석 API
+
+BE `TasteAnalyzer`가 직접 입력마다 AI API를 한 번 부른다(`ai/server/direct_input.py`). 칩 규칙은 위 "칩 표시"를 따르고 `fit_ai.taste.direct_input.to_chips`가 만든다.
+
+`POST /v1/taste/interpret`
+
+```json
+{"text": "시끄럽지 않은 데가 좋아요. 너무 매운 건 못 먹어요"}
+```
+
+| 요청 필드 | 규칙 |
+|---|---|
+| `text` | 앞뒤 공백을 지운 뒤 1~100자. 모르는 필드는 거부한다 |
+
+```json
+{"tastes": [{"polarity": "LIKE", "label": "조용하고 차분한 곳", "code": "QUIET"},
+            {"polarity": "DISLIKE", "label": "매운 음식", "code": "FOOD_SPICY"}],
+ "model": "gpt-4o-mini"}
+```
+
+| 응답 필드 | 뜻 |
+|---|---|
+| `tastes` | 칩 목록, 최대 10개. 해석할 취향이 없으면 빈 목록(200)이다. 해석 실패와 구분한다 |
+| `tastes[].polarity` | `LIKE` 또는 `DISLIKE`. `DISLIKE`는 음식·맛 코드에만 나온다(1단계 규칙) |
+| `tastes[].label` | 코드가 있으면 코드표 `label`, 없으면 `positive_text`. BE 상한에 맞춰 공백을 하나로 줄이고 UTF-16 20단위로 자른다 |
+| `tastes[].code` | 코드표 코드 또는 `null`. BE가 칩과 함께 저장한다(profile-storage spec 열린 문제 6) |
+| `model` | 해석한 LLM |
+
+오류는 BE 컨벤션의 ProblemDetail(`application/problem+json`, `code` 필드)이다. 입력 원문은 응답과 로그에 넣지 않고, 로그에는 칩 수와 걸린 시간만 남긴다.
+
+| 상태 | `code` | 경우 |
+|---|---|---|
+| 400 | `INVALID_REQUEST` | 본문이 JSON이 아니거나 `text`가 규칙에 맞지 않음, 모르는 필드 |
+| 503 | `INTERPRET_FAILED` | GMS가 꺼짐(`GMS_ENABLED`), 호출이나 출력 검사가 두 번 실패. 사용자가 다시 시도한다 |
+| 500 | `INTERNAL_ERROR` | 예상하지 못한 오류 |
+
+GMS 한 번의 타임아웃은 `GMS_TIMEOUT_SECONDS`(기본 5초)이고 실패하면 한 번 더 부른다. 실제 GMS로 부르면 1~2초 걸렸다. BE 기본 타임아웃(`fitdining.onboarding.timeout-ms`, 3초)보다 길어질 수 있으므로 BE에 연결할 때 함께 정한다.
 
 해석 품질 평가(정답셋 만들기)는 이번 범위가 아니다. 샘플 입력으로 동작만 확인한다.
 
@@ -402,17 +440,18 @@ ai/
 │  ├─ gms.py           # GMS 호출: 타임아웃, 재시도, 킬스위치, 원문 로그 금지 (공유)
 │  └─ taste/
 │     ├─ profile.py       # 장부 행 → 프로필 (3·5·6단계)
-│     └─ direct_input.py  # 직접 입력 → 장부 행 (1·2단계)
+│     └─ direct_input.py  # 직접 입력 → 장부 행 (1·2단계), 칩
+├─ server/              # AI API(FastAPI). app.py 공통 오류, direct_input.py 해석 API
 ├─ scripts/build_sample_taste_profiles.py
 ├─ samples/taste/       # profiles.json, code_vectors.json
 └─ tests/
 ```
 
-- uv 프로젝트이고 의존성은 `sentence-transformers`, `numpy`, `httpx`, 개발용 `pytest`, `ruff`뿐이다. ruff는 lefthook pre-commit에서 스테이징한 `ai/` 파일에 돈다
+- uv 프로젝트이고 의존성은 `sentence-transformers`, `numpy`, `httpx`, `fastapi`, 개발용 `pytest`, `ruff`, `uvicorn`뿐이다. ruff는 lefthook pre-commit에서 스테이징한 `ai/` 파일에 돈다
 - torch는 기본으로 PyPI 빌드를 쓴다. GPU 서버(CUDA 12.8 드라이버)에서는 `uv sync --extra cu128`, CPU 전용 빌드는 `uv sync --extra cpu`로 고른다
 - 40은 `place/`, 41은 `match/`를 쓴다. 41은 `taste` 내부를 가져다 쓰지 않고 프로필 JSON만 읽는다
 - 코드표는 지금 Python 모듈이다. BE·FE가 같은 목록을 읽어야 할 때(공용 특징 코드 목록, 리뷰 spec D-16) JSON으로 옮긴다
-- 넣지 않는 것: `ai/` CI 잡, Docker, 서버 코드. 저장소 전체에 도는 시크릿 검사와 줄바꿈(CRLF) 검사는 `ai/`에도 적용된다
+- 넣지 않는 것: `ai/` CI 잡, Docker. 저장소 전체에 도는 시크릿 검사와 줄바꿈(CRLF) 검사는 `ai/`에도 적용된다
 - 단위 테스트는 임베딩 함수와 GMS 응답을 가짜로 넣어 모델과 네트워크 없이 돈다. 실제 모델과 GMS 확인은 샘플 생성 스크립트로 한다
 
 ## 열린 질문

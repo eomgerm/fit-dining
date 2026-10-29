@@ -7,6 +7,8 @@ from fit_ai.features import FEATURES
 from fit_ai.taste.profile import Row
 
 MAX_LEN = 100  # 온보딩 직접 입력 상한(PRD FR-06)
+MAX_CHIPS = 10  # BE `Preferences.tastes` 상한
+MAX_LABEL = 20  # BE `TasteChip.label` 상한. Java처럼 UTF-16 단위로 센다
 
 # 프롬프트는 라벨 설명을 붙인 제로샷 지시(Gen-Z, arXiv 2311.07115)를 GEPA로 최적화한 것이다
 # (S15P31A302-107, ai/experiments/prompt_opt). 합성 test 108개 평균이 0.675에서 0.849가 됐다.
@@ -351,3 +353,25 @@ def interpret(
             row["positive_text"] = it["positive_text"]
         rows.append(row)
     return rows
+
+
+def _label(text: str) -> str:
+    label = " ".join(text.split())  # 줄바꿈 같은 제어 문자는 BE가 거부한다
+    while len(label.encode("utf-16-le")) // 2 > MAX_LABEL:
+        label = label[:-1]
+    return label.rstrip()
+
+
+def to_chips(rows: list[Row]) -> list[dict]:
+    """해석 행 → BE 칩(spec 1단계 "칩 표시"). 보관만 하는 행은 반영되지 않으므로 뺀다."""
+    chips = []
+    for row in rows:
+        if row["code"]:
+            label = FEATURES[row["code"]].label
+        elif row.get("positive_text"):
+            label = _label(row["positive_text"])
+        else:
+            continue
+        polarity = "LIKE" if row["direction"] > 0 else "DISLIKE"
+        chips.append({"polarity": polarity, "label": label, "code": row["code"]})
+    return chips[:MAX_CHIPS]

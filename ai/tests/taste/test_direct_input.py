@@ -6,6 +6,7 @@ from fit_ai.taste.direct_input import (
     build_messages,
     interpret,
     parse_items,
+    to_chips,
 )
 
 T0 = "2026-10-22T10:00:00+09:00"
@@ -181,3 +182,68 @@ def test_failed_interpretation_returns_none():
 def test_rejects_text_over_100_chars():
     with pytest.raises(ValueError):
         interpret("가" * 101, "u1", T0, call=answering())
+
+
+def row(code=None, direction=1, positive_text=None, quote="원문"):
+    r = {
+        "user_id": None,
+        "code": code,
+        "direction": direction,
+        "source": "free_text",
+        "quote": quote,
+        "created_at": T0,
+    }
+    if positive_text is not None:
+        r["positive_text"] = positive_text
+    return r
+
+
+def test_chips_from_codes_sentences_and_food_dislike():
+    rows = [
+        row("QUIET"),
+        row(positive_text="담백한 국물 요리를 먹을 수 있는 곳"),
+        row("FOOD_SPICY", -1),
+    ]
+    assert to_chips(rows) == [
+        {"polarity": "LIKE", "label": FEATURES["QUIET"].label, "code": "QUIET"},
+        {
+            "polarity": "LIKE",
+            "label": "담백한 국물 요리를 먹을 수 있는 곳",
+            "code": None,
+        },
+        {
+            "polarity": "DISLIKE",
+            "label": FEATURES["FOOD_SPICY"].label,
+            "code": "FOOD_SPICY",
+        },
+    ]
+
+
+def test_kept_only_rows_are_not_chips():
+    # 시설·품질·예산, 코드 없는 비선호는 반영되지 않으므로 칩으로 보여 주지 않는다
+    assert to_chips([row(), row(direction=-1)]) == []
+
+
+def test_every_code_label_fits_chip_limit():
+    assert all(1 <= len(f.label) <= 20 for f in FEATURES.values())
+
+
+@pytest.mark.parametrize(
+    ("text", "label"),
+    [
+        (
+            "비 오는 날 따뜻한 국수를 먹을 수 있는 곳",
+            "비 오는 날 따뜻한 국수를 먹을 수",
+        ),
+        ("가" * 19 + " 나", "가" * 19),  # 자른 끝 공백은 지운다
+        ("가" * 19 + "😀", "가" * 19),  # BE는 UTF-16 단위로 센다
+        ("줄\n바꿈  있는\t곳", "줄 바꿈 있는 곳"),  # BE는 제어 문자를 거부한다
+    ],
+)
+def test_sentence_label_is_cut_to_20_without_controls(text, label):
+    assert to_chips([row(positive_text=text)])[0]["label"] == label
+
+
+def test_at_most_10_chips():
+    rows = [row(positive_text=f"{i}번째 곳") for i in range(12)]
+    assert len(to_chips(rows)) == 10
