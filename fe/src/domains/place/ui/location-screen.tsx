@@ -75,7 +75,7 @@ export function LocationScreen() {
   return (
     <main className="mx-auto flex min-h-svh w-full max-w-110 flex-col bg-linear-to-b from-primary-soft via-surface-warm to-surface px-5 pb-6 text-ink sm:px-8">
       <header className="-mx-3 flex min-h-14 items-center justify-end">
-        <TextButton disabled={pending} onClick={skipLocation}>
+        <TextButton variant="muted" disabled={pending} onClick={skipLocation}>
           건너뛰기
         </TextButton>
       </header>
