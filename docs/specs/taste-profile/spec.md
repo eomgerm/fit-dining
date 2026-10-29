@@ -476,7 +476,7 @@ ai/
 │  └─ taste/
 │     ├─ profile.py       # 장부 행 → 프로필 (3·5·6단계)
 │     └─ direct_input.py  # 직접 입력 → 장부 행 (1·2단계), 칩
-├─ server/              # AI API(FastAPI)와 임베딩 Modal 앱. direct_input.py가 해석 API
+├─ server/              # AI API(FastAPI)와 임베딩 Modal 앱. direct_input.py가 해석 API, taste_profile.py가 프로필 계산 API
 ├─ scripts/build_sample_taste_profiles.py
 ├─ samples/taste/       # profiles.json, code_vectors.json
 └─ tests/
