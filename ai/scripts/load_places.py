@@ -8,28 +8,13 @@
 장소 분석 결과(place_profiles, place_personas)는 40 프롬프트가 정해지면 따로 넣는다.
 """
 
-import csv
 import json
 import sys
 from collections import defaultdict
 from pathlib import Path
 
+from fit_ai.place.clean import by_place, read
 from fit_ai.place.rules import food_type
-
-
-def read(clean: Path, name: str) -> list[dict]:
-    """빈 값은 None이다(정제본 규약: 빈 문자열을 쓰지 않는다)."""
-    with open(clean / name, encoding="utf-8", newline="") as f:
-        return [{k: v or None for k, v in r.items()} for r in csv.DictReader(f)]
-
-
-def by_place(rows: list[dict], order: str | None = None) -> dict[str, list[dict]]:
-    if order:
-        rows = sorted(rows, key=lambda r: int(r[order]))
-    out = defaultdict(list)
-    for r in rows:
-        out[r["naver_place_id"]].append(r)
-    return out
 
 
 def boolean(v: str | None) -> bool | None:
