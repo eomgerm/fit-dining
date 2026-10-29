@@ -40,10 +40,15 @@ def create_app(deps: Dependencies) -> FastAPI:
             return problem(400, "INVALID_REQUEST", "요청 형식이 올바르지 않다")
         return problem(e.status_code, "HTTP_ERROR", "요청을 처리할 수 없다")
 
-    @app.exception_handler(Exception)
-    async def _unexpected(_: Request, e: Exception) -> JSONResponse:
-        log("error", error=type(e).__name__)
-        return problem(500, "INTERNAL_ERROR", "AI 서비스 내부 오류다")
+    # exception_handler(Exception)는 응답 뒤 예외를 다시 던져 uvicorn이 메시지째
+    # traceback을 남긴다. 메시지에 입력이 섞일 수 있어(pydantic 검사 오류 등) 여기서 끝낸다.
+    @app.middleware("http")
+    async def _unexpected(request: Request, call_next):
+        try:
+            return await call_next(request)
+        except Exception as e:  # noqa: BLE001
+            log("error", error=type(e).__name__)
+            return problem(500, "INTERNAL_ERROR", "AI 서비스 내부 오류다")
 
     @app.get("/healthz")
     def healthz() -> JSONResponse:

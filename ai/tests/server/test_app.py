@@ -77,3 +77,11 @@ class TestErrors:
         assert SECRET not in response.text
         assert "RuntimeError" in caplog.text
         assert SECRET not in caplog.text
+
+    def test_unexpected_error_is_not_reraised(self) -> None:
+        """오류_예상못한예외면_다시던지지않는다"""
+        # 다시 던지면 uvicorn이 예외 메시지(입력이 섞일 수 있다)를 traceback으로 남긴다.
+        response = client(raise_server_exceptions=True).get("/boom")
+
+        assert response.status_code == 500
+        assert response.json()["code"] == "INTERNAL_ERROR"
