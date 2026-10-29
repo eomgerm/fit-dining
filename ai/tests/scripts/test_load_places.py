@@ -197,25 +197,188 @@ def test_place_rows_maps_places_and_child_files(tmp_path):
     assert korean["parking_free"] is None and korean["pet_allowed"] is None
 
 
-def test_upsert_sql_quotes_values_and_updates_on_conflict():
-    sql = load_places.upsert_sql(
-        [
-            {
-                "naver_place_id": "1",
-                "name": "할매's",
-                "food_type": None,
-                "parking_free": True,
-                "lat": 37.5,
-                "keywords": ["a'b"],
-                "facilities": [],
-            }
-        ]
-    )
+CHILD_CSV = {
+    "place_hours.csv": """naver_place_id,service_type,day_of_week,label_date,is_closed,open_time,close_time
+1,DEFAULT,MON,,false,17:00,02:00
+1,DEFAULT,TUE,,true,,
+1,DEFAULT,FRI,2026-10-23,true,,
+1,DEFAULT,SAT,,false,11:00,24:00
+2,DELIVERS,WED,,false,10:00,20:00
+2,DINE_IN,WED,2026-10-21,false,07:00,22:00
+""",
+    "place_hours_breaks.csv": """naver_place_id,service_type,day_of_week,break_seq,break_start,break_end
+1,DEFAULT,MON,2,20:00,20:30
+1,DEFAULT,MON,1,18:00,18:30
+2,DELIVERS,WED,1,15:00,16:00
+""",
+    "place_hours_last_orders.csv": """naver_place_id,service_type,day_of_week,seq,last_order_time
+1,DEFAULT,MON,1,01:00
+2,DINE_IN,WED,1,21:00
+""",
+    "place_photos.csv": """naver_place_id,photo_kind,media_source,position,original_url
+1,REPRESENTATIVE,,1,rep
+1,BUSINESS,business,3,b3
+1,BUSINESS,pai,2,pai
+1,BUSINESS,business,1,b1
+1,VISITOR,aiView,4,visitor
+1,MENU_BOARD,,1,m1
+""",
+    "menu_items.csv": """naver_place_id,menu_item_id,position,name,description,price_type,price,price_text,is_representative,category_name
+1,mb,2,라떼,,RANGE,,"5,000~6,000원",false,커피
+1,ma,1,아메리카노,진한,FIXED,4500,"4,500원",true,
+""",
+    "menu_item_images.csv": """naver_place_id,menu_item_id,position,url
+1,ma,2,u2
+1,ma,1,u1
+""",
+    "menu_item_labels.csv": """naver_place_id,menu_item_id,position,label
+1,mb,1,사전예약
+""",
+    "place_transit.csv": """naver_place_id,kind,position,stop_name,line_name,exit_number,stop_code,walk_minutes,walk_meters
+1,BUS,1,강남역,,,22173,2,150
+1,SUBWAY,2,역삼,2,3,,9,700
+1,SUBWAY,1,강남,신분당,10,,3,200
+""",
+    "place_seat_types.csv": """naver_place_id,position,seat_name,description
+1,1,단체석,최소 4명
+""",
+    "place_broadcasts.csv": """naver_place_id,position,channel,program,episode,aired_on,menu
+1,1,KBS2,생생정보,100,2015-06-29,
+""",
+}
 
+
+def test_child_rows_follow_place_catalog_rules(tmp_path):
+    for name, text in CHILD_CSV.items():
+        (tmp_path / name).write_text(text, encoding="utf-8")
+
+    rows = load_places.child_rows(tmp_path)
+
+    def hour(pid, day, open, close, closed=False, breaks="[]", last_orders=()):
+        return {
+            "naver_place_id": pid,
+            "day_of_week": day,
+            "open_time": open,
+            "close_time": close,
+            "closed": closed,
+            "breaks": breaks,
+            "last_orders": list(last_orders),
+        }
+
+    # 기본 시간표가 없으면 매장 시간표만, 날짜가 붙은 휴무는 정보 없음, 24:00은 00:00(D-10, D-24)
+    assert rows["place_hours"] == [
+        hour(
+            "1",
+            "MON",
+            "17:00",
+            "02:00",
+            breaks='[{"start": "18:00", "end": "18:30"}, {"start": "20:00", "end": "20:30"}]',
+            last_orders=["01:00"],
+        ),
+        hour("1", "TUE", None, None, closed=True),
+        hour("1", "FRI", None, None),
+        hour("1", "SAT", "11:00", "00:00"),
+        hour("2", "WED", "07:00", "22:00", last_orders=["21:00"]),
+    ]
+    photos = sorted(rows["place_photos"], key=lambda r: (r["source"], r["sort_order"]))
+    assert photos == [
+        {"naver_place_id": "1", "source": "business", "sort_order": 0, "url": "b1"},
+        {"naver_place_id": "1", "source": "business", "sort_order": 1, "url": "b3"},
+        {"naver_place_id": "1", "source": "menuBoard", "sort_order": 0, "url": "m1"},
+    ]
+    assert rows["place_menus"] == [
+        {
+            "naver_place_id": "1",
+            "sort_order": 0,
+            "category": None,
+            "name": "아메리카노",
+            "description": "진한",
+            "price": 4500,
+            "price_text": "4,500원",
+            "price_type": "FIXED",
+            "representative": True,
+            "labels": [],
+            "photo_urls": ["u1", "u2"],
+        },
+        {
+            "naver_place_id": "1",
+            "sort_order": 1,
+            "category": "커피",
+            "name": "라떼",
+            "description": None,
+            "price": None,
+            "price_text": "5,000~6,000원",
+            "price_type": "RANGE",
+            "representative": False,
+            "labels": ["사전예약"],
+            "photo_urls": [],
+        },
+    ]
+    assert [r["station"] for r in rows["place_subways"]] == ["강남", "역삼"]
+    assert rows["place_subways"][0] == {
+        "naver_place_id": "1",
+        "station": "강남",
+        "line": "신분당",
+        "exit": "10",
+        "walk_minutes": 3,
+        "walk_meters": 200,
+    }
+    assert rows["place_bus_stops"] == [
+        {
+            "naver_place_id": "1",
+            "name": "강남역",
+            "code": "22173",
+            "walk_minutes": 2,
+            "walk_meters": 150,
+        }
+    ]
+    assert rows["place_seats"] == [
+        {"naver_place_id": "1", "name": "단체석", "description": "최소 4명"}
+    ]
+    assert rows["place_broadcasts"] == [
+        {
+            "naver_place_id": "1",
+            "channel": "KBS2",
+            "program": "생생정보",
+            "episode": "100",
+            "aired_on": "2015-06-29",
+            "menu": None,
+        }
+    ]
+
+
+def test_load_sql_upserts_places_then_replaces_their_children():
+    place = {
+        "naver_place_id": "1",
+        "name": "할매's",
+        "food_type": None,
+        "parking_free": True,
+        "lat": 37.5,
+        "keywords": ['a"b', "c'd"],
+        "facilities": [],
+    }
+    hours = {"naver_place_id": "1", "day_of_week": "MON", "breaks": "[]", "sort": 0}
+    tables = {"place_hours": [hours], "place_seats": []}
+    sql = load_places.load_sql([place], tables)
+
+    assert sql.startswith("BEGIN;\n") and sql.rstrip().endswith("COMMIT;")
     assert (
-        "VALUES\n('1', '할매''s', NULL, true, 37.5, ARRAY['a''b']::text[], '{}'::text[])"
+        "VALUES\n('1', '할매''s', NULL, true, 37.5, '{\"a\\\"b\",\"c''d\"}', '{}')"
         in sql
     )
     assert "ON CONFLICT (naver_place_id) DO UPDATE SET name = EXCLUDED.name," in sql
     assert "naver_place_id = EXCLUDED" not in sql
-    assert sql.rstrip().endswith("updated_at = now();")
+    assert "updated_at = now();" in sql
+    # 장소 행은 지우지 않아 place_id가 그대로다. 자식 행만 지우고 다시 넣는다(D-15)
+    assert "DELETE FROM places" not in sql
+    for table in ("place_hours", "place_seats"):
+        assert (
+            f"DELETE FROM {table} WHERE place_id IN "
+            "(SELECT place_id FROM places WHERE naver_place_id IN ('1'));" in sql
+        )
+    assert (
+        "INSERT INTO place_hours (place_id, day_of_week, breaks, sort) VALUES\n"
+        "((SELECT place_id FROM places WHERE naver_place_id = '1'), 'MON', '[]', 0);"
+        in sql
+    )
+    assert "INSERT INTO place_seats" not in sql
