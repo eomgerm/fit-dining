@@ -37,7 +37,9 @@ it("링크 버튼에 nativeButton 경고가 없다", () => {
         <SocialSignupPage />
       </ToastProvider>,
     );
-    expect(screen.getByRole("link").getAttribute("href")).toBe("/signup");
+    expect(
+      screen.getByRole("link", { hidden: true }).getAttribute("href"),
+    ).toBe("/signup");
     expect(
       [...error.mock.calls, ...warn.mock.calls].flat().join(" "),
     ).not.toContain("nativeButton");
