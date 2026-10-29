@@ -69,7 +69,7 @@ class SearchRequest:
     Attributes:
         query: 사용자가 이번에 입력한 요청문
         previous: 후속 조건이면 기준 요청의 조건. 새 검색이면 None이다.
-        taste: 사용자 취향 프로필. 온보딩을 하지 않았으면 None이다.
+        taste: 사용자 취향 프로필. 취향이 없거나 읽지 못했으면 None이다.
         bounds: 지도 영역("이 지역에서 검색"). 있으면 역 대신 좌표로 거른다.
     """
 

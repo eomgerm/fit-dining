@@ -1,11 +1,11 @@
-"""AI API(FastAPI). BE가 Modal 위의 이 앱을 검색마다 한 번 부른다.
+"""AI API(FastAPI). BE가 검색마다 이 앱을 한 번 부른다.
 
 검색 자체(요청 해석부터 카드 만들기까지)는 `fit_ai.match.search`가 한다. 앱은 요청을
 검사해 검색에 넘기고, 결과를 응답 모양과 폴백 코드로 바꾸고, 로그를 남긴다. 앱은 장소
-데이터를 들고 있지 않고 검색마다 DB 뷰에서 읽는다. BE 요구(검색 spec의 카드 계약, BE 컨벤션의
-ProblemDetail)와 인프라 요구를 맞춘다. 인프라 요구는 design.md 12.2의 모델 버전·
-로그·서버 쪽 방어, 12.1 BE 계약 #17의 폴백 표시, contracts/metrics.md의 폴백
-지표다. 명세는 docs/comparison/api.md에 있다.
+데이터를 들고 있지 않고 검색마다 장소 저장소(DB나 장소 파일)에서 읽는다. BE 요구(검색
+spec의 카드 계약, BE 컨벤션의 ProblemDetail)와 인프라 요구를 맞춘다. 인프라 요구는
+design.md 12.2의 모델 버전·로그·서버 쪽 방어, 12.1 BE 계약 #17의 폴백 표시,
+contracts/metrics.md의 폴백 지표다. 명세는 docs/comparison/api.md에 있다.
 """
 
 import json
@@ -66,11 +66,12 @@ class Dependencies:
 
     Attributes:
         embedding_ready: 요청문 인코더 모델을 올렸는지. 못 올렸으면 검색이 503이다.
-        store: 장소 저장소. 접속 주소가 없으면 None이다.
+        store: 장소 저장소. DB 접속 주소와 장소 파일이 모두 없으면 None이다.
         gms_timeout: GMS 한 번 부를 때 기다리는 시간(초)
         gms_client: GMS 연결을 다시 쓰는 HTTP 클라이언트. 없으면 부를 때마다 만든다.
         max_concurrent: 컨테이너 하나가 동시에 처리하는 요청 수 상한
-        taste_store: 회원 취향 저장소. 없으면 회원 id로 온 검색은 취향 없이 한다.
+        taste_store: 회원 취향 저장소. DB 접속 주소가 없으면 None이다. 그때 회원 id로
+            온 검색은 취향 없이 하고 `fallbacks`에 `TASTE_INVALID`를 담는다.
     """
 
     embedding_ready: bool

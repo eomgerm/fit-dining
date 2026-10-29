@@ -102,7 +102,7 @@ class ConditionsBody(_Body):
 
     Attributes:
         text: 정렬 LLM에 넣을 요청문. 후속 조건이면 이전 요청과 합친 문장이다.
-        embedding_text: 후보 추출에 쓸 긍정형 문장
+        embedding_text: 후보 추출에 쓸 문장. 부정 표현을 긍정형으로 바꿨고 위치 말은 뺐다.
         codes: 요청 조건 코드. 취향 코드표 코드와 시설 코드다.
         category_group: 업종. 요청에 없으면 null이다.
         station: 역. 요청에 없으면 null이다.

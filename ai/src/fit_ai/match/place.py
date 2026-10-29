@@ -57,7 +57,7 @@ AXIS_OPPOSITES = {"QUIET": "LIVELY", "LIVELY": "QUIET"}
 
 @dataclass(frozen=True)
 class PlaceInfo:
-    """장소 정보. 40 프로필에 없어서 BE 장소 정보를 뷰에서 함께 읽는다.
+    """장소 정보. 40 프로필에 없어서 장소 저장소가 BE 장소 정보를 함께 읽는다.
 
     Attributes:
         place_id: 장소 id. BE DB의 장소 id다.
@@ -81,7 +81,7 @@ class Place:
         place_id: 장소 id. BE DB의 장소 id다.
         info: 장소 정보
         summary: 40이 만든 장소 요약 문장. 장소 정보로만 만든 틀 문장이라
-            리뷰 내용은 없다. 요약 벡터는 DB에만 있고 유사도도 DB가 잰다.
+            리뷰 내용은 없다. 요약 벡터는 읽지 않고 유사도는 장소 저장소가 잰다.
         conditions: 조건 코드별 근거. 근거 리뷰가 하나도 없는 조건은 빠진다.
     """
 
@@ -126,8 +126,8 @@ class Place:
         """40 장소 프로필 하나를 읽은 JSON 객체와 장소 정보로 장소를 만든다.
 
         장소 id는 장소 정보의 값을 쓴다. 40 프로필의 `place_id`는 원본 데이터의 id일 수
-        있어 읽지 않는다. 요약 벡터와 `embedding`은 DB가 유사도를 잴 때 쓰므로 읽지
-        않는다. `personas`, `evidence`, `food_type`, `features[].label`도 MVP에서 쓰지
+        있어 읽지 않는다. 요약 벡터와 `embedding`은 장소 저장소가 유사도를 잴 때 쓰므로
+        읽지 않는다. `personas`, `evidence`, `food_type`, `features[].label`도 MVP에서 쓰지
         않아 읽지 않는다.
 
         Args:

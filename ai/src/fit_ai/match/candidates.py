@@ -1,8 +1,8 @@
 """① 후보 뽑기. 거르기 조건에 맞는 장소 중 요청문과 가까운 순서로 고른다.
 
-거르기와 유사도 계산은 장소 저장소(Postgres + pgvector)가 SQL 한 번으로 한다.
-여기에는 저장소가 지켜야 할 모양만 둔다. 구현은 `pg_store.py`(Postgres)와, 실제 장소
-DB가 생기기 전에 쓰는 `json_store.py`(JSON 파일)다.
+거르기와 유사도 계산은 장소 저장소가 한다. 여기에는 저장소가 지켜야 할 모양만 둔다.
+구현은 `pg_store.py`(Postgres)와, 실제 장소 DB가 생기기 전에 쓰는 `json_store.py`(JSON
+파일)다.
 취향은 쓰지 않는다. 취향은 ② 정렬에서만 쓴다(docs/comparison/spec.md 4.2).
 """
 
