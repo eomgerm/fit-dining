@@ -26,6 +26,33 @@ describe("highlightParts", () => {
     ]);
   });
 
+  it("공백으로 나눈 단어마다 따로 표시한다", () => {
+    expect(highlightParts("하노이 쌀국수 역삼점", "역삼 쌀국수")).toEqual([
+      { text: "하노이 ", match: false },
+      { text: "쌀국수", match: true },
+      { text: " ", match: false },
+      { text: "역삼", match: true },
+      { text: "점", match: false },
+    ]);
+  });
+
+  it("겹치거나 이어진 부분은 하나로 합친다", () => {
+    expect(highlightParts("쌀국수", "쌀 쌀국수")).toEqual([
+      { text: "쌀국수", match: true },
+    ]);
+    expect(highlightParts("쌀국수집", "쌀 국수")).toEqual([
+      { text: "쌀국수", match: true },
+      { text: "집", match: false },
+    ]);
+  });
+
+  it("조합 중인 마지막 단어는 글자 그대로 맞을 때만 표시한다", () => {
+    expect(highlightParts("역삼 쌀국수", "역삼 쌀구")).toEqual([
+      { text: "역삼", match: true },
+      { text: " 쌀국수", match: false },
+    ]);
+  });
+
   it("같은 부분이 없거나 입력이 비면 그대로다", () => {
     expect(highlightParts("카페 온담", "식당")).toEqual([
       { text: "카페 온담", match: false },
