@@ -52,28 +52,25 @@ function form() {
       <SocialSignupPage />
     </ToastProvider>,
   );
-  fireEvent.change(screen.getByLabelText("닉네임"), {
-    target: { value: "새이름" },
-  });
-  fireEvent.click(screen.getByRole("button", { name: "다음" }));
 }
 async function submit() {
   await screen.findByRole("button", { name: "동의하고 시작하기" });
   fireEvent.click(screen.getByRole("checkbox", { name: "전체 동의" }));
   fireEvent.click(screen.getByRole("button", { name: "동의하고 시작하기" }));
 }
-it("validates nickname before opening terms", () => {
-  render(
-    <ToastProvider>
-      <SocialSignupPage />
-    </ToastProvider>,
+it("opens terms immediately without a nickname input and can reopen", async () => {
+  form();
+  const dialog = await screen.findByRole("dialog");
+  await waitFor(() =>
+    expect(dialog.contains(document.activeElement)).toBe(true),
   );
-  fireEvent.change(screen.getByLabelText("닉네임"), { target: { value: "a" } });
-  fireEvent.blur(screen.getByLabelText("닉네임"));
-  expect(
-    screen.getByRole("button", { name: "다음" }).hasAttribute("disabled"),
-  ).toBe(true);
-  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(screen.queryByLabelText("닉네임")).toBeNull();
+  fireEvent.keyDown(dialog, { key: "Escape" });
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  fireEvent.click(
+    screen.getByRole("button", { name: "약관 동의하고 시작하기" }),
+  );
+  expect(await screen.findByRole("dialog")).toBeTruthy();
 });
 it("requires agreements and navigates to location guidance on success", async () => {
   mocks.signup.mockResolvedValue({});
@@ -86,15 +83,14 @@ it("requires agreements and navigates to location guidance on success", async ()
   await submit();
   await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/location"));
   expect(mocks.signup).toHaveBeenCalledWith({
-    nickname: "새이름",
     agreements: { ageOver14: true, terms: true, privacy: true },
   });
 });
-it.each([401, 409])("handles status %s", async (status) => {
+it.each([401, 500])("handles status %s", async (status) => {
   mocks.signup.mockRejectedValue(
     new ApiError("http", "failed", {
       status,
-      problem: { status, type: "urn:fitdining:auth:nickname-taken" },
+      problem: { status, type: "about:blank" },
     }),
   );
   form();
@@ -105,9 +101,7 @@ it.each([401, 409])("handles status %s", async (status) => {
     );
   else {
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(screen.getByLabelText("닉네임").getAttribute("aria-invalid")).toBe(
-      "true",
-    );
+    expect(screen.getByRole("alert").textContent).toBeTruthy();
   }
 });
 

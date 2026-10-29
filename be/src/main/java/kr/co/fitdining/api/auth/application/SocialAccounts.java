@@ -15,21 +15,27 @@ import org.springframework.stereotype.Service;
 public class SocialAccounts {
     private final SocialAccountTransactions transactions;
     private final AuthUserRepository users;
+    private final SocialNicknames nicknames;
 
     public Issued existing(String provider, String subject) {
         return transactions.existing(provider, subject);
     }
 
-    public Issued signup(String provider, String subject, String nickname) {
-        return signup(provider, subject, nickname, null);
+    public Issued signup(String provider, String subject) {
+        return signup(provider, subject, null);
     }
 
-    public Issued signup(String provider, String subject, String nickname, kr.co.fitdining.api.user.Preferences preferences) {
-        try {
-            return transactions.signup(provider, subject, nickname, preferences);
-        } catch (DataIntegrityViolationException conflict) {
-            if (users.existsByNickname(nickname)) throw new SignupConflict("nickname");
-            throw conflict;
+    public Issued signup(String provider, String subject, kr.co.fitdining.api.user.Preferences preferences) {
+        for (int attempt = 0; attempt < 10; attempt++) {
+            String nickname = nicknames.next(attempt);
+            try {
+                return transactions.signup(provider, subject, nickname, preferences);
+            } catch (SignupConflict conflict) {
+                if (!"nickname".equals(conflict.field())) throw conflict;
+            } catch (DataIntegrityViolationException conflict) {
+                if (!users.existsByNickname(nickname)) throw conflict;
+            }
         }
+        throw new IllegalStateException("Could not allocate a social nickname after 10 attempts");
     }
 }

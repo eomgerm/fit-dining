@@ -392,9 +392,11 @@ V2에서 `auth_users.deleted_at` 및 활성 이메일·닉네임 부분 유일 �
 2. BE가 state와 PKCE를 만들고 서명 쿠키를 설정한 뒤 제공자 인가 화면으로 302 이동한다. 구글 scope는 `openid`, 카카오·네이버는 별도 scope를 요청하지 않는다. 콘솔 동의 항목도 최소로 설정한다.
 3. `GET /api/auth/oauth/{provider}/callback`에서 서명·만료·제공자·state를 확인하고 상태 쿠키를 삭제한다. 구글·카카오는 S256 verifier를 토큰 교환에 전송한다. 네이버는 state를 전송한다. HTTP 연결 3초·읽기 5초 제한을 둔다.
 4. 기존 활성 계정은 RT를 발급하고 `/`로 이동한다. 이후 인증 요청의 `restore()`가 AT를 얻는다. 신규 계정은 가입 대기 쿠키를 받고 `/signup/social`로 이동한다.
-5. 닉네임과 필수 약관 3개에 동의한 뒤 `POST /api/auth/social/signup`을 호출한다. 성공은 201 `TokenResponse`, RT 설정, 가입 대기 쿠키 삭제이며 FE는 `/`로 이동한다. 동일 제공자 식별자의 동시 가입은 DB 트랜잭션 advisory lock으로 직렬화하여 기존 계정으로 로그인한다.
+5. 자동으로 열린 약관 시트에서 필수 약관 3개에 동의한 뒤 `POST /api/auth/social/signup`을 호출한다. 성공은 201 `TokenResponse`, RT 설정, 가입 대기 쿠키 삭제이며 FE는 `/`로 이동한다. 닉네임은 서버가 무작위로 배정한다. 동일 제공자 식별자의 동시 가입은 DB 트랜잭션 advisory lock으로 직렬화하여 기존 계정으로 로그인한다.
 
-실패 콜백은 항상 `/login?error=social` 또는 `/signup?error=social`로 302 이동한다. 신뢰할 수 있는 출발 화면이 없으면 `/login`이다. FE는 실패 토스트를 한 번 띄우고 error 쿼리를 제거한다. 코드·토큰·state·제공자 응답은 로그에 남기지 않는다. 가입 API는 쿠키 인증 실패 401, 닉네임·약관 검증 400, 닉네임 중복 409(`urn:fitdining:auth:nickname-taken`), Origin 불일치 403, 시도 제한 429다. 콜백은 `login`, 가입은 `signup` 시도 제한(15분 20회)을 사용한다. 새 경로에도 `Cache-Control: no-store`가 적용된다.
+실패 콜백은 항상 `/login?error=social` 또는 `/signup?error=social`로 302 이동한다. 신뢰할 수 있는 출발 화면이 없으면 `/login`이다. FE는 실패 토스트를 한 번 띄우고 error 쿼리를 제거한다. 코드·토큰·state·제공자 응답은 로그에 남기지 않는다. 가입 API는 쿠키 인증 실패 401, 약관·취향 검증 400, Origin 불일치 403, 시도 제한 429다. 콜백은 `login`, 가입은 `signup` 시도 제한(15분 20회)을 사용한다. 새 경로에도 `Cache-Control: no-store`가 적용된다.
+
+소셜 가입 닉네임 배정 (2026-10-29): 신규 계정은 `/signup/social`에서 바로 열린 `SignupTerms` 시트로 필수 약관에 동의한다. 시트를 닫으면 “약관 동의하고 시작하기” 버튼으로 다시 연다. `POST /api/auth/social/signup` 본문은 `agreements`와 선택 `preferences`만 받으며 구 클라이언트의 `nickname`은 무시한다. 서버는 `{행동}하는 {캐릭터}` 형식의 랜덤 닉네임을 배정한다. 닉네임 사전 중복 또는 유일 인덱스 경합 시 별도 트랜잭션에서 기본 조합 5회, 1000~9999 접미사 조합 5회로 총 10회 시도한다. 소진 시 일반 서버 오류를 반환하며 닉네임 중복 409는 반환하지 않는다. 성공 시 토큰·쿠키를 발급하고 `/`로 이동하며 배정 닉네임은 따로 안내하지 않는다. 이메일 가입의 닉네임 입력은 유지한다.
 
 | 쿠키 | 내용 | 속성 | 수명 |
 |---|---|---|---|

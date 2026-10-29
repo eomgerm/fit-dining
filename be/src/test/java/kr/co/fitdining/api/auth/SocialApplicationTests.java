@@ -8,7 +8,6 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import kr.co.fitdining.api.auth.application.*;
 import kr.co.fitdining.api.auth.domain.AuthFailure;
-import kr.co.fitdining.api.auth.domain.SignupConflict;
 import kr.co.fitdining.api.auth.infrastructure.SocialTokens;
 import kr.co.fitdining.api.auth.ports.AuthUseCases;
 import kr.co.fitdining.api.auth.repository.AuthUserRepository;
@@ -36,6 +35,20 @@ class SocialApplicationTests extends PostgresTestSupport {
     @Autowired SocialTokens tokens;
     @MockitoSpyBean
     AuthUserRepository users;
+    @MockitoSpyBean SocialNicknames nicknames;
+
+    @Test
+    void signup_duplicateNickname_retriesAfterRollback() {
+        String taken = "충돌" + UUID.randomUUID().toString().substring(0, 8);
+        String available = "신규" + UUID.randomUUID().toString().substring(0, 8);
+        auth.signup(UUID.randomUUID() + "@example.com", "password123", taken, "nickname-retry");
+        Mockito.doReturn(taken).when(nicknames).next(0);
+        Mockito.doReturn(available).when(nicknames).next(1);
+        var issued = accounts.signup("google", UUID.randomUUID().toString());
+        assertEquals(available, issued.identity().nickname());
+        Mockito.verify(nicknames).next(1);
+    }
+
     @Test
     @DisplayName("소셜계정_동시 가입_한 계정 생성 후 각각 로그인")
     void signup_concurrentIdentity_createsOneAccount() throws Exception {
@@ -44,10 +57,9 @@ class SocialApplicationTests extends PostgresTestSupport {
             var gate = new CountDownLatch(1);
             var tasks = new ArrayList<Future<AuthUseCases.Issued>>();
             for (int i = 0; i < 4; i++) {
-                final int n = i;
                 tasks.add(executor.submit(() -> {
                     gate.await();
-                    return accounts.signup("google", subject, "동시" + n);
+                    return accounts.signup("google", subject);
                 }));
             }
 
@@ -63,9 +75,9 @@ class SocialApplicationTests extends PostgresTestSupport {
     @DisplayName("소셜계정_가입과 갱신 및 로그아웃_이메일 없이 기존 세션 사용")
     void socialSession_refreshLogoutAndProfile_worksWithoutEmail() {
         String subject = UUID.randomUUID().toString();
-        var session = accounts.signup("kakao", subject, "소셜검증");
+        var session = accounts.signup("kakao", subject);
         assertNull(auth.me(session.identity().userId()).email());
-        assertEquals(session.identity().userId(), accounts.signup("kakao", subject, "무시닉네임").identity().userId());
+        assertEquals(session.identity().userId(), accounts.signup("kakao", subject).identity().userId());
         var rotated = auth.refresh(session.refreshToken());
         assertEquals(session.identity().userId(), rotated.identity().userId());
         auth.logout(rotated.refreshToken());
@@ -73,16 +85,9 @@ class SocialApplicationTests extends PostgresTestSupport {
     }
 
     @Test
-    @DisplayName("소셜가입_중복 닉네임_이메일 가입과 같은 충돌")
-    void signup_duplicateNickname_rejects() {
-        accounts.signup("naver", UUID.randomUUID().toString(), "중복확인");
-        assertThrows(SignupConflict.class, () -> accounts.signup("google", UUID.randomUUID().toString(), "중복확인"));
-    }
-
-    @Test
     @DisplayName("마이그레이션_이메일과 암호 한쪽만 없음_CHECK 거부")
     void migration_halfCredentials_rejects() {
-        var session = accounts.signup("naver", UUID.randomUUID().toString(), "제약확인");
+        var session = accounts.signup("naver", UUID.randomUUID().toString());
         assertThrows(DataIntegrityViolationException.class, () -> jdbc.update("update auth_users set email='half@example.com' where id=?", session.identity().userId()));
         assertThrows(DataIntegrityViolationException.class, () -> jdbc.update("update auth_users set password_hash='half' where id=?", session.identity().userId()));
     }
@@ -91,28 +96,27 @@ class SocialApplicationTests extends PostgresTestSupport {
     @DisplayName("별도계정_같은 제공자 식별자와 이메일 문자열_이메일 계정에 연결 안 함")
     void signup_emailShapedIdentity_remainsIndependent() {
         var email = auth.signup("independent@example.com", "password123", "이메일독립", "independent-address");
-        var social = accounts.signup("google", "independent@example.com", "소셜독립");
+        var social = accounts.signup("google", "independent@example.com");
         assertNotEquals(email.identity().userId(), social.identity().userId());
         assertNull(auth.me(social.identity().userId()).email());
         assertEquals(email.identity().userId(), auth.login("independent@example.com", "password123", "independent-address").identity().userId());
     }
 
     @Test
-    @DisplayName("소셜가입_다른 식별자가 같은 닉네임으로 동시 가입_201 하나와 409 하나")
-    void signup_concurrentNickname_returnsOneCreatedAndOneConflict() throws Exception {
+    @DisplayName("소셜가입_닉네임 유일 인덱스 경합_재시도로 둘 다 가입")
+    void signup_concurrentNickname_retriesInFreshTransaction() throws Exception {
         String nickname = "경합" + UUID.randomUUID().toString().substring(0, 8);
+        Mockito.doReturn(nickname).when(nicknames).next(0);
         var checked = new CountDownLatch(2);
         var checks = new AtomicInteger();
         Mockito.doAnswer(invocation -> {
             if (checks.incrementAndGet() <= 2) {
                 checked.countDown();
                 assertTrue(checked.await(10, TimeUnit.SECONDS));
-                // Both requests pass the pre-check so the unique index, rather than a sequential check, resolves the race.
                 return false;
             }
-
             return jdbc.queryForObject("select exists(select 1 from auth_users where lower(nickname)=lower(?))",
-                    Boolean.class, nickname);
+                Boolean.class, nickname);
         }).when(users).existsByNickname(nickname);
         try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
             var tasks = new ArrayList<Future<Integer>>();
@@ -121,18 +125,15 @@ class SocialApplicationTests extends PostgresTestSupport {
                 tasks.add(executor.submit(() -> mvc.perform(
                     MockMvcRequestBuilders.post("/api/auth/social/signup")
                     .header("Origin", "http://localhost:3000").contentType("application/json")
-                    .content("{\"nickname\":\"" + nickname + "\",\"agreements\":{\"ageOver14\":true,\"terms\":true,\"privacy\":true}}")
+                    .content("{\"agreements\":{\"ageOver14\":true,\"terms\":true,\"privacy\":true}}")
                     .cookie(new Cookie("fitdining_social", tokens.encode("social_signup", "google", subject))))
                     .andReturn().getResponse().getStatus()));
             }
-
-            var statuses = new ArrayList<Integer>();
-            for (var task : tasks) statuses.add(task.get(20, TimeUnit.SECONDS));
-            statuses.sort(Integer::compareTo);
-            assertEquals(List.of(201, 409), statuses);
+            for (var task : tasks) assertEquals(201, task.get(20, TimeUnit.SECONDS));
             assertEquals(1, jdbc.queryForObject("select count(*) from auth_users where nickname=?", Integer.class, nickname));
-            assertEquals(1, jdbc.queryForObject("select count(*) from auth_social_accounts a join auth_users u on a.user_id=u.id where u.nickname=?", Integer.class, nickname));
             assertEquals(3, checks.get());
+            Mockito.verify(nicknames).next(1);
         }
     }
+
 }

@@ -39,11 +39,10 @@ class SocialDevelopSyncTests extends PostgresTestSupport {
     @MockitoBean SocialProviderClient client;
 
     @Test
-    @DisplayName("소셜탈퇴_같은 식별자와 닉네임_새 계정으로 재가입")
-    void withdraw_sameIdentityAndNickname_createsNewAccount() throws Exception {
+    @DisplayName("소셜탈퇴_같은 식별자_새 계정으로 재가입")
+    void withdraw_sameIdentity_createsNewAccount() throws Exception {
         String subject = UUID.randomUUID().toString();
-        String nickname = "재가입" + subject.substring(0, 8);
-        var old = accounts.signup("google", subject, nickname);
+        var old = accounts.signup("google", subject);
         String user = old.identity().userId();
         mvc.perform(delete("/api/v1/users/" + user).header("Origin", "http://localhost:3000")
                 .header("Authorization", "Bearer " + old.accessToken()))
@@ -54,7 +53,7 @@ class SocialDevelopSyncTests extends PostgresTestSupport {
         mvc.perform(get("/api/auth/oauth/google/callback").param("code", "code").param("state", "state")
                 .cookie(new Cookie("fitdining_oauth", tokens.encode("oauth_state", "google", "state", "verifier", "login"))))
                 .andExpect(status().isFound()).andExpect(header().string("Location", "/signup/social"));
-        var fresh = accounts.signup("google", subject, nickname);
+        var fresh = accounts.signup("google", subject);
         assertNotEquals(user, fresh.identity().userId());
         mvc.perform(get("/api/auth/oauth/google/callback").param("code", "code").param("state", "state")
                 .cookie(new Cookie("fitdining_oauth", tokens.encode("oauth_state", "google", "state", "verifier", "login"))))
@@ -67,7 +66,7 @@ class SocialDevelopSyncTests extends PostgresTestSupport {
     @DisplayName("소셜콜백_탈퇴 계정 연결 잔존_로그인 거부")
     void existing_withdrawnLinkedUser_rejectsLogin() throws Exception {
         String subject = UUID.randomUUID().toString();
-        var old = accounts.signup("google", subject, "방어" + subject.substring(0, 8));
+        var old = accounts.signup("google", subject);
         jdbc.update("update auth_users set deleted_at=current_timestamp where id=?", old.identity().userId());
         assertThrows(AuthFailure.class, () -> accounts.existing("google", subject));
         when(client.exchange(any(), any(), any(), any(), any())).thenReturn(subject);

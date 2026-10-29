@@ -116,13 +116,16 @@ export async function signup(body: SignupRequest) {
   });
 }
 export async function socialSignup(
-  body: Pick<SignupRequest, "nickname" | "agreements" | "preferences">,
+  body: Pick<SignupRequest, "agreements" | "preferences">,
 ) {
   return browserLock(async () => {
     const next = await send<AuthSession>("/social/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...body, nickname: body.nickname.trim() }),
+      body: JSON.stringify({
+        agreements: body.agreements,
+        ...(body.preferences ? { preferences: body.preferences } : {}),
+      }),
     });
     update(next);
     channel?.postMessage("session-changed");

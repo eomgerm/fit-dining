@@ -98,7 +98,7 @@ public class SocialAuthController {
         @CookieValue(name = "fitdining_social", required = false) String cookie, HttpServletRequest request, HttpServletResponse response) {
         String[] identity = tokens.decode(cookie, "social_signup", 2);
         if (!transactions.recordAttempt(request.getRemoteAddr(), "signup")) throw new AuthFailure("Limited", 429);
-        var issued = accounts.signup(identity[0], identity[1], body.nickname(), body.preferences());
+        var issued = accounts.signup(identity[0], identity[1], body.preferences());
         response.addHeader(HttpHeaders.SET_COOKIE, cookie("fitdining_social", "", true, 0).toString());
         return ResponseEntity.status(201).body(cookies.issued(issued, response));
     }

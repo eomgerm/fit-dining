@@ -16,7 +16,6 @@ import java.util.Locale;
 import java.util.Set;
 import kr.co.fitdining.api.auth.application.*;
 import kr.co.fitdining.api.auth.domain.AuthFailure;
-import kr.co.fitdining.api.auth.domain.SignupConflict;
 import kr.co.fitdining.api.auth.infrastructure.*;
 import kr.co.fitdining.api.auth.ports.AuthUseCases;
 import kr.co.fitdining.api.auth.presentation.*;
@@ -156,8 +155,8 @@ class SocialHttpTests {
     @Test
     @DisplayName("소셜가입_정상 요청_201 토큰과 쿠키 삭제")
     void signup_valid_issuesTokens() throws Exception {
-        when(accounts.signup(any(), any(), any(), any())).thenReturn(issued());
-        mvc.perform(post("/api/auth/social/signup").header("Origin", "http://localhost:3000").contentType("application/json").content(body)
+        when(accounts.signup(any(), any(), any())).thenReturn(issued());
+        mvc.perform(post("/api/auth/social/signup").header("Origin", "http://localhost:3000").contentType("application/json").content(body.replace("\"nickname\":\"새닉네임\",", ""))
             .cookie(new Cookie("fitdining_social", tokens.encode("social_signup", "google", "subject"))))
             .andExpect(status().isCreated()).andExpect(jsonPath("$.userId").value("id")).andExpect(jsonPath("$.accessToken").value("at")).andExpect(cookie().maxAge("fitdining_social", 0));
     }
@@ -175,14 +174,13 @@ class SocialHttpTests {
     }
 
     @Test
-    @DisplayName("소셜가입_닉네임 규칙 위반_400 닉네임 오류")
-    void signup_invalidNickname_returnsNicknameError() throws Exception {
+    @DisplayName("소셜가입_기존 닉네임 입력은 무시")
+    void signup_legacyNickname_isIgnored() throws Exception {
+        when(accounts.signup(any(), any(), any())).thenReturn(issued());
         mvc.perform(post("/api/auth/social/signup").header("Origin", "http://localhost:3000")
             .contentType("application/json").content(body.replace("새닉네임", "a"))
             .cookie(new Cookie("fitdining_social", tokens.encode("social_signup", "google", "subject"))))
-            .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.errors.length()").value(1))
-            .andExpect(jsonPath("$.errors[0].field").value("nickname"));
+            .andExpect(status().isCreated());
     }
 
     @Test
@@ -219,15 +217,6 @@ class SocialHttpTests {
 
         mvc.perform(post("/api/auth/social/signup").header("Origin", "http://localhost:3000").contentType("application/json").content(body)
             .cookie(new Cookie("fitdining_social", token))).andExpect(status().isUnauthorized());
-    }
-
-    @Test
-    @DisplayName("소셜가입_중복 닉네임_409 타입")
-    void signup_duplicateNickname_returnsConflict() throws Exception {
-        when(accounts.signup(any(), any(), any(), any())).thenThrow(new SignupConflict("nickname"));
-        mvc.perform(post("/api/auth/social/signup").header("Origin", "http://localhost:3000").contentType("application/json").content(body)
-            .cookie(new Cookie("fitdining_social", tokens.encode("social_signup", "google", "subject"))))
-            .andExpect(status().isConflict()).andExpect(jsonPath("$.type").value("urn:fitdining:auth:nickname-taken"));
     }
 
     @Test
