@@ -11,6 +11,7 @@
 
     python persona.py              # 최적화
     python persona.py baseline 2   # 지금 프롬프트를 2번 돌려 split·slice별 점수와 낮은 것
+    python persona.py test 3       # 등록된 프롬프트 3번 버전을 test로 TEST_RUNS번
     python persona.py show r-001   # 평가셋 개수와 그 장소의 모델 입력(GMS 안 부름)
 """
 
@@ -42,8 +43,10 @@ MAX_METRIC_CALLS = 1000
 TEST_RUNS = 3
 DATA = Path(__file__).parent / "data" / "persona.jsonl"
 SPLITS = ("train", "val", "test")
-# 반성 한 번에 보는 장소 수. 페르소나 출력이 길어 107(6개)보다 적게 둔다
-REFLECTION_MINIBATCH = 4
+# 반성 한 번에 보는 장소 수. 기본 3개면 장소 하나에만 맞춘 규칙이 생기기 쉽다(107)
+REFLECTION_MINIBATCH = 6
+# 지시문에 이만큼 긴 리뷰 구절이 그대로 있으면 평가셋을 외운 것으로 본다
+LEAK_MIN = 10
 # 리뷰 두 개 이상에 나온 (코드, 방향)은 그 방향 페르소나가 다뤄야 한다
 COVER_MIN = 2
 
@@ -362,6 +365,27 @@ def evaluate(system: str, rows: list[dict], runs: int) -> None:
             print(f"[{row['split']}] {row['id']} {row['slice']}  {w}")
 
 
+def leaks(system: str) -> list[str]:
+    """지시문에 그대로 들어간 평가셋 장소 이름과 리뷰 구절."""
+    found = []
+    for r in load():
+        phrases = [r["summary"].split(". ")[0]] + [
+            q
+            for review in r["reviews"]
+            for it in review["items"]
+            for q in (it[3], it[4])
+            if q and len(q) >= LEAK_MIN
+        ]
+        found += [f"{r['id']}: {q}" for q in phrases if q in system]
+    return found
+
+
+def report(system: str) -> None:
+    """test 점수와 평가셋 외움 여부. test는 GEPA에 넘기지 않고 여기서만 잰다."""
+    evaluate(system, load("test"), TEST_RUNS)
+    print("평가셋에서 옮긴 구절:", leaks(system) or "없음")
+
+
 def _records(split: str) -> list[dict]:
     return [{"inputs": _inputs(r), "expectations": {}} for r in load(split)]
 
@@ -387,6 +411,9 @@ if __name__ == "__main__":
     if sys.argv[1:2] == ["baseline"]:
         evaluate(ps._SYSTEM, load(), int(sys.argv[2]) if len(sys.argv) > 2 else 1)
         sys.exit()
+    if sys.argv[1:2] == ["test"]:
+        report(mlflow.genai.load_prompt(f"prompts:/{NAME}/{sys.argv[2]}").format())
+        sys.exit()
     result = optimize(
         NAME,
         ps._SYSTEM,
@@ -404,4 +431,4 @@ if __name__ == "__main__":
     print(optimized.uri)
     for label, system in [("before", ps._SYSTEM), ("after", optimized.format())]:
         print(f"\n== test {label} ==")
-        evaluate(system, load("test"), TEST_RUNS)
+        report(system)

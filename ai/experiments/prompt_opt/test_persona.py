@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from persona import rules
+from persona import leaks, load, rules
 
 ROW = {
     "reviews": [
@@ -73,3 +73,13 @@ def test_dropped_and_format():
     score, why = rules(out, ROW)
     assert score == (2 / 3 + 1 + 1 + 0.5) / 4
     assert "name이 2~4단어가 아니다" in why and "reason가 1문장이다" in why
+
+
+def test_leaks_finds_place_name_and_long_quote():
+    row = load()[0]
+    name = row["summary"].split(". ")[0]
+    quote = next(
+        it[3] for rv in row["reviews"] for it in rv["items"] if len(it[3]) >= 10
+    )
+    found = leaks(f"예: {name}에서 '{quote}'처럼 쓴다.")
+    assert f"{row['id']}: {name}" in found and f"{row['id']}: {quote}" in found
