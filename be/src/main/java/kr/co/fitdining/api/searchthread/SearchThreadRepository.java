@@ -9,7 +9,7 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 /**
- * 검색 기록 저장소(V8). 요청과 응답은 원문 JSON 그대로 {@code jsonb}에 둔다.
+ * 검색 기록 저장소(V11). 요청과 응답은 원문 JSON 그대로 {@code jsonb}에 둔다.
  *
  * <p>요청 시각은 {@code timestamptz}이고 API의 {@code at}(정수 밀리초)과 SQL 안에서 정수 연산으로만 오간다. double을
  * 거치면 먼 미래 시각에서 밀리초가 틀어진다. 목록은 turn을 읽지 않고
