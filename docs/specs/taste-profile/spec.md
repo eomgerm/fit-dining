@@ -413,6 +413,41 @@ GMS 한 번의 타임아웃은 `GMS_TIMEOUT_SECONDS`(기본 5초)이고 실패�
 
 `code_vectors.json`은 `{model, revision, prompt, vectors: {코드: 벡터}}` 형식이다. 운영에서는 같은 벡터를 DB `feature_codes.vector`에 둔다. 사용자 취향의 DB 저장 형식과 함께 [profile-storage](../profile-storage/spec.md)에 있다.
 
+### 프로필 계산 API
+
+BE가 온보딩 취향을 저장할 때 AI API(`ai/server/taste_profile.py`)를 한 번 불러 `features`를 받고, `user_preferences.features`에 저장한다. 3단계 계산만 하고 GMS와 임베딩은 쓰지 않는다. 코드 없는 칩의 벡터는 이 API를 거치지 않고 BE가 Modal에서 받아 `tastes[].vector`에 저장한다.
+
+`POST /v1/taste/profile`
+
+```json
+{
+  "mood": "QUIET",
+  "priorities": ["VALUE"],
+  "purposes": ["WORK_STUDY"],
+  "tastes": [
+    {"polarity": "DISLIKE", "label": "매운 음식", "code": "FOOD_SPICY"},
+    {"polarity": "LIKE", "label": "담백한 국물 요리를 먹을 수", "code": null}
+  ]
+}
+```
+
+| 필드 | 뜻 |
+|---|---|
+| `mood` | BE `Preferences.Mood`. 없으면 `null`이나 생략 |
+| `priorities`, `purposes` | BE `Preferences.Priority`, `Purpose` 이름. 생략하면 빈 목록 |
+| `tastes` | 해석 API가 준 칩 `{polarity, label, code}`. 다른 속성(`vector` 등)은 받지 않는다. `code`가 있는 칩만 계산에 쓴다. `LIKE`는 +1, `DISLIKE`는 −1 |
+
+BE 태그 이름은 코드표와 달라서(profile-storage 문제 8) 이 API에서 바꾼다. `SPACIOUS` → `SPACIOUS_SEATING`, `VALUE` → `VALUE_FOR_MONEY`, `CONVERSATION` → `PURPOSE_TALK`, `SOLO` → `PURPOSE_SOLO`, `DATE` → `PURPOSE_DATE`, `GATHERING` → `PURPOSE_GROUP`, `WORK_STUDY` → `PURPOSE_WORK`이고 나머지는 같다.
+
+응답 `200`: `{"features": [{"code": "QUIET", "layer": "axis", "like": true, "weight": 1}, ...]}`. 근거가 없으면 빈 목록이다.
+
+| 오류 | `code` | 경우 |
+|---|---|---|
+| 400 | `INVALID_REQUEST` | 모르는 태그·코드·속성, JSON 형식 오류 |
+| 500 | `INTERNAL_ERROR` | 그 밖의 오류 |
+
+오류 응답은 BE ProblemDetail 모양(`application/problem+json`)이다. 요청 내용은 응답과 로그에 넣지 않고, 로그에는 특징 개수만 남긴다. 샘플 사용자 1~6번의 요청이 `profiles.json`과 같은 `features`를 내는지 `ai/tests/server/test_taste_profile.py`가 확인한다. 7번은 리뷰 근거라 배치 몫이다.
+
 ### 샘플 사용자
 
 샘플 하나가 PRD 규칙 하나를 확인한다. 직접 입력 문구는 SSAFY 교육생과 임직원이 쓸 법한 말로 썼다.
