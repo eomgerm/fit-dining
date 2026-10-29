@@ -50,17 +50,16 @@ export function Textarea({
   return (
     <Field.Root className={className}>
       <Field.Label className="sr-only">{label}</Field.Label>
+      {/* 포커스는 안쪽 1.5px 주황 테두리. 오류면 포커스 중에도 빨강 테두리를 유지한다 */}
       <div
         className={cn(
           "relative flex h-35 flex-col gap-1 rounded-md border border-line-strong bg-surface p-3",
-          emphasis === undefined
-            ? "focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-focus-ring"
-            : "focus-within:border-1.5 focus-within:border-primary-strong has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus-ring",
-          emphasis && "border-1.5 border-primary-strong",
-          props["aria-invalid"] && "border-danger",
-          props["aria-invalid"] &&
-            emphasis !== undefined &&
-            "border-1.5 focus-within:border-danger",
+          props["aria-invalid"]
+            ? "border-1.5 border-danger"
+            : cn(
+                "focus-within:border-1.5 focus-within:border-primary-strong",
+                emphasis && "border-1.5 border-primary-strong",
+              ),
         )}
       >
         <Field.Control

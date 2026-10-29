@@ -117,10 +117,8 @@ export default function SignupPage() {
       </div>
       <div className="mt-auto flex flex-col gap-3 px-5 pt-5 sm:px-8">
         <SocialButtons from="signup" />
-        {/* Reference explicitly uses muted email text; shared variants stay unchanged. */}
         <TextButton
-          // eslint-disable-next-line shadcn/no-restyle -- Signup reference specifies ink-muted for this link.
-          className="text-ink-muted"
+          variant="muted"
           role="link"
           nativeButton={false}
           render={<Link href="/signup/email" />}

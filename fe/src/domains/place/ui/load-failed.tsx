@@ -18,7 +18,7 @@ export function isOfflineError(error: unknown) {
   return isApiError(error) && error.kind === "network";
 }
 
-// 불러오기 실패(4-E02, 4-E03, 5-E03, 5-E04, 6-02). 연결 실패와 서버 오류는 문구만 다르다
+// 불러오기 실패(4-E02, 4-E03, 5-E03, 5-E04, 6-02). 서버 오류는 경고 색, 연결 실패는 회색 아이콘에 연결 안내 문구다
 export function LoadFailed({
   error,
   title,
@@ -29,6 +29,7 @@ export function LoadFailed({
   return (
     <EmptyState
       role="alert"
+      tone={offline ? "default" : "warn"}
       icon={offline ? <WifiOffIcon /> : <WarningIcon />}
       title={offline ? "인터넷에 연결되어 있지 않아요" : title}
       description={

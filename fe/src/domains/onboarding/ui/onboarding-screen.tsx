@@ -315,6 +315,7 @@ export function OnboardingScreen({
               {step === 2
                 ? priorities.map((option) => (
                     <Chip
+                      size="lg"
                       key={option.id}
                       pressed={answers.priorities.includes(option.id)}
                       onPressedChange={() =>
@@ -332,6 +333,7 @@ export function OnboardingScreen({
                   ))
                 : purposes.map((option) => (
                     <Chip
+                      size="lg"
                       key={option.id}
                       pressed={answers.purposes.includes(option.id)}
                       onPressedChange={() =>

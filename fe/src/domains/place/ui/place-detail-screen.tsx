@@ -271,12 +271,22 @@ function PlaceDetailView({
         className="mt-5 flex flex-1 flex-col"
       >
         {/* 탭은 사진이 지나간 뒤 화면 위쪽에 붙는다 */}
-        <div className="sticky top-0 z-10 bg-surface-warm px-2">
+        <div className="sticky top-0 z-10 bg-surface-warm">
           <TabList>
-            <Tab value="home">홈</Tab>
-            <Tab value="menu">메뉴</Tab>
-            {slots?.reviewTab && <Tab value="review">리뷰</Tab>}
-            <Tab value="info">정보</Tab>
+            <Tab value="home" className="flex-1">
+              홈
+            </Tab>
+            <Tab value="menu" className="flex-1">
+              메뉴
+            </Tab>
+            {slots?.reviewTab && (
+              <Tab value="review" className="flex-1">
+                리뷰
+              </Tab>
+            )}
+            <Tab value="info" className="flex-1">
+              정보
+            </Tab>
           </TabList>
         </div>
         <TabPanel value="home">

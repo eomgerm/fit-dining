@@ -48,7 +48,11 @@ export function SearchSteps({ onCancel }: { onCancel?: () => void }) {
         />
         {showSlow ? "조금만 더 걸려요" : SEARCH_STEPS[step]}
       </p>
-      {showSlow && <TextButton onClick={onCancel}>검색 취소</TextButton>}
+      {showSlow && (
+        <TextButton variant="muted" onClick={onCancel}>
+          검색 취소
+        </TextButton>
+      )}
     </div>
   );
 }

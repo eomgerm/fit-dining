@@ -27,13 +27,22 @@ export function TextField({
   className,
   ...props
 }: TextFieldProps) {
+  const isInvalid = invalid ?? (error ? true : undefined);
   return (
     <Field.Root
-      invalid={invalid ?? (error ? true : undefined)}
-      className={cn("group flex flex-col gap-2", className)}
+      invalid={isInvalid}
+      className={cn("flex flex-col gap-2", className)}
     >
       <Field.Label className="sr-only">{label}</Field.Label>
-      <div className="flex h-13 items-center gap-2 rounded-md border border-line-strong bg-surface px-3.5 group-data-invalid:border-1.5 group-data-invalid:border-danger focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-focus-ring">
+      {/* 포커스는 안쪽 1.5px 주황 테두리. 오류면 포커스 중에도 빨강 테두리를 유지한다 */}
+      <div
+        className={cn(
+          "flex h-13 items-center gap-2 rounded-md border border-line-strong bg-surface px-3.5",
+          isInvalid
+            ? "border-1.5 border-danger"
+            : "focus-within:border-1.5 focus-within:border-primary-strong",
+        )}
+      >
         <Field.Control
           className="min-w-0 flex-1 bg-transparent text-body-md text-ink outline-none placeholder:text-ink-subtle"
           {...props}

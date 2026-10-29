@@ -30,6 +30,17 @@ describe("TextField invalid", () => {
     expect(html).not.toContain('aria-invalid="true"');
   });
 
+  it("포커스는 안쪽 1.5px 테두리로, 오류면 포커스 중에도 빨강 테두리를 유지한다", () => {
+    const normal = renderToStaticMarkup(<TextField label="아이디" />);
+    expect(normal).toContain("focus-within:border-primary-strong");
+    expect(normal).not.toContain("outline-focus-ring");
+
+    const invalid = renderToStaticMarkup(<TextField label="아이디" invalid />);
+    expect(invalid).toContain("border-danger");
+    expect(invalid).not.toContain("primary-strong");
+    expect(invalid).not.toContain("outline-focus-ring");
+  });
+
   it("명시한 invalid=false는 error의 기본 무효 상태보다 우선한다", () => {
     const html = renderToStaticMarkup(
       <TextField label="아이디" invalid={false} error="서버 오류" />,

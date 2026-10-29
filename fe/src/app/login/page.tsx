@@ -178,6 +178,7 @@ export default function LoginPage() {
         </Button>
         <div className="flex justify-center">
           <TextButton
+            variant="muted"
             role="link"
             nativeButton={false}
             render={<Link href="/signup" />}
@@ -187,6 +188,7 @@ export default function LoginPage() {
         </div>
         <div className="flex justify-center">
           <TextButton
+            variant="muted"
             type="button"
             onClick={() => setNotice("비밀번호 찾기는 준비 중이에요.")}
           >

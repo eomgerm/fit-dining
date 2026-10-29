@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { Button } from "./button";
+import { Chip } from "./chip";
 import { TextButton } from "./text-button";
 
 describe("Button", () => {
@@ -64,5 +65,26 @@ describe("TextButton", () => {
     expect(
       renderToStaticMarkup(<TextButton size="sm">나중에 할게요</TextButton>),
     ).toContain("text-button-sm");
+  });
+
+  it("muted는 밑줄 없는 회색 보조 링크로 그린다", () => {
+    const html = renderToStaticMarkup(
+      <TextButton variant="muted">비밀번호 찾기</TextButton>,
+    );
+    expect(html).toContain("text-ink-muted");
+    expect(html).not.toContain("underline");
+  });
+});
+
+describe("Chip", () => {
+  it("기본은 36px 칩, lg는 44px 칩으로 글자 토큰을 따른다", () => {
+    const md = renderToStaticMarkup(<Chip>조용한 곳</Chip>);
+    expect(md).toContain("h-9");
+    expect(md).toContain("text-body-sm");
+    expect(md).toContain("data-pressed:text-label-md");
+
+    const lg = renderToStaticMarkup(<Chip size="lg">조용한 곳</Chip>);
+    expect(lg).toContain("h-11");
+    expect(lg).toContain("text-body-md");
   });
 });
