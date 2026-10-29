@@ -1,11 +1,11 @@
 import { Toggle } from "@base-ui/react/toggle";
 import Image from "next/image";
+import type { ReactNode } from "react";
 
 import { Chip } from "@/shared/ui/button/chip";
 import { Textarea } from "@/shared/ui/form/textarea";
 import { TextField } from "@/shared/ui/form/text-field";
 import { CalendarIcon } from "@/shared/ui/icon/icons/calendar";
-import { CameraIcon } from "@/shared/ui/icon/icons/camera";
 import { CheckIcon } from "@/shared/ui/icon/icons/check";
 import { ChevronDownIcon } from "@/shared/ui/icon/icons/chevron-down";
 import { HeartIcon } from "@/shared/ui/icon/icons/heart";
@@ -129,7 +129,8 @@ type DetailFieldsProps = {
   onRevisitIntentChange: (value: boolean) => void;
   onDescriptionChange: (value: string) => void;
   onSpentPerPersonChange: (raw: string) => void;
-  onAddPhoto: () => void;
+  // 사진 칸(ReviewPhotoField). 올리는 상태는 작성 흐름이 가진다
+  photoField: ReactNode;
 };
 
 // 7-04·7-05. 문구는 와이어프레임 그대로다(D-41)
@@ -141,7 +142,7 @@ export function DetailFields({
   onRevisitIntentChange,
   onDescriptionChange,
   onSpentPerPersonChange,
-  onAddPhoto,
+  photoField,
 }: DetailFieldsProps) {
   return (
     <>
@@ -174,21 +175,7 @@ export function DetailFields({
             onValueChange={(value) => onDescriptionChange(value)}
           />
         </div>
-        <div className="flex flex-col gap-3">
-          <SectionHeader
-            size="md"
-            title="사진"
-            hint={`최대 ${limits.photoMax}장`}
-          />
-          <button
-            type="button"
-            onClick={onAddPhoto}
-            className="flex size-18 flex-col items-center justify-center gap-1 rounded-md border border-line-strong bg-surface text-ink-muted"
-          >
-            <CameraIcon size="md" />
-            <span className="text-caption-sm">추가</span>
-          </button>
-        </div>
+        {photoField}
         <div className="flex flex-col gap-3">
           <SectionHeader size="md" title="1인당 쓴 금액" />
           <TextField

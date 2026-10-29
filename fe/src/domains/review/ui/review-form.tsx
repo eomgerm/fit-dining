@@ -44,7 +44,9 @@ import {
   ReasonTagGroups,
   VisitDateButton,
 } from "./review-write-parts";
+import { ReviewPhotoField } from "./review-photo-field";
 import { submitFailure, type SubmitFailure } from "./submit-failure";
+import { UNREADABLE_PHOTO, useReviewPhotos } from "./use-review-photos";
 import { clearVisitEntry, useVisitEntry } from "./visit-entry-store";
 import { VisitDateSheet } from "./visit-calendar";
 
@@ -186,6 +188,12 @@ export function ReviewWriteFlow({
   const [failureOpen, setFailureOpen] = useState(false);
   const createReview = useCreateReview(placeId, withAccessToken);
   const toast = useToast();
+  const photos = useReviewPhotos({
+    saved: [],
+    max: form.limits.photoMax,
+    withAccessToken,
+    onUnreadable: () => toast(UNREADABLE_PHOTO),
+  });
   const allTags = [...form.tags.good, ...form.tags.bad];
   const disabled = disabledTagCodes(draft.tagCodes, allTags);
   const today = form.visitDate.max;
@@ -200,12 +208,20 @@ export function ReviewWriteFlow({
 
   function close() {
     // 다시 받은 데이터 때문에 비워진 방문일은 쓴 내용으로 보지 않는다
-    if (isDirty(draft, reconcileDraft(initial, form))) setConfirmingClose(true);
-    else onClose();
+    if (
+      isDirty(draft, reconcileDraft(initial, form)) ||
+      photos.tiles.length > 0
+    ) {
+      setConfirmingClose(true);
+    } else onClose();
   }
 
   function submit() {
-    if (createReview.isPending) return;
+    if (createReview.isPending || photos.busy) return;
+    if (photos.failed) {
+      toast("올리지 못한 사진을 다시 올리거나 빼 주세요");
+      return;
+    }
     setFailureOpen(false);
     // 다시 받은 데이터에 맞춰 방문일이나 좋았어요 태그가 빠졌으면 7-01에서 다시 고르게 한다
     if (draft.visitedAt === null || !canLeaveGoodPage(draft, form)) {
@@ -214,7 +230,10 @@ export function ReviewWriteFlow({
       return;
     }
     createReview.mutate(
-      toCreateRequest({ ...draft, visitedAt: draft.visitedAt }),
+      toCreateRequest(
+        { ...draft, visitedAt: draft.visitedAt },
+        photos.photoIds,
+      ),
       {
         onSuccess: ({ reviewId }) => {
           // 토스트는 앱 전체에 하나라 화면을 옮겨도 이어서 보인다(Figma 7-06)
@@ -254,15 +273,17 @@ export function ReviewWriteFlow({
     page === "detail" ? (
       <BottomBar>
         <Button
-          disabled={createReview.isPending}
+          disabled={createReview.isPending || photos.busy}
           onClick={submit}
           className="w-full"
         >
           {createReview.isPending
             ? "등록하는 중"
-            : hasDetail(draft)
-              ? "등록하기"
-              : "건너뛰고 등록하기"}
+            : photos.busy
+              ? "사진 올리는 중"
+              : hasDetail(draft) || photos.tiles.length > 0
+                ? "등록하기"
+                : "건너뛰고 등록하기"}
         </Button>
       </BottomBar>
     ) : (
@@ -328,7 +349,13 @@ export function ReviewWriteFlow({
             );
             if (spentPerPerson !== null) update({ spentPerPerson });
           }}
-          onAddPhoto={() => toast("사진은 아직 올릴 수 없어요")}
+          photoField={
+            <ReviewPhotoField
+              photos={photos}
+              hint={`최대 ${form.limits.photoMax}장`}
+              addLabel="추가"
+            />
+          }
         />
       ) : (
         <div className="px-5 pb-6">
@@ -441,6 +468,19 @@ export function SubmitFailureDialog({
             방문일 바꾸기
           </Button>
         }
+      />
+    );
+  }
+  if (failure === "photo") {
+    return (
+      <AlertDialog
+        open={open}
+        onOpenChange={onOpenChange}
+        tone="warn"
+        icon={<WarningIcon />}
+        title="올릴 수 없는 사진이 있어요"
+        description="사진을 빼거나 다른 사진으로 바꾼 뒤 다시 등록해 주세요."
+        action={ok}
       />
     );
   }

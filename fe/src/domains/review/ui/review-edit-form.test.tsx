@@ -23,6 +23,8 @@ import { ReviewEditForm } from "./review-edit-form";
 const api = vi.hoisted(() => ({
   fetchReview: vi.fn(),
   updateReview: vi.fn(),
+  fetchPhotoUploads: vi.fn(),
+  putPhoto: vi.fn(),
 }));
 vi.mock("../api/review-api", () => api);
 
@@ -30,6 +32,7 @@ const review: ReviewDetailResponse = {
   reviewId: 12,
   placeId: 3,
   description: "처음 본문",
+  photos: [],
   limits: { descriptionMax: 500, photoMax: 5 },
 };
 
@@ -73,6 +76,85 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   onlineManager.setOnline(true);
+});
+
+const withPhotos: ReviewDetailResponse = {
+  ...review,
+  photos: [
+    {
+      photoId: "p1",
+      url: "/photos/dev/confirmed/p1.jpg",
+      thumbUrl: "/photos/dev/confirmed/p1.thumb.jpg",
+    },
+    {
+      photoId: "p2",
+      url: "/photos/dev/confirmed/p2.jpg",
+      thumbUrl: "/photos/dev/confirmed/p2.thumb.jpg",
+    },
+  ],
+};
+
+describe("ReviewEditForm 사진", () => {
+  it("저장된 사진을 순서대로 보이고 장수를 센다", async () => {
+    api.fetchReview.mockResolvedValue(withPhotos);
+    mount();
+
+    expect(await screen.findByRole("img", { name: "사진 1" })).toBeTruthy();
+    expect(
+      screen.getByRole("img", { name: "사진 2" }).getAttribute("src"),
+    ).toBe("/photos/dev/confirmed/p2.thumb.jpg");
+    expect(
+      screen.getByRole("button", { name: "사진 추가, 2/5장" }),
+    ).toBeTruthy();
+  });
+
+  it("사진만 빼면 본문 없이 남은 사진 목록만 보낸다", async () => {
+    api.fetchReview.mockResolvedValue(withPhotos);
+    api.updateReview.mockResolvedValue(undefined);
+    const { onSuccess } = mount();
+
+    fireEvent.click(await screen.findByRole("button", { name: "사진 1 빼기" }));
+    fireEvent.click(submitButton());
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalled());
+    expect(api.updateReview).toHaveBeenCalledWith(
+      12,
+      { photos: ["p2"] },
+      "token",
+    );
+  });
+
+  it("본문만 고치면 사진은 보내지 않는다", async () => {
+    api.fetchReview.mockResolvedValue(withPhotos);
+    api.updateReview.mockResolvedValue(undefined);
+    const { onSuccess } = mount();
+
+    await type("고친 본문");
+    fireEvent.click(submitButton());
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalled());
+    expect(api.updateReview).toHaveBeenCalledWith(
+      12,
+      { description: "고친 본문" },
+      "token",
+    );
+  });
+
+  it("쓸 수 없는 사진(400)이면 사진 안내를 띄운다", async () => {
+    api.fetchReview.mockResolvedValue(withPhotos);
+    api.updateReview.mockRejectedValue(
+      new ApiError("http", "", {
+        status: 400,
+        problem: { status: 400, type: "urn:fitdining:review:invalid-photo" },
+      }),
+    );
+    mount();
+
+    fireEvent.click(await screen.findByRole("button", { name: "사진 2 빼기" }));
+    fireEvent.click(submitButton());
+
+    expect(await screen.findByText("올릴 수 없는 사진이 있어요")).toBeTruthy();
+  });
 });
 
 describe("ReviewEditForm", () => {

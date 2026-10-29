@@ -7,7 +7,10 @@ export type SubmitFailure =
   | "duplicate" // 409
   | "signedOut" // AT 갱신까지 실패한 401
   | "placeNotFound" // 404. 쓰는 동안 장소가 없어졌다
+  | "photo" // 400 중 쓸 수 없는 사진(D-45)
   | "invalid"; // 그 밖의 4xx. 작성 화면 데이터가 낡았을 수 있다
+
+export const INVALID_PHOTO_TYPE = "urn:fitdining:review:invalid-photo";
 
 export function submitFailure(error: unknown): SubmitFailure {
   if (!isApiError(error)) return "server";
@@ -16,6 +19,7 @@ export function submitFailure(error: unknown): SubmitFailure {
   if (error.status === 409) return "duplicate";
   if (error.status === 401) return "signedOut";
   if (error.status === 404) return "placeNotFound";
+  if (error.problem?.type === INVALID_PHOTO_TYPE) return "photo";
   if ((error.status ?? 500) < 500) return "invalid";
   return "server";
 }

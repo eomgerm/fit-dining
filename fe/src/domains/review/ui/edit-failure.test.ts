@@ -13,6 +13,13 @@ describe("editFailure", () => {
     [http(401), "signedOut"],
     [http(404), "notFound"],
     [http(400), "invalid"],
+    [
+      new ApiError("http", "", {
+        status: 400,
+        problem: { status: 400, type: "urn:fitdining:review:invalid-photo" },
+      }),
+      "photo",
+    ],
     [http(403), "forbidden"],
     [http(500), "server"],
     [new Error("boom"), "server"],

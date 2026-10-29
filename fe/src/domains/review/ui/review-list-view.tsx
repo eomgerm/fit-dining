@@ -20,6 +20,7 @@ import {
   formatVisitedDay,
   type ReviewItem,
 } from "../model/review";
+import { ReviewPhotoStrip } from "./review-photo-viewer";
 
 export type ReviewListViewProps = {
   status: "pending" | "error" | "success";
@@ -226,8 +227,9 @@ function ReviewRow({
         </ul>
       )}
       {item.description === undefined ? (
-        // 태그도 없는 예전 리뷰(Walking Skeleton)만 안내 문구를 보인다
-        item.tags.length === 0 && (
+        // 태그도 사진도 없는 예전 리뷰(Walking Skeleton)만 안내 문구를 보인다
+        item.tags.length === 0 &&
+        item.photos.length === 0 && (
           <p className="text-body-sm text-ink-subtle">
             내용 없이 남긴 리뷰예요
           </p>
@@ -236,6 +238,12 @@ function ReviewRow({
         <p className="text-body-sm wrap-anywhere whitespace-pre-line text-ink">
           {item.description}
         </p>
+      )}
+      {item.photos.length > 0 && (
+        <ReviewPhotoStrip
+          photos={item.photos}
+          label={`${authorLabel(item)}의 ${day} 리뷰`}
+        />
       )}
     </li>
   );

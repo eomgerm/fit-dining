@@ -63,7 +63,7 @@ describe("DetailFields", () => {
         onRevisitIntentChange={() => {}}
         onDescriptionChange={() => {}}
         onSpentPerPersonChange={() => {}}
-        onAddPhoto={() => {}}
+        photoField={<p>사진 칸</p>}
       />,
     );
   }
@@ -75,8 +75,7 @@ describe("DetailFields", () => {
     expect(html).toContain("비슷한 취향의 장소를 찾아드릴게요.");
     expect(html).toContain("재방문 의사 있어요");
     expect(html).toContain("0/500");
-    expect(html).toContain("최대 5장");
-    expect(html).toContain("추가");
+    expect(html).toContain("<p>사진 칸</p>");
     expect(html).toContain('value="15,000"');
     expect(html).toContain("원");
     expect(html).toContain("추천이나 화면에는 쓰지 않아요.");

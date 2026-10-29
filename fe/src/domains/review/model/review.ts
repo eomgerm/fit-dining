@@ -7,6 +7,15 @@ export type TagView = {
   sentiment: "GOOD" | "BAD";
 };
 
+// 리뷰 사진 하나(D-45). 주소는 같은 출처 상대 경로다
+export type PhotoView = {
+  photoId: string;
+  // 1,600px 사진
+  url: string;
+  // 긴 변 약 400px 썸네일
+  thumbUrl: string;
+};
+
 export type ReviewItem = {
   reviewId: number;
   // Asia/Seoul 오프셋이 붙은 작성 시각(예: 2026-10-20T15:00:00+09:00). 화면은 방문일을 보인다
@@ -20,6 +29,8 @@ export type ReviewItem = {
   tags: TagView[];
   // 본문 없이 남긴 리뷰면 없다
   description?: string;
+  // 화면 순서대로다. 없으면 빈 목록
+  photos: PhotoView[];
   // 로그인한 사용자 자신의 리뷰
   mine: boolean;
 };
@@ -39,6 +50,8 @@ export type ReviewCreateRequest = {
   revisitIntent: boolean;
   description?: string;
   spentPerPerson?: number;
+  // 올린 사진 id. 화면 순서대로다
+  photos?: string[];
 };
 
 export type ReviewCreateResponse = {
@@ -75,20 +88,44 @@ export type ReviewFormResponse = {
   writable: boolean;
 };
 
-// 수정 화면 데이터(D-44). 고칠 수 있는 필드만 담는다. 사진은 S15P31A302-54에서 더한다
+// 수정 화면 데이터(D-44). 고칠 수 있는 필드만 담는다
 export type ReviewDetailResponse = {
   reviewId: number;
   // 수정한 뒤 돌아갈 장소 상세와 다시 받을 목록의 장소
   placeId: number;
   // 본문 없이 남긴 리뷰면 없다
   description?: string;
+  // 화면 순서대로다
+  photos: PhotoView[];
   limits: { descriptionMax: number; photoMax: number };
 };
 
-// 작성자는 본문과 사진만 고친다(D-6). 빈 문자열이나 공백이면 본문 없음으로 저장된다
+// 작성자는 본문과 사진만 고친다(D-6, D-45). 바꾼 것만 보낸다.
+// 본문이 빈 문자열이나 공백이면 본문 없음으로 저장되고, photos는 고친 뒤의 사진 전체다
 export type ReviewUpdateRequest = {
-  description: string;
+  description?: string;
+  photos?: string[];
 };
+
+// 사진 업로드 주소(D-45). 두 주소에 Content-Type: image/jpeg로 PUT한다
+export type PhotoUpload = {
+  photoId: string;
+  uploadUrl: string;
+  thumbUploadUrl: string;
+  expiresAt: string;
+};
+
+export type PhotoUploadResponse = {
+  uploads: PhotoUpload[];
+};
+
+// 사진 목록이 순서까지 같은지
+export function isSamePhotos(
+  saved: readonly string[],
+  next: readonly string[],
+) {
+  return saved.length === next.length && saved.every((id, i) => id === next[i]);
+}
 
 // 신고 사유(PRD FR-12, D-11). 설명은 "기타"일 때만 받는다
 export type ReportReason = "AD_SPAM" | "ABUSE" | "UNRELATED" | "OTHER";

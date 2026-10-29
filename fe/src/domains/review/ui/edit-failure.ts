@@ -1,5 +1,7 @@
 import { isApiError } from "@/shared/api/api-error";
 
+import { INVALID_PHOTO_TYPE } from "./submit-failure";
+
 // 내 리뷰 수정·삭제 실패의 종류(D-44)
 export type EditFailure =
   | "offline"
@@ -7,6 +9,7 @@ export type EditFailure =
   | "signedOut" // AT 갱신까지 실패한 401
   | "notFound" // 404. 다른 창에서 이미 지웠다
   | "forbidden" // 403. 다른 창에서 다른 계정으로 로그인했다
+  | "photo" // 400 중 쓸 수 없는 사진(D-45)
   | "invalid"; // 그 밖의 4xx
 
 export function editFailure(error: unknown): EditFailure {
@@ -16,6 +19,7 @@ export function editFailure(error: unknown): EditFailure {
   if (error.status === 401) return "signedOut";
   if (error.status === 404) return "notFound";
   if (error.status === 403) return "forbidden";
+  if (error.problem?.type === INVALID_PHOTO_TYPE) return "photo";
   if ((error.status ?? 500) < 500) return "invalid";
   return "server";
 }

@@ -29,8 +29,16 @@ const api = vi.hoisted(() => ({
   fetchReviews: vi.fn(),
   fetchReviewForm: vi.fn(),
   createReview: vi.fn(),
+  fetchPhotoUploads: vi.fn(),
+  putPhoto: vi.fn(),
 }));
 vi.mock("../api/review-api", () => api);
+
+const compress = vi.hoisted(() => ({ compressPhoto: vi.fn() }));
+vi.mock("../model/photo-compress", async (original) => ({
+  ...(await original<typeof import("../model/photo-compress")>()),
+  compressPhoto: compress.compressPhoto,
+}));
 
 function form(reviewedDates: string[] = []): ReviewFormResponse {
   return {
@@ -284,6 +292,91 @@ describe("ReviewWriteFlow", () => {
 
     expect(onClose).toHaveBeenCalledOnce();
     expect(onReload).not.toHaveBeenCalled();
+  });
+});
+
+describe("ReviewWriteFlow 사진", () => {
+  beforeEach(() => {
+    compress.compressPhoto.mockResolvedValue({
+      photo: new Blob(["photo"]),
+      thumb: new Blob(["thumb"]),
+    });
+    api.fetchPhotoUploads.mockResolvedValue({
+      uploads: [
+        {
+          photoId: "photo-1",
+          uploadUrl: "/fit-dev-photos/pending/photo-1.jpg?sig",
+          thumbUploadUrl: "/fit-dev-photos/pending/photo-1.thumb.jpg?sig",
+          expiresAt: "2026-10-21T12:10:00+09:00",
+        },
+      ],
+    });
+    api.putPhoto.mockResolvedValue(undefined);
+  });
+
+  function toDetailWithPhoto() {
+    const view = mount(flow(form()));
+    fireEvent.click(screen.getByRole("button", { name: "조용해서 좋았어요" }));
+    fireEvent.click(screen.getByRole("button", { name: "다음" }));
+    fireEvent.click(screen.getByRole("button", { name: "다음" }));
+    const input = view.container.ownerDocument.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement;
+    fireEvent.change(input, {
+      target: { files: [new File(["x"], "a.jpg", { type: "image/jpeg" })] },
+    });
+    return view;
+  }
+
+  it("사진을 올리는 동안 등록을 막고, 다 올리면 사진 id를 함께 보낸다", async () => {
+    api.createReview.mockResolvedValue({ reviewId: 9 });
+    toDetailWithPhoto();
+
+    const submit = await screen.findByRole("button", { name: "등록하기" });
+    fireEvent.click(submit);
+
+    await waitFor(() => expect(api.createReview).toHaveBeenCalled());
+    expect(api.createReview.mock.calls[0][1]).toEqual({
+      visitedAt: "2026-10-21",
+      tagCodes: ["QUIET_GOOD"],
+      revisitIntent: false,
+      photos: ["photo-1"],
+    });
+  });
+
+  it("쓸 수 없는 사진(400)이면 사진 안내를 띄우고 작성 화면 데이터를 다시 받지 않는다", async () => {
+    api.createReview.mockRejectedValue(
+      new ApiError("http", "", {
+        status: 400,
+        problem: { status: 400, type: "urn:fitdining:review:invalid-photo" },
+      }),
+    );
+    const onReload = vi.fn();
+    const view = mount(flow(form(), { onReload }));
+    fireEvent.click(screen.getByRole("button", { name: "조용해서 좋았어요" }));
+    fireEvent.click(screen.getByRole("button", { name: "다음" }));
+    fireEvent.click(screen.getByRole("button", { name: "다음" }));
+    fireEvent.change(
+      view.container.ownerDocument.querySelector(
+        'input[type="file"]',
+      ) as HTMLInputElement,
+      { target: { files: [new File(["x"], "a.jpg")] } },
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "등록하기" }));
+
+    expect(await screen.findByText("올릴 수 없는 사진이 있어요")).toBeTruthy();
+    expect(onReload).not.toHaveBeenCalled();
+  });
+
+  it("사진을 골랐으면 닫을 때 확인을 받는다", async () => {
+    toDetailWithPhoto();
+    await screen.findByRole("button", { name: "등록하기" });
+
+    fireEvent.click(screen.getByRole("button", { name: "이전" }));
+    fireEvent.click(screen.getByRole("button", { name: "이전" }));
+    fireEvent.click(screen.getByRole("button", { name: "닫기" }));
+
+    expect(await screen.findByText("작성한 내용이 사라져요")).toBeTruthy();
   });
 });
 

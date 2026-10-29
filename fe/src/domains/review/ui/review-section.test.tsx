@@ -59,6 +59,7 @@ describe("ReviewSection", () => {
       nickname: "밤산책",
       revisitIntent: false,
       tags: [],
+      photos: [],
       mine: false,
     });
     const pages: ReviewListResponse[] = [

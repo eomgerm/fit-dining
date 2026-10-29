@@ -116,7 +116,8 @@ export function useReviewDetail(
 }
 
 // 수정에 성공하면 목록을 낡은 것으로 표시한다(PRD AC-11). 이 리뷰는 다시 받지 않고 고친 본문으로 바꿔 둔다.
-// 다시 받으면 수정 화면이 나가기 전에 입력칸을 내린다. 다음에 열 때는 다시 받는다
+// 다시 받으면 수정 화면이 나가기 전에 입력칸을 내린다. 다음에 열 때는 다시 받는다.
+// 사진은 새 주소를 몰라 바꿔 둘 수 없으므로 낡은 것으로만 표시하고 지금은 다시 받지 않는다
 export function useUpdateReview(
   review: Pick<ReviewDetailResponse, "reviewId" | "placeId">,
   withAccessToken: WithAccessToken,
@@ -128,16 +129,23 @@ export function useUpdateReview(
       withAccessToken((accessToken) =>
         updateReview(review.reviewId, body, accessToken),
       ),
-    onSuccess: (_, body) => {
-      queryClient.setQueryData<ReviewDetailResponse>(
-        reviewKeys.detail(review.reviewId),
-        (saved) =>
-          saved && {
-            ...saved,
-            description:
-              body.description.trim() === "" ? undefined : body.description,
-          },
-      );
+    onSuccess: (_, { description, photos }) => {
+      if (description !== undefined) {
+        queryClient.setQueryData<ReviewDetailResponse>(
+          reviewKeys.detail(review.reviewId),
+          (saved) =>
+            saved && {
+              ...saved,
+              description: description.trim() === "" ? undefined : description,
+            },
+        );
+      }
+      if (photos !== undefined) {
+        void queryClient.invalidateQueries({
+          queryKey: reviewKeys.detail(review.reviewId),
+          refetchType: "none",
+        });
+      }
       return queryClient.invalidateQueries({
         queryKey: reviewKeys.list(review.placeId),
       });

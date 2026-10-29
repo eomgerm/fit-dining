@@ -18,6 +18,7 @@ const items: ReviewItem[] = [
       { code: "SHORT_WAIT_BAD", label: "대기가 길었어요", sentiment: "BAD" },
     ],
     description: "국물이 진해요",
+    photos: [],
     mine: false,
   },
   {
@@ -27,6 +28,7 @@ const items: ReviewItem[] = [
     nickname: "라테한잔",
     revisitIntent: false,
     tags: [],
+    photos: [],
     mine: false,
   },
 ];
@@ -94,6 +96,27 @@ describe("ReviewListView", () => {
     expect(html).toMatch(/밤산책<\/p><span class="[^"]*">내 리뷰<\/span>/);
     expect(html.match(/>내 리뷰</g)).toHaveLength(1);
     expect(html).toContain("탈퇴한 회원");
+  });
+
+  it("사진이 있으면 썸네일 줄을 보이고 누르면 크게 보도록 번호를 붙인다(6-03)", () => {
+    const photos = ["p1", "p2"].map((photoId) => ({
+      photoId,
+      url: `/photos/dev/confirmed/${photoId}.jpg`,
+      thumbUrl: `/photos/dev/confirmed/${photoId}.thumb.jpg`,
+    }));
+    const html = render({ totalCount: 1, items: [{ ...items[0], photos }] });
+
+    expect(html).toContain('aria-label="밤산책의 10월 12일 방문 리뷰 사진"');
+    expect(html).toContain('src="/photos/dev/confirmed/p1.thumb.jpg"');
+    expect(html).toContain('aria-label="사진 2/2 크게 보기"');
+    expect(html).not.toContain('src="/photos/dev/confirmed/p1.jpg"');
+  });
+
+  it("사진만 있는 리뷰에는 내용 없음 안내를 보이지 않는다", () => {
+    const photo = { photoId: "p1", url: "/p1.jpg", thumbUrl: "/p1.thumb.jpg" };
+    expect(
+      render({ totalCount: 1, items: [{ ...items[1], photos: [photo] }] }),
+    ).not.toContain("내용 없이 남긴 리뷰예요");
   });
 
   it("본문이 없으면 태그도 없는 예전 리뷰에만 안내 문구를 보인다", () => {

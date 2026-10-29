@@ -19,6 +19,14 @@ describe("submitFailure", () => {
     expect(submitFailure(http(401))).toBe("signedOut");
   });
 
+  it("400 중 쓸 수 없는 사진은 사진 안내다(D-45)", () => {
+    const photo = new ApiError("http", "x", {
+      status: 400,
+      problem: { status: 400, type: "urn:fitdining:review:invalid-photo" },
+    });
+    expect(submitFailure(photo)).toBe("photo");
+  });
+
   it("404는 없어진 장소다", () => {
     expect(submitFailure(http(404))).toBe("placeNotFound");
   });

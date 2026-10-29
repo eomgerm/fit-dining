@@ -150,6 +150,20 @@ describe("normalizeSpent", () => {
 });
 
 describe("toCreateRequest", () => {
+  it("다 올린 사진이 있으면 그 id를 순서대로 보낸다", () => {
+    expect(
+      toCreateRequest(
+        { ...draft({ tagCodes: ["QUIET_GOOD"] }), visitedAt: "2026-10-21" },
+        ["b", "a"],
+      ),
+    ).toEqual({
+      visitedAt: "2026-10-21",
+      tagCodes: ["QUIET_GOOD"],
+      revisitIntent: false,
+      photos: ["b", "a"],
+    });
+  });
+
   it("빈 본문과 금액은 보내지 않는다", () => {
     expect(
       toCreateRequest({

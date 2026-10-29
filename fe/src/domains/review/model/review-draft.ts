@@ -79,9 +79,10 @@ export function formatSpent(digits: string) {
   return digits === "" ? "" : Number(digits).toLocaleString("ko-KR");
 }
 
-// 공백뿐인 본문은 보내지 않는다. BE도 본문 없음으로 저장한다(D-6)
+// 공백뿐인 본문은 보내지 않는다. BE도 본문 없음으로 저장한다(D-6). 사진은 다 올린 것의 id만 담는다(D-45)
 export function toCreateRequest(
   draft: ReviewDraft & { visitedAt: string },
+  photoIds: readonly string[] = [],
 ): ReviewCreateRequest {
   return {
     visitedAt: draft.visitedAt,
@@ -91,5 +92,6 @@ export function toCreateRequest(
     ...(draft.spentPerPerson !== "" && {
       spentPerPerson: Number(draft.spentPerPerson),
     }),
+    ...(photoIds.length > 0 && { photos: [...photoIds] }),
   };
 }

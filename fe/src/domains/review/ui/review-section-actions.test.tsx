@@ -43,6 +43,7 @@ const mine: ReviewItem = {
   revisitIntent: false,
   tags: [],
   description: "내가 쓴 리뷰",
+  photos: [],
   mine: true,
 };
 

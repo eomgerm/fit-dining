@@ -7,7 +7,6 @@ import { Button } from "@/shared/ui/button/button";
 import { IconButton } from "@/shared/ui/button/icon-button";
 import { EmptyState } from "@/shared/ui/display/empty-state";
 import { Textarea } from "@/shared/ui/form/textarea";
-import { CameraIcon } from "@/shared/ui/icon/icons/camera";
 import { ChevronLeftIcon } from "@/shared/ui/icon/icons/chevron-left";
 import { EditIcon } from "@/shared/ui/icon/icons/edit";
 import { WarningIcon } from "@/shared/ui/icon/icons/warning";
@@ -26,9 +25,13 @@ import {
 } from "../api/queries";
 import {
   isDescriptionChanged,
+  isSamePhotos,
   type ReviewDetailResponse,
+  type ReviewUpdateRequest,
 } from "../model/review";
 import { editFailure, type EditFailure } from "./edit-failure";
+import { ReviewPhotoField } from "./review-photo-field";
+import { UNREADABLE_PHOTO, useReviewPhotos } from "./use-review-photos";
 
 type ReviewEditFormProps = {
   reviewId: number;
@@ -40,7 +43,7 @@ type ReviewEditFormProps = {
   onSignedOut: () => void;
 };
 
-// 리뷰 수정(6-07, D-44). 내 리뷰를 받은 뒤 본문과 사진 칸을 그린다
+// 리뷰 수정(6-07, D-44, D-45). 내 리뷰를 받은 뒤 본문과 사진 칸을 그린다
 export function ReviewEditForm({
   reviewId,
   withAccessToken,
@@ -126,13 +129,30 @@ function ReviewEditFields({
   onClose,
 }: ReviewEditFieldsProps) {
   const [description, setDescription] = useState(review.description ?? "");
-  const changed = isDescriptionChanged(review.description, description);
   const [confirmingClose, setConfirmingClose] = useState(false);
   // 닫히는 동안 문구가 바뀌지 않게 마지막 실패 종류는 남겨 둔다
   const [failure, setFailure] = useState<EditFailure>("server");
   const [failureOpen, setFailureOpen] = useState(false);
   const updateReview = useUpdateReview(review, withAccessToken);
   const toast = useToast();
+  const photos = useReviewPhotos({
+    saved: review.photos,
+    max: review.limits.photoMax,
+    withAccessToken,
+    onUnreadable: () => toast(UNREADABLE_PHOTO),
+  });
+  const descriptionChanged = isDescriptionChanged(
+    review.description,
+    description,
+  );
+  const photosChanged = !isSamePhotos(
+    review.photos.map((photo) => photo.photoId),
+    photos.photoIds,
+  );
+  // 올리는 중이거나 올리지 못한 사진도 고친 것으로 본다
+  const changed =
+    descriptionChanged || photosChanged || photos.busy || photos.failed;
+  const pending = updateReview.isPending || photos.busy;
 
   // Figma에 수정 중 나가기 화면이 없어 작성 중 닫기(7-E03)와 같은 꼴로 묻는다.
   // 보내는 중에는 "<"를 막는다. 나가도 요청은 저장되므로 "사라져요"라고 물을 수 없다
@@ -143,22 +163,28 @@ function ReviewEditFields({
   }
 
   function submit() {
-    if (updateReview.isPending) return;
+    if (pending) return;
+    if (photos.failed) {
+      toast("올리지 못한 사진을 다시 올리거나 빼 주세요");
+      return;
+    }
     setFailureOpen(false);
-    updateReview.mutate(
-      { description },
-      {
-        onSuccess: () => {
-          // 등록(7-06)·삭제(6-09)처럼 토스트로 알린다. 토스트는 앱 전체에 하나라 화면을 옮겨도 보인다
-          toast("리뷰를 수정했어요");
-          onSuccess();
-        },
-        onError: (error) => {
-          setFailure(editFailure(error));
-          setFailureOpen(true);
-        },
+    // 바꾼 것만 보낸다. 사진은 고친 뒤의 사진 전체다(D-45)
+    const body: ReviewUpdateRequest = {
+      ...(descriptionChanged && { description }),
+      ...(photosChanged && { photos: photos.photoIds }),
+    };
+    updateReview.mutate(body, {
+      onSuccess: () => {
+        // 등록(7-06)·삭제(6-09)처럼 토스트로 알린다. 토스트는 앱 전체에 하나라 화면을 옮겨도 보인다
+        toast("리뷰를 수정했어요");
+        onSuccess();
       },
-    );
+      onError: (error) => {
+        setFailure(editFailure(error));
+        setFailureOpen(true);
+      },
+    });
   }
 
   return (
@@ -167,14 +193,18 @@ function ReviewEditFields({
       footer={
         <BottomBar>
           <Button
-            // 바뀐 것이 없으면 보낼 것이 없다. 보내는 동안에는 막되 포커스는 남긴다
-            disabled={!changed || updateReview.isPending}
-            focusableWhenDisabled={updateReview.isPending}
-            aria-busy={updateReview.isPending}
+            // 바뀐 것이 없으면 보낼 것이 없다. 보내거나 사진을 올리는 동안에는 막되 포커스는 남긴다
+            disabled={!changed || pending}
+            focusableWhenDisabled={pending}
+            aria-busy={pending}
             onClick={submit}
             className="w-full"
           >
-            {updateReview.isPending ? "수정하는 중" : "수정하기"}
+            {updateReview.isPending
+              ? "수정하는 중"
+              : photos.busy
+                ? "사진 올리는 중"
+                : "수정하기"}
           </Button>
           <span role="status" className="sr-only">
             {updateReview.isPending ? "리뷰를 수정하고 있어요" : ""}
@@ -193,19 +223,7 @@ function ReviewEditFields({
             onValueChange={(value) => setDescription(value)}
           />
         </div>
-        <div className="flex flex-col gap-3">
-          <SectionHeader size="md" title="사진" />
-          <button
-            type="button"
-            // 업로드는 S15P31A302-54에서 붙인다(D-41의 사진 칸과 같다)
-            onClick={() => toast("사진은 아직 올릴 수 없어요")}
-            aria-label={`사진 추가, 0/${review.limits.photoMax}장`}
-            className="flex size-20 flex-col items-center justify-center gap-0.5 rounded-md border border-line-strong bg-surface text-ink-muted"
-          >
-            <CameraIcon size="md" />
-            <span className="text-caption-sm">0/{review.limits.photoMax}</span>
-          </button>
-        </div>
+        <ReviewPhotoField photos={photos} />
       </div>
       <ConfirmDialog
         open={confirmingClose}
@@ -298,18 +316,25 @@ function EditFailureDialog({
           title: "인터넷에 연결되어 있지 않아요",
           description: "연결을 확인하고 다시 수정해 주세요.",
         }
-      : failure === "signedOut"
+      : failure === "photo"
         ? {
             icon: <WarningIcon />,
-            title: "로그인이 끝났어요",
+            title: "올릴 수 없는 사진이 있어요",
             description:
-              "다시 로그인한 뒤 수정해 주세요. 입력한 내용은 그대로 있어요.",
+              "사진을 빼거나 다른 사진으로 바꾼 뒤 다시 수정해 주세요.",
           }
-        : {
-            icon: <WarningIcon />,
-            title: "수정하지 못했어요",
-            description: "입력한 내용을 확인해 주세요.",
-          };
+        : failure === "signedOut"
+          ? {
+              icon: <WarningIcon />,
+              title: "로그인이 끝났어요",
+              description:
+                "다시 로그인한 뒤 수정해 주세요. 입력한 내용은 그대로 있어요.",
+            }
+          : {
+              icon: <WarningIcon />,
+              title: "수정하지 못했어요",
+              description: "입력한 내용을 확인해 주세요.",
+            };
   return (
     <AlertDialog
       open={open}
