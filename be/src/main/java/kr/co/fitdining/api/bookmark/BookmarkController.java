@@ -5,7 +5,7 @@ import java.util.List;
 import kr.co.fitdining.api.auth.domain.AuthFailure;
 import kr.co.fitdining.api.auth.ports.AuthUseCases;
 import kr.co.fitdining.api.bookmark.dto.BookmarkItem;
-import kr.co.fitdining.api.bookmark.dto.BookmarkStatus;
+import kr.co.fitdining.api.bookmark.dto.BookmarkStatusResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.http.HttpHeaders;
@@ -48,9 +48,9 @@ public class BookmarkController {
 
 	/** 저장 여부. 오류: 400({@code placeId}), 401(인증, 탈퇴한 사용자). */
 	@GetMapping("/{placeId}")
-	public BookmarkStatus status(@PathVariable @Positive long placeId,
+	public BookmarkStatusResponse status(@PathVariable @Positive long placeId,
 			@RequestHeader(name = HttpHeaders.AUTHORIZATION, required = false) String authorization) {
-		return new BookmarkStatus(bookmarkService.isBookmarked(userId(authorization), placeId));
+		return new BookmarkStatusResponse(bookmarkService.isBookmarked(userId(authorization), placeId));
 	}
 
 	/** 저장. 이미 저장했어도 204다. 오류: 400({@code placeId}), 401(인증, 탈퇴한 사용자), 404(없는 장소), 503(엔진 없음). */

@@ -313,7 +313,7 @@ class BookmarkPersistenceTest extends PostgresTestSupport {
 
 		@Test
 		@DisplayName("저장여부_북마크테이블만보고_장소엔진을부르지않는다")
-		void status_readsTableOnly() {
+		void isBookmarked_noEngine_readsTableOnly() {
 			String user = createUser();
 			service.save(user, 3);
 			when(places.getPlace(anyLong())).thenThrow(new PlaceSearchUnavailableException());
@@ -331,7 +331,7 @@ class BookmarkPersistenceTest extends PostgresTestSupport {
 
 		@Test
 		@DisplayName("목록_저장시각최신순이고같은시각이면장소id내림차순이다")
-		void list_newestFirstThenPlaceIdDesc() {
+		void list_savedAtTies_returnsNewestFirstThenPlaceIdDesc() {
 			String user = createUser();
 			service.save(user, 3);
 			service.save(user, 7);
@@ -358,7 +358,7 @@ class BookmarkPersistenceTest extends PostgresTestSupport {
 
 		@Test
 		@DisplayName("목록_항목은장소상세의요약주소태그영업상태와KST저장시각이다")
-		void list_itemCarriesPlaceFieldsAndKstSavedAt() {
+		void list_savedPlace_returnsPlaceFieldsAndKstSavedAt() {
 			String user = createUser();
 			clock.instant = Instant.parse("2026-10-29T15:30:00.123456789Z");
 			service.save(user, 3);
@@ -390,7 +390,7 @@ class BookmarkPersistenceTest extends PostgresTestSupport {
 
 		@Test
 		@DisplayName("목록_장소조회가404인북마크는_빠지고행은남는다")
-		void list_placeNotFound_skippedButRowKept() {
+		void list_placeNotFound_skipsItemAndKeepsRow() {
 			String user = createUser();
 			service.save(user, 3);
 			service.save(user, 4);
@@ -402,7 +402,7 @@ class BookmarkPersistenceTest extends PostgresTestSupport {
 
 		@Test
 		@DisplayName("목록_엔진이없으면_목록전체가503예외다")
-		void list_noEngine_failsWhole() {
+		void list_noEngine_throwsUnavailable() {
 			String user = createUser();
 			service.save(user, 3);
 			service.save(user, 4);
@@ -413,7 +413,7 @@ class BookmarkPersistenceTest extends PostgresTestSupport {
 
 		@Test
 		@DisplayName("목록_예상하지못한장소조회오류면_목록전체가실패한다")
-		void list_unexpectedFailure_failsWhole() {
+		void list_unexpectedFailure_throwsWholeList() {
 			String user = createUser();
 			service.save(user, 3);
 			service.save(user, 4);
@@ -440,7 +440,7 @@ class BookmarkPersistenceTest extends PostgresTestSupport {
 
 		@Test
 		@DisplayName("격리_두사용자가섞어저장해제해도_각자의것만보이고바뀐다")
-		void isolation_eachUserSeesAndChangesOnlyOwn() {
+		void saveRemoveListStatus_twoUsersMixed_affectOnlyOwnRows() {
 			List<String> both = createUsers(2);
 			String a = both.get(0);
 			String b = both.get(1);
@@ -467,7 +467,7 @@ class BookmarkPersistenceTest extends PostgresTestSupport {
 
 		@Test
 		@DisplayName("탈퇴_탈퇴한사용자는_네기능모두장소확인전에401이다")
-		void withdrawn_allOperationsRejectedBeforePlaceLookup() {
+		void allOperations_withdrawnUser_throwAuthFailureBeforePlaceLookup() {
 			String user = createUser();
 			service.save(user, 3);
 			withdraw(user);
@@ -483,7 +483,7 @@ class BookmarkPersistenceTest extends PostgresTestSupport {
 
 		@Test
 		@DisplayName("탈퇴_엔진이없어도_404503이아니라401이다")
-		void withdrawn_noEngine_stillUnauthorized() {
+		void save_withdrawnUserAndNoEngine_throwsUnauthorized() {
 			String user = createUser();
 			withdraw(user);
 			when(places.getPlace(anyLong())).thenThrow(new PlaceSearchUnavailableException());
@@ -494,7 +494,7 @@ class BookmarkPersistenceTest extends PostgresTestSupport {
 
 		@Test
 		@DisplayName("탈퇴_회원탈퇴는_북마크행을지우지않는다")
-		void withdrawn_rowsKept() {
+		void withdraw_userWithBookmarks_keepsRows() {
 			String user = createUser();
 			service.save(user, 3);
 			service.save(user, 4);

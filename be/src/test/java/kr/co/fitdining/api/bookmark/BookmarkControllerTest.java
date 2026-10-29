@@ -112,7 +112,7 @@ class BookmarkControllerTest {
 		@ParameterizedTest(name = "{0}")
 		@MethodSource("kr.co.fitdining.api.bookmark.BookmarkControllerTest#endpoints")
 		@DisplayName("인증_토큰이없으면_401ProblemDetail이고서비스를부르지않는다")
-		void missingToken_unauthorized(Endpoint endpoint) throws Exception {
+		void anyEndpoint_missingToken_returnsUnauthorized(Endpoint endpoint) throws Exception {
 			mockMvc.perform(endpoint.request())
 					.andExpect(status().isUnauthorized())
 					.andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
@@ -123,7 +123,7 @@ class BookmarkControllerTest {
 		@ParameterizedTest(name = "{0}")
 		@MethodSource("kr.co.fitdining.api.bookmark.BookmarkControllerTest#endpoints")
 		@DisplayName("인증_Bearer가아닌헤더나무효토큰이면_401이다")
-		void invalidToken_unauthorized(Endpoint endpoint) throws Exception {
+		void anyEndpoint_invalidToken_returnsUnauthorized(Endpoint endpoint) throws Exception {
 			mockMvc.perform(endpoint.request().header("Authorization", "Basic abc"))
 					.andExpect(status().isUnauthorized());
 			mockMvc.perform(endpoint.request().header("Authorization", "Bearer invalid"))
@@ -135,7 +135,7 @@ class BookmarkControllerTest {
 		@ParameterizedTest(name = "{0}")
 		@MethodSource("kr.co.fitdining.api.bookmark.BookmarkControllerTest#endpoints")
 		@DisplayName("인증_만료토큰이면_401과토큰만료type이다")
-		void expiredToken_unauthorizedWithExpiredType(Endpoint endpoint) throws Exception {
+		void anyEndpoint_expiredToken_returnsUnauthorizedWithExpiredType(Endpoint endpoint) throws Exception {
 			mockMvc.perform(endpoint.request().header("Authorization", "Bearer expired"))
 					.andExpect(status().isUnauthorized())
 					.andExpect(jsonPath("$.type").value("urn:fitdining:auth:access-token-expired"));
@@ -144,7 +144,7 @@ class BookmarkControllerTest {
 		@ParameterizedTest(name = "{0}")
 		@MethodSource("kr.co.fitdining.api.bookmark.BookmarkControllerTest#endpoints")
 		@DisplayName("인증_탈퇴한사용자면_서비스의401을ProblemDetail로돌려준다")
-		void withdrawnUser_unauthorized(Endpoint endpoint) throws Exception {
+		void anyEndpoint_withdrawnUser_returnsUnauthorized(Endpoint endpoint) throws Exception {
 			AuthFailure withdrawn = new AuthFailure("로그인이 필요합니다.");
 			when(bookmarkService.list(anyString())).thenThrow(withdrawn);
 			when(bookmarkService.isBookmarked(anyString(), anyLong())).thenThrow(withdrawn);
@@ -158,7 +158,7 @@ class BookmarkControllerTest {
 
 		@Test
 		@DisplayName("인증_쿼리나본문의userId는_무시하고토큰의사용자로처리한다")
-		void userIdFromTokenOnly() throws Exception {
+		void saveAndList_userIdInQueryOrBody_usesTokenUser() throws Exception {
 			mockMvc.perform(put(BASE + "/3").param("userId", "someone-else")
 							.contentType(MediaType.APPLICATION_JSON).content("{\"userId\":\"someone-else\"}")
 							.header("Authorization", "Bearer " + TOKEN))
@@ -179,7 +179,7 @@ class BookmarkControllerTest {
 		@ParameterizedTest(name = "{0} {1}")
 		@MethodSource("kr.co.fitdining.api.bookmark.BookmarkControllerTest#invalidPlaceIds")
 		@DisplayName("장소id_양의정수가아니면_토큰이없어도400이다")
-		void invalidPlaceId_badRequestBeforeAuth(Endpoint endpoint, String placeId) throws Exception {
+		void placeIdEndpoints_invalidPlaceId_returnsBadRequestBeforeAuth(Endpoint endpoint, String placeId) throws Exception {
 			mockMvc.perform(endpoint.request(placeId))
 					.andExpect(status().isBadRequest())
 					.andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON));
@@ -196,7 +196,7 @@ class BookmarkControllerTest {
 
 		@Test
 		@DisplayName("저장_성공하면_204이고본문이없다")
-		void save_noContent() throws Exception {
+		void save_validToken_returnsNoContent() throws Exception {
 			mockMvc.perform(put(BASE + "/3").header("Authorization", "Bearer " + TOKEN))
 					.andExpect(status().isNoContent())
 					.andExpect(content().string(""));
@@ -205,7 +205,7 @@ class BookmarkControllerTest {
 
 		@Test
 		@DisplayName("저장_없는장소면_404ProblemDetail이다")
-		void save_missingPlace_notFound() throws Exception {
+		void save_missingPlace_returnsNotFound() throws Exception {
 			doThrow(new PlaceNotFoundException()).when(bookmarkService).save(USER_ID, 9);
 
 			mockMvc.perform(put(BASE + "/9").header("Authorization", "Bearer " + TOKEN))
@@ -215,7 +215,7 @@ class BookmarkControllerTest {
 
 		@Test
 		@DisplayName("저장_장소엔진이없으면_503ProblemDetail이다")
-		void save_noEngine_unavailable() throws Exception {
+		void save_noEngine_returnsServiceUnavailable() throws Exception {
 			doThrow(new PlaceSearchUnavailableException()).when(bookmarkService).save(USER_ID, 3);
 
 			mockMvc.perform(put(BASE + "/3").header("Authorization", "Bearer " + TOKEN))
@@ -225,7 +225,7 @@ class BookmarkControllerTest {
 
 		@Test
 		@DisplayName("해제_204이고본문이없다")
-		void remove_noContent() throws Exception {
+		void remove_validToken_returnsNoContent() throws Exception {
 			mockMvc.perform(delete(BASE + "/3").header("Authorization", "Bearer " + TOKEN))
 					.andExpect(status().isNoContent())
 					.andExpect(content().string(""));
@@ -234,7 +234,7 @@ class BookmarkControllerTest {
 
 		@Test
 		@DisplayName("지원하지않는메서드면_Spring의405를그대로둔다")
-		void unsupportedMethod_keepsSpringStatus() throws Exception {
+		void post_unsupportedMethod_returnsMethodNotAllowed() throws Exception {
 			mockMvc.perform(post(BASE + "/3").header("Authorization", "Bearer " + TOKEN))
 					.andExpect(status().isMethodNotAllowed());
 		}
@@ -247,7 +247,7 @@ class BookmarkControllerTest {
 
 		@Test
 		@DisplayName("저장여부_bookmarked만담는다")
-		void status_bookmarkedOnly() throws Exception {
+		void status_saved_returnsBookmarkedOnly() throws Exception {
 			when(bookmarkService.isBookmarked(USER_ID, 3)).thenReturn(true);
 
 			String body = mockMvc.perform(get(BASE + "/3").header("Authorization", "Bearer " + TOKEN))
@@ -259,7 +259,7 @@ class BookmarkControllerTest {
 
 		@Test
 		@DisplayName("저장여부_저장하지않았으면_false다")
-		void status_false() throws Exception {
+		void status_notSaved_returnsFalse() throws Exception {
 			mockMvc.perform(get(BASE + "/4").header("Authorization", "Bearer " + TOKEN))
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.bookmarked").value(false));
@@ -267,7 +267,7 @@ class BookmarkControllerTest {
 
 		@Test
 		@DisplayName("목록_BookmarkItem키만담고null키는빠지며savedAt은KST오프셋이다")
-		void list_itemKeys() throws Exception {
+		void list_items_returnsBookmarkItemKeysOnly() throws Exception {
 			when(bookmarkService.list(USER_ID)).thenReturn(List.of(item(3, "서울 강남구 역삼로 1"), item(4, null)));
 
 			String body = mockMvc.perform(get(BASE).header("Authorization", "Bearer " + TOKEN))
@@ -288,7 +288,7 @@ class BookmarkControllerTest {
 
 		@Test
 		@DisplayName("목록_비어있으면_빈배열이다")
-		void list_empty() throws Exception {
+		void list_noBookmarks_returnsEmptyArray() throws Exception {
 			when(bookmarkService.list(USER_ID)).thenReturn(List.of());
 
 			mockMvc.perform(get(BASE).header("Authorization", "Bearer " + TOKEN))
@@ -298,7 +298,7 @@ class BookmarkControllerTest {
 
 		@Test
 		@DisplayName("목록_장소엔진이없으면_503ProblemDetail이다")
-		void list_noEngine_unavailable() throws Exception {
+		void list_noEngine_returnsServiceUnavailable() throws Exception {
 			when(bookmarkService.list(USER_ID)).thenThrow(new PlaceSearchUnavailableException());
 
 			mockMvc.perform(get(BASE).header("Authorization", "Bearer " + TOKEN))
@@ -308,7 +308,7 @@ class BookmarkControllerTest {
 
 		@Test
 		@DisplayName("목록_예상하지못한오류면_500ProblemDetail이고메시지를드러내지않는다")
-		void list_unexpected_internalError() throws Exception {
+		void list_unexpectedFailure_returnsInternalError() throws Exception {
 			when(bookmarkService.list(USER_ID)).thenThrow(new IllegalStateException("secret internal detail"));
 
 			mockMvc.perform(get(BASE).header("Authorization", "Bearer " + TOKEN))

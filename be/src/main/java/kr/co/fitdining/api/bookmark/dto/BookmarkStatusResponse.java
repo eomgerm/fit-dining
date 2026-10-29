@@ -5,5 +5,5 @@ package kr.co.fitdining.api.bookmark.dto;
  *
  * @param bookmarked 내가 저장한 장소면 true
  */
-public record BookmarkStatus(boolean bookmarked) {
+public record BookmarkStatusResponse(boolean bookmarked) {
 }

@@ -13,7 +13,12 @@ import org.springframework.stereotype.Repository;
 @RequiredArgsConstructor
 class BookmarkRepository {
 
-	/** 저장한 장소 id와 저장 시각 */
+	/**
+	 * 북마크 한 행.
+	 *
+	 * @param placeId 저장한 장소 id
+	 * @param savedAt 저장 시각({@code created_at})
+	 */
 	record Row(long placeId, Instant savedAt) {
 	}
 
