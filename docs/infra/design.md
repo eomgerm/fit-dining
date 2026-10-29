@@ -772,7 +772,7 @@ Grafana는 팀원에게 viewer 계정을 준다. A503에서는 SSH 보유자만 
 
 - 한 워크스페이스에 Modal Environment `fit-test`·`fit-dev`·`fit-prod`를 두고 앱 이름은 환경과 상관없이 같게 둔다(예: `fit-embed`). 앱·Secret·웹 URL이 Environment마다 갈린다. FastAPI와 임베딩·리랭커·LLM 엔드포인트가 모두 이 앱들이다.
 - `fit-test`는 AI 팀 전용이다. 상시 배포하지 않고 `modal serve --env fit-test`로 필요할 때만 띄운다. 모델 교체는 fit-test에서 대조한 뒤 같은 커밋을 fit-dev, fit-prod 순서로 `modal deploy --env <env>`한다.
-- 프록시 토큰은 dev용과 prod용을 따로 만든다. RBAC가 없는 워크스페이스는 토큰이 Environment에 묶이지 않아 dev 토큰으로 prod도 부를 수 있다 (확인: Modal 문서는 RBAC 워크스페이스에서만 Environment 단위라고 한다). 그래서 prod 토큰은 B의 `prod.env`에만 둔다.
+- 프록시 토큰은 dev용과 prod용을 따로 만든다. RBAC가 없는 워크스페이스는 토큰이 Environment에 묶이지 않아 dev 토큰으로 prod도 부를 수 있다 (확인: Modal 문서는 RBAC 워크스페이스에서만 Environment 단위라고 한다). prod 토큰을 B의 `prod.env`에만 두는 것은 prod 토큰이 새는 것만 막는다. dev 토큰이 새면 prod 엔드포인트도 부를 수 있고, 이 위험은 Starter 플랜에서 받아들인다. 막으려면 RBAC(Team 플랜)나 prod 전용 워크스페이스가 필요하다(아래 5).
 - 호출 URL과 토큰은 BE의 서버 env에만 둔다.
 - 배포는 AI 팀이 `modal deploy`로 한다. 안정되면 deploy 러너 잡으로 옮길 수 있다(P2).
 
@@ -866,8 +866,10 @@ AI 팀과 M1 전에 합의한다. FastAPI는 Modal에서 돌고 A·B에는 AI �
 ### 12.3 임베딩 엔드포인트 (Modal)
 
 - `POST /embed` `{"texts": [...], "kind": "query|passage"}` → `{"model": "<이름>@<버전>", "dim": <모델별>, "vectors": [...]}`, 응답 헤더 `X-Model-Version`.
-- 요청당 최대 길이와 배치 크기 상한은 AI 팀이 정하고 명세에 적는다. BE는 이를 넘지 않게 나눠 보낸다.
-- 기본 모델(snowflake-arctic-embed-l-v2.0)은 568M 파라미터이고 차원 1024다 (확인). 파인튜닝판 `dragonkue/snowflake-arctic-embed-l-v2.0-ko`의 값은 (미확인).
+- 상한: 요청당 텍스트 1~64개, 텍스트마다 2000자 이하. BE는 이를 넘지 않게 나눠 보낸다. 구현은 `ai/server/embed.py`다.
+- 모델은 `dragonkue/snowflake-arctic-embed-l-v2.0-ko`(568M, 차원 1024)이고 리비전을 고정한다. 벡터는 단위 길이이고 소수 6자리로 반올림된다 (확인: fit-dev 응답이 로컬 `fit_ai.embedding`과 원소 차이 1e-6 이내).
+- 응답 코드: 200 성공. 401 `Modal-Key`·`Modal-Secret` 누락·불일치(Modal 프록시가 거부한다). 422 상한·`kind` 위반이고 본문에는 위치와 사유만 있고 받은 텍스트는 없다. 303 처리가 150초를 넘으면 Modal이 결과 URL로 돌려보낸다(콜드 스타트 중 GPU 배정 대기로 실제로 났다). BE는 303과 5xx를 실패로 보고 폴백한다.
+- 콜드 스타트는 17~85초를 쟀다(fit-dev·fit-test). 연결을 재사용하면 질의 1건이 한국에서 약 250~400ms이고 대부분 미국 동부 왕복이다. BE는 연결 풀을 쓴다.
 - 질의(`query`)는 검색마다 호출돼 지연이 사용자에게 직접 보인다. 문서(`passage`)는 새벽 배치에서 대량으로 호출돼 비용과 직결되므로 배치 크기와 일일 예산을 정한다.
 
 ### 12.4 공통 환경변수

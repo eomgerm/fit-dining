@@ -8,6 +8,8 @@ from typing import Annotated, Literal
 
 import modal
 from fastapi import FastAPI, Response
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from fit_ai import embedding
@@ -28,6 +30,12 @@ class EmbedRequest(BaseModel):
 def create_api() -> FastAPI:
     api = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
+    # 기본 422 본문은 받은 값(input)을 되돌려 BE 로그에 요청 텍스트가 남을 수 있다(design 12.2절 5)
+    @api.exception_handler(RequestValidationError)
+    def reject(_, exc: RequestValidationError):
+        errors = [{k: e[k] for k in ("loc", "msg", "type")} for e in exc.errors()]
+        return JSONResponse({"detail": errors}, status_code=422)
+
     @api.post("/embed")
     def embed(req: EmbedRequest, response: Response):
         encode = (
@@ -44,7 +52,12 @@ def create_api() -> FastAPI:
 
 image = (
     modal.Image.debian_slim(python_version="3.12")
-    .uv_sync(groups=["server"], extras=["cu128"], extra_options="--no-dev")
+    .uv_sync(
+        groups=["server"],
+        extras=["cu128"],
+        extra_options="--no-dev",
+        uv_version="0.13.4",
+    )
     # 가중치를 이미지에 넣어 콜드 스타트마다 내려받지 않는다. 리비전은 embedding.REVISION에 고정돼 있다
     .run_commands(
         "python -c 'from huggingface_hub import snapshot_download; "

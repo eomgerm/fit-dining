@@ -54,3 +54,10 @@ def test_passage_is_encoded_without_prefix(model, client):
 def test_rejects_out_of_contract_requests(model, client, body):
     assert client.post("/embed", json=body).status_code == 422
     assert model.seen == []
+
+
+def test_rejection_does_not_echo_request_text(model, client):
+    secret = "가" * (embed.MAX_CHARS + 1)
+    res = client.post("/embed", json={"texts": [secret], "kind": "query"})
+    assert res.status_code == 422
+    assert secret not in res.text
