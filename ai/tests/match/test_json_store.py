@@ -2,8 +2,7 @@
 
 `test_pg_store.py`와 같은 예시 장소와 같은 기대값을 써서 두 구현체가 같은 결과를 내는지
 본다. 벡터는 2차원 가짜 값이고, 모델·리비전은 공유 모듈 `fit_ai.embedding`의 값을 쓴다.
-커밋한 예시 파일(`samples/place/mock.json`)이 지금 인코더와 맞는지도 본다. 취향 파일은
-취향 분석의 샘플 사용자 7명(`samples/taste/profiles.json`)을 읽는지 본다.
+커밋한 예시 파일(`samples/place/mock.json`)이 지금 인코더와 맞는지도 본다.
 """
 
 import json
@@ -13,11 +12,10 @@ import pytest
 
 from fit_ai import embedding
 from fit_ai.match.candidates import MapBounds, PlaceFilter, StoreError, VectorCounts
-from fit_ai.match.json_store import JsonPlaceStore, JsonTasteStore
+from fit_ai.match.json_store import JsonPlaceStore
 
 QUERY = (1.0, 0.0)
 MOCK_FILE = Path(__file__).resolve().parents[2] / "samples" / "place" / "mock.json"
-TASTE_FILE = Path(__file__).resolve().parents[2] / "samples" / "taste" / "profiles.json"
 
 
 def profile(
@@ -195,62 +193,3 @@ class TestCounts:
 
         assert store.vector_counts() == VectorCounts(comparable=30, mismatched=0)
         assert store.find(PlaceFilter(), [1.0] * 1024, 30).invalid == ()
-
-
-class TestTasteStore:
-    """회원 취향"""
-
-    def test_sample_users(self) -> None:
-        """취향저장소_샘플파일이면_파일의키로샘플사용자취향을꺼낸다"""
-        store = JsonTasteStore(TASTE_FILE)
-
-        first, after_reviews, with_text = (
-            store.find("1"),
-            store.find("7"),
-            store.find("4"),
-        )
-
-        assert first is not None and after_reviews is not None and with_text is not None
-        assert [(f.code, f.like, f.weight) for f in first.features] == [
-            ("QUIET", True, 1),
-            ("LIVELY", False, 1),
-            ("PURPOSE_WORK", True, 1),
-        ]
-        # 7번은 1번 사용자가 리뷰를 쓴 뒤라 user_id는 같고 가중치가 올라갔다.
-        assert after_reviews.user_id == first.user_id
-        assert after_reviews.features[0].weight == 3
-        assert with_text.free_texts[0].usable
-
-    def test_missing_user_is_none(self) -> None:
-        """취향저장소_파일에없는회원이면_None이다"""
-        assert JsonTasteStore(TASTE_FILE).find("u1") is None
-
-    def test_list_file_by_user_id(self, tmp_path: Path) -> None:
-        """취향저장소_취향프로필목록파일이면_user_id로찾는다"""
-        profile = {"schema": "taste-profile/v0", "user_id": "a", "features": []}
-        path = tmp_path / "t.json"
-        path.write_text(json.dumps([profile]), encoding="utf-8")
-
-        assert JsonTasteStore(path).find("a") is not None
-
-    @pytest.mark.parametrize(
-        "content",
-        [
-            "not json",
-            "3",
-            "[1]",
-            '{"a": {"schema": "taste-profile/v1", "user_id": "a"}}',
-            '[{"schema": "taste-profile/v0"}]',
-            (
-                '[{"schema": "taste-profile/v0", "user_id": "a"},'
-                ' {"schema": "taste-profile/v0", "user_id": "a"}]'
-            ),
-        ],
-    )
-    def test_broken_file(self, tmp_path: Path, content: str) -> None:
-        """취향저장소_파일모양이틀리거나목록에같은회원이두번이면_시작할때ValueError다"""
-        path = tmp_path / "t.json"
-        path.write_text(content, encoding="utf-8")
-
-        with pytest.raises(ValueError):
-            JsonTasteStore(path)

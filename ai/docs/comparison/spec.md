@@ -136,11 +136,11 @@ AI가 뷰 `ai_place_search`를 SQL 한 번으로 읽어 거르고 뽑는다. 뷰
 
 ### 4.3 정렬 (`match/ranking.py`, `match/place.py`, `match/taste_select.py`)
 
-취향 프로필은 이렇게 쓴다. 회원 취향은 AI가 취향 저장소(`TasteStore`)에서 회원 id로 꺼낸다. 실제 DB는 저장 설계(`docs/specs/profile-storage/spec.md`)의 `user_preferences`에서 취향 분석이 계산해 둔 `features`와, 칩(`tastes`) 중 코드가 없는 것을 취향 문장으로 읽는다(`match/pg_store.py`). 비교는 취향을 계산하지 않는다. 실제 DB가 생기기 전에는 샘플 사용자 7명 파일(`TASTE_FILE`, `match/json_store.py`)로 대신한다.
+취향 프로필은 이렇게 쓴다. 회원 취향은 AI가 취향 저장소(`TasteStore`)에서 회원 id로 꺼낸다. 실제 DB는 저장 설계(`docs/specs/profile-storage/spec.md`)의 `user_preferences`에서 취향 분석이 계산해 둔 `features`와, 칩(`tastes`) 중 코드가 없는 것을 취향 문장으로 읽는다(`match/pg_store.py`). 비교는 취향을 계산하지 않는다. 회원 취향은 파일로 대신하지 않는다. 샘플 회원 id가 실제 회원 id와 겹칠 수 있어서다. DB 접속 주소가 없으면 회원 검색은 취향 없이 정렬하고 `TASTE_INVALID`를 담는다.
 
 - `features`: 요청과 겹치는 취향을 뺀 뒤 LLM에 글로 넣는다. 문구는 39 코드표의 `phrase`이고 가중치 2에는 "조금 강하게", 3에는 "강하게"를 붙인다. 카드의 취향 근거 항목에는 좋아함만 넣는다.
 - `free_texts`: 벡터가 있는 문장만 원문 그대로 LLM에 넣는다. 벡터가 없는 문장은 39가 보관만 하는 문장이다.
-- 읽지 못하거나(`schema`가 다르거나 형식이 깨짐) 취향 50개·문장 20개를 넘으면 취향 없이 정렬하고 `TASTE_INVALID`를 담는다.
+- 읽지 못하거나(`schema`가 다르거나 형식이 깨짐, 취향 저장소가 없거나 장애) 취향 50개·문장 20개를 넘으면 취향 없이 정렬하고 `TASTE_INVALID`를 담는다. 회원인데 저장된 취향이 없는 것은 실패가 아니라서 담지 않는다.
 - 쓰지 않는 필드: `evidence`(업종별 근거 고르기용, 공개 뒤), `embedding`(취향 벡터 점수를 미뤄서), `original_text`(39가 다시 해석할 때 쓰는 원문).
 
 요청과 겹치는 취향은 묶음으로 뺀다(PRD AC-28, AC-30). 요청에 소음 조건이 있으면 소음 취향을, 목적이나 인원이 있으면 방문 목적 취향을, 음식 종류가 있으면 음식 종류 취향을, 매운맛이 있으면 매운맛 취향을 좋아함·싫어함 모두 뺀다. 음식 종류를 찾아도 매운맛 취향은 남긴다. 중요 기준(가성비 등)과 시설은 요청과 겹쳐도 남긴다.

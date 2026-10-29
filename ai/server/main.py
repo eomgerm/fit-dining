@@ -15,7 +15,7 @@ import httpx
 
 from fit_ai import embedding, gms
 from fit_ai.match.candidates import PlaceStore
-from fit_ai.match.json_store import JsonPlaceStore, JsonTasteStore
+from fit_ai.match.json_store import JsonPlaceStore
 from fit_ai.match.pg_store import PgPlaceStore, PgTasteStore
 from fit_ai.match.taste_select import TasteStore
 from server.app import Dependencies, create_app
@@ -38,9 +38,9 @@ def build_dependencies(env: Mapping[str, str]) -> Dependencies:
         앱의 의존성
 
     Raises:
-        ValueError: `GMS_ENABLED=true`인데 GMS 접속 설정이 틀렸을 때, 장소·취향 파일의
-            모양이 틀렸을 때
-        OSError: 장소·취향 파일을 읽지 못했을 때
+        ValueError: `GMS_ENABLED=true`인데 GMS 접속 설정이 틀렸을 때, 장소 파일의 모양이
+            틀렸을 때
+        OSError: 장소 파일을 읽지 못했을 때
     """
     gms.check_config()
     return Dependencies(
@@ -69,17 +69,13 @@ def _place_store(env: Mapping[str, str]) -> PlaceStore | None:
 
 
 def _taste_store(env: Mapping[str, str]) -> TasteStore | None:
-    """회원 취향 저장소를 고른다. 장소 저장소와 같은 규칙이다.
+    """회원 취향 저장소를 고른다. DB 접속 주소가 있으면 DB(`user_preferences`)를 쓴다.
 
-    DB 접속 주소가 있으면 DB(`user_preferences`)를, 없고 취향 파일이 있으면 파일을 쓴다.
-    둘 다 없으면 None이고, 회원 id로 온 검색은 취향 없이 한다.
+    없으면 None이고, 회원 id로 온 검색은 취향 없이 하고 `TASTE_INVALID`를 담는다.
     """
     dsn = env.get("DATABASE_URL")
     if dsn:
         return PgTasteStore(dsn)
-    taste_file = env.get("TASTE_FILE")
-    if taste_file:
-        return JsonTasteStore(Path(taste_file))
     return None
 
 

@@ -2,8 +2,7 @@
 
 요청이 장기 취향보다 앞선다(PRD AC-28, AC-30). 규칙은 docs/comparison/spec.md 4.3이다.
 취향 프로필 형식은 분석 담당의 spec(S15P31A302-39)을 따른다. 회원 취향은 취향
-저장소(`TasteStore`)에서 꺼낸다. 구현은 `pg_store.py`(DB)와, 실제 취향 DB가 생기기 전에
-쓰는 `json_store.py`(JSON 파일)다.
+저장소(`TasteStore`)에서 꺼낸다. 구현은 `pg_store.py`(DB)다.
 """
 
 from collections.abc import Iterable, Sequence

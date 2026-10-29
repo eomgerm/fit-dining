@@ -10,12 +10,11 @@ import httpx
 import pytest
 
 from fit_ai import embedding
-from fit_ai.match.json_store import JsonPlaceStore, JsonTasteStore
+from fit_ai.match.json_store import JsonPlaceStore
 from fit_ai.match.pg_store import PgPlaceStore, PgTasteStore
 from server.main import build_dependencies
 
 MOCK_FILE = Path(__file__).resolve().parents[2] / "samples" / "place" / "mock.json"
-TASTE_FILE = Path(__file__).resolve().parents[2] / "samples" / "taste" / "profiles.json"
 
 
 def test_builds_store_and_settings(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -40,15 +39,14 @@ def test_builds_store_and_settings(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_places_file_without_database(monkeypatch: pytest.MonkeyPatch) -> None:
-    """의존성_DB주소가없고장소파일이있으면_파일저장소를만든다"""
+    """의존성_DB주소가없고장소파일이있으면_장소는파일저장소를만들고취향저장소는없다"""
     monkeypatch.setenv("GMS_ENABLED", "false")
 
-    deps = build_dependencies(
-        {"PLACES_FILE": str(MOCK_FILE), "TASTE_FILE": str(TASTE_FILE)}
-    )
+    deps = build_dependencies({"PLACES_FILE": str(MOCK_FILE)})
 
     assert isinstance(deps.store, JsonPlaceStore)
-    assert isinstance(deps.taste_store, JsonTasteStore)
+    # 회원 취향은 DB에서만 읽는다.
+    assert deps.taste_store is None
     deps.gms_client.close()
 
 
@@ -60,7 +58,6 @@ def test_database_wins_over_places_file(monkeypatch: pytest.MonkeyPatch) -> None
         {
             "DATABASE_URL": "postgresql://nobody@127.0.0.1:1/none",
             "PLACES_FILE": str(MOCK_FILE),
-            "TASTE_FILE": str(TASTE_FILE),
         }
     )
 

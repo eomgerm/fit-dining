@@ -80,7 +80,7 @@ JSON 이름은 camelCase다. 요청에 모르는 속성이 있으면 400이고(�
 | `fallbacks` 값 | AI가 대신 한 일 |
 | --- | --- |
 | `PREVIOUS_INVALID` | 이전 조건을 읽지 못해 새 검색으로 했다 |
-| `TASTE_INVALID` | 취향을 읽지 못해(형식이 깨짐, 취향 저장소 장애) 취향 없이 정렬했다 |
+| `TASTE_INVALID` | 취향을 읽지 못해(형식이 깨짐, 취향 저장소가 없거나 장애) 취향 없이 정렬했다 |
 | `INTERPRET_LLM_FAILED` | 해석 LLM이 실패해 낱말 규칙으로 해석했다 |
 | `PROFILE_INVALID` | 40 프로필을 읽지 못한 장소를 뺐다 |
 | `RANK_LLM_FAILED` | 정렬 LLM이 실패했거나 시간이 모자라 유사도로 정렬했다 |

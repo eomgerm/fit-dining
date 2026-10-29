@@ -1,12 +1,11 @@
-"""장소·취향 저장소의 JSON 파일 구현. 실제 DB가 생기기 전에 배포와 개발에 쓰는 임시 구현이다.
+"""장소 저장소의 JSON 파일 구현. 실제 장소 DB가 생기기 전에 배포와 개발에 쓰는 임시
+구현이다.
 
 장소 파일은 장소마다 `PgPlaceStore`가 읽는 행과 같은 값(장소 정보와 40 프로필)을 담은
 객체 목록이다. 요약 벡터는 프로필의 `summary.vector`를 쓴다. 시작할 때 한 번 읽어
 메모리에 두고, 거르기와 유사도 순서는 `pg_store.FIND_SQL`과 같은 규칙으로 매번 전부
 계산한다. 예시 장소 수십 곳용이다. 예시 파일은 `scripts/dev_db.py --json`으로 만든다.
-
-취향 파일은 취향 프로필(`taste-profile/v0`)을 담은 객체나 목록이다. 샘플 사용자 7명
-(`samples/taste/profiles.json`)을 그대로 읽는다.
+회원 취향은 파일로 읽지 않는다. 샘플 회원 id가 실제 회원 id와 겹칠 수 있어서다.
 """
 
 import json
@@ -25,7 +24,6 @@ from fit_ai.match.candidates import (
     VectorCounts,
 )
 from fit_ai.match.place import Place, PlaceInfo, read_facilities
-from fit_ai.match.taste_select import TasteProfile
 
 
 class JsonPlaceStore:
@@ -101,58 +99,6 @@ class JsonPlaceStore:
         """
         comparable = sum(vector is not None for vector in self._vectors)
         return VectorCounts(comparable, len(self._vectors) - comparable)
-
-
-class JsonTasteStore:
-    """JSON 파일에서 회원 취향을 꺼낸다.
-
-    객체 파일이면 키를 회원 id로 본다. 샘플 파일(`samples/taste/profiles.json`)은 7번이
-    1번 사용자가 리뷰를 쓴 뒤의 취향이라 `user_id`가 1번과 같아서, 키("1"~"7")로
-    구분한다. 목록 파일이면 프로필의 `user_id`로 찾는다.
-    """
-
-    def __init__(self, path: Path) -> None:
-        """취향 파일을 읽어 둔다. 모양이 틀리면 앱이 시작할 때 드러나도록 여기서 멈춘다.
-
-        Args:
-            path: 취향 파일 경로. 값이 취향 프로필인 객체이거나 취향 프로필 목록이다.
-
-        Raises:
-            OSError: 파일을 읽지 못했을 때
-            ValueError: JSON이 아니거나, 읽지 못하는 취향 프로필이 있거나, 목록
-                파일에 같은 `user_id`가 두 번 나올 때
-        """
-        data = json.loads(path.read_text(encoding="utf-8"))
-        items = None
-        if isinstance(data, dict):
-            items = list(data.items())
-        elif isinstance(data, list):
-            items = [
-                (p.get("user_id") if isinstance(p, dict) else None, p) for p in data
-            ]
-        if items is None or not all(isinstance(p, dict) for _, p in items):
-            raise ValueError("취향 파일이 취향 프로필을 담은 객체나 목록이 아니다")
-        try:
-            self._profiles = {
-                user_id: TasteProfile.from_dict(item) for user_id, item in items
-            }
-        except (KeyError, TypeError) as e:
-            raise ValueError(
-                f"읽지 못하는 취향 프로필이 있다: {type(e).__name__}"
-            ) from e
-        if len(self._profiles) != len(items):
-            raise ValueError("같은 회원 id가 두 번 나온다")
-
-    def find(self, user_id: str) -> TasteProfile | None:
-        """회원 한 명의 취향 프로필을 꺼낸다.
-
-        Args:
-            user_id: 회원 id
-
-        Returns:
-            취향 프로필. 파일에 없는 회원이면 None이다.
-        """
-        return self._profiles.get(user_id)
 
 
 def _comparable_vector(row: dict[str, Any]) -> list[float] | None:
