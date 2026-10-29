@@ -71,7 +71,10 @@ function ThreadList({
     setPicking({ id, status: "loading" });
     try {
       const thread = await load(id, controller.signal);
-      if (!controller.signal.aborted) onOpenThread(thread);
+      if (controller.signal.aborted) return;
+      // 시트가 닫히는 동안 그 줄에 불러오는 중이 남지 않게 한다
+      setPicking(undefined);
+      onOpenThread(thread);
     } catch {
       if (!controller.signal.aborted) setPicking({ id, status: "failed" });
     }
