@@ -15,6 +15,7 @@ import kr.co.fitdining.api.auth.domain.AuthFailure;
 import kr.co.fitdining.api.auth.ports.AuthUseCases;
 import kr.co.fitdining.api.user.UserController;
 import kr.co.fitdining.api.onboarding.OnboardingController;
+import kr.co.fitdining.api.searchthread.SearchThreadController;
 
 public class AuthWebConfiguration implements WebMvcConfigurer {
     private final AuthUseCases auth;
@@ -44,7 +45,8 @@ public class AuthWebConfiguration implements WebMvcConfigurer {
                         || SocialAuthController.class.isAssignableFrom(method.getBeanType())
                         || DevAuthController.class.isAssignableFrom(method.getBeanType())
                         || UserController.class.isAssignableFrom(method.getBeanType())
-                        || OnboardingController.class.isAssignableFrom(method.getBeanType()))) return true;
+                        || OnboardingController.class.isAssignableFrom(method.getBeanType())
+                        || SearchThreadController.class.isAssignableFrom(method.getBeanType()))) return true;
                 response.setHeader("Cache-Control", "no-store");
                 response.setHeader("X-Content-Type-Options", "nosniff");
                 if (request.getMethod().equals("OPTIONS")) return true;
@@ -59,6 +61,6 @@ public class AuthWebConfiguration implements WebMvcConfigurer {
                 request.setAttribute("auth.identity", auth.authenticate(header.substring(7)));
                 return true;
             }
-        }).addPathPatterns("/api/auth/**", "/api/v1/users/**", "/api/v1/onboarding/**");
+        }).addPathPatterns("/api/auth/**", "/api/v1/users/**", "/api/v1/onboarding/**", "/api/v1/me/**");
     }
 }
