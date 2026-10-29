@@ -5,7 +5,7 @@
 검색과 LLM 실패 때는 LLM 없이 같은 모양의 카드를 만든다(docs/comparison/spec.md 3장).
 검색 한 번은 시간 예산(`SEARCH_BUDGET_SECONDS`) 안에서 끝내려고, 남은 시간이 모자라면
 정렬 LLM을 부르지 않는다. HTTP 요청·응답 모양과 폴백 코드로 바꾸는 일은
-API(`server/app.py`)가 한다.
+API(`server/search.py`)가 한다.
 """
 
 import random

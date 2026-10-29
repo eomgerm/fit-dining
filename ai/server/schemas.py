@@ -1,4 +1,4 @@
-"""AI API의 요청·응답 모양. BE가 이 이름 그대로 보내고 받는다.
+"""검색 API의 요청·응답 모양. BE가 이 이름 그대로 보내고 받는다.
 
 JSON 이름은 BE와 같은 camelCase다. 요청의 모르는 속성은 거부하고(검색 spec D-41),
 응답의 null 필드는 뺀다. 명세는 docs/comparison/api.md에 있다.
@@ -6,22 +6,16 @@ JSON 이름은 BE와 같은 camelCase다. 요청의 모르는 속성은 거부�
 
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
-from pydantic.alias_generators import to_camel
+from pydantic import Field, field_validator
 
 from fit_ai.match.interpretation import MAX_CODES, MAX_TEXT_LENGTH
+from server.common import Body
 
 MAX_QUERY_LENGTH = 200
 """요청문 길이 상한. BE 검색 요청과 같다(검색 spec 3번, 인프라 BE 계약 #18)."""
 
 MAX_USER_ID_LENGTH = 64
 """회원 id 길이 상한. BE 회원 id는 UUID 문자열(36자)이다."""
-
-
-class _Body(BaseModel):
-    model_config = ConfigDict(
-        alias_generator=to_camel, populate_by_name=True, extra="forbid"
-    )
 
 
 CategoryGroup = Literal["RESTAURANT", "CAFE", "BAR"]
@@ -31,7 +25,7 @@ Station = Literal["GANGNAM", "YEOKSAM", "SEOLLEUNG"]
 """역. BE `Station`과 같다."""
 
 
-class ModelsBody(_Body):
+class ModelsBody(Body):
     """이번 결과를 낸 모델 버전(인프라 설계 12.2-2, 12.2-7).
 
     Attributes:
@@ -47,7 +41,7 @@ Coordinate = Annotated[float | None, Field(strict=True, allow_inf_nan=False)]
 """좌표 하나. 숫자만 받는다. 문자열("37.4")이나 참거짓, NaN은 거부한다."""
 
 
-class MapBoundsBody(_Body):
+class MapBoundsBody(Body):
     """지도 영역("이 지역에서 검색"). BE `MapBounds`와 같다. 빠진 값은 제한하지 않는다.
 
     Attributes:
@@ -63,7 +57,7 @@ class MapBoundsBody(_Body):
     ne_lng: Coordinate = None
 
 
-class SearchBody(_Body):
+class SearchBody(Body):
     """검색 요청. BE가 검색 요청(첫 페이지)을 받으면 그대로 넘긴다.
 
     Attributes:
@@ -94,7 +88,7 @@ class SearchBody(_Body):
         return value
 
 
-class ConditionsBody(_Body):
+class ConditionsBody(Body):
     """해석한 조건. BE와 FE에는 불투명한 객체다.
 
     BE는 검색 응답의 `conditions`로 FE에 그대로 준다. FE는 후속 조건 때
@@ -117,7 +111,7 @@ class ConditionsBody(_Body):
     nearby: bool = False
 
 
-class ReasonTagBody(_Body):
+class ReasonTagBody(Body):
     """추천 이유의 근거 칩. BE `ReasonTag`와 같다.
 
     Attributes:
@@ -129,7 +123,7 @@ class ReasonTagBody(_Body):
     label: str
 
 
-class ReasonBody(_Body):
+class ReasonBody(Body):
     """추천 이유. BE `Reason`과 같다.
 
     Attributes:
@@ -145,7 +139,7 @@ class ReasonBody(_Body):
     quote_source: str | None = None
 
 
-class ScoreItemBody(_Body):
+class ScoreItemBody(Body):
     """핏 점수를 이루는 항목. BE `ScoreItem`과 같다.
 
     Attributes:
@@ -161,7 +155,7 @@ class ScoreItemBody(_Body):
     evidence_count: int
 
 
-class CardBody(_Body):
+class CardBody(Body):
     """카드의 AI 필드. 장소 이름·좌표·사진·영업 상태는 BE가 채운다.
 
     Attributes:
@@ -181,7 +175,7 @@ class CardBody(_Body):
     caution: str | None = None
 
 
-class EmptyReasonBody(_Body):
+class EmptyReasonBody(Body):
     """결과가 없을 때의 원인과 제안. BE `EmptyReason`과 같다.
 
     Attributes:
@@ -204,7 +198,7 @@ Fallback = Literal[
 (인프라 BE 계약 #17)."""
 
 
-class SearchResponse(_Body):
+class SearchResponse(Body):
     """검색 응답. BE는 카드에 장소 정보를 붙여 검색 응답을 만든다.
 
     Attributes:
@@ -228,21 +222,3 @@ class SearchResponse(_Body):
     ranked_by: Literal["LLM", "SIMILARITY"] | None = None
     fallbacks: list[Fallback]
     models: ModelsBody
-
-
-class ProblemBody(BaseModel):
-    """오류 응답(`application/problem+json`). BE 컨벤션의 ProblemDetail과 같은 모양이다.
-
-    Attributes:
-        type: 문제 종류 URI. 지금은 `about:blank`다.
-        title: HTTP 상태 이름
-        status: HTTP 상태 코드
-        detail: 일반 문구. 요청 내용은 넣지 않는다.
-        code: BE가 분기할 오류 코드
-    """
-
-    type: str = "about:blank"
-    title: str
-    status: int
-    detail: str
-    code: str

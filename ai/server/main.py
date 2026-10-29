@@ -18,7 +18,8 @@ from fit_ai.match.candidates import PlaceStore
 from fit_ai.match.json_store import JsonPlaceStore
 from fit_ai.match.pg_store import PgPlaceStore, PgTasteStore
 from fit_ai.match.taste_select import TasteStore
-from server.app import Dependencies, create_app
+from server.app import create_app
+from server.common import Dependencies
 
 logger = logging.getLogger("server")
 
