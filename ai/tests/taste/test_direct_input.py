@@ -238,6 +238,7 @@ def test_every_code_label_fits_chip_limit():
         ("가" * 19 + " 나", "가" * 19),  # 자른 끝 공백은 지운다
         ("가" * 19 + "😀", "가" * 19),  # BE는 UTF-16 단위로 센다
         ("줄\n바꿈  있는\t곳", "줄 바꿈 있는 곳"),  # BE는 제어 문자를 거부한다
+        ("a\x1bb\x7fc\x85d", "abc d"),
     ],
 )
 def test_sentence_label_is_cut_to_20_without_controls(text, label):

@@ -1,5 +1,6 @@
 """직접 입력 → 근거 장부 행(spec 1·2단계). LLM 해석을 코드 규칙으로 다시 검사한다."""
 
+import unicodedata
 from collections.abc import Callable
 
 from fit_ai import gms
@@ -356,7 +357,9 @@ def interpret(
 
 
 def _label(text: str) -> str:
-    label = " ".join(text.split())  # 줄바꿈 같은 제어 문자는 BE가 거부한다
+    # BE는 제어 문자를 거부한다. 공백류는 한 칸으로 줄이고 나머지는 지운다
+    label = " ".join(text.split())
+    label = "".join(c for c in label if unicodedata.category(c) != "Cc")
     while len(label.encode("utf-16-le")) // 2 > MAX_LABEL:
         label = label[:-1]
     return label.rstrip()
