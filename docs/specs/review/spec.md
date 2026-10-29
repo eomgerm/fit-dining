@@ -32,9 +32,9 @@ Walking Skeleton
 
 3. **작성 흐름**: 같은 작성 화면(`/place/review?id=`)이 Figma 2단계 흐름으로 바뀐다. 비회원은 로그인 후 돌아온다. 작성 진입 때 `GET /api/v1/places/{placeId}/review-form`으로 작성 화면 데이터를 먼저 받고, 오늘 쓴 장소가 아니면 위치를 확인한다. 오늘 이미 리뷰를 썼으면 7-E01 모달, 근처 확인에 실패하면 7-E02 모달이 장소 상세 위에 뜬다(D-43). 작성은 Figma 2단계 흐름이다. 1/2단계에서 방문일과 좋았던 점(1개 이상), 아쉬웠던 점(선택)을 고르고, 2/2단계에서 재방문 의사, 본문, 사진, 1인당 금액을 입력한다. 같은 방문일로 이미 썼으면 409를 받아 방문일을 바꾸라고 안내한다(D-28, D-5, D-31, D-12).
 4. **목록**: 리뷰 탭(6-03)에서 작성일 대신 방문일이 보이고 닉네임, 재방문 의사, 태그, 사진이 더해진다. 본인 리뷰는 닉네임 옆에 "내 리뷰" 태그가 붙고(6-06), 탈퇴한 회원의 리뷰는 "탈퇴한 회원"으로 보인다. 본인 리뷰에는 수정·삭제, 남의 리뷰에는 신고 메뉴가 뜬다(D-24, D-42).
-5. **사진**: 사진을 고르면 앱이 원본과 썸네일 두 벌로 줄이고 EXIF를 지운 뒤 `POST /api/v1/review-photos/upload-urls`로 받은 주소에 바로 올린다. 등록 요청에는 객체 키만 담는다. 목록은 썸네일을 보여 준다(D-9).
+5. **사진**: 사진을 고르면 앱이 1,600px 사진과 썸네일 두 벌을 JPEG로 다시 만들어(EXIF 제거, 용량이 넘으면 품질과 크기를 낮춰 맞춘다) `POST /api/v1/review-photos/upload-urls`로 받은 주소에 바로 올린다. 등록·수정 요청에는 업로드 id(남길 사진은 사진 id)만 담고, BE는 확정할 때 새 사진 id를 매긴다. 목록은 썸네일 줄을 보이고 누르면 1,600px 사진을 넘겨 본다. 리뷰를 지우면 사진도 지운다(D-9, D-45).
 6. **수정·삭제**: 내 리뷰의 ⋯ 메뉴(6-06)에서 "수정하기"를 누르면 수정 화면(`/place/review/edit?id=<placeId>&review=<reviewId>`, 6-07)이 열린다. `GET /api/v1/reviews/{reviewId}`로 본문을 받아 고치고 `PATCH`로 보내면 "리뷰를 수정했어요" 토스트와 함께 장소 상세로 돌아간다. 본인 리뷰는 본문과 사진만 고칠 수 있다. "삭제하기"는 확인(6-08) 뒤 `DELETE`를 보내고, 목록을 다시 받아 리뷰가 빠지면 "리뷰를 삭제했어요" 토스트(6-09)가 뜬다. 같은 방문일로 다시 쓸 수 있다(D-28, D-6, D-44).
-7. **신고와 운영**: 회원은 사유를 골라 신고한다. 운영자는 관리자 API로 숨김, 분석 제외, 작성 차단과 각 해제를 하고 처리 기록이 남는다(D-11).
+7. **신고와 운영**: 회원은 남의 리뷰 ⋯ 메뉴의 "신고하기"(6-10)에서 사유를 골라 신고하고(6-11) 토스트를 본다(6-12, 6-E06). 로그인하지 않았으면 ⋯에 "신고하기"만 있고 누르면 로그인 화면으로 간다. 운영자는 관리자 API로 숨김, 분석 제외, 작성 차단과 각 해제를 하고 처리 기록이 남는다(D-11, D-46).
 
 ## Acceptance criteria
 
@@ -59,10 +59,10 @@ Walking Skeleton
 - [x] AC-13: 같은 사용자·장소·방문일로 두 번 등록하면 두 번째는 409 ProblemDetail이고, 두 요청이 동시에 와도 한 건만 저장된다. 다른 오류(없는 장소 등)는 409로 바뀌지 않는다. FE는 409를 받으면 "이 날짜에는 이미 리뷰를 남겼어요"를 보여 주고 입력을 남기며, "방문일 바꾸기"로 방문일 선택(7-03)을 연다. (D-28, D-31, D-41)
 - [x] AC-14: 목록 항목에 방문일, 닉네임(탈퇴한 회원이면 생략해 "탈퇴한 회원"으로 보인다), 재방문 의사, 태그(장소 업종의 문구와 sentiment, 좋았어요 먼저), `mine`이 더해진다. 헤더 없이 조회하면 `mine`은 모두 false이고, 헤더가 있는데 토큰이 유효하지 않으면 401 ProblemDetail이다. 페이지 하나는 쿼리 4번(다음 페이지는 3번)이다. 사진은 AC-18, `hidden`은 AC-20에서 더한다. (D-24, D-42)
 - [x] AC-15: 작성 화면은 Figma 2단계 흐름이다. 태그를 고르면 같은 그룹의 다른 태그가 페이지(7-01, 7-02)와 관계없이 비활성화된다. 좋았던 점을 하나도 고르지 않으면 7-01의 "다음"이 비활성이다. 태그는 분위기·공간·이용·양·방문 목적 묶음으로 나뉘어 보인다. "<"는 입력을 남긴 채 이전 페이지로 가고, 쓴 내용이 있을 때 "X"를 누르면 7-E03이다. "X"로 나간 뒤 다시 열면 빈 입력이다. 2/2단계가 모두 비면 "건너뛰고 등록하기"다. 등록 실패는 7-E05와 7-E06으로 나뉜다. (D-5, D-31, D-41)
-- [x] AC-16: 작성자는 본문과 사진만 수정할 수 있다. 다른 필드(1인당 금액 포함)를 보내면 400, 남의 리뷰는 403 ProblemDetail이다. 수정해도 목록 순서는 그대로다. 사진 수정은 S15P31A302-54에서 붙는다(AC-18). (D-6, D-24, D-44)
+- [x] AC-16: 작성자는 본문과 사진만 수정할 수 있다. 다른 필드(1인당 금액 포함)를 보내면 400, 남의 리뷰는 403 ProblemDetail이다. 수정해도 목록 순서는 그대로다. 사진은 고친 뒤의 사진 전체를 보낸다(AC-18). (D-6, D-24, D-44, D-45)
 - [x] AC-17: 삭제하면 목록과 `totalCount`에서 즉시 빠지고, 같은 방문일로 다시 등록할 수 있다. (D-28, D-44)
-- [ ] AC-18: 사진은 리뷰당 5장 이하이고 사진마다 원본과 썸네일 키가 있다. 업로드 확인에 실패한 키(없음, 크기 초과, 형식 불일치)가 있으면 400 ProblemDetail이다. 확정된 사진만 공개 경로로 읽힌다. 목록 항목에 사진(`photos`)이 더해진다. (D-9, D-42)
-- [ ] AC-19: 신고는 리뷰당 한 번만 가능하다. 두 번째는 409, 본인 리뷰 신고는 400 ProblemDetail이고, 신고만으로 숨겨지지 않는다. "기타"를 고르면 설명 입력창이 나타나고 설명 없이도 신고된다. 설명은 100자까지 입력되고 글자 수(예: 0/100)를 보인다. "기타"가 아닌 사유에 설명을 보내거나 설명이 100자를 넘으면 400이다. (D-11)
+- [ ] AC-18: 사진은 리뷰당 5장 이하이고 사진마다 1,600px 사진과 썸네일 두 벌이 있다. 쓸 수 없는 사진(없음, 상한 초과, JPEG 아님, 같은 사진 두 번, 이 리뷰에 쓸 수 없는 사진)이 있으면 400 ProblemDetail이고 `type`은 `urn:fitdining:review:invalid-photo`다. 확정된 사진만 공개 경로로 읽힌다. 목록 항목과 수정 화면 데이터에 사진(`photos`)이 더해지고, 리뷰를 지우면 사진도 지운다. 로컬 Garage로 브라우저 확인을 마쳤고, 서버(Caddy 경유)는 `S3_PUBLIC_ENDPOINT`를 넣은 뒤 확인한다. (D-9, D-39, D-42, D-45)
+- [x] AC-19: 신고는 리뷰당 한 번만 가능하다. 두 번째는 409, 본인 리뷰 신고는 400 ProblemDetail이고, 신고만으로 숨겨지지 않는다. "기타"를 고르면 설명 입력창이 나타나고 설명 없이도 신고된다. 설명은 100자까지 입력되고 글자 수(예: 0/100)를 보인다. "기타"가 아닌 사유에 설명을 보내거나 설명이 100자를 넘으면 400이다. (D-11, D-46)
 - [ ] AC-20: 운영자가 숨기면 공개 목록에서 빠지고 작성자 본인에게는 `hidden: true`(이때 목록 항목에 더한다)로 보이며, 그 리뷰의 사진은 공개 경로로 읽히지 않는다. 작성자 본인에게는 "운영 정책에 따라 숨김 처리됨" 표시와 함께 사진도 보인다. 숨김은 분석 제외를 자동 적용하지 않는다. (D-11, D-39)
 - [ ] AC-21: 숨김, 분석 제외, 작성 차단과 각 해제는 처리자·시각·동작을 처리 기록에 남긴다. 작성 차단된 사용자는 `review-form`에서 작성 불가로 안내받고 등록은 403 ProblemDetail이다. (D-11)
 - [x] AC-22: "방문 평가 남기기"를 누르면 위치 확인이 시작되고 "측정 거리 + GPS 정확도 ≤ 100m"면 작성 화면에 "방문 확인 완료"가 보인다. 실패(권한 거절, 시간 초과, 범위 밖)하면 7-E02 모달이 뜨고 "다시 확인"으로 위치만 다시 받거나 "그냥 쓰기"로 작성할 수 있다. 로그인하지 않았거나 작성 화면 데이터를 받지 못하면 위치를 묻지 않는다. 권한 창에 답하지 않아도 20초 뒤 7-E02가 뜨고, 확인하는 동안 상세를 떠나면 그 결과로 화면을 옮기지 않는다. 좌표와 결과를 어떤 요청(주소 포함)·로그·분석 이벤트에도 싣지 않는다. (D-12, D-43)
@@ -70,6 +70,7 @@ Walking Skeleton
 - [ ] AC-25: 리뷰는 `reviews` 테이블에 저장된다. 목록은 목록 인덱스(`idx_reviews_place_id_created_at_review_id`)로 범위와 정렬을 처리하고, `totalCount`는 첫 페이지 응답에만 있다. (D-35)
 - [ ] AC-26: 작성 화면은 로그인하지 않았으면 로그인 화면으로 바뀐다. 등록 요청의 AT가 만료됐으면 한 번 갱신해 다시 보내고, 갱신에 실패하면 다시 로그인하라는 안내를 보이며 입력을 남긴다. (D-15, D-35)
 - [x] AC-27: 회원이 탈퇴해도 그 회원의 리뷰는 목록과 리뷰 수에 남고, 탈퇴 뒤 남은 토큰으로는 리뷰를 등록할 수 없다(401). (D-38)
+- [x] AC-28: 로그인하지 않으면 모든 리뷰의 ⋯ 메뉴에 "신고하기"만 있고, 누르면 시트를 열지 않고 로그인 화면으로 간다. 로그인하면 내 리뷰에는 "수정하기"·"삭제하기", 남의 리뷰에는 "신고하기"가 있다. (PRD FR-12, D-46)
 
 ## Implementation anchors
 
@@ -113,6 +114,15 @@ Walking Skeleton
 | `fe/src/domains/review/ui/review-section.tsx#ReviewSection` (내 리뷰 ⋯ 메뉴, 삭제 확인 6-08과 토스트 6-09) | modify | 1차 | D-44 |
 | `fe/src/domains/review/ui/review-edit-form.tsx#ReviewEditForm` (수정 화면 6-07, 6-E07) | new | 1차 | D-44 |
 | `fe/src/app/place/review/edit/review-edit-screen.tsx#ReviewEditScreen`, `fe/src/app/place/review/review-screen.ts#useSignedIn` (작성·수정 화면의 세션 확인과 나가기) | new | 1차 | D-44 |
+| `be/src/main/java/kr/co/fitdining/api/review/ReviewService.java#ReviewService.report`, `review/report/ReviewReport.java`, `be/src/main/resources/db/migration/V8__create_review_reports.sql` | new | 1차 | D-11, D-46 |
+| `fe/src/domains/review/ui/review-report-sheet.tsx#ReviewReportSheet` (6-11), `review-section.tsx#ReviewSection` (로그인 확인 뒤 시트), `report-failure.ts#reportFailure` (6-E06) | new | 1차 | D-46 |
+| `fe/src/domains/review/ui/review-list-view.tsx#ReviewMenu` (내 리뷰는 수정·삭제, 남의 리뷰와 비로그인은 신고) | modify | 1차 | D-46 |
+| `be/src/main/java/kr/co/fitdining/api/review/photo/ReviewPhotos.java#ReviewPhotos` (발급, 확정, 정리, 읽기 주소), `S3PhotoStorage.java#S3PhotoStorage`, `ReviewPhotoConfiguration.java` | new | 1차 | D-9, D-45 |
+| `be/src/main/resources/db/migration/V9__create_review_photos.sql`, `store/Review.java#Review.changePhotos` | new | 1차 | D-45 |
+| `be/src/main/resources/application.yml#review.photo`, `docs/infra/contracts/env.md` (`S3_PUBLIC_ENDPOINT`), `infra/app/app.env.example`, `be/.env.example` | modify | 1차 | D-45 |
+| `fe/src/domains/review/model/photo-compress.ts#compressPhoto`, `ui/use-review-photos.ts#useReviewPhotos`, `ui/review-photo-field.tsx#ReviewPhotoField` (7-04·7-05·6-07, 7-E04) | new | 1차 | D-45 |
+| `fe/src/domains/review/ui/review-photo-viewer.tsx#ReviewPhotoStrip` (목록 썸네일과 크게 보기) | new | 1차 | D-45 |
+| `fe/next.config.ts#rewrites` (`/fit-dev-photos/*`), `fe/src/app/photos/[env]/confirmed/[name]/route.ts#GET` (로컬 사진 읽기) | new | 1차 | D-45 |
 
 BE는 팀이 정한 루트 패키지 `kr.co.fitdining.api`(검색 D-32) 아래 `review`에 두고, DTO는 `review.dto`에 둔다(D-23). 모듈 경계 규칙이 정해지면 그에 맞춘다. FE는 master의 공통 구조(`app → domains → shared`)를 따라 리뷰 코드를 `src/domains/review`에 둔다. 장소 상세는 검색 담당이 만들고(`src/domains/place`), 리뷰 담당이 상세 화면에 리뷰 자리 세 곳(`slots`)을 렌더 함수 props로 열어 `src/app/place/place-detail-with-reviews.tsx`에서 `ReviewSection`(리뷰 탭, `onShowAll`을 주면 홈 탭 미리보기)과 `ReviewEntryButton`(하단 버튼, 위치 확인 뒤 `reviewWriteHref`로 간다)으로 채운다. 도메인끼리는 import하지 않기 때문이다. 작성 화면(`src/app/place/review`)은 리뷰 담당이 만든다(D-32).
 
@@ -129,7 +139,7 @@ BE는 팀이 정한 루트 패키지 `kr.co.fitdining.api`(검색 D-32) 아래 `
 | `PATCH /api/v1/reviews/{reviewId}` | 1차 | 필수(본인) | `ReviewUpdateRequest` | 204 |
 | `DELETE /api/v1/reviews/{reviewId}` | 1차 | 필수(본인) | 경로 | 204 |
 | `POST /api/v1/review-photos/upload-urls` | 1차 | 필수 | `ReviewPhotoUploadRequest` | `ReviewPhotoUploadResponse` |
-| `POST /api/v1/reviews/{reviewId}/reports` | 1차 | 필수 | `ReviewReportRequest` | 201 |
+| `POST /api/v1/reviews/{reviewId}/reports` | 1차 | 필수 | `ReviewReportRequest` | 201(본문 없음) |
 | `/api/v1/admin/...` | 1차 | 관리자 | 신고 목록, 숨김·분석 제외·작성 차단과 해제, 처리 기록 | D-11 |
 
 1차 후속의 인증은 `Authorization: Bearer <JWT>`다(D-15).
@@ -146,11 +156,12 @@ Walking Skeleton
 1차 후속에서 더하는 것
   ReviewItem           : + visitedAt(date), nickname?(탈퇴한 회원이면 생략), revisitIntent(bool),
                          tags(TagView[], 좋았어요 먼저), mine(bool) (D-42)
-                         + photos({url, thumbUrl}[])는 S15P31A302-54, hidden(bool)은 S15P31A302-56
-  ReviewDetailResponse : reviewId, placeId, description?, limits({descriptionMax: 500, photoMax: 5}) (D-44)
-                         + photos는 S15P31A302-54
+                         + photos(PhotoView[], 없으면 빈 목록) (D-45), hidden(bool)은 S15P31A302-56
+  ReviewDetailResponse : reviewId, placeId, description?, photos(PhotoView[]),
+                         limits({descriptionMax: 500, photoMax: 5}) (D-44, D-45)
   ReviewCreateRequest  : + visitedAt(date), tagCodes(1..), revisitIntent,
-                         photos?({key, thumbKey}[], ..5), spentPerPerson?(0..1,000,000 정수)
+                         spentPerPerson?(0..1,000,000 정수), photos?(업로드 id uuid[], ..5, 화면 순서) (D-45)
+  PhotoView            : photoId(사진 id, 확정할 때 매긴다), url, thumbUrl (같은 출처 /photos/<APP_ENV>/confirmed/)
   TagView              : code, label, sentiment(GOOD|BAD)
   ReviewFormResponse   : place({name, categoryGroup, station, thumbnailUrl?, lat?, lng?}), visitDate({min, max, default}),
                          reviewedDates(date[]), tags({good: FormTag[], bad: FormTag[]}),
@@ -160,9 +171,10 @@ Walking Skeleton
   ReviewReportRequest  : reason(AD_SPAM|ABUSE|UNRELATED|OTHER), detail?(..100, reason이 OTHER일 때만)
   ReviewPhotoUploadRequest  : count(1..5)
   ReviewPhotoUploadResponse : uploads(PhotoUpload[])
-  PhotoUpload          : key, url, thumbKey, thumbUrl, expiresAt
-  ReviewUpdateRequest  : description(..500, 지금은 필수) (D-44)
-                         + photos?({key, thumbKey}[], ..5)는 S15P31A302-54. 그때 둘 중 하나 이상이고 없는 필드는 그대로 둔다
+  PhotoUpload          : photoId(업로드 id), uploadUrl, thumbUploadUrl(같은 출처 상대 주소, Content-Type: image/jpeg로
+                         PUT), expiresAt (D-45)
+  ReviewUpdateRequest  : description?(..500), photos?(uuid[], ..5, 고친 뒤의 사진 전체: 남길 사진은 사진 id, 새 사진은
+                         업로드 id). 하나 이상이고 없는 필드는 그대로 둔다 (D-44, D-45)
 ```
 
 역직렬화되는 요청 record의 숫자와 boolean은 박싱 타입이다(D-23). `spentPerPerson`은 PRD상 화면 표시에 쓰지 않고 수정 화면에도 없어(6-07) 응답에 담지 않는다. 목록 정렬은 작성일 기준이다. Walking Skeleton은 작성일을 보인다. 1차 후속의 화면(6-03)은 방문일만 보이지만, `createdAt`은 직전 배포의 FE를 위해 응답에 남긴다(D-24). `placeId`는 양의 정수다(D-21). 업종과 역 값은 검색 spec 가정 9의 enum과 같다.
@@ -184,9 +196,13 @@ V5__create_reason_tags.sql, R__reason_tag_seed.sql(D-36)
 reason_tags           : code(PK), feature_code, sentiment(GOOD|BAD), label, display_group, sort_order
 reason_tag_categories : (category, code)(PK), label(업종 문구, NULL 허용)
 review_reason_tags    : (review_id, code)(PK)
-review_photos  : review_photo_id, review_id, object_key, thumb_key, sort_order
-review_reports : review_report_id, review_id, reporter_id, reason, detail, created_at
-                 UNIQUE (review_id, reporter_id)
+V8__create_review_reports.sql(D-46)
+review_reports : review_report_id, review_id(FK), reporter_id(FK auth_users), reason(AD_SPAM|ABUSE|UNRELATED|OTHER),
+                 detail(VARCHAR(100), OTHER일 때만), created_at
+                 uk_review_reports_review_id_reporter_id UNIQUE (review_id, reporter_id)
+V9__create_review_photos.sql(D-45)
+review_photos  : (review_id, sort_order)(PK, sort_order 0..4), photo_id(UUID, UNIQUE)
+                 객체는 pending/<업로드 id>(.thumb).jpg → 확정할 때 새 사진 id로 confirmed/<photo_id>(.thumb).jpg
 review_moderation_logs : moderation_log_id, target_type, target_id, action, actor_id, created_at
 review_write_blocks    : user_id, blocked_by, blocked_at
 ```
@@ -210,7 +226,9 @@ Walking Skeleton
 - **FE 순수 로직과 정적 렌더** (example), AC-13, AC-15, AC-22: `src/domains/review/model`의 태그 선택 함수(같은 그룹 비활성화, 소음 축 4개), 입력 상태(첫 방문일, "다음" 조건, 버튼 문구, 금액 입력, 등록 요청, 다시 받은 데이터에 맞추기), 달력 칸 계산, 근처 판정 함수와 `ui`의 등록 실패 분류를 Vitest(`pnpm test`)로 확인한다. 태그 칩 비활성, 달력의 "작성함"과 범위 밖 날, 2/2단계 문구는 정적 렌더로 확인한다. 1/2단계 상단(질문까지) 고정과 태그 목록만의 스크롤, "나가기" 뒤 빈 입력, 다시 받은 데이터로 비워진 방문일과 "X", 등록 404, 쓰는 중의 401, 다시 받은 데이터 반영, 방문일이 빠진 등록, 범위 밖 방문일을 받은 7-03은 jsdom 렌더(Testing Library)로 확인한다(D-31, D-41). 놓치는 것: Next가 숨겨 둔 화면을 다시 여는 동작, 시트·다이얼로그 모양과 닫힘 모션은 수동 확인.
 - **수정·삭제** (example), AC-16, AC-17: `ReviewPersistenceTest`가 본문만 바뀌고 다른 필드·태그·목록 순서가 그대로인지, `updated_at`(같은 본문이면 그대로), 공백뿐인 본문, 삭제가 목록·리뷰 수·이미 쓴 날짜에서 빠지고 같은 날 다시 쓸 수 있는지를 확인한다. 조회·수정·삭제마다 남의 리뷰 403과 행이 바뀌지 않는지, 없거나 삭제한 리뷰 404, 탈퇴한 사용자 401을 본다. 삭제가 행을 잠근 동안 온 본인 수정은 잠금 대기를 `pg_locks`로 확인한 뒤 404이고 리뷰가 되살아나지 않는지, 남의 수정·삭제는 기다리지 않고 403인지를 시간 제한을 두어 확인한다. HTTP로 토큰별 204·403·404와 다른 필드 400을 본다. 컨트롤러 경계는 인증이 필드 검증보다 먼저인지, 고칠 필드 없음·다른 필드·501자 400, `reviewId` 형식, 본문이 없으면 `description` 생략, 로그에 본문이 없음을 본다. FE는 ⋯ 메뉴가 내 리뷰에만 방문일 이름으로 있는지(정적 렌더), 수정하기, 삭제 중 상태(버튼 막힘·포커스·알림·Esc), 작성 화면 데이터 무효화, 삭제 뒤 리뷰 섹션 포커스, 취소, 404·시간 초과의 목록 다시 받기, 403·401·서버 오류·오프라인 토스트, 수정 화면의 비활성 조건·PATCH·빈 본문·토스트·상세 캐시 갱신과 목록 무효화·나가기 확인·보내는 중 "<" 막기·6-E07과 다시 수정·403/404·401·오프라인 안내·불러오기 중 알림·불러오기 404/403/401/오프라인·다시 열면 지금 본문으로 시작을 jsdom으로 확인한다(D-44). 놓치는 것: 메뉴·다이얼로그 모양과 모션, Next가 숨겨 둔 화면을 다시 여는 동작은 수동 확인.
 - **방문 위치 확인** (example), AC-22, AC-23: 근처 판정(거리와 정확도의 합 100m 경계, 장소 좌표 없음)과 진입 판단(오늘 쓴 날이 위치보다 먼저)을 Vitest로 확인한다. `ReviewEntryButton`의 근처·7-E01(위치를 묻지 않음)·7-E02·"다시 확인"·로그인 전·데이터 실패(다시 시도하지 않고 위치를 묻지 않음)·확인 중 떠나기·권한 창 마감은 앱과 같은 재시도 설정의 jsdom 렌더로 확인한다. 작성 화면의 "방문 확인 완료"(오늘일 때만)·방문일 시트 열기·결과를 옮긴 뒤 지우기·"X" 뒤 지우기도 jsdom으로 본다(D-43). 놓치는 것: 실제 기기의 위치 권한 창과 정확도(브라우저에서 위치를 바꿔 넣어 수동 확인).
-- **사진** (manual), AC-18, AC-20: `infra/edge/test` 환경에서 Caddy를 거친 presigned 업로드(원본·썸네일)와 공개 읽기를 확인한다.
+- **사진** (example), AC-18: `ReviewPhotosTest`가 가짜 저장소로 업로드 주소 발급, 확정(새 사진 id와 순서, 같은 업로드를 두 번 확정해도 따로인 복사본, 상한 경계, 빈 파일, JPEG 아님, 올리지 않은 사진, 복사 실패 때 이번 복사본 정리), 트랜잭션 뒤 정리(커밋·롤백·결과 불명)를, `S3PhotoStorageTest`가 운영과 같은 Garage v2.4.1 컨테이너로 presigned PUT(서명 헤더는 Host와 Content-Type뿐, 다른 Content-Type은 403), 크기, 앞부분 읽기, 복사(원본이 없으면 false), 여러 키 한 번에 지우기, 접속 실패를 확인한다. `ReviewPersistenceTest`는 등록·목록·수정 화면의 순서, 업로드 원본과 확정본 정리, 409 뒤 다시 보내기, 저장된 리뷰의 업로드로 다시 등록해도 먼저 저장된 사진이 남는지, 남은 남의 업로드를 따로 복사하는지, 같은 사진 두 번, 남의 사진 id, 순서 바꾸기, 같은 목록의 `updated_at`, 삭제 뒤 정리, 저장소 장애 503과 HTTP로 발급부터 목록까지(목록의 사진 id는 업로드 id와 다르다)와 400 `type`을 본다. 첫 페이지 쿼리는 5번, 다음 페이지는 4번이다. FE는 품질·크기 낮추기 순서, 방향 옵션을 모르는 브라우저의 다시 읽기, 그리기 실패, canvas 비우기(Vitest), 칸 상태·data URL 미리보기·차례로 줄이기·모든 압축 실패의 7-E04·다시 올리기·줄이는 중과 올리는 중 빼기·화면을 떠날 때 멈추기(`renderHook`), 칸을 뺀 뒤 포커스와 실패 알림, 작성·수정 화면의 사진 요청과 사진 400 안내, 목록 썸네일 줄, 로컬 사진 읽기 경로(업스트림 404 포함)를 확인한다(D-45).
+- **신고** (example), AC-19, AC-28: 컨트롤러 경계(사유·설명 형식, 인증 먼저, 404·400·409, 로그), `ReviewPersistenceTest`(저장 값, 공백 설명, 중복 409, 다른 신고자, 내 리뷰, 지운·없는 리뷰, 탈퇴한 사용자, 숨기지 않음, 설명 CHECK, HTTP 201·409·400), FE(⋯ 메뉴 이름과 항목, 비로그인 로그인 이동, 시트 비활성·기타 설명·보낸 요청, 409·404·연결 끊김 처리, 404로 닫힐 때 리뷰 섹션 포커스)를 확인한다(D-46).
+- **수동 확인** AC-18, AC-19, AC-28: 로컬 Garage와 `next dev`로 비로그인 ⋯에서 로그인 화면, 신고 201과 409 토스트, 4000×3000 사진을 1,600px로 줄여 올리기, 깨진 파일의 7-E04, 등록 뒤 확정본만 남기, 목록 썸네일과 크게 보기, 수정에서 빼고 더하기, 삭제 뒤 객체 삭제를 확인했다(2026-10-29). 서버의 Caddy 경유 업로드와 공개 읽기는 `infra/edge/test`나 dev 서버에서 확인한다.
 - **수동 확인** AC-22, AC-23: Figma 흐름(상세 → 위치 확인·오늘 작성 여부 모달 → 1/2·2/2단계 → 상세로 복귀, 검색 상태 유지).
 
 ## Out of scope
@@ -247,22 +265,22 @@ BE 팀 공통
 - 모듈 경계 규칙은 무엇인가요? 장소와 리뷰는 기능 패키지(`place`, `review`) 아래에 평평하게 두는데(D-23), `auth`는 `domain`·`ports`·`application`·`infrastructure`·`presentation`으로 나눈다.
 
 인프라 담당
-- BE는 브라우저가 쓰는 공개 호스트의 경로(`/fit-<env>-photos/`)로 presigned URL을 서명해야 한다(인프라 5.2절, 12.5절 #2). app env 계약에는 내부 주소 `S3_ENDPOINT`뿐인데 공개 호스트는 어떤 키로 받나요?
+- presigned URL 서명 호스트는 env 계약에 선택 키 `S3_PUBLIC_ENDPOINT`로 더했다(D-45). dev·prod 서버 env에 언제 넣나요? 넣기 전까지 서버에서는 사진 업로드가 503이고 사진 없는 리뷰는 그대로 된다.
 - Garage 스파이크(인프라 7.4절) 중 서버에서 남은 확인은 언제 끝나나요? presigned PUT·POST가 Caddy를 거쳐 서명이 통과하는지, PostObject의 `content-length-range`, 수명주기가 남았다. 웹 엔드포인트 공개 읽기와 익명 S3 GET 거부는 로컬에서 확인됐다. 실패하면 저장소가 바뀐다(D-9).
 - AI가 리뷰를 읽는 경로(취향·AI·검색 담당 질문, D-34)를 함께 정해야 한다.
-
-FE 공통 담당
-- 사진 고르기·미리보기 칸은 공통 UI 컴포넌트로 만드나요, 리뷰 도메인에서 만드나요? 방문일 달력(7-03)은 리뷰 도메인에 만들었다(D-41).
 
 기획·디자인
 - 이유 태그 목록, 문구, 업종별 노출은 언제 확정되나요? 그 전까지는 PRD FR-10 초안을 임시 시드로 쓰고, 확정되면 `R__reason_tag_seed.sql`만 고친다(D-36).
 - 7-01에서 좋았던 점을 고르지 않았을 때 "다음" 비활성 상태와 "하나 이상 필수" 안내를 그려야 한다. 7-01, 7-01b와 예외 상태(7-E01~7-E06) 어디에도 아직 없다(D-5).
 - 409(같은 날 두 번째 등록)와 401(로그인 만료) 안내 화면이 예외 상태에 없다. 지금은 7-E05와 같은 다이얼로그 꼴로 그린다(D-41).
+- PRD OQ-07(사진 용량 상한, 압축 품질)을 제안값(1,600px 1MB, 썸네일 100KB, 품질 0.85에서 0.65까지)으로 정해도 되나요? 값은 BE 설정과 앱 상수에 있다(D-45).
+- 쓸 수 없는 사진(400)과 업로드 실패, 이미 신고한 리뷰(409) 안내가 예외 상태에 없다. 지금은 사진 안내 다이얼로그, 칸의 "다시 시도", 토스트로 그린다(D-45, D-46).
 
 팀장
 - 관리자 도구(Appsmith)는 관리자 API를 부르나요, DB에 직접 붙나요?
 
 ### 리뷰 담당이 준비할 것
 
-- 작성 화면에 남은 것: 사진 업로드와 7-E04(S15P31A302-54), 로그인 뒤 작성 화면으로 돌아오기(D-41).
+- 작성 화면에 남은 것: 로그인 뒤 작성 화면으로 돌아오기(D-41). 신고도 로그인 뒤 돌아오지 않는다(D-46).
+- 6-10, 6-11, 6-12, 6-E06, 7-E04의 문구와 배치를 Figma와 대조한다. 구현 때 Figma MCP 호출 한도로 보지 못해 spec·결정의 문구(D-11)로 그렸다(D-45, D-46).
 - 1차 후속 전: Figma에 없는 화면(숨김 처리된 내 리뷰 표시, 작성 차단 안내)을 추가한다.
