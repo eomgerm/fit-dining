@@ -2,6 +2,8 @@ import csv
 import importlib.util
 from pathlib import Path
 
+import pytest
+
 _spec = importlib.util.spec_from_file_location(
     "load_places", Path(__file__).resolve().parents[2] / "scripts" / "load_places.py"
 )
@@ -382,3 +384,68 @@ def test_load_sql_upserts_places_then_replaces_their_children():
         in sql
     )
     assert "INSERT INTO place_seats" not in sql
+
+
+def test_profile_rows_keep_personas_with_three_reviews_and_drop_evidence():
+    persona = {
+        "persona_id": "p1",
+        "name": "조용한 손님",
+        "description": "설명",
+        "reason": "이유",
+        "like": True,
+        "review_ids": ["r1", "r2", "r3"],
+        "vector": [0.5, -0.25],
+    }
+    feature = {
+        "code": "QUIET",
+        "layer": "axis",
+        "like_count": 3,
+        "dislike_count": 0,
+        "is_label": True,
+    }
+    profile = {
+        "schema": "place-profile/v0",
+        "place_id": 1,
+        "food_type": None,
+        "analyzed_review_count": 12,
+        "embedding": {"model": "m"},
+        "summary": {"text": "카페 A. 카페.", "vector": [0.1, 0.2]},
+        "features": [feature],
+        "personas": [
+            persona,
+            persona | {"persona_id": "p2", "like": False, "review_ids": ["r1", "r2"]},
+        ],
+        "evidence": [{"review_id": "r1", "quote": "원문"}],
+    }
+
+    tables = load_places.profile_rows([profile])
+
+    assert tables == {
+        "place_profiles": [
+            {
+                "naver_place_id": "1",
+                "summary_text": "카페 A. 카페.",
+                "summary_vector": "[0.1,0.2]",
+                "features": '[{"code": "QUIET", "layer": "axis", "like_count": 3, '
+                '"dislike_count": 0, "is_label": true}]',
+                "analyzed_review_count": 12,
+            }
+        ],
+        # 근거 3개 미만(p2)은 넣지 않고, review_ids는 앱 리뷰용이라 비워 둔다(profile-storage D-7)
+        "place_personas": [
+            {
+                "naver_place_id": "1",
+                "persona_id": "p1",
+                "name": "조용한 손님",
+                "description": "설명",
+                "reason": "이유",
+                "liked": True,
+                "vector": "[0.5,-0.25]",
+            }
+        ],
+    }
+
+
+def test_profile_rows_rejects_other_schema():
+    with pytest.raises(ValueError, match="place-profile/v1"):
+        load_places.profile_rows([{"schema": "place-profile/v1", "place_id": 1}])

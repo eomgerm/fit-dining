@@ -1,11 +1,12 @@
 """정제한 네이버 수집 CSV(clean/)를 places와 장소 자식 테이블 7개(V7)에 넣는 SQL을 만든다(S15P31A302-113).
 
-    cd ai && uv run python scripts/load_places.py <clean 폴더> > places.sql   # 테이블별 행 수는 stderr
+    cd ai && uv run python scripts/load_places.py <clean 폴더> [profiles.json] > places.sql   # 행 수는 stderr
     psql "<DB 접속 URL>" -v ON_ERROR_STOP=1 -f places.sql
 
 변형 규칙은 docs/specs/place-catalog/spec.md의 "적재·mock 변형 규칙"을 따른다. 다시 돌려도 장소는
 중복되지 않고 place_id도 그대로다. 리뷰에서 나온 CSV는 열지 않는다(place-catalog D-4, D-5).
-장소 분석 결과(place_profiles, place_personas)는 40 프롬프트가 정해지면 따로 넣는다.
+profiles.json(build_place_profiles.py 출력)을 주면 장소 분석 결과(place_profiles, place_personas)도
+넣는다. 이때 CSV의 장소 중 파일에 없는 장소는 분석 결과가 지워진다.
 """
 
 import json
@@ -14,6 +15,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from fit_ai.place.clean import by_place, read
+from fit_ai.place.profile import MIN_EVIDENCE, SCHEMA
 from fit_ai.place.rules import food_type
 
 
@@ -247,6 +249,43 @@ def child_rows(clean: Path) -> dict[str, list[dict]]:
     }
 
 
+def vector(v: list[float]) -> str:
+    return "[" + ",".join(repr(float(x)) for x in v) + "]"
+
+
+def profile_rows(profiles: list[dict]) -> dict[str, list[dict]]:
+    """40 출력(place-profile/v0)을 넣을 행. evidence는 넣지 않는다(profile-storage D-6)."""
+    if bad := {p["schema"] for p in profiles} - {SCHEMA}:
+        raise ValueError(f"{SCHEMA}가 아닌 프로필: {bad}")
+    return {
+        "place_profiles": [
+            {
+                "naver_place_id": str(p["place_id"]),
+                "summary_text": p["summary"]["text"],
+                "summary_vector": vector(p["summary"]["vector"]),
+                "features": json.dumps(p["features"], ensure_ascii=False),
+                "analyzed_review_count": p["analyzed_review_count"],
+            }
+            for p in profiles
+        ],
+        # 근거 3개 이상만 넣고 review_ids는 앱 리뷰 자리라 비워 둔다(profile-storage D-7)
+        "place_personas": [
+            {
+                "naver_place_id": str(p["place_id"]),
+                "persona_id": x["persona_id"],
+                "name": x["name"],
+                "description": x["description"],
+                "reason": x["reason"],
+                "liked": x["like"],
+                "vector": vector(x["vector"]),
+            }
+            for p in profiles
+            for x in p["personas"]
+            if len(x["review_ids"]) >= MIN_EVIDENCE
+        ],
+    }
+
+
 def literal(v) -> str:
     """배열은 '{...}' 문자열로 내 열 타입(text[], time[])에 맞게 바뀌게 한다."""
     if v is None:
@@ -319,6 +358,15 @@ def dropped(
 if __name__ == "__main__":
     clean = Path(sys.argv[1])
     places, tables = place_rows(clean), child_rows(clean)
+    profiles = []
+    if len(sys.argv) > 2:
+        profiles = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+        unknown = {str(p["place_id"]) for p in profiles} - {
+            p["naver_place_id"] for p in places
+        }
+        if unknown:
+            sys.exit(f"CSV에 없는 장소의 프로필: {sorted(unknown)}")
+        tables |= profile_rows(profiles)
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stdout.write(load_sql(places, tables))
     sys.stderr.reconfigure(encoding="utf-8")
@@ -329,9 +377,14 @@ if __name__ == "__main__":
         sep="\n",
         file=sys.stderr,
     )
+    gone = dropped(clean, places, tables)
+    if profiles:
+        gone["근거 3개 미만 페르소나"] = sum(
+            len(p["personas"]) for p in profiles
+        ) - len(tables["place_personas"])
     print(
         "[버린 행]",
-        *(f"  {k} {v}" for k, v in dropped(clean, places, tables).items()),
+        *(f"  {k} {v}" for k, v in gone.items()),
         sep="\n",
         file=sys.stderr,
     )
