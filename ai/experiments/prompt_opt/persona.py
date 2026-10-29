@@ -20,6 +20,7 @@ import re
 import sys
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeout
 from functools import cache
 from pathlib import Path
 
@@ -42,6 +43,9 @@ REFLECTION_MODEL = "openai:/gpt-6.1-sol"
 # 한 번 평가에 생성 1번과 judge 1번이 든다. val 전체 평가 한 번이 50번이다
 MAX_METRIC_CALLS = 500
 TEST_RUNS = 2
+# GMS가 가끔 응답하지 않는다. judge 요청에는 시간 제한이 없어 이만큼 기다리고 다시 부른다
+JUDGE_TIMEOUT = 150
+JUDGE_TRIES = 3
 # 크레딧을 줄이려 val은 slice마다 앞에서 이만큼만 쓴다(10 slice × 5 = 50곳)
 VAL_PER_SLICE = 5
 DATA = Path(__file__).parent / "data" / "persona.jsonl"
@@ -325,8 +329,33 @@ def _inputs(row: dict) -> dict:
 def _judge(inputs: dict, outputs: dict | None) -> tuple[float, str]:
     if outputs is None or not outputs["personas"]:
         return 0.0, "페르소나 없음"
-    fb = grounded(inputs=inputs, outputs=outputs)
-    return float(fb.value), fb.rationale
+    errors = []
+    for _ in range(JUDGE_TRIES):
+        # 시간이 지난 호출은 끊을 수 없어 스레드에 남겨 두고 새로 부른다
+        fut = _judge_pool.submit(grounded, inputs=inputs, outputs=outputs)
+        try:
+            fb = fut.result(timeout=JUDGE_TIMEOUT)
+        except FutureTimeout:
+            errors.append(f"{JUDGE_TIMEOUT}초 동안 응답 없음")
+            continue
+        except Exception as e:  # noqa: BLE001 - 한 장소 때문에 최적화 전체가 멈추지 않게 한다
+            errors.append(f"{type(e).__name__}: {e}")
+            continue
+        if fb.value is None:
+            errors.append(f"judge 오류: {fb.error}")
+            continue
+        return float(fb.value), fb.rationale
+    return 0.0, "judge 실패(0점 처리): " + "; ".join(errors)
+
+
+_judge_pool = ThreadPoolExecutor(32)
+
+
+@scorer(name="grounded", timeout=0)
+def grounded_score(inputs, outputs) -> Feedback:
+    """grounded judge를 시간 제한·재시도로 감싼다. MLflow 기본 제한(300초)에 걸리면 최적화가 멈춘다."""
+    score, why = _judge(inputs, outputs)
+    return Feedback(value=score, rationale=why)
 
 
 def evaluate(system: str, rows: list[dict], runs: int, label: str) -> None:
@@ -462,7 +491,7 @@ if __name__ == "__main__":
         ps._SYSTEM,
         predict,
         _records(load("train")),
-        [persona_rules, grounded],
+        [persona_rules, grounded_score],
         max_metric_calls=MAX_METRIC_CALLS,
         reflection_model=REFLECTION_MODEL,
         valset=_records(_val()),

@@ -83,3 +83,36 @@ def test_leaks_finds_place_name_and_long_quote():
     )
     found = leaks(f"예: {name}에서 '{quote}'처럼 쓴다.")
     assert f"{row['id']}: {name}" in found and f"{row['id']}: {quote}" in found
+
+
+def test_judge_retries_when_gms_hangs(monkeypatch):
+    import threading
+    from types import SimpleNamespace
+
+    import persona
+
+    calls, hang = [], threading.Event()
+
+    def fake(inputs, outputs):
+        calls.append(1)
+        if len(calls) == 1:
+            hang.wait(5)  # 첫 호출은 응답이 없다
+        return SimpleNamespace(value=0.75, rationale="ok")
+
+    monkeypatch.setattr(persona, "grounded", fake)
+    monkeypatch.setattr(persona, "JUDGE_TIMEOUT", 0.2)
+    out = {"personas": [p()], "dropped": []}
+    assert persona._judge({}, out) == (0.75, "ok")
+    assert len(calls) == 2
+    hang.set()
+
+
+def test_judge_gives_zero_after_all_tries_fail(monkeypatch):
+    import persona
+
+    def fake(inputs, outputs):
+        raise RuntimeError("502")
+
+    monkeypatch.setattr(persona, "grounded", fake)
+    score, why = persona._judge({}, {"personas": [p()], "dropped": []})
+    assert score == 0.0 and "502" in why
