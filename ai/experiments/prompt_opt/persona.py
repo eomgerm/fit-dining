@@ -24,7 +24,7 @@ from functools import cache
 from pathlib import Path
 
 import mlflow
-from common import DIR, JUDGE_MODEL, optimize, setup
+from common import DIR, optimize, setup
 from mlflow.entities import Feedback
 from mlflow.genai.judges import make_judge
 from mlflow.genai.scorers import scorer
@@ -37,10 +37,13 @@ from fit_ai.place.profile import Evidence
 from fit_ai.place.rules import KEYWORD_CODES
 
 NAME = "place-persona"
+# judge도 이 모델로 한다. GMS 크레딧 때문에 gpt-5.5는 쓰지 않는다
 REFLECTION_MODEL = "openai:/gpt-6.1-sol"
-# 한 번 평가에 생성 1번과 judge 1번이 든다. val 전체 평가 한 번이 102번이다
-MAX_METRIC_CALLS = 1000
-TEST_RUNS = 3
+# 한 번 평가에 생성 1번과 judge 1번이 든다. val 전체 평가 한 번이 50번이다
+MAX_METRIC_CALLS = 500
+TEST_RUNS = 2
+# 크레딧을 줄이려 val은 slice마다 앞에서 이만큼만 쓴다(10 slice × 5 = 50곳)
+VAL_PER_SLICE = 5
 DATA = Path(__file__).parent / "data" / "persona.jsonl"
 SPLITS = ("train", "val", "test")
 # 반성 한 번에 보는 장소 수. 기본 3개면 장소 하나에만 맞춘 규칙이 생기기 쉽다(107)
@@ -308,7 +311,7 @@ def persona_rules(inputs, outputs) -> Feedback:
 grounded = make_judge(
     name="grounded",
     instructions=JUDGE_INSTRUCTIONS,
-    model=JUDGE_MODEL,
+    model=REFLECTION_MODEL,
     feedback_value_type=float,
     generate_rationale_first=True,
 )
@@ -414,8 +417,18 @@ def report(system: str, label: str) -> None:
     print("평가셋에서 옮긴 구절:", leaks(system) or "없음")
 
 
-def _records(split: str) -> list[dict]:
-    return [{"inputs": _inputs(r), "expectations": {}} for r in load(split)]
+def _val() -> list[dict]:
+    seen = defaultdict(int)
+    rows = []
+    for r in load("val"):
+        seen[r["slice"]] += 1
+        if seen[r["slice"]] <= VAL_PER_SLICE:
+            rows.append(r)
+    return rows
+
+
+def _records(rows: list[dict]) -> list[dict]:
+    return [{"inputs": _inputs(r), "expectations": {}} for r in rows]
 
 
 def show(rid: str | None) -> None:
@@ -448,11 +461,11 @@ if __name__ == "__main__":
         NAME,
         ps._SYSTEM,
         predict,
-        _records("train"),
+        _records(load("train")),
         [persona_rules, grounded],
         max_metric_calls=MAX_METRIC_CALLS,
         reflection_model=REFLECTION_MODEL,
-        valset=_records("val"),
+        valset=_records(_val()),
         reflection_prompt_template=REFLECTION_TEMPLATE,
         reflection_minibatch_size=REFLECTION_MINIBATCH,
     )
