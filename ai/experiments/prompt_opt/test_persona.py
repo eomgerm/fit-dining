@@ -116,3 +116,24 @@ def test_judge_gives_zero_after_all_tries_fail(monkeypatch):
     monkeypatch.setattr(persona, "grounded", fake)
     score, why = persona._judge({}, {"personas": [p()], "dropped": []})
     assert score == 0.0 and "502" in why
+
+
+def test_search_ranks_own_phrases_above_distractors(monkeypatch):
+    import numpy as np
+    import persona
+
+    # 글자 하나를 축 하나로 두는 가짜 임베딩. 같은 글자가 많을수록 가깝다
+    def fake(texts, query):
+        v = np.array([[t.count(c) for c in "가나다라마"] for t in texts], float) + 1e-9
+        return v / np.linalg.norm(v, axis=1, keepdims=True)
+
+    monkeypatch.setattr(persona, "_encode", fake)
+    monkeypatch.setattr(persona, "_phrases", lambda row: ["가가"])
+    monkeypatch.setattr(persona, "_distractors", lambda rid: ("나나", "다다", "가나"))
+    row = {"id": "x"}
+    good = {"personas": [p() | {"name": "가가 손님", "description": "", "reason": ""}]}
+    bad = {"personas": [p() | {"name": "나나 손님", "description": "", "reason": ""}]}
+    assert persona.search(good, row)[0] == 1.0
+    score, why = persona.search(bad, row)
+    assert score < 0.5 and "가가" in why
+    assert persona.search({"personas": []}, row) == (0.0, "좋아할 손님 페르소나가 없다")

@@ -6,8 +6,15 @@
 
 채점은 둘이다.
 - persona_rules(코드): 버려진 페르소나, like와 인용 리뷰 방향, 근거 특징을 빠짐없이 다뤘는지, 형식
-- grounded(LLM judge): 문장을 인용 리뷰가 뒷받침하는지, 근거에 없는 내용을 단정했는지,
-  이 장소에만 맞는 구체적인 설명인지, 페르소나끼리 겹치는지
+- search(임베딩): 이 장소의 좋았어요 구절을 검색어로 넣었을 때, 같은 업종 다른 장소의 구절보다
+  좋아할 손님 페르소나에 더 가깝게 걸리는지. 41이 페르소나 벡터로 취향과 맞대는 방식을 따른다
+
+grounded(LLM judge)도 정의해 두었지만 목표에서 뺐다. judge 점수는 0.47 → 0.72로 올랐는데
+사람 블라인드 비교 25곳에서는 기존 프롬프트가 20:5로 이겼고, judge는 장소별로 사람과 4/24만 일치했다.
+judge가 근거 밖 사소한 덧붙임까지 실패로 쳐서 건조한 템플릿 문장으로 최적화됐다.
+search는 같은 비교에서 사람과 같은 방향이었다(test 평균 기존 0.811, 최적화 0.723).
+
+임베딩은 EMBED_URL(SSH 터널로 연 GPU 서버의 /encode)이 있으면 그쪽을, 없으면 fit_ai.embedding을 쓴다.
 
     python persona.py              # 최적화
     python persona.py baseline 2   # 지금 프롬프트를 2번 돌려 split·slice별 점수와 낮은 것
@@ -16,8 +23,11 @@
 """
 
 import json
+import os
+import random
 import re
 import sys
+import urllib.request
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeout
@@ -25,6 +35,7 @@ from functools import cache
 from pathlib import Path
 
 import mlflow
+import numpy as np
 from common import DIR, optimize, setup
 from mlflow.entities import Feedback
 from mlflow.genai.judges import make_judge
@@ -40,7 +51,7 @@ from fit_ai.place.rules import KEYWORD_CODES
 NAME = "place-persona"
 # judge도 이 모델로 한다. GMS 크레딧 때문에 gpt-5.5는 쓰지 않는다
 REFLECTION_MODEL = "openai:/gpt-6.1-sol"
-# 한 번 평가에 생성 1번과 judge 1번이 든다. val 전체 평가 한 번이 50번이다
+# 한 번 평가에 GMS 생성 1번이 든다(채점은 코드와 임베딩). val 전체 평가 한 번이 50번이다
 MAX_METRIC_CALLS = 500
 TEST_RUNS = 2
 # GMS가 가끔 응답하지 않는다. judge 요청에는 시간 제한이 없어 이만큼 기다리고 다시 부른다
@@ -56,6 +67,11 @@ REFLECTION_MINIBATCH = 6
 OUT = DIR.parent / "prompt_opt"
 # 지시문에 이만큼 긴 리뷰 구절이 그대로 있으면 평가셋을 외운 것으로 본다
 LEAK_MIN = 10
+# search에서 장소마다 섞는 같은 업종 다른 장소의 구절 수
+SEARCH_NEG = 40
+# 동시에 처리하는 장소 수. GEPA 쪽은 MLFLOW_GENAI_EVAL_MAX_WORKERS로 맞춘다
+WORKERS = 16
+EMBED_URL = os.environ.get("EMBED_URL")
 # 리뷰 두 개 이상에 나온 (코드, 방향)은 그 방향 페르소나가 다뤄야 한다
 COVER_MIN = 2
 
@@ -77,8 +93,11 @@ REFLECTION_TEMPLATE = """너는 프롬프트 개선 담당이다. 아래 지시�
 - persona_rules(코드): 버려진 페르소나가 없는가, like true는 좋았어요·false는 아쉬웠어요
   근거가 있는 리뷰를 인용했는가, 리뷰 두 개 이상에 나온 특징을 그 방향 페르소나가 다뤘는가,
   name 2~4단어·description과 reason 각 3문장인가.
-- grounded(judge): 문장마다 인용한 리뷰 근거가 뒷받침하는가, 근거에 없는 메뉴·시간대·동행·
-  공간을 단정하지 않았는가, 이 장소의 근거로 구체적인가, 페르소나끼리 겹치지 않는가.
+- search(임베딩 검색): 페르소나 문장은 벡터로 바뀌어 사용자가 자연어로 찾는 취향과 맞대어진다.
+  이 장소 리뷰의 좋았어요 구절을 검색어로 넣었을 때 같은 업종 다른 장소의 구절보다 좋아할 손님
+  페르소나에 더 가깝게 걸려야 한다. 근거의 메뉴·상황·분위기를 사람이 검색할 법한 풍부한
+  자연어로 담을수록 오르고, 어느 가게에나 붙는 흐린 말이나 근거에 없는 내용은 다른 장소와
+  겹쳐 점수를 깎는다. 피드백의 "검색에 약한 근거"가 잘 걸리지 않은 구절이다.
 
 모델 출력 뒤에 붙는 코드 규칙(지시문으로 바꿀 수 없다):
 - review_ids가 비었거나 입력에 없는 번호가 있으면 그 페르소나가 버려진다.
@@ -96,6 +115,8 @@ REFLECTION_TEMPLATE = """너는 프롬프트 개선 담당이다. 아래 지시�
   예시가 필요하면 위 사례와 다른 새 장소로 쓴다.
 - 특정 장소의 정답을 고정하는 규칙을 쓰지 않는다. 처음 보는 장소에도 통하는 원칙으로 쓴다.
 - 예시는 모두 합쳐 10개 이하로 둔다.
+- 근거에 없는 메뉴·시간대·동행·시설을 지어내게 하는 규칙을 쓰지 않는다. 문장은 화면에 나간다.
+- 검색어를 나열하듯 단어를 늘어놓게 하지 않는다. 사람이 읽는 자연스러운 문장이어야 한다.
 - 응답의 JSON 스키마는 실행할 때 따로 강제되므로 출력 형식을 길게 설명하지 않는다."""
 
 JUDGE_INSTRUCTIONS = """너는 장소 페르소나 채점자다. {{ inputs }}의 place_input은 생성 모델이 받은 입력이다.
@@ -358,40 +379,105 @@ def grounded_score(inputs, outputs) -> Feedback:
     return Feedback(value=score, rationale=why)
 
 
+def _encode(texts: list[str], query: bool) -> np.ndarray:
+    if not EMBED_URL:
+        from fit_ai import embedding
+
+        f = embedding.encode_queries if query else embedding.encode_documents
+        return np.array(f(texts))
+    body = json.dumps({"texts": texts, "query": query}).encode()
+    req = urllib.request.Request(EMBED_URL, body, {"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=120) as resp:
+        return np.array(json.load(resp)["vectors"])
+
+
+_query_cache: dict[str, np.ndarray] = {}
+
+
+def _queries(texts: list[str]) -> np.ndarray:
+    """검색어 벡터. 평가셋 구절은 정해져 있어 한 번만 인코딩한다."""
+    new = [t for t in dict.fromkeys(texts) if t not in _query_cache]
+    if new:
+        _query_cache.update(zip(new, _encode(new, query=True), strict=True))
+    return np.array([_query_cache[t] for t in texts])
+
+
+def _group(row: dict) -> str:
+    return row["summary"].split(". ")[1].split(",")[0]
+
+
+def _phrases(row: dict) -> list[str]:
+    """검색어로 쓰는 이 장소의 좋았어요 리뷰 구절."""
+    return sorted({it[3] for rv in row["reviews"] for it in rv["items"] if it[2] == 1})
+
+
+@cache
+def _distractors(rid: str) -> tuple[str, ...]:
+    """같은 업종 다른 장소의 좋았어요 구절 SEARCH_NEG개. 장소마다 고정한다."""
+    row = load_all()[rid]
+    pool = {
+        q
+        for r in load_all().values()
+        if r["id"] != rid and _group(r) == _group(row)
+        for q in _phrases(r)
+    }
+    pool = sorted(pool - set(_phrases(row)))
+    return tuple(random.Random(rid).sample(pool, min(SEARCH_NEG, len(pool))))
+
+
+def search(outputs: dict | None, row: dict) -> tuple[float, str]:
+    """검색어마다 방해 구절보다 좋아할 손님 페르소나에 가깝게 걸린 비율의 평균(AUC)."""
+    likes = [
+        ps.persona_text(p) for p in (outputs or {}).get("personas", []) if p["like"]
+    ]
+    if not likes:
+        return 0.0, "좋아할 손님 페르소나가 없다"
+    pos, neg = _phrases(row), list(_distractors(row["id"]))
+    sims = (_queries(pos + neg) @ _encode(likes, query=False).T).max(axis=1)
+    wins = (sims[: len(pos), None] > sims[None, len(pos) :]).mean(axis=1)
+    weak = [f"'{q}'({w:.0%})" for q, w in zip(pos, wins, strict=True) if w < 0.8]
+    why = "검색에 약한 근거: " + ", ".join(weak) if weak else "모두 잘 걸림"
+    return float(wins.mean()), why
+
+
+@scorer(name="search", timeout=0)
+def persona_search(inputs, outputs) -> Feedback:
+    score, why = search(outputs, load_all()[inputs["place"]])
+    return Feedback(value=score, rationale=why)
+
+
 def evaluate(system: str, rows: list[dict], runs: int, label: str) -> None:
     """split·slice별 두 점수와, 둘 중 하나라도 0.8 미만인 장소의 이유를 출력한다.
 
     장소별 출력과 점수는 OUT/persona-{label}.jsonl에 남긴다.
     """
-    by = defaultdict(list)  # (run, group) → (rules, grounded)
+    by = defaultdict(list)  # (run, group) → (rules, search)
     low = defaultdict(list)
 
     def one(row):
-        inputs = _inputs(row)
         out = _call(system, row)
-        return out, rules(out, row), _judge(inputs, out)
+        return out, rules(out, row), search(out, row)
 
     OUT.mkdir(parents=True, exist_ok=True)
     log = (OUT / f"persona-{label}.jsonl").open("w", encoding="utf-8")
-    with log, ThreadPoolExecutor(8) as pool:
+    with log, ThreadPoolExecutor(WORKERS) as pool:
         for run in range(runs):
             for row, (out, (rs, rwhy), (gs, gwhy)) in zip(
                 rows, pool.map(one, rows), strict=True
             ):
                 rec = {"id": row["id"], "run": run, "outputs": out}
                 rec |= {"rules": rs, "rules_why": rwhy}
-                rec |= {"grounded": gs, "grounded_why": gwhy}
+                rec |= {"search": gs, "search_why": gwhy}
                 log.write(json.dumps(rec, ensure_ascii=False) + "\n")
                 for group in ("all", row["split"], row["slice"]):
                     by[(run, group)].append((rs, gs))
                 if min(rs, gs) < 0.8:
                     low[row["id"]].append(
-                        f"run{run} rules {rs:.2f} grounded {gs:.2f}\n"
+                        f"run{run} rules {rs:.2f} search {gs:.2f}\n"
                         f"      {rwhy}\n      {gwhy}".replace("\n", "\n      ")
                     )
     print(
-        "group               "
-        + "  ".join(f"run{r} rules/grounded" for r in range(runs))
+        "group               " + "  ".join(f"run{r} rules/search" for r in range(runs))
     )
     for g in dict.fromkeys(g for _, g in by):
         cells = []
@@ -411,18 +497,18 @@ def evaluate(system: str, rows: list[dict], runs: int, label: str) -> None:
 def log_run(label: str, system: str) -> None:
     """OUT/persona-{label}.jsonl을 MLflow run 하나로 올린다. 실행 회차는 step이다."""
     path = OUT / f"persona-{label}.jsonl"
-    by = defaultdict(list)  # (run, group) → (rules, grounded)
+    by = defaultdict(list)  # (run, group) → (rules, search)
     for line in path.read_text(encoding="utf-8").splitlines():
         rec = json.loads(line)
         row = load_all()[rec["id"]]
         for group in ("all", row["split"], row["slice"]):
-            by[(rec["run"], group)].append((rec["rules"], rec["grounded"]))
+            by[(rec["run"], group)].append((rec["rules"], rec["search"]))
     with mlflow.start_run(run_name=f"persona-{label}"):
         mlflow.log_text(system, "system.txt")
         mlflow.log_artifact(str(path))
         for (run, g), s in by.items():
             mlflow.log_metric(f"{g}/rules", sum(x for x, _ in s) / len(s), step=run)
-            mlflow.log_metric(f"{g}/grounded", sum(y for _, y in s) / len(s), step=run)
+            mlflow.log_metric(f"{g}/search", sum(y for _, y in s) / len(s), step=run)
 
 
 def leaks(system: str) -> list[str]:
@@ -491,7 +577,7 @@ if __name__ == "__main__":
         ps._SYSTEM,
         predict,
         _records(load("train")),
-        [persona_rules, grounded_score],
+        [persona_rules, persona_search],
         max_metric_calls=MAX_METRIC_CALLS,
         reflection_model=REFLECTION_MODEL,
         valset=_records(_val()),

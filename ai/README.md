@@ -75,7 +75,18 @@ uv run --with mlflow==3.17.2 mlflow ui --backend-store-uri sqlite:///$HOME/fit-a
 
 judge·반성 모델과 연결 방식은 `experiments/prompt_opt/common.py`에 있습니다. GMS 호출 수는 스크립트의 `MAX_METRIC_CALLS`로 제한합니다.
 
-장소 페르소나(`persona.py`)는 평가 한 번에 생성과 judge를 한 번씩 부릅니다. 먼저 `baseline`으로 지금 프롬프트 점수를 봅니다. 채점 규칙 테스트는 mlflow가 필요해 `tests/` 밖에 있습니다.
+장소 페르소나(`persona.py`)는 평가 한 번에 GMS 생성을 한 번 부르고, 채점은 코드 규칙과 임베딩 검색으로 합니다. 먼저 `baseline`으로 지금 프롬프트 점수를 봅니다. 채점 규칙 테스트는 mlflow가 필요해 `tests/` 밖에 있습니다.
+
+임베딩은 CPU로는 느려서 SSAFY GPU 서버에 `embed_server.py`를 띄우고 SSH 터널로 씁니다. 서버는 `127.0.0.1`에만 열고, GMS 키는 서버에 두지 않습니다.
+
+```bash
+# GPU 서버에서(sentence-transformers가 있는 venv)
+CUDA_VISIBLE_DEVICES=5 nohup python embed_server.py 18765 > server.log 2>&1 &
+# 로컬에서
+ssh -N -L 18765:127.0.0.1:18765 <gpu 서버>
+EMBED_URL=http://127.0.0.1:18765/encode MLFLOW_GENAI_EVAL_MAX_WORKERS=16 uv run --env-file .env \
+  --with mlflow==3.17.2 --with "gepa[full]==0.1.4" python experiments/prompt_opt/persona.py
+```
 
 ```bash
 uv run --env-file .env --with mlflow==3.17.2 --with "gepa[full]==0.1.4" \
