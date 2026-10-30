@@ -128,7 +128,7 @@ export function ReviewSection({
       {
         onSuccess: () => {
           setReporting(null);
-          toast("신고가 접수됐어요");
+          toast("신고했어요. 확인 후 처리할게요.");
         },
         onError: (error) => {
           const failure = reportFailure(error);

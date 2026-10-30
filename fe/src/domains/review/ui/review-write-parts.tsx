@@ -102,7 +102,7 @@ export function ReasonTagGroups({
           aria-label={group.name}
           className="flex flex-col gap-2"
         >
-          <p className="text-caption-md text-ink-muted">{group.name}</p>
+          <p className="text-label-md text-ink-muted">{group.name}</p>
           <div className="flex flex-wrap gap-2">
             {group.tags.map((tag) => (
               <Chip
@@ -154,7 +154,7 @@ export function DetailFields({
         <Toggle
           pressed={revisitIntent}
           onPressedChange={onRevisitIntentChange}
-          className="group mt-4 inline-flex h-12 items-center gap-2 rounded-md border border-line-strong bg-surface px-5 text-button-md text-ink transition-colors duration-200 select-none data-pressed:border-primary data-pressed:bg-primary-soft data-pressed:text-primary-strong"
+          className="group mt-4 inline-flex h-14 items-center gap-2 rounded-md border border-line-strong bg-surface px-6 text-button-lg text-ink transition-colors duration-200 select-none data-pressed:border-primary data-pressed:bg-primary-soft data-pressed:text-primary-strong"
         >
           <HeartIcon
             size="md"

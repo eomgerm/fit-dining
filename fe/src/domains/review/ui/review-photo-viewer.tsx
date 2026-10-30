@@ -26,7 +26,7 @@ export function ReviewPhotoStrip({
         {photos.map((photo, index) => (
           <li
             key={photo.photoId}
-            className="relative size-20 shrink-0 overflow-hidden rounded-md bg-surface-sunken"
+            className="relative size-18 shrink-0 overflow-hidden rounded-md bg-surface-sunken"
           >
             <button
               type="button"

@@ -230,6 +230,34 @@ describe("ReviewWriteFlow", () => {
     expect(scroller.scrollTop).toBe(0);
   });
 
+  it("2/2단계에서 1단계로 돌아갔다 와도 2/2단계 입력이 남는다", () => {
+    mount(flow(form()));
+    fireEvent.click(screen.getByRole("button", { name: "조용해서 좋았어요" }));
+    fireEvent.click(screen.getByRole("button", { name: "다음" }));
+    fireEvent.click(screen.getByRole("button", { name: "다음" }));
+    fireEvent.click(screen.getByRole("button", { name: "재방문 의사 있어요" }));
+    fireEvent.change(screen.getByLabelText("리뷰"), {
+      target: { value: "조용했어요" },
+    });
+    fireEvent.change(screen.getByLabelText("1인당 쓴 금액"), {
+      target: { value: "12000" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "아쉬웠던 점으로" }));
+    fireEvent.click(screen.getByRole("button", { name: "좋았던 점으로" }));
+    expect(pressed("조용해서 좋았어요")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "다음" }));
+    fireEvent.click(screen.getByRole("button", { name: "다음" }));
+
+    expect(pressed("재방문 의사 있어요")).toBe("true");
+    expect((screen.getByLabelText("리뷰") as HTMLTextAreaElement).value).toBe(
+      "조용했어요",
+    );
+    expect(
+      (screen.getByLabelText("1인당 쓴 금액") as HTMLInputElement).value,
+    ).toBe("12,000");
+  });
+
   it("다시 받은 데이터에서 이미 쓴 날이 된 방문일을 비운다", () => {
     const view = mount(flow(form()));
 
@@ -372,8 +400,8 @@ describe("ReviewWriteFlow 사진", () => {
     toDetailWithPhoto();
     await screen.findByRole("button", { name: "등록하기" });
 
-    fireEvent.click(screen.getByRole("button", { name: "이전" }));
-    fireEvent.click(screen.getByRole("button", { name: "이전" }));
+    fireEvent.click(screen.getByRole("button", { name: "아쉬웠던 점으로" }));
+    fireEvent.click(screen.getByRole("button", { name: "좋았던 점으로" }));
     fireEvent.click(screen.getByRole("button", { name: "닫기" }));
 
     expect(await screen.findByText("작성한 내용이 사라져요")).toBeTruthy();

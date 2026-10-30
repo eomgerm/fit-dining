@@ -18,12 +18,9 @@ describe("reportFailure", () => {
 
   it.each([
     [new ApiError("network", ""), "인터넷에 연결되어 있지 않아요"],
-    [
-      new ApiError("timeout", ""),
-      "신고하지 못했어요. 잠시 후 다시 시도해 주세요",
-    ],
-    [http(500), "신고하지 못했어요. 잠시 후 다시 시도해 주세요"],
-    [new Error("boom"), "신고하지 못했어요. 잠시 후 다시 시도해 주세요"],
+    [new ApiError("timeout", ""), "신고하지 못했어요. 다시 시도해 주세요."],
+    [http(500), "신고하지 못했어요. 다시 시도해 주세요."],
+    [new Error("boom"), "신고하지 못했어요. 다시 시도해 주세요."],
   ])("다시 보낼 수 있는 %s는 알리고 시트를 둔다", (error, message) => {
     expect(reportFailure(error)).toEqual({ message, close: false });
   });

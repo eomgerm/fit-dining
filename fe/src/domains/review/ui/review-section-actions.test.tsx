@@ -255,11 +255,12 @@ describe("ReviewSection 남의 리뷰 신고", () => {
   async function openReport() {
     await openOthersMenu();
     fireEvent.click(await screen.findByRole("menuitem", { name: "신고하기" }));
-    await screen.findByRole("dialog", { name: "리뷰 신고" });
+    await screen.findByRole("dialog", { name: "신고 사유를 선택하세요" });
   }
 
   const submitButton = () => screen.getByRole("button", { name: "신고하기" });
-  const sheet = () => screen.queryByRole("dialog", { name: "리뷰 신고" });
+  const sheet = () =>
+    screen.queryByRole("dialog", { name: "신고 사유를 선택하세요" });
 
   it("남의 리뷰 ⋯ 메뉴에는 신고하기만 있다(6-10)", async () => {
     mount();
@@ -322,7 +323,9 @@ describe("ReviewSection 남의 리뷰 신고", () => {
     expect(screen.queryByRole("textbox", { name: "신고 설명" })).toBeNull();
     fireEvent.click(submitButton());
 
-    expect(await screen.findByText("신고가 접수됐어요")).toBeTruthy();
+    expect(
+      await screen.findByText("신고했어요. 확인 후 처리할게요."),
+    ).toBeTruthy();
     expect(api.reportReview).toHaveBeenCalledWith(
       1,
       { reason: "AD_SPAM" },
@@ -413,6 +416,8 @@ describe("ReviewSection 남의 리뷰 신고", () => {
       expect(submitButton().getAttribute("aria-disabled")).not.toBe("true"),
     );
     fireEvent.click(submitButton());
-    expect(await screen.findByText("신고가 접수됐어요")).toBeTruthy();
+    expect(
+      await screen.findByText("신고했어요. 확인 후 처리할게요."),
+    ).toBeTruthy();
   });
 });

@@ -65,6 +65,12 @@ describe("ReviewListView", () => {
     expect(html).not.toContain("<ul");
   });
 
+  it("홈 탭 미리보기는 리뷰가 없으면 개수 없이 리뷰만 쓴다(6-E01)", () => {
+    const html = render({ totalCount: 0, onShowAll: noop });
+    expect(html).toContain("아직 리뷰가 없어요");
+    expect(html).not.toContain(">0</span>");
+  });
+
   it("항목은 닉네임, 재방문 의사, 방문일, 태그, 본문을 보인다(6-03)", () => {
     const html = render({ totalCount: 2, items });
     expect(html).toContain(">2</span>");

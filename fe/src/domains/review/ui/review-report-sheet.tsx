@@ -36,7 +36,7 @@ export function ReviewReportSheet({
 }: ReviewReportSheetProps) {
   return (
     <BottomSheet
-      title="리뷰 신고"
+      title="신고 사유를 선택하세요"
       open={open}
       finalFocus={finalFocus}
       onOpenChange={(next) => {

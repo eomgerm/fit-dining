@@ -65,7 +65,7 @@ export function ReviewPhotoField({
               type="button"
               onClick={() => inputRef.current?.click()}
               aria-label={`사진 추가, ${count}/${photos.max}장`}
-              className="flex size-18 flex-col items-center justify-center gap-0.5 rounded-md border border-line-strong bg-surface text-ink-muted"
+              className="flex size-20 flex-col items-center justify-center gap-0.5 rounded-md border border-line-strong bg-surface text-ink-muted"
             >
               <CameraIcon size="md" />
               <span className="text-caption-sm">
@@ -114,7 +114,7 @@ function PhotoTileView({
 }) {
   const working = tile.status === "processing" || tile.status === "uploading";
   return (
-    <li className="relative size-18 overflow-hidden rounded-md bg-surface-sunken">
+    <li className="relative size-20 overflow-hidden rounded-md bg-surface-sunken">
       {tile.previewUrl ? (
         <Image
           src={tile.previewUrl}

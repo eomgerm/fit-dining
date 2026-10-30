@@ -69,7 +69,11 @@ export function ReviewListView({
   ref,
   className,
 }: ReviewListViewProps) {
-  const count = status === "success" ? totalCount : undefined;
+  // 6-E01: 홈 탭 미리보기는 리뷰가 없으면 개수 없이 "리뷰"만 쓴다
+  const count =
+    status === "success" && !(onShowAll && items.length === 0)
+      ? totalCount
+      : undefined;
   const loaded = status === "success" && items.length > 0;
   return (
     <section

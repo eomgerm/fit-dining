@@ -24,7 +24,7 @@ export function reportFailure(error: unknown): {
     return { message: "이 리뷰는 신고할 수 없어요", close: true };
   }
   return {
-    message: "신고하지 못했어요. 잠시 후 다시 시도해 주세요",
+    message: "신고하지 못했어요. 다시 시도해 주세요.",
     close: false,
   };
 }

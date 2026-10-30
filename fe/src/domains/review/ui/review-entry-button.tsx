@@ -196,6 +196,7 @@ export function ReviewEntryButton({
       <ConfirmDialog
         open={dialog === "notNearby"}
         onOpenChange={close}
+        tone="warn"
         icon={<PinIcon />}
         title="근처에서 확인하지 못했어요"
         description="확인하지 않아도 리뷰를 남길 수 있어요."

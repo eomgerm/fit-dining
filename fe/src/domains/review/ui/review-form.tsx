@@ -262,7 +262,7 @@ export function ReviewWriteFlow({
       <CloseButton onClick={close} />
     ) : (
       <IconButton
-        label="이전"
+        label={page === "detail" ? "아쉬웠던 점으로" : "좋았던 점으로"}
         onClick={() => setPage(page === "detail" ? "bad" : "good")}
       >
         <ChevronLeftIcon />
@@ -287,7 +287,7 @@ export function ReviewWriteFlow({
         </Button>
       </BottomBar>
     ) : (
-      <BottomBar tone="surface-warm">
+      <BottomBar variant="divider">
         <Button
           disabled={page === "good" && !canLeaveGoodPage(draft, form)}
           onClick={() => setPage(page === "good" ? "bad" : "detail")}
@@ -302,7 +302,7 @@ export function ReviewWriteFlow({
     <FormFrame
       start={header}
       step={page === "detail" ? 2 : 1}
-      warm={page !== "detail"}
+      sunken={page !== "detail"}
       scrollRef={scrollRef}
       pinned={
         page !== "detail" && (
@@ -542,7 +542,7 @@ function CloseButton({ onClick }: { onClick: () => void }) {
 function FormFrame({
   start,
   step,
-  warm,
+  sunken,
   pinned,
   footer,
   scrollRef,
@@ -550,7 +550,8 @@ function FormFrame({
 }: {
   start: ReactNode;
   step: 1 | 2;
-  warm?: boolean;
+  // 7-01·7-02: 장소·방문일 줄 아래(질문과 태그 목록)를 회색 띠로 깐다
+  sunken?: boolean;
   // 상단 막대 아래에서 스크롤하지 않는 내용(7-01·7-02의 장소·방문일 줄과 질문)
   pinned?: ReactNode;
   footer?: ReactNode;
@@ -560,8 +561,8 @@ function FormFrame({
   return (
     <div
       className={
-        warm
-          ? "flex h-dvh flex-col bg-surface-warm"
+        sunken
+          ? "flex h-dvh flex-col bg-surface-sunken"
           : "flex h-dvh flex-col bg-surface"
       }
     >

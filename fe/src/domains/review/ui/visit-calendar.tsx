@@ -46,7 +46,7 @@ export function VisitCalendar({
           <span
             key={weekday}
             role="columnheader"
-            className="py-2 text-caption-md text-ink-muted"
+            className="text-caption-sm leading-7 text-ink-muted"
           >
             {weekday}
           </span>
@@ -100,10 +100,10 @@ function DayButton({
       aria-label={`${formatDay(date)}${state === "reviewed" ? " 작성함" : ""}`}
       onClick={() => onSelect(date)}
       className={cn(
-        "my-0.5 flex size-10 items-center justify-center rounded-full text-body-md text-ink transition-colors duration-200",
-        state === "outside" && "text-ink-disabled",
+        "my-0.5 flex size-11 items-center justify-center rounded-full text-body-md text-ink transition-colors duration-200",
+        state === "outside" && "text-ink-subtle",
         state === "reviewed" && "text-ink-subtle line-through",
-        today && !selected && "bg-info-soft font-semibold text-info",
+        today && !selected && "bg-info-soft font-bold text-info",
         selected && "bg-primary font-semibold text-on-primary",
       )}
     >

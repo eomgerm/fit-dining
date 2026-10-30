@@ -20,7 +20,7 @@ export type PhotoTile = {
 export type ReviewPhotos = ReturnType<typeof useReviewPhotos>;
 
 // 7-E04. 읽을 수 없는 사진(HEIC를 지원하지 않는 브라우저, 깨진 파일 등)을 골랐을 때의 토스트
-export const UNREADABLE_PHOTO = "올릴 수 없는 사진이에요";
+export const UNREADABLE_PHOTO = "이 사진은 올릴 수 없어요";
 
 type Blobs = { photo: Blob; thumb: Blob };
 
