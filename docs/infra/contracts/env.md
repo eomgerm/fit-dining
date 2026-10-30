@@ -64,9 +64,11 @@
 | `AUTH_KAKAO_CLIENT_SECRET` | app | X | 카카오 클라이언트 시크릿. 비밀. 카카오 콘솔의 클라이언트 시크릿은 ON으로 둔다 |
 | `AUTH_NAVER_CLIENT_ID` | app | X | 네이버 로그인의 Client ID. `AUTH_NAVER_CLIENT_SECRET`과 한 쌍이다. 콜백 `https://<호스트>/api/auth/oauth/naver/callback`을 등록한다 |
 | `AUTH_NAVER_CLIENT_SECRET` | app | X | 네이버 Client Secret. 비밀 |
-| `MODAL_BASE_URL` | app | O | Modal 엔드포인트의 기준 URL. 환경별 앱이 다르다 |
+| `MODAL_BASE_URL` | app | O | Modal 임베딩과 AI API(`/v1/taste/interpret`, `/v1/taste/profile`)의 공통 기준 URL. 환경별 앱이 다르다 |
 | `MODAL_KEY` | app | O | `Modal-Key` 헤더 값. 비밀 |
 | `MODAL_SECRET` | app | O | `Modal-Secret` 헤더 값. 비밀 |
+| `TASTE_ANALYZER` | app | X | 온보딩 해석 구현. 기본 `mock`, AI 연결 시 `ai` |
+| `TASTE_PROFILE_ENABLED` | app | X | 가입 시 AI 프로필 계산. 기본 `false`, 실패 시 빈 features로 가입 계속 |
 | `MODAL_ENABLED` | app | O | 킬스위치. `false`면 키워드 검색으로 대체한다 |
 | `GMS_BASE_URL` | app | O | GMS(SSAFY LLM API) 기준 URL |
 | `GMS_API_KEY` | app | O | 비밀 |
