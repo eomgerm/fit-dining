@@ -115,7 +115,7 @@ flowchart LR
 | 설정 오류 | 켜져 있는데 주소나 키가 비었거나 주소가 `http(s)://`로 시작하지 않으면 장애로 보지 않고 에러를 낸다. 실행을 시작할 때 검사해 배포 직후 드러나게 한다 |
 | 로그 | 입력 원문과 응답 본문은 로그에 남기지 않는다. 실패 종류만 남긴다 |
 
-온보딩 직접 입력은 AI API(아래 "해석 API")가 GMS를 부른다. 지금 인프라 설계는 GMS 키를 BE 환경 파일에 두므로(`docs/infra/design.md` 793행) AI 서버 배포 전에 계약을 고친다.
+온보딩 직접 입력은 AI API(아래 "해석 API")가 GMS를 부른다. AI API는 Modal에서 돌고 GMS 키는 Modal Secret에 둔다(`ai/.env.example`). 인프라 설계의 외부 서비스 표는 아직 GMS 키를 BE 서버 env에 두므로 AI API Modal 배포 때 함께 고친다.
 
 ### 프롬프트에 넣는 것
 
@@ -441,13 +441,13 @@ ai/
 │  └─ taste/
 │     ├─ profile.py       # 장부 행 → 프로필 (3·5·6단계)
 │     └─ direct_input.py  # 직접 입력 → 장부 행 (1·2단계), 칩
-├─ server/              # AI API(FastAPI). app.py 공통 오류, direct_input.py 해석 API
+├─ server/              # AI API(FastAPI)와 임베딩 Modal 앱. direct_input.py가 해석 API
 ├─ scripts/build_sample_taste_profiles.py
 ├─ samples/taste/       # profiles.json, code_vectors.json
 └─ tests/
 ```
 
-- uv 프로젝트이고 의존성은 `sentence-transformers`, `numpy`, `httpx`, `fastapi`, 개발용 `pytest`, `ruff`, `uvicorn`뿐이다. ruff는 lefthook pre-commit에서 스테이징한 `ai/` 파일에 돈다
+- uv 프로젝트이고 의존성은 `sentence-transformers`, `numpy`, `httpx`, `psycopg`, 서버용 `fastapi`, 개발용 `pytest`, `ruff`, `uvicorn`, `modal`, `pgserver`다. ruff는 lefthook pre-commit에서 스테이징한 `ai/` 파일에 돈다
 - torch는 기본으로 PyPI 빌드를 쓴다. GPU 서버(CUDA 12.8 드라이버)에서는 `uv sync --extra cu128`, CPU 전용 빌드는 `uv sync --extra cpu`로 고른다
 - 40은 `place/`, 41은 `match/`를 쓴다. 41은 `taste` 내부를 가져다 쓰지 않고 프로필 JSON만 읽는다
 - 코드표는 지금 Python 모듈이다. BE·FE가 같은 목록을 읽어야 할 때(공용 특징 코드 목록, 리뷰 spec D-16) JSON으로 옮긴다
