@@ -26,7 +26,7 @@ class SimpleAuthUnitTests {
         var transactions = mock(AuthTransactions.class);
         when(transactions.recordAttempt("ip", "login")).thenReturn(true);
         var passwords = mock(PasswordHasher.class);
-        var service = new AuthService(transactions, mock(AuthUserRepository.class), passwords,
+        var service = new AuthService(transactions, mock(kr.co.fitdining.api.onboarding.TasteProfileService.class), mock(AuthUserRepository.class), passwords,
                 mock(TokenCodec.class), "", new SimpleAuthPolicy(true));
         assertThrows(AuthFailure.class, () -> service.login("missing@example.com", "password1", "ip"));
         verifyNoInteractions(passwords);

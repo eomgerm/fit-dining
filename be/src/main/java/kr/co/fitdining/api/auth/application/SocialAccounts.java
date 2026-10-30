@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class SocialAccounts {
     private final SocialAccountTransactions transactions;
+    private final kr.co.fitdining.api.onboarding.TasteProfileService tasteProfiles;
     private final AuthUserRepository users;
     private final SocialNicknames nicknames;
 
@@ -26,10 +27,11 @@ public class SocialAccounts {
     }
 
     public Issued signup(String provider, String subject, kr.co.fitdining.api.user.Preferences preferences) {
+        var features = tasteProfiles.compute(preferences);
         for (int attempt = 0; attempt < 10; attempt++) {
             String nickname = nicknames.next(attempt);
             try {
-                return transactions.signup(provider, subject, nickname, preferences);
+                return transactions.signup(provider, subject, nickname, preferences, features);
             } catch (SignupConflict conflict) {
                 if (!"nickname".equals(conflict.field())) throw conflict;
             } catch (DataIntegrityViolationException conflict) {

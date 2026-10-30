@@ -33,13 +33,19 @@ public class SocialAccountTransactions {
 
     @Transactional
     public Issued signup(String provider, String subject, String nickname, kr.co.fitdining.api.user.Preferences answers) {
+        return signup(provider, subject, nickname, answers, java.util.List.of());
+    }
+
+    @Transactional
+    public Issued signup(String provider, String subject, String nickname, kr.co.fitdining.api.user.Preferences answers,
+            java.util.List<kr.co.fitdining.api.user.TasteFeature> features) {
         locks.lockAddress("social:" + provider + ":" + subject);
         Issued existing = existing(provider, subject);
         if (existing != null) return existing;
         if (users.existsByNickname(nickname)) throw new SignupConflict("nickname");
         AuthUser user = users.saveAndFlush(new AuthUser(UUID.randomUUID().toString(), nickname, clock.instant(), termsVersion));
         accounts.saveAndFlush(new AuthSocialAccount(new AuthSocialAccount.Key(provider, subject), user.getId(), clock.instant()));
-        if (answers != null) preferences.saveAndFlush(new kr.co.fitdining.api.user.UserPreferences(user.getId(), answers, clock.instant()));
+        if (answers != null) preferences.saveAndFlush(new kr.co.fitdining.api.user.UserPreferences(user.getId(), answers, clock.instant(), features));
         return transactions.login(user);
     }
 }

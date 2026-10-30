@@ -21,6 +21,13 @@ class TasteAnalysisHttpTests {
     static class Configuration { @Bean Clock clock() { return Clock.systemUTC(); } }
     @Autowired MockMvc mvc;
     @MockitoBean AuthUseCases auth;
+    @org.springframework.test.context.bean.override.mockito.MockitoSpyBean MockTasteAnalyzer analyzer;
+    @Test void analyze_empty_returns200() throws Exception {
+        org.mockito.Mockito.doReturn(java.util.List.of()).when(analyzer).analyze("empty");
+        mvc.perform(post("/api/v1/onboarding/taste-analysis").header("Origin", "http://localhost:3000")
+                .contentType("application/json").content("{\"text\":\"empty\"}"))
+                .andExpect(status().isOk()).andExpect(content().json("{\"tastes\":[]}"));
+    }
     @Test @DisplayName("분석_API 예문_기대 칩 반환")
     void analyze_sample_returnsChips() throws Exception {
         mvc.perform(post("/api/v1/onboarding/taste-analysis").header("Origin", "http://localhost:3000")

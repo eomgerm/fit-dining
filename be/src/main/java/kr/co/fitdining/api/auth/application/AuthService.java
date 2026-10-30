@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class AuthService implements AuthUseCases {
     private final AuthTransactions transactions;
+    private final kr.co.fitdining.api.onboarding.TasteProfileService tasteProfiles;
     private final AuthUserRepository users;
     private final PasswordHasher passwords;
     private final TokenCodec codec;
@@ -83,7 +84,8 @@ public class AuthService implements AuthUseCases {
         if (users.findByEmail(normalized).isPresent()) throw new kr.co.fitdining.api.auth.domain.SignupConflict("email");
         if (users.existsByNickname(name)) throw new kr.co.fitdining.api.auth.domain.SignupConflict("nickname");
         String hash = passwords.hash(password);
-        try { return transactions.signup(normalized, name, hash, preferences); }
+        var features = tasteProfiles.compute(preferences);
+        try { return transactions.signup(normalized, name, hash, preferences, features); }
         catch (org.springframework.dao.DataIntegrityViolationException conflict) {
             if (users.findByEmail(normalized).isPresent()) throw new kr.co.fitdining.api.auth.domain.SignupConflict("email");
             if (users.existsByNickname(name)) throw new kr.co.fitdining.api.auth.domain.SignupConflict("nickname");

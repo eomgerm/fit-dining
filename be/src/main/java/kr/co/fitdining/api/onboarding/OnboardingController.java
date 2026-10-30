@@ -18,7 +18,7 @@ public class OnboardingController {
     public record AnalysisRequest(@NotBlank @Size(max = 100) String text) {
         public AnalysisRequest { text = AuthText.strip(text); }
     }
-    /** @param tastes nonempty analysis results */
+    /** @param tastes possibly empty analysis results */
     public record AnalysisResponse(List<TasteChip> tastes) {}
     @PostMapping("/taste-analysis")
     public AnalysisResponse analyze(@Valid @RequestBody AnalysisRequest body, HttpServletRequest request) {

@@ -24,7 +24,7 @@ public class TasteAnalysisService {
                 Thread thread = new Thread(runnable, "taste-analyzer"); thread.setDaemon(true); return thread;
             });
     public TasteAnalysisService(TasteAnalyzer analyzer, Clock clock,
-            @Value("${fitdining.onboarding.timeout-ms:3000}") long timeoutMs) {
+            @Value("${fitdining.onboarding.timeout-ms:10000}") long timeoutMs) {
         if (timeoutMs < 1) throw new IllegalArgumentException("Positive analyzer timeout required");
         this.analyzer = analyzer; this.clock = clock; this.timeoutMs = timeoutMs;
     }

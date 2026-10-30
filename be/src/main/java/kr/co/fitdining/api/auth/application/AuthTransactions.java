@@ -40,9 +40,15 @@ public class AuthTransactions {
     /** Saves the account and initial RT atomically, after transaction-free hashing. */
     @Transactional
     public Issued signup(String email, String nickname, String hash, kr.co.fitdining.api.user.Preferences answers) {
+        return signup(email, nickname, hash, answers, java.util.List.of());
+    }
+
+    @Transactional
+    public Issued signup(String email, String nickname, String hash, kr.co.fitdining.api.user.Preferences answers,
+            java.util.List<kr.co.fitdining.api.user.TasteFeature> features) {
         AuthUser user = users.saveAndFlush(new AuthUser(UUID.randomUUID().toString(), email, nickname,
                 hash, clock.instant(), termsVersion));
-        if (answers != null) preferences.saveAndFlush(new kr.co.fitdining.api.user.UserPreferences(user.getId(), answers, clock.instant()));
+        if (answers != null) preferences.saveAndFlush(new kr.co.fitdining.api.user.UserPreferences(user.getId(), answers, clock.instant(), features));
         return login(user);
     }
 

@@ -35,35 +35,50 @@ class SocialNicknamesTests {
         var tx = mock(SocialAccountTransactions.class);
         var users = mock(AuthUserRepository.class);
         var names = mock(SocialNicknames.class);
-        var accounts = new SocialAccounts(tx, users, names);
+        var accounts = new SocialAccounts(tx, mock(kr.co.fitdining.api.onboarding.TasteProfileService.class), users, names);
         when(names.next(0)).thenReturn("first");
         when(names.next(1)).thenReturn("second");
         when(names.next(2)).thenReturn("third");
-        when(tx.signup("google", "id", "first", null)).thenThrow(new SignupConflict("nickname"));
-        when(tx.signup("google", "id", "second", null)).thenThrow(new DataIntegrityViolationException("race"));
+        when(tx.signup("google", "id", "first", null, java.util.List.of())).thenThrow(new SignupConflict("nickname"));
+        when(tx.signup("google", "id", "second", null, java.util.List.of())).thenThrow(new DataIntegrityViolationException("race"));
         when(users.existsByNickname("second")).thenReturn(true);
         accounts.signup("google", "id");
-        verify(tx).signup("google", "id", "third", null);
+        verify(tx).signup("google", "id", "third", null, java.util.List.of());
     }
 
     @Test void exhaustedRetries_areGeneralError() {
         var tx = mock(SocialAccountTransactions.class);
         var names = mock(SocialNicknames.class);
         when(names.next(anyInt())).thenReturn("name");
-        when(tx.signup(anyString(), anyString(), anyString(), isNull())).thenThrow(new SignupConflict("nickname"));
-        var accounts = new SocialAccounts(tx, mock(AuthUserRepository.class), names);
+        when(tx.signup(anyString(), anyString(), anyString(), isNull(), anyList())).thenThrow(new SignupConflict("nickname"));
+        var accounts = new SocialAccounts(tx, mock(kr.co.fitdining.api.onboarding.TasteProfileService.class), mock(AuthUserRepository.class), names);
         assertThrows(IllegalStateException.class, () -> accounts.signup("google", "id"));
         verify(names).next(9);
-        verify(tx, times(10)).signup("google", "id", "name", null);
+        verify(tx, times(10)).signup("google", "id", "name", null, java.util.List.of());
     }
 
     @Test void unrelatedConflicts_areNotRetried() {
         var tx = mock(SocialAccountTransactions.class);
         var names = mock(SocialNicknames.class);
         when(names.next(0)).thenReturn("name");
-        var accounts = new SocialAccounts(tx, mock(AuthUserRepository.class), names);
-        when(tx.signup("google", "id", "name", null)).thenThrow(new DataIntegrityViolationException("other"));
+        var accounts = new SocialAccounts(tx, mock(kr.co.fitdining.api.onboarding.TasteProfileService.class), mock(AuthUserRepository.class), names);
+        when(tx.signup("google", "id", "name", null, java.util.List.of())).thenThrow(new DataIntegrityViolationException("other"));
         assertThrows(DataIntegrityViolationException.class, () -> accounts.signup("google", "id"));
         verify(names, never()).next(1);
     }
+    @Test void profileComputedOnceAcrossNicknameRetries_andForwardedToTransaction() {
+        var tx = mock(SocialAccountTransactions.class);
+        var names = mock(SocialNicknames.class);
+        var profiles = mock(kr.co.fitdining.api.onboarding.TasteProfileService.class);
+        var answers = new kr.co.fitdining.api.user.Preferences(null, null, null, null);
+        var features = java.util.List.of(new kr.co.fitdining.api.user.TasteFeature("QUIET", "axis", true, 1));
+        when(profiles.compute(answers)).thenReturn(features);
+        when(names.next(0)).thenReturn("first");
+        when(names.next(1)).thenReturn("second");
+        when(tx.signup("google", "id", "first", answers, features)).thenThrow(new SignupConflict("nickname"));
+        new SocialAccounts(tx, profiles, mock(AuthUserRepository.class), names).signup("google", "id", answers);
+        verify(profiles).compute(answers);
+        verify(tx).signup("google", "id", "second", answers, features);
+    }
+
 }

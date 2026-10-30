@@ -76,7 +76,7 @@ class PreferencesFlowTests extends PostgresTestSupport {
     void preferences_signupAndRead_deduplicatesAndChecksOwner() throws Exception {
         var response = request("POST", "/api/auth/signup", signupBody(id(), """
                 ,"preferences":{"mood":"QUIET","priorities":["SPACIOUS","SPACIOUS"],"purposes":["SOLO"],
-                "tastes":[{"polarity":"LIKE","label":"  국물  "}]}
+                "tastes":[{"polarity":"LIKE","label":"  국물  ","code":"FOOD_SPICY"}]}
                 """), null);
         assertEquals(201, response.statusCode(), response.body());
         var session = mapper.readTree(response.body());
@@ -87,6 +87,8 @@ class PreferencesFlowTests extends PostgresTestSupport {
         assertEquals(200, read.statusCode(), read.body());
         assertEquals(1, mapper.readTree(read.body()).get("priorities").size());
         assertEquals("국물", mapper.readTree(read.body()).get("tastes").get(0).get("label").asString());
+        assertEquals("FOOD_SPICY", mapper.readTree(read.body()).get("tastes").get(0).get("code").asString());
+        assertEquals("[]", jdbc.queryForObject("select features::text from user_preferences where user_id=?", String.class, user));
         assertEquals(401, request("GET", "/api/v1/users/" + user + "/preferences", null, null).statusCode());
         assertEquals(403, request("GET", "/api/v1/users/other/preferences", null, token).statusCode());
     }
@@ -100,6 +102,7 @@ class PreferencesFlowTests extends PostgresTestSupport {
     }
     @ParameterizedTest
     @ValueSource(strings = {
+        "{\"tastes\":[{\"polarity\":\"LIKE\",\"label\":\"x\",\"code\":\"bad-code\"}]}",
         "{\"mood\":\"UNKNOWN\"}", "{\"priorities\":[\"UNKNOWN\"]}",
         "{\"tastes\":[{\"polarity\":\"LIKE\",\"label\":\"   \"}]}"})
     @DisplayName("취향_잘못된 코드와 라벨_필드 오류와 가입 방지")

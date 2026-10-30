@@ -94,4 +94,10 @@ auth:
 fitdining:
   onboarding:
     taste-analyzer: ${TASTE_ANALYZER:mock}
-    timeout-ms: 3000
+    timeout-ms: 10000
+  ai:
+    base-url: ${MODAL_BASE_URL:http://localhost:8000}
+    modal-key: ${MODAL_KEY:}
+    modal-secret: ${MODAL_SECRET:}
+    profile-enabled: ${TASTE_PROFILE_ENABLED:false}
+    profile-timeout-ms: 3000

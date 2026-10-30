@@ -26,7 +26,9 @@ public record Preferences(Mood mood, List<@NotNull(message = "장소 선택 기�
     public record TasteChip(@NotNull(message = "취향의 선호 여부를 확인해 주세요.") Polarity polarity,
             @NotBlank(message = "취향은 1~20자로 입력해 주세요.")
             @Size(min = 1, max = 20, message = "취향은 1~20자로 입력해 주세요.")
-            @Pattern(regexp = "[^\\p{Cc}]*", message = "취향에 제어 문자를 사용할 수 없습니다.") String label) {
+            @Pattern(regexp = "[^\\p{Cc}]*", message = "취향에 제어 문자를 사용할 수 없습니다.") String label,
+            @Pattern(regexp = "^[A-Z][A-Z0-9_]{0,63}$", message = "취향 코드를 확인해 주세요.") String code) {
+        public TasteChip(Polarity polarity, String label) { this(polarity, label, null); }
         public TasteChip { label = AuthText.strip(label); }
     }
 }
