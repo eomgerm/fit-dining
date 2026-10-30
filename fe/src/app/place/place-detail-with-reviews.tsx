@@ -8,6 +8,7 @@ import { reviewEditHref, reviewWriteHref } from "@/domains/review/model/review";
 import { ReviewEntryButton } from "@/domains/review/ui/review-entry-button";
 import { ReviewSection } from "@/domains/review/ui/review-section";
 
+import { rememberLoginReturn } from "../login-return";
 import { useBookmarkAccess } from "../use-bookmark-access";
 import { withOptionalAccessToken } from "./with-optional-access-token";
 
@@ -17,8 +18,11 @@ export function PlaceDetailWithReviews() {
   const bookmarks = useBookmarkAccess();
   const editReview = (placeId: number) => (reviewId: number) =>
     router.push(reviewEditHref(placeId, reviewId));
-  // 로그인 화면의 "뒤로"가 장소 상세로 돌아오게 쌓는다. 로그인 뒤 이 화면으로 돌아오는 것은 아직 없다
-  const signIn = () => router.push("/login");
+  // 로그인 화면의 "뒤로"가 장소 상세로 돌아오게 쌓고, 로그인한 뒤 이 장소 상세로 돌아오게 주소를 남긴다(리뷰 D-48)
+  const signIn = () => {
+    rememberLoginReturn(window.location.pathname + window.location.search);
+    router.push("/login");
+  };
   return (
     <PlaceDetailScreen
       bookmarks={bookmarks}

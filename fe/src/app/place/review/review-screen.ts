@@ -5,17 +5,22 @@ import { useCallback, useEffect, useState } from "react";
 
 import { restore } from "@/domains/auth/api/auth-client";
 
+import { rememberLoginReturn } from "../../login-return";
+
 // 장소 상세 주소. 상세 탭은 화면 상태라 주소에 싣지 않는다(D-32)
 function placeDetailHref(placeId: number) {
   return `/place?id=${placeId}`;
 }
 
 // 리뷰는 로그인한 사용자만 쓰고 고친다. 들어올 때 세션을 확인하고, 없으면 로그인 화면으로 바꿔치기해
-// 로그인 화면의 "뒤로"가 이 화면이 아니라 장소 상세로 가게 한다. 로그인 뒤 이 화면으로 돌아오는 것은 아직 없다
+// 로그인 화면의 "뒤로"가 이 화면이 아니라 장소 상세로 가게 한다. 로그인한 뒤 이 화면으로 돌아오게 주소를 남긴다(D-48)
 export function useSignedIn() {
   const router = useRouter();
   const [signedIn, setSignedIn] = useState(false);
-  const goToLogin = useCallback(() => router.replace("/login"), [router]);
+  const goToLogin = useCallback(() => {
+    rememberLoginReturn(window.location.pathname + window.location.search);
+    router.replace("/login");
+  }, [router]);
 
   useEffect(() => {
     let active = true;
