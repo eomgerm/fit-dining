@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { restore } from "@/domains/auth/api/auth-client";
+import { useHideInstallBanner } from "@/domains/install/ui/install-banner";
 import { useInstallIntro } from "@/domains/install/ui/use-install-intro";
 import { SearchScreen } from "@/domains/place/ui/search-screen";
 import { OnboardingScreen } from "@/domains/onboarding/ui/onboarding-screen";
@@ -18,6 +19,8 @@ export function HomeEntry() {
   const [screen, setScreen] = useState<"checking" | "onboarding" | "home">(
     "checking",
   );
+  // 홈 화면 추가 배너(4-01b)는 첫 화면부터 띄운다. 같은 주소의 최초화면·온보딩에서는 숨긴다
+  useHideInstallBanner(screen !== "home");
   useEffect(() => {
     let active = true;
     // 쿼리 없는 홈에 도착했을 때만 북마크 로그인 안내가 남긴 주소를 읽어 지운다(북마크 D-8)

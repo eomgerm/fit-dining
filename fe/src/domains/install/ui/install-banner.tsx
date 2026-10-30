@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { Button } from "@/shared/ui/button/button";
 import { IconButton } from "@/shared/ui/button/icon-button";
 import { CloseIcon } from "@/shared/ui/icon/icons/close";
@@ -14,7 +14,31 @@ import {
 } from "../model/storage";
 import { useInstall } from "./use-install";
 
-// 4-01b 홈 화면 추가 배너. 1-01a 모달을 본 뒤로 브라우저로 연 모든 화면 맨 위에 띄운다.
+// 4-01 첫 화면 전 흐름(로그인·회원가입·위치 권한)과 가이드(그 자체가 안내)에서는 띄우지 않는다
+const beforeHome = ["/login", "/signup", "/location", "/install"];
+
+// 첫 화면과 주소(/)가 같은 최초화면·온보딩이 떠 있는 동안 배너를 숨긴다
+let hidden = 0;
+const hiddenListeners = new Set<() => void>();
+function setHidden(delta: number) {
+  hidden += delta;
+  hiddenListeners.forEach((listener) => listener());
+}
+function subscribeHidden(listener: () => void) {
+  hiddenListeners.add(listener);
+  return () => {
+    hiddenListeners.delete(listener);
+  };
+}
+export function useHideInstallBanner(active: boolean) {
+  useEffect(() => {
+    if (!active) return;
+    setHidden(1);
+    return () => setHidden(-1);
+  }, [active]);
+}
+
+// 4-01b 홈 화면 추가 배너. 1-01a 모달을 본 뒤로 4-01 첫 화면부터의 브라우저 화면 맨 위에 띄운다.
 // 페이지 배치를 밀지 않고 위에 떠 있어, 닫기 전까지는 화면 맨 위 48px(상단 바·지도 버튼)를 덮는다
 export function InstallBanner() {
   const pathname = usePathname();
@@ -24,8 +48,18 @@ export function InstallBanner() {
     () => introSeen() && !bannerClosed(),
     () => false,
   );
-  // 가이드 화면은 그 자체가 안내라 띄우지 않는다
-  if (!available || !waiting || pathname.startsWith("/install")) return null;
+  const hiddenByScreen = useSyncExternalStore(
+    subscribeHidden,
+    () => hidden > 0,
+    () => true,
+  );
+  if (
+    !available ||
+    !waiting ||
+    hiddenByScreen ||
+    beforeHome.some((path) => pathname.startsWith(path))
+  )
+    return null;
   return (
     <aside
       aria-label="홈 화면 추가 안내"

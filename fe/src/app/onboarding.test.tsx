@@ -15,6 +15,7 @@ import {
   onTestFinished,
   vi,
 } from "vitest";
+import { InstallBanner } from "@/domains/install/ui/install-banner";
 import { HomeEntry } from "./home-entry";
 import { rememberLoginReturn } from "./login-return";
 import { introSeen, markIntroSeen } from "@/domains/install/model/storage";
@@ -29,7 +30,10 @@ const mocks = vi.hoisted(() => ({
   replace: vi.fn(),
 }));
 const router = { push: mocks.push, replace: mocks.replace };
-vi.mock("next/navigation", () => ({ useRouter: () => router }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => router,
+  usePathname: () => "/",
+}));
 vi.mock("@/domains/auth/api/auth-client", () => ({ restore: mocks.restore }));
 vi.mock("@/domains/place/ui/search-screen", () => ({
   SearchScreen: () => <div>검색 홈</div>,
@@ -262,4 +266,39 @@ it("안내가 떠 있는 동안에는 아직 본 것으로 기록하지 않는�
   expect(introSeen()).toBe(false);
   fireEvent.click(screen.getByRole("button", { name: "웹에서 계속하기" }));
   expect(introSeen()).toBe(true);
+});
+
+describe("홈 화면 추가 배너(4-01b)는 첫 화면부터 보인다", () => {
+  const banner = () =>
+    screen.queryByRole("complementary", { name: "홈 화면 추가 안내" });
+
+  it("같은 주소의 최초화면·온보딩에서는 숨긴다", async () => {
+    markIntroSeen();
+    mocks.restore.mockRejectedValue(new Error("unauthenticated"));
+    render(
+      <>
+        <HomeEntry />
+        <InstallBanner />
+      </>,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "시작하기" }));
+    expect(
+      screen.getByRole("radio", { name: "조용하고 차분한 곳" }),
+    ).toBeTruthy();
+    expect(banner()).toBeNull();
+  });
+
+  it("첫 화면(4-01)에서는 띄운다", async () => {
+    markIntroSeen();
+    localStorage.setItem(GUEST_KEY, "1");
+    mocks.restore.mockRejectedValue(new Error("unauthenticated"));
+    render(
+      <>
+        <HomeEntry />
+        <InstallBanner />
+      </>,
+    );
+    expect(await screen.findByText("검색 홈")).toBeTruthy();
+    expect(banner()).not.toBeNull();
+  });
 });

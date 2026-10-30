@@ -9,7 +9,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { markIntroSeen } from "../model/storage";
-import { InstallBanner } from "./install-banner";
+import { InstallBanner, useHideInstallBanner } from "./install-banner";
 
 const mocks = vi.hoisted(() => ({
   router: { push: vi.fn() },
@@ -77,11 +77,47 @@ describe("홈 화면 추가 배너", () => {
     expect(banner()).toBeNull();
   });
 
-  it("가이드 화면에서는 띄우지 않는다", () => {
+  it.each(["/install/ios", "/login", "/signup", "/signup/email", "/location"])(
+    "4-01 첫 화면 전 흐름(%s)에서는 띄우지 않는다",
+    (pathname) => {
+      markIntroSeen();
+      mocks.pathname = pathname;
+      render(<InstallBanner />);
+      expect(banner()).toBeNull();
+    },
+  );
+
+  it.each(["/place", "/place/review", "/my"])(
+    "4-01 뒤 흐름(%s)에서는 띄운다",
+    (pathname) => {
+      markIntroSeen();
+      mocks.pathname = pathname;
+      render(<InstallBanner />);
+      expect(banner()).not.toBeNull();
+    },
+  );
+
+  it("첫 화면과 주소가 같은 최초화면·온보딩에서는 그 화면이 숨기는 동안 띄우지 않는다", () => {
     markIntroSeen();
-    mocks.pathname = "/install/ios";
-    render(<InstallBanner />);
+    function Onboarding({ active }: { active: boolean }) {
+      useHideInstallBanner(active);
+      return null;
+    }
+    const view = render(
+      <>
+        <Onboarding active />
+        <InstallBanner />
+      </>,
+    );
     expect(banner()).toBeNull();
+    // 온보딩을 마치고 같은 주소의 첫 화면(4-01)으로 바뀌면 띄운다
+    view.rerender(
+      <>
+        <Onboarding active={false} />
+        <InstallBanner />
+      </>,
+    );
+    expect(banner()).not.toBeNull();
   });
 
   it("[추가하기]는 설치 창이 없으면 가이드로 간다", () => {
