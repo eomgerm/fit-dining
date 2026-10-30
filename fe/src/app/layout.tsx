@@ -13,7 +13,7 @@ const pretendard = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Fit Dining",
+  title: "핏다이닝",
   description: "오늘 끌리는 곳, 내 취향으로 찾기",
   // iOS는 매니페스트 아이콘 대신 apple-touch-icon(PNG)을 읽는다
   icons: { apple: "/icons/apple-touch-icon.png" },
