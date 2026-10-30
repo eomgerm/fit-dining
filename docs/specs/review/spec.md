@@ -119,6 +119,7 @@ Walking Skeleton
 | `fe/src/domains/review/ui/review-list-view.tsx#ReviewMenu` (내 리뷰는 수정·삭제, 남의 리뷰와 비로그인은 신고) | modify | 1차 | D-46 |
 | `be/src/main/java/kr/co/fitdining/api/review/photo/ReviewPhotos.java#ReviewPhotos` (발급, 확정, 정리, 읽기 주소), `S3PhotoStorage.java#S3PhotoStorage`, `ReviewPhotoConfiguration.java` | new | 1차 | D-9, D-45 |
 | `be/src/main/resources/db/migration/V9__create_review_photos.sql`, `store/Review.java#Review.changePhotos` | new | 1차 | D-45 |
+| `fe/src/domains/review/ui/` 작성·목록·신고 화면 (Visual QA와 Figma 시안의 크기·색·문구) | modify | 1차 | D-50 |
 | `be/src/main/resources/application.yml#review.photo`, `docs/infra/contracts/env.md` (`S3_PUBLIC_ENDPOINT`), `infra/app/app.env.example`, `be/.env.example` | modify | 1차 | D-45 |
 | `fe/src/domains/review/model/photo-compress.ts#compressPhoto`, `ui/use-review-photos.ts#useReviewPhotos`, `ui/review-photo-field.tsx#ReviewPhotoField` (7-04·7-05·6-07, 7-E04) | new | 1차 | D-45 |
 | `fe/src/domains/review/ui/review-photo-viewer.tsx#ReviewPhotoStrip` (목록 썸네일과 크게 보기) | new | 1차 | D-45 |
@@ -232,6 +233,7 @@ Walking Skeleton
 - **신고** (example), AC-19, AC-28: 컨트롤러 경계(사유·설명 형식, 인증 먼저, 404·400·409, 로그), `ReviewPersistenceTest`(저장 값, 공백 설명, 중복 409, 다른 신고자, 내 리뷰, 지운·없는 리뷰, 탈퇴한 사용자, 숨기지 않음, 설명 CHECK, HTTP 201·409·400), FE(⋯ 메뉴 이름과 항목, 비로그인 로그인 안내와 그 "로그인"·"취소", 시트 비활성·기타 설명·보낸 요청, 409·404·연결 끊김 처리, 404로 닫힐 때 리뷰 섹션 포커스)를 확인한다(D-46, D-47).
 - **로그인 뒤 돌아오기** (example), AC-22, AC-26, AC-28: 장소 상세의 신고·방문 평가 안내 "로그인"과 작성·수정 화면의 로그인 이동이 지금 주소를 남기는지 jsdom으로 본다(`place-detail-with-reviews.test.tsx`, `review-screen.test.tsx`). 남은 주소로 보내는 것은 북마크의 `HomeEntry` 테스트가 맡는다(D-48). 놓치는 것: 소셜 로그인 복귀(local에 소셜 로그인 환경변수가 없다).
 - **수동 확인** AC-18, AC-19, AC-22, AC-26, AC-28: 로컬 Garage와 `next dev`로 비로그인 ⋯에서 로그인 화면, 신고 201과 409 토스트, 4000×3000 사진을 1,600px로 줄여 올리기, 깨진 파일의 7-E04, 등록 뒤 확정본만 남기, 목록 썸네일과 크게 보기, 수정에서 빼고 더하기, 삭제 뒤 객체 삭제를 확인했다(2026-10-29). 비로그인 신고와 "방문 평가 남기기"의 로그인 안내(6-E05)와 그 "취소"·"로그인"은 2026-10-30에 확인했다(D-47). 신고 안내와 작성 화면 직접 열기에서 이메일로 로그인하면 그 장소 상세와 그 작성 화면으로 돌아오는 것도 같은 날 확인했다(D-48). 서버의 Caddy 경유 업로드와 공개 읽기는 `infra/edge/test`나 dev 서버에서 확인한다.
+- **수동 확인** Visual QA 반영(D-50): 2026-10-30에 폭 360px의 `next dev`에서 DOM 값으로 확인했다. 7-01 회색 띠와 흰 하단 막대·구분선, 묶음 이름 14px/600, "<" 이름, 7-03 날짜 칸 44px·요일 머리글 12px/28px·고를 수 없는 날 색·오늘 숫자 700, 재방문 의사 버튼 56px·19px/700, 작성·수정 화면 사진 칸 80px, 목록 썸네일 72px, 7-E02 경고색 아이콘, 6-E01 개수 없는 머리글이다. 문구(6-11, 6-12, 6-E06, 7-E04)는 Figma 시안과 대조했고 화면에서는 jsdom 테스트로 본다.
 - **수동 확인** AC-22, AC-23: Figma 흐름(상세 → 위치 확인·오늘 작성 여부 모달 → 1/2·2/2단계 → 상세로 복귀, 검색 상태 유지).
 
 ## Out of scope
@@ -285,5 +287,4 @@ BE 팀 공통
 ### 리뷰 담당이 준비할 것
 
 - 작성 중 등록이 401로 끝나면 입력을 지키려고 로그인 화면으로 보내지 않아, 로그인 뒤 돌아오기가 없다(D-41, D-48).
-- 6-10, 6-11, 6-12, 6-E06, 7-E04의 문구와 배치를 Figma와 대조한다. 구현 때 Figma MCP 호출 한도로 보지 못해 spec·결정의 문구(D-11)로 그렸다(D-45, D-46).
 - 1차 후속 전: Figma에 없는 화면(숨김 처리된 내 리뷰 표시, 작성 차단 안내)을 추가한다.
