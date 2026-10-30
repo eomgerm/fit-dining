@@ -8,9 +8,17 @@ export function RegisterServiceWorker() {
     if (process.env.NODE_ENV !== "production") return;
     if (!("serviceWorker" in navigator)) return;
     // 워커 파일을 HTTP 캐시 없이 받아 배포가 바로 반영되게 한다(Next PWA 가이드)
-    navigator.serviceWorker
-      .register("/sw.js", { scope: "/", updateViaCache: "none" })
-      .catch((error) => console.error("서비스 워커 등록 실패", error));
+    const register = () =>
+      navigator.serviceWorker
+        .register("/sw.js", { scope: "/", updateViaCache: "none" })
+        .catch((error) => console.error("서비스 워커 등록 실패", error));
+    // 첫 로딩의 리소스 요청과 겹치지 않게 load 뒤에 등록한다
+    if (document.readyState === "complete") {
+      register();
+      return;
+    }
+    window.addEventListener("load", register, { once: true });
+    return () => window.removeEventListener("load", register);
   }, []);
   return null;
 }
