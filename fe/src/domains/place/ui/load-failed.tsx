@@ -39,7 +39,7 @@ export function LoadFailed({
       }
       action={
         <Button variant="outline" size="md" onClick={onRetry}>
-          <RefreshIcon size="sm" className="mr-1" />
+          <RefreshIcon size="md" className="mr-2" />
           다시 시도
         </Button>
       }

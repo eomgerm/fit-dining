@@ -117,7 +117,7 @@ export function HomeTab({
                       ))}
                     </div>
                     {reason.quote && (
-                      <blockquote className="border-l-2 border-line-strong pl-3 text-body-sm text-ink-muted">
+                      <blockquote className="border-l-2 border-primary-disabled pl-3 text-body-sm text-ink">
                         “{reason.quote}”
                         {reason.quoteSource && (
                           <footer className="mt-0.5 text-caption-sm text-ink-subtle">
@@ -148,7 +148,7 @@ export function HomeTab({
           className="flex min-h-11 w-full items-center gap-3 py-2.5 text-left"
         >
           <ClockIcon size="md" className="text-ink-muted" />
-          <span className="flex-1 text-body-md text-ink">
+          <span className="flex-1 text-body-md leading-5.5 text-ink">
             <OpenStatusLine
               detail={detail}
               notice={`오늘 ${today ? hoursText(today) : "영업시간 정보 없음"}`}
@@ -188,8 +188,12 @@ export function HomeTab({
             <span className="ml-1.5 text-ink-muted">{detail.menus.length}</span>
             <ChevronRightIcon size="md" />
           </button>
-          <div className="-mx-5 flex gap-3 overflow-x-auto px-5">
-            {detail.menus.slice(0, MENU_PREVIEW_COUNT).map((menu) => (
+          <div
+            role="list"
+            aria-label="대표 메뉴"
+            className="-mx-5 flex gap-3 overflow-x-auto px-5"
+          >
+            {previewMenus(detail.menus).map((menu) => (
               <MenuCard key={`${menu.category}-${menu.name}`} menu={menu} />
             ))}
           </div>
@@ -198,6 +202,14 @@ export function HomeTab({
       {reviews && <Section>{reviews}</Section>}
     </div>
   );
+}
+
+// 홈 탭 메뉴 미리보기. 대표 메뉴를 먼저, 나머지는 원래 순서로 채운다(6-01)
+function previewMenus(menus: Menu[]) {
+  return [
+    ...menus.filter((menu) => menu.representative),
+    ...menus.filter((menu) => !menu.representative),
+  ].slice(0, MENU_PREVIEW_COUNT);
 }
 
 // 메뉴 탭(6-02, 와이어프레임 DetailMenu). 원래 순서대로 보이고, 이어지는 같은 카테고리마다 머리글을 붙인다.
@@ -388,11 +400,6 @@ export function InfoTab({ detail, here, now }: TabProps & { now: Date }) {
           today={todayHours(detail.hours, now)?.dayOfWeek}
           className="mt-1"
         />
-        {detail.closedDayNote && (
-          <p className="mt-2 text-body-sm text-ink-muted">
-            {detail.closedDayNote}
-          </p>
-        )}
       </Section>
       <Section>
         <SectionHeader title="위치" />
@@ -468,10 +475,10 @@ export function InfoTab({ detail, here, now }: TabProps & { now: Date }) {
   );
 }
 
-// 두꺼운 띠로 나뉘는 섹션(와이어프레임 sec)
+// 두꺼운 띠로 나뉘는 섹션(와이어프레임 sec). 탭 바로 아래 첫 섹션에는 띠가 없다
 function Section({ children }: { children: ReactNode }) {
   return (
-    <section className="flex flex-col border-t-8 border-line px-5 py-7">
+    <section className="flex flex-col border-line px-5 py-7 not-first:border-t-8">
       {children}
     </section>
   );
@@ -486,7 +493,13 @@ function OpenStatusLine({
   notice: string;
 }) {
   if (!OPEN_STATUS_LABELS[detail.openStatus]) return notice;
-  return <OpenStatusText status={detail.openStatus} notice={notice} />;
+  return (
+    <OpenStatusText
+      status={detail.openStatus}
+      notice={notice}
+      className="text-body-md leading-5.5 text-ink"
+    />
+  );
 }
 
 function AddressRow({
@@ -507,7 +520,7 @@ function AddressRow({
     <div className="flex items-start gap-3 py-2.5">
       <PinIcon size="md" className="mt-0.5 text-ink-muted" />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <p className="flex items-center text-body-md text-ink">
+        <p className="flex items-center text-body-md leading-5.5 text-ink">
           {detail.address}
           {copyable && (
             <button
@@ -530,6 +543,15 @@ function AddressRow({
   );
 }
 
+// 웹사이트 줄에는 도메인만 보인다("https://cafeondam.example/" → "cafeondam.example"). 주소가 아니면 원문이다
+function siteName(url: string) {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return url;
+  }
+}
+
 function ContactRows({ detail }: { detail: PlaceDetail }) {
   return (
     <>
@@ -548,10 +570,10 @@ function ContactRows({ detail }: { detail: PlaceDetail }) {
           href={detail.website}
           target="_blank"
           rel="noreferrer"
-          aria-label={`${detail.website} 웹사이트 열기`}
+          aria-label={`${siteName(detail.website)} 웹사이트 열기`}
           trailing={<ExternalLinkIcon size="md" />}
         >
-          {detail.website}
+          {siteName(detail.website)}
         </ContactRow>
       )}
     </>
@@ -575,7 +597,7 @@ function ContactRow({
   return (
     <a {...props} className="flex min-h-11 items-center gap-3 py-2.5">
       <span className="text-ink-muted">{icon}</span>
-      <span className="min-w-0 flex-1 truncate text-body-md text-ink">
+      <span className="min-w-0 flex-1 truncate text-body-md leading-5.5 text-ink">
         {children}
       </span>
       <span className="text-ink-muted">{trailing}</span>
@@ -619,7 +641,12 @@ function WeekHours({
                 {isToday && " · 오늘"}
               </th>
               <td className={cn("py-2.5", day.closed && "text-ink-muted")}>
-                <span className="block">{hoursText(day)}</span>
+                {/* 휴무 요일은 BE closedDayNote와 같은 정기휴무다(날짜가 붙은 휴무는 '정보 없음'). 표 안에 적는다 */}
+                <span className="block">
+                  {day.closed
+                    ? `정기휴무 (매주 ${DAY_LABELS[day.dayOfWeek]}요일)`
+                    : hoursText(day)}
+                </span>
                 {hoursNotes(day).map((note) => (
                   <span key={note} className="block">
                     {note}

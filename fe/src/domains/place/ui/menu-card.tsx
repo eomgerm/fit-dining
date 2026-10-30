@@ -10,14 +10,16 @@ export function formatPrice(price: number) {
 // 홈 탭 메뉴 미리보기의 가로 카드
 export function MenuCard({ menu }: { menu: Menu }) {
   return (
-    <div className="flex w-32 shrink-0 flex-col gap-1.5">
+    <div role="listitem" className="flex w-32 shrink-0 flex-col gap-1.5">
       <PlacePhoto
         src={menu.photoUrl}
         className="aspect-square w-full rounded-md"
       />
-      <span className="truncate text-body-sm text-ink">{menu.name}</span>
+      <span className="truncate text-body-md leading-5.5 font-semibold text-ink">
+        {menu.name}
+      </span>
       {menu.price !== undefined && (
-        <span className="text-label-md text-ink">
+        <span className="text-body-sm leading-5 text-ink-muted">
           {formatPrice(menu.price)}
         </span>
       )}
@@ -33,7 +35,10 @@ export function MenuRow({ menu }: { menu: Menu }) {
       <PlacePhoto src={menu.photoUrl} className="size-16 shrink-0 rounded-md" />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="flex flex-wrap items-center gap-1">
-          <span data-menu-name className="mr-0.5 text-title-sm text-ink">
+          <span
+            data-menu-name
+            className="mr-0.5 text-body-md leading-5.5 font-semibold text-ink"
+          >
             {menu.name}
           </span>
           {menu.representative && <Tag variant="match">대표</Tag>}
@@ -48,7 +53,9 @@ export function MenuRow({ menu }: { menu: Menu }) {
         )}
       </div>
       {menu.priceText && (
-        <span className="shrink-0 text-body-md text-ink">{menu.priceText}</span>
+        <span className="shrink-0 text-body-md leading-5.5 text-ink">
+          {menu.priceText}
+        </span>
       )}
     </div>
   );

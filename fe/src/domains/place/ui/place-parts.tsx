@@ -73,14 +73,17 @@ export function PlaceMeta({
 export function OpenStatusText({
   status,
   notice,
+  className,
 }: {
   status: OpenStatus;
   notice?: string;
+  // 글자 크기·색을 바꿀 때만 넘긴다(홈 탭 영업시간 줄)
+  className?: string;
 }) {
   const label = OPEN_STATUS_LABELS[status];
   if (!label) return null;
   return (
-    <p className="text-body-sm text-ink-muted">
+    <p className={cn("text-body-sm text-ink-muted", className)}>
       <span className={cn("font-semibold", statusVariants({ status }))}>
         {label}
       </span>

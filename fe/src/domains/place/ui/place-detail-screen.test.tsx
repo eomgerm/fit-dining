@@ -241,6 +241,96 @@ describe("PlaceDetailScreen", () => {
     expect(within(tip).getByText(/0~100으로 나타낸 점수예요/)).toBeTruthy();
   });
 
+  it("상단 장소 태그는 검색 카드의 '내 취향' 근거와 같으면 주황, '요청' 근거와 같거나 카드가 없으면 회색이다", async () => {
+    const isMatch = (text: string) =>
+      screen.getByText(text).className.includes("bg-primary-soft");
+    stores.current.recordCards([
+      {
+        ...card,
+        reasons: [
+          {
+            title: "조용해요",
+            tags: [
+              { source: "PREFERENCE", label: "조용한" },
+              { source: "REQUEST", label: "디저트" },
+            ],
+          },
+        ],
+      },
+    ]);
+    renderDetail();
+
+    await screen.findByRole("heading", { name: "카페 온담" });
+    expect(isMatch("조용한")).toBe(true);
+    expect(isMatch("디저트")).toBe(false);
+
+    cleanup();
+    stores.current = createSearchStore();
+    renderDetail();
+    await screen.findByRole("heading", { name: "카페 온담" });
+    expect(isMatch("조용한")).toBe(false);
+  });
+
+  it("추천 이유 인용은 주황 선에 진한 글자다", async () => {
+    stores.current.recordCards([card]);
+    renderDetail();
+
+    await screen.findByRole("heading", { name: "카페 온담" });
+    const quote = screen.getByText(/대화하기 좋아요/).closest("blockquote")!;
+    expect(quote.classList.contains("border-primary-disabled")).toBe(true);
+    expect(quote.classList.contains("text-ink")).toBe(true);
+  });
+
+  it("홈 탭 메뉴 미리보기는 대표 메뉴를 먼저, 나머지는 원래 순서로 6개까지 보인다", async () => {
+    const names = ["a", "b", "c", "d", "e", "f", "g", "h"];
+    setDetail({
+      menus: names.map((name) =>
+        menu({ name, representative: name === "g" || name === "h" }),
+      ),
+    });
+    renderDetail();
+
+    await screen.findByRole("heading", { name: "카페 온담" });
+    const preview = screen.getByRole("list", { name: "대표 메뉴" });
+    expect(
+      within(preview)
+        .getAllByRole("listitem")
+        .map((item) => item.firstChild?.nextSibling?.textContent),
+    ).toEqual(["g", "h", "a", "b", "c", "d"]);
+  });
+
+  it("웹사이트 줄은 주소의 도메인만 보이고 링크는 전체 주소다", async () => {
+    setDetail({ website: "https://cafeondam.example/" });
+    renderDetail();
+
+    await screen.findByRole("heading", { name: "카페 온담" });
+    const link = screen.getByRole("link", {
+      name: "cafeondam.example 웹사이트 열기",
+    });
+    expect(link.textContent).toBe("cafeondam.example");
+    expect(link.getAttribute("href")).toBe("https://cafeondam.example/");
+  });
+
+  it("휴무 요일은 표 안에 '정기휴무 (매주 <요일>요일)'로 보이고 표 아래 따로 적지 않는다", async () => {
+    setDetail({
+      hours: detail.hours.map((hours) =>
+        hours.dayOfWeek === "SUN"
+          ? { ...hours, open: undefined, close: undefined, closed: true }
+          : hours,
+      ),
+      closedDayNote: "매주 일요일 휴무",
+    });
+    renderDetail();
+    await screen.findByRole("heading", { name: "카페 온담" });
+
+    fireEvent.click(screen.getByRole("tab", { name: "정보" }));
+    const sunday = await screen.findByRole("rowheader", { name: /^일/ });
+    expect(sunday.nextElementSibling!.textContent).toBe(
+      "정기휴무 (매주 일요일)",
+    );
+    expect(screen.queryByText("매주 일요일 휴무")).toBeNull();
+  });
+
   it("검색 카드에 점수가 없으면 핏 점수를 숨기고 나머지 카드 정보는 그대로 보여 준다", async () => {
     stores.current.recordCards([
       { ...card, score: undefined, reasons: [], scoreItems: [] },

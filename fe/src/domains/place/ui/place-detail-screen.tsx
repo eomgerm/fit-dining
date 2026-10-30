@@ -147,20 +147,25 @@ function PlaceDetailContent({
   }
   if (query.isError) {
     const notFound = isApiError(query.error) && query.error.status === 404;
-    return (
-      <>
-        <BackBar />
-        {notFound ? (
+    if (notFound) {
+      return (
+        <>
+          <BackBar />
           <NotFound />
-        ) : (
-          <LoadFailed
-            error={query.error}
-            title="장소 정보를 불러오지 못했어요"
-            onRetry={() => query.refetch()}
-            className="mt-40"
-          />
-        )}
-      </>
+        </>
+      );
+    }
+    // 불러오기 실패는 흰 바탕이다(6-E02)
+    return (
+      <div className="flex flex-1 flex-col bg-surface">
+        <BackBar />
+        <LoadFailed
+          error={query.error}
+          title="장소 정보를 불러오지 못했어요"
+          onRetry={() => query.refetch()}
+          className="mt-40"
+        />
+      </div>
     );
   }
   return (
@@ -193,6 +198,14 @@ function PlaceDetailView({
   const [tab, setTab] = useState<DetailTab>("home");
   const [photoIndex, setPhotoIndex] = useState(0);
   const { place } = detail;
+  // 상단 태그 중 검색 카드의 '내 취향' 근거와 같은 문구만 주황이다(VQA D-12). 카드가 없으면 모두 회색이다
+  const preferred = new Set(
+    card?.reasons.flatMap((reason) =>
+      reason.tags
+        .filter((tag) => tag.source === "PREFERENCE")
+        .map((tag) => tag.label),
+    ),
+  );
 
   return (
     <>
@@ -259,7 +272,9 @@ function PlaceDetailView({
         {detail.tags.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-1.5">
             {detail.tags.map((tag) => (
-              <Tag key={tag}>{tag}</Tag>
+              <Tag key={tag} variant={preferred.has(tag) ? "match" : "default"}>
+                {tag}
+              </Tag>
             ))}
           </div>
         )}
