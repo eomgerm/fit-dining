@@ -3,19 +3,16 @@
 import { useEffect, useEffectEvent, useRef, type ReactNode } from "react";
 
 import { cn } from "@/shared/lib/cn";
-import { Button } from "@/shared/ui/button/button";
 import { TextButton } from "@/shared/ui/button/text-button";
-import { Badge } from "@/shared/ui/display/badge";
 import { EmptyState } from "@/shared/ui/display/empty-state";
 import { Note } from "@/shared/ui/display/note";
 import { Tag } from "@/shared/ui/display/tag";
 import { ChevronDownIcon } from "@/shared/ui/icon/icons/chevron-down";
 import { ChevronUpIcon } from "@/shared/ui/icon/icons/chevron-up";
-import { MapIcon } from "@/shared/ui/icon/icons/map";
+import { FilterIcon } from "@/shared/ui/icon/icons/filter";
 import { PinOffIcon } from "@/shared/ui/icon/icons/pin-off";
 import { PlusIcon } from "@/shared/ui/icon/icons/plus";
 import { RequestHistoryIcon } from "@/shared/ui/icon/icons/request-history";
-import { SearchIcon } from "@/shared/ui/icon/icons/search";
 import { SparkleIcon } from "@/shared/ui/icon/icons/sparkle";
 
 import { showsAiFallback } from "../api/place-api";
@@ -44,6 +41,9 @@ const SUPPORTED_AREAS = "강남역·역삼역·선릉역";
 
 // 손잡이를 이만큼 끌면 상태를 바꾼다
 const DRAG_THRESHOLD_PX = 30;
+
+// 카드 목록은 제목보다 4px 바깥(화면 가장자리에서 12px)에 붙는다
+const LIST_CLASS = "-mx-1 flex flex-col gap-2.5";
 
 type ResultPanelProps = {
   state: PanelState;
@@ -106,7 +106,6 @@ export function ResultPanel({
 }: ResultPanelProps) {
   // 받은 결과를 보여 주는 중. 검색 중이거나 실패했으면 이전 결과의 요약과 칩을 숨긴다
   const showingResults = !searching && !failure;
-  const full = state === "full";
   const historyOpen = state === "history";
 
   return (
@@ -114,7 +113,7 @@ export function ResultPanel({
       aria-label="추천 결과"
       className={cn(
         "absolute inset-x-0 bottom-0 flex flex-col bg-surface shadow-sheet transition-all duration-320 ease-enter",
-        full && "h-full",
+        state === "full" && "h-full",
         state === "middle" && "h-3/5 rounded-t-xl",
         // 지도 위 버튼(저장한 장소, 내 정보) 아래까지 펼친다
         historyOpen && "top-30 rounded-t-xl",
@@ -156,11 +155,15 @@ export function ResultPanel({
       ) : (
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-4">
           {showingResults && firstPage?.changeSummary && (
-            <Badge icon={<SparkleIcon size="sm" />} className="self-start">
+            <p
+              role="status"
+              className="inline-flex h-8 shrink-0 items-center gap-1.5 self-start rounded-full bg-primary-soft px-3 text-caption-md font-semibold text-primary-strong"
+            >
+              <SparkleIcon size="sm" />
               {firstPage.changeSummary}
-            </Badge>
+            </p>
           )}
-          <h2 className="text-title-md text-ink">“{sentence}”</h2>
+          <h2 className="text-title-sm text-ink">“{sentence}”</h2>
           {showingResults && chips.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {chips.map((chip, index) => (
@@ -187,17 +190,6 @@ export function ResultPanel({
         </div>
       )}
 
-      {full && (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => onStateChange("middle")}
-          className="absolute bottom-22 left-1/2 -translate-x-1/2"
-        >
-          <MapIcon size="sm" className="mr-1" />
-          지도 보기
-        </Button>
-      )}
       <div className="shrink-0 border-t border-line px-3 py-2">{footer}</div>
     </section>
   );
@@ -266,9 +258,10 @@ export function PanelResults({
     return (
       <div aria-busy className="flex flex-col gap-3">
         <SearchSteps onCancel={onCancelSearch} />
-        <PlaceCardSkeleton />
-        <PlaceCardSkeleton />
-        <PlaceCardSkeleton />
+        <div className={LIST_CLASS}>
+          <PlaceCardSkeleton />
+          <PlaceCardSkeleton />
+        </div>
       </div>
     );
   }
@@ -276,9 +269,11 @@ export function PanelResults({
   if (firstPage.emptyReason) {
     return (
       <EmptyState
-        icon={<SearchIcon />}
+        icon={<FilterIcon />}
         title={firstPage.emptyReason.cause}
         description={firstPage.emptyReason.suggestion}
+        // 제목 바로 아래라 위 여백을 12px로 줄인다(5-E06)
+        className="-mt-4"
       />
     );
   }
@@ -310,7 +305,7 @@ export function PanelResults({
           }
         />
       )}
-      <ol aria-label="추천 장소" className="flex flex-col gap-3">
+      <ol aria-label="추천 장소" className={LIST_CLASS}>
         {cards.map((card, index) => (
           <li key={card.place.id}>
             <PlaceCard
@@ -353,7 +348,7 @@ function LoadMore({ onVisible }: { onVisible: () => void }) {
     return () => observer.disconnect();
   }, []);
   return (
-    <div ref={ref} aria-busy className="flex flex-col gap-3">
+    <div ref={ref} aria-busy className={LIST_CLASS}>
       <span className="sr-only">다음 장소를 불러오는 중</span>
       <PlaceCardSkeleton />
     </div>

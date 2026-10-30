@@ -265,9 +265,8 @@ async function followUp(text: string) {
     target: { value: text },
   });
   fireEvent.click(screen.getByRole("button", { name: "보내기" }));
-  await waitFor(() =>
-    expect(screen.getByRole("heading", { name: `“${text}”` })).toBeTruthy(),
-  );
+  // 후속 입력은 제목이 아니라 칩으로 보인다(place-search D-97)
+  expect(await screen.findByText(`추가 조건 · ${text}`)).toBeTruthy();
 }
 
 const results = () => screen.findByRole("list", { name: "추천 장소" });
@@ -564,10 +563,9 @@ describe("회원 최근 검색 시트", () => {
     gate.release();
 
     await waitFor(() =>
-      expect(
-        screen.getByRole("heading", { name: "“더 조용하게”" }),
-      ).toBeTruthy(),
+      expect(screen.getByRole("heading", { name: "“강남 술집”" })).toBeTruthy(),
     );
+    expect(screen.getByText("추가 조건 · 더 조용하게")).toBeTruthy();
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.getByText("장소 7")).toBeTruthy();
     expect(server.searches).toHaveLength(searches);

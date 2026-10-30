@@ -12,6 +12,7 @@ import {
   followUpChips,
   formatClock,
   historyMeta,
+  requestTitle,
   type HistoryEntry,
 } from "./search-store";
 
@@ -501,5 +502,26 @@ describe("followUpChips", () => {
 
     expect(followUpChips(entries, "N")).toEqual([]);
     expect(followUpChips(entries, undefined)).toEqual([]);
+  });
+});
+
+describe("requestTitle", () => {
+  it("기준 요청을 따라 거슬러 올라간 새 검색의 문장이다", () => {
+    const entries = [
+      entry({ id: "A" }),
+      entry({ id: "B", kind: "followUp", baseId: "A" }),
+      entry({ id: "R", kind: "region", baseId: "B" }),
+      entry({ id: "C", kind: "followUp", baseId: "R" }),
+      entry({ id: "N" }),
+    ];
+
+    expect(requestTitle(entries, "C")).toBe("A");
+    expect(requestTitle(entries, "A")).toBe("A");
+    expect(requestTitle(entries, "N")).toBe("N");
+  });
+
+  it("기록에 없는 요청이면 없다", () => {
+    expect(requestTitle([entry({ id: "A" })], "X")).toBeUndefined();
+    expect(requestTitle([entry({ id: "A" })], undefined)).toBeUndefined();
   });
 });

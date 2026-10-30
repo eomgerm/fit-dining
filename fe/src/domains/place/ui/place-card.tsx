@@ -34,9 +34,12 @@ export function PlaceCard({
       id={placeCardElementId(place.id)}
       aria-pressed={selected}
       onClick={onPress}
+      // 테두리는 안쪽 그림자라 선택돼도 내용이 움직이지 않는다
       className={cn(
-        "flex w-full scroll-my-4 flex-col gap-3 rounded-lg border bg-surface p-4 text-left transition-colors",
-        selected ? "border-1.5 border-primary" : "border-line",
+        "flex w-full scroll-my-4 flex-col gap-2.5 rounded-lg bg-surface p-3.5 text-left transition-shadow",
+        selected
+          ? "inset-ring-2 inset-ring-primary"
+          : "inset-ring inset-ring-line",
       )}
     >
       <div className="flex w-full gap-3">
@@ -44,15 +47,21 @@ export function PlaceCard({
           src={place.thumbnailUrl}
           className="size-19 shrink-0 rounded-md"
         />
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <div className="flex items-center gap-2">
-            <RankBadge rank={rank} selected={selected} />
-            <span className="truncate text-title-md text-ink">
-              {place.name}
-            </span>
+        {/* 태그 줄은 핏 점수 아래까지 폭을 쓴다(5-04) */}
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+          <div className="flex items-start gap-2">
+            <div className="flex min-w-0 flex-1 flex-col">
+              <div className="flex items-center gap-1.5">
+                <RankBadge rank={rank} selected={selected} />
+                <span className="truncate text-title-md text-ink">
+                  {place.name}
+                </span>
+              </div>
+              <PlaceMeta place={place} here={here} status={openStatus} />
+            </div>
+            {score !== undefined && <FitScore score={score} />}
           </div>
-          <PlaceMeta place={place} here={here} status={openStatus} />
-          <div className="mt-1 flex flex-wrap gap-1">
+          <div className="flex flex-wrap gap-1">
             {labels.map((label, index) => (
               <Tag key={label} variant={index === 0 ? "match" : "default"}>
                 {label}
@@ -60,7 +69,6 @@ export function PlaceCard({
             ))}
           </div>
         </div>
-        {score !== undefined && <FitScore score={score} />}
       </div>
       {caution && (
         <p className="flex items-center gap-1.5 text-caption-md text-warning">
@@ -72,15 +80,18 @@ export function PlaceCard({
   );
 }
 
-// 검색 중(5-03)의 빈 카드 자리
+// 검색 중(5-03)의 빈 카드 자리. 이름, 정보 줄, 태그 두 칸
 export function PlaceCardSkeleton() {
   return (
-    <div className="flex gap-3 rounded-lg border border-line p-4">
+    <div className="flex gap-3 rounded-lg p-3.5 inset-ring inset-ring-line">
       <div className="size-19 shrink-0 skeleton rounded-md" />
-      <div className="flex flex-1 flex-col gap-2 pt-1">
-        <div className="h-5 w-2/3 skeleton rounded-xs" />
-        <div className="h-4 w-1/2 skeleton rounded-xs" />
-        <div className="h-6 w-3/4 skeleton rounded-xs" />
+      <div className="flex flex-1 flex-col gap-2.5 pt-1">
+        <div className="h-4.5 w-3/5 skeleton rounded-sm" />
+        <div className="h-3 w-2/5 skeleton rounded-sm" />
+        <div className="flex gap-1.5">
+          <div className="h-5.5 w-21 skeleton rounded-sm" />
+          <div className="h-5.5 w-17.5 skeleton rounded-sm" />
+        </div>
       </div>
     </div>
   );

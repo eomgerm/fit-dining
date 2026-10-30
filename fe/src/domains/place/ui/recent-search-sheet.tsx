@@ -127,24 +127,25 @@ function ThreadList({
                 type="button"
                 aria-busy={loading}
                 onClick={() => handlePick(thread.id)}
-                className="flex min-h-14 w-full items-center gap-3 py-2 text-left active:bg-surface-sunken"
+                // 구분선 1px을 더해 줄 높이가 56px이다(4-02)
+                className="flex min-h-13.75 w-full items-center gap-3 py-1.5 text-left active:bg-surface-sunken"
               >
                 <HistoryIcon size="md" className="text-icon-subtle" />
-                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="flex items-center gap-2 text-body-md text-ink">
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="flex items-center gap-2 text-body-md leading-5.5 text-ink">
                     <span className="truncate">{thread.title}</span>
                     {thread.id === currentThreadId && <Badge>보는 중</Badge>}
                   </span>
                   {loading ? (
-                    <span className="text-caption-md text-ink-muted">
+                    <span className="text-caption-sm text-ink-muted">
                       불러오는 중
                     </span>
                   ) : failed ? (
-                    <span role="alert" className="text-caption-md text-danger">
+                    <span role="alert" className="text-caption-sm text-danger">
                       불러오지 못했어요. 눌러서 다시 시도
                     </span>
                   ) : (
-                    <span className="text-caption-md text-ink-muted">
+                    <span className="text-caption-sm text-ink-muted">
                       {formatRecentAt(thread.lastAt, now)}
                     </span>
                   )}

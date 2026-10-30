@@ -514,3 +514,15 @@ Glossary: none · ADRs: none
 - Decision: D-92 가운데 "상세 `tags`의 강조 색은 쓰지 않는다"와 "휴무일은 '휴무'로 쓴다"만 이 결정으로 바뀐다. 상세 `tags`는 그 장소의 검색 카드(D-86) `reasons`에 출처가 PREFERENCE인 근거 칩과 문구가 같으면 주황(`Tag` match), 그 밖(REQUEST 근거와 같거나, 카드가 없거나, `from=saved`)은 회색이다(VQA D-12). 추천 이유 인용은 주황 선과 진한 본문으로 그린다(VQA D-13). 탭 바로 아래 첫 섹션에는 두꺼운 띠가 없다. 홈 탭 메뉴 미리보기는 `representative` 메뉴를 먼저, 나머지를 원래 순서로 채워 6개까지 보인다. 웹사이트 줄은 주소의 도메인만 글자로 보이고 링크는 원래 주소다. 요일별 표의 휴무 요일은 "정기휴무 (매주 <요일>요일)"로 쓰고 `closedDayNote`를 표 아래 따로 적지 않는다. 휴무 요일은 BE가 정기휴무만 `closed: true`로 보내고 날짜가 붙은 휴무는 정보 없음으로 보내므로(place-catalog AC-14) 모두 정기휴무다.
 - Rejected: 태그 자체의 긍정·부정으로 색 나누기 → 상세 태그는 긍정이 다수인 특징만 들어와 모두 주황이 된다. 서버가 태그마다 일치 여부를 보내기 → API 계약 변경이라 이번 보정 범위를 넘는다. 상세 태그를 정하지 못한 지금은 실제 BE가 `tags`를 빈 목록으로 보내므로 이 색은 Mock에서만 보인다.
 - Anchors: `fe/src/domains/place/ui/place-detail-screen.tsx#PlaceDetailScreen` (modify) · `fe/src/domains/place/ui/place-detail-tabs.tsx#HomeTab` (modify) · `fe/src/domains/place/ui/place-detail-tabs.tsx#InfoTab` (modify) · `fe/src/domains/place/ui/menu-card.tsx#MenuCard` (modify)
+
+## D-97 결과 패널 제목은 첫 요청 문장이고 후속 입력은 칩으로만 보인다
+- Status: settled
+- Decision: 결과 패널 제목은 지금 보는 요청에서 기준 요청을 따라 거슬러 올라간 새 검색의 문장이다. 후속 입력은 28번의 "추가 조건 · <입력>" 칩으로만 보이고 제목이 되지 않는다. 검색 중과 실패에도 보낸 요청의 기준 요청에서 같은 제목을 찾고, 새 검색이면 보낸 문장이다. 전체 화면 VQA(2026-10-29) 결정 D-9다.
+- Rejected: 후속 입력을 제목으로 쓰기 → 제목과 칩에 같은 말이 두 번 나온다(5-06).
+- Anchors: `fe/src/domains/place/model/search-store.ts#requestTitle` (add) · `fe/src/domains/place/ui/search-screen.tsx#SearchScreen` (modify)
+
+## D-98 전체 패널의 "지도 보기"와 과거 결과 화면의 지도 위 버튼은 두지 않는다
+- Status: settled
+- Decision: 시안(5-05, 5-08)대로 전체 상태 결과 패널의 "지도 보기" 버튼을 없앤다. 중간 상태로는 손잡이로 돌아간다. 과거 결과 화면에는 지도 위 "저장한 장소"와 "내 정보" 버튼을 두지 않고 "현재 검색으로"와 "내 위치"만 둔다. 전체 화면 VQA(2026-10-29) 결정 D-11이다.
+- Rejected: spec대로 유지 → 시안에 없고, 사용자가 시안을 따르기로 했다.
+- Anchors: `fe/src/domains/place/ui/result-panel.tsx#ResultPanel` (modify) · `fe/src/domains/place/ui/search-screen.tsx#SearchScreen` (modify)

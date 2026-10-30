@@ -267,6 +267,15 @@ export function continuedFrom(entries: HistoryEntry[], entry: HistoryEntry) {
   return `${order} 요청에서 이어 검색`;
 }
 
+// 결과 패널 제목. 기준 요청을 따라 거슬러 올라간 새 검색의 문장이고, 후속 입력은 칩으로만 보인다(D-97)
+export function requestTitle(entries: HistoryEntry[], id?: string) {
+  const byId = new Map(entries.map((entry) => [entry.id, entry]));
+  let entry = id ? byId.get(id) : undefined;
+  while (entry?.baseId && byId.has(entry.baseId))
+    entry = byId.get(entry.baseId);
+  return entry?.sentence;
+}
+
 // 지금 보는 요청에서 기준 요청을 따라 새 검색까지 거슬러 올라가며 만난 후속 입력(오래된 순서)
 export function followUpChips(entries: HistoryEntry[], viewingId?: string) {
   const byId = new Map(entries.map((entry) => [entry.id, entry]));

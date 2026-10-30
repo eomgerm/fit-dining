@@ -99,7 +99,7 @@ export function PastResultView({
           <Button onClick={onRepeat} className="w-full">
             <RefreshIcon size="md" className="mr-1.5" />이 조건으로 다시 검색
           </Button>
-          <p className="text-center text-caption-md text-ink-muted">
+          <p className="text-center text-caption-sm text-ink-muted">
             새 결과는 기록 끝에 추가되고, 이 결과는 그대로 남아요.
           </p>
         </div>

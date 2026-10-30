@@ -39,6 +39,7 @@ import {
 import {
   followUpChips,
   nextEntryId,
+  requestTitle,
   searchStore,
   type EntryKind,
 } from "../model/search-store";
@@ -493,7 +494,8 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
       {/* 저장한 장소 화면에는 [뒤로]와 "내 위치"만 있다(D-12) */}
       {!savedView && (
         <>
-          {(firstScreen || past || panel !== "full") && (
+          {/* 과거 결과 화면에는 "현재 검색으로"만 둔다(D-98) */}
+          {(firstScreen || (!past && panel !== "full")) && (
             <div className="absolute top-4 right-4 flex flex-col gap-2">
               <Fab label="저장한 장소" onClick={handleOpenSaved}>
                 <BookmarkIcon className="text-icon" />
@@ -555,10 +557,12 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
         <ResultPanel
           state={panel}
           onStateChange={setPanel}
+          // 첫 요청 문장. 검색 중이면 보낸 요청의 기준 요청에서 찾고, 새 검색이면 보낸 문장이다(D-97)
           sentence={
-            searching || failed
-              ? (search.variables?.request.query ?? "")
-              : (viewing?.sentence ?? "")
+            (searching || failed
+              ? (requestTitle(entries, search.variables?.baseId) ??
+                search.variables?.request.query)
+              : requestTitle(entries, viewing?.id)) ?? ""
           }
           searching={searching}
           // "검색 취소"(5-E02). 이전 결과가 있으면 그 결과로, 없으면 첫 화면으로 돌아간다
@@ -601,13 +605,17 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
       ) : (
         <>
           {nearbyOffline && (
-            // 연결이 없으면 지도 대신 연결 안내만 보인다(4-E02)
-            <div className="absolute inset-0 flex flex-col justify-center bg-surface pb-20">
-              <LoadFailed
-                error={nearby.error}
-                title="주변 추천을 불러오지 못했어요"
-                onRetry={nearby.retry}
-              />
+            // 연결이 없으면 지도 대신 연결 안내만 보인다(4-E02).
+            // 안내는 자체 위아래 여백을 뺀 높이의 60%만큼 가운데에서 올린다
+            <div className="absolute inset-0 bg-surface-warm">
+              <div className="absolute inset-x-0 top-1/2 -translate-y-3/5">
+                <LoadFailed
+                  error={nearby.error}
+                  title="주변 추천을 불러오지 못했어요"
+                  onRetry={nearby.retry}
+                  className="-mt-7 -mb-2"
+                />
+              </div>
             </div>
           )}
           {/* 아래부터 검색창, 주변 카드, "내 위치" 순서로 쌓는다(와이어프레임 Start) */}
@@ -617,11 +625,13 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
             )}
             {nearby.error && !nearbyOffline && (
               // 주변 추천을 받지 못하면 카드 자리에 안내를 띄운다(4-E03)
-              <div className="mx-4 rounded-lg bg-surface pb-6 shadow-2">
+              // 카드 안 위 24px, 아래 20px. 안내 자체 여백(위 28px, 아래 8px)에 맞춘다
+              <div className="mx-4 mb-0.5 rounded-lg bg-surface pb-3 shadow-2">
                 <LoadFailed
                   error={nearby.error}
                   title="주변 추천을 불러오지 못했어요"
                   onRetry={nearby.retry}
+                  className="-mt-1"
                 />
               </div>
             )}
@@ -642,6 +652,8 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
               <SearchBar
                 onSearch={handleNewSearch}
                 onOpenRecent={() => setRecentOpen(true)}
+                // 연결이 없으면 검색창을 끈다(4-E02)
+                disabled={nearbyOffline}
               />
             </div>
           </div>

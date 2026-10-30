@@ -44,14 +44,17 @@ export function NearbyCarousel({
         const card = cards[next];
         if (card && card.place.id !== selectedId) onSelect(card);
       }}
-      options={{ align: "start" }}
-      slideClassName="basis-82"
+      // 선택된 카드는 화면 왼쪽에서 24px(칸 여백 8px + 16px) 떨어진다
+      options={{ align: () => 16 }}
+      slideClassName="basis-80"
+      // 칸 위아래 여유(py-1)만큼 당긴다. 아래는 2px 덜 당겨 검색창과 14px 띄운다
+      className="-mt-1 -mb-0.5"
     >
       {cards.map((card, cardIndex) => {
         const selected = card.place.id === selectedId;
         return (
-          // 칸 안쪽 여백으로 카드 사이를 띄운다. 첫 카드도 화면 왼쪽에서 같은 만큼 떨어진다
-          <div key={card.place.id} className="pl-4">
+          // 칸 안쪽 여백으로 카드 사이를 8px 띄운다. 위아래 여유는 카드 밖 선택 링이 잘리지 않게 한다
+          <div key={card.place.id} className="py-1 pl-2">
             <NearbyCard
               card={card}
               rank={cardIndex + 1}
@@ -88,16 +91,17 @@ function NearbyCard({
       type="button"
       aria-pressed={selected}
       onClick={onPress}
+      // 선택은 카드 밖 2px 링이다(4-01)
       className={cn(
-        "flex w-full flex-col overflow-hidden rounded-lg border bg-surface text-left shadow-2 transition-colors",
-        selected ? "border-1.5 border-primary" : "border-line",
+        "flex w-full flex-col overflow-hidden rounded-lg bg-surface text-left shadow-2",
+        selected && "outline-2 outline-offset-2 outline-primary",
       )}
     >
       <PlacePhoto src={place.thumbnailUrl} className="h-30 w-full" />
-      <div className="flex w-full flex-col gap-2 p-4">
+      <div className="flex w-full flex-col gap-2 px-3.5 pt-3 pb-3.5">
         <div className="flex gap-2">
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <RankBadge rank={rank} selected={selected} />
               <span className="truncate text-title-md text-ink">
                 {place.name}

@@ -4,7 +4,8 @@ import { cn } from "@/shared/lib/cn";
 
 const scoreVariants = cva("text-primary", {
   variants: {
-    size: { md: "text-headline-md", lg: "text-headline-lg" },
+    // md는 카드의 20/28, lg는 상세의 30/40
+    size: { md: "text-title-lg", lg: "text-headline-lg" },
   },
   defaultVariants: { size: "md" },
 });

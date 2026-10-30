@@ -122,7 +122,7 @@ export function PlacePhoto({
 }
 
 const rankVariants = cva(
-  "inline-flex size-6 shrink-0 items-center justify-center rounded-full text-label-sm",
+  "inline-flex size-5.5 shrink-0 items-center justify-center rounded-full text-label-sm",
   {
     variants: {
       selected: {

@@ -7,12 +7,12 @@ import { cn } from "@/shared/lib/cn";
 import { IconButton } from "@/shared/ui/button/icon-button";
 import { ArrowUpIcon } from "@/shared/ui/icon/icons/arrow-up";
 import { ChevronRightIcon } from "@/shared/ui/icon/icons/chevron-right";
-import { ClearIcon } from "@/shared/ui/icon/icons/clear";
+import { CloseIcon } from "@/shared/ui/icon/icons/close";
 import { HistoryIcon } from "@/shared/ui/icon/icons/history";
+import { InfoIcon } from "@/shared/ui/icon/icons/info";
 import { PinIcon } from "@/shared/ui/icon/icons/pin";
 import { SearchIcon } from "@/shared/ui/icon/icons/search";
 import { SparkleIcon } from "@/shared/ui/icon/icons/sparkle";
-import { WarningIcon } from "@/shared/ui/icon/icons/warning";
 
 import { highlightParts } from "../model/highlight";
 import type { PlaceSuggestion } from "../model/place-types";
@@ -70,7 +70,8 @@ export function SearchBar({
   }
 
   return (
-    <div className="relative flex flex-col gap-2">
+    // 입력하는 동안은 검색창과 후보가 화면 가장자리에 더 붙는다(5-01)
+    <div className={cn("relative flex flex-col gap-2", typing && "-mx-1")}>
       {typing && (
         <div
           aria-hidden
@@ -87,11 +88,15 @@ export function SearchBar({
           submit();
         }}
         className={cn(
-          "relative flex h-13 items-center gap-1 rounded-md bg-surface pr-1 pl-3.5 shadow-2",
+          "relative flex h-13 items-center gap-1 rounded-md bg-surface pr-1 pl-4 shadow-2",
           focused && "ring-2 ring-primary-strong",
+          // 연결이 없을 때 꺼진 검색창(4-E02)
+          disabled &&
+            "bg-surface-sunken shadow-none inset-ring inset-ring-line",
         )}
       >
-        <SearchIcon size="md" className="mr-1 text-icon" />
+        {/* 돋보기는 입력 중에만 보인다(D-6, 5-01) */}
+        {typing && <SearchIcon size="md" className="mr-1 text-icon" />}
         <input
           ref={inputRef}
           aria-label="장소 검색"
@@ -106,9 +111,11 @@ export function SearchBar({
           className="min-w-0 flex-1 bg-transparent text-body-md text-ink outline-none placeholder:text-ink-subtle"
         />
         {empty ? (
-          <IconButton label="최근 검색" onClick={onOpenRecent}>
-            <HistoryIcon size="md" className="text-icon" />
-          </IconButton>
+          !disabled && (
+            <IconButton label="최근 검색" onClick={onOpenRecent}>
+              <HistoryIcon size="md" className="text-icon" />
+            </IconButton>
+          )
         ) : (
           <IconButton
             label="입력 지우기"
@@ -119,14 +126,17 @@ export function SearchBar({
               inputRef.current?.focus();
             }}
           >
-            <ClearIcon size="md" className="text-ink-subtle" />
+            <CloseIcon size="md" className="text-ink-subtle" />
           </IconButton>
         )}
         <button
           type="submit"
           aria-label="추천받기"
           disabled={disabled || empty}
-          className="flex size-11 items-center justify-center rounded-md bg-primary text-on-primary transition active:bg-primary-pressed disabled:bg-primary-disabled"
+          className={cn(
+            "flex size-11 items-center justify-center rounded-md bg-primary text-on-primary transition active:bg-primary-pressed disabled:bg-primary-disabled",
+            disabled && "disabled:bg-line disabled:text-surface",
+          )}
         >
           <ArrowUpIcon size="md" />
         </button>
@@ -177,8 +187,8 @@ export function SearchBar({
           ))}
           {suggest.failed && (
             <li className="flex min-h-14 items-center gap-3 px-4 py-2.5">
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-surface-sunken text-ink-muted">
-                <WarningIcon size="md" />
+              <span className="flex size-9 shrink-0 items-center justify-center text-ink-subtle">
+                <InfoIcon size="md" />
               </span>
               <span className="text-body-sm text-ink-muted">
                 지금은 후보를 보여 드릴 수 없어요
@@ -231,7 +241,7 @@ function Highlighted({ text, input }: { text: string; input: string }) {
     match ? (
       <mark
         key={index}
-        className="bg-transparent font-semibold text-primary-strong"
+        className="bg-transparent font-bold text-primary-strong"
       >
         {part}
       </mark>

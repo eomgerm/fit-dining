@@ -24,7 +24,7 @@ export function HistoryTimeline({ onView, onContinue }: HistoryTimelineProps) {
         const viewing = entry.id === viewingId;
         const from = continuedFrom(entries, entry);
         return (
-          <li key={entry.id} className="relative flex gap-3 pb-5">
+          <li key={entry.id} className="relative flex gap-3 pb-4.5">
             {/* 시간순을 잇는 세로선 */}
             {index < entries.length - 1 && (
               <span
@@ -44,14 +44,16 @@ export function HistoryTimeline({ onView, onContinue }: HistoryTimelineProps) {
             <div
               className={cn(
                 "flex min-w-0 flex-1 flex-col gap-1.5",
-                viewing && "-mt-2.5 rounded-md bg-surface-warm px-3 py-2.5",
+                // 상자는 왼쪽으로 4px 나와 문장이 다른 줄보다 8px 안쪽에 온다
+                viewing &&
+                  "-mt-2.5 -ml-1 rounded-md bg-surface-warm px-3 py-2.5",
               )}
             >
-              <p className="flex items-center gap-2 text-title-sm text-ink">
+              <p className="flex items-center gap-2 text-body-md leading-5.5 font-semibold text-ink">
                 <span className="truncate">{entry.sentence}</span>
                 {viewing && <Badge>보는 중</Badge>}
               </p>
-              <p className="text-caption-md text-ink-muted">
+              <p className="text-caption-sm text-ink-muted">
                 {historyMeta(entry)}
                 {from && ` · ${from}`}
               </p>

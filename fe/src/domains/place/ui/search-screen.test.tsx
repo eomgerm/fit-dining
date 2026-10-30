@@ -166,14 +166,17 @@ async function newSearch(text: string) {
   return screen.findByRole("list", { name: "추천 장소" });
 }
 
-async function followUp(text: string) {
+function sendFollowUp(text: string) {
   fireEvent.change(screen.getByRole("textbox", { name: "후속 조건" }), {
     target: { value: text },
   });
   fireEvent.click(screen.getByRole("button", { name: "보내기" }));
-  await waitFor(() =>
-    expect(screen.getByRole("heading", { name: `“${text}”` })).toBeTruthy(),
-  );
+}
+
+// 후속 입력은 제목이 아니라 칩으로 보인다(D-97)
+async function followUp(text: string) {
+  sendFollowUp(text);
+  expect(await screen.findByText(`추가 조건 · ${text}`)).toBeTruthy();
 }
 
 // 결과 패널 머리글의 "요청 기록"으로 패널 안에 펼친다
@@ -648,6 +651,50 @@ describe("SearchScreen", () => {
     expect(screen.getByText("추가 조건 · 더 조용하게")).toBeTruthy();
   });
 
+  it("후속 조건 결과의 제목은 첫 요청 문장이고, 후속 입력은 칩으로만 보인다", async () => {
+    renderScreen();
+    await newSearch("역삼 카페");
+    await followUp("더 조용하게");
+    await followUp("주차 되는 곳");
+
+    expect(screen.getByRole("heading", { name: "“역삼 카페”" })).toBeTruthy();
+    expect(
+      screen.queryByRole("heading", { name: "“주차 되는 곳”" }),
+    ).toBeNull();
+    expect(screen.getByText("추가 조건 · 더 조용하게")).toBeTruthy();
+  });
+
+  it("후속 조건을 받는 동안에도 제목은 첫 요청 문장이다", async () => {
+    renderScreen();
+    await newSearch("역삼 카페");
+    // 후속 조건 응답은 오지 않는다
+    const original = globalThis.fetch;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>((input, init) =>
+        String(init?.body).includes("previousConditions")
+          ? new Promise(() => {})
+          : original(input, init),
+      ),
+    );
+
+    sendFollowUp("더 조용하게");
+
+    expect(await screen.findByText("요청을 이해하는 중")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "“역삼 카페”" })).toBeTruthy();
+  });
+
+  it("전체 패널에는 '지도 보기'가 없고 손잡이로 중간 높이로 돌아간다", async () => {
+    renderScreen();
+    await newSearch("역삼 카페");
+
+    fireEvent.click(screen.getByRole("button", { name: "패널 펼치기" }));
+
+    expect(screen.queryByRole("button", { name: "지도 보기" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "패널 줄이기" }));
+    expect(screen.getByRole("button", { name: "패널 펼치기" })).toBeTruthy();
+  });
+
   it("'새 검색'은 결과와 조건을 비우고 위쪽 검색창으로 돌아가며 다음 요청에 previousConditions가 없다", async () => {
     renderScreen();
     await newSearch("역삼 카페");
@@ -707,6 +754,20 @@ describe("SearchScreen", () => {
     fireEvent.click(screen.getByRole("button", { name: "현재 검색으로" }));
     expect(await screen.findByRole("list", { name: "요청 기록" })).toBeTruthy();
     expect(screen.queryByRole("region", { name: "과거 결과" })).toBeNull();
+  });
+
+  it("과거 결과 화면의 지도 위에는 '현재 검색으로'만 있다", async () => {
+    renderScreen();
+    await newSearch("역삼 카페");
+    await followUp("더 조용하게");
+
+    const history = await openHistory();
+    fireEvent.click(within(history).getByRole("button", { name: "결과 보기" }));
+    await pastView();
+
+    expect(screen.queryByRole("button", { name: "저장한 장소" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "내 정보" })).toBeNull();
+    expect(screen.getByRole("button", { name: "현재 검색으로" })).toBeTruthy();
   });
 
   it("'이 조건으로 다시 검색'은 같은 요청 본문을 보내 thread 끝에 쌓고 원래 요청은 그대로 둔다", async () => {
@@ -1351,9 +1412,10 @@ describe("SearchScreen", () => {
 
         await waitFor(() =>
           expect(
-            screen.getByRole("heading", { name: "“더 조용하게”" }),
+            screen.getByRole("heading", { name: "“역삼 카페”" }),
           ).toBeTruthy(),
         );
+        expect(screen.getByText("추가 조건 · 더 조용하게")).toBeTruthy();
         expect(searchBodies).toHaveLength(requestCount);
         const history = await openHistory();
         expect(within(history).getAllByRole("listitem")).toHaveLength(2);
@@ -1505,7 +1567,7 @@ describe("SearchScreen", () => {
       await newSearch("역삼 카페");
       failRequests(isSearch, { times: 3, offline: true });
 
-      await followUp("더 조용하게");
+      sendFollowUp("더 조용하게");
 
       expect(
         await screen.findByText(
@@ -1533,6 +1595,38 @@ describe("SearchScreen", () => {
       expect(await nearbyList()).toBeTruthy();
       expect(screen.queryByText("주변 추천을 불러오지 못했어요")).toBeNull();
     });
+
+    // 연결 실패는 두 번 더 보낸 뒤(약 3초) 실패한다
+    it("연결이 없어 주변 추천을 받지 못하면 검색창이 꺼지고 최근 검색 버튼이 없다", async () => {
+      failRequests((url, body) => body?.query === NEARBY_QUERY, {
+        times: 3,
+        offline: true,
+      });
+      renderScreen();
+
+      expect(
+        await screen.findByText(
+          "인터넷에 연결되어 있지 않아요",
+          {},
+          { timeout: 5000 },
+        ),
+      ).toBeTruthy();
+      expect(
+        screen
+          .getByRole("textbox", { name: "장소 검색" })
+          .hasAttribute("disabled"),
+      ).toBe(true);
+      expect(screen.queryByRole("button", { name: "최근 검색" })).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: "다시 시도" }));
+
+      expect(await nearbyList()).toBeTruthy();
+      expect(
+        screen
+          .getByRole("textbox", { name: "장소 검색" })
+          .hasAttribute("disabled"),
+      ).toBe(false);
+    }, 8000);
 
     it("자동완성 후보를 받지 못하면 '이 조건으로 추천받기'와 안내만 보인다", async () => {
       failRequests((url) => url.startsWith("/api/v1/places/suggest"));
