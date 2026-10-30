@@ -77,7 +77,7 @@ export function OpenStatusText({
 }: {
   status: OpenStatus;
   notice?: string;
-  // 글자 크기·색을 바꿀 때만 넘긴다(홈 탭 영업시간 줄)
+  // 글자 크기·색을 바꿀 때만 넘긴다(홈 탭 영업시간 줄, 정보 탭 영업시간)
   className?: string;
 }) {
   const label = OPEN_STATUS_LABELS[status];

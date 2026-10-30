@@ -394,11 +394,12 @@ export function InfoTab({ detail, here, now }: TabProps & { now: Date }) {
         <OpenStatusText
           status={detail.openStatus}
           notice={todayNotice(detail.hours, detail.openStatus, now)}
+          className="text-ink"
         />
         <WeekHours
           hours={detail.hours}
           today={todayHours(detail.hours, now)?.dayOfWeek}
-          className="mt-1"
+          className="mt-1 leading-5.5"
         />
       </Section>
       <Section>
