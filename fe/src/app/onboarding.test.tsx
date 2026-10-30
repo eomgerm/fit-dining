@@ -9,7 +9,11 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HomeEntry } from "./home-entry";
 import { rememberLoginReturn } from "./login-return";
-import { GUEST_KEY, readAnswers } from "@/domains/onboarding/model/storage";
+import {
+  ANSWERS_KEY,
+  GUEST_KEY,
+  readAnswers,
+} from "@/domains/onboarding/model/storage";
 const mocks = vi.hoisted(() => ({
   restore: vi.fn(),
   push: vi.fn(),
@@ -25,8 +29,8 @@ vi.mock("@/domains/place/ui/search-screen", () => ({
 vi.mock("./use-bookmark-access", () => ({ useBookmarkAccess: () => ({}) }));
 beforeEach(() => {
   vi.clearAllMocks();
-  sessionStorage.clear();
   localStorage.clear();
+  sessionStorage.clear();
   window.history.replaceState(null, "", "/");
 });
 afterEach(() => {
@@ -168,4 +172,14 @@ describe("북마크 로그인 뒤 복귀", () => {
     expect(mocks.replace).not.toHaveBeenCalled();
     expect(sessionStorage.getItem(RETURN_KEY)).toBeNull();
   });
+});
+
+it("선택 없이 건너뛰면 답변을 저장하지 않고 가입으로 이동한다", async () => {
+  mocks.restore.mockRejectedValue(new Error("unauthenticated"));
+  render(<HomeEntry />);
+  fireEvent.click(await screen.findByRole("button", { name: "시작하기" }));
+  fireEvent.click(screen.getByRole("button", { name: "건너뛰기" }));
+  expect(mocks.push).toHaveBeenCalledWith("/signup");
+  expect(readAnswers()).toBeUndefined();
+  expect(localStorage.getItem(ANSWERS_KEY)).toBeNull();
 });

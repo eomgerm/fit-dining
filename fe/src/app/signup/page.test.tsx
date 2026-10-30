@@ -8,9 +8,14 @@ import {
   within,
 } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ToastProvider } from "@/shared/ui/overlay/toast";
-import { ANSWERS_KEY, GUEST_KEY } from "@/domains/onboarding/model/storage";
+import {
+  ANSWERS_KEY,
+  GUEST_KEY,
+  readAnswers,
+  writeAnswers,
+} from "@/domains/onboarding/model/storage";
 import SignupPage from "./page";
 
 vi.mock("@/shared/ui/display/carousel", () => ({
@@ -19,7 +24,11 @@ vi.mock("@/shared/ui/display/carousel", () => ({
   ),
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }));
-afterEach(cleanup);
+beforeEach(() => localStorage.clear());
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 it("시안의 제목과 설명 줄 구성을 유지하고 링크 버튼 경고가 없다", () => {
   const error = vi.spyOn(console, "error");
   const warn = vi.spyOn(console, "warn");
@@ -108,8 +117,14 @@ it.each([
   },
 );
 
-it("가입 없이 시작하면 답변을 지우고 비회원 표시만 저장한다", async () => {
-  sessionStorage.setItem(ANSWERS_KEY, "private answers");
+it("가입 없이 시작하면 답변을 유지하고 비회원 표시를 저장한다", async () => {
+  const answers = {
+    mood: "QUIET" as const,
+    priorities: [],
+    purposes: [],
+    tastes: [],
+  };
+  writeAnswers(answers);
   render(
     <ToastProvider>
       <SignupPage />
@@ -120,7 +135,8 @@ it("가입 없이 시작하면 답변을 지우고 비회원 표시만 저장한
   // Prevent jsdom navigation while keeping the actual click handler.
   link.addEventListener("click", (event) => event.preventDefault());
   fireEvent.click(link);
-  expect(sessionStorage.getItem(ANSWERS_KEY)).toBeNull();
+  expect(readAnswers()).toEqual(answers);
+  expect(localStorage.getItem(ANSWERS_KEY)).not.toBeNull();
   expect(localStorage.getItem(GUEST_KEY)).toBe("1");
 });
 

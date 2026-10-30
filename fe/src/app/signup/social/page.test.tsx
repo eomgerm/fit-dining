@@ -25,9 +25,12 @@ vi.mock("@/domains/auth/api/auth-client", () => ({
 }));
 beforeEach(() => {
   vi.clearAllMocks();
-  sessionStorage.clear();
+  localStorage.clear();
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 it("링크 버튼에 nativeButton 경고가 없다", () => {
   const error = vi.spyOn(console, "error");
   const warn = vi.spyOn(console, "warn");
@@ -132,10 +135,15 @@ it("sends onboarding answers and clears them only after successful signup", asyn
   expect(readAnswers()).toEqual(answers);
   finish();
   await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/location"));
-  expect(sessionStorage.getItem(ANSWERS_KEY)).toBeNull();
+  expect(localStorage.getItem(ANSWERS_KEY)).toBeNull();
 });
 it("keeps onboarding answers when signup fails", async () => {
-  const answers = { mood: null, priorities: [], purposes: [], tastes: [] };
+  const answers = {
+    mood: "QUIET" as const,
+    priorities: [],
+    purposes: [],
+    tastes: [],
+  };
   writeAnswers(answers);
   mocks.signup.mockRejectedValue(
     new ApiError("http", "failed", { status: 409 }),
@@ -145,3 +153,33 @@ it("keeps onboarding answers when signup fails", async () => {
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   expect(readAnswers()).toEqual(answers);
 });
+
+it.each(["empty", "blocked"])(
+  "%s 저장소에서도 취향 없이 가입을 완료한다",
+  async (state) => {
+    if (state === "empty") {
+      localStorage.setItem(
+        ANSWERS_KEY,
+        JSON.stringify({
+          mood: null,
+          priorities: [],
+          purposes: [],
+          tastes: [],
+        }),
+      );
+    } else {
+      for (const method of ["getItem", "setItem", "removeItem"] as const)
+        vi.spyOn(Storage.prototype, method).mockImplementation(() => {
+          throw new Error("disabled");
+        });
+    }
+    mocks.signup.mockResolvedValueOnce({});
+    form();
+    await submit();
+    await waitFor(() =>
+      expect(mocks.replace).toHaveBeenCalledWith("/location"),
+    );
+    expect(mocks.signup).toHaveBeenCalledTimes(1);
+    expect(mocks.signup.mock.calls[0][0]).not.toHaveProperty("preferences");
+  },
+);

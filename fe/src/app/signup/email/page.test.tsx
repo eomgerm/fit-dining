@@ -9,7 +9,11 @@ import {
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ApiError } from "@/shared/api/api-error";
 import { ToastProvider } from "@/shared/ui/overlay/toast";
-import { writeAnswers, readAnswers } from "@/domains/onboarding/model/storage";
+import {
+  ANSWERS_KEY,
+  writeAnswers,
+  readAnswers,
+} from "@/domains/onboarding/model/storage";
 import SignupEmailPage from "./page";
 
 const mocks = vi.hoisted(() => ({ signup: vi.fn(), replace: vi.fn() }));
@@ -19,9 +23,12 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/domains/auth/api/auth-client", () => ({ signup: mocks.signup }));
 beforeEach(() => {
   vi.clearAllMocks();
-  sessionStorage.clear();
+  localStorage.clear();
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 it("링크 버튼에 nativeButton 경고가 없다", () => {
   const error = vi.spyOn(console, "error");
   const warn = vi.spyOn(console, "warn");
@@ -191,4 +198,37 @@ it("온보딩 답변을 가입 요청에 포함하고 성공하면 지운다", a
     expect.objectContaining({ preferences }),
   );
   expect(readAnswers()).toBeUndefined();
+  expect(localStorage.getItem(ANSWERS_KEY)).toBeNull();
 });
+
+it.each(["empty", "blocked"])(
+  "%s 저장소에서도 취향 없이 가입을 완료한다",
+  async (state) => {
+    if (state === "empty") {
+      localStorage.setItem(
+        ANSWERS_KEY,
+        JSON.stringify({
+          mood: null,
+          priorities: [],
+          purposes: [],
+          tastes: [],
+        }),
+      );
+    } else {
+      for (const method of ["getItem", "setItem", "removeItem"] as const)
+        vi.spyOn(Storage.prototype, method).mockImplementation(() => {
+          throw new Error("disabled");
+        });
+    }
+    mocks.signup.mockResolvedValueOnce({});
+    form();
+    await screen.findByRole("button", { name: "동의하고 시작하기" });
+    fireEvent.click(screen.getByRole("checkbox", { name: "전체 동의" }));
+    fireEvent.click(screen.getByRole("button", { name: "동의하고 시작하기" }));
+    await waitFor(() =>
+      expect(mocks.replace).toHaveBeenCalledWith("/location"),
+    );
+    expect(mocks.signup).toHaveBeenCalledTimes(1);
+    expect(mocks.signup.mock.calls[0][0]).not.toHaveProperty("preferences");
+  },
+);

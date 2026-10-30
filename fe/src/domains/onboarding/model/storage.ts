@@ -47,15 +47,23 @@ export function validAnswers(value: unknown): value is OnboardingAnswers {
 }
 export function clearAnswers() {
   try {
-    sessionStorage.removeItem(ANSWERS_KEY);
+    localStorage.removeItem(ANSWERS_KEY);
   } catch {
     /* Storage may be disabled. */
   }
 }
+function hasAnswers(answers: OnboardingAnswers) {
+  return (
+    answers.mood !== null ||
+    answers.priorities.length > 0 ||
+    answers.purposes.length > 0 ||
+    answers.tastes.length > 0
+  );
+}
 export function writeAnswers(answers: OnboardingAnswers) {
   try {
-    if (validAnswers(answers))
-      sessionStorage.setItem(ANSWERS_KEY, JSON.stringify(answers));
+    if (validAnswers(answers) && hasAnswers(answers))
+      localStorage.setItem(ANSWERS_KEY, JSON.stringify(answers));
     else clearAnswers();
   } catch {
     clearAnswers();
@@ -63,17 +71,16 @@ export function writeAnswers(answers: OnboardingAnswers) {
 }
 export function readAnswers(): OnboardingAnswers | undefined {
   try {
-    const raw = sessionStorage.getItem(ANSWERS_KEY);
+    const raw = localStorage.getItem(ANSWERS_KEY);
     if (raw === null) return;
     const value: unknown = JSON.parse(raw);
-    if (validAnswers(value)) return value;
+    if (validAnswers(value) && hasAnswers(value)) return value;
   } catch {
     /* Malformed or unavailable storage must not block signup. */
   }
   clearAnswers();
 }
 export function startAsGuest() {
-  clearAnswers();
   try {
     localStorage.setItem(GUEST_KEY, "1");
   } catch {
