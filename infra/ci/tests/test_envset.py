@@ -173,6 +173,15 @@ class SetTest(EnvsetCase):
         self.assertEqual(rc, 1)
         self.assertIn("REPLACE_ME", out)
 
+    def test_database_url_carries_a_password_so_it_is_never_taken_inline(self):
+        # 이름에 비밀 단어가 없어도 값에 비밀번호가 들어 있다(AI 컨테이너의 DATABASE_URL)
+        self.assertTrue(envset.is_secret("DATABASE_URL"))
+        self.assertFalse(envset.is_secret("SPRING_DATASOURCE_URL"))
+        self.write("ai-dev", "GMS_ENABLED=true" + chr(10))
+        rc, out, err = self.run_cli("set", "ai-dev", "DATABASE_URL=postgresql://fit_dev_ai:pw1234567890abcdef@postgres:5432/fit_dev")
+        self.assertEqual(rc, 1)
+        self.assertNotIn("pw1234567890abcdef", out + err)
+
     def test_empty_inline_value_is_refused(self):
         rc, _, _ = self.run_cli("set", "fe-prod", "X_VALUE=")
         self.assertEqual(rc, 1)

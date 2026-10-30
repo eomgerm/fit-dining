@@ -25,6 +25,7 @@
 | `backup` | `infra/backup/backup.env.example` | A의 백업 스크립트와 타이머(`/etc/fit/backup.env`) |
 | `obs` | `infra/obs/obs.env.example` | A의 관측 스택(`/etc/fit/obs.env`). compose가 `--env-file`로 읽고, 일일 점검 요약이 웹훅 주소를 읽는다 |
 | `ops` | `infra/ops/ops.env.example` | B의 감시 스택과 포트 노출 감사(`/etc/fit/ops.env`) |
+| `ai` | `infra/app/ai.env.example` | AI API 컨테이너(`/etc/fit/ai-dev.env`, `/etc/fit/ai-prod.env`, design.md 11.4절) |
 
 ## 키 목록
 
@@ -64,15 +65,23 @@
 | `AUTH_KAKAO_CLIENT_SECRET` | app | X | 카카오 클라이언트 시크릿. 비밀. 카카오 콘솔의 클라이언트 시크릿은 ON으로 둔다 |
 | `AUTH_NAVER_CLIENT_ID` | app | X | 네이버 로그인의 Client ID. `AUTH_NAVER_CLIENT_SECRET`과 한 쌍이다. 콜백 `https://<호스트>/api/auth/oauth/naver/callback`을 등록한다 |
 | `AUTH_NAVER_CLIENT_SECRET` | app | X | 네이버 Client Secret. 비밀 |
-| `MODAL_BASE_URL` | app | O | Modal 임베딩과 AI API(`/v1/taste/interpret`, `/v1/taste/profile`)의 공통 기준 URL. 환경별 앱이 다르다 |
-| `MODAL_KEY` | app | O | `Modal-Key` 헤더 값. 비밀 |
-| `MODAL_SECRET` | app | O | `Modal-Secret` 헤더 값. 비밀 |
+| `MODAL_BASE_URL` | app | O | BE가 AI API(`/v1/taste/interpret`, `/v1/taste/profile`, 검색)를 부르는 기준 URL이다(키 이름은 Modal 시절 그대로다). A에서 도는 AI API는 `http://ai-dev:8000`, `http://ai-prod:8000`이다(design.md 11.4절). Modal 임베딩 주소가 아니다(그것은 `ai` 그룹의 `EMBED_BASE_URL`) |
+| `MODAL_KEY` | app | X | `Modal-Key` 헤더 값. AI API가 Modal에 있을 때만 쓴다. A의 AI API는 내부 호출이라 비운다. 비밀 |
+| `MODAL_SECRET` | app | X | `Modal-Secret` 헤더 값. AI API가 Modal에 있을 때만 쓴다. A의 AI API는 내부 호출이라 비운다. 비밀 |
 | `TASTE_ANALYZER` | app | X | 온보딩 해석 구현. 기본 `mock`, AI 연결 시 `ai` |
 | `TASTE_PROFILE_ENABLED` | app | X | 가입 시 AI 프로필 계산. 기본 `false`, 실패 시 빈 features로 가입 계속 |
 | `MODAL_ENABLED` | app | O | 킬스위치. `false`면 키워드 검색으로 대체한다 |
-| `GMS_BASE_URL` | app | O | GMS(SSAFY LLM API) 기준 URL |
-| `GMS_API_KEY` | app | O | 비밀 |
-| `GMS_ENABLED` | app | O | 킬스위치 |
+| `GMS_BASE_URL` | app, ai | O | GMS(SSAFY LLM API) 기준 URL |
+| `GMS_API_KEY` | app, ai | O | 비밀 |
+| `GMS_ENABLED` | app, ai | O | 킬스위치 |
+| `DATABASE_URL` | ai | O | AI API가 읽는 Postgres 접속 주소(`postgresql://fit_<env>_ai:<비밀번호>@postgres:5432/fit_<env>`). 읽기 전용 role이고 비밀번호는 `data.env`의 `FIT_PROD_AI_PASSWORD`(dev는 `FIT_DEV_AI_PASSWORD`)와 같아야 한다. 비밀 |
+| `EMBED_BASE_URL` | ai | O | AI API가 임베딩을 부르는 Modal 엔드포인트의 기준 URL(`<URL>/embed`). 환경별 앱이 다르다. 키 이름은 AI 팀과 확정한다(제안) |
+| `EMBED_KEY` | ai | O | Modal `Modal-Key` 헤더 값(프록시 토큰 ID). 비밀 |
+| `EMBED_SECRET` | ai | O | Modal `Modal-Secret` 헤더 값. 비밀 |
+| `DB_POOL_SIZE` | ai | X | 컨테이너 하나가 장소를 읽으려고 여는 DB 접속 수(취향용 1개를 더 연다). role의 접속 상한 6을 넘지 않게 둔다. 기본 2 |
+| `MAX_CONCURRENT_REQUESTS` | ai | X | 컨테이너 하나가 동시에 처리하는 검색 수. 넘으면 503 `BUSY`다. 기본 8 |
+| `GMS_TIMEOUT_SECONDS` | ai | X | GMS를 한 번 부를 때 기다리는 시간(초). 기본 5 |
+| `PLACES_FILE` | ai | X | `DATABASE_URL`이 비었을 때 장소를 읽을 파일(실제 DB가 없을 때의 임시 구현이고 이미지에 파일이 있어야 한다) |
 | `BATCH_ENABLED` | app | O | 새벽 배치. dev 기본값은 `false` |
 | `MODAL_TIMEOUT_MS` | app | X | 일반 호출 타임아웃 |
 | `MODAL_COLD_START_TIMEOUT_MS` | app | X | 첫 호출(콜드 스타트) 타임아웃 |

@@ -29,6 +29,8 @@ from pathlib import Path
 KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
 FORBIDDEN_VALUE_CHARS = frozenset(" \t\"'#$`\\")
 SECRET_WORDS = frozenset({"KEY", "SECRET", "PASSWORD", "TOKEN", "HASH", "WEBHOOK"})
+# 이름에는 비밀 단어가 없지만 값에 비밀번호가 들어 있는 키(AI 컨테이너의 접속 주소)
+SECRET_KEYS = frozenset({"DATABASE_URL"})
 CONTRACT_KEY_RE = re.compile(r"^`([A-Z][A-Z0-9_]*)`$")
 
 # 파일 이름 → 계약 표의 그룹. 이 목록 밖의 이름은 받지 않는다(경로를 줄 수 없다)
@@ -37,6 +39,8 @@ FILES = {
     "dev": "app",
     "fe-prod": "fe",
     "fe-dev": "fe",
+    "ai-prod": "ai",
+    "ai-dev": "ai",
     "migrate-prod": "migrate",
     "migrate-dev": "migrate",
     "data": "data",
@@ -50,6 +54,7 @@ APPLY = {
     "app": "BE는 컨테이너를 만들 때 한 번 읽는다. 배포한 적이 있으면 같은 SHA를 다시 배포한다(infra/deploy/README.md). 아직 배포 전이면 첫 배포에 반영된다",
     "fe": "FE는 컨테이너를 만들 때 한 번 읽는다. 배포한 적이 있으면 같은 SHA를 다시 배포한다(infra/deploy/README.md). 아직 배포 전이면 첫 배포에 반영된다",
     "migrate": "다음 배포의 마이그레이션 컨테이너가 읽는다",
+    "ai": "AI API는 컨테이너를 만들 때 한 번 읽는다. 배포한 적이 있으면 같은 SHA를 다시 배포한다(infra/deploy/README.md). 아직 배포하지 않았으면 첫 배포가 읽는다",
     "edge": "sudo docker compose -p fit-edge -f <저장소>/infra/edge/compose.edge.yml --env-file /etc/fit/edge.env up -d --force-recreate",
     "obs": "sudo docker compose -p fit-obs -f <저장소>/infra/obs/compose.obs.yml --env-file /etc/fit/obs.env up -d --force-recreate obs-init prometheus alertmanager (일일 점검 요약은 실행할 때마다 읽는다)",
     "ops": "sudo docker compose -p fit-ops -f <저장소>/infra/ops/compose.ops.yml --env-file /etc/fit/ops.env up -d --force-recreate ops-init prometheus-b alertmanager-b",
@@ -67,7 +72,7 @@ def env_dir() -> Path:
 
 
 def is_secret(key: str) -> bool:
-    return any(w in SECRET_WORDS for w in key.split("_"))
+    return key in SECRET_KEYS or any(w in SECRET_WORDS for w in key.split("_"))
 
 
 def check_value(key: str, value: str) -> tuple[str, str | None]:

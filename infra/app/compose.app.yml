@@ -43,6 +43,26 @@ x-fe: &fe
     retries: 6
     start_period: 20s
 
+# AI API(FastAPI, 포트 8000. design.md 11.4절). 모델을 올리지 않고 임베딩은 Modal을 부른다. 환경마다 컨테이너 하나이고 Blue/Green이 아니다.
+# 호스트에 게시하지 않고 Caddy 경로도 없다. BE가 compose 망 안에서 서비스 이름(ai-prod, ai-dev)으로 부른다. 루트 파일시스템은 읽기 전용이다.
+x-ai: &ai
+  restart: unless-stopped
+  logging: *logging
+  stop_grace_period: 20s
+  init: true
+  read_only: true
+  tmpfs:
+    - /tmp
+  environment:
+    TZ: Asia/Seoul
+    HF_HUB_OFFLINE: "1"
+  healthcheck:
+    test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"]
+    interval: 10s
+    timeout: 5s
+    retries: 6
+    start_period: 20s
+
 services:
   be-prod-blue:
     <<: *be
@@ -137,6 +157,36 @@ services:
     networks: [net-dev]
     labels:
       com.fit.service: fe
+      com.fit.env: dev
+
+  ai-prod:
+    <<: *ai
+    profiles: [prod]
+    container_name: ai-prod
+    image: ${FIT_AI_IMAGE:-ai}:${AI_PROD_TAG:-none}
+    env_file:
+      - path: ${FIT_ENV_DIR:-/etc/fit}/ai-prod.env
+        required: false
+    mem_limit: 512m
+    cpu_shares: 2048
+    networks: [net-prod, net-data]
+    labels:
+      com.fit.service: ai
+      com.fit.env: prod
+
+  ai-dev:
+    <<: *ai
+    profiles: [dev]
+    container_name: ai-dev
+    image: ${FIT_AI_IMAGE:-ai}:${AI_DEV_TAG:-none}
+    env_file:
+      - path: ${FIT_ENV_DIR:-/etc/fit}/ai-dev.env
+        required: false
+    mem_limit: 400m
+    cpus: 0.5
+    networks: [net-dev, net-data]
+    labels:
+      com.fit.service: ai
       com.fit.env: dev
 
 networks:
