@@ -47,12 +47,20 @@ export function rememberResume(from: IntroAction) {
     /* Storage may be disabled. */
   }
 }
-export function takeResume(): IntroAction | undefined {
+export function peekResume(): IntroAction | undefined {
   try {
     const value = sessionStorage.getItem(RESUME_KEY);
-    sessionStorage.removeItem(RESUME_KEY);
     if (value === "start" || value === "login") return value;
   } catch {
     /* Storage may be disabled. */
   }
+}
+export function takeResume() {
+  const value = peekResume();
+  try {
+    sessionStorage.removeItem(RESUME_KEY);
+  } catch {
+    /* Storage may be disabled. */
+  }
+  return value;
 }

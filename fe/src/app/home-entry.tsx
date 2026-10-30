@@ -22,9 +22,9 @@ export function HomeEntry() {
   );
   // 홈 화면 추가 배너(4-01b)는 첫 화면부터 띄운다. 같은 주소의 최초화면·온보딩에서는 숨긴다
   useHideInstallBanner(screen !== "home");
-  // 가이드에서 돌아오면 온보딩을 첫 질문부터 새로 그린다. Cache Components가 떠난 화면을 상태째 되살려
-  // 최초화면 상태가 남아 있으므로 key를 바꿔 다시 마운트한다
-  const [onboarding, setOnboarding] = useState({ step: 0, key: 0 });
+  // 가이드 화면에서 새로고침한 뒤 돌아오면 이 화면이 새로 그려지므로 첫 질문부터 시작한다.
+  // 상태째 되살아나는 보통의 뒤로 가기는 가이드로 갈 때 이미 온보딩으로 바꿔 두어 여기를 거치지 않는다
+  const [onboardingStep, setOnboardingStep] = useState(0);
   useEffect(() => {
     let active = true;
     // 쿼리 없는 홈에 도착했을 때만 북마크 로그인 안내가 남긴 주소를 읽어 지운다(북마크 D-8)
@@ -36,8 +36,7 @@ export function HomeEntry() {
         router.replace("/login");
         return;
       }
-      if (!home && resume === "start")
-        setOnboarding((previous) => ({ step: 1, key: previous.key + 1 }));
+      if (!home && resume === "start") setOnboardingStep(1);
       setScreen(home ? "home" : "onboarding");
     }
     const timer = setTimeout(() => {
@@ -80,8 +79,7 @@ export function HomeEntry() {
           router.push("/signup");
         }}
         interceptIntro={installIntro.intercept}
-        key={onboarding.key}
-        initialStep={onboarding.step}
+        initialStep={onboardingStep}
       />
       {installIntro.dialog}
     </>

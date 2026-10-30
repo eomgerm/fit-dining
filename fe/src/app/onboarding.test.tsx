@@ -367,10 +367,11 @@ describe("홈 화면 추가 안내가 끝나면 누른 버튼이 하던 곳으�
         <HomeEntry />
       </Activity>,
     );
-    expect(
-      await screen.findByRole("radio", { name: "조용하고 차분한 곳" }),
-    ).toBeTruthy();
+    // 다시 보이는 첫 그림부터 온보딩이어야 한다. 최초화면(어두운 영상)이 한 번 그려지면 깜빡여 보인다
     expect(screen.queryByRole("button", { name: "시작하기" })).toBeNull();
+    expect(
+      screen.getByRole("radio", { name: "조용하고 차분한 곳" }),
+    ).toBeTruthy();
   });
 
   it("[기존 계정으로 로그인]으로 가이드에 갔다가 돌아오면 로그인 화면으로 보낸다", async () => {

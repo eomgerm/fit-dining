@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { IconButton } from "@/shared/ui/button/icon-button";
 import { ChevronLeftIcon } from "@/shared/ui/icon/icons/chevron-left";
 import { TopBar } from "@/shared/ui/layout/top-bar";
+import { peekResume, takeResume } from "../model/storage";
 
 export type InstallStep = {
   text: ReactNode;
@@ -22,9 +23,14 @@ export function InstallGuide({ steps }: { steps: InstallStep[] }) {
         start={
           <IconButton
             label="이전"
-            onClick={() =>
-              window.history.length > 1 ? router.back() : router.replace("/")
-            }
+            onClick={() => {
+              // 로그인하려다 온 거면 최초화면을 거치지 않고 바로 간다. 거치면 최초화면이 비쳤다 바뀌어 깜빡인다
+              if (peekResume() === "login") {
+                takeResume();
+                router.replace("/login");
+              } else if (window.history.length > 1) router.back();
+              else router.replace("/");
+            }}
           >
             <ChevronLeftIcon />
           </IconButton>

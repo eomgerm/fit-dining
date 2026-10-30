@@ -10,6 +10,8 @@ type InstallIntroDialogProps = {
   onInstall: () => void;
   // 누른 버튼의 원래 화면(온보딩·로그인)으로 간다
   onContinue: () => void;
+  // 닫힘 애니메이션까지 끝난 뒤
+  onClosed?: () => void;
 };
 
 // 1-01a 최초화면 홈 화면 추가 안내. 화면 아래에 붙는 창이라 Base UI AlertDialog에 바텀시트 모션을 쓴다.
@@ -18,12 +20,16 @@ export function InstallIntroDialog({
   open,
   onInstall,
   onContinue,
+  onClosed,
 }: InstallIntroDialogProps) {
   return (
     <AlertDialog.Root
       open={open}
       onOpenChange={(next) => {
         if (!next) onContinue();
+      }}
+      onOpenChangeComplete={(next) => {
+        if (!next) onClosed?.();
       }}
     >
       <AlertDialog.Portal>

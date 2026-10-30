@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { useEffect, useSyncExternalStore } from "react";
+import { useLayoutEffect, useSyncExternalStore } from "react";
 import { Button } from "@/shared/ui/button/button";
 import { IconButton } from "@/shared/ui/button/icon-button";
 import { CloseIcon } from "@/shared/ui/icon/icons/close";
@@ -30,8 +30,9 @@ function subscribeHidden(listener: () => void) {
     hiddenListeners.delete(listener);
   };
 }
+// 그리기 전에 숨겨야 화면이 되살아날 때 배너가 한 프레임 비치지 않는다
 export function useHideInstallBanner(active: boolean) {
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!active) return;
     setHidden(1);
     return () => setHidden(-1);

@@ -52,5 +52,5 @@ export function useInstall() {
     openGuide();
   }
 
-  return { available: !inApp && !installed, start };
+  return { available: !inApp && !installed, canPrompt, start };
 }
