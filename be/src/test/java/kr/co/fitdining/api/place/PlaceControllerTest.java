@@ -496,7 +496,7 @@ class PlaceControllerTest {
 		@ParameterizedTest(name = "{0}")
 		@ValueSource(strings = {"suggest", "detail"})
 		@DisplayName("자동완성과상세_Authorization헤더를보지않아_잘못된토큰이어도응답이같다")
-		void suggestAndDetail_ignoreAuthorization(String endpoint) throws Exception {
+		void suggestAndDetail_invalidAuthorization_sameResponse(String endpoint) throws Exception {
 			when(auth.authenticate(any())).thenThrow(new AuthFailure("x"));
 			String plain = mockMvc.perform(request(endpoint)).andExpect(status().isOk())
 					.andReturn().getResponse().getContentAsString();

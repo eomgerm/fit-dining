@@ -165,12 +165,14 @@ public class AiSearchClient {
 	/** {@code 503 BUSY}면 남은 예산 안에서 한 번만 다시 부른다(기다리지 않는다). */
 	private Response call(byte[] body) {
 		long deadline = System.nanoTime() + budget.toNanos();
-		Attempt attempt = attempt(body, deadline);
+		Attempt attempt = attempt(body, budget, deadline);
 		if (attempt.busy()) {
-			if (remaining(deadline) <= 0) {
+			// 남은 예산을 한 번만 재서 그 값으로 다시 부른다. 두 번 재면 그 사이에 예산이 끝나 음수 제한 시간이 될 수 있다.
+			long left = remaining(deadline);
+			if (left <= 0) {
 				throw new Failure(Kind.BUSY, "503");
 			}
-			attempt = attempt(body, deadline);
+			attempt = attempt(body, Duration.ofNanos(left), deadline);
 			if (attempt.busy()) {
 				throw new Failure(Kind.BUSY, "503");
 			}
@@ -181,9 +183,9 @@ public class AiSearchClient {
 		throw new Failure(attempt.status() >= 500 ? Kind.SERVER_ERROR : Kind.STATUS, Integer.toString(attempt.status()));
 	}
 
-	private Attempt attempt(byte[] body, long deadline) {
+	private Attempt attempt(byte[] body, Duration timeout, long deadline) {
 		try {
-			return clients.apply(Duration.ofNanos(remaining(deadline))).post()
+			return clients.apply(timeout).post()
 					.uri(URI.create(baseUrl + PATH))
 					.contentType(MediaType.APPLICATION_JSON)
 					.headers(headers -> {
@@ -252,26 +254,51 @@ public class AiSearchClient {
 	}
 
 	/**
-	 * AI 응답 중 BE가 읽는 속성. 그 밖의 속성은 어느 깊이에서든 무시한다.
+	 * AI 응답 중 BE가 읽는 속성. 그 밖의 속성은 어느 깊이에서든 무시한다. {@code items} 말고는 AI가 빼면 null이다.
 	 *
-	 * @param interpretedBy 로그에만 쓴다. 어떤 JSON 값이든 받는다.
-	 * @param rankedBy 로그에만 쓴다
-	 * @param models 로그에만 쓴다
+	 * @param conditions AI가 해석한 검색 조건. 응답 {@code conditions}로 그대로 옮긴다. 빠지면 null이다.
+	 * @param nearby 근처 검색인지. 빠지면 null이다.
+	 * @param changeSummary 후속 검색에서 바뀐 점. 새 검색이면 빠져 null이다.
+	 * @param emptyReason 결과가 없을 때의 원인과 제안. 결과가 있으면 빠져 null이다.
+	 * @param items 카드. 응답 순서가 화면 순서다. 읽을 수 있는 응답에서는 null이 아니고 null 원소도 없다.
+	 * @param fallbacks AI가 대신 처리한 이유. 빠지면 null이다. null 원소는 없다.
+	 * @param interpretedBy 로그에만 쓴다. 어떤 JSON 값이든 받는다. 빠지면 null이다.
+	 * @param rankedBy 로그에만 쓴다. 결과가 없으면 빠져 null이다.
+	 * @param models 로그에만 쓴다. 빠지면 null이다.
 	 */
 	public record Response(Map<String, Object> conditions, Boolean nearby, String changeSummary,
 			EmptyReason emptyReason, List<Item> items, List<String> fallbacks, JsonNode interpretedBy,
 			JsonNode rankedBy, JsonNode models) {
 	}
 
-	/** AI 카드. {@code placeId}로 카탈로그의 장소 정보를 붙인다. */
+	/**
+	 * AI 카드. {@code placeId}로 카탈로그의 장소 정보를 붙인다. 목록에는 null 원소가 없다.
+	 *
+	 * @param placeId 장소 id. null이 아니다.
+	 * @param score 핏 점수. 빠지면 null이다.
+	 * @param labels 카드 라벨. 빠지면 null이다.
+	 * @param reasons 추천 이유. 빠지면 null이다.
+	 * @param scoreItems 점수 항목. 빠지면 null이다.
+	 */
 	public record Item(Long placeId, Integer score, List<String> labels, List<Reason> reasons,
 			List<ScoreItem> scoreItems) {
 	}
 
-	/** 차단기 상태. 연속 실패 수와 차단이 끝나는 시각(차단 중이 아니면 null)을 함께 바꾼다. */
+	/**
+	 * 차단기 상태. 두 값을 함께 바꾼다.
+	 *
+	 * @param failures 연속 실패 수
+	 * @param openUntil 차단이 끝나는 시각. 연속 실패 수가 임계값보다 적으면 null이다.
+	 */
 	private record Breaker(int failures, Instant openUntil) {
 	}
 
+	/**
+	 * 한 번 부른 결과.
+	 *
+	 * @param status HTTP 상태 코드
+	 * @param body 응답 본문. 로그에 남기지 않는다.
+	 */
 	private record Attempt(int status, byte[] body) {
 
 		/** 상태 503이고 ProblemDetail {@code code}가 {@code BUSY} */
@@ -290,7 +317,18 @@ public class AiSearchClient {
 
 	/** 실패 종류. 차단기는 {@code counted}인 종류(연결 실패, 시간 초과, 5xx, 재시도 뒤 BUSY)만 센다. */
 	enum Kind {
-		CONNECTION(true), TIMEOUT(true), SERVER_ERROR(true), BUSY(true), STATUS(false), INVALID(false);
+		/** ② 연결 실패. 시간 초과가 아닌 I/O 오류(이름 풀이, 연결 거부·끊김, 본문을 읽다 끊김) */
+		CONNECTION(true),
+		/** ③ 재시도까지 합친 예산 안에 응답이 없음 */
+		TIMEOUT(true),
+		/** ④ BUSY가 아닌 5xx */
+		SERVER_ERROR(true),
+		/** ⑤ 재시도 뒤에도 503 BUSY이거나, 남은 예산이 없어 재시도하지 못함 */
+		BUSY(true),
+		/** ⑥ 200도 5xx도 아닌 상태(4xx, 3xx, 200 외 2xx) */
+		STATUS(false),
+		/** ⑦ 200이지만 읽을 수 없는 응답, 또는 I/O 오류가 아닌 그 밖의 예외(형식이 잘못된 주소 포함) */
+		INVALID(false);
 
 		final boolean counted;
 

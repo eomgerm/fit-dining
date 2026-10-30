@@ -130,6 +130,27 @@ class AiSearchClientBudgetTest {
 	}
 
 	@Test
+	@DisplayName("예산_200헤더뒤본문을읽다끊기면_연결실패로대체한다")
+	void budget_bodyCutAfterHeaders_connectionFailure(CapturedOutput output) {
+		// Content-Length보다 적게 보내고 바로 닫는다. 기다리지 않으므로 시간 초과가 아니다.
+		handler = (exchange, call) -> {
+			byte[] bytes = OK.getBytes(StandardCharsets.UTF_8);
+			exchange.getResponseHeaders().set("Content-Type", "application/json");
+			exchange.sendResponseHeaders(200, bytes.length);
+			exchange.getResponseBody().write(bytes, 0, 5);
+			exchange.getResponseBody().flush();
+			throw new IOException("cut");
+		};
+		AiSearchClient client = new AiSearchClient("http://127.0.0.1:" + http.getAddress().getPort(), "", "",
+				Duration.ofSeconds(5), Clock.systemUTC());
+
+		long elapsed = timed(() -> assertThat(client.search(request(), null)).isEmpty());
+
+		assertThat(elapsed).isLessThan(4000);
+		assertThat(output.getAll()).contains("WARN").contains("kind=CONNECTION").doesNotContain(SECRET);
+	}
+
+	@Test
 	@DisplayName("예산_BUSY뒤재시도가늦으면_재시도까지합쳐예산안에서끊는다")
 	void budget_slowRetryAfterBusy_staysWithinBudget(CapturedOutput output) {
 		handler = (exchange, call) -> {

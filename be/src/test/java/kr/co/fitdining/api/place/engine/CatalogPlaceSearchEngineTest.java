@@ -158,8 +158,8 @@ class CatalogPlaceSearchEngineTest {
 		}
 
 		@Test
-		@DisplayName("자동완성과상세는_AI를부르지않는다")
-		void suggestAndDetail_doNotCallAi() {
+		@DisplayName("자동완성과상세_어떤입력이든_AI를부르지않는다")
+		void suggestAndDetail_anyInput_doNotCallAi() {
 			when(keywordSearch.search("역삼", 0, 5)).thenReturn(List.of());
 			engine.suggest("역삼");
 			engine.findPlace(1L);
@@ -173,7 +173,7 @@ class CatalogPlaceSearchEngineTest {
 
 		@Test
 		@DisplayName("AI카드_순서와AI필드를그대로옮기고_장소와영업상태를붙인다")
-		void aiCards_keepOrderAndFields() {
+		void aiCards_aiResponse_keepOrderAndFields() {
 			Reason reason = new Reason("제목", List.of(new ReasonTag(EvidenceSource.REQUEST, "조용해요")), "인용", "앱 리뷰");
 			ScoreItem scoreItem = new ScoreItem(EvidenceSource.PREFERENCE, "넓어요", true, 3);
 			Map<String, Object> conditions = new HashMap<>();
@@ -281,7 +281,7 @@ class CatalogPlaceSearchEngineTest {
 
 		@Test
 		@DisplayName("AI카드_읽을수있는응답이면_interpretedBy와rankedBy와models를INFO로남기고문구는남기지않는다")
-		void aiCards_logsModelsWithoutText(CapturedOutput output) {
+		void aiCards_readableResponse_logsModelsWithoutText(CapturedOutput output) {
 			JsonMapper mapper = JsonMapper.builder().build();
 			Reason reason = new Reason(SECRET, List.of(new ReasonTag(EvidenceSource.REQUEST, SECRET)), SECRET, SECRET);
 			ai(new AiSearchClient.Response(Map.of("text", SECRET), false, SECRET, new EmptyReason(SECRET, SECRET),
@@ -443,7 +443,7 @@ class CatalogPlaceSearchEngineTest {
 
 		@Test
 		@DisplayName("대체_카드는점수없이빈목록이고_conditions는받은값이며커서와요약이없다")
-		void fallback_cardShape() {
+		void fallback_keywordHit_cardWithoutScore() {
 			unavailable();
 			when(keywordSearch.search(any(), anyInt(), anyInt())).thenReturn(List.of(hit(A)));
 			when(catalog.cards(any())).thenReturn(List.of(card(A, OpenStatus.CLOSING_SOON)));
@@ -494,8 +494,8 @@ class CatalogPlaceSearchEngineTest {
 		}
 
 		@Test
-		@DisplayName("대체_로그에검색문장과이전조건이없다")
-		void fallback_doesNotLogInput(CapturedOutput output) {
+		@DisplayName("대체_입력에표식이있어도_로그에검색문장과이전조건이없다")
+		void fallback_secretInput_notLogged(CapturedOutput output) {
 			when(aiClient.search(any(), any())).thenThrow(new IllegalStateException(SECRET));
 			when(keywordSearch.search(any(), anyInt(), anyInt())).thenReturn(List.of());
 

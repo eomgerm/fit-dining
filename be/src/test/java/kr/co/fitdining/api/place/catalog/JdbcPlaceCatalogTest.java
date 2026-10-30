@@ -285,7 +285,7 @@ class JdbcPlaceCatalogTest extends PostgresTestSupport {
 	}
 
 	@Test
-	@DisplayName("id로카드읽기_있는id만한번에읽고점수와이유는비어있다")
+	@DisplayName("id로카드읽기_없는id가섞여있으면_있는id만읽고점수와이유는비어있다")
 	void cards_byIds_readsKnownOnlyWithoutScore() {
 		long first = place("가", "CAFE", "GANGNAM");
 		long second = place("나", "BAR", "SEOLLEUNG");

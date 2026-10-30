@@ -231,6 +231,16 @@ class AiSearchClientTest {
 			assertThat(output.getAll()).contains("ERROR").contains("kind=INVALID");
 		}
 
+		@Test
+		@DisplayName("AI실패_형식이잘못된주소로빈을만들어도_생성은실패하지않고검색은대체한다")
+		void failure_malformedBaseUrlInBeanConstructor_constructsAndFallsBack(CapturedOutput output) {
+			// 스프링이 쓰는 생성자다. 여기서 주소를 해석하면 기동이 실패한다(AC-7 ⑦).
+			AiSearchClient bean = new AiSearchClient("http://ai test", "", "", Optional.empty());
+
+			assertThat(bean.search(request("카페"), null)).isEmpty();
+			assertThat(output.getAll()).contains("ERROR").contains("kind=INVALID");
+		}
+
 		@ParameterizedTest
 		@ValueSource(classes = {UnknownHostException.class, ConnectException.class, IOException.class})
 		@DisplayName("AI실패_연결실패는_WARN이다")
@@ -445,7 +455,7 @@ class AiSearchClientTest {
 
 		@Test
 		@DisplayName("차단기_두번실패뒤성공하면_수가0이되어다시세번이필요하다")
-		void breaker_successResetsCount(CapturedOutput output) {
+		void breaker_successAfterTwoFailures_resetsCount(CapturedOutput output) {
 			fail(2);
 			succeed();
 			fail(2);
