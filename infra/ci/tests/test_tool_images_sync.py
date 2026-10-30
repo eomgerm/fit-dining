@@ -53,7 +53,7 @@ class ToolImagesSyncTest(unittest.TestCase):
     def test_app_dockerfile_base_defaults_match_the_pins(self):
         # hadolint가 FROM의 태그를 요구해서 Dockerfile에 핀 값을 직접 적는다. build-images.sh는 tool-images.sh의 값을 --build-arg로 넘기므로
         # 기본값이 어긋나도 이미지는 핀대로 만들어지지만, 같은 값으로 두어야 읽는 사람이 속지 않는다
-        for dockerfile, var in (("infra/app/Dockerfile.be", "JRE_IMAGE"), ("infra/app/Dockerfile.fe", "NODE_IMAGE")):
+        for dockerfile, var in (("infra/app/Dockerfile.be", "JRE_IMAGE"), ("infra/app/Dockerfile.fe", "NODE_IMAGE"), ("infra/app/Dockerfile.ai", "PYTHON_IMAGE")):
             text = (ROOT / dockerfile).read_text(encoding="utf-8")
             m = re.search(r"^ARG BASE_IMAGE=(\S+)\s*$", text, re.MULTILINE)
             self.assertIsNotNone(m, f"{dockerfile}에 ARG BASE_IMAGE 기본값이 없다")

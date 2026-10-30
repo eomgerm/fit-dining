@@ -65,6 +65,8 @@ prune_and_networks() {
   ok_if "prune: 쓰지 않는 오래된 SHA 이미지(abc001)는 지운다. 같은 이미지의 rc1 태그는 SHA 모양이 아니라 남는다" "$([ "$(has "$be_tags" abc001)$(has "$be_tags" rc1)" = 01 ] && echo 1 || echo 0)"
   ok_if "prune: latest 같은 태그는 건드리지 않는다" "$(has "$be_tags" latest)"
   ok_if "prune: SHA 태그가 5개 이하인 fe는 그대로다" "$([ "$(has "$fe_tags" def001)$(has "$fe_tags" def002)$(has "$fe_tags" def003)" = 111 ] && echo 1 || echo 0)"
+  # 기본 대상(FIT_PRUNE_REPOS를 안 주면 be fe ai)에 ai가 있다. 이름이 시험용이라 이 PC의 실제 이미지를 지우지 않게 스크립트의 기본값만 읽는다
+  ok_if "prune: 기본 대상에 ai가 있다(AI 이미지가 SHA마다 쌓이기만 하지 않는다)" "$(has "$(grep -E '^REPOS=' infra/host/docker-prune.sh)" 'be fe ai')"
   local rc
   FIT_ROLE='' bash infra/host/docker-prune.sh >/dev/null 2>&1 && rc=0 || rc=$?
   ok_if "prune: 역할을 모르면 종료 코드 2로 멈춘다" "$([ "$rc" = 2 ] && echo 1 || echo 0)"

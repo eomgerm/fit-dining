@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Docker 이미지와 빌더 캐시를 정리한다(설계 3절). systemd 타이머(fit-docker-prune.timer)가 주 1회 부른다.
-#   app(서버 A): be·fe 이미지는 SHA 태그 중 최근 5개만 남긴다. 롤백이 직전 색의 이미지를 쓰므로 그 밖의 이미지는 지우지 않는다.
+#   app(서버 A): be·fe·ai 이미지는 SHA 태그 중 최근 5개만 남긴다. 롤백이 직전 색의 이미지를 쓰므로 그 밖의 이미지는 지우지 않는다.
 #   ops(서버 B): 7일 넘게 쓰지 않은 이미지를 모두 지운다. 러너가 필요하면 다시 받는다.
 # 볼륨은 지우지 않는다(데이터가 있다).
-# 환경변수: FIT_ROLE(기본은 /etc/fit/role), FIT_PRUNE_KEEP(기본 5), FIT_PRUNE_REPOS(app의 대상 이미지 이름, 기본 "be fe")
+# 환경변수: FIT_ROLE(기본은 /etc/fit/role), FIT_PRUNE_KEEP(기본 5), FIT_PRUNE_REPOS(app의 대상 이미지 이름, 기본 "be fe ai")
 set -euo pipefail
 
 ROLE="${FIT_ROLE:-$(cat /etc/fit/role 2>/dev/null || true)}"
 KEEP="${FIT_PRUNE_KEEP:-5}"
-REPOS="${FIT_PRUNE_REPOS:-be fe}"
+REPOS="${FIT_PRUNE_REPOS:-be fe ai}"
 
 case "$ROLE" in
   app)
