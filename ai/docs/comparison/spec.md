@@ -1,6 +1,6 @@
 # 취향-가게 비교 베이스라인
 
-Status: draft · Jira: S15P31A302-41 · 작성일: 2026-10-23 · 고친 날: 2026-10-29
+Status: draft · Jira: S15P31A302-41 · 작성일: 2026-10-23 · 고친 날: 2026-10-30
 
 비교 파트는 검색 요청을 해석하고, 조건에 맞는 장소를 DB에서 뽑아 장소 프로필과 취향 프로필로 순위를 매긴 뒤 카드로 내보낸다. BE는 검색마다 AI를 한 번 부른다. AI는 장소 데이터를 들고 있지 않고 검색마다 Postgres 뷰 하나를 pgvector로 읽는다. 정렬은 LLMRank로 한다. 맞음 등급은 코드가 요청 조건 체크표로 정하고, LLM은 같은 등급 안의 순서를 정한다. 점수는 등급과 순위로, 카드의 나머지는 규칙으로 채운다. 다른 담당과 맞출 것은 6장, 다음 할 일은 7장에 있다.
 
@@ -107,7 +107,7 @@ LLM이 꺼져 있거나 실패하면 낱말 사전으로 해석한다. "조용" 
 
 ### 4.2 후보 추출 (`match/pg_store.py`, `match/place.py`)
 
-AI가 뷰 `ai_place_search`를 SQL 한 번으로 읽어 거르고 뽑는다. 뷰의 컬럼은 로컬 개발 DB(`scripts/dev_db.py`의 `SCHEMA_SQL`)에 있다. 실제 장소 DB가 생기기 전에는 같은 행을 담은 JSON 파일(`PLACES_FILE`, 예시는 `samples/place/mock.json`의 BE Mock 장소 30곳)을 `match/json_store.py`가 같은 규칙으로 읽는다. 검색 흐름은 장소 저장소 인터페이스(`PlaceStore`)만 알아서 어느 쪽이든 그대로다.
+AI가 뷰 `ai_place_search`를 SQL 한 번으로 읽어 거르고 뽑는다. 뷰의 컬럼은 로컬 개발 DB(`scripts/dev_db.py`의 `SCHEMA_SQL`)에 있다. 실제 장소 DB가 생기기 전에는 같은 행을 담은 JSON 파일(`PLACES_FILE`, 예시는 `samples/place/mock.json`의 BE Mock 장소)을 `match/json_store.py`가 같은 규칙으로 읽는다. 검색 흐름은 장소 저장소 인터페이스(`PlaceStore`)만 알아서 어느 쪽이든 그대로다.
 
 거르기 규칙:
 

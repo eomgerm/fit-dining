@@ -2,7 +2,8 @@
 
 `test_pg_store.py`와 같은 예시 장소와 같은 기대값을 써서 두 구현체가 같은 결과를 내는지
 본다. 벡터는 2차원 가짜 값이고, 모델·리비전은 공유 모듈 `fit_ai.embedding`의 값을 쓴다.
-커밋한 예시 파일(`samples/place/mock.json`)이 지금 인코더와 맞는지도 본다.
+커밋한 예시 파일(`samples/place/mock.json`)이 지금 인코더와 맞는지, BE Mock과 같은
+장소인지도 본다.
 """
 
 import json
@@ -16,6 +17,9 @@ from fit_ai.match.json_store import JsonPlaceStore
 
 QUERY = (1.0, 0.0)
 MOCK_FILE = Path(__file__).resolve().parents[2] / "samples" / "place" / "mock.json"
+BE_MOCK_FILE = (
+    Path(__file__).resolve().parents[3] / "be/src/main/resources/mock/places.json"
+)
 
 
 def profile(
@@ -189,7 +193,27 @@ class TestCounts:
 
     def test_mock_file_matches_encoder(self) -> None:
         """예시파일_지금인코더로만든벡터라_모든장소를비교할수있다"""
+        count = len(json.loads(MOCK_FILE.read_text(encoding="utf-8")))
         store = JsonPlaceStore(MOCK_FILE)
 
-        assert store.vector_counts() == VectorCounts(comparable=30, mismatched=0)
-        assert store.find(PlaceFilter(), [1.0] * 1024, 30).invalid == ()
+        assert store.vector_counts() == VectorCounts(comparable=count, mismatched=0)
+        assert store.find(PlaceFilter(), [1.0] * 1024, count).invalid == ()
+
+
+class TestMockFile:
+    """예시 파일"""
+
+    def test_mock_file_matches_be_mock(self) -> None:
+        """예시파일_BE_Mock과_장소id·업종·역이같다"""
+        # 검색 응답에는 placeId만 있어 BE가 자기 Mock에서 가게를 찾는다.
+        rows = json.loads(MOCK_FILE.read_text(encoding="utf-8"))
+        be_places = json.loads(BE_MOCK_FILE.read_text(encoding="utf-8"))["places"]
+
+        ours = {(r["place_id"], r["category_group"], r["station"]) for r in rows}
+        be = {
+            (p["id"], p["categoryGroup"], p["station"])
+            for p in (place["card"]["place"] for place in be_places)
+        }
+        assert ours == be, (
+            "BE Mock이 바뀌었다. scripts/dev_db.py --json으로 예시 파일을 다시 만든다"
+        )

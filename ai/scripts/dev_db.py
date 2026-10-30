@@ -1,8 +1,8 @@
 """로컬 개발용 Postgres(pgvector)를 띄우고 예시 장소를 채운다.
 
-pgserver(개발 의존성)로 Docker 없이 띄운다. BE Mock 장소 30곳
-(`be/src/main/resources/mock/places.json`)을 40 장소 프로필 모양으로 바꾸고, 요약
-문장을 공유 모듈 `fit_ai.embedding`의 문서 쪽 함수로 인코딩해 넣는다. 리뷰 수와 시설은 Mock 카드의 라벨과
+pgserver(개발 의존성)로 Docker 없이 띄운다. BE Mock 장소
+(`be/src/main/resources/mock/places.json`)를 40 장소 프로필 모양으로 바꾸고, 요약
+문장을 공유 모듈 `fit_ai.embedding`의 문서 쪽 함수로 인코딩해 넣는다. 리뷰 수는 Mock 카드의 라벨과
 태그로 만든 예시 값이라 실제 데이터와 다르다.
 
 AI가 읽는 장소는 뷰 `ai_place_search` 하나다(`fit_ai.match.pg_store`). 여기서는 BE
@@ -94,7 +94,13 @@ LABEL_CODES = {
 }
 """Mock 카드 라벨과 태그를 코드로 바꾸는 표. 없는 말은 버린다."""
 
-FACILITIES = ("PARKING", "WIFI", "GROUP", "RESERVATION")
+FACILITY_CODES = {
+    "주차": "PARKING",
+    "무선 인터넷": "WIFI",
+    "단체 이용 가능": "GROUP",
+    "예약": "RESERVATION",
+}
+"""Mock 편의시설 이름을 시설 코드로 바꾸는 표. 없는 말은 버린다."""
 
 
 def main() -> None:
@@ -104,7 +110,7 @@ def main() -> None:
     parser.add_argument("--json", type=Path, help="DB 대신 이 파일에 장소를 쓴다")
     args = parser.parse_args()
     if args.stop:
-        pgserver.pg_ctl(["-D", str(args.data), "stop"])
+        pgserver.pg_ctl(["stop"], pgdata=args.data)
         print("멈췄다:", args.data)
         return
 
@@ -140,11 +146,18 @@ def main() -> None:
 def _summary(place: dict) -> str:
     """40 요약처럼 장소 정보로만 틀 문장을 만든다. 리뷰 내용은 넣지 않는다."""
     info = place["card"]["place"]
-    menus = list(dict.fromkeys(menu["category"] for menu in place["detail"]["menus"]))
-    return (
-        f"{CATEGORY_NAMES[info['categoryGroup']]}, {info['name']}. "
-        f"{', '.join(menus[:3])}. {STATION_NAMES[info['station']]} 근처."
+    # 메뉴 분류가 없으면 메뉴 이름을 쓴다. 메뉴가 없는 장소도 있다.
+    menus = list(
+        dict.fromkeys(
+            menu.get("category") or menu["name"] for menu in place["detail"]["menus"]
+        )
     )
+    parts = [
+        f"{CATEGORY_NAMES[info['categoryGroup']]}, {info['name']}.",
+        f"{', '.join(menus[:3])}." if menus else "",
+        f"{STATION_NAMES[info['station']]} 근처.",
+    ]
+    return " ".join(part for part in parts if part)
 
 
 def _features(place: dict, rng: random.Random) -> list[dict]:
@@ -183,7 +196,10 @@ def _features(place: dict, rng: random.Random) -> list[dict]:
 def _row(place: dict, summary: str, vector: list[float]) -> dict:
     """Mock 장소 하나를 뷰 `ai_place_search`의 행 모양으로 만든다. 요약 벡터는 프로필 안에 둔다."""
     info = place["card"]["place"]
-    present = set(place["detail"]["facilities"])
+    present = {FACILITY_CODES.get(name) for name in place["detail"]["facilities"]}
+    # 편의시설에 주차가 없어도 주차 안내가 있으면 주차할 수 있다고 본다.
+    if place["detail"].get("parking"):
+        present.add("PARKING")
     return {
         "place_id": info["id"],
         "category_group": info["categoryGroup"],
@@ -191,7 +207,7 @@ def _row(place: dict, summary: str, vector: list[float]) -> dict:
         "lat": info["lat"],
         "lng": info["lng"],
         # Mock은 있는 시설만 적는다. 예시라서 적히지 않은 시설은 없음으로 둔다.
-        "facilities": {code: code in present for code in FACILITIES},
+        "facilities": {code: code in present for code in FACILITY_CODES.values()},
         "profile": {
             "schema": "place-profile/v0",
             "place_id": f"mock-{info['id']}",
