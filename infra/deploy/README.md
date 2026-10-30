@@ -1,13 +1,13 @@
 # 배포 (deploy)
 
-서버 A에서 BE·FE를 배포하고 되돌린다. prod는 Blue/Green, dev는 단일 색 교체다. 설계는 [design.md](../../docs/infra/design.md) 6.4절과 6.8절이다. GitLab이 죽어도 서버에서 직접 실행할 수 있다.
+서버 A에서 BE·FE를 배포하고 되돌린다(AI API는 켠 환경에서만, 아래 "AI API"). prod는 Blue/Green, dev는 단일 색 교체다. 설계는 [design.md](../../docs/infra/design.md) 6.4절과 6.8절이다. GitLab이 죽어도 서버에서 직접 실행할 수 있다.
 
 ## 자주 하는 일
 
 | 하고 싶은 일 | 명령 |
 |---|---|
-| 배포 | `bash infra/deploy/deploy.sh <prod\|dev> <sha>`(이미지 `be:<sha>`, `fe:<sha>`가 있어야 한다) |
-| 직전으로 되돌리기 | `bash infra/deploy/rollback.sh <prod\|dev> [be\|fe\|all]` |
+| 배포 | `bash infra/deploy/deploy.sh <prod\|dev> <sha>`(이미지 `be:<sha>`, `fe:<sha>`가 있어야 한다. AI를 켠 환경은 `ai:<sha>`도 쓴다) |
+| 직전으로 되돌리기 | `bash infra/deploy/rollback.sh <prod\|dev> [be\|fe\|ai\|all]` |
 | 배포 전 점검만 | `bash infra/deploy/preflight.sh <prod\|dev> <sha>` |
 | 배포한 서비스 확인 | `bash infra/deploy/smoke.sh <prod\|dev> [--sha <sha>] [--only be\|fe]` |
 | 지금 활성 색 보기 | `bash infra/edge/edgectl.sh status` |
@@ -30,6 +30,17 @@ CI가 아닌 곳에서 `deploy.sh`를 직접 실행하려면 `SKIP_VERIFY=<사�
 
 BE·FE 컨테이너는 만들어질 때 `env_file`을 한 번만 읽는다. `/etc/fit/<env>.env`나 `fe-<env>.env`를 바꿔도 떠 있는 컨테이너는 그대로이고 `docker restart`도 다시 읽지 않는다. 배포한 적이 있으면 같은 SHA를 다시 배포한다(prod는 반대 색을 새 값으로 띄워 전환하므로 끊기지 않고, dev는 컨테이너를 교체하는 동안 잠깐 끊긴다). 아직 배포한 적이 없으면 첫 배포에 반영된다. 값을 넣고 점검하는 도구는 [infra/host/envset.py](../host/README.md)다.
 
+## AI API (선택)
+
+AI API(`ai-prod`, `ai-dev`, 설계 11.4절)는 **`/etc/fit/ai-<환경>.env`가 있는 환경에서만** 이미지를 만들고 배포한다. 파일이 없으면 지금까지와 같다.
+
+- 순서는 AI → BE → FE다(BE가 AI를 부른다). 색이 없고 한 컨테이너를 교체한다. 확인은 같은 망에서 `/healthz`가 200인지와 떠 있는 컨테이너의 이미지가 이 SHA인지다.
+- **AI가 실패해도 BE·FE 배포는 계속한다.** 준비되지 않으면 직전 이미지로 돌리고(없으면 컨테이너를 치우고) 로그에 `경고: [ai]`를 남기며 완료 알림에 AI 상태를 덧붙인다. BE에 키워드 검색 폴백이 있기 때문이다.
+- AI 이미지가 없으면(AI 빌드 실패) 사전 점검이 SKIP하고 배포가 AI만 건너뛴다. 사전 점검은 `ai-<환경>.env`의 `APP_ENV`와 자리표시자, 필수 키, 그리고 `DATABASE_URL`이 이 환경의 DB와 읽기 전용 role(`fit_<환경>_ai`)인지 본다(환경이 섞이지 않게).
+- 배포마다 `infra/data/grant-ai-read.sh`로 AI role의 읽기 권한을 맞춘다(마이그레이션이 뷰를 만든 뒤에도 맞아야 한다). 실패하면 경고만 한다.
+- `rollback.sh <환경> all`은 AI도 직전 이미지로 되돌리고(못 되돌리면 경고만), `rollback.sh <환경> ai`는 AI만 되돌린다(못 되돌리면 실패).
+- 켜는 절차와 장애 대응은 [RB-14](../../docs/infra/runbooks/RB-14.md)다.
+
 ## 배포가 하는 일 (prod)
 
 1. `preflight.sh`: env 파일(권한, `APP_ENV`, 자리표시자, 필수 키), FE의 `BE_INTERNAL_URL`이 이 환경의 엣지 내부 리스너(prod `caddy:8081`, dev `caddy:8082`)인지, compose 설정, 공유 망과 엣지, 디스크와 메모리 여유, 이미지와 커밋, **다운그레이드 가드**(현재 배포된 커밋의 후손이거나 같은 커밋만 허용), 마이그레이션이 있으면 사전 덤프 스크립트
@@ -46,14 +57,16 @@ BE·FE 컨테이너는 만들어질 때 `env_file`을 한 번만 읽는다. `/et
 | 사전 점검, 잠금, 사전 덤프, 마이그레이션 | 서비스를 건드리지 않고 멈춘다 |
 | 새 색이 안 뜨거나 준비·직접 확인에 실패 | 새 색을 지우고 트래픽은 옮기지 않는다 |
 | 엣지 전환 뒤 확인에 실패 | 엣지를 이전 색으로 되돌리고 새 색을 지운다 |
+| AI API가 준비되지 않음(켠 환경) | 직전 이미지로 돌리고(없으면 치우고) BE·FE 배포는 계속한다. 로그와 완료 알림에 AI 경고가 남는다 |
 | BE는 성공했는데 FE가 실패 | FE만 이전 색이다. BE는 새 버전으로 남는다(새 BE는 직전 FE와 호환돼야 한다. BE 계약 #16). 문제를 고쳐 같은 SHA로 다시 배포하거나 `rollback.sh prod be`로 BE를 되돌린다 |
 
 dev는 같은 흐름이지만 색이 없어서 교체하고, 확인에 실패하면 직전 이미지로 다시 교체한다. DB 마이그레이션은 어느 경우에도 되돌리지 않는다(forward-fix 원칙).
 
 ## 서버가 갖출 것
 
-- 이미지 `be:<sha>`, `fe:<sha>`(CI의 `build:images`가 만든다. 환경변수 `FIT_BE_IMAGE`, `FIT_FE_IMAGE`로 저장소 이름을 바꿀 수 있다)
+- 이미지 `be:<sha>`, `fe:<sha>`(CI의 `build:images`가 만든다. 환경변수 `FIT_BE_IMAGE`, `FIT_FE_IMAGE`로 저장소 이름을 바꿀 수 있다). AI를 켠 서버는 `ai:<sha>`도 만든다(`FIT_AI_IMAGE`, `ai/` 소스에서 조립하고 실패해도 BE·FE를 막지 않는다)
 - `/etc/fit/<env>.env`, `fe-<env>.env`, `migrate-<env>.env`(키는 [env.md](../../docs/infra/contracts/env.md)의 `app`, `fe`, `migrate` 그룹). 다른 사용자가 읽을 수 없어야 한다
+- AI를 켜려면 `/etc/fit/ai-<env>.env`(`ai` 그룹)와 `data.env`의 `FIT_<ENV>_AI_PASSWORD`, 그리고 `ensure-databases.sh`로 만든 읽기 전용 role이 먼저 있어야 한다([data](../data/README.md))
 - 호스트 설정(`infra/host/`)과 엣지(`infra/edge/`)가 먼저 떠 있어야 한다. 엣지의 첫 상태 파일은 `infra/edge/state-sample/`을 `/srv/fit/state/`에 복사한 것이다(prod는 blue를 가리킨다)
 - prod 마이그레이션이 있는 배포는 사전 덤프 스크립트가 있어야 한다. 기본은 `infra/backup/pg-backup.sh`이고 `predeploy <환경> <sha>`로 부른다(결과는 `/srv/fit/predeploy/`, [backup](../backup/README.md)). `FIT_PREDEPLOY_DUMP`로 바꿀 수 있다
 - 데이터 스택(`infra/data/`)과 `/etc/fit/data.env`. `fit-up.sh`가 올리고 DB·버킷 초기화까지 한다([data](../data/README.md))
@@ -63,6 +76,7 @@ dev는 같은 흐름이지만 색이 없어서 교체하고, 확인에 실패하
 
 - **BE:** `SPRING_PROFILES_ACTIVE=migrate`로 실행하면 서버 없이 마이그레이션 뒤 종료한다. 공개 8080(`/healthz`, `/api/v1/version`), 관리 8081(`/actuator/health/readiness`)
 - **FE:** `WORKDIR /app`, `server.js`와 `.next/static`이 `/app` 아래에 있다(배포가 `docker cp`로 정적 자산을 꺼낸다). 컨테이너 안에 `node`가 있어야 한다(healthcheck). 루트는 읽기 전용이고 `/app/.next/cache`만 tmpfs다
+- **AI:** `uvicorn server.main:app`이 8000에서 돈다. `/healthz`가 200이면 준비 완료이고 저장소나 임베딩을 쓸 수 없으면 503이다. 모델은 넣지 않는다(`Dockerfile.ai`). 비root(10001)이고 루트는 읽기 전용이다. 엣지에 경로가 없어서 점검은 같은 망에서만 한다
 - 서비스 점검은 호스트에 게시하지 않는 포트를 위해 같은 망의 엣지(caddy) 컨테이너 안에서 `wget`으로 한다
 
 ## 파일
@@ -71,7 +85,8 @@ dev는 같은 흐름이지만 색이 없어서 교체하고, 확인에 실패하
 |---|---|
 | `lib.sh` | 공통 함수(상태 파일, 이름 규칙, 점검, 엣지 전환, 잠금). 직접 실행하지 않는다 |
 | `deploy.sh`, `rollback.sh`, `preflight.sh`, `smoke.sh`, `notify.sh`, `fit-up.sh` | 위 표의 명령 |
-| `../app/compose.app.yml` | BE·FE 컨테이너 정의(`fit-app-prod`, `fit-app-dev`, 프로필 `prod`·`dev`) |
+| `../app/compose.app.yml` | BE·FE·AI 컨테이너 정의(`fit-app-prod`, `fit-app-dev`, 프로필 `prod`·`dev`) |
+| `../app/Dockerfile.ai` | AI 이미지(`build-images.sh`가 `ai/`에서 필요한 파일만 임시 폴더로 복사해 조립한다. `.env`와 시험·실험 파일은 컨텍스트에 들어가지 않는다) |
 | `test/` | 노트북 시험(목 BE·FE 이미지, 시험용 엣지) |
 
 상태 파일은 `/srv/fit/state/deploy-<환경>.env`다(compose의 `--env-file`이기도 하다). 서비스별 활성 색(`BE_ACTIVE`, `FE_ACTIVE`), 색별 이미지 태그(`BE_BLUE_TAG` 등), `DEPLOYED_SHA`, `PREVIOUS_SHA`가 있다. dev는 서비스별 직전 이미지 태그(`BE_DEV_PREV_TAG`, `FE_DEV_PREV_TAG`)를, prod는 같은 SHA를 다시 배포했을 때만 쓰는 직전 릴리스 태그(`BE_PROD_PREV_TAG`, `FE_PROD_PREV_TAG`, 평소에는 `none`)를 더 갖는다.
@@ -81,7 +96,8 @@ dev는 같은 흐름이지만 색이 없어서 교체하고, 확인에 실패하
 | 이름 | 기본 | 뜻 |
 |---|---|---|
 | `FIT_DRAIN_SECONDS` | 30 | 전환 뒤 이전 색을 멈추기까지 기다리는 시간 |
-| `FIT_BE_READY_TIMEOUT`, `FIT_FE_READY_TIMEOUT` | 150, 60 | 준비 확인 제한 시간(초) |
+| `FIT_BE_READY_TIMEOUT`, `FIT_FE_READY_TIMEOUT`, `FIT_AI_READY_TIMEOUT` | 150, 60, 60 | 준비 확인 제한 시간(초) |
+| `FIT_AI_IMAGE`, `FIT_GRANT_AI_READ` | `ai`, `infra/data/grant-ai-read.sh` | AI 이미지 저장소 이름과 AI 읽기 권한 맞추기 스크립트(시험이 바꾼다) |
 | `FIT_POOL_KEEP_DAYS` | 14 | 정적 자산 풀에서 이 기간 동안 어느 릴리스에도 없던 파일을 지운다 |
 | `FIT_MIN_DISK_GB`, `FIT_MIN_MEM_MB` | 5, prod 2560 / dev 512 | 사전 점검의 여유 기준 |
 | `FIT_FORCE_MIGRATE=1` | | 마이그레이션 파일이 안 바뀌어도 마이그레이션을 실행한다 |
@@ -95,11 +111,11 @@ dev는 같은 흐름이지만 색이 없어서 교체하고, 확인에 실패하
 ```bash
 bash infra/deploy/test/test-deploy.sh up     # 가짜 서버(공유 망, 엣지, 목 이미지, 시험용 저장소)
 bash infra/deploy/test/test-deploy.sh run    # 배포·롤백·실패 복구·fit-up 시나리오 전부
-bash infra/deploy/test/test-deploy.sh run guard   # 구역만 골라 돌린다(unit guard prod dev fit_up hygiene, 여러 개 가능)
+bash infra/deploy/test/test-deploy.sh run guard   # 구역만 골라 돌린다(unit guard prod dev ai fit_up hygiene, 여러 개 가능)
 bash infra/deploy/test/test-deploy.sh down   # 시험이 만든 것을 모두 지운다
 ```
 
-시험은 실제 Caddy와 목 BE·FE 컨테이너로 돌고 `https://localhost:18443`(prod), `https://dev.localhost:18443`(dev)에 뜬다. 목 이미지의 모드(준비 안 됨, 엣지 경유 시 실패, 마이그레이션 실패, 폴백 표시, 화면 오류)로 각 실패 경로를 만든다. Windows(Git Bash)의 NTFS에는 권한 비트가 없어서 env 파일 권한 점검은 `FIT_SKIP_PERM=1`로 건너뛰고, 그 함수는 Linux 컨테이너에서 따로 시험한다.
+시험은 실제 Caddy와 목 BE·FE·AI 컨테이너로 돌고 `https://localhost:18443`(prod), `https://dev.localhost:18443`(dev)에 뜬다. 목 이미지의 모드(준비 안 됨, 엣지 경유 시 실패, 마이그레이션 실패, 폴백 표시, 화면 오류)로 각 실패 경로를 만든다. Windows(Git Bash)의 NTFS에는 권한 비트가 없어서 env 파일 권한 점검은 `FIT_SKIP_PERM=1`로 건너뛰고, 그 함수는 Linux 컨테이너에서 따로 시험한다.
 
 ## 서버에서만 확인되는 것
 

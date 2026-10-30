@@ -63,7 +63,7 @@ sudo python3 ~/host/envset.py set prod,dev MODAL_KEY MODAL_SECRET       # 키 �
 sudo python3 ~/host/envset.py unset dev REVIEW_MOCK_ENABLED             # 키를 지운다
 ```
 
-- **파일 이름:** 서버 A는 `prod`, `dev`, `fe-prod`, `fe-dev`, `migrate-prod`, `migrate-dev`, `data`, `edge`, `obs`, `backup`, 서버 B는 `ops`다. 쉼표로 여러 파일에 같은 값을 한 번에 넣는다. 목록 밖의 이름이나 경로는 받지 않고, 없는 파일을 새로 만들지도 않는다.
+- **파일 이름:** 서버 A는 `prod`, `dev`, `fe-prod`, `fe-dev`, `ai-prod`, `ai-dev`, `migrate-prod`, `migrate-dev`, `data`, `edge`, `obs`, `backup`, 서버 B는 `ops`다. 쉼표로 여러 파일에 같은 값을 한 번에 넣는다. 목록 밖의 이름이나 경로는 받지 않고, 없는 파일을 새로 만들지도 않는다.
 - **비밀 판별:** 키 이름에 `KEY`, `SECRET`, `PASSWORD`, `TOKEN`, `HASH`, `WEBHOOK`이 단어로 들어 있으면 비밀이다. 비밀은 `KEY=VALUE`로 줄 수 없다(셸 기록과 프로세스 목록에 남는다). 입력을 비우면 그 키는 건너뛴다.
 - **형식 검사:** `check_env_files.py`와 같은 규칙이다(공백, 따옴표, `#`, `$`, 백슬래시, 백틱, 보이지 않는 글자 금지. `$`가 필요한 값은 base64). `REPLACE_ME`도 거부한다. `*_BASE_URL`은 끝의 `/`를 지우고 `http(s)://`로 시작해야 한다. 하나라도 어긋나면 어느 파일에도 쓰지 않는다.
 - **덮어쓰기:** 이미 값이 있는 키를 바꿀 때는 파일마다 묻는다(`--yes`로 생략). `unset`도 묻는다. 필수 키를 지우면 경고한다.

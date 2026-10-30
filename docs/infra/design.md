@@ -439,7 +439,7 @@ Caddy 컨테이너(`caddy:2.x`, 구현 시 최신 2.x를 핀)가 A의 80·443만
 | `fe:test` | verify | 린트, `next typegen`(Next 16의 전역 타입을 만든다. 없으면 `tsc`가 실패한다), 타입 검사, 단위 테스트(`fe/`). verify 러너(B)에서 Node 이미지(핀, arm64 지원)로 실행 |
 | `fe:build` | verify | 같은 Node 이미지로 `next build`(standalone)를 **한 번만** 하고(환경 값은 번들에 넣지 않는다, 6.8절) 커밋 SHA를 `DEPLOYMENT_VERSION`으로 넘겨 빌드 ID와 `deploymentId`로 쓴다. FE 번들(`standalone`, `static`, `public`)을 GitLab 아티팩트로 넘긴다 |
 | `fe:bundle-check` | verify | `infra/ci/check_fe_bundle.py`로 번들 산출물을 검사한다(서버 파일, 정적 자산, 빌드 ID와 `deploymentId`가 SHA와 같음, 이미지 최적화 꺼짐, `sharp` 외 네이티브 모듈 없음, `localhost` 주소 없음. mock 글자는 경고, PWA 파일 없음은 건너뜀). 실패하면 `build:images`가 돌지 않는다 |
-| `build:images` | build | `<서비스>:<SHA>`(be, fe) 로컬 조립(`infra/ci/build-images.sh`). verify 단계가 만든 jar와 FE 번들을 `COPY`한다(BE 계약 #20, FE 계약 #1). 레지스트리는 없다. 이미 있으면 재사용한다(MR을 fast-forward로 병합하므로 SHA가 그대로라 다시 조립하지 않는다). `develop`과 `master`에서만 돈다 |
+| `build:images` | build | `<서비스>:<SHA>`(be, fe) 로컬 조립(`infra/ci/build-images.sh`). verify 단계가 만든 jar와 FE 번들을 `COPY`한다(BE 계약 #20, FE 계약 #1). AI를 켠 서버(`/etc/fit/ai-*.env`가 있다)에서는 `ai:<SHA>`도 `ai/` 소스에서 조립하고(`infra/app/Dockerfile.ai`) 실패해도 BE·FE 이미지는 나간다(11.4절). 레지스트리는 없다. 이미 있으면 재사용한다(MR을 fast-forward로 병합하므로 SHA가 그대로라 다시 조립하지 않는다). `develop`과 `master`에서만 돈다 |
 | `deploy:dev` | deploy | develop 푸시 시 자동(`environment: dev`, `resource_group: dev`). 전체 clone(`GIT_DEPTH: "0"`)을 쓴다. 얕은 clone이면 다운그레이드 가드와 마이그레이션 비교가 틀리므로 preflight가 얕은 저장소를 `git fetch --unshallow`로 채우고 못 채우면 거부한다(Jira S15P31A302-99) |
 | `deploy:prod` | deploy | master에서 수동(`environment: prod`, `resource_group: prod`). `allow_failure: false`라 사람이 누를 때까지 파이프라인이 멈춘다(`when: manual`만 두면 안 눌러도 통과한 것처럼 보인다) |
 | `smoke:dev`, `smoke:prod` | smoke | 환경별로 배포 뒤에 돈다(`smoke.sh <env> --sha <SHA>`). `--resolve`로 서버 내부 경유 확인. 검색 1건을 호출해 폴백 사용 여부를 확인한다(Modal 연동 누락이 폴백에 가려지지 않게, BE 계약 #17). 콜드 스타트를 감안한 타임아웃을 둔다. FE는 `/`가 200이고 `/config.json`에 필수 키가 모두 있는지 확인한다 |
@@ -469,12 +469,12 @@ GitLab이 죽어도 서버에서 직접 실행할 수 있다.
 1. preflight(값 비출력): env 파일·권한·CRLF·필수 키, `compose config -q`, 디스크 여유, **메모리 여유**(겹침 배포에 필요한 양보다 적으면 중단), **다운그레이드 가드**(배포할 SHA가 현재 배포된 SHA의 후손이 아니면 거부한다. `git merge-base --is-ancestor`를 쓰며 저장소가 얕으면 먼저 `git fetch --unshallow origin`으로 전체 이력을 채우고, 못 채우면 거부한다. 되돌리기는 `rollback.sh`로만 한다)
 2. `flock` 잠금
 3. prod는 마이그레이션이 있으면 사전 `pg_dump` 후 일회성 마이그레이션 컨테이너 실행. 실패하면 트래픽을 건드리기 전에 중단
-4. 서비스별로(BE, FE 순) 반대 색 기동 → readiness(BE 최대 150초, FE는 `/fe-healthz`) → idle 색 스모크(BE는 헬스·버전, FE는 SSR 페이지와 `/config.json`). FE의 정적 자산은 색을 띄우기 전에 풀에 쌓는다
+4. (AI를 켠 환경은 먼저 AI API 한 컨테이너를 교체한다. 준비되지 않으면 직전 이미지로 돌리고 BE·FE 배포는 계속한다. 11.4절) 서비스별로(BE, FE 순) 반대 색 기동 → readiness(BE 최대 150초, FE는 `/fe-healthz`) → idle 색 스모크(BE는 헬스·버전, FE는 SSR 페이지와 `/config.json`). FE의 정적 자산은 색을 띄우기 전에 풀에 쌓는다
 5. Caddy 전환(`validate` → `reload`) → Caddy 경유 스모크(BE는 버전 헤더가 새 SHA인지, FE는 페이지가 200인지). 실패하면 자동 복귀
 6. 30초 드레인 후 이전 색 정지. 컨테이너와 이미지는 다음 배포까지 보관하고 `rollback.sh`로 즉시 복귀
 7. 상태 파일과 이력 기록, Mattermost 알림(SHA, 작성자, 소요 시간)
 
-BE와 FE는 같은 절차로 전환하되 BE가 먼저, FE가 나중이다. 새 BE는 직전 FE와 하위호환이어야 한다(BE 계약 #16).
+BE와 FE는 같은 절차로 전환하되 BE가 먼저, FE가 나중이다. 새 BE는 직전 FE와 하위호환이어야 한다(BE 계약 #16). AI API는 BE보다 먼저 배포하므로 새 AI는 직전 BE와 하위호환이어야 한다.
 
 **구현 메모** (확인: `infra/deploy/test/test-deploy.sh`)
 
@@ -670,8 +670,9 @@ B의 알림은 모두 prod에 관한 것이라 수신자는 하나다. 프로브
 | RB-11 | Modal 임베딩 모델 교체와 재색인 연계(AI 팀 주도, RB-07 사용) |
 | RB-12 | A 소실 시 재구축(DR). 새 IP면 도메인 변경 요청 절차 포함 |
 | RB-13 | dev DB 초기화(적용된 마이그레이션이 develop과 어긋났을 때, 10.8절) |
+| RB-14 | AI API(서버 A) 켜기와 장애 대응(11.4절) |
 
-작성한 런북은 [runbooks/](runbooks/README.md)에 있다. 2026-10-28 기준 RB-01~13과 RB-02b를 모두 썼다. 각 파일 맨 아래에 서버에서 직접 따라 해 본 범위와 해 보지 못한 범위를 적는다. RB-12(A 소실 재구축)는 서버에서 한 번도 따라 해 보지 않았고, 사진을 되살리는 도구가 없는 것을 포함해 알려진 빈칸이 적혀 있다.
+작성한 런북은 [runbooks/](runbooks/README.md)에 있다. 2026-10-28 기준 RB-01~13과 RB-02b를 모두 썼고 RB-14는 2026-10-30에 썼다. 각 파일 맨 아래에 서버에서 직접 따라 해 본 범위와 해 보지 못한 범위를 적는다. RB-12(A 소실 재구축)는 서버에서 한 번도 따라 해 보지 않았고, 사진을 되살리는 도구가 없는 것을 포함해 알려진 빈칸이 적혀 있다.
 
 ### 10.3 리허설 (11/06 전)
 
@@ -826,11 +827,11 @@ Grafana는 팀원에게 viewer 계정을 준다. A503에서는 SSH 보유자만 
 
 ### 11.4 AI API (A)
 
-AI API(`ai/server`, FastAPI)는 A의 컨테이너로 돈다. 임베딩 모델은 올리지 않고 GPU가 필요한 일은 Modal을 부른다. 구현은 단계로 나눈다: DB 읽기 전용 role(`infra/data/grant-ai-read.sh`)이 먼저 들어갔고, 컨테이너·배포·CI·점검은 후속 변경이다.
+AI API(`ai/server`, FastAPI)는 A의 컨테이너로 돈다. 임베딩 모델은 올리지 않고 GPU가 필요한 일은 Modal을 부른다. 구현은 단계로 나눈다: DB 읽기 전용 role(`infra/data/grant-ai-read.sh`)과 컨테이너 정의가 먼저 들어갔고, 이어서 이미지 조립(`Dockerfile.ai`, `build-images.sh`), 배포·롤백·fit-up·사전 점검 연동, 런북(RB-14)이 들어갔다(확인: 로컬 시험). 서버에서는 켜 본 적이 없고(미확인), 감시는 컨테이너 알림(`FitContainerRestartLoop`, `FitContainerMemoryHigh`)과 BE의 폴백 비율이 대신하며 `/healthz` 프로브 알림은 아직 없다.
 
 **구성**
 
-- 컨테이너 `ai-prod`, `ai-dev`. 이미지 `ai:<SHA>`(BE·FE와 같은 SHA). 환경마다 하나이고 prod도 Blue/Green이 아니라 한 컨테이너를 교체한다. 모델이 없어 기동이 수 초라 교체 중 단절이 짧고, 그동안 BE는 키워드 검색으로 대체한다(11.2절 폴백).
+- 컨테이너 `ai-prod`, `ai-dev`. 이미지 `ai:<SHA>`(BE·FE와 같은 SHA). 환경마다 하나이고 prod도 Blue/Green이 아니라 한 컨테이너를 교체한다. `/etc/fit/ai-<환경>.env`가 있는 환경에서만 켜지고 AI 배포는 실패해도 BE·FE 배포를 막지 않는다(직전 이미지로 돌리거나 치운다. BE에 폴백이 있다). 모델이 없어 기동이 수 초라 교체 중 단절이 짧고, 그동안 BE는 키워드 검색으로 대체한다(11.2절 폴백).
 - 망: `ai-prod`는 `net-prod`와 `net-data`, `ai-dev`는 `net-dev`와 `net-data`. 호스트에 포트를 게시하지 않고 Caddy 경로도 없다. BE는 `http://ai-prod:8000`, `http://ai-dev:8000`으로 부른다. BE가 이미 이 주소를 `MODAL_BASE_URL`(`fitdining.ai.base-url`)에서 읽고 `Modal-Key`·`Modal-Secret` 헤더는 값이 있을 때만 보내므로, 값만 A 내부 주소로 두고 `MODAL_KEY`·`MODAL_SECRET`은 비운다(BE 코드 변경 없음. 키 이름이 Modal 시절 그대로라 BE와 정리한다).
 - 한도: ai-prod 메모리 0.5GB, ai-dev 0.4GB(추정, 실제 앱으로 측정한다). dev에는 `cpus` 상한을 준다.
 - 건강: `GET /healthz`가 200이면 준비 완료이고 저장소나 임베딩 연결을 쓸 수 없으면 503이다. 컨테이너 healthcheck와 blackbox 프로브의 대상이다. 한 컨테이너가 동시에 받는 검색은 `MAX_CONCURRENT_REQUESTS`까지이고 넘으면 503 `BUSY`다.
@@ -839,7 +840,7 @@ AI API(`ai/server`, FastAPI)는 A의 컨테이너로 돈다. 임베딩 모델은
 
 - 읽기 전용 role `fit_prod_ai`, `fit_dev_ai`가 `DATABASE_URL`로 접속한다. 읽는 것은 뷰 `ai_place_search`와 `user_preferences`뿐이다. 뷰는 소유자 권한으로 실행되므로 뷰 밑의 `places` 등과 인증 테이블은 읽지 못한다. 뷰는 BE 마이그레이션이 만들고 AI는 그 컬럼에만 의존한다. 읽을 객체를 늘리려면 BE·AI 팀과 정한 뒤 `grant-ai-read.sh`의 목록을 고치는 MR을 만든다.
 - role당 접속 6개, 쿼리 10초, 트랜잭션은 기본이 읽기 전용이다. 컨테이너당 풀(`DB_POOL_SIZE`에 취향용 1개를 더한 값)은 이 상한 안에 둔다. Postgres `max_connections`는 60이다.
-- 마이그레이션이 뷰를 만든 뒤 `grant-ai-read.sh`를 다시 돌려야 읽힌다(기본 권한을 주지 않는다). 배포가 마이그레이션 뒤에 돌리게 한다(후속 구현).
+- 마이그레이션이 뷰를 만든 뒤 `grant-ai-read.sh`를 다시 돌려야 읽힌다(기본 권한을 주지 않는다). AI를 켠 환경은 배포가 마이그레이션 뒤에 매번 돌린다(실패해도 경고만 한다).
 - 확인: 로컬 데이터 시험(`test-data.sh`의 `ai` 구역)에서 두 객체만 읽히고 뷰 밑의 테이블, 인증 테이블, 허용 목록 밖의 새 테이블은 읽히지 않으며 쓰기와 DDL이 막히고 다른 환경 DB에 접속하지 못함을 점검했다.
 
 **환경변수**
@@ -1098,7 +1099,7 @@ infra/
 .gitlab-ci.yml
 docs/infra/
   design.md    이 문서
-  runbooks/    RB-01 ~ RB-13
+  runbooks/    RB-01 ~ RB-14
   porting/     포팅 매뉴얼 초안(버전, 환경변수, 외부 서비스, DB 덤프, 시연)
   contracts/   README.md(합의 상태), env.md, metrics.md. BE·AI(Modal 호출)·프런트 계약은 합의되면 이 폴더로 옮긴다
   ssh-matrix.md
