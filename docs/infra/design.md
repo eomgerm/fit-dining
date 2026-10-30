@@ -336,7 +336,7 @@ Caddy 컨테이너(`caddy:2.x`, 구현 시 최신 2.x를 핀)가 A의 80·443만
 | `/fit-prod-photos/*`, `/fit-dev-photos/*` | garage S3 API(사진 업로드, path-style) | Host 헤더가 보존돼 SigV4 서명이 통과해야 한다. 헤더 서명 PUT은 엣지를 거쳐 로컬 garage에서 통과했다 (확인: `test-edge.sh`). presigned URL과 POST policy는 7.4절 스파이크로 확인 |
 | `/photos/<env>/confirmed/*` | garage 웹 엔드포인트(3902) | `header_up Host`를 그 버킷의 웹 호스트(`<버킷>.<web_root_domain>`)로 바꾼다. `pending/`은 공개 경로에서 막는다. 객체 키는 추측할 수 없는 UUID이고, 읽기 응답은 캐시 가능하게(`Cache-Control: public`) 둔다 |
 | `/_ops/prometheus/healthy`, `/_ops/alertmanager/healthy` | 내부 `/-/healthy`로 rewrite | B의 IP(`remote_ip`)와 basic auth를 둘 다 통과해야 하고 실패하면 404. 이 외의 `/_ops` 경로는 없다. B가 A의 감시 체계를 감시한다 |
-| 그 외 모두 | 활성 색 FE(Next.js SSR) | 페이지, RSC, `/config.json`, `/fe-healthz`, `public/` 파일(`/sw.js`, `/manifest.webmanifest`) |
+| 그 외 모두 | 활성 색 FE(Next.js SSR) | 페이지, RSC, `/config.json`, `/fe-healthz`, `public/` 파일(`/sw.js`, `/icons/*`), `/manifest.webmanifest`(`public/` 파일이거나 Next의 `app/manifest.ts`가 만든 것) |
 
 각 호스트는 자기 환경의 경로만 라우팅한다. 예를 들어 dev 호스트는 `/fit-prod-photos/*`를 프록시하지 않는다.
 
@@ -889,7 +889,7 @@ AI 팀과 M1 전에 합의한다. FastAPI는 Modal에서 돌고 A·B에는 AI �
 | 1 | 빌드 | `fe/`가 잠금 파일 기준 설치(`pnpm install --frozen-lockfile`, 패키지 매니저는 `package.json`의 `packageManager` 필드)와 `pnpm build`로 `output: 'standalone'` 번들을 만든다. `generateBuildId`와 `deploymentId`는 커밋 SHA(`DEPLOYMENT_VERSION`)다 | 번들을 컨테이너에 `COPY`만 한다(6.8절). 버전 스큐를 Next가 감지한다 |
 | 2 | 같은 출처 | 브라우저는 API를 `/api`, 사진을 `/fit-<env>-photos/` 상대 경로로 호출한다. 서버 쪽 호출(서버 컴포넌트, 라우트 핸들러)은 `BE_INTERNAL_URL`을 쓴다. 호스트·포트를 번들에 박지 않는다. 로컬 개발은 프록시나 `BE_INTERNAL_URL`로 로컬 BE에 붙는다 | CORS가 필요 없다(5절). 활성 색 전환을 FE가 모른다 |
 | 3 | 환경 값 | 환경별 값은 번들에 넣지 않고 런타임 env(`/etc/fit/fe-<env>.env`)로 받는다. `NEXT_PUBLIC_*`에 환경별 값을 두지 않는다(빌드 때 번들에 박힌다). 브라우저가 쓸 공개 값은 `/config.json`(동적 라우트)이 env에서 읽어 돌려주며 키 목록은 `contracts/env.md`에 둔다. 빌드 메모리는 1.5GB 이내(예: `NODE_OPTIONS=--max-old-space-size=1536`) | 이미지 하나로 dev 검증을 prod에 그대로 쓴다(6.8절). 빌드타임 설정 누락(A503) 방지, B의 CI 메모리 한도(4.2절) |
-| 4 | 서비스 워커 | 루트 `/sw.js`와 `/manifest.webmanifest`는 `public/`에 둔다. `/api/*`, 사진 경로, `/config.json`은 캐시하지 않는다(네트워크 전용). 새 서비스 워커의 활성화 정책은 프런트 팀이 정하되 API 한 버전 하위호환(BE #16)을 전제로 한다 | 5절 캐시 정책, 6.8절 버전 스큐 |
+| 4 | 서비스 워커 | 루트 `/sw.js`는 `public/`에 두고, `/manifest.webmanifest`는 `public/`의 파일이거나 Next의 `app/manifest.ts`가 만든 것이어도 된다(URL이 같고 둘 다 FE가 서빙한다). `/api/*`, 사진 경로, `/config.json`은 캐시하지 않는다(네트워크 전용). 새 서비스 워커의 활성화 정책은 프런트 팀이 정하되 API 한 버전 하위호환(BE #16)을 전제로 한다 | 5절 캐시 정책, 6.8절 버전 스큐 |
 | 5 | 정적 자산 | 정적 자산은 Next가 만드는 해시 붙은 `/_next/static/*`를 쓴다. 다른 경로에 불변 자산을 두려면 미리 알린다 | Caddy가 `/_next/static`만 누적 풀에서 `immutable`로 서빙한다(5.3절) |
 | 6 | 헬스 | `GET /fe-healthz`는 200과 상태만 반환한다(내부 정보 없음). 의존성(BE 등) 상태를 보지 않는다 | idle 색 스모크와 컨테이너 healthcheck. BE 장애 때 FE가 재시작 폭풍에 빠지지 않게 한다 |
 | 7 | 이미지 | 이미지 최적화 기본 로더를 쓰지 않는다(`images.unoptimized: true` 또는 커스텀 로더). 사진은 Garage URL을 쓴다 | B(Arm) 번들을 A(x86)에서 돌리는데 `sharp`가 플랫폼 전용이다(6.8절) |
