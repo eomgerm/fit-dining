@@ -73,6 +73,8 @@ check_site() { # check_site 라벨 URL [curl 인자...]
     fetch "$base$f" "$@"
     expect "$label: $f 는 200" "$(is "$STATUS" 200)"
   done
+  fetch "$base/sw.js" "$@"
+  expect "$label: /sw.js 는 immutable이 아니다(워커는 배포마다 새로 받아야 한다)" "$(is "$(has "$(header_value cache-control)" immutable)" 0)"
   fetch "$base/config.json" "$@"
   expect "$label: /config.json 은 200 + env 키" "$(is "$STATUS$(has "$BODY" '"env"')" 2001)"
   if [ -n "$asset" ]; then
@@ -113,6 +115,8 @@ if [ -n "$DEV" ] && [ -n "$DEV_KEY" ]; then
   done
   fetch "$DEV/manifest.webmanifest"
   expect "dev: /manifest.webmanifest 는 쿠키 없이 200(게이트 밖)" "$(is "$STATUS" 200)"
+  fetch "$DEV/icons/icon-192.png"
+  expect "dev: /icons/* 는 쿠키 없이 200(게이트 밖)" "$(is "$STATUS" 200)"
   fetch "$DEV/?k=wrong-key"
   expect "dev: 틀린 키는 404" "$(is "$STATUS" 404)"
   fetch "$DEV/?k=$DEV_KEY"
