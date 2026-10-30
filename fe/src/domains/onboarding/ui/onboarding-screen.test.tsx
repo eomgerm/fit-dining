@@ -430,3 +430,28 @@ it("분석 API가 즉시 끝나도 덮개를 최소 600ms 보여준다", async (
   await act(async () => vi.advanceTimersByTimeAsync(1));
   expect(screen.getByText("이렇게 이해했어요")).toBeTruthy();
 });
+
+it("빈 분석 결과는 결과 영역 없이 재분석과 기존 확인 흐름을 유지한다", async () => {
+  mocks.analyze.mockResolvedValueOnce([]);
+  const complete = vi.fn();
+  render(<OnboardingScreen onComplete={complete} />);
+  reachTaste();
+  fireEvent.change(screen.getByRole("textbox"), {
+    target: { value: "안녕하세요" },
+  });
+  click("AI 분석");
+  await waitFor(() =>
+    expect(
+      (screen.getByRole("button", { name: "AI 분석" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false),
+  );
+  expect(screen.queryByText("이렇게 이해했어요")).toBeNull();
+  expect(screen.queryByRole("alert")).toBeNull();
+  click("시작하기");
+  await screen.findByRole("alertdialog", { name: "작성 중인 내용이 있어요" });
+  click("그냥 시작하기");
+  expect(complete).toHaveBeenCalledWith(
+    expect.objectContaining({ tastes: [] }),
+  );
+});

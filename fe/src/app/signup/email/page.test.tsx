@@ -185,7 +185,9 @@ it("온보딩 답변을 가입 요청에 포함하고 성공하면 지운다", a
     mood: "QUIET" as const,
     priorities: ["COZY" as const],
     purposes: [],
-    tastes: [],
+    tastes: [
+      { polarity: "DISLIKE" as const, label: "매운맛", code: "FOOD_SPICY" },
+    ],
   };
   writeAnswers(preferences);
   mocks.signup.mockResolvedValueOnce({ userId: "new-user" });

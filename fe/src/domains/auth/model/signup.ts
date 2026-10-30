@@ -43,7 +43,11 @@ export type SignupPreferences = {
     | "VALUE"
   )[];
   purposes: ("CONVERSATION" | "SOLO" | "DATE" | "GATHERING" | "WORK_STUDY")[];
-  tastes: { polarity: "LIKE" | "DISLIKE"; label: string }[];
+  tastes: {
+    polarity: "LIKE" | "DISLIKE";
+    label: string;
+    code?: string | null;
+  }[];
 };
 
 export function validateNickname(nickname: string): string | undefined {

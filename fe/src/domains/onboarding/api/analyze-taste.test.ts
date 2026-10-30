@@ -16,6 +16,7 @@ describe("취향 분석 API", () => {
         method: "POST",
         body: { text: "국물" },
         signal,
+        timeoutMs: 15_000,
       },
     );
   });

@@ -35,9 +35,12 @@ export function validAnswers(value: unknown): value is OnboardingAnswers {
       (taste) =>
         record(taste) &&
         Object.keys(taste).every((key) =>
-          ["polarity", "label"].includes(key),
+          ["polarity", "label", "code"].includes(key),
         ) &&
         (taste.polarity === "LIKE" || taste.polarity === "DISLIKE") &&
+        (taste.code === undefined ||
+          taste.code === null ||
+          typeof taste.code === "string") &&
         typeof taste.label === "string" &&
         taste.label.trim().length >= 1 &&
         taste.label.trim().length <= 20 &&

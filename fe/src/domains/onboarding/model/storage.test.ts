@@ -92,3 +92,25 @@ it("저장소 예외가 흐름을 막지 않는다", () => {
   expect(readAnswers()).toBeUndefined();
   expect(isGuest()).toBe(false);
 });
+
+it.each(["FOOD_SPICY", null, undefined])("칩 코드를 보존한다: %s", (code) => {
+  const value = {
+    ...answers,
+    tastes: [{ polarity: "LIKE" as const, label: "국물", code }],
+  };
+  writeAnswers(value);
+  expect(readAnswers()).toEqual(JSON.parse(JSON.stringify(value)));
+});
+it.each([{ code: 42 }, { vector: [] }, { unknown: true }])(
+  "잘못된 칩 속성을 거부한다: %j",
+  (extra) => {
+    localStorage.setItem(
+      ANSWERS_KEY,
+      JSON.stringify({
+        ...answers,
+        tastes: [{ polarity: "LIKE", label: "국물", ...extra }],
+      }),
+    );
+    expect(readAnswers()).toBeUndefined();
+  },
+);

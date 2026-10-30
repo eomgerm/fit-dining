@@ -115,7 +115,9 @@ it("sends onboarding answers and clears them only after successful signup", asyn
     mood: "QUIET" as const,
     priorities: [],
     purposes: [],
-    tastes: [],
+    tastes: [
+      { polarity: "DISLIKE" as const, label: "매운맛", code: "FOOD_SPICY" },
+    ],
   };
   writeAnswers(answers);
   let finish!: () => void;

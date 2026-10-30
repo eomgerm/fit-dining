@@ -18,7 +18,11 @@ export const purposes = [
   { id: "GATHERING", label: "모임하기 좋은 곳" },
   { id: "WORK_STUDY", label: "작업·공부하기 좋은 곳" },
 ] as const;
-export type TasteChip = { polarity: "LIKE" | "DISLIKE"; label: string };
+export type TasteChip = {
+  polarity: "LIKE" | "DISLIKE";
+  label: string;
+  code?: string | null;
+};
 export type OnboardingAnswers = {
   mood: (typeof moods)[number]["id"] | null;
   priorities: (typeof priorities)[number]["id"][];

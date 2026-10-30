@@ -11,6 +11,7 @@ export async function analyzeTaste(
       method: "POST",
       body: { text },
       signal,
+      timeoutMs: 15_000,
     },
   );
   return response.tastes;
