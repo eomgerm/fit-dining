@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import { Providers } from "./providers";
+import { RegisterServiceWorker } from "./register-sw";
 
 // ponytail: 가변 폰트 전체(2MB)를 한 번에 받는다. 첫 로딩이 문제되면 Pretendard dynamic subset으로 바꾼다
 const pretendard = localFont({
@@ -33,6 +34,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <div className="isolate flex flex-1 flex-col">
           <Providers>{children}</Providers>
         </div>
+        <RegisterServiceWorker />
       </body>
     </html>
   );

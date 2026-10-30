@@ -15,6 +15,28 @@ const nextConfig: NextConfig = {
   // 운영에서는 Caddy가 /api와 사진 업로드 경로를 BE와 Garage로 보낸다. 로컬 `next dev`에서만 직접 프록시한다(design.md 12.5 #2).
   // 사진 업로드는 presigned URL이라 Garage가 받는 Host가 BE의 S3_PUBLIC_ENDPOINT와 같아야 한다(리뷰 D-45).
   // 사진 읽기(/photos/dev/confirmed/)는 Host를 바꿔야 해서 app/photos 라우트 핸들러가 맡는다
+  // 서비스 워커는 매번 새로 받고 같은 출처 스크립트만 쓴다(Next PWA 가이드). 그 밖의 public/ 캐시 헤더는 Next 기본값을 쓴다
+  async headers() {
+    return [
+      {
+        source: "/sw.js",
+        headers: [
+          {
+            key: "Content-Type",
+            value: "application/javascript; charset=utf-8",
+          },
+          {
+            key: "Cache-Control",
+            value: "no-cache, no-store, must-revalidate",
+          },
+          {
+            key: "Content-Security-Policy",
+            value: "default-src 'self'; script-src 'self'",
+          },
+        ],
+      },
+    ];
+  },
   async rewrites() {
     if (process.env.NODE_ENV !== "development") return [];
     const backend = process.env.BE_INTERNAL_URL ?? "http://localhost:8080";
