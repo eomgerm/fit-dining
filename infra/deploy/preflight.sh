@@ -78,6 +78,14 @@ if [ "$ENVN" = dev ]; then want_port=8082; fi
 be_url="$(sed -n 's/^BE_INTERNAL_URL=//p' "$ENV_DIR/fe-$ENVN.env" 2>/dev/null | head -n 1)"
 ok_if "fe-$ENVN.env: BE_INTERNAL_URL이 이 환경의 엣지 내부 리스너(http://caddy:$want_port)다" "$([ "$be_url" = "http://caddy:$want_port" ] && echo 1 || echo 0)"
 if [ "$ROLLBACK" = 0 ]; then check_env_file "$ENV_DIR/migrate-$ENVN.env" migrate; fi
+# AI API는 선택이다. env 파일이 있는 환경에서만 점검한다. 환경이 섞이지 않게 DB 접속 주소가 이 환경의 DB와 읽기 전용 role인지도 본다(설계 11.4절)
+if ai_enabled "$ENVN"; then
+  check_env_file "$ENV_DIR/ai-$ENVN.env" ai
+  want_db="postgresql://fit_${ENVN}_ai:"
+  db_url="$(sed -n 's/^DATABASE_URL=//p' "$ENV_DIR/ai-$ENVN.env" 2>/dev/null | head -n 1)"
+  ok_if "ai-$ENVN.env: DATABASE_URL이 이 환경의 DB(fit_$ENVN)와 읽기 전용 role(fit_${ENVN}_ai)이다" \
+    "$([ "${db_url#"$want_db"}" != "$db_url" ] && [ "${db_url##*/}" = "fit_$ENVN" ] && echo 1 || echo 0)"
+fi
 
 echo "-- Docker와 compose"
 ok_if "docker가 응답한다" "$(succeeds docker info)"
@@ -124,6 +132,14 @@ if [ "$ROLLBACK" = 0 ]; then
     "$([ "$(git -C "$REPO_DIR" rev-parse --is-shallow-repository 2>/dev/null)" = false ] && echo 1 || echo 0)"
   ok_if "이미지 $BE_IMAGE:$SHA 가 있다" "$(succeeds docker image inspect "$BE_IMAGE:$SHA")"
   ok_if "이미지 $FE_IMAGE:$SHA 가 있다" "$(succeeds docker image inspect "$FE_IMAGE:$SHA")"
+  # AI 이미지는 없어도 막지 않는다(AI 빌드가 실패해도 BE·FE는 나간다). 배포가 AI만 건너뛴다
+  if ai_enabled "$ENVN"; then
+    if docker image inspect "$AI_IMAGE:$SHA" >/dev/null 2>&1; then
+      pass "이미지 $AI_IMAGE:$SHA 가 있다"
+    else
+      skip "이미지 $AI_IMAGE:$SHA 가 없다. AI API 배포는 건너뛴다(AI 이미지 빌드가 실패했을 수 있다)"
+    fi
+  fi
   ok_if "저장소에 커밋 $SHA 가 있다" "$(succeeds git -C "$REPO_DIR" rev-parse --verify -q "$SHA^{commit}")"
   cur="$(state_get "$ENVN" DEPLOYED_SHA none)"
   if [ "$cur" = none ]; then

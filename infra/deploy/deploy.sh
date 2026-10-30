@@ -2,6 +2,8 @@
 # 배포(설계 6.4절). GitLab이 죽어도 서버에서 직접 실행할 수 있다.
 #   bash infra/deploy/deploy.sh <prod|dev> <sha>
 # prod는 BE와 FE를 차례로 반대 색으로 띄워 전환하고(Blue/Green) dev는 단일 색을 교체한다. 이미지는 be:<sha>, fe:<sha>로 이미 조립돼 있어야 한다.
+# AI API는 선택이다. /etc/fit/ai-<환경>.env가 있는 환경에서만 BE보다 먼저 한 컨테이너(ai-prod, ai-dev)를 교체하고, 준비되지 않으면 직전 이미지로
+# 돌리거나(없으면 치우고) BE·FE 배포는 계속한다(BE에 키워드 검색 폴백이 있다, 설계 11.4절). AI 이미지가 없으면 AI만 건너뛴다.
 # CI가 아닌 곳(환경변수 CI가 없음)에서 직접 실행하려면 SKIP_VERIFY=<사유>를 줘야 한다(긴급 수동 배포, RB-02b). 사유는 이력에 남는다.
 # 환경변수: FIT_DRAIN_SECONDS(30) FIT_BE_READY_TIMEOUT(150) FIT_FE_READY_TIMEOUT(60) FIT_POOL_KEEP_DAYS(14)
 #          FIT_PREDEPLOY_DUMP(prod 마이그레이션 전 덤프 스크립트) FIT_FORCE_MIGRATE=1
@@ -27,9 +29,65 @@ trap release_lock EXIT
 state_init "$ENVN"
 PREV="$(state_get "$ENVN" DEPLOYED_SHA none)"
 START="$(date +%s)"
+AI_NOTE=""
 WHO="${GITLAB_USER_LOGIN:-$(id -un)}"
 NOTE="${SKIP_VERIFY:+ skip-verify:$SKIP_VERIFY}"
 history_add "$ENVN" deploy-start all "$SHA" "start$NOTE"
+
+# AI role이 읽을 뷰와 테이블의 SELECT를 맞춘다(마이그레이션이 뷰를 만든 뒤에도 맞아야 한다). 실패해도 배포는 계속한다
+grant_ai_read() {
+  ai_enabled "$ENVN" || return 0
+  local script="${FIT_GRANT_AI_READ:-$ROOT_DIR/infra/data/grant-ai-read.sh}" res
+  if res="$(bash "$script" 2>&1)"; then
+    log "AI 읽기 권한을 맞췄다"
+  else
+    log "경고: AI 읽기 권한을 맞추지 못했다(AI API가 DB를 읽지 못할 수 있다)"
+    printf '%s\n' "$res" | tail -n 3
+    AI_NOTE="$AI_NOTE (AI 읽기 권한 맞추기 실패)"
+  fi
+}
+
+# AI API(선택): 한 컨테이너를 교체한다. 확인에 실패하면 직전 이미지로 돌리고, 직전 이미지가 없으면 치운다. 실패해도 1을 돌려줄 뿐 배포를 막지 않는다
+deploy_ai() {
+  local name tagk prevk oldtag oldprev newprev
+  name="$(svc_name ai "$ENVN")"
+  tagk="$(tag_key ai "$ENVN")"
+  prevk="$(prev_key ai "$ENVN")"
+  oldtag="$(state_get "$ENVN" "$tagk" none)"
+  oldprev="$(state_get "$ENVN" "$prevk" none)"
+  # 이미 떠 있는 SHA를 다시 배포하면 직전 태그를 그 SHA로 덮지 않는다(롤백 대상이 사라진다)
+  newprev="$oldtag"
+  if [ "$oldtag" = "$SHA" ]; then newprev="$oldprev"; fi
+  log "[ai] $ENVN 교체 $oldtag → $SHA"
+  state_set "$ENVN" "$tagk=$SHA" "$prevk=$newprev"
+  if compose "$ENVN" up -d --no-deps --force-recreate "$name" && wait_ready ai "$name" && smoke_idle ai "$ENVN" "$name" "$SHA"; then
+    history_add "$ENVN" deploy ai "$SHA" ok
+    return 0
+  fi
+  state_set "$ENVN" "$tagk=$oldtag" "$prevk=$oldprev"
+  history_add "$ENVN" deploy ai "$SHA" fail
+  if [ "$oldtag" = none ]; then
+    log "경고: [ai] $ENVN 확인에 실패했다. 직전 이미지가 없어 AI 컨테이너를 치운다"
+    compose "$ENVN" rm -sf "$name" >/dev/null 2>&1 || true
+  else
+    log "경고: [ai] $ENVN 확인에 실패했다. 직전 이미지($oldtag)로 돌린다"
+    if ! { compose "$ENVN" up -d --no-deps --force-recreate "$name" >/dev/null && wait_ready ai "$name"; }; then
+      log "경고: [ai] 직전 이미지로 돌린 뒤에도 준비되지 않았다"
+    fi
+  fi
+  return 1
+}
+
+deploy_ai_step() {
+  ai_enabled "$ENVN" || return 0
+  if ! docker image inspect "$AI_IMAGE:$SHA" >/dev/null 2>&1; then
+    log "경고: [ai] 이미지 $AI_IMAGE:$SHA 가 없어 AI API 배포를 건너뛴다(AI 이미지 빌드가 실패했을 수 있다)"
+    AI_NOTE="$AI_NOTE (AI API: 이미지가 없어 건너뜀)"
+    return 0
+  fi
+  if ! deploy_ai; then AI_NOTE="$AI_NOTE (AI API: 확인 실패, 이전 상태로 돌림. 로그 확인)"; fi
+  return 0
+}
 
 # 마이그레이션이 바뀌었으면 prod는 사전 덤프 뒤에, dev는 바로 일회성 컨테이너로 실행한다. 실패하면 트래픽을 건드리기 전에 멈춘다
 run_migrations() {
@@ -175,6 +233,8 @@ deploy_dev() { # deploy_dev be|fe
 
 main() {
   run_migrations || return 1
+  grant_ai_read
+  deploy_ai_step
   local svc
   for svc in be fe; do
     if [ "$ENVN" = prod ]; then deploy_color "$svc" || return 1; else deploy_dev "$svc" || return 1; fi
@@ -188,7 +248,7 @@ main() {
 if main; then
   elapsed=$(($(date +%s) - START))
   history_add "$ENVN" deploy-end all "$SHA" "ok$NOTE"
-  notify ok "배포 완료: $ENVN ${SHA:0:12} (작성자 $WHO, ${elapsed}초)"
+  notify ok "배포 완료: $ENVN ${SHA:0:12} (작성자 $WHO, ${elapsed}초)$AI_NOTE"
   log "배포 완료: $ENVN $SHA"
 else
   history_add "$ENVN" deploy-end all "$SHA" "fail$NOTE"

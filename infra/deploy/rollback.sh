@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # 직전 배포로 즉시 되돌린다(설계 6.4절 6단계). 이전 색의 컨테이너와 이미지가 남아 있어서 빠르다.
-#   bash infra/deploy/rollback.sh <prod|dev> [be|fe|all]      # 기본은 all
+#   bash infra/deploy/rollback.sh <prod|dev> [be|fe|ai|all]   # 기본은 all(AI는 켜진 환경에서만 포함한다)
 # prod는 이전 색을 다시 띄워 확인한 뒤 엣지를 옮기고 지금 색을 멈춘다. dev는 직전 이미지로 교체한다.
+# AI API는 한 컨테이너라 직전 이미지로 교체한다. all에서 AI를 되돌리지 못하면 경고만 하고(BE·FE 롤백을 막지 않는다) ai를 직접 지정하면 실패로 본다.
 # DB 마이그레이션은 되돌리지 않는다. expand/contract 원칙이라 이전 버전이 새 스키마에서도 돌아야 한다(설계 6.5절).
 # 되돌리기에 실패하면 지금 상태를 그대로 두고 종료 코드 1이다. 직접 실행에는 SKIP_VERIFY 같은 사유가 필요 없다(긴급 복구).
 set -euo pipefail
@@ -10,12 +11,13 @@ set -euo pipefail
 
 ENVN="${1:-}"
 WHICH="${2:-all}"
-case "$WHICH" in be | fe | all) ;; *) WHICH="" ;; esac
+case "$WHICH" in be | fe | ai | all) ;; *) WHICH="" ;; esac
 if ! valid_env "$ENVN" || [ -z "$WHICH" ]; then
-  echo "사용: bash infra/deploy/rollback.sh <prod|dev> [be|fe|all]" >&2
+  echo "사용: bash infra/deploy/rollback.sh <prod|dev> [be|fe|ai|all]" >&2
   exit 2
 fi
 [ -f "$(state_file "$ENVN")" ] || die "$ENVN에는 배포 기록(상태 파일)이 없다"
+if [ "$WHICH" = ai ] && ! ai_enabled "$ENVN"; then die "$ENVN에는 AI API가 켜져 있지 않다(/etc/fit/ai-$ENVN.env가 없다)"; fi
 
 bash "$DEPLOY_DIR/preflight.sh" "$ENVN" - --rollback || die "사전 점검에 실패했다"
 
@@ -68,6 +70,35 @@ rollback_color() { # rollback_color be|fe
   compose prod stop -t 40 "$oldname" >/dev/null
 }
 
+rollback_ai() { # 한 컨테이너를 직전 이미지로 교체한다(prod와 dev가 같다)
+  local name tagk prevk cur prev
+  name="$(svc_name ai "$ENVN")"
+  tagk="$(tag_key ai "$ENVN")"
+  prevk="$(prev_key ai "$ENVN")"
+  cur="$(state_get "$ENVN" "$tagk" none)"
+  prev="$(state_get "$ENVN" "$prevk" none)"
+  [ "$prev" != none ] || {
+    log "[ai] 되돌릴 이전 이미지가 없다"
+    return 1
+  }
+  docker image inspect "$(image_of ai):$prev" >/dev/null 2>&1 || {
+    log "[ai] 이전 이미지 $(image_of ai):$prev 가 없다"
+    return 1
+  }
+  log "[ai] $ENVN $cur → $prev"
+  state_set "$ENVN" "$tagk=$prev" "$prevk=$cur"
+  if compose "$ENVN" up -d --no-deps --force-recreate "$name" && wait_ready ai "$name" && smoke_idle ai "$ENVN" "$name" "$prev"; then
+    history_add "$ENVN" rollback ai "$prev" ok
+    return 0
+  fi
+  log "[ai] 되돌린 이미지가 준비되지 않았다. 원래 이미지로 복구한다"
+  state_set "$ENVN" "$tagk=$cur" "$prevk=$prev"
+  if ! { compose "$ENVN" up -d --no-deps --force-recreate "$name" >/dev/null && wait_ready ai "$name"; }; then
+    log "경고: [ai] 복구한 뒤에도 준비되지 않았다"
+  fi
+  return 1
+}
+
 rollback_dev() { # rollback_dev be|fe
   local svc="$1" S name tagk cur prev
   S="$(upper "$svc")"
@@ -98,10 +129,23 @@ rollback_dev() { # rollback_dev be|fe
 }
 
 services="be fe"
+if ai_enabled "$ENVN"; then services="be fe ai"; fi
 if [ "$WHICH" != all ]; then services="$WHICH"; fi
 failed=0
 for svc in $services; do
-  if [ "$ENVN" = prod ]; then rollback_color "$svc" || failed=1; else rollback_dev "$svc" || failed=1; fi
+  if [ "$svc" = ai ]; then
+    if rollback_ai; then
+      :
+    elif [ "$WHICH" = ai ]; then
+      failed=1
+    else
+      log "경고: [ai] 되돌리지 못했다. AI API는 지금 상태 그대로다(BE에 키워드 검색 폴백이 있다)"
+    fi
+  elif [ "$ENVN" = prod ]; then
+    rollback_color "$svc" || failed=1
+  else
+    rollback_dev "$svc" || failed=1
+  fi
 done
 
 if [ "$failed" = 0 ]; then

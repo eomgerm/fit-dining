@@ -3,7 +3,8 @@
 #
 # 경로와 이름은 환경변수로 바꿀 수 있다(시험 환경이 쓴다). 서버에서는 기본값을 쓴다.
 #   FIT_ENV_DIR(/etc/fit) FIT_STATE_DIR(/srv/fit/state) FIT_WEB_DIR(/srv/fit/web) FIT_REPO_DIR(저장소 루트)
-#   FIT_EDGE_PROJECT(fit-edge) FIT_BE_IMAGE(be) FIT_FE_IMAGE(fe) FIT_NET_PROD·FIT_NET_DEV·FIT_NET_DATA(망 이름)
+#   FIT_EDGE_PROJECT(fit-edge) FIT_BE_IMAGE(be) FIT_FE_IMAGE(fe) FIT_AI_IMAGE(ai) FIT_NET_PROD·FIT_NET_DEV·FIT_NET_DATA(망 이름)
+#   FIT_GRANT_AI_READ(AI 읽기 권한 맞추기 스크립트, 기본 infra/data/grant-ai-read.sh. 시험이 바꾼다)
 # 상태 파일 $STATE_DIR/deploy-<환경>.env는 compose의 --env-file이기도 하다. 이미지 태그와 활성 색이 여기에 있다.
 
 DEPLOY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -15,8 +16,10 @@ REPO_DIR="${FIT_REPO_DIR:-$ROOT_DIR}"
 EDGE_PROJECT="${FIT_EDGE_PROJECT:-fit-edge}"
 BE_IMAGE="${FIT_BE_IMAGE:-be}"
 FE_IMAGE="${FIT_FE_IMAGE:-fe}"
+AI_IMAGE="${FIT_AI_IMAGE:-ai}"
 BE_READY_TIMEOUT="${FIT_BE_READY_TIMEOUT:-150}"
 FE_READY_TIMEOUT="${FIT_FE_READY_TIMEOUT:-60}"
+AI_READY_TIMEOUT="${FIT_AI_READY_TIMEOUT:-60}"
 DRAIN_SECONDS="${FIT_DRAIN_SECONDS:-30}"
 MIGRATION_DIR="${FIT_MIGRATION_DIR:-be/src/main/resources/db/migration}"
 export FIT_ENV_DIR="$ENV_DIR"
@@ -56,6 +59,8 @@ mode_is_private() {
 valid_env() { case "$1" in prod | dev) return 0 ;; *) return 1 ;; esac; }
 other_color() { if [ "$1" = blue ]; then echo green; else echo blue; fi; }
 upper() { printf '%s' "$1" | tr '[:lower:]' '[:upper:]'; }
+# AI API는 선택이다(폴백이 있다). /etc/fit/ai-<환경>.env가 있는 환경에서만 이미지를 만들고 배포한다(설계 11.4절)
+ai_enabled() { [ -f "$ENV_DIR/ai-$1.env" ]; }
 
 # ---- 상태 파일 ----------------------------------------------------------------
 state_file() { printf '%s/deploy-%s.env' "$STATE_DIR" "$1"; }
@@ -84,21 +89,26 @@ state_set() { # state_set 환경 KEY=VALUE...: 임시 파일에 쓴 뒤 mv로 �
 state_init() { # 처음 배포하는 환경의 상태 파일을 만든다. prod는 활성이 green이라 첫 배포가 blue로 간다(엣지 견본의 upstream과 같다)
   if [ -f "$(state_file "$1")" ]; then return 0; fi
   if [ "$1" = prod ]; then
-    state_set prod BE_ACTIVE=green FE_ACTIVE=green BE_BLUE_TAG=none BE_GREEN_TAG=none FE_BLUE_TAG=none FE_GREEN_TAG=none DEPLOYED_SHA=none PREVIOUS_SHA=none
+    state_set prod BE_ACTIVE=green FE_ACTIVE=green BE_BLUE_TAG=none BE_GREEN_TAG=none FE_BLUE_TAG=none FE_GREEN_TAG=none AI_PROD_TAG=none AI_PROD_PREV_TAG=none DEPLOYED_SHA=none PREVIOUS_SHA=none
   else
-    state_set dev BE_DEV_TAG=none BE_DEV_PREV_TAG=none FE_DEV_TAG=none FE_DEV_PREV_TAG=none DEPLOYED_SHA=none PREVIOUS_SHA=none
+    state_set dev BE_DEV_TAG=none BE_DEV_PREV_TAG=none FE_DEV_TAG=none FE_DEV_PREV_TAG=none AI_DEV_TAG=none AI_DEV_PREV_TAG=none DEPLOYED_SHA=none PREVIOUS_SHA=none
   fi
 }
 
 # ---- 이름 규칙 ----------------------------------------------------------------
-svc_name() { # svc_name be|fe 환경 [색] → be-prod-blue, be-dev
-  if [ "$2" = dev ]; then printf '%s-dev' "$1"; else printf '%s-prod-%s' "$1" "$3"; fi
+svc_name() { # svc_name be|fe|ai 환경 [색] → be-prod-blue, be-dev, ai-prod. AI는 색이 없다(한 컨테이너를 교체한다)
+  if [ "$1" = ai ] || [ "$2" = dev ]; then printf '%s-%s' "$1" "$2"; else printf '%s-prod-%s' "$1" "$3"; fi
 }
-svc_port() { if [ "$1" = be ]; then printf 8080; else printf 3000; fi; }
-tag_key() { # tag_key be|fe 환경 [색] → BE_BLUE_TAG, BE_DEV_TAG
-  if [ "$2" = dev ]; then printf '%s_DEV_TAG' "$(upper "$1")"; else printf '%s_%s_TAG' "$(upper "$1")" "$(upper "$3")"; fi
+svc_port() {
+  case "$1" in be) printf 8080 ;; ai) printf 8000 ;; *) printf 3000 ;; esac
 }
-image_of() { if [ "$1" = be ]; then printf '%s' "$BE_IMAGE"; else printf '%s' "$FE_IMAGE"; fi; }
+tag_key() { # tag_key be|fe|ai 환경 [색] → BE_BLUE_TAG, BE_DEV_TAG, AI_PROD_TAG
+  if [ "$1" = ai ] || [ "$2" = dev ]; then printf '%s_%s_TAG' "$(upper "$1")" "$(upper "$2")"; else printf '%s_%s_TAG' "$(upper "$1")" "$(upper "$3")"; fi
+}
+prev_key() { printf '%s_%s_PREV_TAG' "$(upper "$1")" "$(upper "$2")"; } # prev_key be|fe|ai 환경 → AI_PROD_PREV_TAG
+image_of() {
+  case "$1" in be) printf '%s' "$BE_IMAGE" ;; ai) printf '%s' "$AI_IMAGE" ;; *) printf '%s' "$FE_IMAGE" ;; esac
+}
 
 # docker에 넘기는 파일 경로는 native_path를 거친다(Windows의 docker.exe는 /c/... 모양을 읽지 못한다)
 app_compose_file() { native_path "$ROOT_DIR/infra/app/compose.app.yml"; }
@@ -135,9 +145,9 @@ json_string() { # json_string 키 본문: 첫 번째 "키": "값"의 값
   printf '%s' "$2" | sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" | head -n 1
 }
 
-wait_ready() { # wait_ready be|fe 컨테이너: 준비될 때까지 2초 간격으로 본다. 컨테이너가 죽으면 바로 실패한다
+wait_ready() { # wait_ready be|fe|ai 컨테이너: 준비될 때까지 2초 간격으로 본다. 컨테이너가 죽으면 바로 실패한다
   local svc="$1" name="$2" timeout limit now body
-  if [ "$svc" = be ]; then timeout="$BE_READY_TIMEOUT"; else timeout="$FE_READY_TIMEOUT"; fi
+  case "$svc" in be) timeout="$BE_READY_TIMEOUT" ;; ai) timeout="$AI_READY_TIMEOUT" ;; *) timeout="$FE_READY_TIMEOUT" ;; esac
   limit=$(($(date +%s) + timeout))
   while :; do
     container_running "$name" || {
@@ -147,6 +157,9 @@ wait_ready() { # wait_ready be|fe 컨테이너: 준비될 때까지 2초 간격�
     if [ "$svc" = be ]; then
       body="$(probe "http://$name:8081/actuator/health/readiness" 2>/dev/null || true)"
       if printf '%s' "$body" | grep -Eq '"status"[[:space:]]*:[[:space:]]*"UP"'; then return 0; fi
+    elif [ "$svc" = ai ]; then
+      # /healthz가 200이면 준비된 것이다. 저장소나 임베딩에 연결하지 못하면 503이라 준비되지 않은 것이다(ai/server/app.py)
+      if probe "http://$name:8000/healthz" >/dev/null 2>&1; then return 0; fi
     elif probe "http://$name:3000/fe-healthz" >/dev/null 2>&1; then
       return 0
     fi
@@ -160,9 +173,20 @@ wait_ready() { # wait_ready be|fe 컨테이너: 준비될 때까지 2초 간격�
 }
 
 # 반대 색을 전환하기 전에 직접 확인한다. BE는 헬스와 버전, FE는 SSR 페이지와 /config.json이다(설계 6.4절 4단계)
-smoke_idle() { # smoke_idle be|fe 환경 컨테이너 sha
+smoke_idle() { # smoke_idle be|fe|ai 환경 컨테이너 sha
   local svc="$1" env="$2" name="$3" sha="$4" body got
-  if [ "$svc" = be ]; then
+  if [ "$svc" = ai ]; then
+    # AI API는 엣지에 경로가 없다. 같은 망에서 /healthz를 보고, 떠 있는 컨테이너가 이 SHA의 이미지인지 확인한다
+    probe "http://$name:8000/healthz" >/dev/null 2>&1 || {
+      log "$name /healthz 실패"
+      return 1
+    }
+    got="$(docker inspect -f '{{.Config.Image}}' "$name" 2>/dev/null | tr -d '\r\n')"
+    [ "$got" = "$AI_IMAGE:$sha" ] || {
+      log "$name 이미지가 배포할 SHA와 다르다"
+      return 1
+    }
+  elif [ "$svc" = be ]; then
     probe "http://$name:8080/healthz" >/dev/null 2>&1 || {
       log "$name /healthz 실패"
       return 1

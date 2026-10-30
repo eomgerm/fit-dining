@@ -33,7 +33,7 @@
 
 | 키 | 그룹 | 필수 | 설명 |
 |---|---|---|---|
-| `APP_ENV` | app, migrate, fe | O | 환경 이름 `dev` 또는 `prod`. 부팅 때 DB 이름, Redis 호스트, OpenSearch 접두사가 이 값과 맞는지 검사한다 |
+| `APP_ENV` | app, migrate, fe, ai | O | 환경 이름 `dev` 또는 `prod`. 부팅 때 DB 이름, Redis 호스트, OpenSearch 접두사가 이 값과 맞는지 검사한다 |
 | `SPRING_PROFILES_ACTIVE` | app, migrate | O | 웹은 `dev` 또는 `prod`, 마이그레이션 컨테이너는 `migrate` |
 | `TZ` | app, migrate | O | `Asia/Seoul` |
 | `SPRING_DATASOURCE_URL` | app, migrate | O | JDBC URL. 환경별 DB는 `fit_dev`, `fit_prod` |

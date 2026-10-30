@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# 배포 스크립트를 노트북에서 시험한다(설계 10.5절). 실제 Caddy와 목 BE·FE 이미지로 서버 A를 흉내 낸다.
+# 배포 스크립트를 노트북에서 시험한다(설계 10.5절). 실제 Caddy와 목 BE·FE·AI 이미지로 서버 A를 흉내 낸다.
 #   bash infra/deploy/test/test-deploy.sh up     # 가짜 서버 디렉터리, 공유 망, 엣지, 시험용 저장소와 목 이미지를 만든다
-#   bash infra/deploy/test/test-deploy.sh run [구역...]   # 배포·롤백·실패 복구·기동 시나리오를 돌린다. 구역: unit guard prod dev fit_up hygiene(없으면 전부)
+#   bash infra/deploy/test/test-deploy.sh run [구역...]   # 배포·롤백·실패 복구·기동 시나리오를 돌린다. 구역: unit guard prod dev ai fit_up hygiene(없으면 전부)
 #   bash infra/deploy/test/test-deploy.sh down   # 시험이 만든 컨테이너, 이미지, 망, 디렉터리를 지운다
 # 필요한 것: docker compose(2.24 이상), curl, git, python 3.9 이상. 시험용 이름은 접두사 fit-deploytest로 시작한다.
 # 시험용 서버는 저장소 안의 .tmp-deploytest/에 있다(env 파일, 상태, 정적 자산 풀, 시험용 git 저장소).
@@ -23,7 +23,8 @@ KEY="local-test-dev-gate-key-aaaaaaaaaaaaaaaaaaaa"
 export FIT_ENV_DIR="$T/etc" FIT_STATE_DIR="$T/state" FIT_WEB_DIR="$T/web" FIT_BACKUP_DIR="$T/backups" FIT_REPO_DIR="$T/repo"
 export FIT_NET_PREFIX="$PREFIX" FIT_NET_EDGE="${PREFIX}net-edge" FIT_NET_PROD="${PREFIX}net-prod" FIT_NET_DEV="${PREFIX}net-dev"
 export FIT_NET_DATA="${PREFIX}net-data" FIT_NET_OBS="${PREFIX}net-obs"
-export FIT_BE_IMAGE=fit-deploytest/be FIT_FE_IMAGE=fit-deploytest/fe FIT_EDGE_PROJECT=fit-deploytest-edge
+export FIT_BE_IMAGE=fit-deploytest/be FIT_FE_IMAGE=fit-deploytest/fe FIT_AI_IMAGE=fit-deploytest/ai FIT_EDGE_PROJECT=fit-deploytest-edge
+export FIT_AI_READY_TIMEOUT=20 FIT_GRANT_AI_READ="$ROOT/infra/deploy/test/fake-grant.sh" FIT_GRANT_MARK="$T/grant.mark"
 export FIT_EDGE_COMPOSE_ARGS="-p $FIT_EDGE_PROJECT -f $W/infra/edge/compose.edge.yml -f $W/infra/deploy/test/compose.sim-edge.yml"
 export FIT_DEPLOY_TEST_HTTPS_PORT="$HTTPS_PORT"
 export PROD_HOST=localhost DEV_HOST=dev.localhost ACME_EMAIL=ops@example.test ACME_MODE=production HSTS_MODE=off DEV_GATE_KEY="$KEY"
@@ -76,12 +77,12 @@ make_repo() {
   echo "alter table a add column b int;" >"$T/repo/be/src/main/resources/db/migration/V2__b.sql"
   git -C "$T/repo" add -A
   git -C "$T/repo" commit -q -m c4
-  for n in 5 6 7 8; do git -C "$T/repo" commit -q --allow-empty -m "c$n"; done
+  for n in 5 6 7 8 9 10 11 12 13; do git -C "$T/repo" commit -q --allow-empty -m "c$n"; done
   git -C "$T/repo" checkout -q -b side "$(git -C "$T/repo" rev-list --max-parents=0 HEAD)"
   git -C "$T/repo" commit -q --allow-empty -m s1
   git -C "$T/repo" checkout -q main
   {
-    for n in 1 2 3 4 5 6 7 8; do echo "C$n=$(git -C "$T/repo" rev-parse "main~$((8 - n))")"; done
+    for n in 1 2 3 4 5 6 7 8 9 10 11 12 13; do echo "C$n=$(git -C "$T/repo" rev-parse "main~$((13 - n))")"; done
     echo "S1=$(git -C "$T/repo" rev-parse side)"
   } >"$T/shas.env"
 }
@@ -102,9 +103,22 @@ make_envs() {
     "$PROD_HOST" "$DEV_HOST" "$ACME_EMAIL" "$ACME_MODE" "$HSTS_MODE" "$DEV_GATE_KEY" >"$T/etc/edge.env"
 }
 
-build_images() { # build_images sha BE모드 FE모드
+# AI env 파일은 배포 시험의 AI 구역이 만든다(파일이 있어야 AI가 켜진다). 예제에서 자리표시자를 채우고 환경 이름과 DB 접속 주소를 맞춘다
+make_ai_envs() {
+  local env
+  for env in prod dev; do
+    sed -e 's/REPLACE_ME/test-value/' -e "s/^APP_ENV=.*/APP_ENV=$env/" infra/app/ai.env.example >"$T/etc/ai-$env.env"
+    sed -i "s#^DATABASE_URL=.*#DATABASE_URL=postgresql://fit_${env}_ai:test-value@postgres:5432/fit_$env#" "$T/etc/ai-$env.env"
+    chmod 640 "$T/etc/ai-$env.env"
+  done
+}
+
+build_images() { # build_images sha BE모드 FE모드 [AI모드(기본 ok, none이면 AI 이미지를 만들지 않는다)]
   docker build -q -t "$FIT_BE_IMAGE:$1" --build-arg "SHA=$1" --build-arg "MODE=$2" infra/deploy/test/mock-be >/dev/null
   docker build -q -t "$FIT_FE_IMAGE:$1" --build-arg "SHA=$1" --build-arg "MODE=$3" infra/deploy/test/mock-fe >/dev/null
+  if [ "${4:-ok}" != none ]; then
+    docker build -q -t "$FIT_AI_IMAGE:$1" --build-arg "SHA=$1" --build-arg "MODE=${4:-ok}" infra/deploy/test/mock-ai >/dev/null
+  fi
 }
 
 up() {
@@ -138,15 +152,21 @@ up() {
   build_images "$C7" ok broken
   build_images "$C8" fallback ok
   build_images "$S1" ok ok
+  # AI 구역용: c9는 AI가 준비되지 않고, c10은 정상, c11은 AI만 준비되지 않고, c12는 정상, c13은 AI 이미지가 없다(AI 빌드 실패)
+  build_images "$C9" ok ok unready
+  build_images "$C10" ok ok ok
+  build_images "$C11" ok ok unready
+  build_images "$C12" ok ok ok
+  build_images "$C13" ok ok none
   echo "배포 시험 환경이 떴다: https://$PROD_HOST:$HTTPS_PORT (prod), https://$DEV_HOST:$HTTPS_PORT (dev)"
 }
 
 down() {
   local c n
-  for c in be-prod-blue be-prod-green fe-prod-blue fe-prod-green be-dev fe-dev; do docker rm -f "$c" >/dev/null 2>&1 || true; done
+  for c in be-prod-blue be-prod-green fe-prod-blue fe-prod-green be-dev fe-dev ai-prod ai-dev; do docker rm -f "$c" >/dev/null 2>&1 || true; done
   dc_edge down -v >/dev/null 2>&1 || true
   docker rm -f fit-migrate-prod fit-migrate-dev >/dev/null 2>&1 || true
-  for r in "$FIT_BE_IMAGE" "$FIT_FE_IMAGE"; do
+  for r in "$FIT_BE_IMAGE" "$FIT_FE_IMAGE" "$FIT_AI_IMAGE"; do
     docker image ls "$r" -q 2>/dev/null | sort -u | xargs -r docker image rm -f >/dev/null 2>&1 || true
   done
   for n in net-edge net-prod net-dev net-data net-obs net-dbaccess; do docker network rm "$PREFIX$n" >/dev/null 2>&1 || true; done
@@ -191,6 +211,12 @@ running() {
   echo "${r:-missing}"
 }
 st() { state_get "$@"; } # st 환경 키
+# 떠 있는 AI 컨테이너의 이미지 태그(없으면 빈 값)
+ai_tag() {
+  local img
+  img="$(docker inspect -f '{{.Config.Image}}' "ai-$1" 2>/dev/null | tr -d '\r\n')"
+  printf '%s' "${img#"$FIT_AI_IMAGE":}"
+}
 OUT_ALL=""
 
 run_deploy() { # run_deploy 인자...: out, rc를 채운다. CI=true로 돌린다
@@ -210,6 +236,15 @@ run_unit_checks() {
   rm -f "$FIT_STATE_DIR/deploy-prod.env"
   ok_if "migrations_changed: 마이그레이션 파일이 바뀐 구간과 첫 배포만 참이다" \
     "$(is "$(migrations_changed "$C1" "$C2" && echo 0 || echo 1)$(migrations_changed "$C2" "$C4" && echo 1 || echo 0)$(migrations_changed none "$C1" && echo 1 || echo 0)" 111)"
+  echo "--- AI 이름 규칙"
+  ok_if "AI는 색이 없다(ai-prod, ai-dev, AI_PROD_TAG, AI_DEV_TAG, 포트 8000)" \
+    "$(is "$(svc_name ai prod)$(svc_name ai dev)$(tag_key ai prod)$(tag_key ai dev)$(svc_port ai)" ai-prodai-devAI_PROD_TAGAI_DEV_TAG8000)"
+  ok_if "BE·FE의 이름 규칙은 그대로다" \
+    "$(is "$(svc_name be prod blue)$(svc_name fe dev)$(tag_key be prod green)$(tag_key fe dev)$(svc_port be)$(svc_port fe)" be-prod-bluefe-devBE_GREEN_TAGFE_DEV_TAG80803000)"
+  ok_if "ai_enabled: ai-<환경>.env가 없으면 꺼져 있다" "$(ai_enabled prod && echo 0 || echo 1)"
+  : >"$T/etc/ai-prod.env"
+  ok_if "ai_enabled: 파일이 있으면 그 환경만 켜진다" "$(is "$(ai_enabled prod && echo 1 || echo 0)$(ai_enabled dev && echo 1 || echo 0)" 10)"
+  rm -f "$T/etc/ai-prod.env"
   echo "--- 잠금"
   mkdir -p "$FIT_STATE_DIR/deploy-prod.lock"
   sleep 60 &
@@ -424,6 +459,85 @@ run_dev_checks() {
   ok_if "rollback.sh dev가 직전 이미지로 되돌린다(BE c2, FE c1)" "$([ "$rc" = 0 ] && [ "$(dev_be_sha)$(dev_fe_sha)" = "$C2$C1" ] && echo 1 || echo 0)"
 }
 
+run_ai_checks() {
+  echo "--- AI API: 켜기 전에는 만들어지지 않는다(ai-<환경>.env가 있을 때만 켜진다)"
+  # shellcheck source=/dev/null
+  . "$T/shas.env"
+  ok_if "ai-*.env가 없던 지금까지의 배포는 AI 컨테이너를 만들지 않았다" "$(is "$(running ai-prod)$(running ai-dev)" missingmissing)"
+  make_ai_envs
+  : >"$T/grant.mark"
+
+  echo "--- AI API: 사전 점검"
+  out="$(bash infra/deploy/preflight.sh dev "$C9" 2>&1)" && rc=0 || rc=$?
+  ok_if "AI env 파일이 있으면 점검에 들어가고 통과한다" "$([ "$rc" = 0 ] && [ "$(has "$out" 'ai-dev.env: 형식과 필수 키(그룹 ai)')" = 1 ] && echo 1 || echo 0)"
+  cp "$T/etc/ai-prod.env" "$T/ai-prod.env.bak"
+  sed -i 's#^DATABASE_URL=.*#DATABASE_URL=postgresql://fit_dev_ai:test-value@postgres:5432/fit_dev#' "$T/etc/ai-prod.env"
+  out="$(bash infra/deploy/preflight.sh prod "$C10" 2>&1)" && rc=0 || rc=$?
+  ok_if "prod의 AI가 dev DB와 dev role을 가리키면 사전 점검이 실패한다(환경이 섞이지 않게)" "$([ "$rc" = 1 ] && [ "$(has "$out" 'FAIL  ai-prod.env: DATABASE_URL')" = 1 ] && echo 1 || echo 0)"
+  cp "$T/ai-prod.env.bak" "$T/etc/ai-prod.env"
+  sed -i 's/^APP_ENV=.*/APP_ENV=dev/' "$T/etc/ai-prod.env"
+  out="$(bash infra/deploy/preflight.sh prod "$C10" 2>&1)" && rc=0 || rc=$?
+  ok_if "prod의 AI 파일에 APP_ENV=dev가 있으면 사전 점검이 실패한다" "$([ "$rc" = 1 ] && [ "$(has "$out" 'FAIL  ai-prod.env: APP_ENV가 prod이다')" = 1 ] && echo 1 || echo 0)"
+  cp "$T/ai-prod.env.bak" "$T/etc/ai-prod.env"
+  sed -i 's/^GMS_API_KEY=.*/GMS_API_KEY=REPLACE_ME/' "$T/etc/ai-prod.env"
+  out="$(bash infra/deploy/preflight.sh prod "$C10" 2>&1)" && rc=0 || rc=$?
+  ok_if "AI 파일에 자리표시자(REPLACE_ME)가 남아 있으면 사전 점검이 실패한다" "$([ "$rc" = 1 ] && [ "$(has "$out" 'FAIL  ai-prod.env: 자리표시자')" = 1 ] && echo 1 || echo 0)"
+  cp "$T/ai-prod.env.bak" "$T/etc/ai-prod.env"
+  rm -f "$T/ai-prod.env.bak"
+  out="$(bash infra/deploy/preflight.sh dev "$C13" 2>&1)" && rc=0 || rc=$?
+  ok_if "AI 이미지가 없으면 점검은 통과하고(SKIP) AI 배포만 건너뛴다고 알린다" "$([ "$rc" = 0 ] && [ "$(has "$out" 'SKIP  이미지 ')" = 1 ] && [ "$(has "$out" '건너뛴다')" = 1 ] && echo 1 || echo 0)"
+
+  echo "--- AI API dev: 첫 배포에서 준비되지 않으면(c9) 치우고 BE·FE는 계속한다"
+  run_deploy dev "$C9"
+  ok_if "AI가 준비되지 않아도 배포는 성공한다(AI는 폴백이 있는 선택 의존이다)" "$(is "$rc" 0)"
+  ok_if "BE와 FE는 c9로 갔다" "$(is "$(dev_be_sha)$(dev_fe_sha)" "$C9$C9")"
+  ok_if "준비되지 않은 AI 컨테이너는 치웠고 상태의 태그는 none이다" "$(is "$(running ai-dev)$(st dev AI_DEV_TAG)" missingnone)"
+  ok_if "로그에 AI 경고가 있고 알림에도 AI가 드러난다" \
+    "$([ "$(has "$out" '경고: [ai]')" = 1 ] && grep -a "배포 완료: dev ${C9:0:12}" "$T/webhook.log" | grep -q 'AI' && echo 1 || echo 0)"
+  ok_if "AI 읽기 권한 맞추기를 불렀다(마이그레이션이 없어도 AI를 켠 환경은 매번 맞춘다)" "$([ -s "$T/grant.mark" ] && echo 1 || echo 0)"
+
+  echo "--- AI API dev: 정상 배포(c10), 준비되지 않는 배포(c11), 다시 정상(c12)"
+  run_deploy dev "$C10"
+  ok_if "c10 배포가 성공하고 AI가 c10으로 떠 있다" "$([ "$rc" = 0 ] && [ "$(ai_tag dev)" = "$C10" ] && [ "$(st dev AI_DEV_TAG)" = "$C10" ] && echo 1 || echo 0)"
+  ok_if "BE와 FE도 c10이다" "$(is "$(dev_be_sha)$(dev_fe_sha)" "$C10$C10")"
+  run_deploy dev "$C11"
+  ok_if "c11은 AI가 준비되지 않아도 배포가 성공하고 AI는 직전 이미지(c10)로 돌아가 있다" \
+    "$([ "$rc" = 0 ] && [ "$(ai_tag dev)" = "$C10" ] && [ "$(st dev AI_DEV_TAG)$(st dev AI_DEV_PREV_TAG)" = "${C10}none" ] && echo 1 || echo 0)"
+  ok_if "BE와 FE는 c11이다" "$(is "$(dev_be_sha)$(dev_fe_sha)" "$C11$C11")"
+  run_deploy dev "$C12"
+  ok_if "c12 배포에서 AI가 c12이고 직전 태그는 c10이다" \
+    "$([ "$rc" = 0 ] && [ "$(ai_tag dev)" = "$C12" ] && [ "$(st dev AI_DEV_TAG)$(st dev AI_DEV_PREV_TAG)" = "${C12}${C10}" ] && echo 1 || echo 0)"
+  out="$(bash infra/deploy/rollback.sh dev 2>&1)" && rc=0 || rc=$?
+  printf '%s\n' "$out" >>"$OUT_ALL"
+  ok_if "rollback.sh dev가 AI도 직전 이미지(c10)로 되돌리고 BE·FE는 c11이 된다" \
+    "$([ "$rc" = 0 ] && [ "$(ai_tag dev)" = "$C10" ] && [ "$(dev_be_sha)$(dev_fe_sha)" = "$C11$C11" ] && echo 1 || echo 0)"
+  out="$(bash infra/deploy/rollback.sh dev ai 2>&1)" && rc=0 || rc=$?
+  printf '%s\n' "$out" >>"$OUT_ALL"
+  ok_if "rollback.sh dev ai는 AI만 바꾼다(c12로, BE·FE는 c11 그대로)" \
+    "$([ "$rc" = 0 ] && [ "$(ai_tag dev)" = "$C12" ] && [ "$(dev_be_sha)$(dev_fe_sha)" = "$C11$C11" ] && echo 1 || echo 0)"
+
+  echo "--- AI API dev: AI 이미지가 없는 배포(c13, AI 빌드 실패)는 AI만 건너뛴다"
+  run_deploy dev "$C13"
+  ok_if "배포가 성공하고 BE·FE는 c13, AI는 그대로(c12)이며 건너뛴다고 알린다" \
+    "$([ "$rc" = 0 ] && [ "$(dev_be_sha)$(dev_fe_sha)" = "$C13$C13" ] && [ "$(ai_tag dev)" = "$C12" ] && [ "$(has "$out" 'AI API 배포를 건너뛴다')" = 1 ] && echo 1 || echo 0)"
+  out="$(FAKE_GRANT_FAIL=1 CI=true bash infra/deploy/deploy.sh dev "$C13" 2>&1)" && rc=0 || rc=$?
+  printf '%s\n' "$out" >>"$OUT_ALL"
+  ok_if "AI 읽기 권한 맞추기가 실패해도 배포는 성공하고 경고가 나온다" "$([ "$rc" = 0 ] && [ "$(has "$out" 'AI 읽기 권한을 맞추지 못했다')" = 1 ] && echo 1 || echo 0)"
+
+  echo "--- AI API prod: 한 컨테이너를 교체한다(Blue/Green이 아니다)"
+  run_deploy prod "$C10"
+  ok_if "prod c10 배포가 성공하고 ai-prod가 c10으로 떠 있다" "$([ "$rc" = 0 ] && [ "$(ai_tag prod)" = "$C10" ] && [ "$(st prod AI_PROD_TAG)" = "$C10" ] && echo 1 || echo 0)"
+  ok_if "AI는 색이 없다(ai-prod-blue, ai-prod-green이 없다). BE·FE는 c10이다" \
+    "$(is "$(running ai-prod-blue)$(running ai-prod-green)$(be_sha)$(fe_sha)" "missingmissing$C10$C10")"
+  run_deploy prod "$C11"
+  ok_if "c11은 AI가 준비되지 않아도 배포가 성공하고 ai-prod는 c10으로 남는다. BE·FE는 c11이다" \
+    "$([ "$rc" = 0 ] && [ "$(ai_tag prod)" = "$C10" ] && [ "$(be_sha)$(fe_sha)" = "$C11$C11" ] && echo 1 || echo 0)"
+  out="$(bash infra/deploy/rollback.sh prod 2>&1)" && rc=0 || rc=$?
+  printf '%s\n' "$out" >>"$OUT_ALL"
+  ok_if "rollback.sh prod: BE·FE는 c10으로 돌아가고 AI는 되돌릴 이전 이미지가 없어 그대로다(경고)" \
+    "$([ "$rc" = 0 ] && [ "$(be_sha)$(fe_sha)" = "$C10$C10" ] && [ "$(ai_tag prod)" = "$C10" ] && [ "$(has "$out" '[ai] 되돌릴 이전 이미지가 없다')" = 1 ] && echo 1 || echo 0)"
+}
+
 run_fit_up_checks() {
   echo "--- fit-up: 전부 멈춘 뒤 순서대로 올린다"
   local ids
@@ -435,9 +549,11 @@ run_fit_up_checks() {
   printf '%s\n' "$out" >>"$OUT_ALL"
   ok_if "fit-up이 끝나고 경고가 없다" "$([ "$rc" = 0 ] && [ "$(has "$out" '모두 올라왔다')" = 1 ] && echo 1 || echo 0)"
   ok_if "엣지가 다시 떴고 prod·dev 서비스가 전과 같은 버전으로 응답한다" \
-    "$(is "$(be_sha)$(fe_sha)$(dev_be_sha)$(dev_fe_sha)" "$C6$C6$C2$C1")"
-  ok_if "활성이 아닌 prod 색은 올리지 않는다(green은 멈춘 채)" "$(is "$(running be-prod-green)$(running fe-prod-green)" falsefalse)"
+    "$(is "$(be_sha)$(fe_sha)$(dev_be_sha)$(dev_fe_sha)" "$C10$C10$C13$C13")"
+  ok_if "활성이 아닌 prod 색은 올리지 않는다(blue는 멈춘 채)" "$(is "$(running be-prod-blue)$(running fe-prod-blue)" falsefalse)"
   ok_if "compose 파일이 없는 data·obs는 건너뛰고 data 초기화도 하지 않는다" "$([ "$(has "$out" 'data: 건너뜀')$(has "$out" 'obs: 건너뜀')$(has "$out" '데이터 초기화')" = 110 ] && echo 1 || echo 0)"
+  ok_if "AI 컨테이너도 다시 떴다(ai-prod는 c10, ai-dev는 c12)" "$(is "$(running ai-prod)$(running ai-dev)$(ai_tag prod)$(ai_tag dev)" "truetrue$C10$C12")"
+  ok_if "fit-up이 AI를 올렸다고 알려 준다" "$([ "$(has "$out" 'ai-prod: 올린다')$(has "$out" 'ai-dev: 올린다')" = 11 ] && echo 1 || echo 0)"
 }
 
 run_hygiene_checks() {
@@ -448,6 +564,9 @@ run_hygiene_checks() {
     "$(is "$(docker inspect -f '{{.HostConfig.Memory}}' be-prod-green)$(docker inspect -f '{{.HostConfig.Memory}}' fe-prod-green)$(docker inspect -f '{{.HostConfig.Memory}}' be-dev)" "$((1536 * 1048576))$((512 * 1048576))$((1024 * 1048576))")"
   ok_if "FE는 읽기 전용 루트 파일시스템이다" "$(is "$(docker inspect -f '{{.HostConfig.ReadonlyRootfs}}' fe-prod-green)" true)"
   ok_if "호스트에 게시한 포트가 없다(앱 컨테이너)" "$([ -z "$(docker ps -q --filter label=com.fit.service | xargs -r -n1 docker port)" ] && echo 1 || echo 0)"
+  ok_if "AI 컨테이너 한도: ai-prod 512m, ai-dev 400m, 루트 파일시스템 읽기 전용" \
+    "$(is "$(docker inspect -f '{{.HostConfig.Memory}}' ai-prod)$(docker inspect -f '{{.HostConfig.Memory}}' ai-dev)$(docker inspect -f '{{.HostConfig.ReadonlyRootfs}}' ai-prod)" "$((512 * 1048576))$((400 * 1048576))true")"
+  ok_if "출력과 알림 어디에도 AI의 DB 접속 주소(비밀번호 포함)가 없다" "$([ "$(grep -c 'postgresql://' "$OUT_ALL")" = 0 ] && [ "$(grep -c 'postgresql://' "$T/webhook.log")" = 0 ] && echo 1 || echo 0)"
 }
 
 run() {
@@ -462,12 +581,13 @@ run() {
   echo $! >"$T/sink.pid"
   sleep 1
   set +e
-  # 구역을 주면 그것만 돈다(prod, dev, fit_up은 앞 구역이 만든 상태에 기대므로 처음부터 이어서 줘야 한다. guard는 단독으로 된다)
-  local zones=" ${*:-unit guard prod dev fit_up hygiene} "
+  # 구역을 주면 그것만 돈다(prod, dev, ai, fit_up은 앞 구역이 만든 상태에 기대므로 처음부터 이어서 줘야 한다. guard는 단독으로 된다)
+  local zones=" ${*:-unit guard prod dev ai fit_up hygiene} "
   case "$zones" in *" unit "*) run_unit_checks ;; esac
   case "$zones" in *" guard "*) run_guard_checks ;; esac
   case "$zones" in *" prod "*) run_prod_checks ;; esac
   case "$zones" in *" dev "*) run_dev_checks ;; esac
+  case "$zones" in *" ai "*) run_ai_checks ;; esac
   case "$zones" in *" fit_up "*) run_fit_up_checks ;; esac
   case "$zones" in *" hygiene "*) run_hygiene_checks ;; esac
   set -e
