@@ -64,17 +64,22 @@ const withAccessToken: WithAccessToken = (send) => send("at");
 // 앱과 같은 재시도 설정의 QueryClient로 그린다
 function mount(props: { withAccessToken?: WithAccessToken } = {}) {
   const onEnter = vi.fn();
+  const onSignIn = vi.fn();
   const view = render(
     <QueryClientProvider client={createQueryClient()}>
       <ReviewEntryButton
         placeId={3}
         withAccessToken={props.withAccessToken ?? withAccessToken}
         onEnter={onEnter}
+        onSignIn={onSignIn}
       />
     </QueryClientProvider>,
   );
-  return { onEnter, unmount: view.unmount };
+  return { onEnter, onSignIn, unmount: view.unmount };
 }
+
+const signedOut: WithAccessToken = () =>
+  Promise.reject(new ApiError("http", "x", { status: 401 }));
 
 const entry = () => renderHook(() => useVisitEntry(3)).result.current;
 const press = (name: string) =>
@@ -160,16 +165,46 @@ describe("ReviewEntryButton", () => {
     expect(entry()).toMatchObject({ verified: true });
   });
 
-  it("로그인하지 않았으면 위치를 묻지 않고 작성 화면(로그인 화면으로 바뀐다)으로 보낸다", async () => {
-    const signedOut: WithAccessToken = () =>
-      Promise.reject(new ApiError("http", "x", { status: 401 }));
-    const { onEnter } = mount({ withAccessToken: signedOut });
+  it("로그인하지 않았으면 위치를 묻지 않고 작성 화면 대신 로그인 안내를 띄운다(6-E05)", async () => {
+    const { onEnter, onSignIn } = mount({ withAccessToken: signedOut });
 
     press("방문 평가 남기기");
 
-    await waitFor(() => expect(onEnter).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText("로그인이 필요해요")).toBeTruthy();
+    expect(
+      screen.getByText("방문 평가는 로그인해야 이용할 수 있어요."),
+    ).toBeTruthy();
+    expect(onEnter).not.toHaveBeenCalled();
+    expect(onSignIn).not.toHaveBeenCalled();
     expect(getCurrentPosition).not.toHaveBeenCalled();
-    expect(entry()).toMatchObject({ verified: false, pickDate: false });
+  });
+
+  it("로그인 안내의 로그인은 창을 닫고 로그인으로 보낸다", async () => {
+    const { onEnter, onSignIn } = mount({ withAccessToken: signedOut });
+
+    press("방문 평가 남기기");
+    await screen.findByText("로그인이 필요해요");
+    press("로그인");
+
+    expect(onSignIn).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(screen.queryByText("로그인이 필요해요")).toBeNull(),
+    );
+    expect(onEnter).not.toHaveBeenCalled();
+  });
+
+  it("로그인 안내의 취소는 장소 상세에 남는다", async () => {
+    const { onEnter, onSignIn } = mount({ withAccessToken: signedOut });
+
+    press("방문 평가 남기기");
+    await screen.findByText("로그인이 필요해요");
+    press("취소");
+
+    await waitFor(() =>
+      expect(screen.queryByText("로그인이 필요해요")).toBeNull(),
+    );
+    expect(onEnter).not.toHaveBeenCalled();
+    expect(onSignIn).not.toHaveBeenCalled();
   });
 
   it("작성 화면 데이터를 받지 못하면 다시 시도하지 않고, 위치도 묻지 않은 채 작성 화면으로 보낸다", async () => {

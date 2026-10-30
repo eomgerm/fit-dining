@@ -47,6 +47,7 @@ export function PlaceDetailWithReviews() {
             placeId={placeId}
             withAccessToken={withAccessToken}
             onEnter={() => router.push(reviewWriteHref(placeId))}
+            onSignIn={signIn}
           />
         ),
       }}

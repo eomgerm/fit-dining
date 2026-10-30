@@ -6,7 +6,6 @@ import { isApiError } from "@/shared/api/api-error";
 import { cn } from "@/shared/lib/cn";
 import { Button } from "@/shared/ui/button/button";
 import { TrashIcon } from "@/shared/ui/icon/icons/trash";
-import { UserIcon } from "@/shared/ui/icon/icons/user";
 import { ConfirmDialog } from "@/shared/ui/overlay/confirm-dialog";
 import { useToast } from "@/shared/ui/overlay/toast";
 
@@ -22,6 +21,7 @@ import { deleteFailureMessage } from "./edit-failure";
 import { reportFailure } from "./report-failure";
 import { ReviewListView } from "./review-list-view";
 import { ReviewReportSheet } from "./review-report-sheet";
+import { SignInPrompt } from "./sign-in-prompt";
 
 type ReviewSectionProps = {
   placeId: number;
@@ -210,34 +210,11 @@ export function ReviewSection({
           </Button>
         }
       />
-      <ConfirmDialog
+      <SignInPrompt
         open={signingIn}
-        onOpenChange={(open) => {
-          if (!open) setSigningIn(false);
-        }}
-        icon={<UserIcon />}
-        title="로그인이 필요해요"
         description="리뷰 신고는 로그인해야 이용할 수 있어요."
-        secondaryAction={
-          <Button
-            variant="outline"
-            size="md"
-            onClick={() => setSigningIn(false)}
-          >
-            취소
-          </Button>
-        }
-        action={
-          <Button
-            size="md"
-            onClick={() => {
-              setSigningIn(false);
-              onSignIn();
-            }}
-          >
-            로그인
-          </Button>
-        }
+        onClose={() => setSigningIn(false)}
+        onSignIn={onSignIn}
       />
       <ReviewReportSheet
         open={reporting !== null}

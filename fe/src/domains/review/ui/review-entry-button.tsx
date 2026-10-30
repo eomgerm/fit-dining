@@ -3,6 +3,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
+import { isApiError } from "@/shared/api/api-error";
 import { Button } from "@/shared/ui/button/button";
 import { CalendarIcon } from "@/shared/ui/icon/icons/calendar";
 import { PinIcon } from "@/shared/ui/icon/icons/pin";
@@ -17,6 +18,7 @@ import {
   reviewedToday,
   type VisitEntry,
 } from "../model/visit-entry";
+import { SignInPrompt } from "./sign-in-prompt";
 import { saveVisitEntry } from "./visit-entry-store";
 
 const LOCATION_TIMEOUT_MS = 10_000;
@@ -58,20 +60,23 @@ type ReviewEntryButtonProps = {
   withAccessToken: WithAccessToken;
   // 작성 화면으로 간다. 화면 이동은 app이 정한다
   onEnter: () => void;
+  // 로그인 안내(6-E05)에서 "로그인"을 누르면 부른다. 화면 이동은 app이 정한다
+  onSignIn: () => void;
 };
 
-// 장소 상세 하단의 "방문 평가 남기기"(D-12, D-43). 작성 화면 데이터를 먼저 받아 오늘 이미 썼으면 7-E01,
-// 아니면 기기 위치를 받아 근처면 바로 작성 화면, 근처가 아니면 7-E02를 띄운다
+// 장소 상세 하단의 "방문 평가 남기기"(D-12, D-43, D-47). 작성 화면 데이터를 먼저 받아 로그인하지 않았으면 로그인 안내(6-E05),
+// 오늘 이미 썼으면 7-E01, 아니면 기기 위치를 받아 근처면 바로 작성 화면, 근처가 아니면 7-E02를 띄운다
 export function ReviewEntryButton({
   placeId,
   withAccessToken,
   onEnter,
+  onSignIn,
 }: ReviewEntryButtonProps) {
   const queryClient = useQueryClient();
   const [checking, setChecking] = useState(false);
-  const [dialog, setDialog] = useState<"reviewedToday" | "notNearby" | null>(
-    null,
-  );
+  const [dialog, setDialog] = useState<
+    "signIn" | "reviewedToday" | "notNearby" | null
+  >(null);
   const [form, setForm] = useState<ReviewFormResponse | null>(null);
   // 확인하는 동안 상세를 떠나면(숨김·언마운트) 그 결과로 화면을 옮기지 않는다
   const attempt = useRef(0);
@@ -121,9 +126,11 @@ export function ReviewEntryButton({
       }
       const position = await currentPosition();
       if (id === attempt.current) decide(data, position);
-    } catch {
-      // 로그인하지 않았거나 데이터를 받지 못했으면 작성 화면이 로그인 화면이나 오류 안내를 맡는다
-      if (id === attempt.current) enter({ verified: false, pickDate: false });
+    } catch (error) {
+      if (id !== attempt.current) return;
+      // 데이터를 받지 못했으면 작성 화면이 오류 안내를 맡는다
+      if (isApiError(error) && error.status === 401) setDialog("signIn");
+      else enter({ verified: false, pickDate: false });
     } finally {
       setChecking(false);
     }
@@ -160,6 +167,12 @@ export function ReviewEntryButton({
       <span role="status" className="sr-only">
         {checking ? "방문을 확인하고 있어요" : ""}
       </span>
+      <SignInPrompt
+        open={dialog === "signIn"}
+        description="방문 평가는 로그인해야 이용할 수 있어요."
+        onClose={() => setDialog(null)}
+        onSignIn={onSignIn}
+      />
       <ConfirmDialog
         open={dialog === "reviewedToday"}
         onOpenChange={close}
