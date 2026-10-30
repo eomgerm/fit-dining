@@ -1,6 +1,13 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { bannerClosed, closeBanner, introSeen, markIntroSeen } from "./storage";
+import {
+  bannerClosed,
+  closeBanner,
+  introSeen,
+  markIntroSeen,
+  rememberResume,
+  takeResume,
+} from "./storage";
 
 afterEach(() => {
   localStorage.clear();
@@ -38,5 +45,20 @@ describe("설치 안내 기록", () => {
     expect(() => closeBanner()).not.toThrow();
     expect(introSeen()).toBe(true);
     expect(bannerClosed()).toBe(true);
+  });
+});
+
+describe("가이드에서 돌아올 때 이어 갈 곳", () => {
+  it("한 번만 꺼내 쓴다", () => {
+    expect(takeResume()).toBeUndefined();
+    rememberResume("start");
+    expect(takeResume()).toBe("start");
+    expect(takeResume()).toBeUndefined();
+  });
+
+  it("이번 방문(sessionStorage)에만 남긴다", () => {
+    rememberResume("login");
+    expect(localStorage.length).toBe(0);
+    expect(sessionStorage.length).toBe(1);
   });
 });

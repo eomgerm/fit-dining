@@ -16,6 +16,7 @@ import {
   vi,
 } from "vitest";
 import { InstallBanner } from "@/domains/install/ui/install-banner";
+import { Activity } from "react";
 import { HomeEntry } from "./home-entry";
 import { rememberLoginReturn } from "./login-return";
 import { introSeen, markIntroSeen } from "@/domains/install/model/storage";
@@ -300,5 +301,90 @@ describe("홈 화면 추가 배너(4-01b)는 첫 화면부터 보인다", () => 
     );
     expect(await screen.findByText("검색 홈")).toBeTruthy();
     expect(banner()).not.toBeNull();
+  });
+});
+
+describe("홈 화면 추가 안내가 끝나면 누른 버튼이 하던 곳으로 간다", () => {
+  async function intro() {
+    mocks.restore.mockRejectedValue(new Error("unauthenticated"));
+    render(<HomeEntry />);
+    return screen.findByRole("button", { name: "시작하기" });
+  }
+
+  it("설치 창을 닫으면 최초화면에 머물지 않고 온보딩으로 간다", async () => {
+    fireEvent.click(await intro());
+    await screen.findByRole("alertdialog");
+    const prompt = vi.fn(async () => {});
+    const event = new Event("beforeinstallprompt", { cancelable: true });
+    Object.assign(event, {
+      prompt,
+      userChoice: Promise.resolve({ outcome: "dismissed" }),
+    });
+    act(() => {
+      window.dispatchEvent(event);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "홈 화면에 추가하기" }));
+    expect(
+      await screen.findByRole("radio", { name: "조용하고 차분한 곳" }),
+    ).toBeTruthy();
+    expect(prompt).toHaveBeenCalledTimes(1);
+    expect(mocks.push).not.toHaveBeenCalled();
+  });
+
+  it("[시작하기]로 가이드에 갔다가 돌아오면 바로 온보딩부터 보여 준다", async () => {
+    fireEvent.click(await intro());
+    await screen.findByRole("alertdialog");
+    fireEvent.click(screen.getByRole("button", { name: "홈 화면에 추가하기" }));
+    expect(mocks.push).toHaveBeenCalledWith("/install/android");
+    // 가이드에서 [이전]으로 돌아오면 홈이 새로 그려진다
+    cleanup();
+    mocks.restore.mockRejectedValue(new Error("unauthenticated"));
+    render(<HomeEntry />);
+    expect(
+      await screen.findByRole("radio", { name: "조용하고 차분한 곳" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "시작하기" })).toBeNull();
+  });
+
+  it("화면 상태를 보존한 채 돌아와도(Next Activity) 바로 온보딩부터 보여 준다", async () => {
+    mocks.restore.mockRejectedValue(new Error("unauthenticated"));
+    // Cache Components는 떠난 화면을 hidden Activity로 남겨 두었다가 돌아오면 상태째 다시 보여 준다
+    const view = render(
+      <Activity mode="visible">
+        <HomeEntry />
+      </Activity>,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "시작하기" }));
+    await screen.findByRole("alertdialog");
+    fireEvent.click(screen.getByRole("button", { name: "홈 화면에 추가하기" }));
+    view.rerender(
+      <Activity mode="hidden">
+        <HomeEntry />
+      </Activity>,
+    );
+    view.rerender(
+      <Activity mode="visible">
+        <HomeEntry />
+      </Activity>,
+    );
+    expect(
+      await screen.findByRole("radio", { name: "조용하고 차분한 곳" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "시작하기" })).toBeNull();
+  });
+
+  it("[기존 계정으로 로그인]으로 가이드에 갔다가 돌아오면 로그인 화면으로 보낸다", async () => {
+    await intro();
+    fireEvent.click(
+      screen.getByRole("button", { name: "기존 계정으로 로그인" }),
+    );
+    await screen.findByRole("alertdialog");
+    fireEvent.click(screen.getByRole("button", { name: "홈 화면에 추가하기" }));
+    cleanup();
+    mocks.restore.mockRejectedValue(new Error("unauthenticated"));
+    render(<HomeEntry />);
+    await vi.waitFor(() =>
+      expect(mocks.replace).toHaveBeenCalledWith("/login"),
+    );
   });
 });

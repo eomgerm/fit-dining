@@ -61,6 +61,14 @@ describe("처음 화면 버튼 가로채기(홈 화면 추가 안내용)", () =>
     ).toBeTruthy();
   });
 
+  it("처음 단계를 받아 최초화면 없이 온보딩부터 시작할 수 있다", () => {
+    render(<OnboardingScreen onComplete={() => {}} initialStep={1} />);
+    expect(screen.queryByRole("button", { name: "시작하기" })).toBeNull();
+    expect(
+      screen.getByRole("radio", { name: "조용하고 차분한 곳" }),
+    ).toBeTruthy();
+  });
+
   it("가로채지 않으면 바로 온보딩으로 간다", () => {
     render(
       <OnboardingScreen onComplete={() => {}} interceptIntro={() => false} />,

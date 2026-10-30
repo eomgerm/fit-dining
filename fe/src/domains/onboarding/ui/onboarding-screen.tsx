@@ -90,13 +90,16 @@ function IntroBackground() {
 export function OnboardingScreen({
   onComplete,
   interceptIntro,
+  initialStep = 0,
 }: {
   onComplete: (answers: OnboardingAnswers) => void;
   // 처음 화면의 [시작하기]·[기존 계정으로 로그인]을 가로챈다(홈 화면 추가 안내 1-01a).
   // 가로챘으면 true를 돌려주고, 안내가 끝나면 proceed로 그 버튼이 하던 일을 이어 간다
   interceptIntro?: (from: "start" | "login", proceed: () => void) => boolean;
+  // 1이면 최초화면을 건너뛰고 첫 질문부터 보여 준다(홈 화면 추가 가이드에서 돌아왔을 때)
+  initialStep?: number;
 }) {
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState(initialStep);
   const [answers, setAnswers] = useState<OnboardingAnswers>({
     mood: null,
     priorities: [],

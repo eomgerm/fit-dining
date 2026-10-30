@@ -33,14 +33,20 @@ export function useInstall() {
   const inApp = useSyncExternalStore(subscribeNothing, standalone, () => true);
 
   // Chrome이 설치 창을 띄울 수 있으면 띄우고, 아니면 브라우저 메뉴 경로 안내로 간다(1-01b·1-01c·1-01d)
-  function start() {
-    const openGuide = () =>
+  // onPrompted: 설치 창이 닫힌 뒤(설치·취소 모두), onGuide: 가이드로 가기 직전에 부른다
+  function start({
+    onPrompted,
+    onGuide,
+  }: { onPrompted?: () => void; onGuide?: () => void } = {}) {
+    const openGuide = () => {
+      onGuide?.();
       router.push(
         `/install/${installPlatform(navigator.userAgent, navigator.maxTouchPoints)}`,
       );
+    };
     if (canPrompt) {
       // 설치 창을 못 띄우면(브라우저가 거부) 메뉴 경로 안내로 간다
-      promptInstall().catch(openGuide);
+      promptInstall().then(() => onPrompted?.(), openGuide);
       return;
     }
     openGuide();

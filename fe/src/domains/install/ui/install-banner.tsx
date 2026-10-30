@@ -73,7 +73,15 @@ export function InstallBanner() {
         className="shrink-0"
       />
       <span className="min-w-0 flex-1">홈 화면에 추가하고 편리하게 사용</span>
-      <Button size="sm" className="shrink-0" onClick={start}>
+      <Button
+        size="sm"
+        className="shrink-0"
+        onClick={() => {
+          // 눌렀으면 할 일을 다 한 배너라 이번 방문 동안 숨긴다
+          closeBanner();
+          start();
+        }}
+      >
         추가하기
       </Button>
       {/* 글이 두 줄로 넘어가지 않게 닫기 버튼을 [추가하기]에 붙인다 */}

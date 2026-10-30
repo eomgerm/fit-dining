@@ -35,3 +35,24 @@ export const introSeen = () => read(() => localStorage, INTRO_KEY);
 export const markIntroSeen = () => write(() => localStorage, INTRO_KEY);
 export const bannerClosed = () => read(() => sessionStorage, BANNER_KEY);
 export const closeBanner = () => write(() => sessionStorage, BANNER_KEY);
+
+// 1-01a에서 가이드로 갔다가 돌아오면 최초화면 대신 누른 버튼이 하던 곳(온보딩·로그인)으로 바로 보낸다
+const RESUME_KEY = "fd.install.resume.v1";
+export type IntroAction = "start" | "login";
+
+export function rememberResume(from: IntroAction) {
+  try {
+    sessionStorage.setItem(RESUME_KEY, from);
+  } catch {
+    /* Storage may be disabled. */
+  }
+}
+export function takeResume(): IntroAction | undefined {
+  try {
+    const value = sessionStorage.getItem(RESUME_KEY);
+    sessionStorage.removeItem(RESUME_KEY);
+    if (value === "start" || value === "login") return value;
+  } catch {
+    /* Storage may be disabled. */
+  }
+}

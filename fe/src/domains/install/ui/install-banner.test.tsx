@@ -126,6 +126,16 @@ describe("홈 화면 추가 배너", () => {
     fireEvent.click(screen.getByRole("button", { name: "추가하기" }));
     expect(mocks.router.push).toHaveBeenCalledWith("/install/android");
   });
+
+  it("[추가하기]를 누르면 이번 방문 동안 배너를 숨긴다", () => {
+    markIntroSeen();
+    render(<InstallBanner />);
+    fireEvent.click(screen.getByRole("button", { name: "추가하기" }));
+    expect(banner()).toBeNull();
+    cleanup();
+    render(<InstallBanner />);
+    expect(banner()).toBeNull();
+  });
 });
 
 describe("설치 창을 띄울 수 있을 때", () => {
