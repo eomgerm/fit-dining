@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import { Providers } from "./providers";
@@ -14,6 +14,14 @@ const pretendard = localFont({
 export const metadata: Metadata = {
   title: "Fit Dining",
   description: "오늘 끌리는 곳, 내 취향으로 찾기",
+  // iOS는 매니페스트 아이콘 대신 apple-touch-icon(PNG)을 읽는다
+  icons: { apple: "/icons/apple-touch-icon.png" },
+  appleWebApp: { capable: true, title: "핏다이닝", statusBarStyle: "default" },
+};
+
+// 상단바를 페이지 바탕(--color-surface)과 같은 흰색으로 맞춘다
+export const viewport: Viewport = {
+  themeColor: "#ffffff",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
