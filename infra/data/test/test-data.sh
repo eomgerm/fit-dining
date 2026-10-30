@@ -33,6 +33,8 @@ make_env() {
     echo "FIT_PROD_APP_PASSWORD=$(hex 12)"
     echo "FIT_DEV_APP_PASSWORD=$(hex 12)"
     echo "FIT_MONITOR_PASSWORD=$(hex 12)"
+    echo "FIT_PROD_AI_PASSWORD=$(hex 12)"
+    echo "FIT_DEV_AI_PASSWORD=$(hex 12)"
     echo "REDIS_PROD_PASSWORD=$(hex 12)"
     echo "REDIS_DEV_PASSWORD=$(hex 12)"
     echo "GARAGE_RPC_SECRET=$(hex 32)"
@@ -132,7 +134,7 @@ run_idempotent_checks() {
   run_script init-data.sh
   ok_if "다시 실행해도 성공한다" "$(is "$rc" 0)"
   ok_if "두 번째 실행은 Garage 레이아웃을 다시 적용하지 않는다" "$(is "$(has "$out" '레이아웃을 적용했다')" 0)"
-  ok_if "role은 4개뿐이다(마이그레이터, prod 앱, dev 앱, 모니터링)" "$(is "$(psql_admin -d postgres -c "SELECT count(*) FROM pg_roles WHERE rolname LIKE 'fit\\_%'")" 4)"
+  ok_if "role은 6개뿐이다(마이그레이터, prod 앱, dev 앱, 모니터링, prod AI, dev AI)" "$(is "$(psql_admin -d postgres -c "SELECT count(*) FROM pg_roles WHERE rolname LIKE 'fit\\_%'")" 6)"
   ok_if "DB는 2개뿐이다" "$(is "$(psql_admin -d postgres -c "SELECT count(*) FROM pg_database WHERE datname LIKE 'fit\\_%'")" 2)"
   ok_if "재실행이 기존 데이터를 건드리지 않는다(Postgres)" "$(is "$(pg_as fit_migrator "$FIT_MIGRATOR_PASSWORD" fit_prod 'SELECT id FROM keep_rows')" 7)"
   out="$(prod_s3 get fit-prod-photos keep.txt)"
@@ -229,6 +231,44 @@ run_redis_checks() {
   rcli dev del dev-only >/dev/null
 }
 
+run_ai_checks() {
+  echo "--- AI 읽기 전용 role"
+  local m="$FIT_MIGRATOR_PASSWORD" a="$FIT_PROD_AI_PASSWORD" d="$FIT_DEV_AI_PASSWORD" p="$FIT_PROD_APP_PASSWORD"
+  run_script ensure-databases.sh
+  ok_if "AI role이 있어도 객체가 아직 없는 DB에서 ensure-databases.sh가 성공한다(마이그레이션 전)" "$(is "$rc" 0)"
+  # AI가 읽는 것은 뷰 ai_place_search와 user_preferences 둘뿐이다(마이그레이션이 만든다). 시험은 같은 이름으로 만든다
+  pg_as fit_migrator "$m" fit_prod "CREATE TABLE places_t (id int PRIMARY KEY, name text); INSERT INTO places_t VALUES (1, 'a');
+    CREATE VIEW ai_place_search AS SELECT id AS place_id, name FROM places_t;
+    CREATE TABLE user_preferences (user_id bigint, tastes jsonb, features jsonb); INSERT INTO user_preferences VALUES (1, '[]', '[]');
+    CREATE TABLE auth_users_t (id int, email text); CREATE TABLE t_late (id int)" >/dev/null
+  ok_if "마이그레이션이 만든 객체는 grant-ai-read.sh 전에는 AI role이 못 읽는다(기본 권한을 주지 않는다)" \
+    "$(fails pg_as fit_prod_ai "$a" fit_prod 'SELECT * FROM ai_place_search')"
+  run_script grant-ai-read.sh
+  ok_if "grant-ai-read.sh가 성공한다" "$(is "$rc" 0)"
+  ok_if "grant-ai-read.sh가 준 객체 이름을 알려 준다(ai_place_search, user_preferences)" \
+    "$([ "$(has "$out" ai_place_search)$(has "$out" user_preferences)" = 11 ] && echo 1 || echo 0)"
+  ok_if "AI role이 뷰 ai_place_search를 읽는다" "$(is "$(pg_as fit_prod_ai "$a" fit_prod 'SELECT count(*) FROM ai_place_search')" 1)"
+  ok_if "AI role이 user_preferences를 읽는다" "$(is "$(pg_as fit_prod_ai "$a" fit_prod 'SELECT count(*) FROM user_preferences')" 1)"
+  ok_if "AI role은 뷰 밑의 테이블을 직접 읽지 못한다" "$(fails pg_as fit_prod_ai "$a" fit_prod 'SELECT * FROM places_t')"
+  ok_if "AI role은 인증 같은 다른 테이블을 읽지 못한다" "$(fails pg_as fit_prod_ai "$a" fit_prod 'SELECT * FROM auth_users_t')"
+  ok_if "AI role은 허용 목록 밖의 새 테이블도 읽지 못한다" "$(fails pg_as fit_prod_ai "$a" fit_prod 'SELECT * FROM t_late')"
+  ok_if "AI role은 쓰지 못한다(INSERT)" "$(fails pg_as fit_prod_ai "$a" fit_prod "INSERT INTO user_preferences VALUES (2, '[]', '[]')")"
+  ok_if "AI role은 쓰지 못한다(UPDATE, DELETE)"     "$([ "$(fails pg_as fit_prod_ai "$a" fit_prod 'UPDATE user_preferences SET user_id = 9')$(fails pg_as fit_prod_ai "$a" fit_prod 'DELETE FROM user_preferences')" = 11 ] && echo 1 || echo 0)"
+  ok_if "AI role은 테이블을 만들지 못한다" "$(fails pg_as fit_prod_ai "$a" fit_prod 'CREATE TABLE ai_denied (id int)')"
+  ok_if "AI role의 트랜잭션은 기본이 읽기 전용이다" "$(is "$(pg_as fit_prod_ai "$a" fit_prod 'SHOW default_transaction_read_only')" on)"
+  ok_if "AI role에 쿼리 시간 제한 10초가 걸려 있다" "$(is "$(pg_as fit_prod_ai "$a" fit_prod 'SHOW statement_timeout')" 10s)"
+  ok_if "AI role의 접속 수 상한이 6이다(앱 role의 풀을 굶기지 않는다)" \
+    "$(is "$(psql_admin -d postgres -c "SELECT rolconnlimit FROM pg_roles WHERE rolname = 'fit_prod_ai'")" 6)"
+  ok_if "dev AI role은 prod DB에 접속하지 못한다" "$(fails pg_as fit_dev_ai "$d" fit_prod 'SELECT 1')"
+  ok_if "prod AI role은 dev DB에 접속하지 못한다" "$(fails pg_as fit_prod_ai "$a" fit_dev 'SELECT 1')"
+  ok_if "앱 role의 비밀번호로는 AI role에 접속하지 못한다" "$(fails pg_as fit_prod_ai "$p" fit_prod 'SELECT 1')"
+  run_script ensure-databases.sh
+  ok_if "ensure-databases.sh 재실행 뒤에도 AI role이 뷰를 읽는다(권한이 유지된다)" "$(is "$(pg_as fit_prod_ai "$a" fit_prod 'SELECT count(*) FROM ai_place_search')" 1)"
+  run_script grant-ai-read.sh
+  ok_if "grant-ai-read.sh를 다시 돌려도 성공한다(멱등)" "$(is "$rc" 0)"
+  pg_as fit_migrator "$m" fit_prod 'DROP VIEW ai_place_search; DROP TABLE places_t, user_preferences, auth_users_t, t_late' >/dev/null
+}
+
 run_postgres_checks() {
   echo "--- Postgres"
   ok_if "shared_buffers가 256MB다" "$(is "$(psql_admin -d postgres -c 'SHOW shared_buffers')" 256MB)"
@@ -236,7 +276,7 @@ run_postgres_checks() {
   ok_if "idle_in_transaction_session_timeout이 1분이다" "$(is "$(psql_admin -d postgres -c 'SHOW idle_in_transaction_session_timeout')" 1min)"
   ok_if "pgvector가 동작한다" "$(is "$(pg_as fit_migrator "$FIT_MIGRATOR_PASSWORD" fit_dev "SELECT '[1,2,3]'::vector <-> '[1,2,4]'::vector")" 1)"
   local k bad=0
-  for k in FIT_MIGRATOR_PASSWORD FIT_PROD_APP_PASSWORD FIT_DEV_APP_PASSWORD FIT_MONITOR_PASSWORD; do
+  for k in FIT_MIGRATOR_PASSWORD FIT_PROD_APP_PASSWORD FIT_DEV_APP_PASSWORD FIT_MONITOR_PASSWORD FIT_PROD_AI_PASSWORD FIT_DEV_AI_PASSWORD; do
     if docker logs "$(svc_container postgres)" 2>&1 | grep -qF "$(val "$k")"; then bad=1; fi
   done
   ok_if "role 비밀번호가 Postgres 로그에 남지 않는다" "$(is "$bad" 0)"
@@ -286,7 +326,7 @@ run_port_checks() {
 run_hygiene_checks() {
   echo "--- 비밀 값 노출"
   local k bad=0
-  for k in POSTGRES_PASSWORD FIT_MIGRATOR_PASSWORD FIT_PROD_APP_PASSWORD FIT_DEV_APP_PASSWORD FIT_MONITOR_PASSWORD REDIS_PROD_PASSWORD REDIS_DEV_PASSWORD GARAGE_RPC_SECRET GARAGE_ADMIN_TOKEN S3_PROD_SECRET_KEY S3_DEV_SECRET_KEY; do
+  for k in POSTGRES_PASSWORD FIT_MIGRATOR_PASSWORD FIT_PROD_APP_PASSWORD FIT_DEV_APP_PASSWORD FIT_MONITOR_PASSWORD FIT_PROD_AI_PASSWORD FIT_DEV_AI_PASSWORD REDIS_PROD_PASSWORD REDIS_DEV_PASSWORD GARAGE_RPC_SECRET GARAGE_ADMIN_TOKEN S3_PROD_SECRET_KEY S3_DEV_SECRET_KEY; do
     if [ "$(has "$(cat "$OUT_ALL")" "$(val "$k")")" = 1 ]; then
       bad=1
       echo "FAIL  $k 값이 스크립트 출력에 찍혔다"
@@ -301,7 +341,7 @@ run() { # run [구역...]: 구역을 주지 않으면 전부 돌린다. 구역�
   load_data_env
   local section
   local -a sections=("$@")
-  if [ "${#sections[@]}" = 0 ]; then sections=(init idempotent rotation privilege input redis postgres garage port hygiene); fi
+  if [ "${#sections[@]}" = 0 ]; then sections=(init idempotent rotation privilege ai input redis postgres garage port hygiene); fi
   set +e
   for section in "${sections[@]}"; do "run_${section}_checks"; done
   set -e

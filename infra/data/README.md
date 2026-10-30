@@ -31,18 +31,22 @@ BE는 서비스 이름으로 접속한다(`postgres`, `redis-prod`, `redis-dev`,
 
 | 대상 | prod | dev |
 |---|---|---|
-| Postgres | DB `fit_prod`, role `fit_prod_app`(DML만) | DB `fit_dev`, role `fit_dev_app`(DML만, `statement_timeout` 30초) |
+| Postgres | DB `fit_prod`, role `fit_prod_app`(DML만), `fit_prod_ai`(AI API용 읽기 전용) | DB `fit_dev`, role `fit_dev_app`(DML만, `statement_timeout` 30초), `fit_dev_ai`(읽기 전용) |
 | DDL | `fit_migrator`(두 DB의 소유자. 마이그레이션 컨테이너가 쓴다) | 〃 |
 | Redis | `redis-prod`(자기 비밀번호) | `redis-dev`(자기 비밀번호) |
 | Garage | 버킷 `fit-prod-photos`, prod 전용 키 | 버킷 `fit-dev-photos`, dev 전용 키 |
 
 관측용 role `fit_monitor`(`pg_monitor` 멤버)는 postgres-exporter가 `postgres` DB에서 통계만 읽는 데 쓴다. `fit_prod`, `fit_dev`에는 접속하지 못한다. 비밀번호는 `FIT_MONITOR_PASSWORD`이고 `obs.env`의 같은 키와 같아야 한다.
 
+**서버에 처음 적용할 때는 순서를 지킨다.** ① 백업 스크립트의 설치본을 새 저장소로 갱신한다(`sudo bash infra/backup/install.sh app`). 백업 타이머는 `/usr/local/lib/fit/repo`의 사본을 쓰고, 복원 검증용 임시 DB가 AI role을 만들어야 덤프가 복원된다. ② `data.env`에 `FIT_PROD_AI_PASSWORD`, `FIT_DEV_AI_PASSWORD`를 `envset.py`로 넣는다(없으면 `data.env`를 읽는 스크립트가 멈춘다). ③ `bash infra/data/ensure-databases.sh`를 돌린다. 순서를 바꿔 AI role부터 만들면 그 뒤 백업의 복원 검증이 실패해 덤프가 B로 가지 않는다.
+
+AI API용 role `fit_prod_ai`, `fit_dev_ai`는 읽기 전용이다. `grant-ai-read.sh`의 목록에 있는 객체(뷰 `ai_place_search`, 테이블 `user_preferences`)의 SELECT만 받고, 뷰는 소유자 권한으로 실행되므로 뷰 밑의 테이블과 인증 테이블은 읽지 못한다. 마이그레이터가 만드는 새 객체에는 기본 권한을 주지 않는다(앱 role과 다르다). 목록에 객체를 더하려면 BE·AI 팀과 정한 뒤 그 스크립트의 목록을 고치는 MR을 만든다. 접속은 6개까지, 쿼리는 10초, 트랜잭션은 기본이 읽기 전용이다. 비밀번호는 `FIT_PROD_AI_PASSWORD`, `FIT_DEV_AI_PASSWORD`이고 AI 컨테이너 env의 `DATABASE_URL`에 같은 값이 들어간다.
+
 각 앱 role은 자기 DB에만 접속한다. 마이그레이터가 만드는 테이블과 시퀀스에는 앱 role의 DML 권한이 자동으로 붙는다. 초기화 스크립트를 다시 돌리면 다른 방법으로 만든 기존 테이블에도 같은 권한을 준다.
 
 ## data.env
 
-`/etc/fit/data.env`(root:docker 0640)에 13개 키가 있다. 키 목록과 소비자는 [env.md](../../docs/infra/contracts/env.md)의 `data` 그룹이고 예제는 `data.env.example`이다. 값 규칙은 스크립트가 검사하고 어긋나면 값을 찍지 않고 어떤 키가 틀렸는지만 알려 준다.
+`/etc/fit/data.env`(root:docker 0640)에 15개 키가 있다. 키 목록과 소비자는 [env.md](../../docs/infra/contracts/env.md)의 `data` 그룹이고 예제는 `data.env.example`이다. 값 규칙은 스크립트가 검사하고 어긋나면 값을 찍지 않고 어떤 키가 틀렸는지만 알려 준다.
 
 | 키 | 규칙 | 만드는 법 |
 |---|---|---|
@@ -60,7 +64,8 @@ BE는 서비스 이름으로 접속한다(`postgres`, `redis-prod`, `redis-dev`,
 | `compose.data.yml` | 위 서비스 정의(외부 망은 `FIT_NET_DATA`, `FIT_NET_EDGE`, `FIT_NET_DBACCESS`로 이름을 바꿀 수 있다) |
 | `lib.sh` | 공통 함수(data.env 읽기와 검사, 컨테이너 찾기, `psql_admin`, `s3run`, `wait_healthy`). 직접 실행하지 않는다 |
 | `init-data.sh` | postgres와 garage가 healthy가 되길 기다린 뒤 아래 두 스크립트를 돌린다 |
-| `ensure-databases.sh` | role과 DB, 확장(`vector`, `pg_stat_statements`), 접속·테이블 권한 |
+| `ensure-databases.sh` | role과 DB, 확장(`vector`, `pg_stat_statements`), 접속·테이블 권한(마지막에 `grant-ai-read.sh`를 부른다) |
+| `grant-ai-read.sh` | AI role이 읽을 객체의 SELECT를 맞춘다. 마이그레이션이 객체를 만든 뒤에 다시 돌려야 읽힌다(없는 객체는 건너뛴다) |
 | `init-garage.sh` | 레이아웃, 버킷, 환경 전용 키, 웹 엔드포인트 공개 읽기, 수명주기(`pending/`와 끝나지 않은 멀티파트를 1일 뒤 삭제) |
 | `verify-data.sh` | 서비스 상태, 접속 범위, 비밀번호 거부, Redis 정책, 버킷 분리를 점검한다(PASS/FAIL, 값은 찍지 않는다) |
 | `s3tool.py` | 표준 라이브러리만 쓰는 SigV4 S3 클라이언트. 호스트에 S3 도구가 없고 Garage 포트를 게시하지 않아서 `s3run`이 net-data에 붙인 python 컨테이너에서 실행한다 |

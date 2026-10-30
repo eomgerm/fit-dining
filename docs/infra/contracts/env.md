@@ -110,6 +110,8 @@
 | `GRAFANA_ADMIN_PASSWORD` | obs | O | Grafana admin 비밀번호. 비밀 |
 | `FIT_MONITOR_PASSWORD` | data, obs | O | `fit_monitor` 비밀번호(`pg_monitor` 권한. postgres_exporter가 통계를 읽는다). `data.env`와 `obs.env`의 값이 같아야 한다 |
 | `FIT_PROD_APP_PASSWORD` | data | O | `fit_prod_app` 비밀번호. `prod.env`의 `SPRING_DATASOURCE_PASSWORD`와 같아야 한다 |
+| `FIT_PROD_AI_PASSWORD` | data | O | `fit_prod_ai` 비밀번호(AI API용 읽기 전용 role. `ai_place_search`와 `user_preferences`만 SELECT한다). `ai-prod.env`의 `DATABASE_URL`에 들어 있는 비밀번호와 같아야 한다 |
+| `FIT_DEV_AI_PASSWORD` | data | O | `fit_dev_ai` 비밀번호(위와 같다). `ai-dev.env`의 `DATABASE_URL`에 들어 있는 비밀번호와 같아야 한다 |
 | `REDIS_PROD_PASSWORD` | data | O | `redis-prod` 비밀번호. `prod.env`의 `SPRING_DATA_REDIS_PASSWORD`와 같아야 한다 |
 | `REDIS_DEV_PASSWORD` | data | O | `redis-dev` 비밀번호. `dev.env`의 `SPRING_DATA_REDIS_PASSWORD`와 같아야 한다 |
 | `S3_PROD_ACCESS_KEY` | data | O | prod 버킷 전용 Garage 키 ID. `prod.env`의 `S3_ACCESS_KEY`와 같아야 한다 |

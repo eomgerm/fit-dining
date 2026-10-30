@@ -37,6 +37,11 @@ for env in prod dev; do
   ok_if "fit_$env에 vector와 pg_stat_statements가 있다" \
     "$([ "$(psql_admin -d "fit_$env" -c "SELECT count(*) FROM pg_extension WHERE extname IN ('vector','pg_stat_statements')" 2>/dev/null)" = 2 ] && echo 1 || echo 0)"
   ok_if "fit_${env}_app은 테이블을 만들지 못한다(DDL은 fit_migrator만)" "$(fails pg_as "fit_${env}_app" "${!pw_var}" "fit_$env" 'CREATE TABLE verify_denied (id int)')"
+  ai_pw_var="FIT_$(printf '%s' "$env" | tr '[:lower:]' '[:upper:]')_AI_PASSWORD"
+  ok_if "fit_${env}_ai(AI 읽기 전용)가 fit_$env에 접속한다" "$(succeeds pg_as "fit_${env}_ai" "${!ai_pw_var}" "fit_$env" 'SELECT 1')"
+  ok_if "fit_${env}_ai는 fit_$other에 접속하지 못한다" "$(fails pg_as "fit_${env}_ai" "${!ai_pw_var}" "fit_$other" 'SELECT 1')"
+  ok_if "fit_${env}_ai는 테이블을 만들지 못한다" "$(fails pg_as "fit_${env}_ai" "${!ai_pw_var}" "fit_$env" 'CREATE TABLE verify_ai_denied (id int)')"
+  ok_if "fit_${env}_ai에 읽기 전용 기본값, 쿼리 10초, 접속 6개 상한이 걸려 있다"     "$(succeeds pg_as "fit_${env}_ai" "${!ai_pw_var}" "fit_$env" "SELECT 1 WHERE current_setting('default_transaction_read_only') = 'on' AND current_setting('statement_timeout') = '10s' AND (SELECT rolconnlimit FROM pg_roles WHERE rolname = 'fit_${env}_ai') = 6")"
 done
 ok_if "fit_migrator가 fit_prod에서 테이블을 만들 수 있다" "$(succeeds pg_as fit_migrator "$FIT_MIGRATOR_PASSWORD" fit_prod 'CREATE TEMP TABLE verify_ddl (id int)')"
 ok_if "dev 앱 role에 쿼리 시간 제한 30초가 걸려 있다" "$(succeeds pg_as fit_dev_app "$FIT_DEV_APP_PASSWORD" fit_dev "SELECT 1 WHERE current_setting('statement_timeout') = '30s'")"
