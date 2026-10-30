@@ -270,13 +270,45 @@ describe("ReviewSection 남의 리뷰 신고", () => {
     expect(items.map((item) => item.textContent)).toEqual(["신고하기"]);
   });
 
-  it("로그인하지 않았으면 시트를 열지 않고 로그인으로 보낸다(PRD FR-12)", async () => {
-    const { onSignIn } = mount(() => Promise.reject(http(401)));
-
+  async function openSignIn() {
     await openOthersMenu();
     fireEvent.click(await screen.findByRole("menuitem", { name: "신고하기" }));
+    await screen.findByText("로그인이 필요해요");
+  }
 
-    await waitFor(() => expect(onSignIn).toHaveBeenCalledTimes(1));
+  const signInPrompt = () => screen.queryByText("로그인이 필요해요");
+
+  it("로그인하지 않았으면 시트 대신 로그인 안내를 띄운다(6-E05, PRD FR-12)", async () => {
+    const { onSignIn } = mount(() => Promise.reject(http(401)));
+
+    await openSignIn();
+
+    expect(
+      screen.getByText("리뷰 신고는 로그인해야 이용할 수 있어요."),
+    ).toBeTruthy();
+    expect(sheet()).toBeNull();
+    expect(onSignIn).not.toHaveBeenCalled();
+  });
+
+  it("로그인 안내의 로그인은 창을 닫고 로그인으로 보낸다", async () => {
+    const { onSignIn } = mount(() => Promise.reject(http(401)));
+
+    await openSignIn();
+    fireEvent.click(screen.getByRole("button", { name: "로그인" }));
+
+    expect(onSignIn).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(signInPrompt()).toBeNull());
+    expect(sheet()).toBeNull();
+  });
+
+  it("로그인 안내의 취소는 창만 닫는다", async () => {
+    const { onSignIn } = mount(() => Promise.reject(http(401)));
+
+    await openSignIn();
+    fireEvent.click(screen.getByRole("button", { name: "취소" }));
+
+    await waitFor(() => expect(signInPrompt()).toBeNull());
+    expect(onSignIn).not.toHaveBeenCalled();
     expect(sheet()).toBeNull();
   });
 

@@ -6,6 +6,7 @@ import { isApiError } from "@/shared/api/api-error";
 import { cn } from "@/shared/lib/cn";
 import { Button } from "@/shared/ui/button/button";
 import { TrashIcon } from "@/shared/ui/icon/icons/trash";
+import { UserIcon } from "@/shared/ui/icon/icons/user";
 import { ConfirmDialog } from "@/shared/ui/overlay/confirm-dialog";
 import { useToast } from "@/shared/ui/overlay/toast";
 
@@ -33,7 +34,7 @@ type ReviewSectionProps = {
   withAccessToken: WithAccessToken;
   // 내 리뷰 ⋯ 메뉴의 "수정하기". 화면 이동은 app이 정한다(D-44)
   onEdit: (reviewId: number) => void;
-  // 로그인하지 않은 사용자가 "신고하기"를 누르면 부른다. 로그인 화면으로 가는 것은 app이 정한다(PRD FR-12)
+  // 로그인 안내(6-E05)에서 "로그인"을 누르면 부른다. 로그인 화면으로 가는 것은 app이 정한다(PRD FR-12)
   onSignIn: () => void;
   // 폭·바깥 여백 같은 배치용 클래스
   className?: string;
@@ -45,7 +46,8 @@ type ReviewSectionProps = {
 // 두 자리가 같은 쿼리를 써서 탭을 오가도 목록을 다시 받지 않는다.
 // "방문 평가 남기기"는 장소 상세의 하단 막대가 reviewWriteHref로 연결한다(D-32).
 // 내 리뷰의 "삭제하기"는 확인(6-08)을 받아 지우고, 목록을 다시 받은 뒤 토스트(6-09)를 띄운다(D-44).
-// 남의 리뷰의 "신고하기"는 로그인을 먼저 확인하고 사유 시트(6-11)를 연다. 보내면 토스트(6-12, 6-E06)를 띄운다
+// 남의 리뷰의 "신고하기"는 로그인을 먼저 확인해, 로그인하지 않았으면 로그인 안내(6-E05)를, 했으면 사유 시트(6-11)를 연다.
+// 보내면 토스트(6-12, 6-E06)를 띄운다
 export function ReviewSection({
   placeId,
   onShowAll,
@@ -70,6 +72,7 @@ export function ReviewSection({
   const [confirmed, setConfirmed] = useState(false);
   const sectionRef = useRef<HTMLElement>(null);
   const deleteReview = useDeleteReview(placeId, withAccessToken);
+  const [signingIn, setSigningIn] = useState(false);
   const [reporting, setReporting] = useState<number | null>(null);
   // 신고한 리뷰가 지워져(404) 목록에서 빠지면 시트가 닫힐 때 리뷰 섹션으로 포커스를 보낸다
   const [reportedGone, setReportedGone] = useState(false);
@@ -104,12 +107,12 @@ export function ReviewSection({
     });
   }
 
-  // 회원만 신고할 수 있다(PRD FR-12). 시트를 열기 전에 세션을 확인해, 사유를 고른 뒤에야 로그인으로 보내지 않는다
+  // 회원만 신고할 수 있다(PRD FR-12). 시트를 열기 전에 세션을 확인해, 사유를 고른 뒤에야 로그인을 묻지 않는다
   async function openReport(reviewId: number) {
     try {
       await withAccessToken(async () => undefined);
     } catch (error) {
-      if (isApiError(error) && error.status === 401) onSignIn();
+      if (isApiError(error) && error.status === 401) setSigningIn(true);
       else toast(reportFailure(error).message);
       return;
     }
@@ -204,6 +207,35 @@ export function ReviewSection({
             onClick={confirmDelete}
           >
             {deleteReview.isPending ? "삭제하는 중" : "삭제"}
+          </Button>
+        }
+      />
+      <ConfirmDialog
+        open={signingIn}
+        onOpenChange={(open) => {
+          if (!open) setSigningIn(false);
+        }}
+        icon={<UserIcon />}
+        title="로그인이 필요해요"
+        description="리뷰 신고는 로그인해야 이용할 수 있어요."
+        secondaryAction={
+          <Button
+            variant="outline"
+            size="md"
+            onClick={() => setSigningIn(false)}
+          >
+            취소
+          </Button>
+        }
+        action={
+          <Button
+            size="md"
+            onClick={() => {
+              setSigningIn(false);
+              onSignIn();
+            }}
+          >
+            로그인
           </Button>
         }
       />
