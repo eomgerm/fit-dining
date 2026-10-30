@@ -508,3 +508,9 @@ Glossary: none · ADRs: none
 - Decision: D-63 가운데 "FE는 주소창의 `?mock=empty`를 읽어 이 헤더를 붙인다"만 이 결정으로 바뀐다. `place-api.ts`는 검색 요청에 `X-Mock-Scenario`를 붙이지 않고, 결과 없음 화면은 FE 테스트가 가짜 응답으로 확인한다. BE Mock은 그대로 헤더를 읽으므로 BE 테스트와 직접 호출(curl 등)로는 `empty` 시나리오를 계속 쓴다. 배포 번들에 개발용 mock 스위치가 들어가 인프라의 번들 검사(`mock-words`)가 WARN을 내기 때문이다(`docs/infra/plans/2026-10-23-plan-1c3-ci-pipeline.md` FE 체크리스트 4).
 - Rejected: `/config.json`의 `env`가 dev일 때만 헤더 붙이기 → 코드가 번들에 남아 WARN이 그대로이고, 런타임 설정을 기다리는 분기가 검색 요청에 생긴다.
 - Anchors: `fe/src/domains/place/api/place-api.ts#searchPlaces` (modify)
+
+## D-96 장소 상세를 전체 화면 Visual QA(2026-10-29)의 시안 보정대로 맞춘다
+- Status: settled
+- Decision: D-92 가운데 "상세 `tags`의 강조 색은 쓰지 않는다"와 "휴무일은 '휴무'로 쓴다"만 이 결정으로 바뀐다. 상세 `tags`는 그 장소의 검색 카드(D-86) `reasons`에 출처가 PREFERENCE인 근거 칩과 문구가 같으면 주황(`Tag` match), 그 밖(REQUEST 근거와 같거나, 카드가 없거나, `from=saved`)은 회색이다(VQA D-12). 추천 이유 인용은 주황 선과 진한 본문으로 그린다(VQA D-13). 탭 바로 아래 첫 섹션에는 두꺼운 띠가 없다. 홈 탭 메뉴 미리보기는 `representative` 메뉴를 먼저, 나머지를 원래 순서로 채워 6개까지 보인다. 웹사이트 줄은 주소의 도메인만 글자로 보이고 링크는 원래 주소다. 요일별 표의 휴무 요일은 "정기휴무 (매주 <요일>요일)"로 쓰고 `closedDayNote`를 표 아래 따로 적지 않는다. 휴무 요일은 BE가 정기휴무만 `closed: true`로 보내고 날짜가 붙은 휴무는 정보 없음으로 보내므로(place-catalog AC-14) 모두 정기휴무다.
+- Rejected: 태그 자체의 긍정·부정으로 색 나누기 → 상세 태그는 긍정이 다수인 특징만 들어와 모두 주황이 된다. 서버가 태그마다 일치 여부를 보내기 → API 계약 변경이라 이번 보정 범위를 넘는다. 상세 태그를 정하지 못한 지금은 실제 BE가 `tags`를 빈 목록으로 보내므로 이 색은 Mock에서만 보인다.
+- Anchors: `fe/src/domains/place/ui/place-detail-screen.tsx#PlaceDetailScreen` (modify) · `fe/src/domains/place/ui/place-detail-tabs.tsx#HomeTab` (modify) · `fe/src/domains/place/ui/place-detail-tabs.tsx#InfoTab` (modify) · `fe/src/domains/place/ui/menu-card.tsx#MenuCard` (modify)
