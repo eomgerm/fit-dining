@@ -197,7 +197,7 @@ Glossary: none · ADRs: none
 - Status: settled
 - Decision: 리뷰를 `reviews` 테이블(`V4__create_reviews.sql`)에 저장한다. 와이어프레임 화면에 있는 컬럼만 담고, 공개 숨김·분석 제외(S15P31A302-56)는 그 기능을 만들 때 새 마이그레이션으로 더한다. develop에 머지되면 dev DB에 바로 적용돼 고칠 수 없으므로 컬럼을 더할 때는 NULL 허용이나 기본값으로 더한다. 날짜 컬럼은 팀 DB 규칙 초안을 따라 `visit_date`이고(D-28의 `visited_at`), API 필드는 그대로 `visitedAt`이다. `revisit_intent`는 7-04 토글의 기본값과 같은 `NOT NULL DEFAULT false`, `spent_per_person`(7-04의 1인당 쓴 금액)은 NULL 허용이다. `user_id`는 `auth_users(id)`(text)를 참조하고, `place_id`는 `places` 테이블이 없어 FK가 없다. 인덱스는 장소별 목록 `(place_id, created_at DESC, review_id DESC) WHERE deleted_at IS NULL`과 같은 날 중복 금지 `UNIQUE (user_id, place_id, visit_date) WHERE deleted_at IS NULL`이다. 목록은 행 비교 커서 `(created_at, review_id) < (?, ?)`로 읽어 인덱스가 범위와 정렬을 맡고, 리뷰 수는 첫 페이지(`cursor` 없음)에서만 세어 다음 페이지 응답에서는 생략한다. 등록은 로그인한 사용자만 한다. 리뷰 컨트롤러가 `Authorization` 헤더로 인증 모듈의 `AuthUseCases.authenticate`를 직접 부르고, 인증 모듈의 예외 처리기는 인증 API에만 걸려 있어 `AuthFailure`는 리뷰 예외 처리기가 상태 코드와 `type`(토큰 만료)을 유지해 ProblemDetail로 바꾼다. 방문일 입력은 아직 없어 서버가 KST 오늘로 넣는다. 메모리와 DB를 바꿔 끼우려고 둔 `ReviewStore`는 지우고 `ReviewService`가 `ReviewRepository`를 바로 쓴다. 메모리 저장소, 시드(`mock/reviews.json`), 저장소가 없을 때의 503을 지운다. `REVIEW_MOCK_ENABLED`와 `review.mock.enabled`는 다른 기능의 파일에도 있어 S15P31A302-47의 후속 커밋에서 따로 지웠다. FE 작성 화면은 들어올 때 세션을 확인해 없으면 로그인 화면으로 바꿔치기하고, 등록 요청에 AT를 붙이며 만료면 한 번 갱신해 다시 보낸다. 인증 도메인은 app 계층(`with-access-token.ts`)에서만 부른다(S15P31A302-104가 이 함수를 인증 도메인 `fe/src/domains/auth/api/`로 옮겼다).
 - Rejected: 메모리 저장소를 dev 시드용으로 남기기 → 저장소가 둘이면 local·dev와 prod의 동작이 갈리고 스위치를 계속 관리해야 한다. 시드를 마이그레이션에 넣기 → Mock 데이터가 운영 DB에 들어간다. `ReviewStore` 유지 → 구현이 하나뿐이다. 페이지마다 리뷰 수 세기 → 다음 페이지마다 쿼리가 하나 는다. 리뷰용 인증 인터셉터 → 인증이 필요한 리뷰 API가 하나이고 목록은 인증이 선택이라 컨트롤러에서 직접 부르는 편이 단순하다.
-- 감수: dev 리뷰는 빈 상태에서 시작한다. 장소 카드가 "앱 리뷰 n개가 근거"라고 해도 리뷰 탭이 비어 보일 수 있다(D-33이 막던 상황). 로그인 뒤 작성 화면으로 돌아오는 기능은 아직 없다.
+- 감수: dev 리뷰는 빈 상태에서 시작한다. 장소 카드가 "앱 리뷰 n개가 근거"라고 해도 리뷰 탭이 비어 보일 수 있다(D-33이 막던 상황). 로그인 뒤 작성 화면으로 돌아오는 기능은 아직 없다(D-48에서 더함).
 - Anchors: `be/src/main/resources/db/migration/V4__create_reviews.sql` (new) · `be/src/main/java/kr/co/fitdining/api/review/store/Review.java#Review` (new) · `be/src/main/java/kr/co/fitdining/api/review/store/ReviewRepository.java#ReviewRepository` (new) · `be/src/main/java/kr/co/fitdining/api/review/ReviewController.java#ReviewController` (modify) · `fe/src/domains/auth/api/with-access-token.ts#withAccessToken` (new)
 
 ## D-38 회원이 탈퇴해도 그 회원의 리뷰는 남긴다
@@ -279,7 +279,14 @@ Glossary: none · ADRs: none
 
 ## D-47 로그인하지 않고 신고하거나 방문 평가를 남기려 하면 로그인 안내(6-E05)를 먼저 띄운다
 - Status: settled
-- Decision: 로그인하지 않은 사용자가 "신고하기"를 누르면 세션 확인(D-46)이 401로 끝난 뒤 로그인 화면으로 바로 보내지 않고, 공통 확인 창으로 로그인 안내를 띄운다. 모양은 Figma 6-E05(비회원 저장 → 로그인 안내)를 따른다: 주황 아이콘 원, 제목 "로그인이 필요해요", 왼쪽 [취소]와 오른쪽 [로그인]. 신고에 맞게 아이콘은 북마크 대신 사람(`UserIcon`)이고 설명은 "리뷰 신고는 로그인해야 이용할 수 있어요."다(리뷰 담당 결정 2026-10-30). [로그인]은 창을 닫고 지금처럼 로그인 화면으로 가고(app의 `onSignIn`), [취소]는 요청 없이 창만 닫는다. 로그인 뒤 장소 상세로 돌아오기는 여전히 없다(D-46).
+- Decision: 로그인하지 않은 사용자가 "신고하기"를 누르면 세션 확인(D-46)이 401로 끝난 뒤 로그인 화면으로 바로 보내지 않고, 공통 확인 창으로 로그인 안내를 띄운다. 모양은 Figma 6-E05(비회원 저장 → 로그인 안내)를 따른다: 주황 아이콘 원, 제목 "로그인이 필요해요", 왼쪽 [취소]와 오른쪽 [로그인]. 신고에 맞게 아이콘은 북마크 대신 사람(`UserIcon`)이고 설명은 "리뷰 신고는 로그인해야 이용할 수 있어요."다(리뷰 담당 결정 2026-10-30). [로그인]은 창을 닫고 지금처럼 로그인 화면으로 가고(app의 `onSignIn`), [취소]는 요청 없이 창만 닫는다. 로그인 뒤 장소 상세로 돌아오기는 여전히 없다(D-46. D-48에서 더함).
 - 방문 평가: 장소 상세의 "방문 평가 남기기"도 같다. 작성 화면 데이터 요청이 401(세션 없음)이면 작성 화면으로 보내지 않고, 위치도 묻지 않은 채 같은 안내를 띄운다. 설명은 "방문 평가는 로그인해야 이용할 수 있어요."다(리뷰 담당 결정 2026-10-30, 신고와 맞춤). 401이 아닌 실패는 지금처럼 작성 화면이 오류 안내를 맡는다(D-43). 주소로 작성 화면을 바로 연 비회원은 지금처럼 로그인 화면으로 바뀐다(AC-26). 두 자리는 리뷰 도메인의 `SignInPrompt` 하나를 설명만 바꿔 쓴다.
 - Rejected: 바로 로그인 화면으로 보내기(D-46) → 리뷰 담당이 6-E05 안내를 먼저 보이기로 했다. 6-E05의 북마크 아이콘 그대로 쓰기 → 신고에서 저장 기능처럼 보인다. 북마크 작업의 로그인 안내 컴포넌트 쓰기 → 장소 도메인의 컴포넌트라 리뷰 도메인이 import할 수 없다(D-32).
 - Anchors: `fe/src/domains/review/ui/sign-in-prompt.tsx#SignInPrompt` (new) · `fe/src/domains/review/ui/review-section.tsx#ReviewSection` (modify) · `fe/src/domains/review/ui/review-entry-button.tsx#ReviewEntryButton` (modify)
+
+## D-48 로그인한 뒤 돌아오기는 북마크의 복귀 장치를 쓴다
+- Status: settled
+- Decision: 리뷰가 로그인 화면으로 보내는 곳은 보내기 직전에 북마크의 `rememberLoginReturn`(북마크 D-8)으로 지금 화면 주소를 남긴다. 이메일·소셜 로그인과 가입은 모두 홈(`/`)에 도착하고, 홈이 로그인된 상태면 그 주소로 한 번 보낸다. 신고·방문 평가 안내의 "로그인"은 그 장소 상세(`from=saved`가 있으면 포함)로, 비회원이 작성·수정 화면을 열었으면 그 작성·수정 화면으로 돌아온다. 누르려던 신고나 방문 평가는 자동으로 다시 열지 않는다. 복귀 장치와 그 주석, 로그인 화면, 인증 BE는 고치지 않는다(리뷰 담당 결정 2026-10-30). 상세의 탭은 주소에 없어(D-32) 리뷰 탭에서 눌러도 홈 탭으로 돌아온다.
+- 범위 밖: 작성 중 등록이 401로 끝나면 입력을 지키려고 이동하지 않고 안내만 한다(D-41). 입력이 메모리에만 있어 로그인하러 나가면 사라진다.
+- Rejected: 방문 평가 안내에서 작성 화면으로 돌아오기 → 위치 확인(D-43)과 오늘 쓴 날 확인을 건너뛴다. 로그인 주소에 `next` 붙이기 → 소셜 로그인 callback(`SocialAuthController`)이 `/`로 고정해 보내 인증 BE를 고쳐야 한다(북마크 D-8과 같은 이유). 리뷰 전용 복귀 장치 → 같은 일을 하는 장치가 둘이 된다.
+- Anchors: `fe/src/app/place/place-detail-with-reviews.tsx#PlaceDetailWithReviews` (modify) · `fe/src/app/place/review/review-screen.ts#useSignedIn` (modify)
