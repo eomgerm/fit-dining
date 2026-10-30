@@ -191,6 +191,21 @@ class CheckFeBundleTest(unittest.TestCase):
         self.assertEqual(by_name(results, "pwa-files")[0], "SKIP")
         self.assertEqual([r for r in results if r[0] == "FAIL"], [])
 
+    def test_manifest_built_by_next_counts_as_present(self):
+        # FE가 public/ 대신 app/manifest.ts를 쓰면 Next가 빌드 때 만든 파일이 번들에 있다(URL은 같다)
+        (self.root / "public/manifest.webmanifest").unlink()
+        built = self.root / cfb.NEXT_MANIFEST_ROUTE
+        built.parent.mkdir(parents=True, exist_ok=True)
+        built.write_text("{}", encoding="utf-8")
+        self.assertEqual(by_name(self.run_checks(), "pwa-files")[0], "PASS")
+
+    def test_missing_manifest_is_skipped_and_named_without_blaming_sw(self):
+        (self.root / "public/manifest.webmanifest").unlink()
+        status, _name, detail = by_name(self.run_checks(), "pwa-files")
+        self.assertEqual(status, "SKIP")
+        self.assertIn("매니페스트", detail)
+        self.assertNotIn("public/sw.js", detail)
+
     def test_main_exit_codes(self):
         self.assertEqual(cfb.main([str(self.root), "--sha", SHA]), 0)
         (self.root / "standalone/server.js").unlink()

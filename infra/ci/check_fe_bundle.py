@@ -16,7 +16,8 @@
   no-local-urls        server.js, .next/server, static의 텍스트 파일에 http(s)://localhost, 127.0.0.1, 0.0.0.0 주소가 없다(node_modules는 보지 않는다).
                        Next 런타임이 쓰는 hostname 비교 같은 글자는 주소가 아니라 잡지 않는다
   mock-words           같은 범위에 mock이라는 글자가 있으면 WARN으로 드러낸다(막지 않는다. 개발용 mock 스위치가 배포 번들에 들어갔는지 FE 팀이 본다)
-  pwa-files            public/sw.js와 public/manifest.webmanifest가 있다(없으면 SKIP. FE 팀 몫이라 막지 않는다)
+  pwa-files            public/sw.js가 있고, 매니페스트가 public/manifest.webmanifest이거나 Next가 app/manifest.ts로 빌드 때 만든 파일이다
+                       (URL은 둘 다 /manifest.webmanifest다. 없으면 SKIP. FE 팀 몫이라 막지 않는다)
 """
 from __future__ import annotations
 
@@ -31,6 +32,9 @@ Result = tuple[str, str, str]  # (PASS | FAIL | WARN | SKIP, 검사 이름, 설�
 LOCAL_URL_RE = re.compile(rb"https?://(?:localhost|127\.0\.0\.1|0\.0\.0\.0)", re.IGNORECASE)
 MOCK_RE = re.compile(rb"mock", re.IGNORECASE)
 SHOW_AT_MOST = 5
+# Next가 app/manifest.ts를 빌드 때 만들어 두는 파일. 이름은 Next 내부 구조라 버전이 바뀌면 달라질 수 있다
+# (그래서 못 찾아도 SKIP이다. 진짜 점검은 배포 뒤 verify-edge.sh가 /manifest.webmanifest의 200을 보는 것이다)
+NEXT_MANIFEST_ROUTE = "standalone/.next/server/app/manifest.webmanifest.body"
 
 
 def _rel(root: Path, p: Path) -> str:
@@ -141,10 +145,14 @@ def check_mock_words(root: Path, sha: str) -> Result:
 
 
 def check_pwa_files(root: Path, sha: str) -> Result:
-    missing = [n for n in ("sw.js", "manifest.webmanifest") if not (root / "public" / n).is_file()]
+    missing = []
+    if not (root / "public/sw.js").is_file():
+        missing.append("public/sw.js")
+    if not ((root / "public/manifest.webmanifest").is_file() or (root / NEXT_MANIFEST_ROUTE).is_file()):
+        missing.append(f"매니페스트(public/manifest.webmanifest 또는 {NEXT_MANIFEST_ROUTE})")
     if not missing:
-        return "PASS", "pwa-files", "public/sw.js와 manifest.webmanifest가 있다"
-    return "SKIP", "pwa-files", f"public/에 {', '.join(missing)}이(가) 없다(FE 계약 #4. 막지는 않는다)"
+        return "PASS", "pwa-files", "public/sw.js와 매니페스트가 있다"
+    return "SKIP", "pwa-files", f"{', '.join(missing)}이(가) 없다(FE 계약 #4. 막지는 않는다)"
 
 
 CHECKS = (
