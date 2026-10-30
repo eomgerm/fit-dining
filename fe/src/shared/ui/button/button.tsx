@@ -26,7 +26,8 @@ const buttonVariants = cva(
 
 // cva는 variant와 size를 따로따로 받으므로, Figma에 있는 조합만 쓰도록 타입으로 묶는다
 type ButtonStyle =
-  | { variant?: "primary"; size?: "lg" | "md" }
+  // primary sm은 홈 화면 추가 배너(4-01b)의 [추가하기]에만 쓴다
+  | { variant?: "primary"; size?: "lg" | "md" | "sm" }
   | { variant: "outline"; size: "md" | "sm" }
   | { variant: "danger"; size: "md" };
 

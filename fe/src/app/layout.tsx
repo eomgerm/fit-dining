@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
+import { InstallBanner } from "@/domains/install/ui/install-banner";
 import "./globals.css";
 import { Providers } from "./providers";
 import { RegisterServiceWorker } from "./register-sw";
@@ -34,6 +35,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <div className="isolate flex flex-1 flex-col">
           <Providers>{children}</Providers>
         </div>
+        {/* 페이지 뒤에 두어 z-index 없이 페이지 위에 뜨고, 나중에 body에 붙는 다이얼로그 딤에는 덮인다 */}
+        <InstallBanner />
         <RegisterServiceWorker />
       </body>
     </html>

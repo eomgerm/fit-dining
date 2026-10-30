@@ -41,13 +41,11 @@ describe("Button", () => {
   it("Figma에 없는 variant·size 조합은 타입 오류다", () => {
     // 타입 검사(tsc)에서 확인한다. 런타임 동작은 보지 않는다
     expect([
-      // @ts-expect-error primary에는 sm이 없다
-      <Button key="1" size="sm" />,
       // @ts-expect-error outline에는 lg가 없다
       <Button key="2" variant="outline" size="lg" />,
       // @ts-expect-error danger에는 md만 있다
       <Button key="3" variant="danger" size="sm" />,
-    ]).toHaveLength(3);
+    ]).toHaveLength(2);
   });
 });
 

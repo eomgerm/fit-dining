@@ -6,9 +6,18 @@ import {
   render,
   screen,
 } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from "vitest";
 import { HomeEntry } from "./home-entry";
 import { rememberLoginReturn } from "./login-return";
+import { introSeen, markIntroSeen } from "@/domains/install/model/storage";
 import {
   ANSWERS_KEY,
   GUEST_KEY,
@@ -58,6 +67,8 @@ it("비회원 표시가 있으면 복구 실패에도 홈을 보여준다", asyn
   expect(await screen.findByText("검색 홈")).toBeTruthy();
 });
 it("처음 방문은 온보딩 답변을 저장하고 가입으로 이동한다", async () => {
+  // 홈 화면 추가 안내는 아래 "홈 화면 추가 안내(1-01a)"에서 본다
+  markIntroSeen();
   mocks.restore.mockRejectedValue(new Error("unauthenticated"));
   render(<HomeEntry />);
   fireEvent.click(await screen.findByRole("button", { name: "시작하기" }));
@@ -175,6 +186,8 @@ describe("북마크 로그인 뒤 복귀", () => {
 });
 
 it("선택 없이 건너뛰면 답변을 저장하지 않고 가입으로 이동한다", async () => {
+  // 홈 화면 추가 안내는 아래 "홈 화면 추가 안내(1-01a)"에서 본다
+  markIntroSeen();
   mocks.restore.mockRejectedValue(new Error("unauthenticated"));
   render(<HomeEntry />);
   fireEvent.click(await screen.findByRole("button", { name: "시작하기" }));
@@ -182,4 +195,71 @@ it("선택 없이 건너뛰면 답변을 저장하지 않고 가입으로 이동
   expect(mocks.push).toHaveBeenCalledWith("/signup");
   expect(readAnswers()).toBeUndefined();
   expect(localStorage.getItem(ANSWERS_KEY)).toBeNull();
+});
+
+describe("홈 화면 추가 안내(1-01a)", () => {
+  const dialog = () => screen.queryByRole("alertdialog");
+  async function intro() {
+    mocks.restore.mockRejectedValue(new Error("unauthenticated"));
+    render(<HomeEntry />);
+    return screen.findByRole("button", { name: "시작하기" });
+  }
+
+  it("[시작하기]를 처음 누르면 안내를 띄우고 [웹에서 계속하기]로 온보딩을 이어 간다", async () => {
+    fireEvent.click(await intro());
+    expect(await screen.findByRole("alertdialog")).toBeTruthy();
+    expect(screen.queryByRole("radio")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "웹에서 계속하기" }));
+    expect(
+      await screen.findByRole("radio", { name: "조용하고 차분한 곳" }),
+    ).toBeTruthy();
+  });
+
+  it("한 번 띄운 뒤로는 띄우지 않는다", async () => {
+    fireEvent.click(await intro());
+    await screen.findByRole("alertdialog");
+    fireEvent.click(screen.getByRole("button", { name: "웹에서 계속하기" }));
+    cleanup();
+    fireEvent.click(await intro());
+    expect(dialog()).toBeNull();
+    expect(
+      screen.getByRole("radio", { name: "조용하고 차분한 곳" }),
+    ).toBeTruthy();
+  });
+
+  it("[홈 화면에 추가하기]는 설치 창이 없으면 가이드로 간다", async () => {
+    fireEvent.click(await intro());
+    await screen.findByRole("alertdialog");
+    fireEvent.click(screen.getByRole("button", { name: "홈 화면에 추가하기" }));
+    expect(mocks.push).toHaveBeenCalledWith("/install/android");
+  });
+
+  it("홈 화면에서 연 앱에서는 띄우지 않는다", async () => {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((query: string) => ({
+        matches: query === "(display-mode: standalone)",
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    );
+    onTestFinished(() => {
+      vi.unstubAllGlobals();
+    });
+    fireEvent.click(await intro());
+    expect(dialog()).toBeNull();
+    expect(
+      screen.getByRole("radio", { name: "조용하고 차분한 곳" }),
+    ).toBeTruthy();
+  });
+});
+
+it("안내가 떠 있는 동안에는 아직 본 것으로 기록하지 않는다(배너가 모달 뒤에 뜨지 않게)", async () => {
+  mocks.restore.mockRejectedValue(new Error("unauthenticated"));
+  render(<HomeEntry />);
+  fireEvent.click(await screen.findByRole("button", { name: "시작하기" }));
+  await screen.findByRole("alertdialog");
+  expect(introSeen()).toBe(false);
+  fireEvent.click(screen.getByRole("button", { name: "웹에서 계속하기" }));
+  expect(introSeen()).toBe(true);
 });

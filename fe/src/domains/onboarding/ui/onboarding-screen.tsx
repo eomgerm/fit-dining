@@ -89,8 +89,12 @@ function IntroBackground() {
 
 export function OnboardingScreen({
   onComplete,
+  interceptIntro,
 }: {
   onComplete: (answers: OnboardingAnswers) => void;
+  // 처음 화면의 [시작하기]·[기존 계정으로 로그인]을 가로챈다(홈 화면 추가 안내 1-01a).
+  // 가로챘으면 true를 돌려주고, 안내가 끝나면 proceed로 그 버튼이 하던 일을 이어 간다
+  interceptIntro?: (from: "start" | "login", proceed: () => void) => boolean;
 }) {
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<OnboardingAnswers>({
@@ -102,6 +106,7 @@ export function OnboardingScreen({
   const [text, setText] = useState("");
   const [status, setStatus] = useState<"idle" | "analyzing" | "error">("idle");
   const [dialog, setDialog] = useState(false);
+  const loginLink = useRef<HTMLAnchorElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const request = useRef<AbortController | null>(null);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -185,14 +190,22 @@ export function OnboardingScreen({
           <Button
             ref={startButton}
             className="w-full"
-            onClick={() => setStep(1)}
+            onClick={() => {
+              const start = () => setStep(1);
+              if (!interceptIntro?.("start", start)) start();
+            }}
           >
             시작하기
           </Button>
           <TextButton
-            render={<a href="/login" />}
+            render={<a ref={loginLink} href="/login" />}
             nativeButton={false}
             variant="inverse"
+            onClick={(event) => {
+              // 이어 갈 때는 같은 링크를 다시 눌러 원래대로 이동한다. 가로채는 쪽은 두 번째에는 가로채지 않는다
+              const login = () => loginLink.current?.click();
+              if (interceptIntro?.("login", login)) event.preventDefault();
+            }}
           >
             기존 계정으로 로그인
           </TextButton>

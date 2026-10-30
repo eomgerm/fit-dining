@@ -7,7 +7,15 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from "vitest";
 import { OnboardingScreen } from "./onboarding-screen";
 
 const mocks = vi.hoisted(() => ({ analyze: vi.fn() }));
@@ -30,6 +38,69 @@ afterEach(() => {
   vi.restoreAllMocks();
   mocks.analyze.mockReset();
   vi.unstubAllGlobals();
+});
+describe("처음 화면 버튼 가로채기(홈 화면 추가 안내용)", () => {
+  it("[시작하기]를 가로채면 멈췄다가 넘겨받은 함수로 온보딩을 이어 간다", () => {
+    let proceed!: () => void;
+    const interceptIntro = vi.fn((_: string, next: () => void) => {
+      proceed = next;
+      return true;
+    });
+    render(
+      <OnboardingScreen
+        onComplete={() => {}}
+        interceptIntro={interceptIntro}
+      />,
+    );
+    click("시작하기");
+    expect(interceptIntro).toHaveBeenCalledWith("start", expect.any(Function));
+    expect(screen.queryByRole("radio")).toBeNull();
+    act(() => proceed());
+    expect(
+      screen.getByRole("radio", { name: "조용하고 차분한 곳" }),
+    ).toBeTruthy();
+  });
+
+  it("가로채지 않으면 바로 온보딩으로 간다", () => {
+    render(
+      <OnboardingScreen onComplete={() => {}} interceptIntro={() => false} />,
+    );
+    click("시작하기");
+    expect(
+      screen.getByRole("radio", { name: "조용하고 차분한 곳" }),
+    ).toBeTruthy();
+  });
+
+  it("[기존 계정으로 로그인]을 가로채면 이동을 멈추고, 이어 가면 같은 링크로 로그인 화면에 간다", async () => {
+    let proceed!: () => void;
+    let intercept = true;
+    const interceptIntro = vi.fn((_: string, next: () => void) => {
+      proceed = next;
+      return intercept;
+    });
+    render(
+      <OnboardingScreen
+        onComplete={() => {}}
+        interceptIntro={interceptIntro}
+      />,
+    );
+    const login = screen.getByRole("button", { name: "기존 계정으로 로그인" });
+    // React 핸들러가 끝난 뒤(문서까지 올라온 뒤)에 브라우저가 이동할지 본다
+    const navigate = vi.fn((event: MouseEvent) => event.defaultPrevented);
+    const onLoginClick = (event: MouseEvent) => {
+      if (event.target === login) navigate(event);
+    };
+    document.addEventListener("click", onLoginClick);
+    onTestFinished(() => document.removeEventListener("click", onLoginClick));
+    fireEvent.click(login);
+    expect(interceptIntro).toHaveBeenCalledWith("login", expect.any(Function));
+    expect(navigate).toHaveLastReturnedWith(true);
+    // 안내를 본 뒤에는 가로채지 않으므로 다시 눌러도 막히지 않는다
+    intercept = false;
+    act(() => proceed());
+    await waitFor(() => expect(navigate).toHaveBeenCalledTimes(2));
+    expect(navigate).toHaveLastReturnedWith(false);
+  });
 });
 function click(name: string) {
   fireEvent.click(screen.getByRole("button", { name }));

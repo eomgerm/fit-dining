@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { restore } from "@/domains/auth/api/auth-client";
+import { useInstallIntro } from "@/domains/install/ui/use-install-intro";
 import { SearchScreen } from "@/domains/place/ui/search-screen";
 import { OnboardingScreen } from "@/domains/onboarding/ui/onboarding-screen";
 import { isGuest, writeAnswers } from "@/domains/onboarding/model/storage";
@@ -13,6 +14,7 @@ import { useBookmarkAccess } from "./use-bookmark-access";
 export function HomeEntry() {
   const router = useRouter();
   const bookmarks = useBookmarkAccess();
+  const installIntro = useInstallIntro();
   const [screen, setScreen] = useState<"checking" | "onboarding" | "home">(
     "checking",
   );
@@ -53,11 +55,15 @@ export function HomeEntry() {
     // 검색 기록 저장에 인증을 잇는다. place는 auth를 import하지 않는다(search-thread D-6)
     <SearchScreen bookmarks={bookmarks} threadAuth={threadAuth} />
   ) : (
-    <OnboardingScreen
-      onComplete={(answers) => {
-        writeAnswers(answers);
-        router.push("/signup");
-      }}
-    />
+    <>
+      <OnboardingScreen
+        onComplete={(answers) => {
+          writeAnswers(answers);
+          router.push("/signup");
+        }}
+        interceptIntro={installIntro.intercept}
+      />
+      {installIntro.dialog}
+    </>
   );
 }
