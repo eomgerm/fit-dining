@@ -70,14 +70,21 @@ def analyze_all(
     *,
     call: Callable = gms.call_json,
     workers: int = WORKERS,
+    on_done: Callable[[dict], None] = lambda r: None,
 ) -> list[dict]:
-    """실패한 장소는 빠진다. app_evidence는 장소 순번 → 앱 리뷰 근거(샘플 확인용)."""
+    """실패한 장소는 빠진다. app_evidence는 장소 순번 → 앱 리뷰 근거(샘플 확인용).
+
+    on_done은 장소 하나가 끝날 때마다 작업 스레드에서 불린다(중간 저장용).
+    """
+
+    def run(i: int, place: dict) -> dict:
+        r = analyze(place, app_evidence(i), call=call)
+        on_done(r)
+        return r
+
     with ThreadPoolExecutor(workers) as pool:
         results = pool.map(
-            lambda ip: guarded(
-                lambda: analyze(ip[1], app_evidence(ip[0]), call=call), ip[1]["name"]
-            ),
-            enumerate(places),
+            lambda ip: guarded(lambda: run(*ip), ip[1]["name"]), enumerate(places)
         )
         return [r for r in results if r]
 
@@ -88,10 +95,13 @@ def build_profiles(
     call: Callable = gms.call_json,
     encode: Callable[[list[str]], list[list[float]]] = encode_documents,
     workers: int = WORKERS,
+    on_personas: Callable[[dict, list[dict]], None] = lambda r, ps: None,
 ) -> tuple[list[dict], dict[str, dict[str, float]], dict[str, list[dict]]]:
     """(프로필, 업종 그룹 평균, 장소별 특징). results에 summary와 personas를 채운다.
 
     업종 그룹 평균은 넘겨받은 장소로 구한다. 전체 장소를 넘겨야 is_label이 spec 4단계대로다.
+    personas가 이미 있는 장소는 다시 만들지 않는다. on_personas는 새로 만든 페르소나가 있을 때마다
+    작업 스레드에서 불린다(중간 저장용).
     """
     counts = {r["place"]["place_id"]: profile.count(r["evidence"]) for r in results}
     means = profile.group_means(
@@ -116,6 +126,8 @@ def build_profiles(
         r["summary"] = profile.summary_text(r["place"])
 
     def make_personas(r: dict) -> list[dict]:
+        if "personas" in r:
+            return r["personas"]
         # 4단계 특징 목록을 받아야 해서 모든 장소의 근거를 센 뒤에 만든다
         bodies = {
             x["review_id"]: x["body"]
@@ -130,6 +142,8 @@ def build_profiles(
             call=call,
         )
         log.info("%s: 페르소나 %d개", r["place"]["name"], len(made))
+        if made:
+            on_personas(r, made)
         return made
 
     with ThreadPoolExecutor(workers) as pool:

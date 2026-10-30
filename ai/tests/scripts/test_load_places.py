@@ -449,3 +449,21 @@ def test_profile_rows_keep_personas_with_three_reviews_and_drop_evidence():
 def test_profile_rows_rejects_other_schema():
     with pytest.raises(ValueError, match="place-profile/v1"):
         load_places.profile_rows([{"schema": "place-profile/v1", "place_id": 1}])
+
+
+def test_load_sql_replaces_scoped_tables_only_for_given_places():
+    places = [{"naver_place_id": "1"}, {"naver_place_id": "2"}]
+    profile = {"naver_place_id": "2", "summary_text": "요약"}
+    tables = {"place_seats": [], "place_profiles": [profile]}
+
+    sql = load_places.load_sql(places, tables, {"place_profiles": ["2"]})
+
+    # 분석 결과는 파일에 있는 장소만 바꾼다. 빠진 장소(분석 실패)는 이전 결과가 남는다
+    assert (
+        "DELETE FROM place_profiles WHERE place_id IN "
+        "(SELECT place_id FROM places WHERE naver_place_id IN ('2'));" in sql
+    )
+    assert (
+        "DELETE FROM place_seats WHERE place_id IN "
+        "(SELECT place_id FROM places WHERE naver_place_id IN ('1', '2'));" in sql
+    )

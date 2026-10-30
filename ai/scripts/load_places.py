@@ -6,7 +6,10 @@
 변형 규칙은 docs/specs/place-catalog/spec.md의 "적재·mock 변형 규칙"을 따른다. 다시 돌려도 장소는
 중복되지 않고 place_id도 그대로다. 리뷰에서 나온 CSV는 열지 않는다(place-catalog D-4, D-5).
 profiles.json(build_place_profiles.py 출력)을 주면 장소 분석 결과(place_profiles, place_personas)도
-넣는다. 이때 CSV의 장소 중 파일에 없는 장소는 분석 결과가 지워진다.
+넣는다. 파일에 있는 장소만 바꾸고, 빠진 장소(분석 실패)는 이전 분석 결과를 그대로 둔다.
+
+릴리즈 전 적재 전용이다. 릴리즈 뒤에 분석 결과를 다시 넣으면 04:00 배치가 반영한 앱 리뷰
+(place_personas.review_ids, place_profiles.analyzed_review_count 등)가 첫 적재 값으로 돌아간다.
 """
 
 import json
@@ -304,8 +307,15 @@ def place_id(naver_place_id: str) -> str:
     return f"(SELECT place_id FROM places WHERE naver_place_id = {literal(naver_place_id)})"
 
 
-def load_sql(places: list[dict], tables: dict[str, list[dict]]) -> str:
-    """한 트랜잭션. 장소는 naver_place_id로 갱신해 place_id를 유지하고, 그 장소들의 자식 행은 지운 뒤 다시 넣는다(D-15)."""
+def load_sql(
+    places: list[dict],
+    tables: dict[str, list[dict]],
+    scopes: dict[str, list[str]] | None = None,
+) -> str:
+    """한 트랜잭션. 장소는 naver_place_id로 갱신해 place_id를 유지하고, 그 장소들의 자식 행은 지운 뒤 다시 넣는다(D-15).
+
+    scopes에 있는 테이블은 모든 장소 대신 그 naver_place_id들의 행만 지운다.
+    """
     cols = list(places[0])
     values = ",\n".join(f"({', '.join(literal(r[c]) for c in cols)})" for r in places)
     updates = "".join(f"{c} = EXCLUDED.{c}, " for c in cols if c != "naver_place_id")
@@ -318,9 +328,12 @@ def load_sql(places: list[dict], tables: dict[str, list[dict]]) -> str:
         ),
     ]
     for table, rows in tables.items():
+        scope = (
+            ", ".join(map(literal, scopes[table])) if table in (scopes or {}) else ids
+        )
         sql.append(
             f"DELETE FROM {table} WHERE place_id IN "
-            f"(SELECT place_id FROM places WHERE naver_place_id IN ({ids}));"
+            f"(SELECT place_id FROM places WHERE naver_place_id IN ({scope}));"
         )
         if rows:
             cols = [c for c in rows[0] if c != "naver_place_id"]
@@ -358,17 +371,18 @@ def dropped(
 if __name__ == "__main__":
     clean = Path(sys.argv[1])
     places, tables = place_rows(clean), child_rows(clean)
-    profiles = []
+    profiles, scopes = [], {}
     if len(sys.argv) > 2:
         profiles = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
-        unknown = {str(p["place_id"]) for p in profiles} - {
-            p["naver_place_id"] for p in places
-        }
-        if unknown:
+        profiled = [str(p["place_id"]) for p in profiles]
+        if not profiled:
+            sys.exit("프로필이 하나도 없다")
+        if unknown := set(profiled) - {p["naver_place_id"] for p in places}:
             sys.exit(f"CSV에 없는 장소의 프로필: {sorted(unknown)}")
         tables |= profile_rows(profiles)
+        scopes = {"place_profiles": profiled, "place_personas": profiled}
     sys.stdout.reconfigure(encoding="utf-8")
-    sys.stdout.write(load_sql(places, tables))
+    sys.stdout.write(load_sql(places, tables, scopes))
     sys.stderr.reconfigure(encoding="utf-8")
     counts = {"places": len(places)} | {t: len(rows) for t, rows in tables.items()}
     print(
