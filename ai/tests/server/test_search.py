@@ -23,6 +23,7 @@ from fit_ai.match.candidates import (
     VectorCounts,
 )
 from fit_ai.match.cards import Card, Reason, ReasonTag, ScoreItem, Source
+from fit_ai.match.conditions import Layer
 from fit_ai.match.interpretation import Conditions, Interpretation
 from fit_ai.match.search import (
     EmbeddingError,
@@ -32,7 +33,7 @@ from fit_ai.match.search import (
     SearchResult,
     SearchTrace,
 )
-from fit_ai.match.taste_select import TasteProfile
+from fit_ai.match.taste_select import FreeText, TasteFeature, TasteProfile
 from server import search as server_search
 from server.app import create_app
 from server.common import Dependencies
@@ -56,11 +57,21 @@ CONDITIONS_BODY = {
     "nearby": False,
 }
 
+VECTOR = [0.01] * 1024
+"""칩 벡터. 길이만 맞춘 예시 값이다."""
+
 TASTE_BODY = {
-    "schema": "taste-profile/v0",
-    "user_id": "u1",
-    "features": [{"code": "QUIET", "layer": "axis", "like": True, "weight": 1}],
+    "mood": "QUIET",
+    "priorities": ["SPACIOUS"],
+    "purposes": [],
+    "tastes": [
+        {"polarity": "LIKE", "label": "조용한 곳", "code": "QUIET"},
+        {"polarity": "LIKE", "label": "창가 자리", "code": None, "vector": VECTOR},
+    ],
 }
+"""비회원 취향. 기기가 저장한 온보딩 답에 칩 벡터가 더해진 모양이다."""
+
+QUIET_FEATURE = {"code": "QUIET", "layer": "axis", "like": True, "weight": 1}
 
 CARD = Card(
     place_id=2,
@@ -151,7 +162,7 @@ class FakeStore:
         return self.counts
 
 
-STORED_TASTE = TasteProfile.from_dict(TASTE_BODY | {"user_id": "user-1"})
+STORED_TASTE = TasteProfile.from_stored("user-1", [QUIET_FEATURE], None)
 
 
 class FakeTasteStore:
@@ -230,7 +241,17 @@ class TestSearch:
                 SearchRequest(
                     QUERY_TEXT,
                     previous=CONDITIONS,
-                    taste=TasteProfile.from_dict(TASTE_BODY),
+                    # 온보딩 답으로 계산한 취향이다. 직접 입력한 "조용한 곳"(QUIET)이
+                    # 고른 답에 더해져 강도가 2다. 코드가 붙은 칩은 문장으로 읽지 않는다.
+                    taste=TasteProfile(
+                        "",
+                        (
+                            TasteFeature("QUIET", Layer.AXIS, True, 2),
+                            TasteFeature("LIVELY", Layer.AXIS, False, 2),
+                            TasteFeature("SPACIOUS_SEATING", Layer.IMPORTANCE, True, 1),
+                        ),
+                        (FreeText("창가 자리", True, tuple(VECTOR)),),
+                    ),
                     bounds=MapBounds(sw_lat=37.49, ne_lng=127.04),
                 ),
                 store,
@@ -317,26 +338,73 @@ class TestSearch:
     @pytest.mark.parametrize(
         "taste",
         [
-            {"schema": "taste-profile/v1", "user_id": "u1"},
-            {"schema": "taste-profile/v0", "user_id": "u1", "features": [{}]},
+            # 취향 분석 출력 모양(taste-profile/v0)은 받지 않는다.
             {
                 "schema": "taste-profile/v0",
                 "user_id": "u1",
-                "features": [
-                    {"code": "QUIET", "layer": "axis", "like": True, "weight": 1}
-                ]
-                * 51,
+                "features": [QUIET_FEATURE],
             },
+            # 계산한 취향은 AI가 만든다. 기기가 보내도 받지 않는다.
+            {"features": [QUIET_FEATURE]},
+            {"mood": "NOISY"},
+            {"tastes": [{"polarity": "MAYBE", "label": "조용한 곳"}]},
+            {"tastes": [{"polarity": "LIKE", "label": "가" * 101}]},
+            {"tastes": [{"polarity": "LIKE", "label": "창가 자리", "vector": [0.6]}]},
+            {
+                "tastes": [
+                    {"polarity": "LIKE", "label": "창가", "vector": ["0.1"] * 1024}
+                ]
+            },
+            {"tastes": [{"polarity": "LIKE", "label": "조용한 곳"}] * 21},
         ],
     )
     def test_invalid_taste_profile_degrades(
-        self, searched: FakeSearch, taste: dict
+        self, searched: FakeSearch, taste: dict, caplog: pytest.LogCaptureFixture
     ) -> None:
         """검색_취향프로필을읽지못하면_취향없이검색하고TASTE_INVALID를담는다"""
+        caplog.set_level(logging.INFO, logger="server")
+
         data = post(client(), tasteProfile=taste)
 
         assert searched.calls[0][0].taste is None
         assert data["fallbacks"] == ["TASTE_INVALID"]
+        # 모양 오류는 값 오류와 구분해 남기고, 칩 문구는 남기지 않는다.
+        assert "INVALID_SHAPE" in caplog.text
+        assert "조용한 곳" not in caplog.text
+
+    def test_guest_vector_only_on_uncoded_like(self, searched: FakeSearch) -> None:
+        """검색_비회원칩에벡터가있으면_코드없는좋아함칩의벡터만쓴다"""
+        post(
+            client(),
+            tasteProfile={
+                "tastes": [
+                    {
+                        "polarity": "LIKE",
+                        "label": "조용한",
+                        "code": "QUIET",
+                        "vector": VECTOR,
+                    },
+                    {"polarity": "DISLIKE", "label": "비싼 곳", "vector": VECTOR},
+                    {"polarity": "LIKE", "label": "창가 자리", "vector": VECTOR},
+                ]
+            },
+        )
+
+        taste = searched.calls[0][0].taste
+        assert [(t.text, t.usable) for t in taste.free_texts] == [
+            ("비싼 곳", False),
+            ("창가 자리", True),
+        ]
+
+    @pytest.mark.parametrize(
+        "taste", [{}, {"mood": None, "priorities": [], "purposes": [], "tastes": []}]
+    )
+    def test_empty_guest_taste(self, searched: FakeSearch, taste: dict) -> None:
+        """검색_비회원취향이비었으면_빈취향으로검색하고폴백은없다"""
+        data = post(client(), tasteProfile=taste)
+
+        assert searched.calls[0][0].taste == TasteProfile("", (), ())
+        assert data["fallbacks"] == []
 
     def test_member_taste_from_store(self, searched: FakeSearch) -> None:
         """검색_회원id가있으면_취향저장소에서꺼내고요청의취향프로필은읽지않는다"""
@@ -364,9 +432,7 @@ class TestSearch:
         [
             StoreError("취향 저장소를 읽지 못했다: OperationalError"),
             ValueError("취향의 weight가 범위를 벗어났다"),
-            TasteProfile.from_dict(
-                TASTE_BODY | {"features": TASTE_BODY["features"] * 51}
-            ),
+            TasteProfile.from_stored("user-1", [QUIET_FEATURE] * 51, None),
         ],
     )
     def test_member_taste_unreadable(

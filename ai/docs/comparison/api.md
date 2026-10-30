@@ -1,6 +1,6 @@
 # AI 검색 API 명세
 
-Status: 초안 v0.4 · Jira: S15P31A302-41 · 작성일: 2026-10-23 · 고친 날: 2026-10-27
+Status: 초안 v0.5 · Jira: S15P31A302-41 · 작성일: 2026-10-23 · 고친 날: 2026-10-30
 
 BE는 검색 첫 페이지마다 AI를 한 번 부른다. AI는 요청을 해석하고 DB에서 후보를 뽑아 정렬한 뒤 카드의 AI 필드를 돌려준다. BE는 카드에 장소 정보와 영업 상태를 붙여 FE에 준다.
 
@@ -31,7 +31,25 @@ JSON 이름은 camelCase다. 요청에 모르는 속성이 있으면 400이고(�
 | `previousConditions` | | 후속 검색이면 직전 응답의 `conditions`. 읽지 못하면 새 검색으로 본다 | `previousConditions` |
 | `mapBounds` | | 지도 영역(숫자). 있으면 역 대신 이 영역으로 거른다. 빠진 값은 제한하지 않고 `{}`는 없는 것으로 본다 | `mapBounds` |
 | `userId` | | 회원 id(1~64자). BE가 로그인으로 확인한 id만 보낸다. 있으면 AI가 회원 취향(`user_preferences`)을 직접 읽고 `tasteProfile`은 읽지 않는다. 취향이 저장돼 있지 않으면 취향 없이 정렬한다 | 로그인 사용자 |
-| `tasteProfile` | | 비회원 취향. 기기가 저장한 39 취향 프로필 JSON을 BE가 그대로 넘긴다(형식은 39 spec). 없거나 읽지 못하면 취향 없이 정렬한다 | 없음(5장) |
+| `tasteProfile` | | 비회원 취향. 기기가 저장한 온보딩 답을 BE가 그대로 넘긴다(아래 예). 없으면 취향 없이 정렬한다. 모양이 틀리면 취향 없이 정렬하고 `TASTE_INVALID`를 담는다 | 없음(5장) |
+
+비회원 취향은 이렇게 보낸다. 회원 `user_preferences` 행에서 `features`를 뺀 모양이고, 취향 프로필 계산 API(`POST /v1/taste/profile`) 요청에 칩 벡터가 더해진 모양이다. 모든 필드는 빠져도 된다.
+
+```json
+"tasteProfile": {
+  "mood": "QUIET",
+  "priorities": ["SPACIOUS"],
+  "purposes": ["DATE"],
+  "tastes": [
+    {"polarity": "LIKE", "label": "조용한 곳", "code": "QUIET"},
+    {"polarity": "LIKE", "label": "창가 자리", "code": null, "vector": [0.01, 0.02]}
+  ]
+}
+```
+
+- AI는 취향 프로필 계산 API와 같은 계산으로 `features`를 만든다. 회원은 가입 때 BE가 저장해 둔 `features`를 읽으므로 같은 답이면 같은 취향이 된다.
+- `vector`는 온보딩 담당이 코드 없는 좋아함 칩에 붙인다(길이 1024). 회원 행처럼 그 칩의 벡터만 쓰고 다른 칩에 붙은 벡터는 버린다. 벡터가 없는 칩은 보관만 하고 정렬에 쓰지 않는다.
+- 모양이 틀린 경우: 모르는 필드(`features` 포함), 목록에 없는 값, 칩 20개 초과, 문구 1~100자 밖, 벡터 길이가 1024가 아님
 
 `conditions`에는 해석 결과만 있다. 후속 검색 때도 `userId`(또는 `tasteProfile`)와 `mapBounds`는 다시 보내야 한다. BE의 `preferences`와 `cursor`는 null이라도 넣으면 400이므로 AI 요청용 DTO를 따로 둔다.
 
@@ -212,4 +230,4 @@ LLM 실패와 읽지 못한 입력은 오류가 아니라 200과 `fallbacks`로 
 | 점수 구간 | 딱 맞음 85~100, 대체로 65~84, 일부 40~64, 안 맞음 0~39. 따질 조건이 없으면 모두 딱 맞음 |
 | 모델 | LLM `gpt-4o-mini`, 인코더 arctic-ko 리비전 `55ec6e9`. 40 장소 벡터도 같은 인코더로 만든다 |
 | 인증 | BE가 `Modal-Key`, `Modal-Secret` 헤더로 부른다(인프라 설계 11.2). 없거나 틀리면 Modal 프록시가 401을 낸다 |
-| 취향 전달 | 회원은 `userId`로 보내고 AI가 `user_preferences`(저장 설계 V6)를 읽는다. 비회원은 기기가 저장한 프로필을 `tasteProfile`로 보낸다. 기기가 저장할 형식과 계산 주체는 FE·BE·39와 정해야 한다 |
+| 취향 전달 | 회원은 `userId`로 보내고 AI가 `user_preferences`(저장 설계 V6)를 읽는다. 비회원은 기기가 저장한 온보딩 답(칩 벡터 포함)을 `tasteProfile`로 보내고 AI가 `features`를 계산한다(10-30). FE 저장 검사는 아직 칩의 `vector`를 받지 않는다 |

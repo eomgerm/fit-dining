@@ -2,7 +2,9 @@
 
 요청이 장기 취향보다 앞선다(PRD AC-28, AC-30). 규칙은 docs/comparison/spec.md 4.3이다.
 취향 프로필 형식은 분석 담당의 spec(S15P31A302-39)을 따른다. 회원 취향은 취향
-저장소(`TasteStore`)에서 꺼낸다. 구현은 `pg_store.py`(DB)다.
+저장소(`TasteStore`)에서 꺼낸다. 구현은 `pg_store.py`(DB)다. 회원 취향과 검색 요청에
+실린 비회원 취향은 같은 저장 모양(`features`, `tastes`)이라 `TasteProfile.from_stored`
+하나로 읽는다.
 """
 
 from collections.abc import Iterable, Sequence
@@ -20,6 +22,9 @@ SCHEMA = "taste-profile/v0"
 
 MAX_WEIGHT = 3
 """취향 강도 상한. 취향 spec과 같다."""
+
+POLARITY = {"LIKE": True, "DISLIKE": False}
+"""온보딩 칩의 `polarity`(BE `Preferences.Polarity`)를 좋아함 여부로 바꾸는 표"""
 
 MAX_FREE_TEXT_LENGTH = 100
 """취향 문장 길이 상한. 온보딩 직접 입력 상한(PRD FR-06)과 같다. 문장은 정렬 LLM
@@ -104,6 +109,54 @@ class TasteProfile:
             user_id=data["user_id"],
             features=tuple(_feature(f) for f in _list(data.get("features", []))),
             free_texts=tuple(_free_text(t) for t in _list(data.get("free_texts", []))),
+        )
+
+    @classmethod
+    def from_stored(
+        cls, user_id: str, features: object, tastes: object
+    ) -> "TasteProfile":
+        """저장 모양(`user_preferences`의 `features`, `tastes`)을 취향 프로필로 읽는다.
+
+        회원은 DB 행이고, 비회원은 기기가 저장해 검색 요청에 실어 보낸 같은 모양이다.
+        `features`는 취향 분석이 계산한 결과라 그대로 쓴다. 칩 중 코드가 붙은 것은 이미
+        `features`에 들어 있어 코드가 없는 칩만 취향 문장으로 읽는다. 벡터는 코드 없는
+        좋아함 칩에만 있다. `code` 키가 없는 칩(취향 분석 결과를 더하기 전의 온보딩 원본)도
+        벡터가 없어 보관만 하는 문장이 된다.
+
+        Args:
+            user_id: 사용자 id. 비회원이면 빈 문자열이다.
+            features: 취향 계산 결과(`{code, layer, like, weight}` 목록)
+            tastes: 온보딩 칩(`{polarity, label, code, vector}` 목록). 없으면 None이다.
+
+        Returns:
+            취향 프로필
+
+        Raises:
+            ValueError: `polarity`가 LIKE·DISLIKE가 아니거나 취향 값이 범위를 벗어났을 때
+            KeyError: 칩이나 취향에 필수 필드가 없을 때
+            TypeError: 칩 목록이나 취향의 타입이 다를 때
+        """
+        chips = [] if tastes is None else tastes
+        if not isinstance(chips, list) or not all(isinstance(c, dict) for c in chips):
+            raise TypeError("tastes가 객체 목록이 아니다")
+        if any(chip["polarity"] not in POLARITY for chip in chips):
+            raise ValueError("칩의 polarity가 LIKE나 DISLIKE가 아니다")
+        free_texts = [
+            {
+                "text": chip["label"],
+                "like": POLARITY[chip["polarity"]],
+                "vector": chip.get("vector"),
+            }
+            for chip in chips
+            if chip.get("code") is None
+        ]
+        return cls.from_dict(
+            {
+                "schema": SCHEMA,
+                "user_id": user_id,
+                "features": features,
+                "free_texts": free_texts,
+            }
         )
 
 

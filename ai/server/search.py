@@ -29,11 +29,14 @@ from fit_ai.match.search import (
     search,
 )
 from fit_ai.match.taste_select import TasteProfile, TasteStore
+from fit_ai.taste.profile import compute_features
 from server.common import Dependencies, log, problem
 from server.schemas import (
     CardBody,
     ConditionsBody,
     EmptyReasonBody,
+    GuestChipBody,
+    GuestTasteBody,
     MapBoundsBody,
     ModelsBody,
     ReasonBody,
@@ -42,12 +45,16 @@ from server.schemas import (
     SearchBody,
     SearchResponse,
 )
+from server.taste_profile import to_rows
 
 MAX_TASTE_FEATURES = 50
 """취향 프로필의 취향 수 상한. 넘으면 읽지 않는다(요청당 비용 상한)."""
 
 MAX_TASTE_FREE_TEXTS = 20
 """취향 프로필의 취향 문장 수 상한. 넘으면 읽지 않는다(요청당 비용 상한)."""
+
+GUEST_ID = ""
+"""비회원 취향의 사용자 id. 취향 spec처럼 비운다. 검색은 이 값을 읽지 않는다."""
 
 
 def router(deps: Dependencies) -> APIRouter:
@@ -307,12 +314,38 @@ def _stored_taste(
 
 
 def _sent_taste(data: dict[str, Any]) -> tuple[TasteProfile | None, bool]:
-    """요청에 실린 취향 프로필을 읽는다."""
+    """요청에 실린 비회원 취향(기기가 저장한 온보딩 답)을 읽는다.
+
+    회원은 가입 때 BE가 취향 프로필 계산 API로 `features`를 저장해 두지만 비회원은
+    없다. 그래서 같은 계산(`server.taste_profile.to_rows`, `compute_features`)으로
+    `features`를 만들고 회원과 같은 `TasteProfile.from_stored`로 읽는다.
+    """
     try:
-        return TasteProfile.from_dict(data), False
+        body = GuestTasteBody.model_validate(data)
+        features = compute_features(to_rows(body))
+        chips = [_stored_chip(chip) for chip in body.tastes]
+        return TasteProfile.from_stored(GUEST_ID, features, chips), False
+    # ValidationError는 ValueError의 하위 타입이라 먼저 잡는다.
+    except ValidationError:
+        log("taste_invalid", error="INVALID_SHAPE")
     except (ValueError, KeyError, TypeError, AttributeError) as e:
         log("taste_invalid", error=type(e).__name__)
-        return None, True
+    return None, True
+
+
+def _stored_chip(chip: GuestChipBody) -> dict[str, Any]:
+    """비회원 칩을 회원 행의 칩 모양으로 바꾼다.
+
+    벡터는 회원 행처럼 코드 없는 좋아함 칩에만 남긴다(저장 설계 V6). 다른 칩의 벡터를
+    남기면 시설이나 싫어하는 문장이 정렬에 들어간다.
+    """
+    keep = chip.code is None and chip.polarity == "LIKE"
+    return {
+        "polarity": chip.polarity,
+        "label": chip.label,
+        "code": chip.code,
+        "vector": chip.vector if keep else None,
+    }
 
 
 def _card_body(card: Card) -> CardBody:

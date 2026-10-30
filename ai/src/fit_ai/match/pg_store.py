@@ -23,7 +23,6 @@ from fit_ai.match.candidates import (
     VectorCounts,
 )
 from fit_ai.match.place import Place, PlaceInfo, read_facilities
-from fit_ai.match.taste_select import SCHEMA as TASTE_SCHEMA
 from fit_ai.match.taste_select import TasteProfile
 
 FIND_SQL = """
@@ -72,9 +71,6 @@ SELECT features, tastes FROM user_preferences WHERE user_id = %(user_id)s
 
 SESSION_OPTIONS = "-c statement_timeout=2000 -c default_transaction_read_only=on"
 """접속마다 거는 설정. 쿼리는 2초를 넘기면 끊고, 읽기만 한다."""
-
-POLARITY = {"LIKE": True, "DISLIKE": False}
-"""온보딩 칩의 `polarity`(BE `Preferences.Polarity`)를 좋아함 여부로 바꾸는 표"""
 
 
 class PgPlaceStore:
@@ -194,7 +190,7 @@ class PgTasteStore:
         if not rows:
             return None
         features, tastes = rows[0]
-        return _taste_profile(user_id, features, tastes)
+        return TasteProfile.from_stored(user_id, features, tastes)
 
     def close(self) -> None:
         """접속 풀을 닫는다."""
@@ -222,43 +218,6 @@ def _fetch(
     except (psycopg.Error, PoolTimeout) as e:
         # 메시지에 접속 주소나 값이 섞일 수 있어 종류만 남긴다.
         raise StoreError(f"{name} 저장소를 읽지 못했다: {type(e).__name__}") from e
-
-
-def _taste_profile(user_id: str, features: object, tastes: object) -> TasteProfile:
-    """`user_preferences` 한 행을 취향 프로필로 읽는다.
-
-    `features`는 취향 분석이 계산한 결과라 그대로 쓴다. 칩 중 코드가 붙은 것은 이미
-    `features`에 들어 있어 코드가 없는 칩만 취향 문장으로 읽는다. 벡터는 코드 없는
-    좋아함 칩에만 있다. `code` 키가 없는 칩(취향 분석 결과를 더하기 전의 온보딩 원본)도
-    벡터가 없어 보관만 하는 문장이 된다.
-
-    Raises:
-        ValueError: `polarity`가 LIKE·DISLIKE가 아니거나 취향 값이 범위를 벗어났을 때
-        KeyError: 칩이나 취향에 필수 필드가 없을 때
-        TypeError: 칩 목록이나 취향의 타입이 다를 때
-    """
-    chips = [] if tastes is None else tastes
-    if not isinstance(chips, list) or not all(isinstance(c, dict) for c in chips):
-        raise TypeError("tastes가 객체 목록이 아니다")
-    if any(chip["polarity"] not in POLARITY for chip in chips):
-        raise ValueError("칩의 polarity가 LIKE나 DISLIKE가 아니다")
-    free_texts = [
-        {
-            "text": chip["label"],
-            "like": POLARITY[chip["polarity"]],
-            "vector": chip.get("vector"),
-        }
-        for chip in chips
-        if chip.get("code") is None
-    ]
-    return TasteProfile.from_dict(
-        {
-            "schema": TASTE_SCHEMA,
-            "user_id": user_id,
-            "features": features,
-            "free_texts": free_texts,
-        }
-    )
 
 
 def _vector_text(vector: Sequence[float]) -> str:

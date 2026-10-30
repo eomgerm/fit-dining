@@ -9,13 +9,21 @@ from typing import Annotated, Any, Literal
 from pydantic import Field, field_validator
 
 from fit_ai.match.interpretation import MAX_CODES, MAX_TEXT_LENGTH
+from fit_ai.match.taste_select import MAX_FREE_TEXT_LENGTH
 from server.common import Body
+from server.taste_profile import PRIORITIES, PURPOSES, ProfileBody, TasteChip
 
 MAX_QUERY_LENGTH = 200
 """요청문 길이 상한. BE 검색 요청과 같다(검색 spec 3번, 인프라 BE 계약 #18)."""
 
 MAX_USER_ID_LENGTH = 64
 """회원 id 길이 상한. BE 회원 id는 UUID 문자열(36자)이다."""
+
+MAX_GUEST_CHIPS = 20
+"""비회원 칩 수 상한. 코드가 붙은 칩도 센다(요청당 비용 상한). FE는 10개까지 저장한다."""
+
+VECTOR_SIZE = 1024
+"""칩 벡터 길이. 임베딩 모델(arctic-ko)의 벡터 길이이고 DB `vector(1024)`와 같다."""
 
 
 CategoryGroup = Literal["RESTAURANT", "CAFE", "BAR"]
@@ -39,6 +47,41 @@ class ModelsBody(Body):
 
 Coordinate = Annotated[float | None, Field(strict=True, allow_inf_nan=False)]
 """좌표 하나. 숫자만 받는다. 문자열("37.4")이나 참거짓, NaN은 거부한다."""
+
+
+VectorValue = Annotated[float, Field(strict=True, allow_inf_nan=False)]
+"""벡터 값 하나. 숫자만 받는다."""
+
+
+class GuestChipBody(TasteChip):
+    """비회원 칩. 온보딩 칩에 벡터가 더해진다.
+
+    Attributes:
+        label: 칩 문구
+        vector: 문구 벡터. 온보딩 담당이 코드 없는 좋아함 칩에 붙인다. 다른 칩에 붙어
+            오면 쓰지 않는다.
+    """
+
+    label: str = Field(min_length=1, max_length=MAX_FREE_TEXT_LENGTH)
+    vector: list[VectorValue] | None = Field(
+        default=None, min_length=VECTOR_SIZE, max_length=VECTOR_SIZE
+    )
+
+
+class GuestTasteBody(ProfileBody):
+    """비회원 취향. 기기가 저장한 온보딩 답이고, 회원 `user_preferences` 행에서
+    `features`를 뺀 모양이다. 취향 프로필 계산 API의 요청과 같고 칩에 벡터가 더해진다.
+    """
+
+    priorities: list[Literal[tuple(PRIORITIES)]] = Field(
+        default_factory=list, max_length=len(PRIORITIES)
+    )
+    purposes: list[Literal[tuple(PURPOSES)]] = Field(
+        default_factory=list, max_length=len(PURPOSES)
+    )
+    tastes: list[GuestChipBody] = Field(
+        default_factory=list, max_length=MAX_GUEST_CHIPS
+    )
 
 
 class MapBoundsBody(Body):
@@ -67,8 +110,8 @@ class SearchBody(Body):
         map_bounds: 지도 영역. 있으면 역 대신 좌표로 거른다.
         user_id: 회원 id. BE가 로그인으로 확인한 id다. 있으면 취향 저장소에서 그 회원의
             취향을 꺼내고 `taste_profile`은 읽지 않는다. 비회원이면 null이다.
-        taste_profile: 비회원 취향 프로필(`taste-profile/v0`) JSON. 기기가 저장한
-            프로필을 BE가 그대로 넘긴다. 읽지 못하면 취향 없이 검색하고 `fallbacks`에
+        taste_profile: 비회원 취향(`GuestTasteBody`). 기기가 저장한 온보딩 답을 BE가
+            그대로 넘긴다. 읽지 못하면 취향 없이 검색하고 `fallbacks`에
             `TASTE_INVALID`를 담는다.
     """
 

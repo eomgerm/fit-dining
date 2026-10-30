@@ -1,6 +1,7 @@
 """⓪ 취향 고르기를 확인한다.
 
-취향 프로필 읽기와 요청과 겹치는 취향을 빼는 규칙을 본다.
+취향 프로필 읽기, 저장 모양(회원 DB 행과 비회원 요청) 읽기, 요청과 겹치는 취향을 빼는
+규칙을 본다.
 """
 
 import pytest
@@ -105,6 +106,55 @@ class TestReadProfile:
         """프로필읽기_features가목록이아니면_거부한다"""
         with pytest.raises(TypeError):
             TasteProfile.from_dict({**PROFILE, "features": {"code": "QUIET"}})
+
+
+class TestReadStored:
+    """저장 모양 읽기"""
+
+    def test_reads_features_and_uncoded_chips(self) -> None:
+        """저장모양읽기_계산결과와칩이있으면_계산결과는그대로코드없는칩만취향문장으로읽는다"""
+        profile = TasteProfile.from_stored(
+            "",
+            [{"code": "QUIET", "layer": "axis", "like": True, "weight": 2}],
+            [
+                {"polarity": "LIKE", "label": "조용한 곳", "code": "QUIET"},
+                {
+                    "polarity": "LIKE",
+                    "label": "창가 자리",
+                    "code": None,
+                    "vector": [0.6, 0.8],
+                },
+                {"polarity": "DISLIKE", "label": "비싼 곳"},
+            ],
+        )
+
+        assert profile.user_id == ""
+        assert profile.features == (TasteFeature("QUIET", Layer.AXIS, True, 2),)
+        assert [(t.text, t.like, t.usable) for t in profile.free_texts] == [
+            ("창가 자리", True, True),
+            ("비싼 곳", False, False),
+        ]
+
+    def test_no_chips(self) -> None:
+        """저장모양읽기_칩이없으면_계산결과만읽는다"""
+        profile = TasteProfile.from_stored("u1", PROFILE["features"], None)
+
+        assert profile.features == FEATURES
+        assert profile.free_texts == ()
+
+    @pytest.mark.parametrize(
+        ("tastes", "error"),
+        [
+            ([{"polarity": "MAYBE", "label": "조용한 곳"}], ValueError),
+            ([{"polarity": "LIKE"}], KeyError),
+            ({"polarity": "LIKE", "label": "조용한 곳"}, TypeError),
+            (["조용한 곳"], TypeError),
+        ],
+    )
+    def test_reject_bad_chips(self, tastes: object, error: type[Exception]) -> None:
+        """저장모양읽기_칩의polarity나모양이틀리면_거부한다"""
+        with pytest.raises(error):
+            TasteProfile.from_stored("u1", [], tastes)
 
 
 class TestSelectTastes:
