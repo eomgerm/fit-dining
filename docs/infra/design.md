@@ -11,16 +11,16 @@
 
 ## 0. 요약
 
-Fit Dining(Next.js SSR 프런트(PWA), Spring Boot 백엔드, OpenSearch 검색, Modal 위의 AI)의 서버 인프라 설계다. SSAFY가 지급한 자원 4종으로 구성한다. 첫 공개는 2026-11-06, 서비스 종료는 11-18이라 공개 운영은 12일이다. 그래서 "작게 만들되 사고가 나도 복구되는" 구성을 택했다.
+Fit Dining(Next.js SSR 프런트(PWA), Spring Boot 백엔드, OpenSearch 검색, A의 AI API와 Modal의 GPU 임베딩)의 서버 인프라 설계다. SSAFY가 지급한 자원 4종으로 구성한다. 첫 공개는 2026-11-06, 서비스 종료는 11-18이라 공개 운영은 12일이다. 그래서 "작게 만들되 사고가 나도 복구되는" 구성을 택했다.
 
 ### 한눈에 보기
 
 | 자원 | 역할 | 올라가는 것 |
 |---|---|---|
-| A: EC2 t3.xlarge (x86, 16GB) | 서비스 | Caddy, FE(Next.js SSR, prod·dev), BE(prod·dev), Postgres, OpenSearch, Redis, Garage, 관측성, 배포 러너 |
+| A: EC2 t3.xlarge (x86, 16GB) | 서비스 | Caddy, FE(Next.js SSR, prod·dev), BE(prod·dev), AI API(FastAPI, prod·dev), Postgres, OpenSearch, Redis, Garage, 관측성, 배포 러너 |
 | B: EC2 c6g.large (Arm, 4GB) | 감시·CI·백업 | 외부 감시, CI verify 러너, 백업 금고 |
 | SSAFY 공용 GPU 서버 | 학습 전용 | 인프라가 다루지 않는다. A·B와 연결하지 않는다 |
-| Modal (serverless GPU) | AI 추론 전부 | FastAPI, 임베딩, 리랭커, 소형 LLM. A·B에는 AI 구성요소가 없다 |
+| Modal (serverless GPU) | GPU 추론 | 임베딩(`fit-embed`), 리랭커, 소형 LLM. AI API(FastAPI)는 Modal이 아니라 A에서 돈다(11.4절). B에는 AI 구성요소가 없다 |
 
 ### 이 문서를 읽는 법
 
@@ -41,7 +41,7 @@ Fit Dining(Next.js SSR 프런트(PWA), Spring Boot 백엔드, OpenSearch 검색,
 | 3 | 엣지는 Caddy. 프런트는 Next.js SSR(Node 컨테이너)을 Caddy 뒤에 둔다 | 인증서 발급·갱신, 프록시 헤더, 리다이렉트가 기본이라 선배 팀의 nginx 함정이 대부분 없다. Next.js는 앞단에 리버스 프록시를 두라고 권장하고 그 역할을 Caddy가 한다 |
 | 4 | CI/CD는 GitLab Runner 2개(verify는 B, deploy는 A). 러너 등록이 막히면 Jenkins로 폴백 | 공개 웹훅과 플러그인 설정이 없고 설정이 repo에 남는다 |
 | 5 | prod는 Blue/Green(Caddy upstream 전환), dev는 교체형. BE와 FE가 같은 방식이다 | 배포 중 요청 유실을 줄이고, 실패하면 자동으로 되돌린다. 두 서비스가 같은 메커니즘이라 배포·롤백 절차가 하나다 |
-| 6 | AI 추론과 FastAPI는 전부 Modal에 둔다. A·B는 AI를 담당하지 않고, BE가 Modal을 HTTPS로 호출한다 | AI 팀이 Modal에서 모델을 서빙·배포하므로 서버는 모델 파일, 양자화, 아키텍처별 의존성(arm64)을 맡지 않는다. 대신 Modal이 AI의 단일 의존점이라 키워드 검색 폴백, 예산, 킬스위치가 필수다 |
+| 6 | AI API(FastAPI)는 A에 두고 GPU 추론(임베딩 등)은 Modal에 둔다. BE가 AI API를 A 내부망으로 부르고 AI API가 Modal을 HTTPS로 부른다. A에는 모델을 올리지 않는다 | AI API가 읽는 장소 벡터와 회원 취향은 Postgres에 있고 DB는 외부에 열지 않는다(Modal은 DB에 닿지 못한다). 모델까지 A에 올리면 컨테이너 하나가 약 2.9GB(측정)이고 질의 임베딩이 CPU로 150~290ms(빠른 데스크톱 CPU에서 측정)라 A의 지속 CPU(약 1.6 vCPU)와 메모리 여유를 넘는다(4.1절). 서버는 GPU 모델 파일, 양자화, 아키텍처별 의존성(arm64)을 맡지 않는다. 대신 Modal이 임베딩의 단일 의존점이라 키워드 검색 폴백, 예산, 킬스위치가 필수다 |
 | 7 | 사진 저장소는 Garage(S3 호환) | S3를 쓸 수 없다고 가정한다. MinIO 커뮤니티판은 아카이브됐다 |
 | 8 | 백업은 age로 암호화(수신자 2명, 개인키는 서버에 두지 않음)한 뒤 B 금고로 쓰기 전용 전송. 복원 리허설은 사람이 한다 | 서버가 뚫려도 백업 평문이 나가지 않는다 |
 | 9 | 관측성은 A에 Prometheus·Alertmanager·Grafana, B에 외부 감시. Loki·Tempo·OTel은 쓰지 않는다 | 선배 팀에서 Tempo/OTel은 쓰이지 않았고 Promtail은 EOL이다 |
@@ -85,7 +85,7 @@ Fit Dining(Next.js SSR 프런트(PWA), Spring Boot 백엔드, OpenSearch 검색,
 | A. EC2 t3.xlarge | x86_64, 4 vCPU, 15.7GB, 디스크 309GB (확인: 2026-10-22 서버, 유형은 인스턴스 메타데이터). 전송량 한도 (미확인) | 서비스 본체(BE, FE, 엣지), 배포 러너 |
 | B. EC2 c6g.large | Arm(Graviton2), 2 vCPU, 4GiB, EBS 전용, GPU 없음 (확인). 디스크 크기 (미확인) | 외부 감시, CI verify 러너, 백업 금고 |
 | SSAFY GPU 서버 | 공용, 학습 전용(기획서). 고정 공인 IP 없음, VPC/VPN 없음(A503 기준) | 학습만. 서비스 경로에 넣지 않고 A·B와 연결하지 않는다. 학습 결과는 AI 팀이 직접 Modal에 올린다 |
-| Modal | serverless GPU | AI 추론 전부(임베딩, 리랭커, 소형 LLM)와 FastAPI. A·B에는 AI 구성요소가 없다. 호출 쪽 계약(11.2절)은 인프라와 BE가 맡는다 |
+| Modal | serverless GPU | GPU 추론(임베딩, 리랭커, 소형 LLM). AI API(FastAPI)는 A에서 돈다(11.4절). 호출 쪽 계약(11.2절)은 인프라와 BE가 맡는다 |
 
 - **A의 CPU 크레딧:** baseline은 vCPU당 40%(t3.xlarge는 시간당 96크레딧을 얻고 최대 2304크레딧을 쌓는다)라서 지속 약 1.6 vCPU다. 초과분은 유휴 때 적립한 burst 용량을 쓰고, 오래 burst하면 적립분을 다 써서 다시 baseline(지속 가능 구간)으로 돌아간다 (확인: AWS 문서, 실측은 RB-09).
 - **A의 CPU 크레딧 실측(2026-10-27):** A는 SSAFY가 준 서버라 AWS 콘솔이 없다. 크레딧 잔액과 크레딧 모드(standard·unlimited)는 콘솔과 CloudWatch로만 보이고 인스턴스 메타데이터에도 해당 키가 없어 확인하지 못했다 (미확인). 서버 안에서는 인스턴스 유형 `t3.xlarge`(확인: 메타데이터)와 CPU steal(확인: A의 Prometheus `job=node`)을 읽는다. 최근 3일 steal은 평균 0.8%, 5분 평균의 최댓값 6.7%였고 같은 기간 CPU 사용률은 평균 5.8%, 5분 평균의 최댓값 42.9%였다. 부하가 낮은 동안 크레딧 때문에 제한된 징후는 없다. 다만 이 값은 크레딧 모드의 증거가 아니고, 크레딧이 바닥나 제한되면 steal로 보일 것이라는 것은 추정이며(미확인), 동시 사용자 100명 피크에서의 동작은 알려 주지 않는다. 그 부분은 경량 부하 시험과 RB-09로 본다. 알림은 `FitCpuHigh30m`(30분 평균 CPU 40% 초과, warning)뿐이고 steal 알림은 없다. steal은 Prometheus에서 `node_cpu_seconds_total{mode="steal"}`로 볼 수 있다.
@@ -124,7 +124,7 @@ Fit Dining(Next.js SSR 프런트(PWA), Spring Boot 백엔드, OpenSearch 검색,
 
 - repo는 모노레포이고 `be/`, `ai/`, `fe/`, `infra/`를 최상위에 둔다(repo의 실제 구조).
 - 브랜치는 feature → MR → `develop`(dev 자동 배포), `develop → master` MR 후 prod 수동 배포다. 규칙은 10.8절이다.
-- BE는 Spring Boot(Java 21), 검색은 OpenSearch(nori)다. AI는 FastAPI(Python 3.12)이고 Modal에 배포되며 A·B에서 돌지 않는다. BE가 Modal 엔드포인트를 HTTPS로 호출한다(AI 팀이 `modal deploy`로 배포).
+- BE는 Spring Boot(Java 21), 검색은 OpenSearch(nori)다. AI는 FastAPI(Python 3.12)다. AI API는 A의 컨테이너(`ai-prod`, `ai-dev`)로 돌고 BE가 A 내부망으로 부른다. GPU가 필요한 임베딩은 AI API가 Modal 엔드포인트를 HTTPS로 부른다(AI 팀이 Modal 앱을 `modal deploy`로 배포).
 - 프런트(`fe/`)는 Next.js(SSR)로 만든 PWA다. Node 컨테이너(standalone 빌드)가 렌더링하고 Caddy가 앞단에서 프록시한다. 팀이 서버 렌더링 기능을 쓰기로 했다(구체적인 요구는 16절 #26). A의 한도 최악 합계는 약 12.7GB로 예산에 들어간다(4.1절).
 - 팀 Mattermost에 Incoming Webhook을 만들 수 있다.
 - 예상 규모(동시 사용자, 피크 RPS, 문서·벡터 수, 사진)는 아직 모른다. 4.4절의 자리표시자를 팀과 맞춘다(16절).
@@ -151,7 +151,9 @@ Fit Dining(Next.js SSR 프런트(PWA), Spring Boot 백엔드, OpenSearch 검색,
 |---|---|
 | A → B | 암호화된 덤프 전송(`vault`, 쓰기 전용 SSH), TCP 22 프로브 |
 | B → A | HTTPS 프로브만. B에는 A로 들어오는 SSH 키가 없다 |
-| BE(A) → Modal·GMS | 아웃바운드 HTTPS. AI 추론(임베딩, 리랭커, 소형 LLM)과 FastAPI는 Modal에서 돌고 A·B에는 AI 구성요소가 없다 |
+| BE(A) → AI API(A) | 같은 호스트의 환경 망(`net-prod`, `net-dev`)으로 HTTP. 호스트에 게시하지 않고 엣지에도 경로가 없다 |
+| AI API(A) → Modal·GMS | 아웃바운드 HTTPS. GPU 추론(임베딩, 리랭커, 소형 LLM)은 Modal이다. B에는 AI 구성요소가 없다 |
+| BE(A) → GMS | 아웃바운드 HTTPS |
 | 공용 GPU 서버 | 학습 전용이라 A·B와 연결하지 않는다. AI 팀이 학습 결과를 직접 Modal에 올린다 |
 
 ### 2.2 compose 프로젝트와 네트워크
@@ -193,7 +195,8 @@ Fit Dining(Next.js SSR 프런트(PWA), Spring Boot 백엔드, OpenSearch 검색,
 | Redis | `redis-prod` 인스턴스 | `redis-dev` 인스턴스 (인스턴스당 약 10MB라 논리 DB 번호보다 안전하다) |
 | Garage | 버킷 `fit-prod-photos`, prod 전용 키 | 버킷 `fit-dev-photos`, dev 전용 키 |
 | 비밀 | DB 비밀번호, JWT 키, 외부 API 토큰 모두 환경마다 다르게 | 〃 |
-| Modal | Environment `fit-prod`의 앱(FastAPI, 임베딩, 리랭커, LLM)과 prod 전용 프록시 토큰 | Environment `fit-dev`. AI 팀 시험용 `fit-test`가 따로 있다(11.2절) |
+| Modal | Environment `fit-prod`의 GPU 앱(임베딩, 리랭커, LLM)과 prod 전용 프록시 토큰 | Environment `fit-dev`. AI 팀 시험용 `fit-test`가 따로 있다(11.2절) |
+| AI API | 컨테이너 `ai-prod`, 읽기 전용 role `fit_prod_ai`, env `ai-prod.env` | 컨테이너 `ai-dev`, role `fit_dev_ai`, env `ai-dev.env`(11.4절) |
 
 ## 3. 호스트 기반
 
@@ -248,11 +251,12 @@ getent hosts <도메인>
 | OpenSearch (힙 768MB) | 2.0 | 1.3 |
 | Redis ×2 + Garage | 0.45 | 0.15 |
 | 관측성 전체 | 1.4 | 0.9 |
-| **합계** | **약 9.2** | **약 5.3** |
+| ai-prod 0.5 + ai-dev 0.4 (모델 없음, 추정) | 0.9 | 0.3 |
+| **합계** | **약 10.1** | **약 5.6** |
 
-- A에는 AI 구성요소(임베딩 서버, ai-api)가 없다. 한도 합계 약 9.2GB는 16GB의 약 58%다. FE(Node)는 빈 템플릿에서 약 45MiB(측정)라 평상시 값은 실제 앱으로 다시 측정한다(추정).
+- AI API는 모델을 올리지 않아 한도를 prod 0.5GB, dev 0.4GB로 잡는다(추정. 실제 앱으로 측정한다). 모델까지 올리면 컨테이너 하나가 약 2.9GB라 이 표가 맞지 않는다(11.4절). 한도 합계 약 10.1GB는 16GB의 약 63%다. FE(Node)는 빈 템플릿에서 약 45MiB(측정)라 평상시 값은 실제 앱으로 다시 측정한다(추정).
 - JVM 힙을 컨테이너 한도의 60%로 잡으면 메타스페이스·스레드 스택·코드 캐시가 한도 안에 들어온다(12.1 #10).
-- 순간 증가분은 3.5GB다: 이미지 조립 0.3, 배포 겹침(BE 1.5 + FE 0.5) 2.0, 새벽 배치 1.2. jar와 FE 번들은 B에서 빌드하고 A는 `COPY`만 하므로 빌드 메모리가 A에 오지 않는다(6.3절). 한도 최악 합계는 약 12.7GB다.
+- 순간 증가분은 3.5GB다: 이미지 조립 0.3, 배포 겹침(BE 1.5 + FE 0.5) 2.0, 새벽 배치 1.2. jar와 FE 번들은 B에서 빌드하고 A는 `COPY`만 하므로 빌드 메모리가 A에 오지 않는다(6.3절). 한도 최악 합계는 약 13.6GB다.
 
 한도는 상한일 뿐 동시에 다 차지는 않는다는 가정에 기대는 설계라서 아래를 방어선으로 둔다.
 
@@ -456,7 +460,7 @@ Caddy 컨테이너(`caddy:2.x`, 구현 시 최신 2.x를 핀)가 A의 80·443만
 
 verify는 Arm, prod는 x86이다. 그래서 deploy 스크립트가 idle 색에서 실제 x86 이미지로 스모크를 돌린 뒤에만 전환한다.
 
-`ai/`의 테스트와 배포는 AI 팀이 Modal 쪽에서 한다(인프라 CI 범위 밖). Modal 배포를 deploy 러너 잡으로 옮기는 것은 P2다(11.2절).
+`ai/`의 테스트는 AI 팀이 한다. AI API 이미지의 빌드와 A 배포는 인프라 CI가 맡는다(11.4절, 후속 구현). Modal 앱 배포는 AI 팀이 `modal deploy`로 하고 이를 deploy 러너 잡으로 옮기는 것은 P2다(11.2절).
 
 ### 6.4 배포 스크립트 `infra/deploy/deploy.sh <env> <sha>`
 
@@ -690,7 +694,7 @@ Grafana는 팀원에게 viewer 계정을 준다. A503에서는 SSH 보유자만 
 
 ### 10.5 로컬 개발·사전 검증
 
-- 로컬 개발용 `infra/local/compose.yml`은 profile(`core`, `search`)로 나눠 노트북 메모리에 맞게 고르게 한다. AI는 Modal의 dev 앱을 쓴다. 켜고 점검하는 명령은 `bash infra/local/fit-local.sh`이고 접속 값은 `infra/local/README.md`에 있다. 환경변수 이름은 `docs/infra/contracts/env.md`를 따른다. 엣지는 `bash infra/edge/test/test-edge.sh up|verify|down`으로 목 BE·FE와 시험용 풀, 로컬 스택의 garage를 붙여 시험한다. 배포는 `bash infra/deploy/test/test-deploy.sh up|run|down`으로 실제 Caddy와 목 BE·FE 이미지를 띄워 배포·롤백·실패 복구를 시험한다.
+- 로컬 개발용 `infra/local/compose.yml`은 profile(`core`, `search`)로 나눠 노트북 메모리에 맞게 고르게 한다. 임베딩은 Modal의 dev 앱을 쓴다. 켜고 점검하는 명령은 `bash infra/local/fit-local.sh`이고 접속 값은 `infra/local/README.md`에 있다. 환경변수 이름은 `docs/infra/contracts/env.md`를 따른다. 엣지는 `bash infra/edge/test/test-edge.sh up|verify|down`으로 목 BE·FE와 시험용 풀, 로컬 스택의 garage를 붙여 시험한다. 배포는 `bash infra/deploy/test/test-deploy.sh up|run|down`으로 실제 Caddy와 목 BE·FE 이미지를 띄워 배포·롤백·실패 복구를 시험한다.
 - 서버 수령 전에는 이 PC의 Docker Desktop(Docker 29.7.2, Compose v5.4.0)과 Ubuntu 컨테이너(호스트 스크립트)로 compose·스크립트·알림 규칙·Caddy 설정을 검증한다. shellcheck, promtool, age는 컨테이너로 돌린다.
 - 서버에서만 확인되는 것은 스왑·sysctl 적용, ufw의 실제 차단, 실제 TLS 발급, CPU 버스트, 외부 포트 노출, 클라우드 방화벽이다.
 
@@ -770,15 +774,16 @@ Grafana는 팀원에게 viewer 계정을 준다. A503에서는 SSH 보유자만 
 
 **분리와 배포**
 
-- 한 워크스페이스에 Modal Environment `fit-test`·`fit-dev`·`fit-prod`를 두고 앱 이름은 환경과 상관없이 같게 둔다(예: `fit-embed`). 앱·Secret·웹 URL이 Environment마다 갈린다. FastAPI와 임베딩·리랭커·LLM 엔드포인트가 모두 이 앱들이다.
+- 한 워크스페이스에 Modal Environment `fit-test`·`fit-dev`·`fit-prod`를 두고 앱 이름은 환경과 상관없이 같게 둔다(예: `fit-embed`). 앱·Secret·웹 URL이 Environment마다 갈린다. Modal 앱은 GPU가 필요한 모델 서버(임베딩·리랭커·LLM 엔드포인트)이고 FastAPI AI API는 A에서 돈다(11.4절).
 - `fit-test`는 AI 팀 전용이다. 상시 배포하지 않고 `modal serve --env fit-test`로 필요할 때만 띄운다. 모델 교체는 fit-test에서 대조한 뒤 같은 커밋을 fit-dev, fit-prod 순서로 `modal deploy --env <env>`한다.
-- 프록시 토큰은 dev용과 prod용을 따로 만든다. RBAC가 없는 워크스페이스는 토큰이 Environment에 묶이지 않아 dev 토큰으로 prod도 부를 수 있다 (확인: Modal 문서는 RBAC 워크스페이스에서만 Environment 단위라고 한다). prod 토큰을 B의 `prod.env`에만 두는 것은 prod 토큰이 새는 것만 막는다. dev 토큰이 새면 prod 엔드포인트도 부를 수 있고, 이 위험은 Starter 플랜에서 받아들인다. 막으려면 RBAC(Team 플랜)나 prod 전용 워크스페이스가 필요하다(아래 5).
-- 호출 URL과 토큰은 BE의 서버 env에만 둔다.
+- 프록시 토큰은 dev용과 prod용을 따로 만든다. RBAC가 없는 워크스페이스는 토큰이 Environment에 묶이지 않아 dev 토큰으로 prod도 부를 수 있다 (확인: Modal 문서는 RBAC 워크스페이스에서만 Environment 단위라고 한다). prod 토큰을 A의 `ai-prod.env`에만 두는 것은 prod 토큰이 새는 것만 막는다. dev 토큰이 새면 prod 엔드포인트도 부를 수 있고, 이 위험은 Starter 플랜에서 받아들인다. 막으려면 RBAC(Team 플랜)나 prod 전용 워크스페이스가 필요하다(아래 5).
+- Modal 호출 URL과 토큰은 AI API의 서버 env(`/etc/fit/ai-<env>.env`)에만 둔다. BE는 Modal을 직접 부르지 않는다.
 - 배포는 AI 팀이 `modal deploy`로 한다. 안정되면 deploy 러너 잡으로 옮길 수 있다(P2).
 
 **호출 방어**
 
 - 모든 외부 호출(Modal, GMS, Apify)에 타임아웃, 재시도 1회, 서킷 브레이커, 동시성 상한, 일일 호출 예산(Redis 카운터), `*_ENABLED` 킬스위치를 둔다.
+- BE가 AI API를 부를 때도 같은 방어(타임아웃, 재시도 1회, 서킷 브레이커, 동시성 상한, 킬스위치)를 둔다. AI API가 응답하지 않으면 BE는 키워드 검색으로 대체한다.
 
 **폴백**
 
@@ -796,7 +801,7 @@ Grafana는 팀원에게 viewer 계정을 준다. A503에서는 SSH 보유자만 
 
 전역 일일 예산만 두면 한 사용자가 예산을 소진시켜 모든 사용자를 키워드 폴백으로 떨어뜨릴 수 있다. 그래서 아래를 함께 건다.
 
-1. Modal 엔드포인트는 전부 `requires_proxy_auth=True`로 두고 BE가 `Modal-Key`·`Modal-Secret` 헤더로 호출한다 (확인: Modal 문서. 거부된 요청이 컨테이너를 띄우는지는 미확인).
+1. Modal 엔드포인트는 전부 `requires_proxy_auth=True`로 두고 AI API가 `Modal-Key`·`Modal-Secret` 헤더로 호출한다 (확인: Modal 문서. 거부된 요청이 컨테이너를 띄우는지는 미확인).
 2. Modal을 부르는 API에는 BE가 사용자별·IP별 분당·일일 상한을 건다(BE 계약 #18).
 3. 질의 길이 상한(예: 200자)을 둔다.
 4. 비로그인 검색을 허용한다면 IP당 일일 횟수로 묶는다(16절 #22).
@@ -818,6 +823,40 @@ Grafana는 팀원에게 viewer 계정을 준다. A503에서는 SSH 보유자만 
 | PostHog Cloud | 행동 분석(웹 SDK) | 프런트 `config.json`의 공개 키 | 분석 손실만 |
 | Mattermost | 알림 웹훅 | `/etc/fit/obs.env`, `/etc/fit/ops.env` | 알림 채널 중단, 일일 digest로 보완 |
 | GitLab | 코드, 러너 | 러너 토큰(호스트) | 서버에서 수동 배포 |
+
+### 11.4 AI API (A)
+
+AI API(`ai/server`, FastAPI)는 A의 컨테이너로 돈다. 임베딩 모델은 올리지 않고 GPU가 필요한 일은 Modal을 부른다. 구현은 단계로 나눈다: DB 읽기 전용 role(`infra/data/grant-ai-read.sh`)이 먼저 들어갔고, 컨테이너·배포·CI·점검은 후속 변경이다.
+
+**구성**
+
+- 컨테이너 `ai-prod`, `ai-dev`. 이미지 `ai:<SHA>`(BE·FE와 같은 SHA). 환경마다 하나이고 prod도 Blue/Green이 아니라 한 컨테이너를 교체한다. 모델이 없어 기동이 수 초라 교체 중 단절이 짧고, 그동안 BE는 키워드 검색으로 대체한다(11.2절 폴백).
+- 망: `ai-prod`는 `net-prod`와 `net-data`, `ai-dev`는 `net-dev`와 `net-data`. 호스트에 포트를 게시하지 않고 Caddy 경로도 없다. BE는 `http://ai-prod:8000`, `http://ai-dev:8000`으로 부른다. BE가 이미 이 주소를 `MODAL_BASE_URL`(`fitdining.ai.base-url`)에서 읽고 `Modal-Key`·`Modal-Secret` 헤더는 값이 있을 때만 보내므로, 값만 A 내부 주소로 두고 `MODAL_KEY`·`MODAL_SECRET`은 비운다(BE 코드 변경 없음. 키 이름이 Modal 시절 그대로라 BE와 정리한다).
+- 한도: ai-prod 메모리 0.5GB, ai-dev 0.4GB(추정, 실제 앱으로 측정한다). dev에는 `cpus` 상한을 준다.
+- 건강: `GET /healthz`가 200이면 준비 완료이고 저장소나 임베딩 연결을 쓸 수 없으면 503이다. 컨테이너 healthcheck와 blackbox 프로브의 대상이다. 한 컨테이너가 동시에 받는 검색은 `MAX_CONCURRENT_REQUESTS`까지이고 넘으면 503 `BUSY`다.
+
+**DB 읽기**
+
+- 읽기 전용 role `fit_prod_ai`, `fit_dev_ai`가 `DATABASE_URL`로 접속한다. 읽는 것은 뷰 `ai_place_search`와 `user_preferences`뿐이다. 뷰는 소유자 권한으로 실행되므로 뷰 밑의 `places` 등과 인증 테이블은 읽지 못한다. 뷰는 BE 마이그레이션이 만들고 AI는 그 컬럼에만 의존한다. 읽을 객체를 늘리려면 BE·AI 팀과 정한 뒤 `grant-ai-read.sh`의 목록을 고치는 MR을 만든다.
+- role당 접속 6개, 쿼리 10초, 트랜잭션은 기본이 읽기 전용이다. 컨테이너당 풀(`DB_POOL_SIZE`에 취향용 1개를 더한 값)은 이 상한 안에 둔다. Postgres `max_connections`는 60이다.
+- 마이그레이션이 뷰를 만든 뒤 `grant-ai-read.sh`를 다시 돌려야 읽힌다(기본 권한을 주지 않는다). 배포가 마이그레이션 뒤에 돌리게 한다(후속 구현).
+- 확인: 로컬 데이터 시험(`test-data.sh`의 `ai` 구역)에서 두 객체만 읽히고 뷰 밑의 테이블, 인증 테이블, 허용 목록 밖의 새 테이블은 읽히지 않으며 쓰기와 DDL이 막히고 다른 환경 DB에 접속하지 못함을 점검했다.
+
+**환경변수**
+
+- 컨테이너는 `/etc/fit/ai-<env>.env`를 읽는다(`ai` 그룹, 계약은 env.md에 후속으로 추가한다). `DATABASE_URL`, `GMS_*`, Modal 호출 값(`MODAL_BASE_URL`, `MODAL_KEY`, `MODAL_SECRET`), `MAX_CONCURRENT_REQUESTS` 등이다. 비밀은 `envset.py`로만 넣는다. BE는 Modal을 직접 부르지 않는다. BE env의 `MODAL_BASE_URL`은 AI API 주소로 쓰이고(`MODAL_KEY`·`MODAL_SECRET`은 A 내부 호출이라 비운다) 계약의 이름과 설명은 BE와 맞춘다. 지금 dev.env에 들어 있는 Modal 값(임베딩 주소와 토큰)은 AI API가 생기면 `ai-dev.env`로 옮긴다.
+
+**AI 팀·BE 팀의 전제**(구현 전에 필요하다)
+
+1. AI API가 임베딩을 Modal `POST /embed`(12.3절)로 부른다. 응답의 `model`이 저장된 벡터의 모델과 같은지 확인하고, 타임아웃과 재시도 1회, 연결 재사용을 둔다. 지금 `fit_ai.embedding`은 로컬 모델만 써서 원격 호출이 없다(미구현).
+2. AI API 이미지가 torch를 끌어오지 않도록 로컬 인코더(`sentence-transformers`)를 선택 의존성으로 분리하고 `uvicorn`을 서버 의존성으로 옮긴다. Linux 기본 torch는 CUDA판이라 이미지가 수 GB가 된다(미구현).
+3. 장소 읽기가 개발 DB에만 있는 뷰가 아니라 BE 마이그레이션이 만든 뷰 `ai_place_search`를 읽는다(미구현. 지금은 실제 DB에서 503이다).
+4. BE의 `AiTasteClient`가 해석(`/v1/taste/interpret`, 타임아웃 10초)과 프로필(`/v1/taste/profile`, 3초)을 이미 부른다(확인: develop). 검색(`POST /v1/search`) 호출과 서킷 브레이커, 동시성 상한, 폴백은 아직 없다(미구현).
+
+**택하지 않은 방식**
+
+- AI API와 모델을 함께 A에 두는 방식(CPU 임베딩): 개발 PC(Core Ultra 9)에서 잰 질의 1건 임베딩이 4스레드 154ms, 2스레드 228ms, 1스레드 286ms이고 모델을 올리면 메모리가 약 2.9GB다. A(t3.xlarge, 지속 약 1.6 vCPU)에서는 더 느릴 것이다 (미측정). 컨테이너 하나만 더해도 4.1절의 한도 합계가 약 12.7GB, 순간 최대가 약 16.2GB로 A의 15.7GB를 넘고 dev까지 두면 불가능하다. Modal GPU 임베딩은 질의 1건이 한국에서 약 250~400ms로 비슷하다(12.3절).
+- AI API를 Modal에 두는 방식: Modal이 우리 DB를 읽을 수 없다. Postgres는 호스트의 `127.0.0.1`에만 열려 있고 외부에 열 계획이 없다.
 
 ## 12. 서비스 계약
 
@@ -853,14 +892,14 @@ BE·AI·프런트 팀과 M1 전에 합의한다. 합의되면 `docs/infra/contra
 
 ### 12.2 AI (FastAPI, Modal)
 
-AI 팀과 M1 전에 합의한다. FastAPI는 Modal에서 돌고 A·B에는 AI 컨테이너가 없다. BE가 Modal 엔드포인트를 HTTPS로 호출한다.
+AI 팀과 M1 전에 합의한다. AI API(FastAPI)는 A의 컨테이너(`ai-prod`, `ai-dev`)이고 GPU 임베딩은 Modal을 HTTPS로 부른다. BE가 AI API를 A 내부망으로 부른다(11.4절).
 
-1. Modal Environment(`fit-dev`, `fit-prod`)와 토큰을 분리한다(11.2절). URL과 토큰은 BE의 서버 env(`/etc/fit/<env>.env`)에 둔다. 토큰은 코드와 repo에 두지 않는다. 엔드포인트는 모두 `requires_proxy_auth=True`로 보호하고 BE가 `Modal-Key`·`Modal-Secret` 헤더로 호출한다(11.2절).
+1. Modal Environment(`fit-dev`, `fit-prod`)와 토큰을 분리한다(11.2절). Modal URL과 토큰은 AI API의 서버 env(`/etc/fit/ai-<env>.env`)에 둔다. 토큰은 코드와 repo에 두지 않는다. 엔드포인트는 모두 `requires_proxy_auth=True`로 보호하고 AI API가 `Modal-Key`·`Modal-Secret` 헤더로 호출한다(11.2절).
 2. 엔드포인트는 임베딩(12.3절), 리랭커, 요청 해석(LLM)이다. 요청·응답 스키마, 오류 코드, 최대 입력 길이와 배치 크기 상한을 AI 팀이 명세하고, 응답에 모델 버전을 싣는다.
 3. 콜드 스타트: 첫 호출 지연의 상한과 상시 가동할 컨테이너 수를 AI 팀이 비용 상한과 함께 정한다. BE 타임아웃은 이 값에 맞춘다(11.2절).
 4. 서버 쪽 방어도 둔다: 동시성 상한과 요청당 비용 상한. BE의 일일 호출 예산과 별개다.
 5. 로그는 JSON이고 비밀·개인정보를 마스킹한다. 요청 텍스트를 그대로 남기지 않는다.
-6. 테스트와 배포(`modal deploy`)는 AI 팀이 맡는다. 인프라 CI는 `ai/`를 다루지 않는다(6.3절).
+6. `ai/`의 테스트와 Modal 앱 배포(`modal deploy`)는 AI 팀이 맡는다. AI API 이미지의 빌드와 A 배포는 인프라 CI가 맡는다(6.3절, 11.4절).
 7. 임베딩 모델을 바꾸면 벡터 공간이 달라지므로 새 인덱스 재색인과 별칭 전환이 필요하다(RB-11). 모델 버전은 응답과 BE 지표에 노출한다.
 
 ### 12.3 임베딩 엔드포인트 (Modal)
@@ -985,7 +1024,7 @@ AI 팀과 M1 전에 합의한다. FastAPI는 Modal에서 돌고 A·B에는 AI �
 
 | # | 리스크 | 대응 |
 |---|---|---|
-| 1 | A 메모리(OpenSearch) | 한도, 스왑, OOM 알림. 비상안은 dev 스택 중지. 한도 합계가 약 9.2GB(16GB의 58%)로 여유가 있다 |
+| 1 | A 메모리(OpenSearch) | 한도, 스왑, OOM 알림. 비상안은 dev 스택 중지. 한도 합계가 약 10.1GB(16GB의 63%)로 여유가 있다(AI API 컨테이너 포함, 모델은 올리지 않는다) |
 | 2 | A CPU 버스트 소진 | dev·CI 상한, "30분 평균 >40%" 알림, 소진 후 동작 실측 |
 | 3 | A 단일 장애점 | bootstrap + 금고 복원으로 재구축. RTO는 리허설로 측정 |
 | 4 | B의 4GB와 Arm | 테스트 메모리 계약, arm64 이미지·의존성 확인(M1 전), `verify-x86` 폴백 |
@@ -1098,7 +1137,7 @@ docs/infra/
 | 구성 | 1차 공개 | 11/06 | 10/28, 10/22 이전 |
 | 구성 | 스택 | Spring Boot + FastAPI(Modal) | NestJS + FastAPI, Python 단일 |
 | 구성 | 프로젝트명 | Fit Dining. 식별자 접두사는 `fit`(`/etc/fit`, `fit-edge`, `fit_prod` 등) | |
-| AI | AI 추론 위치 | 전부 Modal(FastAPI, 임베딩, 리랭커, 소형 LLM). A·B에는 AI 구성요소가 없다 | A 또는 B에서 임베딩 서버 운영(모델 파일, 양자화, 아키텍처별 의존성, 배포를 서버 쪽이 맡아야 한다) |
+| AI | AI 추론 위치 | AI API(FastAPI)는 A의 컨테이너, GPU 임베딩·리랭커·LLM은 Modal(11.4절) | AI API까지 전부 Modal(Modal이 DB를 읽을 수 없다). A에서 모델까지 운영(컨테이너 약 2.9GB, 한도가 A의 15.7GB를 넘는다) |
 | AI | 모델 허브 | 두지 않는다. AI 팀이 학습 결과를 직접 Modal에 올린다 | B에 datasets/inbox/verified 허브와 `install-model.sh` |
 | 서버 역할 | B 역할 | 외부 감시, CI verify, 백업 금고 | B에 임베딩 서버 |
 | 서버 역할 | CI verify 위치 | B. prod가 없고 A의 CPU 크레딧을 쓰지 않는다 | A(privileged dind) |
