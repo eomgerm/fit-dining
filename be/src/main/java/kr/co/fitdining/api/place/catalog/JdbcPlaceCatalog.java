@@ -13,6 +13,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -87,6 +88,12 @@ public class JdbcPlaceCatalog implements PlaceCatalog {
 			FROM places ORDER BY place_id""";
 	private static final String ALL_HOURS_SQL = """
 			SELECT place_id, day_of_week, open_time, close_time, closed, breaks, last_orders FROM place_hours""";
+	private static final String PLACES_BY_IDS_SQL = """
+			SELECT place_id, name, category_group, station, lat, lng, thumbnail_url
+			FROM places WHERE place_id IN (:ids) ORDER BY place_id""";
+	private static final String HOURS_BY_IDS_SQL = """
+			SELECT place_id, day_of_week, open_time, close_time, closed, breaks, last_orders
+			FROM place_hours WHERE place_id IN (:ids)""";
 	private static final String ALL_MENU_NAMES_SQL = """
 			SELECT place_id, name FROM place_menus ORDER BY place_id, sort_order""";
 
@@ -108,9 +115,22 @@ public class JdbcPlaceCatalog implements PlaceCatalog {
 
 	@Override
 	public List<PlaceCard> nearbyCandidates() {
-		List<PlaceSummary> places = jdbc.sql(ALL_PLACES_SQL).query((rs, rowNum) -> summary(rs)).list();
+		return cards(jdbc.sql(ALL_PLACES_SQL), jdbc.sql(ALL_HOURS_SQL));
+	}
+
+	@Override
+	public List<PlaceCard> cards(Collection<Long> ids) {
+		if (ids.isEmpty()) {
+			return List.of();
+		}
+		return cards(jdbc.sql(PLACES_BY_IDS_SQL).param("ids", ids), jdbc.sql(HOURS_BY_IDS_SQL).param("ids", ids));
+	}
+
+	/** 장소 행과 영업시간 행으로 점수 없는 카드를 만든다. 영업 상태는 지금 서울 시각 기준이다. */
+	private List<PlaceCard> cards(JdbcClient.StatementSpec placesQuery, JdbcClient.StatementSpec hoursQuery) {
+		List<PlaceSummary> places = placesQuery.query((rs, rowNum) -> summary(rs)).list();
 		Map<Long, Map<DayCode, Hours>> hoursByPlace = new HashMap<>();
-		for (PlaceHours row : jdbc.sql(ALL_HOURS_SQL)
+		for (PlaceHours row : hoursQuery
 				.query((rs, rowNum) -> new PlaceHours(rs.getLong("place_id"), hours(rs))).list()) {
 			hoursByPlace.computeIfAbsent(row.placeId(), key -> new EnumMap<>(DayCode.class))
 					.put(row.hours().dayOfWeek(), row.hours());

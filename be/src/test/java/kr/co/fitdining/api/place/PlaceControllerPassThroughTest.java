@@ -3,9 +3,12 @@ package kr.co.fitdining.api.place;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import kr.co.fitdining.api.auth.ports.AuthUseCases;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -32,6 +35,7 @@ import kr.co.fitdining.api.place.dto.PlaceSummary.CategoryGroup;
 import kr.co.fitdining.api.place.dto.PlaceSummary.Station;
 import kr.co.fitdining.api.place.dto.PlaceSummary;
 import kr.co.fitdining.api.place.engine.PlaceSearchEngine;
+import kr.co.fitdining.api.place.engine.PlaceSearchResult;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,6 +44,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.json.JsonCompareMode;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -93,10 +98,14 @@ class PlaceControllerPassThroughTest {
 			return SUGGESTIONS;
 		}
 
+		String lastUserId;
+		String fallback;
+
 		@Override
-		public PlaceSearchResponse search(PlaceSearchRequest request) {
+		public PlaceSearchResult search(PlaceSearchRequest request, String userId) {
 			lastRequest = request;
-			return SEARCH;
+			lastUserId = userId;
+			return new PlaceSearchResult(SEARCH, fallback);
 		}
 
 		@Override
@@ -107,6 +116,9 @@ class PlaceControllerPassThroughTest {
 
 	@Autowired
 	MockMvc mockMvc;
+
+	@MockitoBean
+	AuthUseCases auth;
 
 	@Autowired
 	JsonMapper jsonMapper;
@@ -130,6 +142,46 @@ class PlaceControllerPassThroughTest {
 				.andExpect(status().isOk())
 				.andExpect(content().json(jsonMapper.writeValueAsString(SEARCH), JsonCompareMode.STRICT));
 		assertThat(fakeEngine.lastRequest.cursor()).isEqualTo("엔진만 아는 값");
+	}
+
+	@Test
+	@DisplayName("추천검색_엔진의X-Fallback값을_헤더로그대로싣는다")
+	void search_engineFallback_sentAsHeader() throws Exception {
+		fakeEngine.fallback = "PREVIOUS_INVALID,TASTE_INVALID";
+		try {
+			mockMvc.perform(post("/api/v1/places/search").contentType(MediaType.APPLICATION_JSON)
+							.content("{\"query\":\"아무거나\"}"))
+					.andExpect(status().isOk())
+					.andExpect(header().string("X-Fallback", "PREVIOUS_INVALID,TASTE_INVALID"));
+		} finally {
+			fakeEngine.fallback = null;
+		}
+	}
+
+	@Test
+	@DisplayName("추천검색_엔진의X-Fallback값이없으면_헤더가없다")
+	void search_noEngineFallback_noHeader() throws Exception {
+		mockMvc.perform(post("/api/v1/places/search").contentType(MediaType.APPLICATION_JSON)
+						.content("{\"query\":\"아무거나\"}"))
+				.andExpect(status().isOk())
+				.andExpect(header().doesNotExist("X-Fallback"));
+	}
+
+	@Test
+	@DisplayName("추천검색_유효한토큰이면_그사용자id만엔진에넘기고preferences는요청에남는다")
+	void search_validToken_passesTokenUserIdOnly() throws Exception {
+		when(auth.authenticate("token")).thenReturn(new AuthUseCases.Identity("user-1", "닉", "s", 0, 0));
+
+		mockMvc.perform(post("/api/v1/places/search").contentType(MediaType.APPLICATION_JSON)
+						.header("Authorization", "Bearer token")
+						.content("{\"query\":\"아무거나\",\"preferences\":{\"mood\":\"QUIET\"}}"))
+				.andExpect(status().isOk());
+		assertThat(fakeEngine.lastUserId).isEqualTo("user-1");
+
+		mockMvc.perform(post("/api/v1/places/search").contentType(MediaType.APPLICATION_JSON)
+						.content("{\"query\":\"아무거나\",\"preferences\":{\"mood\":\"QUIET\"}}"))
+				.andExpect(status().isOk());
+		assertThat(fakeEngine.lastUserId).isNull();
 	}
 
 	@Test

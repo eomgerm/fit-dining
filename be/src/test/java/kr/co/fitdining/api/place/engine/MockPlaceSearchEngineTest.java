@@ -47,7 +47,7 @@ class MockPlaceSearchEngineTest {
 	}
 
 	private static List<PlaceCard> cards(MockPlaceSearchEngine engine) {
-		return new ArrayList<>(engine.search(new PlaceSearchRequest("근처", null, null, null, null)).items());
+		return new ArrayList<>(engine.search(new PlaceSearchRequest("근처", null, null, null, null), null).response().items());
 	}
 
 	@Nested

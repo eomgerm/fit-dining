@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 import kr.co.fitdining.api.place.catalog.PlaceCatalog;
+import kr.co.fitdining.api.place.engine.AiSearchClient;
 import kr.co.fitdining.api.place.engine.CatalogPlaceSearchEngine;
 import kr.co.fitdining.api.place.engine.MockPlaceSearchEngine;
 import kr.co.fitdining.api.place.engine.PlaceSearchEngine;
@@ -52,6 +53,7 @@ class PlaceEngineWiringTest {
 					.isInstanceOf(CatalogPlaceSearchEngine.class);
 			assertThat(context.getBeansOfType(PlaceCatalog.class)).hasSize(1);
 			assertThat(context.getBeansOfType(PlaceKeywordSearch.class)).hasSize(1);
+			assertThat(context.getBeansOfType(AiSearchClient.class)).hasSize(1);
 		});
 	}
 
@@ -98,6 +100,7 @@ class PlaceEngineWiringTest {
 					.isInstanceOf(MockPlaceSearchEngine.class);
 			assertThat(context.getBeansOfType(PlaceCatalog.class)).isEmpty();
 			assertThat(context.getBeansOfType(PlaceKeywordSearch.class)).isEmpty();
+			assertThat(context.getBeansOfType(AiSearchClient.class)).isEmpty();
 		});
 	}
 

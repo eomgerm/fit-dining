@@ -1,15 +1,17 @@
 package kr.co.fitdining.api.place.dto;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-import java.util.List;
 import java.util.Map;
+import kr.co.fitdining.api.user.Preferences;
 
 /**
  * 추천 검색 요청. 기기 위치 좌표는 어떤 필드에도 담지 않는다.
  *
  * @param query 사용자가 입력한 문장. 1~200자다.
- * @param preferences 사용자 취향 태그 코드 목록. Mock은 받기만 하고 결과에 반영하지 않는다.
+ * @param preferences 비회원이 기기에 저장한 온보딩 답변. 가입과 같은 모양과 검증을 따른다. 지금은 검증만 하고 엔진에
+ *        넘기지 않는다(place-ai-search D-4).
  * @param previousConditions 후속 조건일 때, 기준 요청의 응답 {@code conditions}를 그대로 돌려보낸 값.
  *        BE는 내용을 해석하지 않는다. 새 검색이면 없다.
  * @param mapBounds 검색 대상 지역. "이 지역에서 검색"을 눌렀거나 위치를 얻지 못했을 때만 보낸다.
@@ -17,7 +19,7 @@ import java.util.Map;
  */
 public record PlaceSearchRequest(
 		@NotBlank @Size(max = 200) String query,
-		List<String> preferences,
+		@Valid Preferences preferences,
 		Map<String, Object> previousConditions,
 		MapBounds mapBounds,
 		String cursor

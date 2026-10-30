@@ -6,12 +6,12 @@ import java.util.List;
  * 검색 결과 카드. 상세 화면의 핏 점수, 추천 이유, 주의점도 이 카드의 값을 쓴다.
  *
  * @param place 장소 요약
- * @param score 핏 점수. 0~100 정수이고 화면에는 % 없이 그대로 보인다. AI 엔진이 붙기 전(DB 모드)에는 생략한다.
- * @param labels 카드에 보이는 장소 특징 2개. AI 엔진이 없으면 빈 목록이다.
+ * @param score 핏 점수. 0~100 정수이고 화면에는 % 없이 그대로 보인다. AI 결과가 없으면(대체 결과) 생략한다.
+ * @param labels 카드에 보이는 장소 특징 2개. AI 결과가 없으면 빈 목록이다.
  * @param caution 주의점. 없으면 생략한다.
  * @param openStatus 요청 시각 기준 영업 상태
- * @param reasons AI 추천 이유. AI 엔진이 없으면 빈 목록이다.
- * @param scoreItems 핏 점수를 이루는 항목. 상세 화면의 ⓘ 시트에 보인다. AI 엔진이 없으면 빈 목록이다.
+ * @param reasons AI 추천 이유. AI 결과가 없으면 빈 목록이다.
+ * @param scoreItems 핏 점수를 이루는 항목. 상세 화면의 ⓘ 시트에 보인다. AI 결과가 없으면 빈 목록이다.
  */
 public record PlaceCard(
 		PlaceSummary place,

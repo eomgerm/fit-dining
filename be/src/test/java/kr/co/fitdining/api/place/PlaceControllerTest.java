@@ -1,6 +1,10 @@
 package kr.co.fitdining.api.place;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.ArgumentMatchers.any;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.nullValue;
@@ -10,6 +14,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import kr.co.fitdining.api.auth.domain.AuthFailure;
+import kr.co.fitdining.api.auth.ports.AuthUseCases;
 import com.jayway.jsonpath.JsonPath;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
@@ -41,6 +47,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.json.JsonCompareMode;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import tools.jackson.databind.JsonNode;
@@ -61,6 +68,9 @@ class PlaceControllerTest {
 
 	@Autowired
 	MockMvc mockMvc;
+
+	@MockitoBean
+	AuthUseCases auth;
 
 	@Nested
 	@DisplayName("자동완성")
@@ -392,7 +402,8 @@ class PlaceControllerTest {
 		@DisplayName("추천검색_정의된필드만있으면_정상처리한다")
 		void search_definedFieldsOnly_returnsOk() throws Exception {
 			mockMvc.perform(search("""
-							{"query":"카페","preferences":["QUIET","아무 태그"],
+							{"query":"카페","preferences":{"mood":"QUIET","priorities":["COZY"],"purposes":["DATE"],
+							 "tastes":[{"polarity":"LIKE","label":"국물","code":"FOOD_SOUP"}]},
 							 "previousConditions":{"lat":37.5,"any":{"nested":[1,2]}},
 							 "mapBounds":{"swLat":37.49,"swLng":127.02,"neLat":null},"cursor":null}
 							"""))
@@ -483,33 +494,130 @@ class PlaceControllerTest {
 	class AuthorizationAndPreferences {
 
 		@ParameterizedTest(name = "{0}")
-		@ValueSource(strings = {"suggest", "search", "detail"})
-		@DisplayName("엔드포인트_Authorization헤더가있든없든_응답이같다")
-		void endpoint_withOrWithoutAuthorization_sameResponse(String endpoint) throws Exception {
+		@ValueSource(strings = {"suggest", "detail"})
+		@DisplayName("자동완성과상세_Authorization헤더를보지않아_잘못된토큰이어도응답이같다")
+		void suggestAndDetail_ignoreAuthorization(String endpoint) throws Exception {
+			when(auth.authenticate(any())).thenThrow(new AuthFailure("x"));
 			String plain = mockMvc.perform(request(endpoint)).andExpect(status().isOk())
 					.andReturn().getResponse().getContentAsString();
 
-			mockMvc.perform(request(endpoint).header("Authorization", "Bearer token"))
-					.andExpect(status().isOk())
-					.andExpect(content().json(plain, JsonCompareMode.STRICT));
+			for (String header : List.of("Bearer bad", "Basic x", "")) {
+				mockMvc.perform(request(endpoint).header("Authorization", header))
+						.andExpect(status().isOk())
+						.andExpect(content().json(plain, JsonCompareMode.STRICT));
+			}
+			verifyNoInteractions(auth);
 		}
 
 		private static MockHttpServletRequestBuilder request(String endpoint) {
-			return switch (endpoint) {
-				case "suggest" -> get("/api/v1/places/suggest").param("q", "역삼");
-				case "search" -> search("{\"query\":\"카페\"}");
-				default -> get("/api/v1/places/{id}", 3);
-			};
+			return endpoint.equals("suggest") ? get("/api/v1/places/suggest").param("q", "역삼")
+					: get("/api/v1/places/{id}", 3);
 		}
 
 		@Test
-		@DisplayName("추천검색_preferences는받지만_Mock결과에반영하지않는다")
+		@DisplayName("추천검색_유효한토큰이면_Mock결과는토큰없을때와같고X-Fallback이없다")
+		void search_validToken_sameMockResult() throws Exception {
+			when(auth.authenticate("token")).thenReturn(identity("user-1"));
+			String plain = mockMvc.perform(search("{\"query\":\"카페\"}"))
+					.andExpect(header().doesNotExist("X-Fallback"))
+					.andReturn().getResponse().getContentAsString();
+
+			mockMvc.perform(search("{\"query\":\"카페\"}").header("Authorization", "Bearer token"))
+					.andExpect(status().isOk())
+					.andExpect(header().doesNotExist("X-Fallback"))
+					.andExpect(content().json(plain, JsonCompareMode.STRICT));
+		}
+
+		@ParameterizedTest
+		@ValueSource(strings = {"", "Basic token", "bearer token", "Bearer"})
+		@DisplayName("추천검색_Bearer로시작하지않는헤더는_401이다")
+		void search_nonBearerHeader_returnsUnauthorized(String header) throws Exception {
+			mockMvc.perform(search("{\"query\":\"카페\"}").header("Authorization", header))
+					.andExpect(status().isUnauthorized())
+					.andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+					.andExpect(jsonPath("$.status").value(401));
+			verifyNoInteractions(auth);
+		}
+
+		@Test
+		@DisplayName("추천검색_유효하지않은토큰은_401이다")
+		void search_invalidToken_returnsUnauthorized() throws Exception {
+			when(auth.authenticate("bad")).thenThrow(new AuthFailure("인증 실패"));
+
+			mockMvc.perform(search("{\"query\":\"카페\"}").header("Authorization", "Bearer bad"))
+					.andExpect(status().isUnauthorized())
+					.andExpect(jsonPath("$.status").value(401))
+					.andExpect(jsonPath("$.type").doesNotExist());
+		}
+
+		@Test
+		@DisplayName("추천검색_만료된토큰은_401이고만료type이다")
+		void search_expiredToken_returnsExpiredType() throws Exception {
+			when(auth.authenticate("old")).thenThrow(AuthFailure.accessExpired());
+
+			mockMvc.perform(search("{\"query\":\"카페\"}").header("Authorization", "Bearer old"))
+					.andExpect(status().isUnauthorized())
+					.andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+					.andExpect(jsonPath("$.type").value("urn:fitdining:auth:access-token-expired"));
+		}
+
+		@Test
+		@DisplayName("추천검색_본문이틀리고토큰도무효면_400이먼저다")
+		void search_invalidBodyAndToken_badRequestFirst() throws Exception {
+			mockMvc.perform(search("{\"query\":\"\"}").header("Authorization", "Bearer bad"))
+					.andExpect(status().isBadRequest());
+			verifyNoInteractions(auth);
+		}
+
+		@Test
+		@DisplayName("추천검색_새모양preferences는받지만_Mock결과에반영하지않는다")
 		void search_preferences_acceptedButIgnored() throws Exception {
 			String plain = mockMvc.perform(search("{\"query\":\"카페\"}"))
 					.andReturn().getResponse().getContentAsString();
-			mockMvc.perform(search("{\"query\":\"카페\",\"preferences\":[\"QUIET\",\"PARKING\"]}"))
+			mockMvc.perform(search("""
+							{"query":"카페","preferences":{"mood":"LIVELY","priorities":["VALUE","VALUE"],
+							 "tastes":[{"polarity":"DISLIKE","label":"  매운맛 "}]}}"""))
 					.andExpect(status().isOk())
 					.andExpect(content().json(plain, JsonCompareMode.STRICT));
+		}
+
+		static Stream<String> invalidPreferences() {
+			return Stream.of(
+					"[\"QUIET\",\"PARKING\"]",
+					"{\"mood\":\"CALM\"}",
+					"{\"priorities\":[\"NOPE\"]}",
+					"{\"priorities\":[null]}",
+					"{\"purposes\":[\"DATE\",null]}",
+					"{\"tastes\":[null]}",
+					"{\"tastes\":[{\"label\":\"국물\"}]}",
+					"{\"tastes\":[{\"polarity\":\"LIKE\",\"label\":\"   \"}]}",
+					"{\"tastes\":[{\"polarity\":\"LIKE\",\"label\":\"" + "가".repeat(21) + "\"}]}",
+					"{\"tastes\":[{\"polarity\":\"LIKE\",\"label\":\"a\\u0007b\"}]}",
+					"{\"tastes\":[{\"polarity\":\"LIKE\",\"label\":\"a\",\"code\":\"bad-code\"}]}",
+					"{\"tastes\":[" + java.util.stream.IntStream.range(0, 11)
+							.mapToObj(i -> "{\"polarity\":\"LIKE\",\"label\":\"x" + i + "\"}")
+							.collect(Collectors.joining(",")) + "]}",
+					"{\"mood\":\"QUIET\",\"extra\":1}",
+					"{\"tastes\":[{\"polarity\":\"LIKE\",\"label\":\"a\",\"weight\":1}]}");
+		}
+
+		@ParameterizedTest
+		@MethodSource("invalidPreferences")
+		@DisplayName("추천검색_가입검증에맞지않는preferences는_비회원이든회원이든400이다")
+		void search_invalidPreferences_returnsBadRequest(String preferences) throws Exception {
+			when(auth.authenticate("token")).thenReturn(identity("user-1"));
+			String body = "{\"query\":\"카페\",\"preferences\":" + preferences + "}";
+
+			mockMvc.perform(search(body)).andExpect(status().isBadRequest())
+					.andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON));
+			mockMvc.perform(search(body).header("Authorization", "Bearer token")).andExpect(status().isBadRequest());
+		}
+
+		@Test
+		@DisplayName("추천검색_본문에userId가있으면_400이다")
+		void search_userIdInBody_returnsBadRequest() throws Exception {
+			mockMvc.perform(search("{\"query\":\"카페\",\"userId\":\"someone\"}"))
+					.andExpect(status().isBadRequest());
 		}
 	}
 
@@ -546,7 +654,8 @@ class PlaceControllerTest {
 		return Stream.of(
 				Arguments.of("자동완성", get("/api/v1/places/suggest").param("q", LOG_SECRET + "q")),
 				Arguments.of("추천검색", search(
-						"{\"query\":\"" + LOG_SECRET + "query\",\"preferences\":[\"" + LOG_SECRET + "pref\"]}")));
+						"{\"query\":\"" + LOG_SECRET + "query\",\"preferences\":{\"tastes\":[{\"polarity\":\"LIKE\","
+								+ "\"label\":\"" + LOG_SECRET + "p\"}]}}")));
 	}
 
 	static Stream<Arguments> badRequestsWithSecret() {
@@ -559,7 +668,11 @@ class PlaceControllerTest {
 				Arguments.of("깨진 JSON", search("{\"query\":\"" + LOG_SECRET + "\"")),
 				Arguments.of("200자를 넘는 query", search("{\"query\":\"" + LOG_SECRET + "가".repeat(200) + "\"}")),
 				Arguments.of("잘못된 cursor",
-						search("{\"query\":\"" + LOG_SECRET + "\",\"cursor\":\"" + LOG_SECRET + "\"}")));
+						search("{\"query\":\"" + LOG_SECRET + "\",\"cursor\":\"" + LOG_SECRET + "\"}")),
+				Arguments.of("검증에 맞지 않는 preferences", search("{\"query\":\"" + LOG_SECRET + "\",\"preferences\":"
+						+ "{\"tastes\":[{\"polarity\":\"LIKE\",\"label\":\"" + LOG_SECRET + "가나다라마바사아자차카타파하\"}]}}")),
+				Arguments.of("옛 모양 preferences",
+						search("{\"query\":\"" + LOG_SECRET + "\",\"preferences\":[\"" + LOG_SECRET + "\"]}")));
 	}
 
 	@Nested
@@ -718,6 +831,10 @@ class PlaceControllerTest {
 		private static void assertRequired(JsonNode node, Set<String> required) {
 			assertThat(node.propertyNames()).containsAll(required);
 		}
+	}
+
+	static AuthUseCases.Identity identity(String userId) {
+		return new AuthUseCases.Identity(userId, "닉네임", "session", 0, 0);
 	}
 
 	private static MockHttpServletRequestBuilder search(String body) {

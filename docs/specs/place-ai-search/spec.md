@@ -44,44 +44,44 @@ curl -i -X POST http://localhost:8080/api/v1/places/search -H "Content-Type: app
 
 AI 호출
 
-- [ ] AC-1: `cursor`가 없는 모든 추천 검색 요청은 홈의 "근처 맛집"을 포함해 요청마다 AI `POST {base-url}/v1/search`를 부른다(차단 중과 주소가 빈 경우는 AC-13, AC-7). 이전 요청의 결과를 다시 쓰지 않는다. "근처"가 들어 있다는 이유로 AI 없이 응답하지 않는다. (D-2, D-8, D-9)
-- [ ] AC-2: AI 요청 본문은 [AI 요청](#ai-요청) 표의 속성만 담는다. `query`는 받은 값 그대로, `previousConditions`는 받은 값 그대로이되 없거나 빈 객체(`{}`)면 빠지고, `mapBounds`는 [AI 요청](#ai-요청) 표의 규칙대로, `userId`는 AC-3의 경우에만 있다. `cursor`, `preferences`, `tasteProfile`은 없다. `fitdining.ai.modal-key`·`modal-secret`이 비어 있지 않으면 각각 `Modal-Key`·`Modal-Secret` 헤더로 실린다. (D-2, D-3, D-4, D-5)
-- [ ] AC-3: `Authorization: Bearer <AT>`가 유효하면 AI 요청의 `userId`는 그 토큰의 사용자 id이고, 본문에 `preferences`가 있어도 AI에 보내지 않는다. `Authorization` 헤더가 없으면 비회원이고 AI 요청에 `userId`도 취향도 없다(비회원 답변 전달은 [취향과 인증](#취향과-인증)의 보류 규칙). (D-4, D-12)
-- [ ] AC-4: `cursor`가 null이 아닌(빈 문자열 포함) 요청은 AI를 부르지 않고 400이다. `cursor`가 없거나 null이면 커서 없음이다. 이 판정은 DB 모드 엔진이 인증 뒤에 하므로 토큰이 무효면 401이 먼저이고, Mock 모드에는 적용되지 않는다. (D-10)
+- [x] AC-1: `cursor`가 없는 모든 추천 검색 요청은 홈의 "근처 맛집"을 포함해 요청마다 AI `POST {base-url}/v1/search`를 부른다(차단 중과 주소가 빈 경우는 AC-13, AC-7). 이전 요청의 결과를 다시 쓰지 않는다. "근처"가 들어 있다는 이유로 AI 없이 응답하지 않는다. (D-2, D-8, D-9)
+- [x] AC-2: AI 요청 본문은 [AI 요청](#ai-요청) 표의 속성만 담는다. `query`는 받은 값 그대로, `previousConditions`는 받은 값 그대로이되 없거나 빈 객체(`{}`)면 빠지고, `mapBounds`는 [AI 요청](#ai-요청) 표의 규칙대로, `userId`는 AC-3의 경우에만 있다. `cursor`, `preferences`, `tasteProfile`은 없다. `fitdining.ai.modal-key`·`modal-secret`이 비어 있지 않으면 각각 `Modal-Key`·`Modal-Secret` 헤더로 실린다. (D-2, D-3, D-4, D-5)
+- [x] AC-3: `Authorization: Bearer <AT>`가 유효하면 AI 요청의 `userId`는 그 토큰의 사용자 id이고, 본문에 `preferences`가 있어도 AI에 보내지 않는다. `Authorization` 헤더가 없으면 비회원이고 AI 요청에 `userId`도 취향도 없다(비회원 답변 전달은 [취향과 인증](#취향과-인증)의 보류 규칙). (D-4, D-12)
+- [x] AC-4: `cursor`가 null이 아닌(빈 문자열 포함) 요청은 AI를 부르지 않고 400이다. `cursor`가 없거나 null이면 커서 없음이다. 이 판정은 DB 모드 엔진이 인증 뒤에 하므로 토큰이 무효면 401이 먼저이고, Mock 모드에는 적용되지 않는다. (D-10)
 
 AI 결과를 카드로
 
-- [ ] AC-5: AI 응답의 카드는 AI 응답 순서 그대로 나오고, 같은 `placeId`가 다시 오면 처음 카드만 남는다. 각 카드의 `place`는 카탈로그의 그 `placeId` 장소 요약, `openStatus`는 요청을 처리하는 동안의 서울 시각 기준 영업 상태이고, `score`·`labels`·`reasons`·`scoreItems`는 AI 값 그대로이고 AI가 뺀 `labels`·`reasons`·`scoreItems`는 빈 목록, 뺀 `score`는 없음이며, `caution`은 없고, `reasons`의 `quote`·`quoteSource`는 AI가 주면 그대로 옮긴다. 카탈로그에 없는 `placeId`의 카드는 빠지고(다른 장소로 채우지 않는다) 빠진 id 수(중복을 지운 뒤)가 WARN 로그에 남는다. `totalCount`는 남은 카드 수이고 `nextCursor`는 없다. `conditions`·`nearby`·`changeSummary`·`emptyReason`은 AI 값 그대로다. AI가 `conditions`를 빼면 `{}`, `nearby`를 빼면 false이고, `changeSummary`·`emptyReason`을 빼면 응답에서도 빠진다. AI 응답의 모르는 속성은 어느 깊이에서든 무시하고 정상 응답한다. (D-5, D-11)
-- [ ] AC-6: AI 응답의 `fallbacks`가 비어 있지 않으면 응답에 `X-Fallback` 헤더가 붙고 값은 `fallbacks`의 원소를 받은 순서대로, 고치지 않고 쉼표로 이은 문자열(`PREVIOUS_INVALID,TASTE_INVALID`)이다. 비었거나 없으면 헤더가 없다. 대체로 끝난 응답의 헤더는 AC-7이다. (D-7)
+- [x] AC-5: AI 응답의 카드는 AI 응답 순서 그대로 나오고, 같은 `placeId`가 다시 오면 처음 카드만 남는다. 각 카드의 `place`는 카탈로그의 그 `placeId` 장소 요약, `openStatus`는 요청을 처리하는 동안의 서울 시각 기준 영업 상태이고, `score`·`labels`·`reasons`·`scoreItems`는 AI 값 그대로이고 AI가 뺀 `labels`·`reasons`·`scoreItems`는 빈 목록, 뺀 `score`는 없음이며, `caution`은 없고, `reasons`의 `quote`·`quoteSource`는 AI가 주면 그대로 옮긴다. 카탈로그에 없는 `placeId`의 카드는 빠지고(다른 장소로 채우지 않는다) 빠진 id 수(중복을 지운 뒤)가 WARN 로그에 남는다. `totalCount`는 남은 카드 수이고 `nextCursor`는 없다. `conditions`·`nearby`·`changeSummary`·`emptyReason`은 AI 값 그대로다. AI가 `conditions`를 빼면 `{}`, `nearby`를 빼면 false이고, `changeSummary`·`emptyReason`을 빼면 응답에서도 빠진다. AI 응답의 모르는 속성은 어느 깊이에서든 무시하고 정상 응답한다. (D-5, D-11)
+- [x] AC-6: AI 응답의 `fallbacks`가 비어 있지 않으면 응답에 `X-Fallback` 헤더가 붙고 값은 `fallbacks`의 원소를 받은 순서대로, 고치지 않고 쉼표로 이은 문자열(`PREVIOUS_INVALID,TASTE_INVALID`)이다. 비었거나 없으면 헤더가 없다. 대체로 끝난 응답의 헤더는 AC-7이다. (D-7)
 
 AI 실패와 대체
 
-- [ ] AC-7: 아래 경우 모두 응답은 200, [대체 결과](#대체-결과) 모양이고 `X-Fallback: AI_UNAVAILABLE`이 붙는다. ① `fitdining.ai.base-url`이 비었거나 공백뿐(부르기 전에 판정) ② 연결 실패(이름 풀이 실패, 연결 거부·끊김, TLS 실패, 200 헤더 뒤 본문을 읽다 끊김 등 시간 초과가 아닌 I/O 오류) ③ 재시도까지 합쳐 8초 안에 응답이 없음 ④ 5xx(`BUSY` 제외) ⑤ `503 BUSY`가 재시도 뒤에도 옴 ⑥ 200이 아닌 그 밖의 상태(4xx, 3xx, 200 외 2xx) ⑦ 200이지만 [읽을 수 없는 응답](#ai-응답), 또는 AI 호출 중 난 I/O 오류가 아닌 그 밖의 예외(형식이 잘못된 주소 포함. 이 경우에도 기동은 실패하지 않는다) ⑧ 카드가 하나 이상인데 모든 `placeId`가 카탈로그에 없음 ⑨ 차단 중. ⑧에서 AI 응답에 `fallbacks`가 있어도 헤더 값은 `AI_UNAVAILABLE` 하나다. AC-15의 DB 오류 말고는 어느 경우에도 5xx를 주지 않는다. (D-3, D-6, D-7, D-11)
-- [ ] AC-8: AI가 `503 BUSY`(상태 503이고 ProblemDetail `code`가 `BUSY`)를 주면 BE는 8초 예산 안에서 한 번만 다시 부른다. 다시 부르기 전에 기다릴지(`Retry-After: 1`)는 재량이지만, 기다림과 재시도 모두 예산 안이어야 한다. 재시도는 남은 예산을 제한 시간으로 하고, 그 안에 응답이 없으면 ③이다. 남은 예산이 없어 재시도하지 못하면 ⑤다. 재시도가 성공하면 AC-5대로 정상 응답한다. `BUSY`가 아닌 503과 다른 실패는 다시 부르지 않는다. (D-3)
-- [ ] AC-9: 홈 요청(`query`의 앞뒤 공백을 지운 값이 정확히 "근처 맛집"이고 `previousConditions`가 없거나 `{}`인 요청. `mapBounds`는 있어도 된다)의 대체 결과는 카탈로그 전체 카드이고 `nearby: true`다. (D-6)
-- [ ] AC-10: 홈 요청이 아닌 요청의 대체 결과는 `query`의 키워드 검색 결과를 순위 순으로 카드로 만든 것이고 `nearby: false`다. 순서는 키워드 검색 히트 전체 → 히트의 좌표로 `mapBounds` 거르기 → 앞 20곳 → 카탈로그에서 id로 읽기이고, 카탈로그에서 읽히지 않는 장소는 빠진다(그래서 20곳보다 적을 수 있다). (D-6)
-- [ ] AC-11: 대체 결과에서 `mapBounds`가 있으면 위도·경도가 그 영역 안(경계 포함)인 장소만 남는다. 네 값 중 빈 값은 그쪽을 제한하지 않는다. 홈 요청도 `mapBounds`가 있으면 영역 안만 남는다. (D-6)
-- [ ] AC-12: 대체 결과의 카드에는 `score`가 없고 `labels`·`reasons`·`scoreItems`는 빈 목록이다. `conditions`는 받은 `previousConditions`(없거나 `{}`면 `{}`), `nextCursor`·`changeSummary`는 없고, `totalCount`는 카드 수다. 남은 카드가 없으면 `items: []`와 `emptyReason`(원인 "지금은 가게 이름, 메뉴, 업종, 역 이름으로만 찾을 수 있어요", 제안 "가게 이름이나 메뉴 이름으로 다시 검색해 보세요")이 온다. (D-6)
-- [ ] AC-13: 차단기 실패(②~⑤: 연결 실패, 시간 초과, 5xx, 재시도 뒤 `BUSY`)마다 연속 실패 수가 1 늘고, 그 결과 3 이상이면 그때부터 30초 동안(차단 중. 차단 중에 끝난 차단기 실패도 끝 시각을 그때부터 30초 뒤로 다시 잡는다) 오는 검색은 AI를 부르지 않고 바로 대체한다. 30초가 지난 뒤 오는 요청은 AI를 부르고, 차단기 실패면 다시 30초 동안 차단한다. 읽을 수 있는 200 응답은 언제 끝났든(차단 전에 시작해 차단 중에 끝난 요청 포함) 연속 실패 수를 0으로 만들고 차단을 푼다. ⑥과 ⑦은 대체하지만 연속 실패 수와 차단을 바꾸지 않는다. 읽을 수 있는 200 응답(카드 id가 전부 카탈로그에 없는 응답 포함)은 성공이다. (D-3)
-- [ ] AC-14: `fitdining.ai.base-url`이 빈 값이거나 AI 서버가 닿지 않아도 BE는 정상으로 뜨고 readiness는 DB만 본다. (D-3)
-- [ ] AC-15: 카탈로그 DB를 읽지 못하면(카드 조립이나 대체 중) 지금처럼 503 ProblemDetail이다. DB 장애는 AI 장애로 대체하지 않는다(엔진이 DB 오류나 키워드 검색의 503 예외를 삼켜 대체 결과로 바꾸지 않는다. 대체로 바꾸는 것은 AI 호출에서 난 실패뿐이다). (D-6)
-- [ ] AC-16: 검색이 ①~⑦로 대체되면 요청마다 실패 종류(예외 클래스나 상태 코드)가 로그에 남는다. ⑥, ⑦, ① 주소 없음은 ERROR, ②~⑤는 WARN이다. ⑧은 AC-5의 빠진 id WARN 로그로 갈음한다. ⑨ 차단 중에 대체한 요청은 요청마다 남기지 않는다. 차단을 시작하거나 다시 시작할 때마다(AC-13) WARN을, 차단 중이거나 연속 실패 수가 3 이상일 때 성공해 차단이 풀리면 INFO를 남긴다. 읽을 수 있는 AI 응답을 받은 검색(⑧ 포함)마다 `interpretedBy`, `rankedBy`, `models`가 INFO 로그에 남는다. (D-3, D-5)
+- [x] AC-7: 아래 경우 모두 응답은 200, [대체 결과](#대체-결과) 모양이고 `X-Fallback: AI_UNAVAILABLE`이 붙는다. ① `fitdining.ai.base-url`이 비었거나 공백뿐(부르기 전에 판정) ② 연결 실패(이름 풀이 실패, 연결 거부·끊김, TLS 실패, 200 헤더 뒤 본문을 읽다 끊김 등 시간 초과가 아닌 I/O 오류) ③ 재시도까지 합쳐 8초 안에 응답이 없음 ④ 5xx(`BUSY` 제외) ⑤ `503 BUSY`가 재시도 뒤에도 옴 ⑥ 200이 아닌 그 밖의 상태(4xx, 3xx, 200 외 2xx) ⑦ 200이지만 [읽을 수 없는 응답](#ai-응답), 또는 AI 호출 중 난 I/O 오류가 아닌 그 밖의 예외(형식이 잘못된 주소 포함. 이 경우에도 기동은 실패하지 않는다) ⑧ 카드가 하나 이상인데 모든 `placeId`가 카탈로그에 없음 ⑨ 차단 중. ⑧에서 AI 응답에 `fallbacks`가 있어도 헤더 값은 `AI_UNAVAILABLE` 하나다. AC-15의 DB 오류 말고는 어느 경우에도 5xx를 주지 않는다. (D-3, D-6, D-7, D-11)
+- [x] AC-8: AI가 `503 BUSY`(상태 503이고 ProblemDetail `code`가 `BUSY`)를 주면 BE는 8초 예산 안에서 한 번만 다시 부른다. 다시 부르기 전에 기다릴지(`Retry-After: 1`)는 재량이지만, 기다림과 재시도 모두 예산 안이어야 한다. 재시도는 남은 예산을 제한 시간으로 하고, 그 안에 응답이 없으면 ③이다. 남은 예산이 없어 재시도하지 못하면 ⑤다. 재시도가 성공하면 AC-5대로 정상 응답한다. `BUSY`가 아닌 503과 다른 실패는 다시 부르지 않는다. (D-3)
+- [x] AC-9: 홈 요청(`query`의 앞뒤 공백을 지운 값이 정확히 "근처 맛집"이고 `previousConditions`가 없거나 `{}`인 요청. `mapBounds`는 있어도 된다)의 대체 결과는 카탈로그 전체 카드이고 `nearby: true`다. (D-6)
+- [x] AC-10: 홈 요청이 아닌 요청의 대체 결과는 `query`의 키워드 검색 결과를 순위 순으로 카드로 만든 것이고 `nearby: false`다. 순서는 키워드 검색 히트 전체 → 히트의 좌표로 `mapBounds` 거르기 → 앞 20곳 → 카탈로그에서 id로 읽기이고, 카탈로그에서 읽히지 않는 장소는 빠진다(그래서 20곳보다 적을 수 있다). (D-6)
+- [x] AC-11: 대체 결과에서 `mapBounds`가 있으면 위도·경도가 그 영역 안(경계 포함)인 장소만 남는다. 네 값 중 빈 값은 그쪽을 제한하지 않는다. 홈 요청도 `mapBounds`가 있으면 영역 안만 남는다. (D-6)
+- [x] AC-12: 대체 결과의 카드에는 `score`가 없고 `labels`·`reasons`·`scoreItems`는 빈 목록이다. `conditions`는 받은 `previousConditions`(없거나 `{}`면 `{}`), `nextCursor`·`changeSummary`는 없고, `totalCount`는 카드 수다. 남은 카드가 없으면 `items: []`와 `emptyReason`(원인 "지금은 가게 이름, 메뉴, 업종, 역 이름으로만 찾을 수 있어요", 제안 "가게 이름이나 메뉴 이름으로 다시 검색해 보세요")이 온다. (D-6)
+- [x] AC-13: 차단기 실패(②~⑤: 연결 실패, 시간 초과, 5xx, 재시도 뒤 `BUSY`)마다 연속 실패 수가 1 늘고, 그 결과 3 이상이면 그때부터 30초 동안(차단 중. 차단 중에 끝난 차단기 실패도 끝 시각을 그때부터 30초 뒤로 다시 잡는다) 오는 검색은 AI를 부르지 않고 바로 대체한다. 30초가 지난 뒤 오는 요청은 AI를 부르고, 차단기 실패면 다시 30초 동안 차단한다. 읽을 수 있는 200 응답은 언제 끝났든(차단 전에 시작해 차단 중에 끝난 요청 포함) 연속 실패 수를 0으로 만들고 차단을 푼다. ⑥과 ⑦은 대체하지만 연속 실패 수와 차단을 바꾸지 않는다. 읽을 수 있는 200 응답(카드 id가 전부 카탈로그에 없는 응답 포함)은 성공이다. (D-3)
+- [x] AC-14: `fitdining.ai.base-url`이 빈 값이거나 AI 서버가 닿지 않아도 BE는 정상으로 뜨고 readiness는 DB만 본다. (D-3)
+- [x] AC-15: 카탈로그 DB를 읽지 못하면(카드 조립이나 대체 중) 지금처럼 503 ProblemDetail이다. DB 장애는 AI 장애로 대체하지 않는다(엔진이 DB 오류나 키워드 검색의 503 예외를 삼켜 대체 결과로 바꾸지 않는다. 대체로 바꾸는 것은 AI 호출에서 난 실패뿐이다). (D-6)
+- [x] AC-16: 검색이 ①~⑦로 대체되면 요청마다 실패 종류(예외 클래스나 상태 코드)가 로그에 남는다. ⑥, ⑦, ① 주소 없음은 ERROR, ②~⑤는 WARN이다. ⑧은 AC-5의 빠진 id WARN 로그로 갈음한다. ⑨ 차단 중에 대체한 요청은 요청마다 남기지 않는다. 차단을 시작하거나 다시 시작할 때마다(AC-13) WARN을, 차단 중이거나 연속 실패 수가 3 이상일 때 성공해 차단이 풀리면 INFO를 남긴다. 읽을 수 있는 AI 응답을 받은 검색(⑧ 포함)마다 `interpretedBy`, `rankedBy`, `models`가 INFO 로그에 남는다. (D-3, D-5)
 
 취향과 인증
 
-- [ ] AC-17: `Authorization` 헤더가 있는데(빈 값 포함) `Bearer `로 시작하지 않거나 토큰이 유효하지 않으면 401 ProblemDetail이고 AI를 부르지 않는다. 만료된 토큰이면 `type`이 `urn:fitdining:auth:access-token-expired`다. 비회원으로 계속하지 않는다. (D-4)
-- [ ] AC-18: `preferences`는 가입의 `preferences`와 같은 모양(`mood`, `priorities`, `purposes`, `tastes`)과 검증을 따른다. 검증에 맞지 않거나 모르는 속성이 있으면 회원이든 비회원이든 400이다. 예전 모양(문자열 목록)은 Mock 모드에서도 400이다. (D-4)
-- [ ] AC-19: `migrate` 프로필이 인증 환경 변수 없이 뜨고 끝난다(인증을 붙인 뒤에도). (D-4)
+- [x] AC-17: `Authorization` 헤더가 있는데(빈 값 포함) `Bearer `로 시작하지 않거나 토큰이 유효하지 않으면 401 ProblemDetail이고 AI를 부르지 않는다. 만료된 토큰이면 `type`이 `urn:fitdining:auth:access-token-expired`다. 비회원으로 계속하지 않는다. (D-4)
+- [x] AC-18: `preferences`는 가입의 `preferences`와 같은 모양(`mood`, `priorities`, `purposes`, `tastes`)과 검증을 따른다. 검증에 맞지 않거나 모르는 속성이 있으면 회원이든 비회원이든 400이다. 예전 모양(문자열 목록)은 Mock 모드에서도 400이다. (D-4)
+- [x] AC-19: `migrate` 프로필이 인증 환경 변수 없이 뜨고 끝난다(인증을 붙인 뒤에도). (D-4)
 
 절대 일어나면 안 되는 일
 
-- [ ] AC-20: 어떤 요청이든(성공, 대체 ①~⑨, 400, 401, 503) 처리한 뒤 BE 로그 출력에 검색 문장(`query`), `previousConditions`, `preferences`의 값, AI 요청·응답 본문(본문 조각을 담을 수 있는 HTTP·JSON 예외 메시지 포함)이 나타나지 않는다. 예외는 AC-16이 남기라는 `interpretedBy`, `rankedBy`, `models` 값뿐이다. (D-11)
-- [ ] AC-21: 어떤 요청 본문과 헤더 조합이든 AI 요청의 `userId`는 검증된 토큰의 사용자 id이거나 없다. 본문에 `userId`를 넣으면 400이다. (D-11)
+- [x] AC-20: 어떤 요청이든(성공, 대체 ①~⑨, 400, 401, 503) 처리한 뒤 BE 로그 출력에 검색 문장(`query`), `previousConditions`, `preferences`의 값, AI 요청·응답 본문(본문 조각을 담을 수 있는 HTTP·JSON 예외 메시지 포함)이 나타나지 않는다. 예외는 AC-16이 남기라는 `interpretedBy`, `rankedBy`, `models` 값뿐이다. (D-11)
+- [x] AC-21: 어떤 요청 본문과 헤더 조합이든 AI 요청의 `userId`는 검증된 토큰의 사용자 id이거나 없다. 본문에 `userId`를 넣으면 400이다. (D-11)
 
 바뀌지 않는 것
 
-- [ ] AC-22: Mock 모드의 추천 검색은 AI를 부르지 않고 지금과 같은 결과와 페이지 나눔(`cursor`, `nextCursor`, 잘못된 커서 400)을 주며 `X-Fallback`이 없다. 새 모양의 `preferences`는 받기만 하고 결과에 반영하지 않는다. 인증 규칙(AC-17)과 `preferences` 검증(AC-18)은 Mock 모드에도 같다. Mock 엔진의 동작은 그대로이고, 공용 엔진 인터페이스가 바뀌어 생기는 코드 변경은 허용한다. (D-1, D-4, D-10)
-- [ ] AC-23: 자동완성(`GET /places/suggest`)과 상세(`GET /places/{id}`)는 DB 모드에서도 지금과 같고 AI를 부르지 않으며, `Authorization` 헤더를 보지 않는다(잘못된 토큰이어도 401이 아니다). (D-2, D-4)
+- [x] AC-22: Mock 모드의 추천 검색은 AI를 부르지 않고 지금과 같은 결과와 페이지 나눔(`cursor`, `nextCursor`, 잘못된 커서 400)을 주며 `X-Fallback`이 없다. 새 모양의 `preferences`는 받기만 하고 결과에 반영하지 않는다. 인증 규칙(AC-17)과 `preferences` 검증(AC-18)은 Mock 모드에도 같다. Mock 엔진의 동작은 그대로이고, 공용 엔진 인터페이스가 바뀌어 생기는 코드 변경은 허용한다. (D-1, D-4, D-10)
+- [x] AC-23: 자동완성(`GET /places/suggest`)과 상세(`GET /places/{id}`)는 DB 모드에서도 지금과 같고 AI를 부르지 않으며, `Authorization` 헤더를 보지 않는다(잘못된 토큰이어도 401이 아니다). (D-2, D-4)
 
 ## Interfaces
 

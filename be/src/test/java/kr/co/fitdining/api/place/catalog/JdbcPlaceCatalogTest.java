@@ -285,6 +285,41 @@ class JdbcPlaceCatalogTest extends PostgresTestSupport {
 	}
 
 	@Test
+	@DisplayName("id로카드읽기_있는id만한번에읽고점수와이유는비어있다")
+	void cards_byIds_readsKnownOnlyWithoutScore() {
+		long first = place("가", "CAFE", "GANGNAM");
+		long second = place("나", "BAR", "SEOLLEUNG");
+		long other = place("다", "CAFE", "YEOKSAM");
+		hours(second, "WED", "11:00", "22:00", false, "[]", "{}");
+
+		List<PlaceCard> cards = catalog.cards(List.of(second, -1L, first));
+
+		assertThat(cards).extracting(card -> card.place().id()).containsExactlyInAnyOrder(first, second)
+				.doesNotContain(other);
+		assertThat(cards).allSatisfy(card -> {
+			assertThat(card.score()).isNull();
+			assertThat(card.caution()).isNull();
+			assertThat(card.labels()).isEmpty();
+			assertThat(card.reasons()).isEmpty();
+			assertThat(card.scoreItems()).isEmpty();
+		});
+		PlaceCard bar = cards.stream().filter(card -> card.place().id() == second).findFirst().orElseThrow();
+		assertThat(bar.openStatus()).isEqualTo(OpenStatus.OPEN);
+		assertThat(bar.place().name()).isEqualTo("나");
+		assertThat(bar.place().categoryGroup()).isEqualTo(CategoryGroup.BAR);
+		assertThat(bar.place().station()).isEqualTo(Station.SEOLLEUNG);
+		assertThat(bar.place().lat()).isEqualTo(37.5);
+	}
+
+	@Test
+	@DisplayName("id로카드읽기_빈목록이면_DB를보지않고빈목록이다")
+	void cards_emptyIds_returnsEmpty() {
+		place("가", "CAFE", "GANGNAM");
+
+		assertThat(catalog.cards(List.of())).isEmpty();
+	}
+
+	@Test
 	@DisplayName("검색문서_메뉴는원본순서이고네이버업종과메뉴없는장소를옮긴다")
 	void loadSearchDocuments_menusInOrderAndNaverCategory() {
 		long first = place("베트남집", "RESTAURANT", "YEOKSAM");

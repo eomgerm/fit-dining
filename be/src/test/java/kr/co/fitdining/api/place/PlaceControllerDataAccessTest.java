@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import kr.co.fitdining.api.auth.ports.AuthUseCases;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,6 +28,9 @@ class PlaceControllerDataAccessTest {
 
 	@Autowired
 	MockMvc mockMvc;
+
+	@MockitoBean
+	AuthUseCases auth;
 
 	@MockitoBean
 	PlaceService placeService;

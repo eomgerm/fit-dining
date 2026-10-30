@@ -101,8 +101,13 @@ public class MockPlaceSearchEngine implements PlaceSearchEngine {
 		return suggestions;
 	}
 
+	/** 회원 id와 {@code preferences}는 결과에 반영하지 않는다. {@code X-Fallback}은 없다. */
 	@Override
-	public PlaceSearchResponse search(PlaceSearchRequest request) {
+	public PlaceSearchResult search(PlaceSearchRequest request, String userId) {
+		return new PlaceSearchResult(searchResponse(request), null);
+	}
+
+	private PlaceSearchResponse searchResponse(PlaceSearchRequest request) {
 		Map<String, Object> previousConditions = request.previousConditions();
 		Map<String, Object> conditions = previousConditions != null ? previousConditions : Map.of();
 		List<PlaceCard> ranked = rankedCards();

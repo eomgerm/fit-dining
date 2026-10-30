@@ -1,5 +1,6 @@
 package kr.co.fitdining.api.place.keyword;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -32,6 +33,11 @@ final class FakePlaceCatalog implements PlaceCatalog {
 
 	@Override
 	public List<PlaceCard> nearbyCandidates() {
+		throw new UnsupportedOperationException();
+	}
+
+	@Override
+	public List<PlaceCard> cards(Collection<Long> ids) {
 		throw new UnsupportedOperationException();
 	}
 
