@@ -1,5 +1,9 @@
 // @vitest-environment jsdom
-import { QueryClientProvider } from "@tanstack/react-query";
+import {
+  focusManager,
+  onlineManager,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import {
   act,
   cleanup,
@@ -78,11 +82,17 @@ function card(id: number): PlaceCard {
 // 사용자가 보낸 검색 요청 본문. 첫 화면 주변 카드 요청은 nearbyBodies에 따로 모은다
 let searchBodies: Record<string, unknown>[];
 let nearbyBodies: Record<string, unknown>[];
+// 켜면 그 응답에 X-Fallback: AI_UNAVAILABLE을 붙인다(BE가 AI 대신 키워드로 찾은 결과)
+let aiFallback: { nearby: boolean; search: boolean };
 
-// 첫 요청은 conditions {area: "역삼"}, 후속 조건이면 changeSummary가 있다
+const fallbackHeaders = (on: boolean) =>
+  on ? { headers: { "X-Fallback": "AI_UNAVAILABLE" } } : undefined;
+
+// 첫 요청은 conditions {area: "역삼"}, 후속 조건이면 changeSummary가 있다. "없는"이 들어가면 빈 결과다
 function stubApi() {
   searchBodies = [];
   nearbyBodies = [];
+  aiFallback = { nearby: false, search: false };
   vi.stubGlobal(
     "fetch",
     vi.fn<typeof fetch>(async (input, init) => {
@@ -94,12 +104,32 @@ function stubApi() {
       if (body.query.includes("근처")) {
         // 1번은 역삼역 바로 앞, 3번은 약 2km 떨어진 곳
         const far = { ...card(3), place: { ...card(3).place, lat: 37.518 } };
-        return Response.json({
-          conditions: {},
-          nearby: true,
-          totalCount: 2,
-          items: [card(1), far],
-        } satisfies PlaceSearchResponse);
+        return Response.json(
+          {
+            conditions: {},
+            nearby: true,
+            totalCount: 2,
+            items: [card(1), far],
+          } satisfies PlaceSearchResponse,
+          fallbackHeaders(
+            body.query === NEARBY_QUERY ? aiFallback.nearby : aiFallback.search,
+          ),
+        );
+      }
+      if (body.query.includes("없는")) {
+        return Response.json(
+          {
+            conditions: {},
+            nearby: false,
+            totalCount: 0,
+            items: [],
+            emptyReason: {
+              cause: "찾지 못했어요",
+              suggestion: "다시 찾아 보세요",
+            },
+          } satisfies PlaceSearchResponse,
+          fallbackHeaders(aiFallback.search),
+        );
       }
       const response: PlaceSearchResponse = {
         conditions: followUp
@@ -110,7 +140,7 @@ function stubApi() {
         items: followUp ? [card(2)] : [card(1), card(2)],
         ...(followUp && { changeSummary: "요청하신 조건을 반영했어요" }),
       };
-      return Response.json(response);
+      return Response.json(response, fallbackHeaders(aiFallback.search));
     }),
   );
 }
@@ -1520,6 +1550,70 @@ describe("SearchScreen", () => {
       expect(
         within(list).getByRole("button", { name: "이 조건으로 추천받기" }),
       ).toBeTruthy();
+    });
+  });
+  describe("AI 대신 키워드로 찾은 결과", () => {
+    const NOTICE = "지금은 AI 추천을 쓸 수 없어 가게 이름·메뉴로 찾았어요";
+
+    it("검색 결과가 대체 결과이고 카드가 있으면 목록 위에 안내가 보인다", async () => {
+      aiFallback.search = true;
+      renderScreen();
+
+      await newSearch("역삼 카페");
+
+      expect(screen.getByText(NOTICE)).toBeTruthy();
+    });
+
+    it("대체 결과가 아니면 검색 결과와 첫 화면에 안내가 없다", async () => {
+      renderScreen();
+      await nearbyList();
+      expect(screen.queryByText(NOTICE)).toBeNull();
+
+      await newSearch("역삼 카페");
+
+      expect(screen.queryByText(NOTICE)).toBeNull();
+    });
+
+    it("대체 결과에 카드가 없으면 안내 없이 emptyReason만 보인다", async () => {
+      aiFallback.search = true;
+      renderScreen();
+      fireEvent.change(screen.getByRole("textbox", { name: "장소 검색" }), {
+        target: { value: "없는 가게" },
+      });
+      fireEvent.submit(screen.getByRole("search"));
+
+      expect(await screen.findByText("찾지 못했어요")).toBeTruthy();
+      expect(screen.queryByText(NOTICE)).toBeNull();
+    });
+
+    it("첫 화면 주변 카드가 대체 결과면 안내가 보이고 다시 그릴 때 새로 받는다", async () => {
+      aiFallback.nearby = true;
+      renderScreen();
+      await nearbyList();
+      expect(screen.getByText(NOTICE)).toBeTruthy();
+
+      await newSearch("역삼 카페");
+      fireEvent.click(screen.getByRole("button", { name: "새 검색" }));
+      await nearbyList();
+
+      await waitFor(() => expect(nearbyBodies).toHaveLength(2));
+    });
+
+    it("첫 화면 대체 결과도 창 포커스나 재연결로는 다시 받지 않는다", async () => {
+      aiFallback.nearby = true;
+      renderScreen();
+      await nearbyList();
+
+      act(() => {
+        focusManager.setFocused(false);
+        focusManager.setFocused(true);
+        onlineManager.setOnline(false);
+        onlineManager.setOnline(true);
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(nearbyBodies).toHaveLength(1);
+      focusManager.setFocused(undefined);
     });
   });
 });

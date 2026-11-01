@@ -5,6 +5,7 @@ import { placeQueries } from "../api/place-queries";
 import { pickNearby, YEOKSAM_STATION } from "../model/nearby";
 import type { PlaceSearchResponse } from "../model/place-types";
 import { searchStore } from "../model/search-store";
+import { showsAiFallback } from "./result-panel";
 import { useHere } from "./use-search-store";
 
 // 장소별 최근 카드에 이미 넣은 응답. 상세에서 돌아와 다시 그려질 때 더 최근 검색의 카드를 덮어쓰지 않게 한다
@@ -31,6 +32,8 @@ export function useNearbyPicks(enabled: boolean) {
     origin,
     // 기준 지점이 역삼역이면 거리 앞에 "역삼역"을 붙인다
     originLabel: here ? undefined : "역삼역",
+    // BE가 AI 대신 키워드로 찾은 결과라 카드 위에 안내를 띄운다
+    aiFallback: showsAiFallback(data),
     // 받은 카드가 없을 때의 실패만 알린다. 다시 받다가 실패해도 이전 카드는 그대로 보인다
     error: data ? null : error,
     retry: () => void refetch(),

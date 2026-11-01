@@ -58,7 +58,7 @@ import { PastResultView } from "./past-result-view";
 import { placeCardElementId } from "./place-card";
 import { PlaceMap, type PlaceMapHandle } from "./place-map";
 import { RecentSearchSheet } from "./recent-search-sheet";
-import { ResultPanel, type PanelState } from "./result-panel";
+import { AiFallbackNote, ResultPanel, type PanelState } from "./result-panel";
 import { savedCardElementId, SavedPlacesView } from "./saved-places";
 import { savedViewState, type SavedPanelState } from "./saved-view-state";
 import { SearchBar } from "./search-bar";
@@ -625,6 +625,11 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
                 />
               </div>
             )}
+            {nearby.aiFallback &&
+              nearby.cards.length > 0 &&
+              selectedNearbyId !== undefined && (
+                <AiFallbackNote className="mx-4" />
+              )}
             {nearby.cards.length > 0 && selectedNearbyId !== undefined && (
               <NearbyCarousel
                 cards={nearby.cards}

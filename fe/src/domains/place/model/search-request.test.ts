@@ -66,7 +66,6 @@ describe("nextPageRequest", () => {
   it("첫 요청을 그대로 다시 보내고 cursor만 더한다", () => {
     const first = {
       query: "더 조용하게",
-      preferences: ["quiet"],
       previousConditions: { a: 1 },
       mapBounds: bounds,
     };
@@ -76,17 +75,15 @@ describe("nextPageRequest", () => {
 });
 
 describe("regionRequest", () => {
-  it("같은 query, preferences, previousConditions에 지도 영역을 담고 cursor는 뺀다", () => {
+  it("같은 query, previousConditions에 지도 영역을 담고 cursor는 뺀다", () => {
     const viewing = {
       query: "더 조용하게",
-      preferences: ["quiet"],
       previousConditions: { a: 1 },
       cursor: "MjA",
     };
 
     expect(regionRequest(viewing, bounds)).toEqual({
       query: "더 조용하게",
-      preferences: ["quiet"],
       previousConditions: { a: 1 },
       mapBounds: bounds,
     });

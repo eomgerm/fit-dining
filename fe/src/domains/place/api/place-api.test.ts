@@ -8,7 +8,12 @@ import {
   shouldSendMapBounds,
 } from "../model/search-request";
 import { createSearchStore } from "../model/search-store";
-import { getPlace, searchPlaces, suggestPlaces } from "./place-api";
+import {
+  getPlace,
+  isAiFallback,
+  searchPlaces,
+  suggestPlaces,
+} from "./place-api";
 
 const searchResponse = {
   conditions: { area: "역삼" },
@@ -78,6 +83,61 @@ describe("searchPlaces", () => {
     for (const call of [0, 1, 2, 3]) {
       expect(sentHeaders(call).has("X-Mock-Scenario")).toBe(false);
     }
+  });
+
+  it("검색만 15초를 기다리고 자동완성과 상세는 10초다", async () => {
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+
+    await searchPlaces({ query: "역삼 카페" });
+    await searchPlaces({ query: "역삼 카페", cursor: "MjA" });
+    await suggestPlaces("역삼");
+    await getPlace(1);
+
+    expect(timeout.mock.calls.map(([ms]) => ms)).toEqual([
+      15_000, 15_000, 10_000, 10_000,
+    ]);
+    timeout.mockRestore();
+  });
+
+  it("넘긴 토큰은 Authorization으로, 비회원 답은 본문의 preferences로 싣는다", async () => {
+    const preferences = {
+      mood: null,
+      priorities: ["SPACIOUS" as const],
+      purposes: [],
+      tastes: [{ polarity: "LIKE" as const, label: "창가 자리", code: null }],
+    };
+
+    await searchPlaces({ query: "카페" }, undefined, { accessToken: "at-1" });
+    await searchPlaces({ query: "카페" }, undefined, { preferences });
+    await searchPlaces({ query: "카페" });
+
+    expect(sentHeaders(0).get("Authorization")).toBe("Bearer at-1");
+    expect(JSON.parse(sentBody(0))).toEqual({ query: "카페" });
+    expect(sentHeaders(1).has("Authorization")).toBe(false);
+    expect(JSON.parse(sentBody(1))).toEqual({ query: "카페", preferences });
+    expect(sentHeaders(2).has("Authorization")).toBe(false);
+    expect(JSON.parse(sentBody(2))).toEqual({ query: "카페" });
+  });
+
+  it.each([
+    ["AI_UNAVAILABLE", true],
+    ["PREVIOUS_INVALID,AI_UNAVAILABLE", true],
+    ["TASTE_INVALID", false],
+    [null, false],
+  ])("X-Fallback이 %s이면 대체 결과 여부가 %s다", async (value, expected) => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify(searchResponse), {
+        headers: {
+          "Content-Type": "application/json",
+          ...(value && { "X-Fallback": value }),
+        },
+      }),
+    );
+
+    const response = await searchPlaces({ query: "카페" });
+
+    expect(response).toEqual(searchResponse);
+    expect(isAiFallback(response)).toBe(expected);
   });
 
   it("기기 위치를 얻었어도 어떤 검색 요청 본문에도 그 좌표가 없다", async () => {

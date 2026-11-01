@@ -56,10 +56,9 @@ export function regionRequest(
   viewing: PlaceSearchRequest,
   mapBounds: MapBounds,
 ): PlaceSearchRequest {
-  const { query, preferences, previousConditions } = viewing;
+  const { query, previousConditions } = viewing;
   return {
     query,
-    ...(preferences && { preferences }),
     ...(previousConditions && { previousConditions }),
     mapBounds,
   };

@@ -18,6 +18,14 @@ const DEFAULT_TIMEOUT_MS = 10_000;
 // 호출자가 취소하면 AbortError를 그대로 던지고, 나머지 실패는 ApiError로 던진다.
 export async function request<T>(
   path: string,
+  options?: RequestOptions,
+): Promise<T> {
+  return (await requestWithHeaders<T>(path, options)).data;
+}
+
+// request와 같고, 성공한 응답의 헤더도 돌려준다
+export async function requestWithHeaders<T>(
+  path: string,
   {
     method = "GET",
     query,
@@ -26,7 +34,7 @@ export async function request<T>(
     signal,
     timeoutMs = DEFAULT_TIMEOUT_MS,
   }: RequestOptions = {},
-): Promise<T> {
+): Promise<{ data: T; headers: Headers }> {
   const requestHeaders = new Headers(headers);
   if (body !== undefined) {
     requestHeaders.set("Content-Type", "application/json");
@@ -44,7 +52,7 @@ export async function request<T>(
     });
 
     if (!response.ok) throw await toHttpError(response);
-    return (await readJson(response)) as T;
+    return { data: (await readJson(response)) as T, headers: response.headers };
   } catch (error) {
     throw toFetchError(error);
   }

@@ -18,6 +18,7 @@ import { RequestHistoryIcon } from "@/shared/ui/icon/icons/request-history";
 import { SearchIcon } from "@/shared/ui/icon/icons/search";
 import { SparkleIcon } from "@/shared/ui/icon/icons/sparkle";
 
+import { isAiFallback } from "../api/place-api";
 import type {
   LatLng,
   PlaceCard as PlaceCardData,
@@ -25,6 +26,18 @@ import type {
 } from "../model/place-types";
 import { PlaceCard, PlaceCardSkeleton } from "./place-card";
 import { SearchSteps } from "./search-steps";
+
+// BE가 AI 대신 키워드로 찾은 결과에 카드가 있을 때 카드 위에 띄운다(place-ai-search AC-27)
+export function AiFallbackNote({ className }: { className?: string }) {
+  return (
+    <Note className={className}>
+      지금은 AI 추천을 쓸 수 없어 가게 이름·메뉴로 찾았어요
+    </Note>
+  );
+}
+
+export const showsAiFallback = (response: PlaceSearchResponse | undefined) =>
+  response !== undefined && isAiFallback(response) && response.items.length > 0;
 
 // 중간(5-04), 전체(5-05), 요청 기록 펼침(와이어프레임 RequestHistory)
 export type PanelState = "middle" | "full" | "history";
@@ -282,6 +295,7 @@ export function PanelResults({
 
   return (
     <>
+      {showsAiFallback(firstPage) && <AiFallbackNote />}
       {unfilteredNearby && (
         <Note>위치를 확인할 수 없어 지역 기준으로 보여 드려요</Note>
       )}

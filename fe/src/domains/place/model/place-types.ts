@@ -32,12 +32,24 @@ export type MapBounds = {
 // BE와 FE가 해석하지 않고 다음 후속 요청에 그대로 돌려보내는 값
 export type SearchConditions = Record<string, unknown>;
 
+// 화면 상태와 검색 기록에 남는 요청. 비회원 답(preferences)은 보낼 때만 붙이므로 여기에 없다(place-ai-search D-16)
 export type PlaceSearchRequest = {
   query: string;
-  preferences?: string[];
   previousConditions?: SearchConditions;
   mapBounds?: MapBounds;
   cursor?: string;
+};
+
+// 비회원이 기기에 저장한 온보딩 답. 가입의 preferences와 같은 모양이다
+export type SearchPreferences = {
+  mood: string | null;
+  priorities: string[];
+  purposes: string[];
+  tastes: {
+    polarity: "LIKE" | "DISLIKE";
+    label: string;
+    code?: string | null;
+  }[];
 };
 
 export type ReasonTag = { source: EvidenceSource; label: string };
