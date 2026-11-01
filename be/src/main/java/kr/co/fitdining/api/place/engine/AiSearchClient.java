@@ -20,6 +20,7 @@ import kr.co.fitdining.api.place.dto.PlaceCard.ScoreItem;
 import kr.co.fitdining.api.place.dto.PlaceSearchRequest;
 import kr.co.fitdining.api.place.dto.PlaceSearchRequest.MapBounds;
 import kr.co.fitdining.api.place.dto.PlaceSearchResponse.EmptyReason;
+import kr.co.fitdining.api.user.Preferences;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -46,7 +47,7 @@ import tools.jackson.databind.json.JsonMapper;
 public class AiSearchClient {
 
 	static final String PATH = "/v1/search";
-	static final Duration BUDGET = Duration.ofSeconds(8);
+	static final Duration BUDGET = Duration.ofSeconds(12);
 	static final int FAILURE_THRESHOLD = 3;
 	static final Duration OPEN_DURATION = Duration.ofSeconds(30);
 
@@ -99,7 +100,7 @@ public class AiSearchClient {
 	/**
 	 * AI 검색을 부른다.
 	 *
-	 * @param request 추천 검색 요청. {@code cursor}와 {@code preferences}는 보내지 않는다.
+	 * @param request 추천 검색 요청. {@code cursor}는 보내지 않고, {@code preferences}는 비회원일 때만 {@code tasteProfile}로 보낸다.
 	 * @param userId 검증된 토큰의 사용자 id. 비회원이면 null이다.
 	 * @return 읽을 수 있는 200 응답. 주소가 없거나, 차단 중이거나, 실패하면 빈 값이다.
 	 */
@@ -141,8 +142,30 @@ public class AiSearchClient {
 		}
 		if (userId != null) {
 			body.put("userId", userId);
+		} else if (request.preferences() != null) {
+			body.put("tasteProfile", tasteProfile(request.preferences()));
 		}
 		return MAPPER.writeValueAsBytes(body);
+	}
+
+	/** 비회원 답변을 그대로 옮긴다. null인 {@code mood}·{@code code}는 빼고 빈 목록은 그대로 둔다. */
+	private static Map<String, Object> tasteProfile(Preferences preferences) {
+		Map<String, Object> profile = new LinkedHashMap<>();
+		if (preferences.mood() != null) {
+			profile.put("mood", preferences.mood());
+		}
+		profile.put("priorities", preferences.priorities());
+		profile.put("purposes", preferences.purposes());
+		profile.put("tastes", preferences.tastes().stream().map(chip -> {
+			Map<String, Object> taste = new LinkedHashMap<>();
+			taste.put("polarity", chip.polarity());
+			taste.put("label", chip.label());
+			if (chip.code() != null) {
+				taste.put("code", chip.code());
+			}
+			return taste;
+		}).toList());
+		return profile;
 	}
 
 	private static Map<String, Double> bounds(MapBounds mapBounds) {

@@ -47,8 +47,8 @@ curl -i -X POST http://localhost:8080/api/v1/places/search -H "Content-Type: app
 AI 호출
 
 - [x] AC-1: `cursor`가 없는 모든 추천 검색 요청은 홈의 "근처 맛집"을 포함해 요청마다 AI `POST {base-url}/v1/search`를 부른다(차단 중과 주소가 빈 경우는 AC-13, AC-7). 이전 요청의 결과를 다시 쓰지 않는다. "근처"가 들어 있다는 이유로 AI 없이 응답하지 않는다. (D-2, D-8, D-9)
-- [ ] AC-2: AI 요청 본문은 [AI 요청](#ai-요청) 표의 속성만 담는다. `query`는 받은 값 그대로, `previousConditions`는 받은 값 그대로이되 없거나 빈 객체(`{}`)면 빠지고, `mapBounds`는 [AI 요청](#ai-요청) 표의 규칙대로, `userId`와 `tasteProfile`은 AC-3의 경우에만 있다. `cursor`와 `preferences`는 없다. `fitdining.ai.modal-key`·`modal-secret`이 비어 있지 않으면 각각 `Modal-Key`·`Modal-Secret` 헤더로 실린다. (D-2, D-3, D-4, D-5)
-- [ ] AC-3: `Authorization: Bearer <AT>`가 유효하면 AI 요청의 `userId`는 그 토큰의 사용자 id이고, 본문에 `preferences`가 있어도 AI에 보내지 않는다(`tasteProfile` 없음). `Authorization` 헤더가 없으면 비회원이고 AI 요청에 `userId`가 없다. 비회원 요청에 `preferences`가 있으면 AI 요청의 `tasteProfile`은 그 `preferences`를 검증과 정리(AC-18)를 거친 값 그대로 담은 것이다. 속성 이름과 값은 같고, null인 `mood`와 칩의 null인 `code`는 빠지며, `priorities`·`purposes`·`tastes`는 비어 있어도 `[]`로 싣는다. `preferences`가 없으면 `tasteProfile`도 없다. (D-4, D-12)
+- [x] AC-2: AI 요청 본문은 [AI 요청](#ai-요청) 표의 속성만 담는다. `query`는 받은 값 그대로, `previousConditions`는 받은 값 그대로이되 없거나 빈 객체(`{}`)면 빠지고, `mapBounds`는 [AI 요청](#ai-요청) 표의 규칙대로, `userId`와 `tasteProfile`은 AC-3의 경우에만 있다. `cursor`와 `preferences`는 없다. `fitdining.ai.modal-key`·`modal-secret`이 비어 있지 않으면 각각 `Modal-Key`·`Modal-Secret` 헤더로 실린다. (D-2, D-3, D-4, D-5)
+- [x] AC-3: `Authorization: Bearer <AT>`가 유효하면 AI 요청의 `userId`는 그 토큰의 사용자 id이고, 본문에 `preferences`가 있어도 AI에 보내지 않는다(`tasteProfile` 없음). `Authorization` 헤더가 없으면 비회원이고 AI 요청에 `userId`가 없다. 비회원 요청에 `preferences`가 있으면 AI 요청의 `tasteProfile`은 그 `preferences`를 검증과 정리(AC-18)를 거친 값 그대로 담은 것이다. 속성 이름과 값은 같고, null인 `mood`와 칩의 null인 `code`는 빠지며, `priorities`·`purposes`·`tastes`는 비어 있어도 `[]`로 싣는다. `preferences`가 없으면 `tasteProfile`도 없다. (D-4, D-12)
 - [x] AC-4: `cursor`가 null이 아닌(빈 문자열 포함) 요청은 AI를 부르지 않고 400이다. `cursor`가 없거나 null이면 커서 없음이다. 이 판정은 DB 모드 엔진이 인증 뒤에 하므로 토큰이 무효면 401이 먼저이고, Mock 모드에는 적용되지 않는다. (D-10)
 
 AI 결과를 카드로
@@ -58,8 +58,8 @@ AI 결과를 카드로
 
 AI 실패와 대체
 
-- [ ] AC-7: 아래 경우 모두 응답은 200, [대체 결과](#대체-결과) 모양이고 `X-Fallback: AI_UNAVAILABLE`이 붙는다. ① `fitdining.ai.base-url`이 비었거나 공백뿐(부르기 전에 판정) ② 연결 실패(이름 풀이 실패, 연결 거부·끊김, TLS 실패, 200 헤더 뒤 본문을 읽다 끊김 등 시간 초과가 아닌 I/O 오류) ③ 재시도까지 합쳐 12초 안에 응답이 없음 ④ 5xx(`BUSY` 제외) ⑤ `503 BUSY`가 재시도 뒤에도 옴 ⑥ 200이 아닌 그 밖의 상태(4xx, 3xx, 200 외 2xx) ⑦ 200이지만 [읽을 수 없는 응답](#ai-응답), 또는 AI 호출 중 난 I/O 오류가 아닌 그 밖의 예외(형식이 잘못된 주소 포함. 이 경우에도 기동은 실패하지 않는다) ⑧ 카드가 하나 이상인데 모든 `placeId`가 카탈로그에 없음 ⑨ 차단 중. ⑧에서 AI 응답에 `fallbacks`가 있어도 헤더 값은 `AI_UNAVAILABLE` 하나다. AC-15의 DB 오류 말고는 어느 경우에도 5xx를 주지 않는다. (D-3, D-6, D-7, D-11)
-- [ ] AC-8: AI가 `503 BUSY`(상태 503이고 ProblemDetail `code`가 `BUSY`)를 주면 BE는 12초 예산 안에서 한 번만 다시 부른다. 다시 부르기 전에 기다릴지(`Retry-After: 1`)는 재량이지만, 기다림과 재시도 모두 예산 안이어야 한다. 재시도는 남은 예산을 제한 시간으로 하고, 그 안에 응답이 없으면 ③이다. 남은 예산이 없어 재시도하지 못하면 ⑤다. 재시도가 성공하면 AC-5대로 정상 응답한다. `BUSY`가 아닌 503과 다른 실패는 다시 부르지 않는다. (D-3)
+- [x] AC-7: 아래 경우 모두 응답은 200, [대체 결과](#대체-결과) 모양이고 `X-Fallback: AI_UNAVAILABLE`이 붙는다. ① `fitdining.ai.base-url`이 비었거나 공백뿐(부르기 전에 판정) ② 연결 실패(이름 풀이 실패, 연결 거부·끊김, TLS 실패, 200 헤더 뒤 본문을 읽다 끊김 등 시간 초과가 아닌 I/O 오류) ③ 재시도까지 합쳐 12초 안에 응답이 없음 ④ 5xx(`BUSY` 제외) ⑤ `503 BUSY`가 재시도 뒤에도 옴 ⑥ 200이 아닌 그 밖의 상태(4xx, 3xx, 200 외 2xx) ⑦ 200이지만 [읽을 수 없는 응답](#ai-응답), 또는 AI 호출 중 난 I/O 오류가 아닌 그 밖의 예외(형식이 잘못된 주소 포함. 이 경우에도 기동은 실패하지 않는다) ⑧ 카드가 하나 이상인데 모든 `placeId`가 카탈로그에 없음 ⑨ 차단 중. ⑧에서 AI 응답에 `fallbacks`가 있어도 헤더 값은 `AI_UNAVAILABLE` 하나다. AC-15의 DB 오류 말고는 어느 경우에도 5xx를 주지 않는다. (D-3, D-6, D-7, D-11)
+- [x] AC-8: AI가 `503 BUSY`(상태 503이고 ProblemDetail `code`가 `BUSY`)를 주면 BE는 12초 예산 안에서 한 번만 다시 부른다. 다시 부르기 전에 기다릴지(`Retry-After: 1`)는 재량이지만, 기다림과 재시도 모두 예산 안이어야 한다. 재시도는 남은 예산을 제한 시간으로 하고, 그 안에 응답이 없으면 ③이다. 남은 예산이 없어 재시도하지 못하면 ⑤다. 재시도가 성공하면 AC-5대로 정상 응답한다. `BUSY`가 아닌 503과 다른 실패는 다시 부르지 않는다. (D-3)
 - [x] AC-9: 홈 요청(`query`의 앞뒤 공백을 지운 값이 정확히 "근처 맛집"이고 `previousConditions`가 없거나 `{}`인 요청. `mapBounds`는 있어도 된다)의 대체 결과는 카탈로그 전체 카드이고 `nearby: true`다. (D-6)
 - [x] AC-10: 홈 요청이 아닌 요청의 대체 결과는 `query`의 키워드 검색 결과를 순위 순으로 카드로 만든 것이고 `nearby: false`다. 순서는 키워드 검색 히트 전체 → 히트의 좌표로 `mapBounds` 거르기 → 앞 20곳 → 카탈로그에서 id로 읽기이고, 카탈로그에서 읽히지 않는 장소는 빠진다(그래서 20곳보다 적을 수 있다). (D-6)
 - [x] AC-11: 대체 결과에서 `mapBounds`가 있으면 위도·경도가 그 영역 안(경계 포함)인 장소만 남는다. 네 값 중 빈 값은 그쪽을 제한하지 않는다. 홈 요청도 `mapBounds`가 있으면 영역 안만 남는다. (D-6)
@@ -87,7 +87,7 @@ AI 실패와 대체
 
 AI가 읽는 뷰
 
-- [ ] AC-24: BE 마이그레이션을 끝까지 적용한 DB에 뷰 `ai_place_search`가 있고(새 마이그레이션 하나로 만든다), 프로필이 있는 장소마다 한 행이 [AI가 읽는 뷰](#ai가-읽는-뷰)의 컬럼과 값을 갖는다. 프로필이 없는 장소는 행이 없다. 편의시설은 표의 이름이 있을 때만 그 코드가 `true`이고 그 밖의 코드는 키가 없다(`false`가 아니다). (D-15)
+- [x] AC-24: BE 마이그레이션을 끝까지 적용한 DB에 뷰 `ai_place_search`가 있고(새 마이그레이션 하나로 만든다), 프로필이 있는 장소마다 한 행이 [AI가 읽는 뷰](#ai가-읽는-뷰)의 컬럼과 값을 갖는다. 프로필이 없는 장소는 행이 없다. 편의시설은 표의 이름이 있을 때만 그 코드가 `true`이고 그 밖의 코드는 키가 없다(`false`가 아니다). (D-15)
 
 FE 검색 요청
 

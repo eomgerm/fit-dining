@@ -88,6 +88,13 @@ class AiSearchClientBudgetTest {
 	}
 
 	@Test
+	@DisplayName("예산_빈으로만든클라이언트는_재시도까지합쳐12초다")
+	void budget_default_isTwelveSeconds() {
+		// 실제로 12초를 기다리지 않고, 빈 생성자가 쓰는 값만 본다. 예산 동작은 아래 시험이 짧은 값으로 본다.
+		assertThat(AiSearchClient.BUDGET).isEqualTo(Duration.ofSeconds(12));
+	}
+
+	@Test
 	@DisplayName("예산_제때응답하면_읽는다")
 	void budget_timelyResponse_succeeds() {
 		handler = (exchange, call) -> respond(exchange, 200, OK);

@@ -130,6 +130,36 @@ class AiSearchClientTest {
 		}
 
 		@Test
+		@DisplayName("AI요청_비회원답변이있으면_tasteProfile로그대로보낸다")
+		void request_guestPreferences_sentAsTasteProfile() {
+			Preferences preferences = new Preferences(Preferences.Mood.QUIET, List.of(Preferences.Priority.SPACIOUS),
+					List.of(Preferences.Purpose.DATE), List.of(
+							new Preferences.TasteChip(Preferences.Polarity.LIKE, "조용한 곳", "QUIET"),
+							new Preferences.TasteChip(Preferences.Polarity.DISLIKE, "매운 음식")));
+			server.expect(requestTo(URL))
+					.andExpect(content().json("""
+							{"query":"카페","tasteProfile":{"mood":"QUIET","priorities":["SPACIOUS"],"purposes":["DATE"],
+							 "tastes":[{"polarity":"LIKE","label":"조용한 곳","code":"QUIET"},
+							           {"polarity":"DISLIKE","label":"매운 음식"}]}}""", JsonCompareMode.STRICT))
+					.andRespond(withSuccess(OK, MediaType.APPLICATION_JSON));
+
+			client().search(new PlaceSearchRequest("카페", preferences, null, null, null), null);
+		}
+
+		@Test
+		@DisplayName("AI요청_비회원답변의빈값은_null은빼고빈목록은그대로보낸다")
+		void request_guestPreferencesEmptyValues_dropsNullsKeepsEmptyLists() {
+			server.expect(requestTo(URL))
+					.andExpect(content().string("""
+							{"query":"카페","tasteProfile":{"priorities":[],"purposes":[],\
+							"tastes":[{"polarity":"LIKE","label":"창가 자리"}]}}"""))
+					.andRespond(withSuccess(OK, MediaType.APPLICATION_JSON));
+
+			client().search(new PlaceSearchRequest("카페", new Preferences(null, null, null,
+					List.of(new Preferences.TasteChip(Preferences.Polarity.LIKE, "창가 자리"))), null, null, null), null);
+		}
+
+		@Test
 		@DisplayName("AI요청_빈이전조건과빈지도영역은_빼고null로도넣지않는다")
 		void request_emptyPreviousAndBounds_omitted() {
 			server.expect(requestTo(URL))
