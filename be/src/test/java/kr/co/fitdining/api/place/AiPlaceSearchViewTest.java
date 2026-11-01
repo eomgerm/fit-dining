@@ -39,7 +39,7 @@ class AiPlaceSearchViewTest extends PostgresTestSupport {
 		placeIds.forEach(id -> jdbc.update("DELETE FROM places WHERE place_id = ?", id));
 	}
 
-	private long place(String... facilities) {
+	private long insertPlace(String... facilities) {
 		long id = jdbc.queryForObject("""
 				INSERT INTO places (naver_place_id, name, category_group, station, lat, lng, facilities)
 				VALUES (?, '뷰 시험 카페', 'CAFE', 'YEOKSAM', 37.5004, 127.0365, ?::text[])
@@ -49,7 +49,7 @@ class AiPlaceSearchViewTest extends PostgresTestSupport {
 		return id;
 	}
 
-	private void profile(long placeId) {
+	private void insertProfile(long placeId) {
 		jdbc.update("""
 				INSERT INTO place_profiles (place_id, summary_text, summary_vector, features, analyzed_review_count)
 				VALUES (?, '카페, 뷰 시험 카페. 역삼역 근처.', ?::vector, ?::jsonb, 10)""", placeId, VECTOR, FEATURES);
@@ -73,8 +73,8 @@ class AiPlaceSearchViewTest extends PostgresTestSupport {
 	@Test
 	@DisplayName("AI뷰_프로필이있는장소는_장소값과AI프로필모양으로읽힌다")
 	void view_placeWithProfile_readsPlaceValuesAndAiProfile() {
-		long id = place();
-		profile(id);
+		long id = insertPlace();
+		insertProfile(id);
 
 		assertThat(jdbc.queryForMap("""
 				SELECT category_group, station, lat, lng, summary_vector::text AS vector
@@ -94,21 +94,27 @@ class AiPlaceSearchViewTest extends PostgresTestSupport {
 	@Test
 	@DisplayName("AI뷰_표의편의시설이름은_코드true로바뀌고그밖의이름은버린다")
 	void view_knownFacilityNames_mappedToTrueCodes() {
-		long all = place("주차", "무선 인터넷", "단체 이용 가능", "예약", "콜키지 가능");
-		long valet = place("발렛파킹");
-		profile(all);
-		profile(valet);
+		long id = insertPlace("주차", "무선 인터넷", "단체 이용 가능", "예약", "콜키지 가능");
+		insertProfile(id);
 
-		assertThat(column("facilities", all)).isEqualTo(JSON.readTree("""
+		assertThat(column("facilities", id)).isEqualTo(JSON.readTree("""
 				{"PARKING": true, "WIFI": true, "GROUP": true, "RESERVATION": true}"""));
-		assertThat(column("facilities", valet)).isEqualTo(JSON.readTree("{\"PARKING\": true}"));
+	}
+
+	@Test
+	@DisplayName("AI뷰_발렛파킹만있으면_주차로본다")
+	void view_valetParkingOnly_mappedToParking() {
+		long id = insertPlace("발렛파킹");
+		insertProfile(id);
+
+		assertThat(column("facilities", id)).isEqualTo(JSON.readTree("{\"PARKING\": true}"));
 	}
 
 	@Test
 	@DisplayName("AI뷰_표의이름이없는장소는_시설키가없다")
 	void view_noKnownFacilityNames_emptyObject() {
-		long id = place("포장");
-		profile(id);
+		long id = insertPlace("포장");
+		insertProfile(id);
 
 		assertThat(column("facilities", id)).isEqualTo(JSON.readTree("{}"));
 	}
@@ -116,7 +122,7 @@ class AiPlaceSearchViewTest extends PostgresTestSupport {
 	@Test
 	@DisplayName("AI뷰_프로필이없는장소는_행이없다")
 	void view_placeWithoutProfile_noRow() {
-		long id = place("주차");
+		long id = insertPlace("주차");
 
 		assertThat(jdbc.queryForObject("SELECT count(*) FROM ai_place_search WHERE place_id = ?", Integer.class, id))
 				.isZero();

@@ -24,6 +24,11 @@ export function isAiFallback(response: PlaceSearchResponse | undefined) {
   return response !== undefined && aiFallbacks.has(response);
 }
 
+// 대체 안내를 띄울지. 카드가 없으면 emptyReason만 보인다(AC-27)
+export function showsAiFallback(response: PlaceSearchResponse | undefined) {
+  return isAiFallback(response) && response?.items.length !== 0;
+}
+
 export function suggestPlaces(q: string, signal?: AbortSignal) {
   return request<PlaceSuggestion[]>("/v1/places/suggest", {
     query: { q },

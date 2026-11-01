@@ -12,6 +12,7 @@ import {
   getPlace,
   isAiFallback,
   searchPlaces,
+  showsAiFallback,
   suggestPlaces,
 } from "./place-api";
 
@@ -138,6 +139,22 @@ describe("searchPlaces", () => {
 
     expect(response).toEqual(searchResponse);
     expect(isAiFallback(response)).toBe(expected);
+  });
+
+  it("대체 결과라도 카드가 없으면 안내를 띄우지 않는다", async () => {
+    const withCard = { ...searchResponse, totalCount: 1, items: [{}] };
+    for (const body of [searchResponse, withCard]) {
+      fetchMock.mockResolvedValueOnce(
+        Response.json(body, { headers: { "X-Fallback": "AI_UNAVAILABLE" } }),
+      );
+    }
+
+    const empty = await searchPlaces({ query: "카페" });
+    const filled = await searchPlaces({ query: "카페" });
+
+    expect(showsAiFallback(empty)).toBe(false);
+    expect(showsAiFallback(filled)).toBe(true);
+    expect(showsAiFallback(undefined)).toBe(false);
   });
 
   it("기기 위치를 얻었어도 어떤 검색 요청 본문에도 그 좌표가 없다", async () => {

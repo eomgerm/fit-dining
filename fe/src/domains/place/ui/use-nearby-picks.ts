@@ -1,11 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 
+import { showsAiFallback } from "../api/place-api";
 import { placeQueries } from "../api/place-queries";
 import { pickNearby, YEOKSAM_STATION } from "../model/nearby";
 import type { PlaceSearchResponse } from "../model/place-types";
 import { searchStore } from "../model/search-store";
-import { showsAiFallback } from "./result-panel";
 import { useHere } from "./use-search-store";
 
 // 장소별 최근 카드에 이미 넣은 응답. 상세에서 돌아와 다시 그려질 때 더 최근 검색의 카드를 덮어쓰지 않게 한다

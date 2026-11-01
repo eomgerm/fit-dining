@@ -18,7 +18,7 @@ import { RequestHistoryIcon } from "@/shared/ui/icon/icons/request-history";
 import { SearchIcon } from "@/shared/ui/icon/icons/search";
 import { SparkleIcon } from "@/shared/ui/icon/icons/sparkle";
 
-import { isAiFallback } from "../api/place-api";
+import { showsAiFallback } from "../api/place-api";
 import type {
   LatLng,
   PlaceCard as PlaceCardData,
@@ -35,9 +35,6 @@ export function AiFallbackNote({ className }: { className?: string }) {
     </Note>
   );
 }
-
-export const showsAiFallback = (response: PlaceSearchResponse | undefined) =>
-  response !== undefined && isAiFallback(response) && response.items.length > 0;
 
 // 중간(5-04), 전체(5-05), 요청 기록 펼침(와이어프레임 RequestHistory)
 export type PanelState = "middle" | "full" | "history";

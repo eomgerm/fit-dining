@@ -1596,7 +1596,10 @@ describe("SearchScreen", () => {
       fireEvent.click(screen.getByRole("button", { name: "새 검색" }));
       await nearbyList();
 
-      await waitFor(() => expect(nearbyBodies).toHaveLength(2));
+      // 캐시의 카드를 먼저 그리고 뒤에서 다시 받는다. 다른 테스트와 함께 돌아 느려도 기다린다
+      await waitFor(() => expect(nearbyBodies).toHaveLength(2), {
+        timeout: 5000,
+      });
     });
 
     it("첫 화면 대체 결과도 창 포커스나 재연결로는 다시 받지 않는다", async () => {

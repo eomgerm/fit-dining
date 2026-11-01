@@ -625,20 +625,18 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
                 />
               </div>
             )}
-            {nearby.aiFallback &&
-              nearby.cards.length > 0 &&
-              selectedNearbyId !== undefined && (
-                <AiFallbackNote className="mx-4" />
-              )}
             {nearby.cards.length > 0 && selectedNearbyId !== undefined && (
-              <NearbyCarousel
-                cards={nearby.cards}
-                selectedId={selectedNearbyId}
-                origin={nearby.origin}
-                originLabel={nearby.originLabel}
-                onSelect={handleNearbySelect}
-                onOpen={({ place }) => router.push(`/place?id=${place.id}`)}
-              />
+              <>
+                {nearby.aiFallback && <AiFallbackNote className="mx-4" />}
+                <NearbyCarousel
+                  cards={nearby.cards}
+                  selectedId={selectedNearbyId}
+                  origin={nearby.origin}
+                  originLabel={nearby.originLabel}
+                  onSelect={handleNearbySelect}
+                  onOpen={({ place }) => router.push(`/place?id=${place.id}`)}
+                />
+              </>
             )}
             <div className="px-4">
               <SearchBar
