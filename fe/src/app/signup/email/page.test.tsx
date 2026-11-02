@@ -108,21 +108,28 @@ it("closes the sheet and shows duplicate email beside its field", async () => {
   await screen.findByRole("button", { name: "동의하고 시작하기" });
   fireEvent.click(screen.getByRole("checkbox", { name: "전체 동의" }));
   fireEvent.click(screen.getByRole("button", { name: "동의하고 시작하기" }));
-  expect(
-    await screen.findByText("이미 가입한 이메일이에요. 로그인해 주세요."),
-  ).toBeTruthy();
+  expect(await screen.findByText("사용 중인 이메일입니다.")).toBeTruthy();
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   expect(screen.getByLabelText("이메일").getAttribute("aria-invalid")).toBe(
     "true",
   );
   expect(mocks.replace).not.toHaveBeenCalled();
-  expect(
-    screen.getByRole("link", { name: "로그인하기" }).getAttribute("href"),
-  ).toBe("/login");
+  expect(screen.queryByRole("link", { name: "로그인하기" })).toBeNull();
+  const next = screen.getByRole("button", { name: "다음" });
+  expect(next.hasAttribute("disabled")).toBe(true);
+  fireEvent.blur(screen.getByLabelText("이메일"));
+  fireEvent.change(screen.getByLabelText("닉네임"), {
+    target: { value: "다른이름" },
+  });
+  fireEvent.blur(screen.getByLabelText("닉네임"));
+  expect(screen.getByText("사용 중인 이메일입니다.")).toBeTruthy();
+  expect(next.hasAttribute("disabled")).toBe(true);
   fireEvent.change(screen.getByLabelText("이메일"), {
     target: { value: "changed@example.com" },
   });
   expect(screen.queryByRole("link", { name: "로그인하기" })).toBeNull();
+  expect(screen.queryByText("사용 중인 이메일입니다.")).toBeNull();
+  expect(next.hasAttribute("disabled")).toBe(false);
 });
 it("does not show the login link for a field error containing duplicate wording", async () => {
   mocks.signup.mockRejectedValue(

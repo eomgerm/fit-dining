@@ -14,7 +14,6 @@ import {
   type SignupErrors,
 } from "@/domains/auth/model/signup";
 import { Button } from "@/shared/ui/button/button";
-import { TextButton } from "@/shared/ui/button/text-button";
 import { IconButton } from "@/shared/ui/button/icon-button";
 import { TextField } from "@/shared/ui/form/text-field";
 import { ChevronLeftIcon } from "@/shared/ui/icon/icons/chevron-left";
@@ -33,7 +32,7 @@ export default function SignupEmailPage() {
   });
   const [errors, setErrors] = useState<SignupErrors>({});
   const [message, setMessage] = useState("");
-  const [emailTaken, setEmailTaken] = useState(false);
+  const [serverErrors, setServerErrors] = useState<SignupErrors>({});
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [agreements, setAgreements] = useState({
@@ -47,10 +46,17 @@ export default function SignupEmailPage() {
     event.preventDefault();
     const invalid = validateSignup(fields);
     setErrors(invalid);
+    if (Object.values(serverErrors).some(Boolean)) return;
     if (Object.keys(invalid).length === 0) setOpen(true);
   }
   async function start() {
-    if (submitting.current || !allAgreed || !valid) return;
+    if (
+      submitting.current ||
+      !allAgreed ||
+      !valid ||
+      Object.values(serverErrors).some(Boolean)
+    )
+      return;
     submitting.current = true;
     setBusy(true);
     setMessage("");
@@ -68,8 +74,7 @@ export default function SignupEmailPage() {
       router.replace("/location");
     } catch (error) {
       const failure = signupFailure(error);
-      setErrors(failure.fields);
-      setEmailTaken(failure.emailTaken);
+      setServerErrors(failure.fields);
       setMessage(failure.message);
       setOpen(false);
       const first = Object.keys(failure.fields)[0];
@@ -85,8 +90,8 @@ export default function SignupEmailPage() {
     }
   }
   return (
-    <main className="mx-auto flex min-h-svh w-full max-w-110 flex-col bg-surface px-5 pb-6 text-ink sm:px-8">
-      <header className="-mx-3 flex min-h-14 items-center gap-2">
+    <main className="mx-auto flex min-h-svh w-full max-w-110 flex-col bg-surface px-5 pb-4 text-ink sm:px-8">
+      <header className="relative -mx-3 flex min-h-14 items-center">
         <IconButton
           label="회원가입으로 돌아가기"
           role="link"
@@ -95,7 +100,9 @@ export default function SignupEmailPage() {
         >
           <ChevronLeftIcon />
         </IconButton>
-        <h1 className="text-title-md">이메일로 가입</h1>
+        <h1 className="pointer-events-none absolute inset-x-0 text-center text-title-sm">
+          이메일로 가입
+        </h1>
       </header>
       <form
         ref={formRef}
@@ -138,7 +145,7 @@ export default function SignupEmailPage() {
                 value={fields[field]}
                 disabled={busy}
                 required
-                error={errors[field]}
+                error={serverErrors[field] || errors[field]}
                 description={
                   field === "password" || field === "nickname"
                     ? signupMessages[field]
@@ -163,7 +170,10 @@ export default function SignupEmailPage() {
                       : {}),
                   }));
                   setMessage("");
-                  if (field === "email") setEmailTaken(false);
+                  setServerErrors((previous) => ({
+                    ...previous,
+                    [field]: undefined,
+                  }));
                 }}
               />
             );
@@ -174,19 +184,10 @@ export default function SignupEmailPage() {
             {message}
           </p>
         )}
-        {emailTaken && (
-          <TextButton
-            role="link"
-            nativeButton={false}
-            render={<Link href="/login" />}
-          >
-            로그인하기
-          </TextButton>
-        )}
         <Button
           className="mt-auto w-full"
           type="submit"
-          disabled={!valid || busy}
+          disabled={!valid || busy || Object.values(serverErrors).some(Boolean)}
         >
           다음
         </Button>

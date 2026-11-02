@@ -11,8 +11,11 @@ describe("signup errors", () => {
         problem: { status: 409, type: `urn:fitdining:auth:${field}-taken` },
       });
       expect(signupFailure(error).fields[field]).toBeTruthy();
+      if (field === "email")
+        expect(signupFailure(error).fields.email).toBe(
+          "사용 중인 이메일입니다.",
+        );
       expect(signupFailure(error).message).toBe("");
-      expect(signupFailure(error).emailTaken).toBe(field === "email");
     },
   );
   it("maps recognized 400 fields and ignores malformed extensions", () => {
@@ -33,7 +36,6 @@ describe("signup errors", () => {
       password: "password rule",
       nickname: "name rule",
     });
-    expect(signupFailure(error).emailTaken).toBe(false);
   });
   it("shows rate limiting and network failures", () => {
     expect(

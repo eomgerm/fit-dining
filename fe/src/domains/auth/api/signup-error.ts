@@ -4,19 +4,14 @@ import type { SignupErrors } from "../model/signup";
 export function signupFailure(error: unknown): {
   fields: SignupErrors;
   message: string;
-  emailTaken: boolean;
 } {
   const fields: SignupErrors = {};
-  const emailTaken =
-    error instanceof ApiError &&
-    error.status === 409 &&
-    error.problem?.type === "urn:fitdining:auth:email-taken";
   if (error instanceof ApiError) {
     if (
       error.status === 409 &&
       error.problem?.type === "urn:fitdining:auth:email-taken"
     )
-      fields.email = "이미 가입한 이메일이에요. 로그인해 주세요.";
+      fields.email = "사용 중인 이메일입니다.";
     if (
       error.status === 409 &&
       error.problem?.type === "urn:fitdining:auth:nickname-taken"
@@ -40,7 +35,6 @@ export function signupFailure(error: unknown): {
   }
   return {
     fields,
-    emailTaken,
     message: Object.keys(fields).length
       ? ""
       : error instanceof ApiError && error.status === 429
