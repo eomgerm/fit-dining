@@ -42,8 +42,8 @@ const SUPPORTED_AREAS = "강남역·역삼역·선릉역";
 // 손잡이를 이만큼 끌면 상태를 바꾼다
 const DRAG_THRESHOLD_PX = 30;
 
-// 카드 목록은 제목보다 4px 바깥(화면 가장자리에서 12px)에 붙는다
-const LIST_CLASS = "-mx-1 flex flex-col gap-2.5";
+// 제목과 안내는 화면 가장자리에서 20px, 카드 목록은 8px 바깥(12px)에 붙는다
+const LIST_CLASS = "-mx-2 flex flex-col gap-2.5";
 
 type ResultPanelProps = {
   state: PanelState;
@@ -124,36 +124,37 @@ export function ResultPanel({
       )}
       <PanelHandle expanded={state !== "middle"} onChange={onStateChange} />
 
+      {/* 머리글 버튼은 화면 왼쪽 8px, 오른쪽 12px에 붙는다 */}
       <div className="flex shrink-0 items-center justify-between px-4">
         <button
           type="button"
           aria-expanded={historyOpen}
           onClick={onToggleHistory}
-          className="-ml-1 flex h-11 items-center gap-1.5 px-1 text-label-md text-ink"
+          className="-ml-2 flex h-11 items-center gap-1 px-2 text-label-md text-ink"
         >
           {!historyOpen && (
             <RequestHistoryIcon size="md" className="text-icon" />
           )}
           요청 기록
           {historyOpen ? (
-            <ChevronUpIcon size="sm" className="text-icon" />
+            <ChevronUpIcon size="md" className="text-icon" />
           ) : (
-            <ChevronDownIcon size="sm" className="text-icon" />
+            <ChevronDownIcon size="md" className="text-icon" />
           )}
         </button>
         <button
           type="button"
           onClick={onNewSearch}
-          className="-mr-1 flex h-11 items-center gap-1 px-1 text-label-md text-ink-muted"
+          className="-mr-1 flex h-11 items-center gap-1 px-2 text-label-md text-ink-muted"
         >
-          <PlusIcon size="sm" />새 검색
+          <PlusIcon size="md" />새 검색
         </button>
       </div>
 
       {historyOpen ? (
         <div className="min-h-0 flex-1 overflow-y-auto pb-4">{history}</div>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-4">
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-5 pb-4">
           {showingResults && firstPage?.changeSummary && (
             <p
               role="status"
@@ -165,7 +166,8 @@ export function ResultPanel({
           )}
           <h2 className="text-title-sm text-ink">“{sentence}”</h2>
           {showingResults && chips.length > 0 && (
-            <div className="flex flex-wrap gap-1">
+            // 제목 아래 8px(5-06)
+            <div className="-mt-1 flex flex-wrap gap-1">
               {chips.map((chip, index) => (
                 <Tag key={index}>추가 조건 · {chip}</Tag>
               ))}
@@ -256,7 +258,8 @@ export function PanelResults({
   >) {
   if (searching) {
     return (
-      <div aria-busy className="flex flex-col gap-3">
+      // 단계 문구는 제목 아래 6px, 빈 카드는 그 아래 16px(5-03)
+      <div aria-busy className="-mt-1.5 flex flex-col gap-4">
         <SearchSteps onCancel={onCancelSearch} />
         <div className={LIST_CLASS}>
           <PlaceCardSkeleton />

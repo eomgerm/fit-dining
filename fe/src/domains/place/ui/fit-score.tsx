@@ -21,7 +21,8 @@ export function FitScore({ score, size, className }: FitScoreProps) {
   return (
     <div className={cn("flex flex-col items-end", className)}>
       <span className={scoreVariants({ size })}>{score}</span>
-      <span className="text-caption-sm text-ink-muted">핏 점수</span>
+      {/* 시안에서 라벨은 숫자 아래 3px 띄어 놓인다 */}
+      <span className="mt-0.75 text-caption-sm text-ink-muted">핏 점수</span>
     </div>
   );
 }

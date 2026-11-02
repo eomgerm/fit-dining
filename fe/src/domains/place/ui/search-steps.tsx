@@ -36,7 +36,8 @@ export function SearchSteps({ onCancel }: { onCancel?: () => void }) {
 
   const showSlow = slow && onCancel;
   return (
-    <div className="flex items-center justify-between gap-2">
+    // 줄 높이는 문구(22px)에 맞추고 44px "검색 취소"는 위아래로 넘친다(5-E02)
+    <div className="flex h-5.5 items-center justify-between gap-2">
       <p
         role="status"
         aria-live="polite"

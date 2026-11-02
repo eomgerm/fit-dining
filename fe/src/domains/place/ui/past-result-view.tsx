@@ -80,7 +80,7 @@ export function PastResultView({
             {formatRecentAt(past.at, now)} 결과 · “{past.sentence}”
           </span>
         </p>
-        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-4">
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-5 pb-4">
           <PanelResults
             searching={false}
             firstPage={firstPage}
