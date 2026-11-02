@@ -17,7 +17,7 @@ import { CloseIcon } from "@/shared/ui/icon/icons/close";
 import { MoonIcon } from "@/shared/ui/icon/icons/moon";
 import { SunIcon } from "@/shared/ui/icon/icons/sun";
 import { SparklesIcon } from "@/shared/ui/icon/icons/sparkles";
-import { WarningIcon } from "@/shared/ui/icon/icons/warning";
+import { InfoIcon } from "@/shared/ui/icon/icons/info";
 import { EditIcon } from "@/shared/ui/icon/icons/edit";
 import { AlertDialog } from "@/shared/ui/overlay/alert-dialog";
 import { cn } from "@/shared/lib/cn";
@@ -209,6 +209,8 @@ export function OnboardingScreen({
               const login = () => loginLink.current?.click();
               if (interceptIntro?.("login", login)) event.preventDefault();
             }}
+            // eslint-disable-next-line shadcn/no-restyle -- Main 시안의 로그인 링크만 15px/600으로 표시한다.
+            className="text-body-md font-semibold"
           >
             기존 계정으로 로그인
           </TextButton>
@@ -370,6 +372,8 @@ export function OnboardingScreen({
           {step === 4 && (
             <div className="mt-6">
               <Textarea
+                // eslint-disable-next-line shadcn/no-arbitrary-values, shadcn/no-restyle -- 공통 Textarea 변경 없이 Onb4 시안 높이를 적용한다.
+                className="[&>div]:h-[133px]"
                 label="취향 직접 적기"
                 value={text}
                 inputRef={input}
@@ -399,7 +403,7 @@ export function OnboardingScreen({
                     type="button"
                     disabled={!text.trim() || answers.tastes.length > 0}
                     onClick={analyze}
-                    className="inline-flex h-11 items-center gap-1.5 rounded-full bg-primary-soft px-4 text-body-md font-semibold text-primary-strong disabled:bg-surface-sunken disabled:text-ink-disabled"
+                    className="-mt-1.5 -mr-2 -mb-2 inline-flex h-11 items-center gap-1.5 rounded-full bg-primary-soft px-4 text-body-md font-semibold text-primary-strong disabled:bg-surface-sunken disabled:text-ink-disabled"
                   >
                     <SparklesIcon size="md" />
                     AI 분석
@@ -410,9 +414,9 @@ export function OnboardingScreen({
                 <p
                   id="taste-error"
                   role="alert"
-                  className="mt-2 flex items-center gap-1 text-body-sm text-danger"
+                  className="mt-2 flex items-center gap-1 text-caption-md text-danger"
                 >
-                  <WarningIcon size="sm" />
+                  <InfoIcon size="sm" />
                   잠시 후 다시 시도해 주세요
                 </p>
               )}
@@ -435,7 +439,7 @@ export function OnboardingScreen({
                         className={cn(
                           "onboarding-result-chip inline-flex min-h-11 max-w-full items-center rounded-sm border border-line-strong bg-surface pl-3 text-body-sm",
                           taste.polarity === "LIKE" &&
-                            "border-primary bg-primary-soft text-primary-strong",
+                            "border-primary bg-primary-soft leading-5 font-semibold text-primary-strong",
                         )}
                       >
                         <span className="min-w-0 wrap-anywhere">
@@ -499,7 +503,9 @@ export function OnboardingScreen({
             <SparklesIcon size="lg" />
           </span>
           <b className="text-title-md">AI가 취향을 분석하고 있어요</b>
-          <span className="text-body-sm">잠시만 기다려 주세요</span>
+          <span className="text-body-sm leading-5 text-on-secondary/80">
+            잠시만 기다려 주세요
+          </span>
         </div>
       )}
       <AlertDialog
