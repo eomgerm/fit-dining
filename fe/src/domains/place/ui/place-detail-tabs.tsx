@@ -94,14 +94,16 @@ export function HomeTab({
     <div className="flex flex-col">
       {(reasons.length > 0 || notes.length > 0 || card?.caution) && (
         <Section>
-          {reasons.length > 0 && <SectionHeader title="AI 추천 이유" />}
+          {reasons.length > 0 && (
+            <SectionHeader title="AI 추천 이유" className="mb-3" />
+          )}
           <div className="flex flex-col gap-2.5">
             {reasons.length > 0 && (
               <ul className="flex flex-col gap-2.5">
                 {reasons.map((reason) => (
                   <li
                     key={reason.title}
-                    className="flex flex-col gap-2.5 rounded-lg border border-line bg-surface p-4"
+                    className="flex flex-col gap-2.5 rounded-lg bg-surface p-4 ring-1 ring-line ring-inset"
                   >
                     <p className="text-title-sm text-ink">{reason.title}</p>
                     <div className="flex flex-wrap gap-1">
@@ -120,7 +122,7 @@ export function HomeTab({
                       <blockquote className="border-l-2 border-primary-disabled pl-3 text-body-sm text-ink">
                         “{reason.quote}”
                         {reason.quoteSource && (
-                          <footer className="mt-0.5 text-caption-sm text-ink-subtle">
+                          <footer className="mt-0.5 text-caption-sm text-ink-muted">
                             {reason.quoteSource}
                           </footer>
                         )}
@@ -182,10 +184,12 @@ export function HomeTab({
           <button
             type="button"
             onClick={onShowMenu}
-            className="-mt-2 mb-1 flex min-h-11 items-center gap-0.5 self-start text-title-lg text-ink"
+            className="mb-3 flex min-h-11 items-center gap-0.5 self-start text-title-lg text-ink"
           >
             메뉴
-            <span className="ml-1.5 text-ink-muted">{detail.menus.length}</span>
+            <span className="ml-1.5 font-semibold text-ink-muted">
+              {detail.menus.length}
+            </span>
             <ChevronRightIcon size="md" />
           </button>
           <div
@@ -389,8 +393,9 @@ export function InfoTab({ detail, here, now }: TabProps & { now: Date }) {
   const lines = infoLines(detail);
   return (
     <div className="flex flex-col">
-      <Section>
-        <SectionHeader title="영업시간" />
+      {/* 정보 탭 첫 섹션은 위 여백이 16px이다(6-04) */}
+      <Section className="pt-4">
+        <SectionHeader title="영업시간" className="mb-3" />
         <OpenStatusText
           status={detail.openStatus}
           notice={todayNotice(detail.hours, detail.openStatus, now)}
@@ -403,7 +408,7 @@ export function InfoTab({ detail, here, now }: TabProps & { now: Date }) {
         />
       </Section>
       <Section>
-        <SectionHeader title="위치" />
+        <SectionHeader title="위치" className="mb-3" />
         <AddressRow detail={detail} here={here} copyable />
         {/* 정보 탭을 열 때만 만든다(지도 사용량은 지도 생성 횟수). 쓸 수 없으면 자리를 차지하지 않는다 */}
         <PlaceMap
@@ -416,14 +421,14 @@ export function InfoTab({ detail, here, now }: TabProps & { now: Date }) {
       </Section>
       {(detail.phone || detail.website) && (
         <Section>
-          <SectionHeader title="연락처" />
+          <SectionHeader title="연락처" className="mb-3" />
           <ContactRows detail={detail} />
         </Section>
       )}
       <Section>
         {detail.facilities.length > 0 && (
           <>
-            <SectionHeader title="시설" />
+            <SectionHeader title="시설" className="mb-3" />
             <ul className="flex flex-wrap gap-2">
               {detail.facilities.map((facility) => (
                 <li
@@ -477,9 +482,20 @@ export function InfoTab({ detail, here, now }: TabProps & { now: Date }) {
 }
 
 // 두꺼운 띠로 나뉘는 섹션(와이어프레임 sec). 탭 바로 아래 첫 섹션에는 띠가 없다
-function Section({ children }: { children: ReactNode }) {
+function Section({
+  className,
+  children,
+}: {
+  className?: string;
+  children: ReactNode;
+}) {
   return (
-    <section className="flex flex-col border-line px-5 py-7 not-first:border-t-8">
+    <section
+      className={cn(
+        "flex flex-col border-line px-5 py-7 not-first:border-t-8",
+        className,
+      )}
+    >
       {children}
     </section>
   );
@@ -606,7 +622,8 @@ function ContactRow({
   );
 }
 
-// 요일별 영업시간 표. 오늘 줄은 굵게, 브레이크타임과 라스트오더는 줄마다 덧붙인다
+// 요일별 영업시간 표. 오늘 줄은 굵게, 브레이크타임과 라스트오더는 줄마다 덧붙인다.
+// 줄 아래 선(1px)이 높이를 차지하므로 아래 여백을 1px 줄여 시안(선이 높이를 차지하지 않는 줄 86px)과 맞춘다
 function WeekHours({
   hours,
   today,
@@ -632,7 +649,7 @@ function WeekHours({
               <th
                 scope="row"
                 className={cn(
-                  "w-16 py-2.5 text-left",
+                  "w-16 pt-2.5 pb-2.25 text-left",
                   isToday
                     ? "font-semibold text-ink"
                     : "font-normal text-ink-muted",
@@ -641,7 +658,9 @@ function WeekHours({
                 {DAY_LABELS[day.dayOfWeek]}
                 {isToday && " · 오늘"}
               </th>
-              <td className={cn("py-2.5", day.closed && "text-ink-muted")}>
+              <td
+                className={cn("pt-2.5 pb-2.25", day.closed && "text-ink-muted")}
+              >
                 {/* 휴무 요일은 BE closedDayNote와 같은 정기휴무다(날짜가 붙은 휴무는 '정보 없음'). 표 안에 적는다 */}
                 <span className="block">
                   {day.closed

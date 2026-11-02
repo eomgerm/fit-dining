@@ -243,7 +243,7 @@ function PlaceDetailView({
         </div>
       </div>
 
-      <section className="relative -mt-28 flex flex-col gap-1 px-5">
+      <section className="relative -mt-29 flex flex-col px-5">
         <PlaceMeta place={place} here={here} />
         <div className="flex items-end justify-between gap-3">
           <h1 className="text-headline-lg text-ink">{place.name}</h1>
@@ -268,9 +268,10 @@ function PlaceDetailView({
         <OpenStatusText
           status={detail.openStatus}
           notice={todayNotice(detail.hours, detail.openStatus, now)}
+          className="mt-1"
         />
         {detail.tags.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-1.5">
+          <div className="mt-3.5 flex flex-wrap gap-1.5">
             {detail.tags.map((tag) => (
               <Tag key={tag} variant={preferred.has(tag) ? "match" : "default"}>
                 {tag}
