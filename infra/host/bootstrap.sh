@@ -99,8 +99,8 @@ set_timezone() {
 setup_swap() {
   step "스왑"
   skipped swap && return 0
-  local want_mb=2048 cur_mb
-  if [ "$ROLE" = app ]; then want_mb=4096; fi
+  # 두 서버 모두 4GB다. B는 BE와 FE의 무거운 CI 잡이 동시에 돌 때 RAM 3.8GB를 조금 넘는다(설계 6.1절)
+  local want_mb=4096 cur_mb
   cur_mb="$(awk '/^SwapTotal:/ { print int($2 / 1024) }' /proc/meminfo)"
   if [ "$cur_mb" -ge $((want_mb * 95 / 100)) ]; then
     log "그대로(목표 ${want_mb}MB)"

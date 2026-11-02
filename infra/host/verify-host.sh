@@ -66,8 +66,7 @@ check_system() {
     if [ "$ROLE" = app ]; then ok_if "max_map_count가 262144다" "$(is "$(sysctl -n vm.max_map_count)" 262144)"; fi
   fi
   if skipped swap; then skip "스왑 (FIT_SKIP=swap)"; else
-    local want_mb=2048 cur_mb
-    if [ "$ROLE" = app ]; then want_mb=4096; fi
+    local want_mb=4096 cur_mb
     cur_mb="$(awk '/^SwapTotal:/ { print int($2 / 1024) }' /proc/meminfo)"
     ok_if "스왑이 목표(${want_mb}MB)의 95% 이상이다" "$([ "$cur_mb" -ge $((want_mb * 95 / 100)) ] && echo 1 || echo 0)"
     ok_if "재부팅 뒤에도 스왑이 켜지도록 fstab에 있다" "$(succeeds grep -qE '^/swapfile[[:space:]]' /etc/fstab)"

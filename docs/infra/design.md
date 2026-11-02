@@ -205,7 +205,7 @@ Fit Dining(Next.js SSR 프런트(PWA), Spring Boot 백엔드, OpenSearch 검색,
 | 영역 | A | B | 근거 |
 |---|---|---|---|
 | 시간대 | 호스트와 모든 컨테이너 `Asia/Seoul`(tzdata 포함 확인), DB는 `timestamptz` | 호스트 `Asia/Seoul` | 새벽 4시 KST 일괄 처리. A503은 호스트 KST와 컨테이너 UTC 불일치로 날짜 오류가 났다 |
-| 스왑 | 4GB swapfile, swappiness 10 | 2GB swapfile, swappiness 10 | OOM 완충 |
+| 스왑 | 4GB swapfile, swappiness 10 | 4GB swapfile, swappiness 10 (2026-11-02에 2GB에서 올렸다. BE와 FE의 무거운 CI 잡이 동시에 돌면 RAM 3.8GB를 조금 넘는다) | OOM 완충 |
 | 커널 | `vm.max_map_count=262144` | 해당 없음 | OpenSearch 필수값 |
 | Docker 로그 | `json-file` 10MB×3. be·fe·caddy는 50MB×5(compose `logging:`) | 10MB×3 | 로그 로테이션 부재가 선배 팀의 공통 결함 |
 | Docker 운영 | `live-restore`, 주 1회 이미지·빌더 캐시 prune(be·fe는 SHA 태그 최근 5개 유지, 볼륨은 지우지 않는다) | 주 1회 prune(7일 넘게 쓰지 않은 이미지) | prune 부재가 공통 결함. 시험에서 최근 5개 유지와 사용 중 이미지 보호를 확인했다 (확인: `test-host.sh prune`) |
