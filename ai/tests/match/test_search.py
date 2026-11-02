@@ -348,16 +348,17 @@ class TestEmptyAndFailures:
     def test_embedding_failure(
         self, fake_gms: FakeGms, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """검색_요청문인코딩이실패하면_저장소를읽지않고EmbeddingError를낸다"""
+        """검색_원격임베딩이실패하면_저장소를읽지않고실패종류를담은EmbeddingError를낸다"""
 
         def encode_queries(texts: list[str]) -> list[list[float]]:
-            raise RuntimeError("CUDA out of memory")
+            raise embedding.EmbeddingUnavailable("HTTP 401")
 
         fake_gms(answers())
         monkeypatch.setattr(embedding, "encode_queries", encode_queries)
         store = FakeStore()
 
-        with pytest.raises(EmbeddingError, match="RuntimeError"):
+        # RB-14 진단에 쓰도록 실패 종류(요청문 없음)를 남긴다
+        with pytest.raises(EmbeddingError, match="HTTP 401"):
             run(store)
         assert store.calls == []
 

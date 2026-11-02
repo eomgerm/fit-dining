@@ -1,7 +1,7 @@
 """환경변수로 의존성을 만들어 띄우는 AI API 앱.
 
-로컬에서는 `ai/`에서 `uv run --extra encoder --env-file .env uvicorn server.main:app`으로 띄운다.
-배포는 Modal이고 진입점은 따로 둔다(AI API Modal 배포 일감). 환경변수는
+로컬에서는 `ai/`에서 `uv run --env-file .env uvicorn server.main:app`으로 띄운다.
+배포는 서버 A의 컨테이너다(infra/app/Dockerfile.ai, design.md 11.4절). 환경변수는
 `ai/.env.example`에 설명이 있다.
 """
 
@@ -20,18 +20,16 @@ from fit_ai.match.json_store import JsonPlaceStore
 from fit_ai.match.pg_store import PgPlaceStore, PgTasteStore
 from fit_ai.match.taste_select import TasteStore
 from server.app import create_app
-from server.common import Dependencies
-
-logger = logging.getLogger("server")
+from server.common import Dependencies, log
 
 
 def build_dependencies(env: Mapping[str, str]) -> Dependencies:
     """환경변수로 앱의 의존성을 만든다.
 
     GMS 접속 설정은 공유 모듈 `fit_ai.gms`가 환경변수에서 직접 읽는다. 설정이 틀리면
-    장애로 가리지 않고 시작할 때 ValueError로 드러낸다(취향 spec 1단계). 인코더를
-    올리지 못하거나 장소 저장소(DB 접속 주소나 장소 파일)가 없으면 앱은 떠 있지만
-    `/healthz`와 검색은 503을 돌려준다.
+    장애로 가리지 않고 시작할 때 ValueError로 드러낸다(취향 spec 1단계). 원격 임베딩
+    설정(`EMBED_*`)이 틀리거나 장소 저장소(DB 접속 주소나 장소 파일)가 없으면 앱은 떠
+    있지만 `/healthz`와 검색은 503을 돌려준다. 시작할 때 Modal은 부르지 않는다.
 
     Args:
         env: 환경변수
@@ -46,10 +44,11 @@ def build_dependencies(env: Mapping[str, str]) -> Dependencies:
     """
     gms.check_config()
     return Dependencies(
-        embedding_ready=_warm_up_embedding(env),
+        embedding_ready=_embedding_ready(env),
         store=_place_store(env),
         gms_timeout=float(env.get("GMS_TIMEOUT_SECONDS", "5.0")),
         # 검색마다 GMS를 두 번 부르므로 연결을 다시 써서 TLS 연결 시간을 아낀다.
+        # 임베딩 연결은 `fit_ai.embedding`이 따로 다시 쓴다.
         gms_client=httpx.Client(),
         max_concurrent=int(env.get("MAX_CONCURRENT_REQUESTS", "8")),
         taste_store=_taste_store(env),
@@ -81,27 +80,19 @@ def _taste_store(env: Mapping[str, str]) -> TasteStore | None:
     return None
 
 
-def _warm_up_embedding(env: Mapping[str, str]) -> bool:
-    """`EMBEDDING_ENABLED`가 "true"면 요청문 인코더 모델을 미리 올린다.
+def _embedding_ready(env: Mapping[str, str]) -> bool:
+    """원격 임베딩 설정(`EMBED_*`)이 맞는지 본다. Modal은 부르지 않는다.
 
-    공유 모듈 `fit_ai.embedding`은 처음 부를 때 모델을 올린다(2GB 남짓 내려받기 포함).
-    첫 검색이 이를 기다리지 않도록 시작할 때 한 번 인코딩한다.
+    콜드 스타트가 수십 초라 시작할 때나 `/healthz`마다 부르면 준비가 늦어진다. 닿지
+    못하는 것은 검색 때 `embedding_failed`로 드러난다.
 
     Returns:
-        모델을 올렸으면 True
+        설정이 맞으면 True
     """
-    if env.get("EMBEDDING_ENABLED") != "true":
-        return False
-    try:
-        embedding.encode_queries(["준비"])
-    # 내려받기 오류, 깨진 모델 파일(safetensors), CUDA 오류 등 종류가 많다. 어떤 오류든
-    # 앱은 떠 있고 503으로 알려야 재시작을 되풀이하지 않는다.
-    except Exception as e:  # noqa: BLE001
-        logger.error(
-            json.dumps({"event": "embedding_failed", "error": type(e).__name__})
-        )
-        return False
-    return True
+    problem = embedding.remote_config_problem(env)
+    if problem is not None:
+        log("embedding_failed", error=problem)
+    return problem is None
 
 
 class _JsonFormatter(logging.Formatter):
@@ -144,16 +135,11 @@ def _configure_logging() -> None:
         # 요청마다 JSON이 아닌 로그를 남긴다.
         "httpx": logging.WARNING,
         "uvicorn.access": logging.WARNING,
-        # INFO면 인코딩마다 진행 막대를 그린다.
-        "sentence_transformers": logging.WARNING,
         # 접속 실패 메시지에 DB 주소가 들어간다. 실패는 앱 로그 `store_failed`로 남는다.
         "psycopg.pool": logging.ERROR,
     }
     for name, level in quiet.items():
         logging.getLogger(name).setLevel(level)
-    # 모델을 올릴 때 가중치 진행 막대를 그린다. transformers는 처음 불러올 때 이 값을
-    # 읽으므로 인코더를 올리기 전에 정한다.
-    os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
 
 
 _configure_logging()

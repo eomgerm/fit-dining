@@ -1,9 +1,11 @@
 """환경변수로 앱 의존성을 만드는지 확인한다.
 
 GMS 접속 설정은 공유 모듈 `fit_ai.gms`가 환경변수에서 직접 읽어서 monkeypatch로 넣는다.
-요청문 인코더 모델은 공유 모듈 `fit_ai.embedding`을 가짜로 바꿔 올린다.
+원격 임베딩은 `EMBED_*` 값이 있는지만 보고 시작할 때 부르지 않는다.
 """
 
+import json
+import logging
 from pathlib import Path
 
 import httpx
@@ -79,37 +81,44 @@ def test_off_unless_set(monkeypatch: pytest.MonkeyPatch) -> None:
     assert deps.embedding_ready is False
 
 
-def test_warms_up_embedding(monkeypatch: pytest.MonkeyPatch) -> None:
-    """의존성_EMBEDDING_ENABLED가true면_시작할때인코더모델을한번올린다"""
-    seen = []
-    monkeypatch.setattr(embedding, "encode_queries", lambda texts: seen.append(texts))
+EMBED_ENV = {
+    "EMBED_BASE_URL": "https://embed.example",
+    "EMBED_KEY": "key-id",
+    "EMBED_SECRET": "secret",
+}
+
+
+def test_ready_when_embed_settings_present(monkeypatch: pytest.MonkeyPatch) -> None:
+    """의존성_EMBED설정이모두있으면_Modal을부르지않고준비된것으로본다"""
+    monkeypatch.setattr(
+        embedding, "encode_queries", lambda texts: pytest.fail("시작할 때 불렀다")
+    )
     monkeypatch.setenv("GMS_ENABLED", "false")
 
-    deps = build_dependencies({"EMBEDDING_ENABLED": "true"})
-
-    assert deps.embedding_ready is True
-    assert seen == [["준비"]]
-
-
-class SafetensorError(Exception):
-    """깨진 모델 파일에서 나는 오류처럼 흔한 예외 계열 밖의 오류"""
+    assert build_dependencies(EMBED_ENV).embedding_ready is True
 
 
 @pytest.mark.parametrize(
-    "error", [OSError("모델 파일을 받지 못했다"), SafetensorError("파일이 깨졌다")]
+    "env",
+    [
+        {**EMBED_ENV, "EMBED_SECRET": ""},
+        {**EMBED_ENV, "EMBED_BASE_URL": "embed.example"},
+    ],
 )
-def test_embedding_load_failure(
-    monkeypatch: pytest.MonkeyPatch, error: Exception
+def test_bad_embed_settings_not_ready(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, env
 ) -> None:
-    """의존성_인코더모델을올리다어떤오류가나도_서버는죽지않고준비되지않은것으로본다"""
-
-    def encode_queries(texts: list[str]) -> list[list[float]]:
-        raise error
-
-    monkeypatch.setattr(embedding, "encode_queries", encode_queries)
+    """의존성_EMBED설정이틀리면_죽지않고준비되지않은것으로보고embedding_failed를남긴다"""
     monkeypatch.setenv("GMS_ENABLED", "false")
 
-    assert build_dependencies({"EMBEDDING_ENABLED": "true"}).embedding_ready is False
+    with caplog.at_level(logging.INFO, logger="server"):
+        assert build_dependencies(env).embedding_ready is False
+
+    [entry] = [json.loads(r.getMessage()) for r in caplog.records]
+    assert entry["event"] == "embedding_failed"
+    assert "EMBED_" in entry["error"]
+    # 값(비밀)은 로그에 남기지 않는다
+    assert "secret" not in caplog.text and "key-id" not in caplog.text
 
 
 def test_bad_gms_config_fails_at_start(monkeypatch: pytest.MonkeyPatch) -> None:

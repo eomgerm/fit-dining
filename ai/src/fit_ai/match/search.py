@@ -227,9 +227,12 @@ def empty_reason(conditions: Conditions, in_map_bounds: bool) -> EmptyReason:
 
 
 def _encode(text: str) -> list[float]:
-    """요청문을 공유 모듈 `fit_ai.embedding`으로 인코딩한다."""
+    """요청문을 공유 모듈 `fit_ai.embedding`으로 인코딩한다(서버에서는 Modal 원격 호출)."""
     try:
         [query] = embedding.encode_queries([text])
+    except embedding.EmbeddingUnavailable as e:
+        # 원격 실패는 메시지가 실패 종류(`HTTP 401` 등)뿐이라 그대로 남긴다.
+        raise EmbeddingError(str(e)) from e
     except (RuntimeError, OSError, ValueError) as e:
         # 메시지에 요청문이 섞일 수 있어 종류만 남긴다.
         raise EmbeddingError(type(e).__name__) from e

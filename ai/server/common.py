@@ -24,7 +24,8 @@ class Dependencies:
     요청문 인코딩과 GMS 호출은 공유 모듈 `fit_ai.embedding`, `fit_ai.gms`를 바로 부른다.
 
     Attributes:
-        embedding_ready: 요청문 인코더 모델을 올렸는지. 못 올렸으면 검색이 503이다.
+        embedding_ready: 원격 임베딩 설정(`EMBED_*`)이 맞는지. 틀리면 검색과 `/healthz`가
+            503이다. Modal에 닿는지는 보지 않는다.
         store: 장소 저장소. DB 접속 주소와 장소 파일이 모두 없으면 None이다.
         gms_timeout: GMS 한 번 부를 때 기다리는 시간(초)
         gms_client: GMS 연결을 다시 쓰는 HTTP 클라이언트. 없으면 부를 때마다 만든다.

@@ -100,9 +100,7 @@ def health(deps: Dependencies) -> JSONResponse | None:
         준비됐으면 None, 아니면 503 ProblemDetail
     """
     if not deps.embedding_ready:
-        return problem(
-            503, "EMBEDDING_UNAVAILABLE", "요청문 인코더가 아직 준비되지 않았다"
-        )
+        return problem(503, "EMBEDDING_UNAVAILABLE", "원격 임베딩 설정이 없거나 틀렸다")
     if deps.store is None:
         return problem(503, "PLACES_UNAVAILABLE", "장소 저장소가 설정되지 않았다")
     try:
@@ -125,9 +123,7 @@ def health(deps: Dependencies) -> JSONResponse | None:
 
 def _search(deps: Dependencies, body: SearchBody) -> JSONResponse:
     if not deps.embedding_ready:
-        return problem(
-            503, "EMBEDDING_UNAVAILABLE", "요청문 인코더가 아직 준비되지 않았다"
-        )
+        return problem(503, "EMBEDDING_UNAVAILABLE", "원격 임베딩 설정이 없거나 틀렸다")
     if deps.store is None:
         return problem(503, "PLACES_UNAVAILABLE", "장소 저장소가 설정되지 않았다")
 
@@ -169,7 +165,7 @@ def _search(deps: Dependencies, body: SearchBody) -> JSONResponse:
         ranked_by=ranked_by,
         fallbacks=fallbacks,
         models=ModelsBody(
-            embedding=f"{embedding.MODEL_ID}@{embedding.REVISION}",
+            embedding=embedding.MODEL_VERSION,
             llm=gms.MODEL if used_llm else None,
         ),
     )
