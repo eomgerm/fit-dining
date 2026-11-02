@@ -190,7 +190,7 @@ AC-9 ~ AC-12가 규칙이다(D-6). 요약하면 다음과 같다.
 
 ### AI가 읽는 뷰
 
-뷰 `ai_place_search`는 Flyway 마이그레이션으로 만든다(D-15). 버전 번호는 머지 직전 develop과 먼저 머지될 브랜치의 가장 높은 번호 다음이다. 지금 develop은 V11이고 리뷰 FK 브랜치(S15P31A302-128)가 V12를 쓰므로 V13이며, 그 브랜치가 먼저 머지되지 않으면 머지 전에 번호를 다시 맞춘다(Flyway는 이미 적용된 번호보다 낮은 새 번호를 거부한다). `places`와 `place_profiles`를 `place_id`로 이은 행이고, AI 코드(`ai/src/fit_ai/match/pg_store.py`)가 읽는 이름과 모양이 의무다.
+뷰 `ai_place_search`는 Flyway 마이그레이션으로 만든다(D-15). 버전 번호는 머지 직전 develop과 먼저 머지될 브랜치의 가장 높은 번호 다음이다. 지금 develop은 V11이고 이 브랜치가 리뷰 FK 브랜치(S15P31A302-128)보다 먼저 머지되므로 V12다. 그 브랜치는 머지 전에 자기 번호를 V13으로 다시 맞춘다(Flyway는 이미 적용된 번호보다 낮은 새 번호를 거부한다). `places`와 `place_profiles`를 `place_id`로 이은 행이고, AI 코드(`ai/src/fit_ai/match/pg_store.py`)가 읽는 이름과 모양이 의무다.
 
 | 컬럼 | 값 |
 |---|---|
