@@ -58,6 +58,12 @@ ok_if "유닛은 Docker 뒤에 뜨고 Docker가 재시작되면 같이 다시 �
 ok_if "유닛의 ExecStart는 규칙이 있으면 넣지 않는다(멱등)" "$(grep -q "iptables -C DOCKER-USER -d 169.254.169.254 -j DROP 2>/dev/null || iptables -I DOCKER-USER 1 -d 169.254.169.254 -j DROP" /tmp/unit.txt && echo 1 || echo 0)"
 ok_if "부팅 때 켜지도록 multi-user.target에 걸려 있다" "$(grep -q "^WantedBy=multi-user.target$" /tmp/unit.txt && echo 1 || echo 0)"
 
+echo "--- root가 아니면(iptables -C는 root만 읽는다) 규칙이 없다고 잘못 알리지 않고 root가 필요하다고 알린다"
+setpriv --reuid=65534 --regid=65534 --clear-groups bash "$S" check >/tmp/c3.log 2>&1; rc=$?
+ok_if "root가 아닌 check는 실패한다" "$([ "$rc" != 0 ] && echo 1 || echo 0)"
+ok_if "root가 필요하다고 알린다" "$(grep -q "root" /tmp/c3.log && echo 1 || echo 0)"
+ok_if "규칙이 없다는 거짓 보고를 하지 않는다(규칙은 실제로 있다)" "$(grep -q "규칙이 없다" /tmp/c3.log && echo 0 || echo 1)"
+
 echo "--- 잘못된 사용"
 bash "$S" bogus >/tmp/b.log 2>&1; rc=$?
 ok_if "모르는 인자는 거부한다" "$([ "$rc" != 0 ] && echo 1 || echo 0)"

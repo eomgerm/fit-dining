@@ -27,7 +27,7 @@
 | `bootstrap.sh` | 적용 스크립트(`ROLE=app\|ops`). A는 `/srv/fit/state`, `/srv/fit/web`을 `root:docker 2775`로 만든다(setgid라 deploy 러너(`gitlab-runner`, docker 그룹)가 쓴 파일도 docker 그룹이 되고, Caddy는 others로 읽기만 한다). 이미 있는 파일의 그룹은 서버에서 한 번 맞춘다(`chgrp -R docker /srv/fit/state /srv/fit/web && chmod -R g+rwX /srv/fit/state /srv/fit/web`) |
 | `verify-host.sh` | 읽기만 하는 점검. PASS, FAIL, SKIP만 출력하고 IP·키 값은 찍지 않는다 |
 | `networks.sh` | 서버 A의 공유 Docker 망 여섯 개(`net-edge`, `net-prod`, `net-dev`, `net-data`(internal), `net-obs`, `net-dbaccess`). bootstrap이 부르고 직접 실행해도 된다 |
-| `block-imds.sh` | 서버 A에서 컨테이너가 클라우드 메타데이터(`169.254.169.254`)로 나가는 패킷을 `DOCKER-USER`에서 버린다(`apply`, `check`, `unit`). 부팅과 Docker 재시작 때 다시 넣는 systemd 유닛도 설치한다. 호스트 자신의 접근은 막지 않는다. bootstrap이 부르고(ROLE=app) 직접 실행해도 된다 |
+| `block-imds.sh` | 서버 A에서 컨테이너가 클라우드 메타데이터(`169.254.169.254`)로 나가는 패킷을 `DOCKER-USER`에서 버린다(`apply`, `check`(root 필요), `unit`). 부팅과 Docker 재시작 때 다시 넣는 systemd 유닛도 설치한다. 호스트 자신의 접근은 막지 않는다. bootstrap이 부르고(ROLE=app) 직접 실행해도 된다 |
 | `runner.sh` | GitLab Runner 설치와 등록(`install`, `register`, `tune`, `status`). 아래 CI 러너 절 |
 | `envset.py` | `/etc/fit/*.env`에 환경변수를 넣고 바꾸고 지우는 도구. 아래 환경변수 넣기 절 |
 | `docker-prune.sh` | 주 1회 정리. A는 `be`·`fe`의 SHA 태그 최근 5개만 남기고, B는 7일 넘게 쓰지 않은 이미지를 지운다. 볼륨은 지우지 않는다 |

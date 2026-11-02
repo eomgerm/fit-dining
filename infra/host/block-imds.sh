@@ -3,7 +3,7 @@
 # 2026-11-02에 서버 A의 컨테이너에서 IMDSv2 토큰 발급이 200으로 닿는 것을 확인했다(호스트와 같은 주소). 컨테이너 안의 코드(특히 MR 코드를 도는
 # CI 러너)가 인스턴스의 역할 자격 증명과 user-data를 읽을 수 있다는 뜻이라, 컨테이너발 패킷만 DOCKER-USER에서 버린다.
 #   sudo bash infra/host/block-imds.sh        # 규칙을 넣고, 부팅과 Docker 재시작 때 다시 넣는 systemd 유닛을 설치한다(멱등)
-#   bash infra/host/block-imds.sh check       # 읽기만 한다(규칙과 유닛이 있는지)
+#   sudo bash infra/host/block-imds.sh check  # 읽기만 한다(규칙과 유닛이 있는지. iptables를 읽으려면 root가 필요하다)
 #   bash infra/host/block-imds.sh unit        # 설치할 유닛 파일 내용을 보여 준다
 # 호스트 자신의 접근(SSM 에이전트 등)은 막지 않는다. DOCKER-USER는 컨테이너에서 나가는(포워딩) 패킷만 거른다.
 # 환경변수(시험용): FIT_SKIP=systemd(유닛 설치를 건너뛴다), FIT_SYSTEMD_DIR(유닛 파일 위치)
@@ -74,6 +74,8 @@ do_apply() {
 
 do_check() {
   local ok=1
+  # iptables -C는 root만 읽는다. root가 아니면 규칙이 있어도 실패하므로 "규칙이 없다"로 잘못 알리지 않고 여기서 멈춘다
+  [ "$(id -u)" = 0 ] || die "root로 실행한다(sudo bash infra/host/block-imds.sh check)"
   command -v iptables >/dev/null 2>&1 || die "iptables가 없다"
   if rule_present; then log "PASS  컨테이너발 $ADDR 패킷을 버리는 규칙이 DOCKER-USER에 있다"; else log "FAIL  규칙이 없다(sudo bash infra/host/block-imds.sh)"; ok=0; fi
   if skipped systemd; then
