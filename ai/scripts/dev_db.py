@@ -10,9 +10,11 @@ AI가 읽는 장소는 뷰 `ai_place_search` 하나다(`fit_ai.match.pg_store`).
 뷰만 맞추면 된다는 걸 보인다. 회원 취향 예시(샘플 사용자 7명)도 저장 설계와 같은
 `user_preferences`에 넣는다.
 
-    uv run python scripts/dev_db.py          # 띄우고 채운다
-    uv run python scripts/dev_db.py --stop   # 멈춘다
-    uv run python scripts/dev_db.py --json samples/place/mock.json  # DB 없이 파일로 쓴다
+    uv run --extra encoder python scripts/dev_db.py   # 띄우고 채운다
+    uv run python scripts/dev_db.py --stop            # 멈춘다
+    uv run --extra encoder python scripts/dev_db.py --json samples/place/mock.json  # DB 없이 파일로 쓴다
+
+요약 문장을 인코딩하므로 `encoder` extra가 필요하다. `--stop`은 인코딩하지 않는다.
 
 마지막 줄에 찍히는 `DATABASE_URL`을 `.env`에 넣고 앱을 띄운다. `--json`이면 같은 장소를
 뷰의 행 모양(요약 벡터는 프로필 안)으로 파일에 쓴다. 실제 장소 DB가 생기기 전에

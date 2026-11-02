@@ -1,6 +1,6 @@
 """환경변수로 의존성을 만들어 띄우는 AI API 앱.
 
-로컬에서는 `ai/`에서 `uv run --env-file .env uvicorn server.main:app`으로 띄운다.
+로컬에서는 `ai/`에서 `uv run --extra encoder --env-file .env uvicorn server.main:app`으로 띄운다.
 배포는 Modal이고 진입점은 따로 둔다(AI API Modal 배포 일감). 환경변수는
 `ai/.env.example`에 설명이 있다.
 """

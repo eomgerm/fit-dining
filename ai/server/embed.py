@@ -54,7 +54,7 @@ image = (
     modal.Image.debian_slim(python_version="3.12")
     .uv_sync(
         groups=["server"],
-        extras=["cu128"],
+        extras=["encoder", "cu128"],
         extra_options="--no-dev",
         uv_version="0.13.4",
     )

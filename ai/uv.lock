@@ -334,7 +334,6 @@ dependencies = [
     { name = "numpy" },
     { name = "psycopg", extra = ["binary"] },
     { name = "psycopg-pool" },
-    { name = "sentence-transformers" },
 ]
 
 [package.optional-dependencies]
@@ -345,6 +344,9 @@ cpu = [
 cu128 = [
     { name = "torch", version = "2.11.0+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" } },
 ]
+encoder = [
+    { name = "sentence-transformers" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -352,10 +354,10 @@ dev = [
     { name = "pgserver" },
     { name = "pytest" },
     { name = "ruff" },
-    { name = "uvicorn" },
 ]
 server = [
     { name = "fastapi" },
+    { name = "uvicorn" },
 ]
 
 [package.metadata]
@@ -364,11 +366,11 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.5.4" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
     { name = "psycopg-pool", specifier = ">=3.2" },
-    { name = "sentence-transformers", specifier = ">=6.2.0" },
+    { name = "sentence-transformers", marker = "extra == 'encoder'", specifier = ">=6.2.0" },
     { name = "torch", marker = "extra == 'cpu'", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "fit-ai", extra = "cpu" } },
     { name = "torch", marker = "extra == 'cu128'", index = "https://download.pytorch.org/whl/cu128", conflict = { package = "fit-ai", extra = "cu128" } },
 ]
-provides-extras = ["cpu", "cu128"]
+provides-extras = ["encoder", "cpu", "cu128"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -376,9 +378,11 @@ dev = [
     { name = "pgserver", specifier = ">=0.1.4" },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "ruff", specifier = ">=0.17.1" },
+]
+server = [
+    { name = "fastapi", specifier = ">=0.162.0" },
     { name = "uvicorn", specifier = ">=0.54.0" },
 ]
-server = [{ name = "fastapi", specifier = ">=0.162.0" }]
 
 [[package]]
 name = "frozenlist"
