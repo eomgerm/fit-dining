@@ -227,11 +227,14 @@ class JobsTest(unittest.TestCase):
         for gone in ("fe:test", "fe:build"):
             self.assertNotIn(gone, CI, gone)
 
-    def test_deploy_stage_jobs_use_the_deploy_runner_and_the_rest_use_verify(self):
+    def test_deploy_stage_jobs_use_the_deploy_runner_fe_check_uses_the_fe_runner_and_the_rest_use_verify(self):
         for name in job_names():
             tags = effective(name).get("tags")
             if name in DEPLOY_TAGGED:
                 self.assertEqual(tags, ["deploy"], name)
+            elif name == "fe:check":
+                # A의 FE 검사 전용 러너. docker.sock이 없는 러너라 FE 검사 말고는 이 태그를 쓰지 않는다
+                self.assertEqual(tags, ["verify-fe"], name)
             else:
                 self.assertEqual(tags, ["verify"], name)
 

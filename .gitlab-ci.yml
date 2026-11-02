@@ -347,6 +347,10 @@ fe:scope:
 fe:check:
   extends: .verify
   image: $NODE_IMAGE
+  # A의 FE 검사 전용 러너(docker.sock 없음, 설계 6.1절)에서 돈다. B는 CPU가 2개뿐이다. 이 러너가 없거나 꺼져 있으면 이 잡이 pending으로 멈춘다
+  # (되돌리기: 이 태그를 verify로 바꾸는 MR, infra/host/README.md)
+  tags:
+    - verify-fe
   resource_group: verify-heavy-fe
   needs:
     # MR에서만 있다. 없으면(develop·master) 전체 시험이다
