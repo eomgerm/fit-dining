@@ -83,7 +83,7 @@ class AiEnvInitTest(unittest.TestCase):
         self.assertTrue(self.ensure_marker.exists(), "ensure-databases.sh를 돌렸다")
         ai = parse(self.env / "ai-dev.env")
         self.assertEqual(ai["APP_ENV"], "dev")
-        self.assertEqual(ai["GMS_BASE_URL"], "https://gms.example/gmsapi")
+        self.assertEqual(ai["GMS_BASE_URL"], "https://gms.example/gmsapi/api.openai.com/v1", "AI는 공급자 경로까지 있는 주소가 필요하다")
         self.assertEqual(ai["GMS_ENABLED"], "true")
         self.assertEqual(ai["GMS_API_KEY"], GMS_KEY)
         self.assertEqual(ai["EMBED_BASE_URL"], MODAL_URL)
@@ -91,6 +91,21 @@ class AiEnvInitTest(unittest.TestCase):
         self.assertEqual(ai["EMBED_SECRET"], MODAL_SECRET)
         self.assertEqual(ai["DATABASE_URL"], f"postgresql://fit_dev_ai:{data['FIT_DEV_AI_PASSWORD']}@postgres:5432/fit_dev")
         self.assertNoSecrets(out)
+
+    def test_the_gms_address_is_given_the_provider_path_the_ai_needs_unless_it_already_has_one(self):
+        for source, want in (
+            ("https://gms.example/gmsapi/", "https://gms.example/gmsapi/api.openai.com/v1"),
+            ("https://gms.example/gmsapi/api.openai.com/v1", "https://gms.example/gmsapi/api.openai.com/v1"),
+            ("https://gms.example/gmsapi/api.openai.com/v1/chat/completions", "https://gms.example/gmsapi/api.openai.com/v1/chat/completions"),
+            ("https://other.example/llm", "https://other.example/llm"),
+        ):
+            with self.subTest(source=source):
+                (self.env / "ai-dev.env").unlink(missing_ok=True)
+                lines = [("GMS_BASE_URL=" + source) if l.startswith("GMS_BASE_URL=") else l for l in (self.env / "dev.env").read_text(encoding="utf-8").splitlines()]
+                self.write("dev.env", chr(10).join(lines) + chr(10))
+                rc, out = self.run_script("dev")
+                self.assertEqual(rc, 0, out)
+                self.assertEqual(parse(self.env / "ai-dev.env")["GMS_BASE_URL"], want)
 
     def test_running_again_changes_nothing(self):
         self.run_script("dev")

@@ -32,6 +32,15 @@ AI_NAME="ai-$ENVN"
 
 # 파일에서 키의 첫 값(없으면 빈 문자열)
 getv() { { grep -E "^$2=" "$1" 2>/dev/null || true; } | head -n 1 | cut -d= -f2-; }
+# AI는 GMS_BASE_URL 끝에 /chat/completions를 붙여 부른다. BE 계약의 주소(.../gmsapi)에는 공급자 경로가 없어서 그대로 쓰면 GMS가 403을 낸다(2026-11-02 dev에서 확인)
+gms_base_for_ai() {
+  local u="${1%/}"
+  case "$u" in
+    */chat/completions | */v1) printf '%s' "$u" ;;
+    */gmsapi) printf '%s/api.openai.com/v1' "$u" ;;
+    *) printf '%s' "$u" ;;
+  esac
+}
 # 값이 있고 자리표시자가 아니면 참
 real() { [ -n "$1" ] && [ "${1#*REPLACE_ME}" = "$1" ]; }
 # 비밀이 아닌 값은 인자로, 비밀 값은 파이프로 넘긴다(이미 있는 값은 --yes로 덮는 일이 없게 호출하는 쪽이 먼저 확인한다)
@@ -75,7 +84,7 @@ do_init() {
 
   step "값 채우기(이미 있는 값은 건드리지 않는다)"
   put_plain "$AI_NAME" APP_ENV "$ENVN"
-  fill_plain GMS_BASE_URL "$(getv "$APP_FILE" GMS_BASE_URL)"
+  fill_plain GMS_BASE_URL "$(gms_base_for_ai "$(getv "$APP_FILE" GMS_BASE_URL)")"
   fill_plain GMS_ENABLED "$(getv "$APP_FILE" GMS_ENABLED)"
   src="$(getv "$APP_FILE" MODAL_BASE_URL)"
   case "$src" in

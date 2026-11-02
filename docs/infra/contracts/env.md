@@ -71,7 +71,7 @@
 | `TASTE_ANALYZER` | app | X | 온보딩 해석 구현. 기본 `mock`, AI 연결 시 `ai` |
 | `TASTE_PROFILE_ENABLED` | app | X | 가입 시 AI 프로필 계산. 기본 `false`, 실패 시 빈 features로 가입 계속 |
 | `MODAL_ENABLED` | app | O | 킬스위치. `false`면 키워드 검색으로 대체한다 |
-| `GMS_BASE_URL` | app, ai | O | GMS(SSAFY LLM API) 기준 URL |
+| `GMS_BASE_URL` | app, ai | O | GMS(SSAFY LLM API) 기준 URL. **AI는 끝에 `/chat/completions`를 붙여 부르므로 `ai` 그룹에는 공급자 경로까지 적는다**(`https://gms.ssafy.io/gmsapi/api.openai.com/v1`). `.../gmsapi`만 쓰면 GMS가 403을 내서 해석과 정렬이 규칙·유사도로 대체된다(2026-11-02 dev에서 확인). `infra/app/ai-env-init.sh`가 BE 쪽 값에서 이 형식으로 만든다 |
 | `GMS_API_KEY` | app, ai | O | 비밀 |
 | `GMS_ENABLED` | app, ai | O | 킬스위치 |
 | `DATABASE_URL` | ai | O | AI API가 읽는 Postgres 접속 주소(`postgresql://fit_<env>_ai:<비밀번호>@postgres:5432/fit_<env>`). 읽기 전용 role이고 비밀번호는 `data.env`의 `FIT_PROD_AI_PASSWORD`(dev는 `FIT_DEV_AI_PASSWORD`)와 같아야 한다. 비밀 |
