@@ -136,28 +136,41 @@ export default function SignupPage() {
             <span>
               가입하면 내 취향이 쌓여 더 정확한 장소 추천을 받아볼 수 있어요.
             </span>
-            <span className="mt-3 block text-caption-sm">
-              시작하면 <TermsModal kind="terms">이용약관</TermsModal>과{" "}
-              <TermsModal kind="privacy">개인정보처리방침</TermsModal>에 동의한
-              것으로 간주해요.
-            </span>
           </>
         }
         action={
-          <div className="flex w-full gap-2">
-            <Button
-              variant="outline"
-              size="md"
-              onClick={startAsGuest}
-              role="link"
-              nativeButton={false}
-              render={<Link href="/location" />}
-            >
-              가입 없이 시작
-            </Button>
-            <Button size="md" onClick={() => setSkip(false)}>
-              가입하기
-            </Button>
+          <div className="flex w-full flex-col gap-4">
+            <div className="flex w-full gap-2">
+              <Button
+                variant="outline"
+                size="md"
+                className="min-w-0 grow-131 basis-0"
+                onClick={startAsGuest}
+                role="link"
+                nativeButton={false}
+                render={<Link href="/location" />}
+              >
+                가입 없이 시작
+              </Button>
+              <Button
+                size="md"
+                className="min-w-0 grow-121 basis-0"
+                onClick={() => setSkip(false)}
+              >
+                가입하기
+              </Button>
+            </div>
+            <p className="text-caption-sm leading-4.5 text-ink-muted">
+              시작하면{" "}
+              <TermsModal kind="terms" variant="caption">
+                이용약관
+              </TermsModal>
+              과{" "}
+              <TermsModal kind="privacy" variant="caption">
+                개인정보처리방침
+              </TermsModal>
+              에<br /> 동의한 것으로 간주해요.
+            </p>
           </div>
         }
       />

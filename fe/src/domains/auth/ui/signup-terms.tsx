@@ -53,9 +53,9 @@ export function SignupTerms({
           })
         }
       >
-        전체 동의
+        <span className="font-semibold">전체 동의</span>
       </Checkbox>
-      <div className="my-3 border-t border-line" />
+      <div className="my-3" />
       {(Object.keys(agreementLabels) as (keyof typeof agreements)[]).map(
         (field) => (
           <div key={field} className="flex items-center justify-between gap-2">
@@ -69,8 +69,10 @@ export function SignupTerms({
                 }))
               }
             >
-              <span className="text-body-sm">
-                <span className="mr-2 text-primary-strong">필수</span>
+              <span className="text-body-md">
+                <span className="mr-2 font-semibold text-primary-strong">
+                  필수
+                </span>
                 {agreementLabels[field]}
               </span>
             </Checkbox>

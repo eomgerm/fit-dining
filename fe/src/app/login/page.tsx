@@ -164,7 +164,7 @@ export default function LoginPage() {
           </p>
         )}
         <Button
-          className="mt-3 w-full"
+          className={message ? "mt-2 w-full" : "mt-3 w-full"}
           type="submit"
           disabled={busy || !email || !password}
         >
@@ -176,6 +176,15 @@ export default function LoginPage() {
           )}
           {busy ? "로그인 확인 중" : "로그인"}
         </Button>
+        <div className="-mt-1 flex justify-center">
+          <TextButton
+            variant="muted"
+            type="button"
+            onClick={() => setNotice("비밀번호 찾기는 준비 중이에요.")}
+          >
+            비밀번호 찾기
+          </TextButton>
+        </div>
         <div className="flex justify-center">
           <TextButton
             variant="muted"
@@ -184,15 +193,6 @@ export default function LoginPage() {
             render={<Link href="/signup" />}
           >
             이메일로 가입하기
-          </TextButton>
-        </div>
-        <div className="flex justify-center">
-          <TextButton
-            variant="muted"
-            type="button"
-            onClick={() => setNotice("비밀번호 찾기는 준비 중이에요.")}
-          >
-            비밀번호 찾기
           </TextButton>
         </div>
         {notice && (

@@ -7,7 +7,7 @@ export function SocialButtons({ from }: { from: "login" | "signup" }) {
         <a
           key={provider}
           href={`/api/auth/oauth/${provider}?from=${from}`}
-          className={`inline-flex h-12 w-full items-center justify-center rounded-md px-5 text-button-md whitespace-nowrap transition select-none motion-safe:active:scale-98 ${provider === "kakao" ? "bg-kakao text-ink" : provider === "naver" ? "bg-naver text-on-primary" : "border border-line-strong bg-surface text-ink"}`}
+          className={`inline-flex h-13 w-full items-center justify-center rounded-md px-5 text-button-md whitespace-nowrap transition select-none motion-safe:active:scale-98 ${provider === "kakao" ? "bg-kakao text-ink" : provider === "naver" ? "bg-naver text-on-primary" : "border border-line-strong bg-surface text-ink"}`}
         >
           {provider === "kakao" ? (
             <KakaoIcon size="md" className="mr-2" />

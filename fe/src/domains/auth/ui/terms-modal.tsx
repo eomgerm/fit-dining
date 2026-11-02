@@ -4,22 +4,30 @@ import { Dialog } from "@base-ui/react/dialog";
 import type { ReactNode } from "react";
 import { termsContent, type TermsKind } from "../model/terms-content";
 import { Button } from "@/shared/ui/button/button";
-import { TextButton } from "@/shared/ui/button/text-button";
 
 // Base UI가 중첩 팝업의 포커스와 Esc를 관리하도록 루트를 부모 팝업 안에 둔다.
 export function TermsModal({
   kind,
   disabled,
   children,
+  variant = "view",
 }: {
   kind: TermsKind;
   disabled?: boolean;
   children: ReactNode;
+  variant?: "view" | "caption";
 }) {
   const content = termsContent[kind];
   return (
     <Dialog.Root>
-      <Dialog.Trigger disabled={disabled} render={<TextButton />}>
+      <Dialog.Trigger
+        disabled={disabled}
+        className={
+          variant === "caption"
+            ? "inline text-caption-sm font-normal text-ink-muted underline underline-offset-2"
+            : "inline-flex min-h-11 min-w-11 items-center justify-center text-body-sm font-normal text-ink-muted"
+        }
+      >
         {children}
       </Dialog.Trigger>
       <Dialog.Portal>
