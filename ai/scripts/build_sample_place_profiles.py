@@ -1,7 +1,7 @@
 """샘플 장소 20곳의 장소 프로필과 확인용 리포트를 만든다(spec 7단계 샘플 장소).
 
-    cd ai && uv run --env-file .env python scripts/build_sample_place_profiles.py
-    cd ai && uv run --env-file .env python scripts/build_sample_place_profiles.py --reuse  # 페르소나만 새로
+    cd ai && uv run --extra encoder --env-file .env python scripts/build_sample_place_profiles.py
+    cd ai && uv run --extra encoder --env-file .env python scripts/build_sample_place_profiles.py --reuse  # 페르소나만 새로
 
 출력(samples/place/)에는 네이버 리뷰 원문 구절이 들어가므로 커밋하지 않는다.
 """

@@ -1,6 +1,6 @@
 """정제 CSV(clean/)의 장소 전부를 분석해 장소 프로필 파일을 만든다(S15P31A302-113, place-profile spec).
 
-    cd ai && uv run --env-file .env python scripts/build_place_profiles.py <clean 폴더>
+    cd ai && uv run --extra encoder --env-file .env python scripts/build_place_profiles.py <clean 폴더>
 
 GMS는 장소마다 본문 추출 (리뷰 수 ÷ extract.BATCH_SIZE)번과 페르소나 1번을 부른다. GMS_ENABLED가
 true가 아니면 부르지 않고 키워드·메뉴 근거만으로 만든다(페르소나 없음).

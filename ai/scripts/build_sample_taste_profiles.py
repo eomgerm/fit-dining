@@ -1,6 +1,6 @@
 """샘플 사용자 7명의 취향 프로필과 코드 문구 벡터를 만든다(spec 6단계 샘플 사용자).
 
-    cd ai && uv run --env-file .env python scripts/build_sample_taste_profiles.py
+    cd ai && uv run --extra encoder --env-file .env python scripts/build_sample_taste_profiles.py
 
 GMS가 꺼져 있으면 직접 입력은 해석에 실패해 태그 근거만 남는다.
 """

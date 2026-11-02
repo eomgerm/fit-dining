@@ -53,7 +53,7 @@ ai/
 ## 취향 프로필 샘플 만들기
 
 ```bash
-uv run --env-file .env python scripts/build_sample_taste_profiles.py
+uv run --extra encoder --env-file .env python scripts/build_sample_taste_profiles.py
 ```
 
 `samples/taste/`에 `profiles.json`(샘플 사용자 7명)과 `code_vectors.json`을 만듭니다. `profiles.json`은 41이 읽을 출력 형식의 스냅숏이라 커밋합니다. GMS 응답이 실행마다 조금 달라질 수 있으니 프롬프트나 출력 형식을 바꿀 때만 다시 만듭니다. `code_vectors.json`은 장소 벡터와 같은 환경에서 만들어야 해서(아래 "GPU로 돌리기") 그때 커밋합니다. `GMS_ENABLED`가 `true`가 아니면 직접 입력은 해석 대기(`like: null`)로 남습니다. 규칙은 `docs/specs/taste-profile/spec.md`에 있습니다.
@@ -118,10 +118,12 @@ Modal Environment는 `fit-test`·`fit-dev`·`fit-prod`이고 앱 이름은 모�
 
 ```bash
 uv run --extra encoder python scripts/dev_db.py                  # 개발 DB를 띄우고 예시 장소를 채운다
-# 마지막 줄의 DATABASE_URL과 EMBEDDING_ENABLED=true를 .env에 넣는다(GMS 설정도 .env에 둔다)
-uv run --extra encoder --env-file .env uvicorn server.main:app   # 검색 API를 띄운다
+# 마지막 줄의 DATABASE_URL과 Modal 임베딩 값(EMBED_*)을 .env에 넣는다(GMS 설정도 .env에 둔다)
+uv run --env-file .env uvicorn server.main:app                   # 검색 API를 띄운다
 uv run python scripts/dev_db.py --stop                           # 개발 DB를 멈춘다
 ```
+
+검색 API는 요청문을 Modal 임베딩 앱(`fit-dev`의 `fit-embed`)으로 인코딩해서 torch 없이 돕니다. `EMBED_BASE_URL`, `EMBED_KEY`, `EMBED_SECRET`이 비면 `/healthz`와 검색이 503입니다. 장소 문서는 `.env`와 상관없이 늘 로컬 모델로 인코딩합니다(`encoder` extra). 질의는 `.env`에 `EMBED_BASE_URL`이 있으면 스크립트에서도 Modal로 인코딩합니다.
 
 개발 DB에는 회원 취향 예시(샘플 사용자 7명, 회원 id `"1"`~`"7"`)도 들어 있어 요청에 `"userId": "1"`을 넣으면 취향을 읽습니다.
 

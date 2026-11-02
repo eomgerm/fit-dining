@@ -199,7 +199,7 @@ BE는 검색마다 `modal_llm_calls_total`과 `modal_embedding_calls_total`을 �
 
 ## 3. `GET /healthz`
 
-준비됐으면 200 `{"status": "ok"}`, 아니면 503 ProblemDetail이다. 인코더를 못 올렸으면 `EMBEDDING_UNAVAILABLE`, DB 주소가 없거나 못 읽으면 `PLACES_UNAVAILABLE`, 모든 장소의 벡터 모델이 다르면 `MODEL_MISMATCH`다. 일부 장소만 다르면 200이고 그 장소만 검색에서 빠진다.
+준비됐으면 200 `{"status": "ok"}`, 아니면 503 ProblemDetail이다. 원격 임베딩 설정(`EMBED_*`)이 비었거나 틀렸으면 `EMBEDDING_UNAVAILABLE`(Modal은 부르지 않는다), DB 주소가 없거나 못 읽으면 `PLACES_UNAVAILABLE`, 모든 장소의 벡터 모델이 다르면 `MODEL_MISMATCH`다. 일부 장소만 다르면 200이고 그 장소만 검색에서 빠진다.
 
 ## 4. 오류
 
@@ -212,7 +212,7 @@ BE는 검색마다 `modal_llm_calls_total`과 `modal_embedding_calls_total`을 �
 | 400 | `INVALID_REQUEST` | 요청 형식이 틀림(길이, 모르는 속성, 타입, 읽을 수 없는 본문) | BE 버그다. 로그를 남긴다 |
 | 404, 405 | `HTTP_ERROR` | 없는 주소이거나 메서드가 틀림 | 설정을 확인한다 |
 | 503 | `BUSY` | 동시 처리 상한을 넘음. `Retry-After: 1` | 한 번 다시 부르거나 대신 처리한다 |
-| 503 | `EMBEDDING_UNAVAILABLE` | 요청문 인코더가 없거나 인코딩이 실패함 | 대신 처리하고 임베딩 폴백으로 센다 |
+| 503 | `EMBEDDING_UNAVAILABLE` | 원격 임베딩 설정이 없거나 Modal 호출이 두 번 실패함 | 대신 처리하고 임베딩 폴백으로 센다 |
 | 503 | `PLACES_UNAVAILABLE` | DB 주소가 없거나 DB를 읽지 못함 | 대신 처리하고 알림 |
 | 503 | `MODEL_MISMATCH` | `/healthz`만. 모든 장소의 벡터 모델이 다름 | 40 프로필을 같은 모델로 다시 만든다 |
 | 500 | `INTERNAL_ERROR` | 예상하지 못한 오류 | 대신 처리하고 알림 |

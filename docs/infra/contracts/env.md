@@ -75,7 +75,7 @@
 | `GMS_API_KEY` | app, ai | O | 비밀 |
 | `GMS_ENABLED` | app, ai | O | 킬스위치 |
 | `DATABASE_URL` | ai | O | AI API가 읽는 Postgres 접속 주소(`postgresql://fit_<env>_ai:<비밀번호>@postgres:5432/fit_<env>`). 읽기 전용 role이고 비밀번호는 `data.env`의 `FIT_PROD_AI_PASSWORD`(dev는 `FIT_DEV_AI_PASSWORD`)와 같아야 한다. 비밀 |
-| `EMBED_BASE_URL` | ai | O | AI API가 임베딩을 부르는 Modal 엔드포인트의 기준 URL(`<URL>/embed`). 환경별 앱이 다르다. 키 이름은 AI 팀과 확정한다(제안) |
+| `EMBED_BASE_URL` | ai | O | AI API가 임베딩을 부르는 Modal 엔드포인트의 기준 URL(`<URL>/embed`). 환경별 앱이 다르다. 셋 중 하나라도 비면 AI API `/healthz`가 503이다 |
 | `EMBED_KEY` | ai | O | Modal `Modal-Key` 헤더 값(프록시 토큰 ID). 비밀 |
 | `EMBED_SECRET` | ai | O | Modal `Modal-Secret` 헤더 값. 비밀 |
 | `DB_POOL_SIZE` | ai | X | 컨테이너 하나가 장소를 읽으려고 여는 DB 접속 수(취향용 1개를 더 연다). role의 접속 상한 6을 넘지 않게 둔다. 기본 2 |
