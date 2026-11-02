@@ -844,7 +844,7 @@ AI API(`ai/server`, FastAPI)는 A의 컨테이너로 돈다. 임베딩 모델은
 
 **환경변수**
 
-- 컨테이너는 `/etc/fit/ai-<env>.env`를 읽는다(`ai` 그룹, 계약은 env.md에 후속으로 추가한다). `DATABASE_URL`, `GMS_*`, Modal 호출 값(`MODAL_BASE_URL`, `MODAL_KEY`, `MODAL_SECRET`), `MAX_CONCURRENT_REQUESTS` 등이다. 비밀은 `envset.py`로만 넣는다. BE는 Modal을 직접 부르지 않는다. BE env의 `MODAL_BASE_URL`은 AI API 주소로 쓰이고(`MODAL_KEY`·`MODAL_SECRET`은 A 내부 호출이라 비운다) 계약의 이름과 설명은 BE와 맞춘다. 지금 dev.env에 들어 있는 Modal 값(임베딩 주소와 토큰)은 AI API가 생기면 `ai-dev.env`로 옮긴다.
+- 컨테이너는 `/etc/fit/ai-<env>.env`를 읽는다(`ai` 그룹, 키는 env.md에 있다). `DATABASE_URL`, `GMS_*`, 임베딩 호출 값(`EMBED_BASE_URL`, `EMBED_KEY`, `EMBED_SECRET`. 이름은 AI 팀과 확정한다), `MAX_CONCURRENT_REQUESTS` 등이다. 비밀은 `envset.py`로만 넣는다. BE는 Modal을 직접 부르지 않는다. BE env의 `MODAL_BASE_URL`은 AI API 주소로 쓰이고(`MODAL_KEY`·`MODAL_SECRET`은 A 내부 호출이라 비운다) 계약의 이름과 설명은 BE와 맞춘다. 지금 dev.env에 들어 있는 Modal 값(임베딩 주소와 토큰)은 AI API가 생기면 `ai-dev.env`의 `EMBED_*`로 옮긴다.
 
 **AI 팀·BE 팀의 전제**(구현 전에 필요하다)
 
