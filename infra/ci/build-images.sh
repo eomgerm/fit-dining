@@ -49,8 +49,8 @@ check_be_input() {
 }
 
 check_fe_input() {
-  [ -f "$BUNDLE_DIR/standalone/server.js" ] || die "FE 번들이 아니다($BUNDLE_DIR/standalone/server.js가 없다). fe:build의 아티팩트를 확인한다"
-  [ -d "$BUNDLE_DIR/static" ] || die "FE 번들에 static/이 없다($BUNDLE_DIR/static). fe:build의 아티팩트를 확인한다"
+  [ -f "$BUNDLE_DIR/standalone/server.js" ] || die "FE 번들이 아니다($BUNDLE_DIR/standalone/server.js가 없다). fe:check의 아티팩트를 확인한다"
+  [ -d "$BUNDLE_DIR/static" ] || die "FE 번들에 static/이 없다($BUNDLE_DIR/static). fe:check의 아티팩트를 확인한다"
 }
 
 build_be() {

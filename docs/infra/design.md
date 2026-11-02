@@ -281,7 +281,7 @@ CPU는 dev 컨테이너에 `cpus` 상한을, prod에는 `cpu_shares` 우선순�
 - 스왑은 2GB다.
 - 디스크는 (미확인)이며 CI 이미지, Gradle·npm 캐시, 백업에 최소 20GB가 필요하다 (추정).
 - 금고의 rsync·timer는 메모리를 거의 쓰지 않는다.
-- B에서 OpenSearch 컨테이너 테스트는 메모리상 불가하므로 BE 계약(12.1 #13)에 명시한다. 프런트 테스트(`fe:test`)는 Node 힙을 1.5GB 안으로 묶는다(12.5절).
+- B에서 OpenSearch 컨테이너 테스트는 메모리상 불가하므로 BE 계약(12.1 #13)에 명시한다. 프런트 검사(`fe:check`)는 Node 힙을 1.5GB 안으로 묶는다(12.5절).
 
 ### 4.3 디스크 (A, 320GB)
 
@@ -436,15 +436,14 @@ Caddy 컨테이너(`caddy:2.x`, 구현 시 최신 2.x를 핀)가 A의 80·443만
 | `lint:*` | verify | 아래 목록 |
 | `be:test` | verify | Gradle 테스트(`sh ./gradlew test`: 래퍼가 git에서 실행 권한이 없다). DB가 필요한 BE 시험은 Testcontainers(`PostgresTestSupport`)가 dev·prod와 같은 pgvector(`PGVECTOR_IMAGE` 핀)를 직접 띄운다. 그래서 잡에는 DB 서비스도 `SPRING_DATASOURCE_*` 환경변수도 주지 않는다(환경변수가 시험이 코드로 넣은 값을 가린 적이 있다). Testcontainers는 최신 버전이어야 하고, 잡 컨테이너가 형제 컨테이너의 게시 포트에 닿도록 B에 ufw `docker0` 규칙이 있다(3절 호스트 표. 2026-10-26 BE 팀이 Testcontainers로 옮길 때 확인했고, 같은 날 DB 서비스를 뺐다). JUnit 보고서를 MR에 보인다(실패해도 올린다). jar는 만들지 않는다. MR마다 55MB를 GitLab으로 올리면 느리고, 서버가 흔들릴 때(2026-10-23, 502) 테스트까지 같이 실패한다 |
 | `be:build` | verify | 스위치를 켠 `develop`·`master`에서만 돈다. `be:test`가 끝난 뒤 `bootJar -x test`로 배포할 jar를 만들어 아티팩트로 넘긴다(DB가 필요 없다). jar 크기가 GitLab 아티팩트 상한을 넘으면 B에서 A로 `rsync`한다(상한은 미확인) |
-| `fe:test` | verify | 린트, `next typegen`(Next 16의 전역 타입을 만든다. 없으면 `tsc`가 실패한다), 타입 검사, 단위 테스트(`fe/`). verify 러너(B)에서 Node 이미지(핀, arm64 지원)로 실행 |
-| `fe:build` | verify | 같은 Node 이미지로 `next build`(standalone)를 **한 번만** 하고(환경 값은 번들에 넣지 않는다, 6.8절) 커밋 SHA를 `DEPLOYMENT_VERSION`으로 넘겨 빌드 ID와 `deploymentId`로 쓴다. FE 번들(`standalone`, `static`, `public`)을 GitLab 아티팩트로 넘긴다 |
+| `fe:check` | verify | 린트, `next typegen`(Next 16의 전역 타입을 만든다. 없으면 `tsc`가 실패한다), 타입 검사, 단위 테스트(`fe/`)를 하고, 배포 스위치가 켜져 있으면 **같은 잡에서** `next build`(standalone)를 **한 번만** 한다(환경 값은 번들에 넣지 않는다, 6.8절). 커밋 SHA를 `DEPLOYMENT_VERSION`으로 넘겨 빌드 ID와 `deploymentId`로 쓰고 FE 번들(`standalone`, `static`, `public`)을 GitLab 아티팩트로 넘긴다. 검사가 하나라도 실패하면 번들을 만들지 않는다. verify 러너(B)에서 Node 이미지(핀, arm64 지원)로 실행한다. 한 잡으로 합친 이유는 컨테이너 기동과 `pnpm install`을 한 번만 하고 무거운 잡 줄(`resource_group`)에 한 번만 서기 위해서다. `next build`만 잡는 오류(예: `cacheComponents`에서 렌더링 중 `new Date()`)가 있어서 MR에서도 빌드를 뺄 수 없다 |
 | `fe:bundle-check` | verify | `infra/ci/check_fe_bundle.py`로 번들 산출물을 검사한다(서버 파일, 정적 자산, 빌드 ID와 `deploymentId`가 SHA와 같음, 이미지 최적화 꺼짐, `sharp` 외 네이티브 모듈 없음, `localhost` 주소 없음. mock 글자는 경고, PWA 파일 없음은 건너뜀). 실패하면 `build:images`가 돌지 않는다 |
 | `build:images` | build | `<서비스>:<SHA>`(be, fe) 로컬 조립(`infra/ci/build-images.sh`). verify 단계가 만든 jar와 FE 번들을 `COPY`한다(BE 계약 #20, FE 계약 #1). AI를 켠 서버(`/etc/fit/ai-*.env`가 있다)에서는 `ai:<SHA>`도 `ai/` 소스에서 조립하고(`infra/app/Dockerfile.ai`) 실패해도 BE·FE 이미지는 나간다(11.4절). 레지스트리는 없다. 이미 있으면 재사용한다(MR을 fast-forward로 병합하므로 SHA가 그대로라 다시 조립하지 않는다). `develop`과 `master`에서만 돈다 |
 | `deploy:dev` | deploy | develop 푸시 시 자동(`environment: dev`, `resource_group: dev`). 전체 clone(`GIT_DEPTH: "0"`)을 쓴다. 얕은 clone이면 다운그레이드 가드와 마이그레이션 비교가 틀리므로 preflight가 얕은 저장소를 `git fetch --unshallow`로 채우고 못 채우면 거부한다(Jira S15P31A302-99) |
 | `deploy:prod` | deploy | master에서 수동(`environment: prod`, `resource_group: prod`). `allow_failure: false`라 사람이 누를 때까지 파이프라인이 멈춘다(`when: manual`만 두면 안 눌러도 통과한 것처럼 보인다) |
 | `smoke:dev`, `smoke:prod` | smoke | 환경별로 배포 뒤에 돈다(`smoke.sh <env> --sha <SHA>`). `--resolve`로 서버 내부 경유 확인. 검색 1건을 호출해 폴백 사용 여부를 확인한다(Modal 연동 누락이 폴백에 가려지지 않게, BE 계약 #17). 콜드 스타트를 감안한 타임아웃을 둔다. FE는 `/`가 200이고 `/config.json`에 필수 키가 모두 있는지 확인한다 |
 
-**배포 스위치:** `.gitlab-ci.yml`의 변수 `FIT_CD_ENABLED`가 `"false"`이면(2026-10-26에 `"true"`로 켰다. 비상으로 끄려면 프로젝트 CI/CD 변수로 덮는다) `fe:build`부터 `smoke`까지는 파이프라인에 나타나지 않고 `be:test`와 `fe:test`만 모든 파이프라인(`develop`, `master`, MR)에서 돈다. 켜면 `develop`은 `smoke:dev`까지, `master`는 수동 `deploy:prod`와 `smoke:prod`까지, MR은 검사 잡(`fe:build`, `fe:bundle-check` 포함, 바뀐 경로에 한해)까지 나타난다. jar를 만드는 `be:build`는 MR에 나타나지 않는다. 켜는 일은 MR 한 줄이라 기록이 남고, 구조 시험(`test_pipeline_structure.py`)의 기본값 시험도 함께 바꿔야 해서 실수로 켜지 못한다. BE·FE가 서비스 계약(12.1, 12.5절)을 이행하기 전에 `fe:bundle-check`가 모든 MR을 막는 일을 피하려는 것이다. 켜기 전에 끝나야 할 일은 [계획 1C-3의 계약 이행 체크리스트](plans/2026-10-23-plan-1c3-ci-pipeline.md)에 있다.
+**배포 스위치:** `.gitlab-ci.yml`의 변수 `FIT_CD_ENABLED`가 `"false"`이면(2026-10-26에 `"true"`로 켰다. 비상으로 끄려면 프로젝트 CI/CD 변수로 덮는다) 번들 만들기(`fe:check` 안)와 `be:build`부터 `smoke`까지는 파이프라인에 나타나지 않고 `be:test`와 `fe:check`(검사만)가 모든 파이프라인(`develop`, `master`, MR)에서 돈다. 켜면 `develop`은 `smoke:dev`까지, `master`는 수동 `deploy:prod`와 `smoke:prod`까지, MR은 검사 잡(`fe:check`의 번들 만들기와 `fe:bundle-check` 포함, 바뀐 경로에 한해)까지 나타난다. jar를 만드는 `be:build`는 MR에 나타나지 않는다. 켜는 일은 MR 한 줄이라 기록이 남고, 구조 시험(`test_pipeline_structure.py`)의 기본값 시험도 함께 바꿔야 해서 실수로 켜지 못한다. BE·FE가 서비스 계약(12.1, 12.5절)을 이행하기 전에 `fe:bundle-check`가 모든 MR을 막는 일을 피하려는 것이다. 켜기 전에 끝나야 할 일은 [계획 1C-3의 계약 이행 체크리스트](plans/2026-10-23-plan-1c3-ci-pipeline.md)에 있다.
 
 **`lint:*` 잡**
 
@@ -510,7 +509,7 @@ B가 죽으면 CI가 멈추고 배포가 막힌다. 서비스는 영향이 없�
 
 FE는 `fe/`의 Next.js를 `output: 'standalone'`으로 빌드한 Node 컨테이너(`fe-<env>`)로 돌고 Caddy가 앞단에서 프록시한다(5절). 프런트 계약은 12.5절이다. 관리 지점을 줄이려고 BE와 같은 방식(Blue/Green, 상태 파일, 롤백 절차)을 쓰고 FE만의 절차를 만들지 않는다.
 
-- **빌드:** `fe:build`가 B에서 `next build`로 번들을 **한 번만** 만든다. 환경별 값은 번들에 넣지 않는다(`NEXT_PUBLIC_*`에 환경별 값을 두지 않는다). dev에서 검증한 이미지가 곧 prod 이미지다. `generateBuildId`와 `deploymentId`는 커밋 SHA다. 시크릿은 어디에도 넣지 않는다.
+- **빌드:** `fe:check`가 B에서 `next build`로 번들을 **한 번만** 만든다. 환경별 값은 번들에 넣지 않는다(`NEXT_PUBLIC_*`에 환경별 값을 두지 않는다). dev에서 검증한 이미지가 곧 prod 이미지다. `generateBuildId`와 `deploymentId`는 커밋 SHA다. 시크릿은 어디에도 넣지 않는다.
 - **아키텍처:** B(Arm)에서 만든 번들을 A(x86)에서 돌린다. standalone 번들에는 `sharp`의 플랫폼 전용 네이티브 모듈이 들어가고 이미지 최적화를 꺼도 빠지지 않는다(확인: Linux x64 빌드에서 `images.unoptimized: true`여도 `@img/sharp-linux-x64`가 들어간다). 그래서 이미지 최적화 기본 로더를 쓰지 않는다(`unoptimized: true` 또는 커스텀 로더). 사진은 Garage가 제공한다.
 - **산출물 검사(P0):** 번들에 `localhost`·mock 값이 없는지, `.next/images-manifest.json`의 `unoptimized`가 `true`인지(확인: 설정에 따라 `false`나 `true`로 기록된다), 네이티브 모듈이 `sharp-*`뿐인지, `server.js`와 `.next/static`이 있는지 확인한다. 배치 뒤 smoke는 `/config.json`에 필수 키가 모두 있는지 확인한다. A503이 빌드타임 설정 누락으로 빈 번들을 6회 배포한 교훈이다.
 - **배치:** `fe:<SHA>` 이미지로 반대 색 FE를 띄우고 idle 색에서 SSR 페이지(`/`)와 `/config.json`을 확인한 뒤 전환한다. 정적 자산은 색을 띄우기 전에 `.next/static`을 풀(`/srv/fit/web/<env>/pool/`)에 쌓는다.
@@ -1048,7 +1047,7 @@ AI 팀과 M1 전에 합의한다. AI API(FastAPI)는 A의 컨테이너(`ai-prod`
 | 21 | 옛 SHA가 나중에 배포됨 | `oldest_first`, outdated 배포 보호, `deploy.sh` 다운그레이드 가드(6.2·6.4절) |
 | 22 | `develop`의 미완성 코드가 prod로 승격됨 | `develop`은 항상 배포 가능, 미완성은 `*_ENABLED` 스위치 뒤(10.8절) |
 | 23 | FE(Node) 장애나 메모리 초과가 곧 사이트 전체 장애 | FE도 Blue/Green, `/fe-healthz` 헬스게이트와 `/`의 외부 감시(9.2절), 메모리 한도와 힙 상한, 롤백 절차는 BE와 같다 |
-| 24 | B(Arm)에서 만든 FE 번들을 A(x86)에서 돌림. 네이티브 모듈(`sharp`)이 플랫폼에 묶임 | 이미지 최적화 기본 로더를 쓰지 않는다(`unoptimized`). `fe:build` 산출물 검사가 이를 확인하고 idle 색 스모크가 A에서 실제로 띄워 본다(6.8절) |
+| 24 | B(Arm)에서 만든 FE 번들을 A(x86)에서 돌림. 네이티브 모듈(`sharp`)이 플랫폼에 묶임 | 이미지 최적화 기본 로더를 쓰지 않는다(`unoptimized`). `fe:bundle-check`의 산출물 검사가 이를 확인하고 idle 색 스모크가 A에서 실제로 띄워 본다(6.8절) |
 
 ## 16. 미결정·확인 필요
 
@@ -1116,7 +1115,7 @@ docs/infra/
 | `env_file` 없이 키별 전달해 누락 6회 이상 (A603) | 12.4절 env 계약, 부팅 시 검증(12.1 #8), 배포 preflight |
 | 기본값이 mock이라 운영에 mock 기동 (A503) | 12.1 #8 |
 | Flyway 체크섬 불일치로 배포 롤백 2연속 (A603) | 6.5절 CI 게이트 |
-| 빌드타임 설정 누락으로 빈 번들 6회 (A503 FE) | 번들에 환경 값을 넣지 않고 `/config.json`으로 받음 + `fe:build` 산출물 검사와 smoke의 config 키 확인(P0) |
+| 빌드타임 설정 누락으로 빈 번들 6회 (A503 FE) | 번들에 환경 값을 넣지 않고 `/config.json`으로 받음 + `fe:check` 산출물 검사와 smoke의 config 키 확인(P0) |
 | 서비스명 별칭이 공유 망에서 환경 간 해석 (A603) | 2.2절 이름 규칙 |
 | Blue/Green 상태 파일이 서버에만 있어 유실 시 전체 404, smoke 실패 경로에서 idle 색 잔존 (A603) | 상태 디렉터리 마운트, 활성 색을 실제 컨테이너·Caddy 설정과 교차 확인(6.4절) |
 | Jenkins–GitLab 플러그인에 며칠, 변경 감지의 과트리거와 침묵 스킵 (A503) | GitLab Runner, 항상 전체 실행 |

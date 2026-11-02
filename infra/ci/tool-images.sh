@@ -11,7 +11,7 @@ PROMETHEUS_IMAGE=prom/prometheus:v3.15.0
 ALERTMANAGER_IMAGE=prom/alertmanager:v0.34.1
 DOCKER_CLI_IMAGE=docker:29.9.0-cli
 PYTHON_IMAGE=python:3.12.15-slim
-# BE·FE 빌드(be:test, fe:test, fe:build)와 이미지 조립의 베이스(infra/app/Dockerfile.*). 빌드는 B(arm64), 조립은 A(amd64)에서 돈다
+# BE·FE 빌드(be:test, be:build, fe:check)와 이미지 조립의 베이스(infra/app/Dockerfile.*). 빌드는 B(arm64), 조립은 A(amd64)에서 돈다
 JDK_IMAGE=eclipse-temurin:21.0.12_8-jdk-noble
 JRE_IMAGE=eclipse-temurin:21.0.12_8-jre-noble
 NODE_IMAGE=node:22.23.4-bookworm-slim

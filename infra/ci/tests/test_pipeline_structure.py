@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[3]
 CI = yaml.safe_load((ROOT / ".gitlab-ci.yml").read_text(encoding="utf-8"))
 
 RESERVED = {"stages", "workflow", "default", "variables", "include", "image", "services", "cache", "before_script", "after_script"}
-VERIFY_JOBS = ["be:test", "fe:test", "be:build", "fe:build", "fe:bundle-check"]
+VERIFY_JOBS = ["be:test", "fe:check", "be:build", "fe:bundle-check"]
 ALWAYS_IN_MR = {"lint:guards", "lint:secrets", "lint:history"}  # 경로와 상관없이 모든 MR에서 도는 잡. MR에 파이프라인이 없으면 병합할 수 없다
 DEPLOY_TAGGED = ["build:images", "deploy:dev", "deploy:prod", "smoke:dev", "smoke:prod"]
 NEW_JOBS = VERIFY_JOBS + DEPLOY_TAGGED
@@ -218,10 +218,13 @@ class EvaluatorTest(unittest.TestCase):
 
 
 class JobsTest(unittest.TestCase):
-    def test_the_ten_jobs_exist(self):
+    def test_the_nine_jobs_exist(self):
+        # fe:test와 fe:build는 fe:check 하나로 합쳤다(컨테이너 기동, 설치, 무거운 잡 줄을 한 번만 쓴다)
         for name in NEW_JOBS:
             self.assertIn(name, CI, name)
-        self.assertEqual(len(NEW_JOBS), 10)
+        self.assertEqual(len(NEW_JOBS), 9)
+        for gone in ("fe:test", "fe:build"):
+            self.assertNotIn(gone, CI, gone)
 
     def test_deploy_stage_jobs_use_the_deploy_runner_and_the_rest_use_verify(self):
         for name in job_names():
@@ -232,7 +235,7 @@ class JobsTest(unittest.TestCase):
                 self.assertEqual(tags, ["verify"], name)
 
     def test_stages(self):
-        want = {"be:test": "verify", "fe:test": "verify", "be:build": "verify", "fe:build": "verify", "fe:bundle-check": "verify",
+        want = {"be:test": "verify", "fe:check": "verify", "be:build": "verify", "fe:bundle-check": "verify",
                 "build:images": "build", "deploy:dev": "deploy", "deploy:prod": "deploy", "smoke:dev": "smoke", "smoke:prod": "smoke"}
         for name, stage in want.items():
             self.assertEqual(effective(name).get("stage"), stage, name)
@@ -290,15 +293,15 @@ class JobsTest(unittest.TestCase):
 
     def test_artifacts_carry_the_jar_and_the_bundle(self):
         self.assertIn("be/build/libs/*.jar", effective("be:build")["artifacts"]["paths"])
-        self.assertIn("fe-bundle/", effective("fe:build")["artifacts"]["paths"])
+        self.assertIn("fe-bundle/", effective("fe:check")["artifacts"]["paths"])
         build_needs = effective("build:images")["needs"]
         self.assertIn({"job": "be:build", "artifacts": True}, build_needs)
-        self.assertIn({"job": "fe:build", "artifacts": True}, build_needs)
+        self.assertIn({"job": "fe:check", "artifacts": True}, build_needs)
         self.assertIn("fe:bundle-check", build_needs)
-        self.assertIn({"job": "fe:build", "artifacts": True}, effective("fe:bundle-check")["needs"])
+        self.assertIn({"job": "fe:check", "artifacts": True}, effective("fe:bundle-check")["needs"])
 
     def test_scripts_pass_the_commit_sha(self):
-        self.assertIn('DEPLOYMENT_VERSION="$CI_COMMIT_SHA" pnpm build', script_text("fe:build"))
+        self.assertIn('DEPLOYMENT_VERSION="$CI_COMMIT_SHA" pnpm build', script_text("fe:check"))
         self.assertIn('check_fe_bundle.py fe-bundle --sha "$CI_COMMIT_SHA"', script_text("fe:bundle-check"))
         self.assertIn('build-images.sh "$CI_COMMIT_SHA"', script_text("build:images"))
         for env in ("dev", "prod"):
@@ -327,10 +330,10 @@ class JobsTest(unittest.TestCase):
 
     def test_heavy_jobs_share_one_resource_group_so_two_of_them_never_run_at_once(self):
         # B(메모리 4GB)의 러너는 동시에 둘을 돌린다. 메모리를 많이 쓰는 잡끼리만 줄을 세워 가벼운 lint 잡이 기다리지 않게 한다
-        for name in ("be:test", "fe:test", "be:build", "fe:build"):
+        for name in ("be:test", "fe:check", "be:build"):
             self.assertEqual(effective(name).get("resource_group"), "verify-heavy", name)
         for name in job_names():
-            if name not in ("be:test", "fe:test", "be:build", "fe:build"):
+            if name not in ("be:test", "fe:check", "be:build"):
                 self.assertNotEqual(effective(name).get("resource_group"), "verify-heavy", name)
 
     def test_path_filtered_jobs_rerun_when_the_ci_config_changes_and_branches_run_everything(self):
@@ -363,7 +366,7 @@ class JobsTest(unittest.TestCase):
 
     def test_fe_generates_next_types_before_type_checking(self):
         # Next 16의 LayoutProps 같은 전역 타입은 typegen이나 build가 만든다. 먼저 만들지 않으면 tsc가 실패한다
-        lines = effective("fe:test")["script"]
+        lines = effective("fe:check")["script"]
         typegen = next(i for i, l in enumerate(lines) if "next typegen" in l)
         tsc = next(i for i, l in enumerate(lines) if "tsc --noEmit" in l)
         self.assertLess(typegen, tsc)
@@ -384,7 +387,7 @@ class PipelineContentsTest(unittest.TestCase):
 
     def test_with_the_switch_off_only_the_tests_appear_everywhere(self):
         for kind in ("develop", "master", "mr"):
-            self.assertEqual(sorted(self.new_jobs(kind, "false")), ["be:test", "fe:test"], kind)
+            self.assertEqual(sorted(self.new_jobs(kind, "false")), ["be:test", "fe:check"], kind)
 
     def test_no_pipeline_for_a_plain_branch_push_or_a_develop_to_master_mr(self):
         for kind in ("feature-push", "mr-from-develop"):
@@ -465,8 +468,8 @@ class MrPathTest(unittest.TestCase):
         self.assertEqual(self.mr(["README.md"]), ALWAYS_IN_MR)
 
     def test_fe_only_runs_the_fe_test_and_nothing_from_be_or_infra(self):
-        self.assertEqual(self.mr(["fe/src/app/page.tsx"], "false"), ALWAYS_IN_MR | {"fe:test"})
-        self.assertEqual(self.mr(["fe/src/app/page.tsx"], "true"), ALWAYS_IN_MR | {"fe:test", "fe:build", "fe:bundle-check"})
+        self.assertEqual(self.mr(["fe/src/app/page.tsx"], "false"), ALWAYS_IN_MR | {"fe:check"})
+        self.assertEqual(self.mr(["fe/src/app/page.tsx"], "true"), ALWAYS_IN_MR | {"fe:check", "fe:bundle-check"})
 
     def test_be_only_runs_the_be_test_and_the_migration_check_only_for_migrations(self):
         self.assertEqual(self.mr(["be/src/main/java/kr/co/fitdining/api/X.java"]), ALWAYS_IN_MR | {"be:test"})
@@ -488,11 +491,12 @@ class MrPathTest(unittest.TestCase):
         everything = set(pipeline(context("mr", "true"), None)) - {"lint:image-arch"}
         self.assertEqual(self.mr([".gitlab-ci.yml"], "true"), everything)
 
-    def test_a_bundle_check_script_change_runs_the_bundle_jobs_without_the_fe_test(self):
+    def test_a_bundle_check_script_change_runs_the_bundle_jobs_only_when_the_switch_is_on(self):
+        # fe:bundle-check는 fe:check의 번들을 기다리므로 같은 변경에서 둘이 함께 나타나야 한다(없는 잡을 기다리면 파이프라인이 만들어지지 않는다)
         got = self.mr(["infra/ci/check_fe_bundle.py"], "true")
-        self.assertIn("fe:build", got)
+        self.assertIn("fe:check", got)
         self.assertIn("fe:bundle-check", got)
-        self.assertNotIn("fe:test", got)
+        self.assertEqual(self.mr(["infra/ci/check_fe_bundle.py"], "false"), ALWAYS_IN_MR)
 
     def test_an_mr_pipeline_is_never_empty_whatever_changed(self):
         samples = [[], ["README.md"], ["docs/a.md"], ["fe/a.ts"], ["be/a.java"], ["infra/ci/tests/test_x.py"], ["ai/main.py"], ["some/new/dir/file.txt"]]
@@ -504,7 +508,7 @@ class MrPathTest(unittest.TestCase):
     def test_branch_pipelines_run_every_path_filtered_job_regardless_of_paths(self):
         for kind in ("develop", "master"):
             got = set(pipeline(context(kind), []))
-            for name in ("be:test", "fe:test", "lint:shell", "lint:docker", "lint:caddy", "lint:prometheus", "lint:alertmanager", "lint:yaml", "lint:guards", "lint:secrets"):
+            for name in ("be:test", "fe:check", "lint:shell", "lint:docker", "lint:caddy", "lint:prometheus", "lint:alertmanager", "lint:yaml", "lint:guards", "lint:secrets"):
                 self.assertIn(name, got, f"{kind}: {name}")
 
     def test_needs_stay_valid_for_every_kind_of_change(self):

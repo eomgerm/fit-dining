@@ -49,7 +49,7 @@ bash ~/host/runner.sh status           # 읽기 전용 점검(PASS, FAIL, SKIP)
 - **register:** 동시 실행 수(`concurrent`)를 역할에 맞춘다(B의 `fit-verify` 2, A의 `fit-deploy` 1). B는 job 메모리 2GB, CPU 2개, docker.sock을 job에 연다. 이미 등록돼 있으면 건드리지 않는다(`FIT_RUNNER_REREGISTER=1`이면 다시 등록한다. GitLab에서 옛 러너도 지운다).
 - **tune:** 이미 등록된 러너의 `concurrent`만 역할에 맞춘다. 토큰이 필요 없고 서비스를 재시작하지 않는다(러너가 `config.toml`을 몇 초마다 다시 읽어 돌고 있는 job이 끊기지 않는다). `FIT_RUNNER_CONCURRENT`(1에서 4)로 B의 값을 바꿀 수 있고 A는 무엇을 줘도 1이다. B에서 가벼운 린터가 무거운 잡(Gradle, Node) 뒤에 줄을 서지 않게 하려는 것이다. 무거운 잡끼리는 `.gitlab-ci.yml`의 `resource_group: verify-heavy`가 한 번에 하나로 묶는다. `status`는 `concurrent`가 역할의 값과 다르면 `tune`을 안내하며 실패한다.
 - 환경변수: `FIT_RUNNER_URL`(기본 `https://lab.ssafy.com`), `FIT_RUNNER_ROLE_FILE`, `FIT_RUNNER_CONFIG`, `FIT_SKIP=systemd`(시험용).
-- **러너가 도는 잡:** `fit-verify`(B, 태그 `verify`)는 `lint:*`, `be:test`, `fe:test`, `be:build`, `fe:build`, `fe:bundle-check`를(MR에서는 바뀐 경로의 잡만 돈다), `fit-deploy`(A, 태그 `deploy`)는 `build:images`, `deploy:*`, `smoke:*`를 받는다(`.gitlab-ci.yml`, 설계 6.3절, [infra/deploy/README.md](../deploy/README.md)). `fit-deploy`가 `deploy.sh`를 돌려면 `/srv/fit/state`, `/srv/fit/web`이 `root:docker 2775`여야 한다(bootstrap이 만든다).
+- **러너가 도는 잡:** `fit-verify`(B, 태그 `verify`)는 `lint:*`, `be:test`, `fe:check`, `be:build`, `fe:bundle-check`를(MR에서는 바뀐 경로의 잡만 돈다), `fit-deploy`(A, 태그 `deploy`)는 `build:images`, `deploy:*`, `smoke:*`를 받는다(`.gitlab-ci.yml`, 설계 6.3절, [infra/deploy/README.md](../deploy/README.md)). `fit-deploy`가 `deploy.sh`를 돌려면 `/srv/fit/state`, `/srv/fit/web`이 `root:docker 2775`여야 한다(bootstrap이 만든다).
 
 ## 환경변수 넣기 (envset.py)
 

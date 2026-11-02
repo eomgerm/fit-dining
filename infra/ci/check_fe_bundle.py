@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""FE 번들 산출물 검사(설계 6.8절 P0). fe:build가 만든 번들이 배포할 수 있는 모양인지 이미지를 조립하기 전에 확인한다.
+"""FE 번들 산출물 검사(설계 6.8절 P0). fe:check가 만든 번들이 배포할 수 있는 모양인지 이미지를 조립하기 전에 확인한다.
 
   python3 infra/ci/check_fe_bundle.py <번들 디렉터리> --sha <커밋 SHA>
 
