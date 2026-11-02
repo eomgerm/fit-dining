@@ -10,6 +10,7 @@ export type EditFailure =
   | "notFound" // 404. 다른 창에서 이미 지웠다
   | "forbidden" // 403. 다른 창에서 다른 계정으로 로그인했다
   | "photo" // 400 중 쓸 수 없는 사진(D-45)
+  | "conflict" // 409. 사진을 확정하는 사이 다른 곳에서 사진을 고쳤다(D-51)
   | "invalid"; // 그 밖의 4xx
 
 export function editFailure(error: unknown): EditFailure {
@@ -19,6 +20,7 @@ export function editFailure(error: unknown): EditFailure {
   if (error.status === 401) return "signedOut";
   if (error.status === 404) return "notFound";
   if (error.status === 403) return "forbidden";
+  if (error.status === 409) return "conflict";
   if (error.problem?.type === INVALID_PHOTO_TYPE) return "photo";
   if ((error.status ?? 500) < 500) return "invalid";
   return "server";

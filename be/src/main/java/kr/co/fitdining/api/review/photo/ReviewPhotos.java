@@ -19,8 +19,6 @@ import kr.co.fitdining.api.review.dto.ReviewPhotoUploadResponse.PhotoUpload;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * 리뷰 사진의 업로드 주소 발급, 확정, 정리, 읽기 주소(D-9, D-45). 객체는 1,600px 사진({@code <id>.jpg})과
@@ -105,33 +103,6 @@ public class ReviewPhotos {
 	/** 리뷰에 붙인 뒤 남은 업로드 원본을 지운다. 지우지 못하면 수명주기가 지운다. */
 	public void discardPending(Collection<UUID> uploadIds) {
 		deleteQuietly(uploadIds.stream().flatMap(id -> Stream.of(pending(id), pendingThumb(id))).toList());
-	}
-
-	/**
-	 * 지금 트랜잭션이 끝나면 사진을 정리한다. 커밋되면 빠진 사진의 확정본과 새 사진의 업로드 원본을 지우고, 롤백되면 새로
-	 * 확정한 사진을 지운다. 결과를 알 수 없으면 커밋됐을 수도 있어 지우지 않는다.
-	 *
-	 * @param uploadIds 이번에 확정한 사진의 업로드 id
-	 * @param added 이번에 확정한 사진 id
-	 * @param removed 리뷰에서 빠진 사진 id
-	 */
-	public void cleanUpAfterTransaction(List<UUID> uploadIds, List<UUID> added, List<UUID> removed) {
-		List<UUID> uploads = List.copyOf(uploadIds);
-		List<UUID> addedCopy = List.copyOf(added);
-		List<UUID> removedCopy = List.copyOf(removed);
-		TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-			@Override
-			public void afterCompletion(int status) {
-				switch (status) {
-					case STATUS_COMMITTED -> {
-						discardConfirmed(removedCopy);
-						discardPending(uploads);
-					}
-					case STATUS_ROLLED_BACK -> discardConfirmed(addedCopy);
-					default -> log.warn("Skipped review photo cleanup: transaction outcome is unknown");
-				}
-			}
-		});
 	}
 
 	public PhotoView view(UUID id) {

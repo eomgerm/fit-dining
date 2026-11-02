@@ -155,6 +155,26 @@ describe("ReviewEditForm 사진", () => {
 
     expect(await screen.findByText("올릴 수 없는 사진이 있어요")).toBeTruthy();
   });
+
+  it("사진이 바뀌었으면(409) 다시 불러와 사진은 저장된 것으로 돌리고 본문은 남긴다", async () => {
+    api.fetchReview
+      .mockResolvedValueOnce(withPhotos)
+      .mockResolvedValueOnce({ ...withPhotos, photos: [withPhotos.photos[1]] });
+    api.updateReview.mockRejectedValue(http(409));
+    mount();
+
+    await type("고친 본문");
+    fireEvent.click(await screen.findByRole("button", { name: "사진 1 빼기" }));
+    fireEvent.click(submitButton());
+    expect(await screen.findByText("사진이 바뀌었어요")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "다시 불러오기" }));
+
+    expect(
+      await screen.findByRole("button", { name: "사진 추가, 1/5장" }),
+    ).toBeTruthy();
+    expect(api.fetchReview).toHaveBeenCalledTimes(2);
+    expect((await textarea()).value).toBe("고친 본문");
+  });
 });
 
 describe("ReviewEditForm", () => {

@@ -53,6 +53,8 @@ export function ReviewEditForm({
 }: ReviewEditFormProps) {
   const detail = useReviewDetail(reviewId, withAccessToken);
   const signedOut = isApiError(detail.error) && detail.error.status === 401;
+  // 사진이 바뀌어(409) 다시 받을 때 쓰던 본문을 남겨, 다시 그린 입력칸이 이 본문으로 시작하게 한다
+  const [keptDescription, setKeptDescription] = useState<string | null>(null);
 
   useEffect(() => {
     if (signedOut) onSignedOut();
@@ -64,9 +66,14 @@ export function ReviewEditForm({
     return (
       <ReviewEditFields
         review={review}
+        initialDescription={keptDescription}
         withAccessToken={withAccessToken}
         onSuccess={onSuccess}
         onClose={onClose}
+        onReload={(description) => {
+          setKeptDescription(description);
+          void detail.refetch();
+        }}
       />
     );
   }
@@ -117,18 +124,24 @@ export function ReviewEditForm({
 
 type ReviewEditFieldsProps = {
   review: ReviewDetailResponse;
+  initialDescription: string | null;
   withAccessToken: WithAccessToken;
   onSuccess: () => void;
   onClose: () => void;
+  onReload: (description: string) => void;
 };
 
 function ReviewEditFields({
   review,
+  initialDescription,
   withAccessToken,
   onSuccess,
   onClose,
+  onReload,
 }: ReviewEditFieldsProps) {
-  const [description, setDescription] = useState(review.description ?? "");
+  const [description, setDescription] = useState(
+    initialDescription ?? review.description ?? "",
+  );
   const [confirmingClose, setConfirmingClose] = useState(false);
   // 닫히는 동안 문구가 바뀌지 않게 마지막 실패 종류는 남겨 둔다
   const [failure, setFailure] = useState<EditFailure>("server");
@@ -248,24 +261,27 @@ function ReviewEditFields({
         onOpenChange={setFailureOpen}
         onRetry={submit}
         onLeave={onClose}
+        onReload={() => onReload(description)}
       />
     </EditFrame>
   );
 }
 
-// 6-E07과 연결 끊김·401·403·404 안내. 고칠 수 없게 된 리뷰(403·404)만 빼고 입력은 그대로 남는다
+// 6-E07과 연결 끊김·401·403·404·409 안내. 고칠 수 없게 된 리뷰(403·404)만 빼고 입력은 그대로 남는다
 function EditFailureDialog({
   failure,
   open,
   onOpenChange,
   onRetry,
   onLeave,
+  onReload,
 }: {
   failure: EditFailure;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onRetry: () => void;
   onLeave: () => void;
+  onReload: () => void;
 }) {
   const onDismiss = () => onOpenChange(false);
 
@@ -304,6 +320,24 @@ function EditFailureDialog({
         action={
           <Button size="md" onClick={onLeave}>
             나가기
+          </Button>
+        }
+      />
+    );
+  }
+  // Figma에 없는 안내라 403·404 안내와 같은 꼴로 그린다. 다시 받으면 사진 칸만 저장된 사진으로 돌아간다(D-51)
+  if (failure === "conflict") {
+    return (
+      <AlertDialog
+        open={open}
+        onOpenChange={onOpenChange}
+        tone="warn"
+        icon={<WarningIcon />}
+        title="사진이 바뀌었어요"
+        description="다른 곳에서 사진을 고쳤어요. 저장된 사진을 다시 불러올게요."
+        action={
+          <Button size="md" onClick={onReload}>
+            다시 불러오기
           </Button>
         }
       />

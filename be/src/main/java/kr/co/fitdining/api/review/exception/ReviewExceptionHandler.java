@@ -77,6 +77,12 @@ public class ReviewExceptionHandler {
 		return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "이 날짜에는 이미 리뷰를 남겼어요.");
 	}
 
+	@ExceptionHandler(ReviewPhotosChangedException.class)
+	public ProblemDetail handlePhotosChanged() {
+		log.info("Rejected review request: reason=ReviewPhotosChangedException");
+		return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "사진이 바뀌었어요. 다시 불러와 주세요.");
+	}
+
 	@ExceptionHandler(ReviewNotFoundException.class)
 	public ProblemDetail handleReviewNotFound() {
 		return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "리뷰를 찾을 수 없어요.");

@@ -52,6 +52,7 @@ import kr.co.fitdining.api.review.exception.InvalidVisitDateException;
 import kr.co.fitdining.api.review.exception.OwnReviewReportException;
 import kr.co.fitdining.api.review.exception.ReviewForbiddenException;
 import kr.co.fitdining.api.review.exception.ReviewNotFoundException;
+import kr.co.fitdining.api.review.exception.ReviewPhotosChangedException;
 import kr.co.fitdining.api.review.photo.FakePhotoStorage;
 import kr.co.fitdining.api.review.photo.InvalidPhotoException;
 import kr.co.fitdining.api.review.photo.PhotoStorageUnavailableException;
@@ -1184,6 +1185,52 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 			service.delete(id, user);
 
 			assertThat(photoStorage.hasConfirmed(saved)).isFalse();
+		}
+
+		@Test
+		@DisplayName("수정삭제_사진저장소를부르는동안_트랜잭션을열지않는다")
+		void updateDelete_storageCalls_runOutsideTransaction() {
+			String user = createUsers(1).getFirst();
+			long id = write(user, List.of(photoStorage.upload(901, 91), photoStorage.upload(902, 92)));
+			UUID kept = photoIds(id).get(1);
+
+			service.update(id, user, photosOnly(List.of(photoStorage.upload(903, 93), kept)));
+			service.delete(id, user);
+
+			assertThat(photoStorage.callsInTransaction()).isZero();
+		}
+
+		@Test
+		@DisplayName("수정_확정하는사이사진목록이바뀌면_409이고이번확정본을지우며리뷰는그대로다")
+		void update_photosChangedWhileConfirming_conflictAndDiscardsCopies() {
+			String user = createUsers(1).getFirst();
+			long id = write(user, List.of(photoStorage.upload(901, 91), photoStorage.upload(902, 92)));
+			List<UUID> saved = photoIds(id);
+			UUID upload = photoStorage.upload(903, 93);
+			photoStorage.beforeNextCopy(
+					() -> jdbc.update("delete from review_photos where review_id = ? and sort_order = 1", id));
+
+			assertThatThrownBy(() -> service.update(id, user, photosOnly(List.of(saved.get(0), saved.get(1), upload))))
+					.isInstanceOf(ReviewPhotosChangedException.class);
+			assertThat(photoIds(id)).containsExactly(saved.get(0));
+			assertThat(photoStorage.confirmedIds()).containsExactlyInAnyOrderElementsOf(saved);
+			assertThat(photoStorage.hasPending(upload)).isTrue();
+		}
+
+		@Test
+		@DisplayName("수정_확정하는사이리뷰가지워지면_404이고이번확정본을지운다")
+		void update_deletedWhileConfirming_notFoundAndDiscardsCopies() {
+			String user = createUsers(1).getFirst();
+			long id = write(user, List.of(photoStorage.upload()));
+			UUID saved = photoIds(id).getFirst();
+			UUID upload = photoStorage.upload(903, 93);
+			photoStorage.beforeNextCopy(
+					() -> jdbc.update("update reviews set deleted_at = now() where review_id = ?", id));
+
+			assertThatThrownBy(() -> service.update(id, user, photosOnly(List.of(saved, upload))))
+					.isInstanceOf(ReviewNotFoundException.class);
+			assertThat(photoStorage.confirmedIds()).containsExactly(saved);
+			assertThat(photoStorage.hasPending(upload)).isTrue();
 		}
 	}
 

@@ -50,6 +50,7 @@ import kr.co.fitdining.api.review.exception.InvalidVisitDateException;
 import kr.co.fitdining.api.review.exception.OwnReviewReportException;
 import kr.co.fitdining.api.review.exception.ReviewForbiddenException;
 import kr.co.fitdining.api.review.exception.ReviewNotFoundException;
+import kr.co.fitdining.api.review.exception.ReviewPhotosChangedException;
 import kr.co.fitdining.api.review.photo.InvalidPhotoException;
 import kr.co.fitdining.api.review.photo.PhotoStorageUnavailableException;
 import kr.co.fitdining.api.review.report.ReportReason;
@@ -692,6 +693,14 @@ class ReviewControllerTest {
 		@DisplayName("수정_사진이6장이면_400이다")
 		void update_sixPhotos_returnsBadRequest() throws Exception {
 			expectProblem(update(7, "{\"photos\":" + photos(6) + "}"), 400);
+		}
+
+		@Test
+		@DisplayName("수정_확정하는사이사진목록이바뀌었으면_409다")
+		void update_photosChanged_returnsConflict() throws Exception {
+			doThrow(new ReviewPhotosChangedException()).when(reviewService).update(eq(7L), eq(USER_ID), any());
+
+			expectProblem(update(7, "{\"photos\":[\"" + PHOTO_A + "\"]}"), 409);
 		}
 	}
 

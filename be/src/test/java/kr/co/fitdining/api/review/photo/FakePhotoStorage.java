@@ -9,13 +9,17 @@ import java.util.OptionalLong;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /** 메모리 사진 저장소. 앱이 올린 것처럼 객체를 넣어 두고, 접속 실패를 흉내 낼 수 있다. */
 public class FakePhotoStorage implements PhotoStorage {
 
 	private final Map<String, byte[]> objects = new ConcurrentHashMap<>();
 	private volatile boolean down;
+	private final AtomicInteger callsInTransaction = new AtomicInteger();
+	private volatile Runnable beforeNextCopy;
 
 	/** JPEG 머리(FF D8 FF)로 시작하는 {@code size}바이트 */
 	public static byte[] jpeg(int size) {
@@ -70,9 +74,21 @@ public class FakePhotoStorage implements PhotoStorage {
 		this.down = down;
 	}
 
+	/** 트랜잭션이 열린 채 불린 저장소 호출 수. 리뷰 수정·삭제는 0이어야 한다(D-51). */
+	public int callsInTransaction() {
+		return callsInTransaction.get();
+	}
+
+	/** 다음 복사 직전에 한 번 실행한다. 사진을 확정하는 사이에 다른 요청이 끼어드는 경우를 흉내 낸다. */
+	public void beforeNextCopy(Runnable action) {
+		beforeNextCopy = action;
+	}
+
 	public void reset() {
 		objects.clear();
 		down = false;
+		callsInTransaction.set(0);
+		beforeNextCopy = null;
 	}
 
 	@Override
@@ -98,6 +114,11 @@ public class FakePhotoStorage implements PhotoStorage {
 	@Override
 	public boolean copy(String from, String to) {
 		check();
+		Runnable action = beforeNextCopy;
+		if (action != null) {
+			beforeNextCopy = null;
+			action.run();
+		}
 		byte[] bytes = objects.get(from);
 		if (bytes == null) {
 			return false;
@@ -113,6 +134,9 @@ public class FakePhotoStorage implements PhotoStorage {
 	}
 
 	private void check() {
+		if (TransactionSynchronizationManager.isActualTransactionActive()) {
+			callsInTransaction.incrementAndGet();
+		}
 		if (down) {
 			throw new PhotoStorageUnavailableException(new IllegalStateException("down"));
 		}

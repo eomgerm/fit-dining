@@ -17,15 +17,12 @@ import java.util.OptionalLong;
 import java.util.UUID;
 import kr.co.fitdining.api.review.dto.PhotoView;
 import kr.co.fitdining.api.review.dto.ReviewPhotoUploadResponse.PhotoUpload;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.support.StaticListableBeanFactory;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /** 사진 확인, 복사, 정리 규칙. 실제 S3 API 호출은 {@code S3PhotoStorageTest}가 확인한다. */
 class ReviewPhotosTest {
@@ -218,69 +215,6 @@ class ReviewPhotosTest {
 	@Nested
 	@DisplayName("정리")
 	class CleanUp {
-
-		@AfterEach
-		void clearSynchronization() {
-			if (TransactionSynchronizationManager.isSynchronizationActive()) {
-				TransactionSynchronizationManager.clearSynchronization();
-			}
-		}
-
-		private void complete(int status) {
-			for (TransactionSynchronization synchronization : TransactionSynchronizationManager.getSynchronizations()) {
-				synchronization.afterCompletion(status);
-			}
-		}
-
-		/** 기존 사진 둘(남길 것, 뺄 것)과 이번에 올려 확정한 사진 하나 */
-		private record Edit(UUID kept, UUID removed, UUID upload, UUID added) {
-		}
-
-		private Edit edit() {
-			List<UUID> saved = photos.confirm(List.of(storage.upload(), storage.upload()));
-			UUID upload = storage.upload();
-			UUID added = photos.confirm(List.of(upload)).getFirst();
-			TransactionSynchronizationManager.initSynchronization();
-			photos.cleanUpAfterTransaction(List.of(upload), List.of(added), List.of(saved.get(1)));
-			return new Edit(saved.get(0), saved.get(1), upload, added);
-		}
-
-		@Test
-		@DisplayName("트랜잭션뒤_커밋되면_빠진사진확정본과새사진업로드원본을지운다")
-		void cleanUp_committed_removesRemovedAndUploadedOriginal() {
-			Edit edit = edit();
-
-			complete(TransactionSynchronization.STATUS_COMMITTED);
-
-			assertThat(storage.hasConfirmed(edit.kept())).isTrue();
-			assertThat(storage.hasConfirmed(edit.added())).isTrue();
-			assertThat(storage.hasPending(edit.upload())).isFalse();
-			assertThat(storage.hasConfirmed(edit.removed())).isFalse();
-		}
-
-		@Test
-		@DisplayName("트랜잭션뒤_롤백되면_새로확정한사진만지운다")
-		void cleanUp_rolledBack_removesAddedOnly() {
-			Edit edit = edit();
-
-			complete(TransactionSynchronization.STATUS_ROLLED_BACK);
-
-			assertThat(storage.hasConfirmed(edit.added())).isFalse();
-			assertThat(storage.hasPending(edit.upload())).isTrue();
-			assertThat(storage.hasConfirmed(edit.removed())).isTrue();
-		}
-
-		@Test
-		@DisplayName("트랜잭션뒤_결과를알수없으면_아무것도지우지않는다")
-		void cleanUp_unknown_deletesNothing() {
-			Edit edit = edit();
-
-			complete(TransactionSynchronization.STATUS_UNKNOWN);
-
-			assertThat(storage.hasConfirmed(edit.added())).isTrue();
-			assertThat(storage.hasConfirmed(edit.removed())).isTrue();
-			assertThat(storage.hasPending(edit.upload())).isTrue();
-		}
 
 		@Test
 		@DisplayName("지우기_저장소에접속하지못해도_예외를던지지않는다")

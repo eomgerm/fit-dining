@@ -36,6 +36,7 @@ import kr.co.fitdining.api.review.exception.InvalidVisitDateException;
 import kr.co.fitdining.api.review.exception.OwnReviewReportException;
 import kr.co.fitdining.api.review.exception.ReviewForbiddenException;
 import kr.co.fitdining.api.review.exception.ReviewNotFoundException;
+import kr.co.fitdining.api.review.exception.ReviewPhotosChangedException;
 import kr.co.fitdining.api.review.photo.InvalidPhotoException;
 import kr.co.fitdining.api.review.photo.PhotoStorageUnavailableException;
 import kr.co.fitdining.api.review.photo.ReviewPhotos;
@@ -49,16 +50,23 @@ import kr.co.fitdining.api.review.store.ReviewTagRow;
 import kr.co.fitdining.api.review.tag.ReasonTag;
 import kr.co.fitdining.api.review.tag.ReasonTagRepository;
 import kr.co.fitdining.api.review.tag.ReasonTagRule;
+import lombok.extern.slf4j.Slf4j;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.CannotCreateTransactionException;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionException;
+import org.springframework.transaction.UnexpectedRollbackException;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * 본문 정규화, 작성 시각과 방문일, 중복 금지, 커서 페이지 계산, 작성 화면 데이터, 내 리뷰 수정·삭제, 신고를 맡는다.
  * 사진 객체는 {@link ReviewPhotos}가 다룬다.
  * 등록과 작성 화면 데이터는 장소 기능으로 장소를 확인한다(D-37).
  */
+@Slf4j
 @Service
 public class ReviewService {
 
@@ -95,16 +103,23 @@ public class ReviewService {
 	private final ReasonTagRepository tags;
 	private final ReviewReportRepository reports;
 	private final ReviewPhotos photos;
+	/** 수정·삭제의 짧은 트랜잭션. 사진 저장소 호출은 이 밖에서 한다(D-51). */
+	private final TransactionTemplate transaction;
+	private final TransactionTemplate readOnly;
 	private final Clock clock;
 
 	public ReviewService(ReviewRepository reviews, AuthUserRepository users, PlaceService places,
-			ReasonTagRepository tags, ReviewReportRepository reports, ReviewPhotos photos, Optional<Clock> clock) {
+			ReasonTagRepository tags, ReviewReportRepository reports, ReviewPhotos photos,
+			PlatformTransactionManager transactionManager, Optional<Clock> clock) {
 		this.reviews = reviews;
 		this.users = users;
 		this.places = places;
 		this.tags = tags;
 		this.reports = reports;
 		this.photos = photos;
+		this.transaction = new TransactionTemplate(transactionManager);
+		this.readOnly = new TransactionTemplate(transactionManager);
+		this.readOnly.setReadOnly(true);
 		this.clock = clock.orElseGet(() -> Clock.system(SEOUL));
 	}
 
@@ -216,62 +231,96 @@ public class ReviewService {
 	}
 
 	/**
-	 * 본문이나 사진을 고친다(D-6, D-44, D-45). 요청의 사진 중 이 리뷰에 이미 있는 id는 남기고, 나머지는 업로드 id로 보고
-	 * 행을 잠근 채 새 사진 id의 확정본으로 복사한다. 빠진 사진의 확정본은 커밋된 뒤에 지우고, 롤백되면 새로 복사한 확정본을
-	 * 지운다.
+	 * 본문이나 사진을 고친다(D-6, D-44, D-45, D-51). 요청의 사진 중 이 리뷰에 이미 있는 id는 남기고, 나머지는 업로드 id로
+	 * 보고 트랜잭션 밖에서 새 사진 id의 확정본으로 복사한다. 그 뒤 짧은 트랜잭션에서 행을 잠그고, 사진 목록이 복사 전과
+	 * 같을 때만 반영한다. 빠진 사진의 확정본과 업로드 원본은 커밋된 뒤에 지우고, 반영하지 못하면 새로 복사한 확정본을 지운다.
 	 *
 	 * @param request 수정 요청. 형식 검증은 컨트롤러가 인증 뒤에 한다.
 	 * @throws AuthFailure 탈퇴했거나 없는 사용자일 때(401)
 	 * @throws ReviewNotFoundException 없거나 삭제한 리뷰일 때
 	 * @throws ReviewForbiddenException 남의 리뷰일 때
 	 * @throws InvalidPhotoException 쓸 수 없는 사진이 있을 때
+	 * @throws ReviewPhotosChangedException 복사하는 사이 사진 목록이 바뀌었을 때
 	 */
-	@Transactional
 	public void update(long reviewId, String userId, ReviewUpdateRequest request) {
 		requireActiveUser(userId);
-		Review review = lockOwn(reviewId, userId);
-		Instant now = now();
-		if (request.description() != null) {
-			review.changeDescription(normalize(request.description()), now);
-		}
 		if (request.photos() == null) {
+			transaction.executeWithoutResult(status -> changeDescription(lockOwn(reviewId, userId), request, now()));
 			return;
 		}
+		List<UUID> before = readOnly.execute(status ->
+				List.copyOf(own(reviews.findByReviewIdAndDeletedAtIsNull(reviewId), userId).getPhotoIds()));
 		List<UUID> requested = distinct(request.photos());
-		List<UUID> before = List.copyOf(review.getPhotoIds());
 		List<UUID> uploadIds = requested.stream().filter(id -> !before.contains(id)).toList();
 		List<UUID> added = photos.confirm(uploadIds);
-		photos.cleanUpAfterTransaction(uploadIds, added,
-				before.stream().filter(id -> !requested.contains(id)).toList());
 		Map<UUID, UUID> confirmedByUpload = new HashMap<>();
 		for (int i = 0; i < uploadIds.size(); i++) {
 			confirmedByUpload.put(uploadIds.get(i), added.get(i));
 		}
-		review.changePhotos(requested.stream().map(id -> confirmedByUpload.getOrDefault(id, id)).toList(), now);
-		try {
-			reviews.flush();
-		} catch (DataIntegrityViolationException e) {
-			if (violates(e, PHOTO_CONSTRAINT)) {
-				throw new InvalidPhotoException();
+		List<UUID> after = requested.stream().map(id -> confirmedByUpload.getOrDefault(id, id)).toList();
+		applyOrDiscard(added, () -> {
+			Review review = lockOwn(reviewId, userId);
+			if (!review.getPhotoIds().equals(before)) {
+				throw new ReviewPhotosChangedException();
 			}
+			Instant now = now();
+			changeDescription(review, request, now);
+			review.changePhotos(after, now);
+			try {
+				reviews.flush();
+			} catch (DataIntegrityViolationException e) {
+				if (violates(e, PHOTO_CONSTRAINT)) {
+					throw new InvalidPhotoException();
+				}
+				throw e;
+			}
+		});
+		photos.discardConfirmed(before.stream().filter(id -> !requested.contains(id)).toList());
+		photos.discardPending(uploadIds);
+	}
+
+	private void changeDescription(Review review, ReviewUpdateRequest request, Instant now) {
+		if (request.description() != null) {
+			review.changeDescription(normalize(request.description()), now);
+		}
+	}
+
+	/**
+	 * 짧은 트랜잭션에서 반영한다. 반영되지 않았으면 이번에 만든 확정본을 지우고, 커밋 결과를 알 수 없으면 커밋됐을 수도
+	 * 있어 지우지 않는다(D-45).
+	 */
+	private void applyOrDiscard(List<UUID> added, Runnable change) {
+		try {
+			transaction.executeWithoutResult(status -> change.run());
+		} catch (CannotCreateTransactionException | UnexpectedRollbackException e) {
+			photos.discardConfirmed(added);
+			throw e;
+		} catch (TransactionException e) {
+			log.warn("Skipped review photo cleanup: transaction outcome is unknown, reason={}",
+					e.getClass().getSimpleName());
+			throw e;
+		} catch (RuntimeException e) {
+			photos.discardConfirmed(added);
 			throw e;
 		}
 	}
 
 	/**
-	 * 리뷰를 지운다. 목록과 리뷰 수에서 바로 빠지고 같은 방문일로 다시 쓸 수 있다(D-28). 사진의 확정본은 커밋된 뒤에
-	 * 지운다(D-39).
+	 * 리뷰를 지운다. 목록과 리뷰 수에서 바로 빠지고 같은 방문일로 다시 쓸 수 있다(D-28). 사진의 확정본은 커밋된 뒤
+	 * 트랜잭션 밖에서 지운다(D-39, D-51).
 	 *
 	 * @throws AuthFailure 탈퇴했거나 없는 사용자일 때(401)
 	 * @throws ReviewNotFoundException 없거나 이미 삭제한 리뷰일 때
 	 * @throws ReviewForbiddenException 남의 리뷰일 때
 	 */
-	@Transactional
 	public void delete(long reviewId, String userId) {
 		requireActiveUser(userId);
-		Review review = lockOwn(reviewId, userId);
-		review.delete(now());
-		photos.cleanUpAfterTransaction(List.of(), List.of(), review.getPhotoIds());
+		List<UUID> photoIds = transaction.execute(status -> {
+			Review review = lockOwn(reviewId, userId);
+			review.delete(now());
+			return List.copyOf(review.getPhotoIds());
+		});
+		photos.discardConfirmed(photoIds);
 	}
 
 	/** 같은 사진이 두 번 있으면 400이다. 없으면 빈 목록이다. */

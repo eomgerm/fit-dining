@@ -35,6 +35,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.PlatformTransactionManager;
 
 /** DB 없이 확인할 수 있는 규칙. 저장과 목록은 {@code ReviewPersistenceTest}가 실제 PostgreSQL로 확인한다. */
 class ReviewServiceTest {
@@ -67,7 +68,8 @@ class ReviewServiceTest {
 		private final PlaceService places = mock(PlaceService.class);
 		private final ReasonTagRepository tags = mock(ReasonTagRepository.class);
 		private final ReviewService service = new ReviewService(reviews, users, places, tags,
-				mock(ReviewReportRepository.class), mock(ReviewPhotos.class), Optional.of(Clock.fixed(Instant.parse("2026-10-21T03:00:00Z"), ZoneOffset.UTC)));
+				mock(ReviewReportRepository.class), mock(ReviewPhotos.class), mock(PlatformTransactionManager.class),
+				Optional.of(Clock.fixed(Instant.parse("2026-10-21T03:00:00Z"), ZoneOffset.UTC)));
 
 		/** 장소와 사용자 확인을 지나고 저장에서 {@code constraint}를 어기게 한 등록 */
 		private void createViolating(String constraint) {

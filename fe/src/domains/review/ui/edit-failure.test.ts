@@ -21,6 +21,7 @@ describe("editFailure", () => {
       "photo",
     ],
     [http(403), "forbidden"],
+    [http(409), "conflict"],
     [http(500), "server"],
     [new Error("boom"), "server"],
   ])("%s는 %s다", (error, kind) => {
