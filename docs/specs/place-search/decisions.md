@@ -526,3 +526,9 @@ Glossary: none · ADRs: none
 - Decision: 시안(5-05, 5-08)대로 전체 상태 결과 패널의 "지도 보기" 버튼을 없앤다. 중간 상태로는 손잡이로 돌아간다. 과거 결과 화면에는 지도 위 "저장한 장소"와 "내 정보" 버튼을 두지 않고 "현재 검색으로"와 "내 위치"만 둔다. 패널 아래 "새 결과는 기록 끝에 추가되고, 이 결과는 그대로 남아요." 안내도 없애고 "이 조건으로 다시 검색" 버튼만 둔다(시안도 같이 고쳤다). D-90의 안내 문구는 이 결정으로 바뀐다. 전체 화면 VQA(2026-10-29) 결정 D-11이다.
 - Rejected: spec대로 유지 → 시안에 없고, 사용자가 시안을 따르기로 했다.
 - Anchors: `fe/src/domains/place/ui/result-panel.tsx#ResultPanel` (modify) · `fe/src/domains/place/ui/search-screen.tsx#SearchScreen` (modify)
+
+## D-99 조건이 좁아 결과가 없으면 다시 찾기 버튼 없이 안내만 가운데에 둔다
+- Status: settled
+- Decision: `emptyReason`이 있는 결과 없음(5-E06)은 원인과 제안 문구만 보이고 다시 찾기 버튼은 두지 않는다. 안내는 제목 아래 남은 자리의 가운데에 두고, 패널 높이는 다른 결과 화면과 같다. 시안도 버튼을 빼고 같은 높이·위치로 고쳤다. 전체 화면 VQA(2026-10-29) 결정 D-10의 ②안이다.
+- Rejected: 뺄 조건을 API에 더해 버튼 만들기(①안) → `emptyReason`은 문장 두 개뿐이고 `conditions`는 FE에 불투명해 AI·BE·FE 계약을 바꿔야 한다. 시안처럼 패널을 30px 높이기 → 버튼이 없으면 필요 없다.
+- Anchors: `fe/src/domains/place/ui/result-panel.tsx#PanelResults` (modify)

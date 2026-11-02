@@ -271,13 +271,16 @@ export function PanelResults({
   if (!firstPage) return null;
   if (firstPage.emptyReason) {
     return (
-      <EmptyState
-        icon={<FilterIcon />}
-        title={firstPage.emptyReason.cause}
-        description={firstPage.emptyReason.suggestion}
-        // 제목 바로 아래라 위 여백을 12px로 줄인다(5-E06)
-        className="-mt-4"
-      />
+      // 조건이 좁아 결과가 없으면 버튼 없이 안내만, 제목 아래 남은 자리 가운데에 둔다(5-E06, D-99).
+      // 아래로는 목록 여백(pb-4)까지 쓰고, 안내 위 여백 28px 중 20px을 빼 위아래 8px로 맞춘다
+      <div className="-mb-4 flex flex-1 flex-col justify-center">
+        <EmptyState
+          icon={<FilterIcon />}
+          title={firstPage.emptyReason.cause}
+          description={firstPage.emptyReason.suggestion}
+          className="-mt-5"
+        />
+      </div>
     );
   }
   if (locating) {
