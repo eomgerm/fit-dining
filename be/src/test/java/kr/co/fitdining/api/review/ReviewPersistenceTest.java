@@ -88,7 +88,8 @@ import tools.jackson.databind.json.JsonMapper;
 
 /**
  * 실제 PostgreSQL(Testcontainers)과 V4 마이그레이션으로 리뷰 저장, 중복 금지, 커서 페이지, 인덱스 사용을 확인한다.
- * 컨테이너는 다른 통합 테스트와 함께 쓰므로 리뷰와 이 테스트가 만든 사용자는 앞뒤로 지운다.
+ * 장소는 카탈로그 DB 모드로 읽는다. 컨테이너는 다른 통합 테스트와 함께 쓰므로 리뷰와 이 테스트가 만든 사용자와 장소는
+ * 앞뒤로 지운다.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Import(ReviewPersistenceTest.Configuration.class)
@@ -101,10 +102,13 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 	/** 로그인 시도 제한(주소마다 15분에 20번)은 다른 통합 테스트와 함께 세므로 이 테스트만의 주소로 로그인하고 지운다. */
 	private static final String CLIENT_ADDRESS = USER_PREFIX + "client";
 	private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
+	/** 테스트가 쓰는 장소 id와 업종. 리뷰 FK(V13)가 장소 행을 요구해 이 id로 넣는다. */
+	private static final Map<Long, String> PLACES = Map.of(1L, "CAFE", 2L, "BAR", 3L, "CAFE", 4L, "RESTAURANT",
+			5L, "RESTAURANT");
 
 	@DynamicPropertySource
-	static void placeMock(DynamicPropertyRegistry registry) {
-		registry.add("place.mock.enabled", () -> "true");
+	static void placeCatalog(DynamicPropertyRegistry registry) {
+		registry.add("place.mock.enabled", () -> "false");
 		registry.add("spring.jpa.properties.hibernate.generate_statistics", () -> "true");
 	}
 
@@ -183,6 +187,11 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 		cleanUp();
 		clock.instant = NOON;
 		photoStorage.reset();
+		jdbc.update("delete from places where place_id in (1, 2, 3, 4, 5)");
+		PLACES.forEach((placeId, group) -> jdbc.update("""
+				insert into places (place_id, naver_place_id, name, category_group, station, lat, lng)
+				overriding system value values (?, ?, ?, ?, 'GANGNAM', 37.5, 127.03)""",
+				placeId, USER_PREFIX + placeId, "리뷰 테스트 장소 " + placeId, group));
 	}
 
 	@AfterEach
@@ -192,6 +201,7 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 		app.update("delete from review_photos");
 		app.update("delete from review_reason_tags");
 		app.update("delete from reviews");
+		app.update("delete from places where naver_place_id like ?", USER_PREFIX + "%");
 		app.update("delete from auth_refresh_tokens where user_id like ?", USER_PREFIX + "%");
 		app.update("delete from auth_users where id like ?", USER_PREFIX + "%");
 		app.update("delete from auth_login_attempts where address = ?", CLIENT_ADDRESS);
@@ -1358,6 +1368,32 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 			assertThatCode(() -> service.create(1, accounts.get(1), body("재가입 뒤 리뷰"))).doesNotThrowAnyException();
 			assertThat(service.list(1, null, null).items()).extracting(ReviewItem::description)
 					.containsExactly("재가입 뒤 리뷰", "탈퇴 전 리뷰");
+		}
+	}
+
+	@Nested
+	@DisplayName("장소 FK")
+	class PlaceForeignKey {
+
+		@Test
+		@DisplayName("리뷰테이블_없는장소id면_FK로거부한다")
+		void reviews_unknownPlaceId_rejectedByForeignKey() {
+			String user = createUsers(1).getFirst();
+
+			assertThatThrownBy(() -> jdbc.update("insert into reviews (place_id, user_id, visit_date)"
+					+ " values (999, ?, date '2026-10-21')", user))
+					.hasMessageContaining("fk_reviews_place_id");
+		}
+
+		@Test
+		@DisplayName("장소삭제_리뷰가있으면_FK로거부하고리뷰는남는다")
+		void placeDelete_withReview_rejectedAndReviewKept() {
+			String user = createUsers(1).getFirst();
+			service.create(1, user, body("남을 리뷰"));
+
+			assertThatThrownBy(() -> jdbc.update("delete from places where place_id = 1"))
+					.hasMessageContaining("fk_reviews_place_id");
+			assertThat(service.list(1, null, null).totalCount()).isEqualTo(1);
 		}
 	}
 

@@ -18,6 +18,7 @@ import kr.co.fitdining.api.auth.repository.AuthUserRepository;
 import kr.co.fitdining.api.place.PlaceService;
 import kr.co.fitdining.api.place.dto.PlaceSummary;
 import kr.co.fitdining.api.place.dto.PlaceSummary.CategoryGroup;
+import kr.co.fitdining.api.place.exception.PlaceNotFoundException;
 import kr.co.fitdining.api.review.dto.ReviewCreateRequest;
 import kr.co.fitdining.api.review.dto.ReviewCreateResponse;
 import kr.co.fitdining.api.review.dto.ReviewDetailResponse;
@@ -67,6 +68,9 @@ public class ReviewService {
 	static final String DUPLICATE_VISIT_CONSTRAINT = "uk_reviews_user_id_place_id_visit_date";
 
 	static final String AUTHOR_CONSTRAINT = "fk_reviews_user_id";
+
+	/** 장소 확인을 지난 뒤 장소 행이 없으면 걸리는 FK(V13, D-49). 없는 장소(404)로 바꾼다. */
+	static final String PLACE_CONSTRAINT = "fk_reviews_place_id";
 
 	/** 같은 사람이 같은 리뷰를 두 번 신고하지 못하게 하는 유니크 제약(V8, D-11). */
 	static final String DUPLICATE_REPORT_CONSTRAINT = "uk_review_reports_review_id_reporter_id";
@@ -152,6 +156,9 @@ public class ReviewService {
 			}
 			if (violates(e, AUTHOR_CONSTRAINT)) {
 				throw new AuthFailure("로그인이 필요합니다.");
+			}
+			if (violates(e, PLACE_CONSTRAINT)) {
+				throw new PlaceNotFoundException();
 			}
 			if (violates(e, PHOTO_CONSTRAINT)) {
 				throw new InvalidPhotoException();

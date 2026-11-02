@@ -20,6 +20,7 @@ import kr.co.fitdining.api.place.dto.PlaceDetailResponse;
 import kr.co.fitdining.api.place.dto.PlaceSummary;
 import kr.co.fitdining.api.place.dto.PlaceSummary.CategoryGroup;
 import kr.co.fitdining.api.place.dto.PlaceSummary.Station;
+import kr.co.fitdining.api.place.exception.PlaceNotFoundException;
 import kr.co.fitdining.api.review.dto.ReviewCreateRequest;
 import kr.co.fitdining.api.review.photo.ReviewPhotos;
 import kr.co.fitdining.api.review.report.ReviewReportRepository;
@@ -58,8 +59,8 @@ class ReviewServiceTest {
 	}
 
 	@Nested
-	@DisplayName("작성자 확인")
-	class Author {
+	@DisplayName("저장 중 FK 위반")
+	class ForeignKeys {
 
 		private final ReviewRepository reviews = mock(ReviewRepository.class);
 		private final AuthUserRepository users = mock(AuthUserRepository.class);
@@ -68,9 +69,8 @@ class ReviewServiceTest {
 		private final ReviewService service = new ReviewService(reviews, users, places, tags,
 				mock(ReviewReportRepository.class), mock(ReviewPhotos.class), Optional.of(Clock.fixed(Instant.parse("2026-10-21T03:00:00Z"), ZoneOffset.UTC)));
 
-		@Test
-		@DisplayName("등록_저장중작성자FK위반이면_401이다")
-		void create_authorForeignKeyViolation_unauthorized() {
+		/** 장소와 사용자 확인을 지나고 저장에서 {@code constraint}를 어기게 한 등록 */
+		private void createViolating(String constraint) {
 			PlaceDetailResponse detail = mock(PlaceDetailResponse.class);
 			when(detail.place()).thenReturn(new PlaceSummary(1L, "식당", CategoryGroup.RESTAURANT, Station.GANGNAM,
 					null, null, null));
@@ -79,12 +79,23 @@ class ReviewServiceTest {
 					new ReasonTag("QUIET_GOOD", "QUIET", ReasonTag.Sentiment.GOOD, "조용해서 좋았어요", "분위기")));
 			when(users.existsByIdAndDeletedAtIsNull("user-1")).thenReturn(true);
 			when(reviews.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("x",
-					new ConstraintViolationException("fk", new SQLException(), ReviewService.AUTHOR_CONSTRAINT)));
-			ReviewCreateRequest request = new ReviewCreateRequest(LocalDate.of(2026, 10, 21), List.of("QUIET_GOOD"),
-					false, null, null, null);
+					new ConstraintViolationException("fk", new SQLException(), constraint)));
+			service.create(1, "user-1", new ReviewCreateRequest(LocalDate.of(2026, 10, 21), List.of("QUIET_GOOD"),
+					false, null, null, null));
+		}
 
-			assertThatThrownBy(() -> service.create(1, "user-1", request))
+		@Test
+		@DisplayName("등록_저장중작성자FK위반이면_401이다")
+		void create_authorForeignKeyViolation_unauthorized() {
+			assertThatThrownBy(() -> createViolating(ReviewService.AUTHOR_CONSTRAINT))
 					.isInstanceOfSatisfying(AuthFailure.class, failure -> assertThat(failure.status()).isEqualTo(401));
+		}
+
+		@Test
+		@DisplayName("등록_저장중장소FK위반이면_없는장소다")
+		void create_placeForeignKeyViolation_placeNotFound() {
+			assertThatThrownBy(() -> createViolating(ReviewService.PLACE_CONSTRAINT))
+					.isInstanceOf(PlaceNotFoundException.class);
 		}
 	}
 
