@@ -10,7 +10,7 @@ import { locateDevice } from "./locate-device";
 
 function PermissionIllustration() {
   return (
-    <div aria-hidden className="relative h-64 w-full overflow-hidden">
+    <div aria-hidden className="relative h-59 w-full shrink-0 overflow-hidden">
       <div className="absolute top-7 left-1/2 h-60 w-38 -translate-x-1/2 rounded-xl border-3 border-line-strong bg-surface p-3 pt-7">
         <div className="h-full rounded-t-lg border-2 border-line" />
       </div>
@@ -26,7 +26,9 @@ function PermissionIllustration() {
         </div>
         <div className="mt-4 flex items-center justify-between">
           <span className="h-2 w-18 rounded-full bg-surface-sunken" />
-          <span className="text-label-sm text-primary-strong">허용</span>
+          <span className="text-body-sm leading-5 font-semibold text-primary-strong">
+            허용
+          </span>
         </div>
       </div>
       <div className="absolute inset-x-0 bottom-0 h-14 bg-linear-to-b from-transparent to-surface-warm" />
@@ -73,13 +75,14 @@ export function LocationScreen() {
   }
 
   return (
-    <main className="mx-auto flex min-h-svh w-full max-w-110 flex-col bg-linear-to-b from-primary-soft via-surface-warm to-surface px-5 pb-6 text-ink sm:px-8">
+    <main className="mx-auto flex min-h-svh w-full max-w-110 flex-col bg-linear-to-b from-primary-soft via-surface-warm to-surface px-5 pb-4 text-ink sm:px-8">
       <header className="-mx-3 flex min-h-14 items-center justify-end">
         <TextButton variant="muted" disabled={pending} onClick={skipLocation}>
           건너뛰기
         </TextButton>
       </header>
-      <h1 className="mt-7 text-center text-headline-md">
+      {/* 시안의 시스템 상태바 28px을 제외한 제목 y=64, 그림 y=168을 일반 흐름으로 배치한다. */}
+      <h1 className="mt-2 text-center text-headline-md">
         {pending ? (
           <>
             가까운 곳부터
@@ -94,7 +97,13 @@ export function LocationScreen() {
           </>
         )}
       </h1>
-      <div className="flex flex-1 flex-col items-center justify-center py-6">
+      <div
+        className={
+          pending
+            ? "mt-10 flex flex-1 flex-col items-center"
+            : "-mx-5 mt-4 flex flex-1 flex-col items-center justify-center sm:-mx-8"
+        }
+      >
         {pending ? (
           <PermissionIllustration />
         ) : (
@@ -108,7 +117,11 @@ export function LocationScreen() {
         )}
         <p
           aria-live="polite"
-          className="mt-5 text-center text-body-sm leading-5.5 text-ink-muted"
+          className={
+            pending
+              ? "mt-5 text-center text-body-sm leading-5.5 text-ink-muted"
+              : "mt-5 px-6 text-center text-body-sm leading-5.5 text-ink-muted"
+          }
         >
           {pending ? (
             <>
