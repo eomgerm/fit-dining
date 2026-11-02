@@ -9,9 +9,11 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 
 이 spec은 Jira S15P31A302-114 "사용자별 장소 북마크 추가"의 BE·FE를 다룬다. 완료 기준은 상세에서 저장·해제가 되고, 메인에서 내 저장 장소만 보이며, 다른 사용자 계정에서는 보이지 않는 것이다. 화면 글자의 "저장"이 북마크이고 "저장 해제"가 북마크 취소다. **저장한 장소 화면**은 별도 페이지가 아니라 메인 첫 화면의 지도와 하단 패널이 내가 저장한 장소만 보이도록 바뀐 상태이고, 주소는 `/?view=saved`다.
 
+이번 반복(Jira S15P31A302-137 "북마크 장소 FK 추가")은 북마크가 실제 장소만 가리키게 한다. 지금 `bookmarks.place_id`에는 `places`로 가는 FK가 없어서, Mock 시절 번호로 저장된 행이 같은 번호의 다른 장소에 붙거나 장소가 지워진 뒤에도 남을 수 있다. 기존 북마크를 모두 지우고 FK를 건다(D-1, D-16, D-17).
+
 ## Assumptions
 
-1. 장소 조회는 장소 기능의 `PlaceService.getPlace`가 맡는다. 지금 구현은 `mock/places.json`을 읽는 Mock 엔진뿐이고 local/dev에서만 켜지며, 운영은 엔진이 없어 `getPlace`가 503 예외를 던진다. `places` 테이블(V6)은 있지만 적재된 행이 없다. DB 엔진은 S15P31A302-115가 만든다(D-1, D-16).
+1. 장소 조회는 장소 기능의 `PlaceService.getPlace`가 맡는다. Mock 엔진(`mock/places.json`)과 DB 엔진(S15P31A302-115)이 있고 `PLACE_MOCK_ENABLED`로 고른다. 2026-11-02 기준 dev는 DB 모드이고 `places`에 300곳이 적재돼 있으며 북마크는 시험 데이터 1행이다. prod DB에는 아직 앱 테이블이 없다. Mock은 local 화면 작업에서만 쓴다(D-1, D-16, D-17).
 2. `getPlace`의 응답(`PlaceDetailResponse`)에는 핏 점수와 추천 이유가 없고, 장소 요약(`PlaceSummary`), 주소, `tags`, 응답을 만들 때의 시각으로 계산한 `openStatus`가 있다. Mock의 `tags`는 고정 문구에서 지어낸 값이고 실데이터는 AI 쪽이 나중에 준다(D-13).
 3. BE는 null 필드를 응답에서 생략한다(`default-property-inclusion: non_null`). 전역 ProblemDetail 처리는 없고 기능마다 예외 처리기를 둔다. 운영의 `Clock` 빈은 UTC다.
 4. 인증은 무상태 JWT다. AT가 만료되면 BE가 401과 토큰 만료 `type`을 돌려주고, FE의 `withAccessToken`이 RT로 한 번 갱신해 다시 보낸다. 만료가 아닌 401은 그대로 던지고 앱의 로그인 정보를 지우지 않는다. 페이지를 새로 열면 FE가 RT로 AT를 다시 받는다(로그인 복원). RT 쿠키는 탭끼리 공유된다. 탈퇴는 `auth_users.deleted_at`을 채우는 soft delete이고 재가입은 새 사용자 id를 만든다(D-2, D-7, D-15).
@@ -72,6 +74,11 @@ FE: 저장한 장소 화면
 
 - [x] AC-29: 두 계정 A, B로 local에서 직접 확인한다. A가 저장한 장소가 B의 저장한 장소 화면과 상세 버튼에 보이지 않는다. 같은 브라우저에서 A로 저장한 장소 화면을 본 뒤 로그아웃하고 B로 로그인하면 A의 목록과 저장 상태가 보이지 않는다. 게스트로 상세에서 저장을 눌러 로그인하면 그 상세로, 메인 "저장한 장소" 버튼에서 눌러 로그인하면 저장한 장소 화면으로 돌아온다(이메일 로그인으로 확인하고, 같은 복귀 경로인 소셜 로그인은 직접 확인하지 않는다, D-11). 저장한 장소 화면 → 상세 → 브라우저 [뒤로]가 저장한 장소 화면(탭·패널 유지)으로, 다시 [뒤로]가 들어오기 전 화면으로 온다. 화면을 Assumptions 8의 와이어프레임과 비교해 배치, 문구, 흐름이 같다. 간격과 다음은 달라도 된다: 정렬 드롭다운 없음(D-6), 공통 토스트 모양(D-5), 영업 상태 글자와 주소는 지금 데이터와 기존 라벨 그대로, "내 위치" 버튼은 기존 메인 버튼 그대로. 와이어프레임이 있는 사람이 확인한다. (D-2, D-11)
 
+장소 FK (S15P31A302-137)
+
+- [ ] AC-30: 장소 확인을 통과한 뒤 저장할 때 `places`에 그 장소 행이 없어 장소 FK에 걸리면 404 ProblemDetail이고 행이 생기지 않는다(500이 아니다). (D-1, D-2)
+- [ ] AC-31: 새 마이그레이션 하나가 기존 `bookmarks` 행을 장소가 있든 없든 모두 지운 뒤 `place_id` → `places(place_id)` FK `fk_bookmarks_place_id`를 `ON DELETE CASCADE`로 건다. 적용 뒤 `places`에 없는 `place_id`는 거부되고, 장소를 지우면 그 장소의 북마크만 지워지며 다른 장소의 북마크는 남는다. 기본키, 사용자 FK, 양수 CHECK는 그대로다. 버전은 develop에 합칠 때 비어 있는 다음 번호다(작성 시점 V14). (D-2, D-16)
+
 ## Interfaces
 
 API (모두 `Authorization: Bearer <AT>` 필요, 오류는 ProblemDetail)
@@ -102,29 +109,30 @@ FE 주소
 | `/?view=saved&category=RESTAURANT\|CAFE\|BAR` | 저장한 장소 화면(그 업종 탭) |
 | `/place?id=<placeId>&from=saved` | 저장한 장소 화면에서 연 장소 상세(핏 점수와 추천 이유 숨김) |
 
-저장 형태 (새 마이그레이션, 버전은 AC-12)
+저장 형태 (테이블은 AC-12, 장소 FK는 AC-31)
 
 ```sql
 CREATE TABLE bookmarks (
     user_id    text        NOT NULL CONSTRAINT fk_bookmarks_user_id REFERENCES auth_users(id),
     place_id   bigint      NOT NULL CONSTRAINT ck_bookmarks_place_id CHECK (place_id > 0),
+                           -- AC-31: CONSTRAINT fk_bookmarks_place_id REFERENCES places(place_id) ON DELETE CASCADE
     created_at timestamptz NOT NULL,
     CONSTRAINT pk_bookmarks PRIMARY KEY (user_id, place_id)
 );
 ```
 
 - `created_at`이 저장 시각(API의 `savedAt`)이다. 삭제 시각 컬럼은 없다(D-15).
-- `places`로 가는 FK는 없다. -115 인수인계(D-16): `places`에 실데이터가 들어가고 장소 조회가 DB 엔진으로 바뀌는 배포와 같은 배포의 마이그레이션 하나에서 bookmarks 행을 모두 지운 뒤 `place_id REFERENCES places(place_id) ON DELETE CASCADE`를 더한다. 기본키와 사용자 FK는 그대로 둔다. 같은 때 여러 장소를 한 번에 읽는 장소 조회가 필요하다(D-13).
+- `places`로 가는 FK `fk_bookmarks_place_id`(`ON DELETE CASCADE`)는 AC-31의 마이그레이션이 기존 행을 모두 지운 뒤 더한다. 이 마이그레이션은 prod를 사용자에게 열기 전에 나가야 한다(D-2의 10, D-16).
 
 ## Constraints
 
 - 북마크의 장소 정보와 존재 확인은 장소 기능의 `PlaceService`를 거치고 `places` 테이블을 직접 읽지 않는다. (D-1, D-13)
 - 사용자는 `AuthUseCases.authenticate`로 Bearer 토큰에서 얻고, 모든 북마크 API에서 탈퇴하지 않은 사용자인지 장소 확인보다 먼저 확인한다(확인하는 계층은 구현이 정한다). 북마크 예외 처리기는 북마크 컨트롤러에만 걸리고 `AuthFailure`의 상태와 `type`, 경로 변수 오류의 400, 장소 예외의 404/503, 처리되지 않은 예외의 500을 ProblemDetail로 바꾼다. Spring이 원래 4xx로 처리하는 요청 오류는 4xx로 둔다. 장소·리뷰 예외 처리기가 걸리지 않게 북마크 코드는 `api.place`, `api.review` 패키지 밖에 둔다. 북마크 컨트롤러는 리뷰 컨트롤러처럼 웹 애플리케이션일 때만 뜬다(`migrate` 프로필 기동). (D-4)
-- 저장은 `INSERT … ON CONFLICT DO NOTHING`으로 하고 저장 시각은 주입한 `Clock`에서 얻는다. 리뷰의 `saveAndFlush` 뒤 제약 이름으로 나누는 방식을 쓰지 않는다. (D-3)
-- 마이그레이션은 새 파일 하나로 더하고 기존 마이그레이션은 고치지 않는다. 탈퇴 처리(`UserService.withdraw`)는 바꾸지 않는다. (D-15)
+- 저장은 `INSERT … ON CONFLICT DO NOTHING`으로 하고 저장 시각은 주입한 `Clock`에서 얻는다. 리뷰의 `saveAndFlush` 뒤 제약 이름으로 나누는 방식을 쓰지 않는다. 다만 장소 FK 위반은 제약 이름 `fk_bookmarks_place_id`로 알아보고 없는 장소(404)로 바꾼다. (D-1, D-3)
+- 마이그레이션은 새 파일 하나로 더하고 기존 마이그레이션은 고치지 않는다. 탈퇴 처리(`UserService.withdraw`)는 바꾸지 않는다. (D-15, D-16)
 - FE의 place 도메인은 auth 도메인을 직접 import하지 않고, 인증이 필요한 호출과 세션 상태는 app 계층이 이어 준다(지금 FE 의존 방향 규칙). 서버 상태는 지금 FE 관례대로 공통 API 클라이언트와 TanStack Query로 다룬다. (D-5)
 - 공통 토스트, 공통 확인 창, 로그인 화면, 가입 화면, 인증 BE, 인증 FE 모듈(`auth-client`, `withAccessToken`)은 고치지 않는다. 계정 확인과 세션 정리는 app 계층에서 기존 함수(`withAccessToken`, `getSession`, `clearSession`)를 써서 하고, 로그인 뒤 복귀는 FE의 sessionStorage와 홈 도착 처리로만 한다. (D-3, D-5, D-7, D-8)
-- place-search 문서는 고치지 않는다. (D-10)
+- place 기능 문서(place-search, place-catalog, place-ai-search)는 이번 반복에서 사실을 지금 코드에 맞추는 것만 고치고 결정은 바꾸지 않는다. place-lookup-db 문서는 고치지 않는다. (D-10)
 
 ## Existing code
 
@@ -142,10 +150,13 @@ CREATE TABLE bookmarks (
 | `fe/src/domains/place/ui/search-screen.tsx#SearchScreen` | modify | "저장한 장소" 버튼의 "준비 중" 토스트를 저장한 장소 화면과 로그인 안내로 바꾸고, 메인에 `/?view=saved` 상태를 더한다 | D-7, D-12 |
 | `fe/src/app/home-entry.tsx#HomeEntry` | modify | 메인에 북마크의 인증 호출과 세션 상태를 이어 주고, 홈 도착 때 sessionStorage에 남은 주소로 한 번 보낸다. 온보딩 게이트는 그대로 | D-8, D-12 |
 | `fe/src/app/my/page.tsx#MyPage` | modify | "저장한 장소" 메뉴의 토스트만 `/?view=saved` 열기로 바꾼다 | D-9 |
+| `be/src/main/java/kr/co/fitdining/api/bookmark/BookmarkService.java#save` | modify | 저장 중 장소 FK 위반을 `PlaceNotFoundException`(404)으로 바꾼다. 그 밖의 동작은 그대로 | D-1 |
+| `be/src/test/java/kr/co/fitdining/api/bookmark/BookmarkPersistenceTest.java#BookmarkPersistenceTest` | modify | 장소 FK가 요구하는 시험 장소 행을 넣는다. 확인하는 성질은 줄이지 않는다 | D-16 |
 
 ## Seams & test plan
 
-- BE 서비스·영속성 (example), AC-2, AC-4, AC-5, AC-6, AC-7, AC-8, AC-9, AC-10, AC-11, AC-12: Spring Boot 테스트에서 실제 PostgreSQL(Testcontainers)과 마이그레이션 위에 북마크 서비스를 직접 부른다. 시계는 고정·이동 가능한 UTC `Clock`, 장소 조회는 Mock 엔진 또는 `PlaceService` 대역(없는 장소, 엔진 없음, 예상 못 한 예외, 호출 횟수)을 쓴다. 동시 `PUT`은 여러 스레드로 같은 키를 넣고 행 수와 이후 시각 불변을 본다. `savedAt`의 `+09:00` 변환을 서비스 결과에서 본다. AC-12는 탈퇴 처리를 부른 뒤 행이 남는지 본다. 잡는 것: 유일성, 저장 시각 유지, 정렬, 격리, 탈퇴 판정 순서, 404 빼기, 엔진 미호출. 놓치는 것: HTTP 상태와 JSON 키. Prior art: `be/src/test/java/kr/co/fitdining/api/review/ReviewPersistenceTest.java`, `support/PostgresTestSupport`.
+- BE 서비스·영속성 (example), AC-2, AC-4, AC-5, AC-6, AC-7, AC-8, AC-9, AC-10, AC-11, AC-12, AC-30, AC-31(FK 정의와 장소 삭제): Spring Boot 테스트에서 실제 PostgreSQL(Testcontainers)과 마이그레이션 위에 북마크 서비스를 직접 부른다. 시계는 고정·이동 가능한 UTC `Clock`, 장소 조회는 Mock 엔진 또는 `PlaceService` 대역(없는 장소, 엔진 없음, 예상 못 한 예외, 호출 횟수)을 쓴다. 동시 `PUT`은 여러 스레드로 같은 키를 넣고 행 수와 이후 시각 불변을 본다. `savedAt`의 `+09:00` 변환을 서비스 결과에서 본다. AC-12는 탈퇴 처리를 부른 뒤 행이 남는지 본다. 잡는 것: 유일성, 저장 시각 유지, 정렬, 격리, 탈퇴 판정 순서, 404 빼기, 엔진 미호출. 놓치는 것: HTTP 상태와 JSON 키. Prior art: `be/src/test/java/kr/co/fitdining/api/review/ReviewPersistenceTest.java`, `support/PostgresTestSupport`.
+- BE 마이그레이션 (example), AC-31(기존 행 삭제): 같은 컨테이너에 따로 만든 DB를 V13까지 올리고 장소가 있는 행과 없는 행을 넣은 뒤 나머지를 적용해, 행이 모두 지워지고 없는 장소가 거부되는지 본다. 잡는 것: 기존 행을 남기거나 일부만 지우는 마이그레이션. Prior art: `support/PostgresTestSupport`.
 - BE 컨트롤러 (example), AC-1, AC-2, AC-3, AC-4, AC-7, AC-10, AC-11: `@WebMvcTest`로 북마크 컨트롤러에 서비스와 `AuthUseCases`를 대역으로 넣어 상태 코드, ProblemDetail, 만료 `type`, 400 경로와 인증보다 먼저인 순서, `?userId=` 무시, 응답 JSON 키와 null 키 생략, 서비스 예외의 503·500을 본다. 놓치는 것: DB 동작과 엔진 호출 여부. Prior art: `ReviewControllerTest`.
 - FE 상세 북마크 버튼 (example, jsdom), AC-13, AC-14, AC-15, AC-16, AC-17, AC-26: 장소 상세 화면을 Testing Library로 그리고 북마크 API와 세션을 대역으로 두어 확인 중·확인 실패·저장됨·미저장의 접근 속성, 요청 중 눌리지 않음, 성공·4xx·5xx·연결 끊김과 재조회, 오프라인(`onlineManager`)에서 멈추지 않고 실패하며 다시 나가지 않음, 보내는 순간 사용자가 다르면 보내지 않음, 계정 전환 뒤 늦은 응답 버리기, 비로그인과 세션 종료 401의 안내 창·`clearSession` 호출·버튼 모양, 저절로 나간 조회의 401은 창 없음, 로그인 복원 3초 시간 제한, [취소]·[로그인]이 남기는 주소, `from=saved`면 검색 카드가 있어도 핏 점수 숨김을 본다. 기존 "준비 중이에요" 단언 테스트는 공유와 저장을 나눠 새 동작으로 바꾼다. Prior art: `fe/src/domains/place/ui/place-detail-screen.test.tsx`, `review-edit-form.test.tsx`(`onlineManager`).
 - FE 저장한 장소 화면 (example, jsdom), AC-17, AC-19, AC-20, AC-21, AC-22, AC-23, AC-24, AC-25, AC-26, AC-28: 메인 화면을 그리고 목록 API, 세션, 주소를 대역으로 두어 버튼이 `/?view=saved`로 가는지와 그 주소·`category`로 직접 들어온 경우, 비로그인 메인 버튼과 비로그인 직접 진입의 안내 창 문구와 목록 미요청, 숨긴 검색창·버튼, 핀·카드에 저장 장소만 있는지, 검색 결과가 늦게 와도 화면 유지와 메인 선택 불변, [뒤로]의 앱 안·밖 진입별 행선지와 검색 기록 미기록, 진입마다 다시 받기와 로딩, 카드 내용과 빠지는 값, 카드가 `from=saved`로 상세를 여는지, 업종 탭 거르기·개수·조사·주소 반영, 0개와 [추천 받으러 가기], 서버·시간 초과·연결 실패와 다시 시도, 목록 401, 다시 그렸을 때 탭·패널 유지와 해제 반영을 본다. 기존 "준비 중이에요" 단언 테스트는 새 동작으로 바꾼다. 놓치는 것: 지도 핀의 실제 모양, 라우트를 실제로 오가는 [뒤로]. Prior art: `fe/src/domains/place/ui/search-screen.test.tsx`.
@@ -161,7 +172,8 @@ CREATE TABLE bookmarks (
 - 로그인 주소의 `next` 같은 앱 공통 로그인 복귀 장치, 리뷰 작성·내 정보의 로그인 복귀, 로그인 뒤 저장 자동 실행. (D-8)
 - 홈의 온보딩 게이트 변경(로그아웃한 비게스트에게 `/?view=saved`를 여는 것). (D-12)
 - 탈퇴 시 북마크 삭제(보관 정책 PRD OQ-17이 정해지면 다시 본다). (D-15)
-- `places` FK와 Mock id 북마크 정리, 여러 장소 일괄 조회(-115에서 한다). (D-16, D-13)
+- local Mock 모드의 장소 id를 DB `place_id`와 맞추는 일. (D-17)
+- 여러 장소 일괄 조회. (D-13)
 - 장소 상세 응답에 저장 여부 넣기. (D-5)
 - "공유" 버튼 기능. (D-10)
 
