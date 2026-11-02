@@ -76,8 +76,8 @@ FE: 저장한 장소 화면
 
 장소 FK (S15P31A302-137)
 
-- [ ] AC-30: 장소 확인을 통과한 뒤 저장할 때 `places`에 그 장소 행이 없어 장소 FK에 걸리면 404 ProblemDetail이고 행이 생기지 않는다(500이 아니다). (D-1, D-2)
-- [ ] AC-31: 새 마이그레이션 하나가 기존 `bookmarks` 행을 장소가 있든 없든 모두 지운 뒤 `place_id` → `places(place_id)` FK `fk_bookmarks_place_id`를 `ON DELETE CASCADE`로 건다. 적용 뒤 `places`에 없는 `place_id`는 거부되고, 장소를 지우면 그 장소의 북마크만 지워지며 다른 장소의 북마크는 남는다. 기본키, 사용자 FK, 양수 CHECK는 그대로다. 버전은 develop에 합칠 때 비어 있는 다음 번호다(작성 시점 V14). (D-2, D-16)
+- [x] AC-30: 장소 확인을 통과한 뒤 저장할 때 `places`에 그 장소 행이 없어 장소 FK에 걸리면 404 ProblemDetail이고 행이 생기지 않는다(500이 아니다). (D-1, D-2)
+- [x] AC-31: 새 마이그레이션 하나가 기존 `bookmarks` 행을 장소가 있든 없든 모두 지운 뒤 `place_id` → `places(place_id)` FK `fk_bookmarks_place_id`를 `ON DELETE CASCADE`로 건다. 적용 뒤 `places`에 없는 `place_id`는 거부되고, 장소를 지우면 그 장소의 북마크만 지워지며 다른 장소의 북마크는 남는다. 기본키, 사용자 FK, 양수 CHECK는 그대로다. 버전은 develop에 합칠 때 비어 있는 다음 번호다(작성 시점 V14). (D-2, D-16)
 
 ## Interfaces
 

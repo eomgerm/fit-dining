@@ -1,5 +1,6 @@
 package kr.co.fitdining.api.bookmark;
 
+import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -13,6 +14,7 @@ import kr.co.fitdining.api.bookmark.dto.BookmarkItem;
 import kr.co.fitdining.api.place.PlaceService;
 import kr.co.fitdining.api.place.dto.PlaceDetailResponse;
 import kr.co.fitdining.api.place.exception.PlaceNotFoundException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 /**
@@ -23,6 +25,9 @@ import org.springframework.stereotype.Service;
 public class BookmarkService {
 
 	private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
+	/** {@code places}로 가는 FK(V14). */
+	static final String PLACE_CONSTRAINT = "fk_bookmarks_place_id";
+	private static final String FOREIGN_KEY_VIOLATION = "23503";
 
 	private final BookmarkRepository bookmarks;
 	private final AuthUserRepository users;
@@ -41,7 +46,7 @@ public class BookmarkService {
 	 * 장소를 저장한다. 이미 저장한 장소면 장소를 확인하지 않고 아무것도 바꾸지 않는다(D-3).
 	 *
 	 * @throws AuthFailure 탈퇴했거나 없는 사용자일 때(401)
-	 * @throws PlaceNotFoundException 저장하지 않은 장소가 없는 장소일 때
+	 * @throws PlaceNotFoundException 저장하지 않은 장소가 없는 장소일 때. 확인한 뒤 장소가 사라져 FK에 걸려도 같다(D-1)
 	 * @throws kr.co.fitdining.api.place.exception.PlaceSearchUnavailableException 저장하지 않은 장소를 확인할 엔진이 없을 때
 	 */
 	public void save(String userId, long placeId) {
@@ -50,7 +55,24 @@ public class BookmarkService {
 			return;
 		}
 		places.getPlace(placeId);
-		bookmarks.insertIfAbsent(userId, placeId, clock.instant().truncatedTo(ChronoUnit.MICROS));
+		try {
+			bookmarks.insertIfAbsent(userId, placeId, clock.instant().truncatedTo(ChronoUnit.MICROS));
+		} catch (DataIntegrityViolationException e) {
+			if (violatesPlaceConstraint(e)) {
+				throw new PlaceNotFoundException();
+			}
+			throw e;
+		}
+	}
+
+	/** JDBC 예외에는 제약 이름 필드가 없어 FK 위반 상태 코드와 서버 메시지의 제약 이름으로 판별한다. */
+	static boolean violatesPlaceConstraint(Throwable e) {
+		for (Throwable cause = e; cause != null; cause = cause.getCause()) {
+			if (cause instanceof SQLException sql && FOREIGN_KEY_VIOLATION.equals(sql.getSQLState())) {
+				return sql.getMessage() != null && sql.getMessage().contains(PLACE_CONSTRAINT);
+			}
+		}
+		return false;
 	}
 
 	/**

@@ -63,6 +63,10 @@ class BookmarkPersistenceTest extends PostgresTestSupport {
 	/** 2026-10-29 12:00:00.123456789 KST. 나노초가 있어 마이크로초 절사를 확인할 수 있다. */
 	private static final Instant NOON = Instant.parse("2026-10-29T03:00:00.123456789Z");
 	private static final String USER_PREFIX = "bookmark-test-";
+	/** 테스트가 쓰는 장소 id. 장소 FK(V14)가 장소 행을 요구해 넣는다. 다른 테스트가 같은 id를 넣었으면 그 행을 쓴다. */
+	private static final List<Long> PLACE_IDS = List.of(3L, 4L, 5L, 7L, 9L);
+	/** 장소 삭제 확인에만 쓰는 장소 id. 다른 테스트와 겹치지 않는 값이다. */
+	private static final long DELETABLE_PLACE_ID = 900_001L;
 
 	@TestConfiguration
 	static class Configuration {
@@ -115,13 +119,22 @@ class BookmarkPersistenceTest extends PostgresTestSupport {
 		jdbc = new JdbcTemplate(appSource());
 		cleanUp();
 		clock.instant = NOON;
+		PLACE_IDS.forEach(this::insertPlace);
 		when(places.getPlace(anyLong())).thenAnswer(call -> detail(call.getArgument(0)));
+	}
+
+	private void insertPlace(long placeId) {
+		jdbc.update("""
+				insert into places (place_id, naver_place_id, name, category_group, station, lat, lng)
+				overriding system value values (?, ?, ?, 'CAFE', 'YEOKSAM', 37.5, 127.03)
+				on conflict do nothing""", placeId, USER_PREFIX + placeId, "북마크 테스트 장소 " + placeId);
 	}
 
 	@AfterEach
 	void cleanUp() {
 		JdbcTemplate app = new JdbcTemplate(appSource());
 		app.update("delete from bookmarks");
+		app.update("delete from places where naver_place_id like ?", USER_PREFIX + "%");
 		app.update("delete from auth_refresh_tokens where user_id like ?", USER_PREFIX + "%");
 		app.update("delete from auth_users where id like ?", USER_PREFIX + "%");
 	}
@@ -162,6 +175,48 @@ class BookmarkPersistenceTest extends PostgresTestSupport {
 
 	private static List<Long> ids(List<BookmarkItem> items) {
 		return items.stream().map(item -> item.place().id()).toList();
+	}
+
+	@Nested
+	@DisplayName("장소 FK")
+	class PlaceForeignKey {
+
+		@Test
+		@DisplayName("저장_확인뒤장소가없어FK에걸리면_404예외이고행이생기지않는다")
+		void save_placeMissingAtInsert_throwsNotFoundWithoutRow() {
+			String user = createUser();
+			long missing = 888_888L;
+
+			assertThatThrownBy(() -> service.save(user, missing)).isInstanceOf(PlaceNotFoundException.class);
+			assertThat(rows()).isZero();
+			verify(places).getPlace(missing);
+		}
+
+		@Test
+		@DisplayName("장소삭제_그장소의북마크만지워지고다른장소북마크는남는다")
+		void deletePlace_removesOnlyItsBookmarks() {
+			insertPlace(DELETABLE_PLACE_ID);
+			List<String> users = createUsers(2);
+			service.save(users.get(0), DELETABLE_PLACE_ID);
+			service.save(users.get(1), DELETABLE_PLACE_ID);
+			service.save(users.get(0), 3);
+
+			jdbc.update("delete from places where place_id = ?", DELETABLE_PLACE_ID);
+
+			assertThat(rows()).isEqualTo(1);
+			assertThat(service.isBookmarked(users.get(0), 3)).isTrue();
+		}
+
+		@Test
+		@DisplayName("제약_장소FK는places를가리키고장소삭제때함께지운다")
+		void constraint_referencesPlacesWithCascade() {
+			var fk = jdbc.queryForMap("""
+					SELECT confrelid::regclass::text AS target, confdeltype::text AS on_delete
+					FROM pg_constraint WHERE conname = ?""", BookmarkService.PLACE_CONSTRAINT);
+
+			assertThat(fk.get("target")).isEqualTo("places");
+			assertThat(fk.get("on_delete")).isEqualTo("c");
+		}
 	}
 
 	@Nested

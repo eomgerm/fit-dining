@@ -8,7 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
-/** {@code bookmarks} 테이블(V8). 모든 쿼리는 사용자 id로 제한한다(bookmark D-2). */
+/** {@code bookmarks} 테이블(V10, 장소 FK는 V14). 모든 쿼리는 사용자 id로 제한한다(bookmark D-2). */
 @Repository
 @RequiredArgsConstructor
 class BookmarkRepository {
