@@ -80,10 +80,10 @@ Settings → CI/CD → General pipelines에서 설정한다.
 
 | 러너 | Tags | Run untagged | Protected | 호스트·executor |
 |---|---|---|---|---|
-| `fit-verify` | `verify` | 끔 | 끔 | B, docker(+ docker.sock), `concurrent 2` |
+| `fit-verify` | `verify` | 끔 | 끔 | B, docker(+ docker.sock), `concurrent 3` |
 | `fit-deploy` | `deploy` | 끔 | 켬 | A, shell, `concurrent 1` |
 
-세부 값(job 메모리, cpus, `gitlab-runner` 사용자의 docker 그룹)은 설계 6.1절이다. B의 `concurrent`는 처음 등록하면 `runner.sh register`가 2로 맞추고, 이미 1로 등록된 러너는 토큰 없이 `sudo bash ~/host/runner.sh tune`으로 바꾼다(서비스를 재시작하지 않는다). 메모리를 많이 쓰는 잡은 `resource_group: verify-heavy`로 한 번에 하나만 돌아서 4GB를 넘지 않는다.
+세부 값(job 메모리, cpus, `gitlab-runner` 사용자의 docker 그룹)은 설계 6.1절이다. B의 `concurrent`는 처음 등록하면 `runner.sh register`가 3으로 맞추고, 이미 1로 등록된 러너는 토큰 없이 `sudo bash ~/host/runner.sh tune`으로 바꾼다(서비스를 재시작하지 않는다). 메모리를 많이 쓰는 잡은 BE끼리, FE끼리 `resource_group`(`verify-heavy-be`, `verify-heavy-fe`)으로 한 번에 하나씩만 돈다. BE와 FE가 겹치면 B의 RAM을 조금 넘어 스왑을 쓴다(2026-11-02 측정, 설계 6.1절).
 
 - [x] 두 러너를 만들고 화면에 한 번만 보이는 인증 토큰(`glrt-`로 시작)을 호스트의 `gitlab-runner register`에 입력한다. 토큰은 호스트의 `config.toml`에만 남긴다. 두 서버에서 `runner.sh status`가 PASS다(2026-10-23).
 - [x] Runners 목록에서 두 러너가 online인지 확인한다. 임시 verify 러너(이 PC의 Docker)는 지웠다(사용자 보고, 2026-10-23).

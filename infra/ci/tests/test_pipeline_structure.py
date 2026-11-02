@@ -328,13 +328,16 @@ class JobsTest(unittest.TestCase):
         self.assertIn("be:test", build["needs"])
         self.assertNotIn("services", build)  # -x test라 DB가 필요 없다
 
-    def test_heavy_jobs_share_one_resource_group_so_two_of_them_never_run_at_once(self):
-        # B(메모리 4GB)의 러너는 동시에 둘을 돌린다. 메모리를 많이 쓰는 잡끼리만 줄을 세워 가벼운 lint 잡이 기다리지 않게 한다
-        for name in ("be:test", "fe:check", "be:build"):
-            self.assertEqual(effective(name).get("resource_group"), "verify-heavy", name)
+    def test_heavy_jobs_queue_per_side_so_one_be_and_one_fe_job_run_at_the_same_time(self):
+        # 메모리를 많이 쓰는 잡은 BE끼리, FE끼리 줄을 세운다. BE 하나와 FE 하나는 동시에 돈다. B(RAM 3.8GB)에서 잡 하나는 최대 1.5~1.6GB였고
+        # 둘이 겹치면 스왑을 조금 쓴다(2026-11-02 측정). 같은 쪽의 잡 둘이 겹치면 3.2GB가 넘어 그렇게 하지 않는다
+        groups = {"be:test": "verify-heavy-be", "be:build": "verify-heavy-be", "fe:check": "verify-heavy-fe"}
+        for name, group in groups.items():
+            self.assertEqual(effective(name).get("resource_group"), group, name)
+        self.assertNotEqual(groups["be:test"], groups["fe:check"])
         for name in job_names():
-            if name not in ("be:test", "fe:check", "be:build"):
-                self.assertNotEqual(effective(name).get("resource_group"), "verify-heavy", name)
+            if name not in groups:
+                self.assertNotIn(effective(name).get("resource_group"), set(groups.values()), name)
 
     def test_path_filtered_jobs_rerun_when_the_ci_config_changes_and_branches_run_everything(self):
         filtered = []

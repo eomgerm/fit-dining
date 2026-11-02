@@ -406,7 +406,7 @@ Caddy 컨테이너(`caddy:2.x`, 구현 시 최신 2.x를 핀)가 A의 80·443만
 
 | 러너 | 호스트 | executor | 비고 |
 |---|---|---|---|
-| `fit-verify` (태그 `verify`) | B (Arm) | docker + docker.sock | job 메모리 2.0GB, cpus 2, `concurrent 2`(메모리를 많이 쓰는 Gradle·Node 잡은 `resource_group: verify-heavy`로 한 번에 하나만 돌아서 나머지 하나는 가벼운 lint가 쓴다. `runner.sh tune`). B에는 prod 컨테이너·볼륨·시크릿이 없어 CI 사고가 서비스에 닿지 않는다 |
+| `fit-verify` (태그 `verify`) | B (Arm) | docker + docker.sock | job 메모리 2.0GB, cpus 2, `concurrent 3`(메모리를 많이 쓰는 Gradle·Node 잡은 BE끼리, FE끼리 `resource_group`(`verify-heavy-be`, `verify-heavy-fe`)으로 한 번에 하나씩만 돌고 BE 하나와 FE 하나는 동시에 돈다. 잡 하나의 최대 메모리는 FE 1.6GB, BE 1.5GB였고(2026-11-02 B에서 측정) 둘이 겹치면 RAM 3.8GB를 조금 넘어 스왑을 쓴다. 나머지 하나는 가벼운 lint가 쓴다. `runner.sh tune`). B에는 prod 컨테이너·볼륨·시크릿이 없어 CI 사고가 서비스에 닿지 않는다 |
 | `fit-deploy` (태그 `deploy`) | A (x86) | shell, `gitlab-runner` ∈ docker 그룹 | protected 브랜치(develop·master)만, `concurrent 1`. 이미지 조립(`COPY`)과 배포만 한다. jar와 PWA 번들은 verify 단계(B)가 만든 아티팩트를 쓴다 |
 | `fit-verify-x86` (필요 시) | A | docker | BE·프런트 의존성에 arm64 빌드가 없을 때만 추가. 야간 위주 |
 
@@ -742,7 +742,7 @@ Grafana는 팀원에게 viewer 계정을 준다. A503에서는 SSH 보유자만 
 - 병합 커밋(3-way merge)은 쓰지 않는다. 브랜치는 `git rebase origin/master`로 최신화하고 `git pull --rebase`로 당겨받는다. 로컬에서는 lefthook의 `pre-merge-commit`이, MR에서는 CI의 `lint:history`가 병합 커밋을 막는다. GitLab의 fast-forward 병합은 병합 커밋이 든 브랜치도 받아주므로 이 검사가 필요하다.
 - merge train은 쓰지 않는다. Premium·Ultimate 기능이고 fast-forward와 완전히 호환되지 않는다 (확인: GitLab 문서).
 - 병합 권한자는 준비된 MR을 먼저 올라온 순서로 하나씩 병합한다. 대기가 길면 변경이 작은 MR부터 병합한다.
-- verify 러너가 B 한 대라 MR이 몰리면 큐가 길어진다. 그래서 MR 파이프라인은 바뀐 경로의 잡만 돌리고(6.3절), 무거운 잡만 줄을 세우고 가벼운 잡은 동시에 돌린다(`concurrent 2`). 파이프라인에는 시간 상한(`timeout`, 예: 30분, 제안값)을 둔다.
+- verify 러너가 B 한 대라 MR이 몰리면 큐가 길어진다. 그래서 MR 파이프라인은 바뀐 경로의 잡만 돌리고(6.3절), 무거운 잡은 BE끼리, FE끼리만 줄을 세워 BE 하나와 FE 하나를 동시에 돌리고 가벼운 잡도 동시에 돌린다(`concurrent 3`). 파이프라인에는 시간 상한(`timeout`, 예: 30분, 제안값)을 둔다.
 - 마이그레이션 번호가 겹치는 MR은 앞선 MR이 병합된 뒤 rebase하면 `lint:migrations`가 `duplicate-version`으로 잡는다(6.5절). 새 번호는 rebase한 뒤 다시 붙인다.
 
 **인프라 경로 변경**

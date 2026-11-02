@@ -9,7 +9,7 @@
 # 여기서는 화면에 한 번만 보이는 인증 토큰(glrt-로 시작)을 입력한다. 토큰은 이 서버의 config.toml에만 남는다.
 # 환경변수(선택): FIT_SKIP(쉼표로 구분, 시험용) systemd. FIT_RUNNER_URL(https://lab.ssafy.com). FIT_RUNNER_ROLE_FILE(/etc/fit/role)
 #   FIT_RUNNER_CONFIG(/etc/gitlab-runner/config.toml). FIT_RUNNER_REREGISTER=1(이미 등록돼 있어도 다시 등록한다)
-#   FIT_RUNNER_CONCURRENT(fit-verify의 동시 실행 수. 기본 2, 1에서 4까지)
+#   FIT_RUNNER_CONCURRENT(fit-verify의 동시 실행 수. 기본 3, 1에서 4까지)
 set -euo pipefail
 
 # GitLab 서버(CE 18.11.5)와 같은 마이너 버전으로 고정한다. 서버를 올리면 이 값도 같이 올린다
@@ -46,13 +46,14 @@ runner_name() {
 }
 
 # 동시에 돌릴 job 수(설계 6.1절). config.toml의 전역 값이다.
-#  fit-verify(B): 2. 메모리를 많이 쓰는 job(Gradle, Node)은 .gitlab-ci.yml의 resource_group(verify-heavy)이 한 번에 하나로 묶으므로
-#                 나머지 하나는 가벼운 lint가 쓴다. MR이 몰려도 lint가 무거운 job 뒤에 줄을 서지 않는다. B는 메모리 4GB라 4를 넘기지 않는다
+#  fit-verify(B): 3. 메모리를 많이 쓰는 job(Gradle, Node)은 .gitlab-ci.yml의 resource_group이 BE끼리, FE끼리 한 번에 하나로 묶는다
+#                 (verify-heavy-be, verify-heavy-fe). 무거운 BE 하나와 FE 하나가 동시에 돌아도 나머지 하나는 가벼운 lint가 쓴다.
+#                 MR이 몰려도 lint가 무거운 job 뒤에 줄을 서지 않는다. B는 메모리 4GB라 4를 넘기지 않는다
 #  fit-deploy(A): 1. 같은 환경의 배포가 겹치면 안 된다
 want_concurrent() {
   case "$(runner_name)" in
     fit-verify)
-      local n="${FIT_RUNNER_CONCURRENT:-2}"
+      local n="${FIT_RUNNER_CONCURRENT:-3}"
       case "$n" in 1 | 2 | 3 | 4) echo "$n" ;; *) die "FIT_RUNNER_CONCURRENT는 1에서 4 사이의 정수다" ;; esac
       ;;
     *) echo 1 ;;

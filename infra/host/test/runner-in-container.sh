@@ -84,20 +84,20 @@ write_config() { printf 'concurrent = %s\n[[runners]]\n  name = "%s"\n  url = "h
 concurrent_now() { sed -n 's/^concurrent[[:space:]]*=[[:space:]]*\([0-9]*\).*/\1/p' /etc/gitlab-runner/config.toml; }
 write_config 1 fit-verify
 out="$(run status)"; rc=$?
-ok_if "B(fit-verify)에 concurrent가 1이면 status가 실패하고 tune을 안내한다" "$([ "$rc" != 0 ] && [ "$(has "$out" 'FAIL  concurrent가 2이 아니다(sudo bash infra/host/runner.sh tune)')" = 1 ] && echo 1 || echo 0)"
+ok_if "B(fit-verify)에 concurrent가 1이면 status가 실패하고 tune을 안내한다" "$([ "$rc" != 0 ] && [ "$(has "$out" 'FAIL  concurrent가 3이 아니다(sudo bash infra/host/runner.sh tune)')" = 1 ] && echo 1 || echo 0)"
 out="$(run tune)"; rc=$?
-ok_if "tune이 B의 concurrent를 2로 바꾸고 서비스는 재시작하지 않는다고 알린다" "$([ "$rc" = 0 ] && [ "$(concurrent_now)" = 2 ] && [ "$(has "$out" '변경 1건')" = 1 ] && [ "$(has "$out" '재시작하지 않았다')" = 1 ] && echo 1 || echo 0)"
+ok_if "tune이 B의 concurrent를 3으로 바꾸고 서비스는 재시작하지 않는다고 알린다" "$([ "$rc" = 0 ] && [ "$(concurrent_now)" = 3 ] && [ "$(has "$out" '변경 1건')" = 1 ] && [ "$(has "$out" '재시작하지 않았다')" = 1 ] && echo 1 || echo 0)"
 ok_if "config.toml 권한이 600으로 남는다" "$([ "$(stat -c %a /etc/gitlab-runner/config.toml)" = 600 ] && echo 1 || echo 0)"
 ok_if "러너 항목은 그대로다" "$([ "$(grep -c 'name = "fit-verify"' /etc/gitlab-runner/config.toml)" = 1 ] && echo 1 || echo 0)"
 out="$(run tune)"; rc=$?
-ok_if "다시 실행하면 변경이 없다(멱등)" "$([ "$rc" = 0 ] && [ "$(has "$out" '변경 0건')" = 1 ] && [ "$(has "$out" '이미 2이다')" = 1 ] && echo 1 || echo 0)"
+ok_if "다시 실행하면 변경이 없다(멱등)" "$([ "$rc" = 0 ] && [ "$(has "$out" '변경 0건')" = 1 ] && [ "$(has "$out" '이미 3이다')" = 1 ] && echo 1 || echo 0)"
 out="$(run status)"; rc=$?
-ok_if "tune 뒤에는 status가 concurrent를 PASS로 보고한다" "$([ "$rc" = 0 ] && [ "$(has "$out" 'PASS  concurrent가 2이다')" = 1 ] && echo 1 || echo 0)"
-out="$(FIT_RUNNER_CONCURRENT=3 run tune)"; rc=$?
-ok_if "FIT_RUNNER_CONCURRENT로 B의 값을 바꿀 수 있다" "$([ "$rc" = 0 ] && [ "$(concurrent_now)" = 3 ] && echo 1 || echo 0)"
+ok_if "tune 뒤에는 status가 concurrent를 PASS로 보고한다" "$([ "$rc" = 0 ] && [ "$(has "$out" 'PASS  concurrent가 3이다')" = 1 ] && echo 1 || echo 0)"
+out="$(FIT_RUNNER_CONCURRENT=4 run tune)"; rc=$?
+ok_if "FIT_RUNNER_CONCURRENT로 B의 값을 바꿀 수 있다" "$([ "$rc" = 0 ] && [ "$(concurrent_now)" = 4 ] && echo 1 || echo 0)"
 for bad in 0 5 abc '2;touch /tmp/injected'; do
   out="$(FIT_RUNNER_CONCURRENT="$bad" run tune)"; rc=$?
-  ok_if "FIT_RUNNER_CONCURRENT=$bad는 거부하고 config를 바꾸지 않는다" "$([ "$rc" != 0 ] && [ "$(has "$out" '1에서 4 사이')" = 1 ] && [ "$(concurrent_now)" = 3 ] && [ ! -e /tmp/injected ] && echo 1 || echo 0)"
+  ok_if "FIT_RUNNER_CONCURRENT=$bad는 거부하고 config를 바꾸지 않는다" "$([ "$rc" != 0 ] && [ "$(has "$out" '1에서 4 사이')" = 1 ] && [ "$(concurrent_now)" = 4 ] && [ ! -e /tmp/injected ] && echo 1 || echo 0)"
 done
 echo app >/etc/fit/role
 write_config 5 fit-deploy
