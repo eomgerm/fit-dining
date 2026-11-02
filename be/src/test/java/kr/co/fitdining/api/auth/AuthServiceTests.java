@@ -137,7 +137,7 @@ class AuthServiceTests extends PostgresTestSupport {
         assertEquals(clock.instant(), user.getAgeConfirmedAt());
         assertEquals(clock.instant(), user.getTermsAgreedAt());
         assertEquals(clock.instant(), user.getPrivacyAgreedAt());
-        assertEquals("2026-10-23", user.getTermsVersion());
+        assertEquals("2026-11-02", user.getTermsVersion());
         assertNotEquals("password1", user.getPasswordHash());
         assertEquals("새이름", issued.identity().nickname());
         assertEquals("새이름", auth.refresh(issued.refreshToken()).identity().nickname());
