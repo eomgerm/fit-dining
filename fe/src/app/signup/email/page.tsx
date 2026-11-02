@@ -8,6 +8,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signup } from "@/domains/auth/api/auth-client";
 import {
+  SIGNUP_LIMITS,
   signupMessages,
   validateSignup,
   type SignupFields,
@@ -125,6 +126,9 @@ export default function SignupEmailPage() {
                 label={label}
                 placeholder={label}
                 name={field}
+                maxLength={
+                  SIGNUP_LIMITS[field === "confirmation" ? "password" : field]
+                }
                 id={`signup-${field}`}
                 type={
                   field === "email"

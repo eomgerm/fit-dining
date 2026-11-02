@@ -1,3 +1,9 @@
+export const SIGNUP_LIMITS = {
+  email: 254,
+  password: 72,
+  nickname: 15,
+} as const;
+
 export const signupMessages = {
   email: "이메일 형식을 확인해 주세요.",
   password: "영문과 숫자를 섞어 8자 이상",
@@ -14,13 +20,16 @@ export type SignupErrors = Partial<Record<keyof SignupFields, string>>;
 export function validateSignup(fields: SignupFields): SignupErrors {
   const errors: SignupErrors = {};
   const email = fields.email.trim().toLowerCase();
-  if (email.length > 254 || !/^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/.test(email))
+  if (
+    email.length > SIGNUP_LIMITS.email ||
+    !/^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/.test(email)
+  )
     errors.email = signupMessages.email;
   if (
     Array.from(fields.password).length < 8 ||
     !/[a-zA-Z]/.test(fields.password) ||
     !/[0-9]/.test(fields.password) ||
-    new TextEncoder().encode(fields.password).length > 72
+    new TextEncoder().encode(fields.password).length > SIGNUP_LIMITS.password
   )
     errors.password = signupMessages.password;
   if (!fields.confirmation || fields.password !== fields.confirmation)
@@ -52,6 +61,10 @@ export type SignupPreferences = {
 
 export function validateNickname(nickname: string): string | undefined {
   const length = Array.from(nickname.trim()).length;
-  if (length < 2 || length > 15 || /\p{Cc}/u.test(nickname.trim()))
+  if (
+    length < 2 ||
+    length > SIGNUP_LIMITS.nickname ||
+    /\p{Cc}/u.test(nickname.trim())
+  )
     return signupMessages.nickname;
 }

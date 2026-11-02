@@ -58,3 +58,26 @@ describe("signup validation", () => {
       validateSignup({ ...valid, confirmation: "other" }).confirmation,
     ).toBeTruthy());
 });
+
+it("accepts exactly 254 email characters and rejects 255", () => {
+  const email = `${"a".repeat(242)}@example.com`;
+  expect(validateSignup({ ...valid, email })).toEqual({});
+  expect(validateSignup({ ...valid, email: `a${email}` }).email).toBeTruthy();
+});
+it("accepts 72 ASCII password bytes and rejects 73", () => {
+  const password = `a1${"a".repeat(70)}`;
+  expect(
+    validateSignup({ ...valid, password, confirmation: password }),
+  ).toEqual({});
+  expect(
+    validateSignup({ ...valid, password: `${password}a` }).password,
+  ).toBeTruthy();
+});
+it("accepts a trimmed 15-character nickname and rejects 16 code points", () => {
+  expect(
+    validateSignup({ ...valid, nickname: ` ${"가".repeat(15)} ` }),
+  ).toEqual({});
+  expect(
+    validateSignup({ ...valid, nickname: "😀".repeat(16) }).nickname,
+  ).toBeTruthy();
+});

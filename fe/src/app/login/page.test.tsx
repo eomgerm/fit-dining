@@ -160,3 +160,23 @@ it("로그인 성공 후 홈으로 이동한다", async () => {
   fireEvent.submit(screen.getByLabelText("이메일").closest("form")!);
   await waitFor(() => expect(mocks.router.replace).toHaveBeenCalledWith("/"));
 });
+
+it("sets input maximum lengths", async () => {
+  mocks.restore.mockRejectedValueOnce(new Error("unauthenticated"));
+  render(
+    <ToastProvider>
+      <LoginPage />
+    </ToastProvider>,
+  );
+  await waitFor(() =>
+    expect((screen.getByLabelText("이메일") as HTMLInputElement).disabled).toBe(
+      false,
+    ),
+  );
+  expect((screen.getByLabelText("이메일") as HTMLInputElement).maxLength).toBe(
+    254,
+  );
+  expect(
+    (screen.getByLabelText("비밀번호") as HTMLInputElement).maxLength,
+  ).toBe(72);
+});

@@ -3,6 +3,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AuthError, login, restore } from "@/domains/auth/api/auth-client";
+import { SIGNUP_LIMITS } from "@/domains/auth/model/signup";
 import Image from "next/image";
 import { Button } from "@/shared/ui/button/button";
 import { IconButton } from "@/shared/ui/button/icon-button";
@@ -107,7 +108,7 @@ export default function LoginPage() {
           autoComplete="email"
           autoCapitalize="none"
           spellCheck={false}
-          maxLength={254}
+          maxLength={SIGNUP_LIMITS.email}
           required
           disabled={busy}
           value={email}
@@ -124,6 +125,7 @@ export default function LoginPage() {
           label="비밀번호"
           id="password"
           name="password"
+          maxLength={SIGNUP_LIMITS.password}
           placeholder="비밀번호"
           type={showPassword ? "text" : "password"}
           autoComplete="current-password"

@@ -241,3 +241,23 @@ it.each(["empty", "blocked"])(
     expect(mocks.signup.mock.calls[0][0]).not.toHaveProperty("preferences");
   },
 );
+
+it("sets input maximum lengths", () => {
+  render(
+    <ToastProvider>
+      <SignupEmailPage />
+    </ToastProvider>,
+  );
+  expect((screen.getByLabelText("이메일") as HTMLInputElement).maxLength).toBe(
+    254,
+  );
+  expect(
+    (screen.getByLabelText("비밀번호") as HTMLInputElement).maxLength,
+  ).toBe(72);
+  expect(
+    (screen.getByLabelText("비밀번호 확인") as HTMLInputElement).maxLength,
+  ).toBe(72);
+  expect((screen.getByLabelText("닉네임") as HTMLInputElement).maxLength).toBe(
+    15,
+  );
+});
