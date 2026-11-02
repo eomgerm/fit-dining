@@ -150,4 +150,38 @@ class AuthHttpTests {
         verifyNoInteractions(auth);
     }
 
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"email", "password", "nickname"})
+    void signup_overMaximum_returnsFieldError(String field) throws Exception {
+        String email = field.equals("email") ? "a".repeat(243) + "@example.com" : "new@example.com";
+        String password = field.equals("password") ? "abc1" + "\uac00".repeat(23) : "password1";
+        String nickname = field.equals("nickname") ? "a".repeat(16) : "new";
+        String body = """
+            {"email":"%s","password":"%s","nickname":"%s",
+             "agreements":{"ageOver14":true,"terms":true,"privacy":true}}
+            """.formatted(email, password, nickname);
+        mvc.perform(post("/api/auth/signup").header("Origin", "http://localhost:3000")
+                .contentType("application/json").content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[*].field", org.hamcrest.Matchers.contains(field)));
+        verifyNoInteractions(auth);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"ascii", "multibyte"})
+    void login_overMaximumPassword_preservesExistingFailure(String kind) throws Exception {
+        // Use the real early validation branch; no service dependencies are used for invalid input.
+        when(auth.login(any(), any(), any())).thenAnswer(invocation ->
+                new kr.co.fitdining.api.auth.application.AuthService(null, null, null, null, null, null, null)
+                        .login(invocation.getArgument(0), invocation.getArgument(1), invocation.getArgument(2)));
+        String password = kind.equals("ascii") ? "a1" + "a".repeat(71) : "abc1" + "\uac00".repeat(23);
+        mvc.perform(post("/api/auth/login").header("Origin", "http://localhost:3000")
+                .contentType("application/json")
+                .content("{\"email\":\"demo@example.com\",\"password\":\"" + password + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith("application/problem+json"))
+                .andExpect(jsonPath("$.detail").value("\uC785\uB825 \uD615\uC2DD\uC744 \uD655\uC778\uD574\uC8FC\uC138\uC694."));
+        verify(auth).login(eq("demo@example.com"), eq(password), any());
+    }
 }

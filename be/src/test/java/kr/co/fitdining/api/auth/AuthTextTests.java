@@ -34,4 +34,29 @@ class AuthTextTests {
 
     @Test @DisplayName("정규화_누락 입력_null 유지")
     void normalize_omittedInput_keepsNull() { assertNull(AuthText.strip(null)); }
+
+    @Test
+    void email_maximumLength_accepts254Rejects255() {
+        String email = "a".repeat(242) + "@example.com";
+        assertTrue(SignupValue.Validator.valid("email", email));
+        assertFalse(SignupValue.Validator.valid("email", "a" + email));
+    }
+
+    @ParameterizedTest @ValueSource(strings = {"ascii", "multibyte"})
+    void password_maximumBytes_accepts72Rejects73(String kind) {
+        String password = kind.equals("ascii") ? "a1" + "a".repeat(70) : "abc123" + "\uac00".repeat(22);
+        assertEquals(72, password.getBytes(java.nio.charset.StandardCharsets.UTF_8).length);
+        assertTrue(SignupValue.Validator.valid("password", password));
+        assertFalse(SignupValue.Validator.valid("password", password + "a"));
+    }
+
+    @ParameterizedTest @ValueSource(strings = {"a", "\uac00", "\ud83d\ude00"})
+    void nickname_maximumCodePoints_accepts15Rejects16(String character) {
+        String nickname = character.repeat(15);
+        assertTrue(SignupValue.Validator.valid("nickname", nickname));
+        assertFalse(SignupValue.Validator.valid("nickname", nickname + character));
+        var request = new SignupRequest("user@example.com", "password1", " " + nickname + " ", null);
+        assertEquals(nickname, request.nickname());
+        assertTrue(SignupValue.Validator.valid("nickname", request.nickname()));
+    }
 }
