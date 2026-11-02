@@ -231,16 +231,17 @@ public class ReviewService {
 	}
 
 	/**
-	 * 본문이나 사진을 고친다(D-6, D-44, D-45, D-51). 요청의 사진 중 이 리뷰에 이미 있는 id는 남기고, 나머지는 업로드 id로
-	 * 보고 트랜잭션 밖에서 새 사진 id의 확정본으로 복사한다. 그 뒤 짧은 트랜잭션에서 행을 잠그고, 사진 목록이 복사 전과
-	 * 같을 때만 반영한다. 빠진 사진의 확정본과 업로드 원본은 커밋된 뒤에 지우고, 반영하지 못하면 새로 복사한 확정본을 지운다.
+	 * 본문이나 사진을 고친다(D-6, D-44, D-45, D-51). 기준 사진 목록은 수정 화면이 받은 목록({@code basePhotos})이고, 없으면
+	 * 요청이 도착했을 때의 목록이다. 요청의 사진 중 기준 목록에 있는 id는 남기고, 나머지는 업로드 id로 보고 트랜잭션 밖에서
+	 * 새 사진 id의 확정본으로 복사한다. 그 뒤 짧은 트랜잭션에서 행을 잠그고, 사진 목록이 기준 목록과 같을 때만 반영한다.
+	 * 빠진 사진의 확정본과 업로드 원본은 커밋된 뒤에 지우고, 반영하지 못하면 새로 복사한 확정본을 지운다.
 	 *
 	 * @param request 수정 요청. 형식 검증은 컨트롤러가 인증 뒤에 한다.
 	 * @throws AuthFailure 탈퇴했거나 없는 사용자일 때(401)
 	 * @throws ReviewNotFoundException 없거나 삭제한 리뷰일 때
 	 * @throws ReviewForbiddenException 남의 리뷰일 때
 	 * @throws InvalidPhotoException 쓸 수 없는 사진이 있을 때
-	 * @throws ReviewPhotosChangedException 복사하는 사이 사진 목록이 바뀌었을 때
+	 * @throws ReviewPhotosChangedException 사진 목록이 기준 목록과 달라졌을 때
 	 */
 	public void update(long reviewId, String userId, ReviewUpdateRequest request) {
 		requireActiveUser(userId);
@@ -248,8 +249,12 @@ public class ReviewService {
 			transaction.executeWithoutResult(status -> changeDescription(lockOwn(reviewId, userId), request, now()));
 			return;
 		}
-		List<UUID> before = readOnly.execute(status ->
+		List<UUID> current = readOnly.execute(status ->
 				List.copyOf(own(reviews.findByReviewIdAndDeletedAtIsNull(reviewId), userId).getPhotoIds()));
+		List<UUID> before = request.basePhotos() == null ? current : List.copyOf(request.basePhotos());
+		if (!current.equals(before)) {
+			throw new ReviewPhotosChangedException();
+		}
 		List<UUID> requested = distinct(request.photos());
 		List<UUID> uploadIds = requested.stream().filter(id -> !before.contains(id)).toList();
 		List<UUID> added = photos.confirm(uploadIds);

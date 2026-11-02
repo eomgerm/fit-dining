@@ -682,6 +682,15 @@ class ReviewControllerTest {
 		}
 
 		@Test
+		@DisplayName("수정_화면이받은사진목록을함께보내면_204이고그대로넘긴다")
+		void update_withBasePhotos_passesThrough() throws Exception {
+			mockMvc.perform(update(7, "{\"photos\":[\"" + PHOTO_A + "\"],\"basePhotos\":[\"" + PHOTO_A + "\"]}"))
+					.andExpect(status().isNoContent());
+
+			verify(reviewService).update(7L, USER_ID, new ReviewUpdateRequest(null, List.of(PHOTO_A), List.of(PHOTO_A)));
+		}
+
+		@Test
 		@DisplayName("수정_빈사진목록이면_204다")
 		void update_emptyPhotos_returnsNoContent() throws Exception {
 			mockMvc.perform(update(7, "{\"photos\":[]}")).andExpect(status().isNoContent());

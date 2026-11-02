@@ -108,7 +108,7 @@ describe("ReviewEditForm 사진", () => {
     ).toBeTruthy();
   });
 
-  it("사진만 빼면 본문 없이 남은 사진 목록만 보낸다", async () => {
+  it("사진만 빼면 본문 없이 남은 사진 목록과 화면이 받은 사진 목록을 보낸다", async () => {
     api.fetchReview.mockResolvedValue(withPhotos);
     api.updateReview.mockResolvedValue(undefined);
     const { onSuccess } = mount();
@@ -119,7 +119,7 @@ describe("ReviewEditForm 사진", () => {
     await waitFor(() => expect(onSuccess).toHaveBeenCalled());
     expect(api.updateReview).toHaveBeenCalledWith(
       12,
-      { photos: ["p2"] },
+      { photos: ["p2"], basePhotos: ["p1", "p2"] },
       "token",
     );
   });

@@ -101,10 +101,12 @@ export type ReviewDetailResponse = {
 };
 
 // 작성자는 본문과 사진만 고친다(D-6, D-45). 바꾼 것만 보낸다.
-// 본문이 빈 문자열이나 공백이면 본문 없음으로 저장되고, photos는 고친 뒤의 사진 전체다
+// 본문이 빈 문자열이나 공백이면 본문 없음으로 저장되고, photos는 고친 뒤의 사진 전체다.
+// basePhotos는 수정 화면이 받은 사진 id로, 그사이 다른 곳에서 사진이 바뀌었으면 409다(D-51)
 export type ReviewUpdateRequest = {
   description?: string;
   photos?: string[];
+  basePhotos?: string[];
 };
 
 // 사진 업로드 주소(D-45). 두 주소에 Content-Type: image/jpeg로 PUT한다

@@ -1232,6 +1232,38 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 			assertThat(photoStorage.confirmedIds()).containsExactly(saved);
 			assertThat(photoStorage.hasPending(upload)).isTrue();
 		}
+
+		@Test
+		@DisplayName("수정_화면을연뒤다른곳에서사진이바뀌었으면_409이고복사하지않으며리뷰는그대로다")
+		void update_staleBasePhotos_conflictWithoutCopy() {
+			String user = createUsers(1).getFirst();
+			long id = write(user, List.of(photoStorage.upload(901, 91), photoStorage.upload(902, 92)));
+			List<UUID> base = photoIds(id);
+			jdbc.update("delete from review_photos where review_id = ? and sort_order = 1", id);
+			UUID upload = photoStorage.upload(903, 93);
+
+			assertThatThrownBy(() -> service.update(id, user,
+					new ReviewUpdateRequest(null, List.of(base.get(0), upload), base)))
+					.isInstanceOf(ReviewPhotosChangedException.class);
+			assertThat(photoIds(id)).containsExactly(base.get(0));
+			assertThat(photoStorage.confirmedIds()).containsExactlyInAnyOrderElementsOf(base);
+			assertThat(photoStorage.hasPending(upload)).isTrue();
+		}
+
+		@Test
+		@DisplayName("수정_화면이받은사진목록이지금과같으면_반영한다")
+		void update_currentBasePhotos_applies() {
+			String user = createUsers(1).getFirst();
+			long id = write(user, List.of(photoStorage.upload(901, 91), photoStorage.upload(902, 92)));
+			List<UUID> base = photoIds(id);
+			UUID upload = photoStorage.upload(903, 93);
+
+			service.update(id, user, new ReviewUpdateRequest(null, List.of(upload, base.get(1)), base));
+
+			assertThat(sizes(id)).containsExactly(903, 902);
+			assertThat(photoStorage.hasConfirmed(base.get(0))).isFalse();
+			assertThat(photoStorage.hasPending(upload)).isFalse();
+		}
 	}
 
 	@Nested

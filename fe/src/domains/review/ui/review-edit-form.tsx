@@ -182,10 +182,13 @@ function ReviewEditFields({
       return;
     }
     setFailureOpen(false);
-    // 바꾼 것만 보낸다. 사진은 고친 뒤의 사진 전체다(D-45)
+    // 바꾼 것만 보낸다. 사진은 고친 뒤의 사진 전체와 이 화면이 받은 사진 목록이다(D-45, D-51)
     const body: ReviewUpdateRequest = {
       ...(descriptionChanged && { description }),
-      ...(photosChanged && { photos: photos.photoIds }),
+      ...(photosChanged && {
+        photos: photos.photoIds,
+        basePhotos: review.photos.map((photo) => photo.photoId),
+      }),
     };
     updateReview.mutate(body, {
       onSuccess: () => {
