@@ -27,6 +27,7 @@
 | `bootstrap.sh` | 적용 스크립트(`ROLE=app\|ops`). A는 `/srv/fit/state`, `/srv/fit/web`을 `root:docker 2775`로 만든다(setgid라 deploy 러너(`gitlab-runner`, docker 그룹)가 쓴 파일도 docker 그룹이 되고, Caddy는 others로 읽기만 한다). 이미 있는 파일의 그룹은 서버에서 한 번 맞춘다(`chgrp -R docker /srv/fit/state /srv/fit/web && chmod -R g+rwX /srv/fit/state /srv/fit/web`) |
 | `verify-host.sh` | 읽기만 하는 점검. PASS, FAIL, SKIP만 출력하고 IP·키 값은 찍지 않는다 |
 | `networks.sh` | 서버 A의 공유 Docker 망 여섯 개(`net-edge`, `net-prod`, `net-dev`, `net-data`(internal), `net-obs`, `net-dbaccess`). bootstrap이 부르고 직접 실행해도 된다 |
+| `block-imds.sh` | 서버 A에서 컨테이너가 클라우드 메타데이터(`169.254.169.254`)로 나가는 패킷을 `DOCKER-USER`에서 버린다(`apply`, `check`, `unit`). 부팅과 Docker 재시작 때 다시 넣는 systemd 유닛도 설치한다. 호스트 자신의 접근은 막지 않는다. bootstrap이 부르고(ROLE=app) 직접 실행해도 된다 |
 | `runner.sh` | GitLab Runner 설치와 등록(`install`, `register`, `tune`, `status`). 아래 CI 러너 절 |
 | `envset.py` | `/etc/fit/*.env`에 환경변수를 넣고 바꾸고 지우는 도구. 아래 환경변수 넣기 절 |
 | `docker-prune.sh` | 주 1회 정리. A는 `be`·`fe`의 SHA 태그 최근 5개만 남기고, B는 7일 넘게 쓰지 않은 이미지를 지운다. 볼륨은 지우지 않는다 |
@@ -90,7 +91,7 @@ sudo python3 ~/host/envset.py unset dev REVIEW_MOCK_ENABLED             # 키를
 | `ROLE` | `app` 또는 `ops`(bootstrap 필수. verify-host는 `/etc/fit/role`에서 읽는다) |
 | `FIT_PEER_IP` | 상대 서버의 공인 IP(공백으로 여러 개) |
 | `FIT_FORCE_SSH=1` | 키가 없어도 비밀번호 로그인을 끈다. 서버에 못 들어갈 수 있다 |
-| `FIT_SKIP` | 건너뛸 단계(쉼표): `docker-install`, `swap`, `sysctl-apply`, `systemd`, `networks`, `arch`(verify-host만). 시험용이다 |
+| `FIT_SKIP` | 건너뛸 단계(쉼표): `docker-install`, `swap`, `sysctl-apply`, `systemd`, `networks`, `imds`, `arch`(verify-host만). 시험용이다 |
 | `FIT_NET_PREFIX` | `networks.sh`의 망 이름 앞에 붙일 접두사(시험용) |
 
 ## 노트북에서 시험하기
@@ -99,6 +100,7 @@ sudo python3 ~/host/envset.py unset dev REVIEW_MOCK_ENABLED             # 키를
 bash infra/host/test/test-host.sh          # Ubuntu 24.04 컨테이너에서 app과 ops
 bash infra/host/test/test-host.sh all      # 24.04와 22.04 모두
 bash infra/host/test/test-host.sh prune    # docker-prune.sh와 networks.sh를 이 PC의 Docker로
+bash infra/host/test/test-host.sh imds     # block-imds.sh를 Ubuntu 컨테이너(iptables)에서
 bash infra/host/test/test-runner.sh        # runner.sh를 Ubuntu 컨테이너에서(실제 GitLab Runner 저장소로 설치. all은 22.04도)
 ```
 
@@ -106,4 +108,4 @@ bash infra/host/test/test-runner.sh        # runner.sh를 Ubuntu 컨테이너에
 
 ## 서버에서만 확인되는 것
 
-스왑 생성과 `vm.max_map_count` 적용, 시간 동기화, Docker 데몬(`live-restore`)과 정리 타이머·fail2ban의 실제 동작, 공유 Docker 망 생성, B의 CPU 구조(arm64), 실제 SSH 접속(`fit-dev` 터널, 키 로그인), 서버 밖에서 보이는 열린 포트. `verify-host.sh`가 이 항목을 점검한다.
+스왑 생성과 `vm.max_map_count` 적용, 시간 동기화, Docker 데몬(`live-restore`)과 정리 타이머·fail2ban의 실제 동작, 공유 Docker 망 생성, 컨테이너에서 메타데이터 주소가 실제로 막히는지(`000`), B의 CPU 구조(arm64), 실제 SSH 접속(`fit-dev` 터널, 키 로그인), 서버 밖에서 보이는 열린 포트. `verify-host.sh`가 이 항목을 점검한다.

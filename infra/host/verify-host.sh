@@ -92,6 +92,9 @@ check_docker() {
     if skipped networks || skipped systemd; then skip "공유 Docker 망 (FIT_SKIP)"; else
       ok_if "공유 Docker 망이 있고 net-data만 internal이다" "$(succeeds bash "$HERE/networks.sh" check)"
     fi
+    if skipped imds || skipped systemd; then skip "컨테이너발 클라우드 메타데이터 차단 (FIT_SKIP)"; else
+      ok_if "컨테이너에서 클라우드 메타데이터(169.254.169.254)로 못 나가고 재부팅 뒤에도 유지된다" "$(succeeds bash "$HERE/block-imds.sh" check)"
+    fi
   fi
 }
 

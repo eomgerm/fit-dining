@@ -4,7 +4,7 @@
 #   sudo ROLE=ops bash infra/host/bootstrap.sh    # 서버 B(EC2 Arm)
 # 환경변수(선택)
 #   FIT_PEER_IP      상대 서버의 공인 IP(공백으로 여러 개). fail2ban이 이 주소는 차단하지 않는다
-#   FIT_SKIP         건너뛸 단계(쉼표로 구분, 시험용): docker-install, swap, sysctl-apply, systemd, networks
+#   FIT_SKIP         건너뛸 단계(쉼표로 구분, 시험용): docker-install, swap, sysctl-apply, systemd, networks, imds
 #   FIT_FORCE_SSH=1  키가 등록된 로그인 계정이 없어도 비밀번호 로그인을 끈다(서버에 못 들어갈 수 있다)
 # 실행 전에 다른 터미널에서 키로 SSH 접속이 되는지 확인한다. 이 스크립트가 비밀번호 로그인을 끄기 때문이다.
 # 확인은 infra/host/verify-host.sh가 한다.
@@ -305,6 +305,17 @@ create_networks() {
   fi
 }
 
+block_imds() {
+  step "컨테이너의 클라우드 메타데이터 접근 차단"
+  [ "$ROLE" = app ] || { log "해당 없음(ROLE=ops)"; return 0; }
+  skipped imds && return 0
+  if docker info >/dev/null 2>&1; then
+    bash "$HERE/block-imds.sh"
+  else
+    log "Docker가 응답하지 않아 건너뛴다. Docker를 띄운 뒤 'sudo bash infra/host/block-imds.sh'를 실행한다"
+  fi
+}
+
 main() {
   preflight
   install_packages
@@ -320,6 +331,7 @@ main() {
   harden_ssh
   configure_ufw
   create_networks
+  block_imds
   step "끝"
   if [ "$CHANGES" = 0 ]; then log "변경 없음"; else log "변경 ${CHANGES}건"; fi
   log "다음: sudo bash infra/host/verify-host.sh"

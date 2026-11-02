@@ -87,7 +87,7 @@ Settings → CI/CD → General pipelines에서 설정한다.
 세부 값(job 메모리, cpus, `gitlab-runner` 사용자의 docker 그룹)은 설계 6.1절이다. B의 `concurrent`는 처음 등록하면 `runner.sh register`가 3으로 맞추고, 이미 1로 등록된 러너는 토큰 없이 `sudo bash ~/host/runner.sh tune`으로 바꾼다(서비스를 재시작하지 않는다). 메모리를 많이 쓰는 잡은 BE끼리, FE끼리 `resource_group`(`verify-heavy-be`, `verify-heavy-fe`)으로 한 번에 하나씩만 돈다. BE와 FE가 겹치면 B의 RAM을 조금 넘어 스왑을 쓴다(2026-11-02 측정, 설계 6.1절).
 
 - [ ] **FE 검사 러너(`fit-verify-fe`, 선택, 2026-11-02 계획)를 A에 더한다.** 순서를 지킨다(러너가 없는데 `.gitlab-ci.yml`이 태그를 바꾸면 FE 잡이 영원히 기다린다).
-  1. A에서 컨테이너가 클라우드 메타데이터에 닿는지 본다: `sudo docker run --rm curlimages/curl -s -m 4 -o /dev/null -w '%{http_code}\n' -X PUT -H 'X-aws-ec2-metadata-token-ttl-seconds: 5' http://169.254.169.254/latest/api/token`. `000`이면 막혀 있어 괜찮다. `200`이면 닿는다. 그러면 켜지 말고 인프라 담당에게 알려 `DOCKER-USER` 규칙으로 막은 뒤에 켠다.
+  1. A에서 컨테이너가 클라우드 메타데이터에 닿는지 본다: `sudo docker run --rm curlimages/curl -s -m 4 -o /dev/null -w '%{http_code}\n' -X PUT -H 'X-aws-ec2-metadata-token-ttl-seconds: 5' http://169.254.169.254/latest/api/token`. `000`이면 막혀 있어 괜찮다. `200`이면 닿는다(2026-11-02 A는 200이었다). 그러면 켜지 말고 `cd ~/fit-repo && sudo bash infra/host/block-imds.sh`로 `DOCKER-USER`에서 막은 뒤(부팅과 Docker 재시작 때 다시 넣는 유닛도 설치된다) 같은 명령이 `000`인지 다시 본다. 이어서 `bash infra/host/block-imds.sh check`가 PASS인지 본다.
   2. GitLab에서 러너를 만든다(Settings → CI/CD → Runners → Create project runner): Tags `verify-fe`, Run untagged 끔, **Protected 끔**(MR 파이프라인이 써야 한다), Lock to current projects 켬. 화면에 한 번만 보이는 토큰(`glrt-`)을 복사한다.
   3. A에서 `cd ~/fit-repo && sudo bash infra/host/runner.sh register fit-verify-fe`를 실행하고 토큰을 숨김 입력으로 넣는다. 이어서 `bash infra/host/runner.sh status`가 PASS인지 본다. 서비스를 재시작하지 않으므로 돌고 있는 배포는 끊기지 않는다.
   4. Runners 화면에서 online인지 본 뒤, `fe:check`의 태그를 `verify-fe`로 바꾸는 MR을 올린다(MR의 `fe:check`가 A에서 처음 돈다).

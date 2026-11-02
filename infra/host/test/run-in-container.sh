@@ -7,7 +7,7 @@ set -uo pipefail
 
 ROLE="${1:?app 또는 ops}"
 H=/opt/fit-host
-SKIPS=swap,sysctl-apply,systemd,networks
+SKIPS=swap,sysctl-apply,systemd,networks,imds
 # 시험 컨테이너는 x86이라 B(Arm)의 CPU 구조 점검은 건너뛴다
 if [ "$ROLE" = ops ]; then SKIPS="$SKIPS,arch"; fi
 export ROLE FIT_SKIP="$SKIPS" FIT_PEER_IP="203.0.113.7 198.51.100.9"

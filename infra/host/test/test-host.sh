@@ -3,6 +3,7 @@
 #   bash infra/host/test/test-host.sh            # Ubuntu 24.04에서 app과 ops
 #   bash infra/host/test/test-host.sh all        # 24.04와 22.04에서 app과 ops
 #   bash infra/host/test/test-host.sh prune      # docker-prune.sh와 networks.sh를 이 PC의 Docker로 시험
+#   bash infra/host/test/test-host.sh imds       # block-imds.sh를 Ubuntu 컨테이너(iptables)에서 시험
 # 컨테이너는 --rm으로 지워진다. 필요한 것: docker, git. 컨테이너 시험은 Docker Engine 설치까지 하므로 조합당 몇 분 걸린다.
 set -euo pipefail
 
@@ -106,8 +107,9 @@ case "${1:-default}" in
     done
     ;;
   prune) prune_and_networks ;;
+  imds) bash infra/host/test/test-imds.sh ;;
   *)
-    echo "사용: bash infra/host/test/test-host.sh [all|prune]" >&2
+    echo "사용: bash infra/host/test/test-host.sh [all|prune|imds]" >&2
     exit 2
     ;;
 esac
