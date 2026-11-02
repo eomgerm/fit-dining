@@ -367,6 +367,23 @@ class JobsTest(unittest.TestCase):
         leaked = sorted(k for k in job.get("variables", {}) if k.startswith(("SPRING_DATASOURCE_", "POSTGRES_")))
         self.assertEqual(leaked, [], "be:test에 DB 접속 환경변수를 주지 않는다")
 
+    def test_mr_pipelines_only_read_the_be_and_fe_caches_and_branches_update_them(self):
+        # 잡마다 캐시(pnpm 스토어 약 580MB 등)를 묶어 올리는 시간을 줄인다. MR은 읽기만(pull) 하고 develop·master가 갱신(pull-push)한다
+        for name, var in (("be:test", "BE_CACHE_POLICY"), ("fe:check", "FE_CACHE_POLICY")):
+            job = effective(name)
+            self.assertEqual(job["cache"]["policy"], "$" + var, name)
+            self.assertEqual(job["variables"][var], "pull-push", f"{name}: 기본은 갱신이다(develop·master)")
+            mr_rules = [r for r in job["rules"] if "merge_request_event" in r.get("if", "") and "!=" not in r.get("if", "")]
+            self.assertTrue(mr_rules, name)
+            for rule in mr_rules:
+                self.assertEqual(rule.get("variables", {}).get(var), "pull", f"{name}: MR은 캐시를 읽기만 한다")
+
+    def test_fe_check_caches_eslint_tsc_and_next_and_runs_eslint_with_its_cache(self):
+        job = effective("fe:check")
+        for path in (".pnpm-store", "fe/.eslintcache", "fe/tsconfig.tsbuildinfo", "fe/.next/cache"):
+            self.assertIn(path, job["cache"]["paths"], path)
+        self.assertIn("pnpm lint --cache", script_text("fe:check"))
+
     def test_fe_generates_next_types_before_type_checking(self):
         # Next 16의 LayoutProps 같은 전역 타입은 typegen이나 build가 만든다. 먼저 만들지 않으면 tsc가 실패한다
         lines = effective("fe:check")["script"]

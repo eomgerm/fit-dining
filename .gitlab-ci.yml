@@ -255,8 +255,12 @@ be:test:
         - 'be/**/*'
         - '.gitlab-ci.yml'
         - 'infra/ci/tool-images.sh'
+      variables:
+        BE_CACHE_POLICY: pull
     - *on_branches
   variables:
+    # 캐시는 MR에서 읽기만 하고 develop·master가 갱신한다. 잡마다 캐시를 다시 묶어 올리는 시간을 줄인다
+    BE_CACHE_POLICY: pull-push
     GRADLE_USER_HOME: $CI_PROJECT_DIR/.gradle
     GRADLE_OPTS: -Xmx768m -Dorg.gradle.daemon=false
     # DB는 BE 시험이 Testcontainers로 직접 띄운다(PostgresTestSupport. 이미지는 아래 PGVECTOR_IMAGE와 같아야 한다). 그 컨테이너는 B 위에 나란히 생겨
@@ -270,6 +274,7 @@ be:test:
     paths:
       - .gradle/caches
       - .gradle/wrapper
+    policy: $BE_CACHE_POLICY
   script:
     # gradlew는 git에서 실행 권한이 없어서 sh로 부른다. jar는 be:build가 만든다(여기서 올리면 MR마다 55MB가 GitLab으로 올라간다)
     - cd be
@@ -322,27 +327,38 @@ fe:check:
         - 'fe/**/*'
         - '.gitlab-ci.yml'
         - 'infra/ci/tool-images.sh'
+      variables:
+        FE_CACHE_POLICY: pull
     # 번들 검사기만 바뀐 MR은 스위치가 켜져 있을 때만 번들을 만들어 검사한다(fe:bundle-check가 이 잡의 번들을 기다린다)
     - if: $FIT_CD_ENABLED == "true" && $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
         - 'infra/ci/check_fe_bundle.py'
         - '.gitlab-ci.yml'
         - 'infra/ci/tool-images.sh'
+      variables:
+        FE_CACHE_POLICY: pull
     - *on_branches
   variables:
+    # 캐시는 MR에서 읽기만 하고 develop·master가 갱신한다. pnpm 스토어(약 580MB)를 잡마다 다시 묶어 올리지 않는다
+    FE_CACHE_POLICY: pull-push
     NODE_OPTIONS: --max-old-space-size=1536
     npm_config_store_dir: $CI_PROJECT_DIR/.pnpm-store
   cache:
     key:
       files:
         - fe/pnpm-lock.yaml
+    # ESLint(--cache), tsc(tsconfig의 incremental), next build의 캐시. 내용이 바뀐 파일만 다시 처리한다(로컬 측정: ESLint 15초→4초, tsc 9초→3초, next build 23초→13초)
     paths:
       - .pnpm-store
+      - fe/.eslintcache
+      - fe/tsconfig.tsbuildinfo
+      - fe/.next/cache
+    policy: $FE_CACHE_POLICY
   script:
     - corepack enable
     - cd fe
     - pnpm install --frozen-lockfile
-    - pnpm lint
+    - pnpm lint --cache
     # Next 16의 LayoutProps 같은 전역 타입은 typegen이나 build가 만든다. 먼저 만들지 않으면 tsc가 실패한다
     - pnpm exec next typegen
     - pnpm exec tsc --noEmit
