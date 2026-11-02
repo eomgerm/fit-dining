@@ -446,9 +446,9 @@ public class ReviewService {
 				review.getUserId().equals(viewerId))).toList();
 	}
 
-	/** 공백뿐인 본문은 본문 없음(null)이다(D-6). 길이 검증은 원문 기준이라 그 밖에는 그대로 둔다. */
+	/** 공백뿐인 본문은 본문 없음(null)이다(D-6, D-52). 길이 검증은 원문 기준이라 그 밖에는 그대로 둔다. */
 	static String normalize(String description) {
-		return description == null || description.isBlank() ? null : description;
+		return ReviewText.isBlank(description) ? null : description;
 	}
 
 	/** 원인 예외 중 Hibernate가 제약 이름을 꺼낸 것이 있으면 그 이름을 비교한다. */

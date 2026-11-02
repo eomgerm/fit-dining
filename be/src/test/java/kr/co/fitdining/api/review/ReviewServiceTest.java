@@ -22,7 +22,9 @@ import kr.co.fitdining.api.place.dto.PlaceSummary.CategoryGroup;
 import kr.co.fitdining.api.place.dto.PlaceSummary.Station;
 import kr.co.fitdining.api.place.exception.PlaceNotFoundException;
 import kr.co.fitdining.api.review.dto.ReviewCreateRequest;
+import kr.co.fitdining.api.review.dto.ReviewReportRequest;
 import kr.co.fitdining.api.review.photo.ReviewPhotos;
+import kr.co.fitdining.api.review.report.ReportReason;
 import kr.co.fitdining.api.review.report.ReviewReportRepository;
 import kr.co.fitdining.api.review.store.ReviewRepository;
 import kr.co.fitdining.api.review.tag.ReasonTag;
@@ -56,6 +58,27 @@ class ReviewServiceTest {
 		@DisplayName("본문_내용이있으면_앞뒤공백까지그대로둔다")
 		void normalize_withContent_keepsOriginal() {
 			assertThat(ReviewService.normalize("  좋았어요 \n")).isEqualTo("  좋았어요 \n");
+		}
+
+		@ParameterizedTest
+		@ValueSource(strings = {" ", " ", " ", "﻿", "　", " ", "\u000B"})
+		@DisplayName("본문_FE가공백으로보는문자뿐이면_null이다")
+		void normalize_feWhitespaceOnly_returnsNull(String description) {
+			assertThat(ReviewService.normalize(description)).isNull();
+		}
+
+		@ParameterizedTest
+		@ValueSource(strings = {"\u001F", "​"})
+		@DisplayName("본문_FE가공백으로보지않는문자면_그대로둔다")
+		void normalize_notFeWhitespace_keepsOriginal(String description) {
+			assertThat(ReviewService.normalize(description)).isEqualTo(description);
+		}
+
+		@Test
+		@DisplayName("신고설명_기타가아니어도FE가공백으로보는문자뿐이면_받는다")
+		void detailAllowed_feWhitespaceOnly_allowed() {
+			assertThat(new ReviewReportRequest(ReportReason.AD_SPAM, " ").detailAllowed()).isTrue();
+			assertThat(new ReviewReportRequest(ReportReason.AD_SPAM, "\u001F").detailAllowed()).isFalse();
 		}
 	}
 

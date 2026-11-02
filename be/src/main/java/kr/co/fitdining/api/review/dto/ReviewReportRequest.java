@@ -2,6 +2,7 @@ package kr.co.fitdining.api.review.dto;
 
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import kr.co.fitdining.api.review.ReviewText;
 import kr.co.fitdining.api.review.report.ReportReason;
 
 /**
@@ -18,6 +19,6 @@ public record ReviewReportRequest(
 
 	/** 이름이 getter 꼴이 아니어서 JSON 속성으로 읽히지 않는다. */
 	public boolean detailAllowed() {
-		return reason == ReportReason.OTHER || detail == null || detail.isBlank();
+		return reason == ReportReason.OTHER || ReviewText.isBlank(detail);
 	}
 }
