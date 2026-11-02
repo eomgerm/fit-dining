@@ -10,6 +10,7 @@
 | 스택만 직접 올리기 | `docker compose -p fit-data -f infra/data/compose.data.yml --env-file /etc/fit/data.env up -d --wait` |
 | DB·role·버킷·키 맞추기(몇 번 해도 같은 결과) | `bash infra/data/init-data.sh` |
 | 설계대로인지 점검(읽기 전용) | `bash infra/data/verify-data.sh` |
+| 한 환경의 장소 데이터를 다른 환경으로 한 번 복사(prod 첫 공개) | `bash infra/data/copy-places.sh dev prod`(점검만), 확인 뒤 `--apply`를 붙인다 |
 | DB role 비밀번호 바꾸기 | `/etc/fit/data.env`의 값을 바꾸고 `bash infra/data/ensure-databases.sh`, 이어서 `/etc/fit/<env>.env`와 `migrate-<env>.env`의 같은 값을 바꾸고 그 환경의 BE를 다시 배포한다 |
 | Redis 비밀번호 바꾸기 | `/etc/fit/data.env`와 `<env>.env`를 바꾸고 `docker compose -p fit-data ... up -d redis-<env>`(컨테이너를 다시 만든다. AOF로 데이터는 돌아온다) |
 | 개발자가 dev DB에 접속 | `ssh -N -L 5432:127.0.0.1:5432 fit-dev@<A>`로 터널을 열고 `fit_dev_app` 자격으로 `127.0.0.1:5432`에 접속한다 |
@@ -66,6 +67,7 @@ AI API용 role `fit_prod_ai`, `fit_dev_ai`는 읽기 전용이다. `grant-ai-rea
 | `init-data.sh` | postgres와 garage가 healthy가 되길 기다린 뒤 아래 두 스크립트를 돌린다 |
 | `ensure-databases.sh` | role과 DB, 확장(`vector`, `pg_stat_statements`), 접속·테이블 권한(마지막에 `grant-ai-read.sh`를 부른다) |
 | `grant-ai-read.sh` | AI role이 읽을 객체의 SELECT를 맞춘다. 마이그레이션이 객체를 만든 뒤에 다시 돌려야 읽힌다(없는 객체는 건너뛴다) |
+| `copy-places.sh` | 장소 테이블 10개(`places`, `place_profiles`, `place_personas`, 딸린 7개)를 `<원본> <대상>`(`dev`, `prod`)으로 복사한다. 옵션이 없으면 점검만 하고 `--apply`를 줘야 쓴다. 대상 테이블이 모두 비어 있고 두 DB의 열 구성이 같을 때만 하며(덮어쓰지 않는다), 복사와 번호표 보정은 한 트랜잭션이다. 끝나면 행 수·값 해시·번호표·AI 뷰의 행 수를 원본과 대조한다. 북마크·리뷰·사용자·코드표는 복사하지 않는다. 행 수·값 해시 대조는 시험으로 어긋남을 만들 수 없어 안전망으로만 둔다(번호표 대조는 시험이 확인한다) |
 | `init-garage.sh` | 레이아웃, 버킷, 환경 전용 키, 웹 엔드포인트 공개 읽기, 수명주기(`pending/`와 끝나지 않은 멀티파트를 1일 뒤 삭제) |
 | `verify-data.sh` | 서비스 상태, 접속 범위, 비밀번호 거부, Redis 정책, 버킷 분리를 점검한다(PASS/FAIL, 값은 찍지 않는다) |
 | `s3tool.py` | 표준 라이브러리만 쓰는 SigV4 S3 클라이언트. 호스트에 S3 도구가 없고 Garage 포트를 게시하지 않아서 `s3run`이 net-data에 붙인 python 컨테이너에서 실행한다 |
@@ -86,6 +88,7 @@ AI API용 role `fit_prod_ai`, `fit_dev_ai`는 읽기 전용이다. `grant-ai-rea
 bash infra/data/test/test-data.sh up     # 공유 망과 실제 Postgres·Redis·Garage를 띄운다(접두사 fit-datatest)
 bash infra/data/test/test-data.sh run    # 초기화·멱등·권한·입력 검증·재시작 시나리오
 bash infra/data/test/test-data.sh down   # 시험이 만든 것을 모두 지운다
+bash infra/data/test/test-copy-places.sh  # copy-places.sh: 실제 마이그레이션(V1~V14)으로 만든 Postgres 한 개에서 복사·거부·원자성·번호표를 시험한다
 FIT_TEST_OPENSEARCH=1 bash infra/data/test/test-data.sh up   # OpenSearch(이미지 빌드, 메모리 2GB)도 띄우고 nori까지 점검한다
 ```
 
