@@ -29,7 +29,7 @@ out="$(run install)"; rc=$?
 ok_if "docker 그룹이 없으면 install을 거부한다(bootstrap이 먼저다)" "$([ "$rc" != 0 ] && [ "$(has "$out" 'docker 그룹이 없다')" = 1 ] && echo 1 || echo 0)"
 groupadd docker
 out="$(run bogus)"; rc=$?
-ok_if "모르는 명령은 거부한다" "$([ "$rc" != 0 ] && [ "$(has "$out" '사용: runner.sh install | register | tune | status')" = 1 ] && echo 1 || echo 0)"
+ok_if "모르는 명령은 거부한다" "$([ "$rc" != 0 ] && [ "$(has "$out" '사용: runner.sh install | register [이름] | tune | status')" = 1 ] && echo 1 || echo 0)"
 
 echo "--- install(서버 A 역할)"
 out="$(run install)"; rc=$?
@@ -109,6 +109,65 @@ printf 'check_interval = 3\n[[runners]]\n  name = "fit-deploy"\n' >/etc/gitlab-r
 chmod 644 /etc/gitlab-runner/config.toml
 out="$(run tune)"; rc=$?
 ok_if "concurrent 줄이 없으면 만들고 권한을 600으로 맞춘다" "$([ "$rc" = 0 ] && [ "$(concurrent_now)" = 1 ] && [ "$(stat -c %a /etc/gitlab-runner/config.toml)" = 600 ] && echo 1 || echo 0)"
+echo ops >/etc/fit/role
+
+echo "--- A의 FE 검사 러너(fit-verify-fe): 등록 인자, 이름 검사, limit, 점검"
+echo app >/etc/fit/role
+args="$(FIT_RUNNER_PRINT_ARGS=1 run register fit-verify-fe)"; rc=$?
+ok_if "fit-verify-fe는 docker executor다" "$([ "$rc" = 0 ] && [ "$(has "$args" '--executor docker')" = 1 ] && echo 1 || echo 0)"
+ok_if "메모리 4g, 스왑 없음, CPU 2개, cpu-shares 512, limit 1을 건다" "$([ "$(has "$args" '--docker-memory 4g')" = 1 ] && [ "$(has "$args" '--docker-memory-swap 4g')" = 1 ] && [ "$(has "$args" '--docker-cpus 2')" = 1 ] && [ "$(has "$args" '--docker-cpu-shares 512')" = 1 ] && [ "$(has "$args" '--limit 1')" = 1 ] && echo 1 || echo 0)"
+ok_if "docker.sock, privileged, 호스트 볼륨을 주지 않는다(MR 코드가 운영 서버에서 돈다)" "$([ "$(has "$args" 'docker.sock')" = 0 ] && [ "$(has "$args" 'privileged')" = 0 ] && [ "$(has "$args" '--docker-volumes')" = 0 ] && echo 1 || echo 0)"
+ok_if "no-new-privileges를 켜고 쓰지 않는 capability를 뺀다" "$([ "$(has "$args" 'no-new-privileges:true')" = 1 ] && [ "$(has "$args" '--docker-cap-drop NET_RAW')" = 1 ] && [ "$(has "$args" '--docker-cap-drop MKNOD')" = 1 ] && echo 1 || echo 0)"
+help_text="$(gitlab-runner register --help 2>&1)"
+unknown=""
+for flag in $(printf '%s\n' "$args" | tr ' ' '\n' | grep -E '^--[a-z-]+$' | sort -u); do
+  case "$help_text" in *"$flag"*) ;; *) unknown="$unknown $flag" ;; esac
+done
+out="$unknown"
+ok_if "등록 인자의 옵션 이름이 설치된 gitlab-runner에 모두 있다(오타가 있으면 서버에서 등록이 실패한다)" "$([ -z "$unknown" ] && echo 1 || echo 0)"
+out="$(FIT_RUNNER_PRINT_ARGS=1 run register fit-verify)"; rc=$?
+ok_if "A에서 B의 러너 이름은 거부한다" "$([ "$rc" != 0 ] && [ "$(has "$out" '만들 수 있는 러너가 아니다')" = 1 ] && echo 1 || echo 0)"
+args="$(FIT_RUNNER_REREGISTER=1 FIT_RUNNER_PRINT_ARGS=1 run register fit-deploy)"
+ok_if "fit-deploy는 shell executor이고 limit 1이다" "$([ "$(has "$args" '--executor shell')" = 1 ] && [ "$(has "$args" '--limit 1')" = 1 ] && echo 1 || echo 0)"
+
+cat >/etc/gitlab-runner/config.toml <<'TOML'
+concurrent = 1
+check_interval = 0
+
+[[runners]]
+  name = "fit-deploy"
+  url = "https://lab.ssafy.com"
+  executor = "shell"
+  [runners.cache]
+    MaxUploadedArchiveSize = 0
+
+[[runners]]
+  name = "fit-verify-fe"
+  limit = 7
+  url = "https://lab.ssafy.com"
+  executor = "docker"
+  [runners.docker]
+    memory = "4g"
+    privileged = false
+TOML
+chmod 600 /etc/gitlab-runner/config.toml
+lim() { awk -v n="$1" '/^\[\[runners\]\]/{m=1;h=0;next} /^\[/{m=0} m && $0 ~ "name = \""n"\""{h=1} m && h && /^ *limit *=/{print $3}' /etc/gitlab-runner/config.toml; }
+out="$(run tune)"; rc=$?
+ok_if "tune이 러너 둘이면 concurrent를 2로 한다" "$([ "$rc" = 0 ] && [ "$(concurrent_now)" = 2 ] && echo 1 || echo 0)"
+ok_if "러너마다 limit을 1로 맞춘다(없던 것은 만들고 7은 고친다)" "$([ "$(lim fit-deploy)" = 1 ] && [ "$(lim fit-verify-fe)" = 1 ] && [ "$(grep -c '^ *limit *=' /etc/gitlab-runner/config.toml)" = 2 ] && echo 1 || echo 0)"
+ok_if "하위 표의 key는 그대로다([runners.cache], [runners.docker])" "$([ "$(grep -c 'MaxUploadedArchiveSize = 0' /etc/gitlab-runner/config.toml)" = 1 ] && [ "$(grep -c 'memory = "4g"' /etc/gitlab-runner/config.toml)" = 1 ] && [ "$(grep -c 'privileged = false' /etc/gitlab-runner/config.toml)" = 1 ] && echo 1 || echo 0)"
+ok_if "limit은 하위 표가 시작되기 전(러너의 상위 표)에 있다" "$([ "$(awk '/^\[runners\./{sub_=1} sub_ && /^ *limit *=/{bad=1} END{print bad+0}' /etc/gitlab-runner/config.toml)" = 0 ] && echo 1 || echo 0)"
+out="$(run tune)"; rc=$?
+ok_if "다시 실행하면 변경이 없다(limit도 멱등)" "$([ "$rc" = 0 ] && [ "$(has "$out" '변경 0건')" = 1 ] && echo 1 || echo 0)"
+out="$(run status)"; rc=$?
+ok_if "status가 두 러너와 limit을 PASS로 보고한다" "$([ "$rc" = 0 ] && [ "$(has "$out" 'PASS  러너 fit-verify-fe가 등록돼 있다(선택)')" = 1 ] && [ "$(has "$out" 'PASS  러너 fit-deploy의 limit이 1이다')" = 1 ] && [ "$(has "$out" 'PASS  러너 fit-verify-fe의 limit이 1이다')" = 1 ] && [ "$(has "$out" 'PASS  concurrent가 2이다')" = 1 ] && echo 1 || echo 0)"
+ok_if "docker.sock과 privileged가 없으면 PASS를 보고한다" "$([ "$(has "$out" 'PASS  docker.sock과 privileged가 열려 있지 않다')" = 1 ] && echo 1 || echo 0)"
+sed -i 's#^    memory = "4g"#    memory = "4g"\n    volumes = ["/var/run/docker.sock:/var/run/docker.sock"]#' /etc/gitlab-runner/config.toml
+out="$(run status)"; rc=$?
+ok_if "fit-verify-fe에 docker.sock이 열려 있으면 status가 실패한다" "$([ "$rc" != 0 ] && [ "$(has "$out" 'FAIL  config.toml에 docker.sock이나 privileged가 있다')" = 1 ] && echo 1 || echo 0)"
+write_config 1 fit-deploy
+out="$(run tune)"; rc=$?
+ok_if "fit-verify-fe 없이 fit-deploy만 있으면 concurrent 1, limit 1이다" "$([ "$rc" = 0 ] && [ "$(concurrent_now)" = 1 ] && [ "$(lim fit-deploy)" = 1 ] && echo 1 || echo 0)"
 echo ops >/etc/fit/role
 
 echo

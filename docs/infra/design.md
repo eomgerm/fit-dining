@@ -408,7 +408,7 @@ Caddy 컨테이너(`caddy:2.x`, 구현 시 최신 2.x를 핀)가 A의 80·443만
 |---|---|---|---|
 | `fit-verify` (태그 `verify`) | B (Arm) | docker + docker.sock | job 메모리 2.0GB, cpus 2, `concurrent 3`(메모리를 많이 쓰는 Gradle·Node 잡은 BE끼리, FE끼리 `resource_group`(`verify-heavy-be`, `verify-heavy-fe`)으로 한 번에 하나씩만 돌고 BE 하나와 FE 하나는 동시에 돈다. 잡 하나의 최대 메모리는 FE 1.6GB, BE 1.5GB였고(2026-11-02 B에서 측정) 둘이 겹치면 RAM 3.8GB를 조금 넘어 스왑을 쓴다. 나머지 하나는 가벼운 lint가 쓴다. `runner.sh tune`). B에는 prod 컨테이너·볼륨·시크릿이 없어 CI 사고가 서비스에 닿지 않는다 |
 | `fit-deploy` (태그 `deploy`) | A (x86) | shell, `gitlab-runner` ∈ docker 그룹 | protected 브랜치(develop·master)만, `concurrent 1`. 이미지 조립(`COPY`)과 배포만 한다. jar와 PWA 번들은 verify 단계(B)가 만든 아티팩트를 쓴다 |
-| `fit-verify-x86` (필요 시) | A | docker | BE·프런트 의존성에 arm64 빌드가 없을 때만 추가. 야간 위주 |
+| `fit-verify-fe` (태그 `verify-fe`, 선택) | A (x86) | docker, **docker.sock 없음** | FE 검사(`fe:check`) 전용이다. B는 CPU가 2개뿐이라 FE와 BE의 무거운 잡이 겹치면 CPU 대기가 80%를 넘었고(2026-11-02 측정), A는 CPU 평균 5%로 놀고 있다. 그래서 FE 잡만 A로 옮긴다. 부수 효과로 번들을 운영과 같은 x86에서 만든다. MR 코드가 운영 서버에서 도는 유일한 러너라서 제한을 둔다: docker.sock과 privileged와 호스트 볼륨을 주지 않고, job 메모리 4GB(스왑 없음. 같은 제한 아래에서 FE 검사의 최고 사용량은 약 2.5GB였다)·CPU 2개·`cpu-shares` 512(운영 컨테이너가 CPU를 먼저 받는다)·`limit 1`, `no-new-privileges`, 쓰지 않는 capability(`NET_RAW`, `MKNOD`, `SETFCAP`, `SYS_CHROOT`, `AUDIT_WRITE`)를 뺀다. Protected 끔(MR 파이프라인이 써야 한다). job 컨테이너는 기본 bridge 망이라 운영 망(`net-*`)에 닿지 않고 Postgres 등은 127.0.0.1에만 열려 있어 닿지 않는다. 클라우드 메타데이터(`169.254.169.254`)는 컨테이너에서 닿는지 켜기 전에 확인한다(gitlab-setup.md). 등록하지 않으면 FE 잡은 B의 `fit-verify`에서 돈다 |
 
 러너는 프로젝트 Settings → CI/CD → Runners → Create project runner로 만든다. Maintainer 권한이 필요하고 runner authentication token 방식을 쓴다. 옛 registration token은 GitLab 17.0부터 비활성화됐다 (확인). 이 메뉴가 막혀 있으면 Jenkins로 폴백한다. 그 경우 선배 팀의 Jenkinsfile 자산을 쓴다.
 

@@ -81,10 +81,16 @@ Settings → CI/CD → General pipelines에서 설정한다.
 | 러너 | Tags | Run untagged | Protected | 호스트·executor |
 |---|---|---|---|---|
 | `fit-verify` | `verify` | 끔 | 끔 | B, docker(+ docker.sock), `concurrent 3` |
-| `fit-deploy` | `deploy` | 끔 | 켬 | A, shell, `concurrent 1` |
+| `fit-deploy` | `deploy` | 끔 | 켬 | A, shell, `limit 1` |
+| `fit-verify-fe` (선택) | `verify-fe` | 끔 | **끔** | A, docker(**docker.sock 없음**), `limit 1` |
 
 세부 값(job 메모리, cpus, `gitlab-runner` 사용자의 docker 그룹)은 설계 6.1절이다. B의 `concurrent`는 처음 등록하면 `runner.sh register`가 3으로 맞추고, 이미 1로 등록된 러너는 토큰 없이 `sudo bash ~/host/runner.sh tune`으로 바꾼다(서비스를 재시작하지 않는다). 메모리를 많이 쓰는 잡은 BE끼리, FE끼리 `resource_group`(`verify-heavy-be`, `verify-heavy-fe`)으로 한 번에 하나씩만 돈다. BE와 FE가 겹치면 B의 RAM을 조금 넘어 스왑을 쓴다(2026-11-02 측정, 설계 6.1절).
 
+- [ ] **FE 검사 러너(`fit-verify-fe`, 선택, 2026-11-02 계획)를 A에 더한다.** 순서를 지킨다(러너가 없는데 `.gitlab-ci.yml`이 태그를 바꾸면 FE 잡이 영원히 기다린다).
+  1. A에서 컨테이너가 클라우드 메타데이터에 닿는지 본다: `sudo docker run --rm curlimages/curl -s -m 4 -o /dev/null -w '%{http_code}\n' -X PUT -H 'X-aws-ec2-metadata-token-ttl-seconds: 5' http://169.254.169.254/latest/api/token`. `000`이면 막혀 있어 괜찮다. `200`이면 닿는다. 그러면 켜지 말고 인프라 담당에게 알려 `DOCKER-USER` 규칙으로 막은 뒤에 켠다.
+  2. GitLab에서 러너를 만든다(Settings → CI/CD → Runners → Create project runner): Tags `verify-fe`, Run untagged 끔, **Protected 끔**(MR 파이프라인이 써야 한다), Lock to current projects 켬. 화면에 한 번만 보이는 토큰(`glrt-`)을 복사한다.
+  3. A에서 `cd ~/fit-repo && sudo bash infra/host/runner.sh register fit-verify-fe`를 실행하고 토큰을 숨김 입력으로 넣는다. 이어서 `bash infra/host/runner.sh status`가 PASS인지 본다. 서비스를 재시작하지 않으므로 돌고 있는 배포는 끊기지 않는다.
+  4. Runners 화면에서 online인지 본 뒤, `fe:check`의 태그를 `verify-fe`로 바꾸는 MR을 올린다(MR의 `fe:check`가 A에서 처음 돈다).
 - [x] 두 러너를 만들고 화면에 한 번만 보이는 인증 토큰(`glrt-`로 시작)을 호스트의 `gitlab-runner register`에 입력한다. 토큰은 호스트의 `config.toml`에만 남긴다. 두 서버에서 `runner.sh status`가 PASS다(2026-10-23).
 - [x] Runners 목록에서 두 러너가 online인지 확인한다. 임시 verify 러너(이 PC의 Docker)는 지웠다(사용자 보고, 2026-10-23).
 - [x] MR 파이프라인에서 `lint:*` 잡이 verify 러너에서 통과하는지 확인한다(MR 38의 파이프라인 #238229 통과, 2026-10-23).
