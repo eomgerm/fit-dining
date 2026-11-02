@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import kr.co.fitdining.api.place.catalog.ConditionalOnCatalogMode;
@@ -35,8 +36,8 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * AI 검색 API({@code POST /v1/search})를 부른다. 시간 예산, {@code 503 BUSY} 재시도, 차단기, 실패 분류는 place-ai-search
- * spec의 "호출 규칙"과 AC-7·8·13·16을 따른다. 실패하면 빈 값을 돌려주고 엔진이 대체한다.
+ * AI 검색 API({@code POST /v1/search})를 부른다. 시간 예산, {@code 503 BUSY} 재시도, 차단기, 동시성 상한, 실패 분류는
+ * place-ai-search spec의 "호출 규칙"과 AC-7·8·13·16·28을 따른다. 실패하면 빈 값을 돌려주고 엔진이 대체한다.
  *
  * <p>요청·응답 본문과 예외 메시지에는 검색 문장과 AI 문구가 들어 있어 로그에 남기지 않는다. 실패 종류(예외 클래스나 상태
  * 코드)만 남긴다(AC-20). 본문은 앱 전역 Jackson 설정(null 생략, 모르는 속성 거부)과 달리 이 클래스의 매퍼로 쓰고 읽는다.
@@ -50,6 +51,8 @@ public class AiSearchClient {
 	static final Duration BUDGET = Duration.ofSeconds(12);
 	static final int FAILURE_THRESHOLD = 3;
 	static final Duration OPEN_DURATION = Duration.ofSeconds(30);
+	/** AI를 기다리는 검색 수의 상한. AI 컨테이너 하나가 받는 검색 수({@code MAX_CONCURRENT_REQUESTS} 기본 8)와 같다(D-17). */
+	static final int MAX_IN_FLIGHT = 8;
 
 	private static final JsonMapper MAPPER = JsonMapper.builder()
 			.disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
@@ -63,6 +66,7 @@ public class AiSearchClient {
 	private final Clock clock;
 	private final Function<Duration, RestClient> clients;
 	private final AtomicReference<Breaker> breaker = new AtomicReference<>(CLOSED);
+	private final Semaphore inFlight = new Semaphore(MAX_IN_FLIGHT);
 
 	@Autowired
 	public AiSearchClient(@Value("${fitdining.ai.base-url:http://localhost:8000}") String baseUrl,
@@ -102,7 +106,7 @@ public class AiSearchClient {
 	 *
 	 * @param request 추천 검색 요청. {@code cursor}는 보내지 않고, {@code preferences}는 비회원일 때만 {@code tasteProfile}로 보낸다.
 	 * @param userId 검증된 토큰의 사용자 id. 비회원이면 null이다.
-	 * @return 읽을 수 있는 200 응답. 주소가 없거나, 차단 중이거나, 실패하면 빈 값이다.
+	 * @return 읽을 수 있는 200 응답. 주소가 없거나, 차단 중이거나, AI를 기다리는 검색이 상한만큼 있거나, 실패하면 빈 값이다.
 	 */
 	public Optional<Response> search(PlaceSearchRequest request, String userId) {
 		if (baseUrl.isEmpty()) {
@@ -111,6 +115,11 @@ public class AiSearchClient {
 		}
 		Breaker state = breaker.get();
 		if (state.openUntil() != null && clock.instant().isBefore(state.openUntil())) {
+			return Optional.empty();
+		}
+		// 기다리지 않는다. AI가 멈추면 BE의 요청 스레드가 검색마다 예산만큼 묶이므로 상한을 넘은 검색은 바로 대체한다
+		if (!inFlight.tryAcquire()) {
+			log.warn("AI search skipped: in-flight limit reached, limit={}", MAX_IN_FLIGHT);
 			return Optional.empty();
 		}
 		try {
@@ -126,6 +135,8 @@ public class AiSearchClient {
 			}
 		} catch (RuntimeException e) {
 			log.error("AI search failed: kind={}, reason={}", Kind.INVALID, e.getClass().getSimpleName());
+		} finally {
+			inFlight.release();
 		}
 		return Optional.empty();
 	}

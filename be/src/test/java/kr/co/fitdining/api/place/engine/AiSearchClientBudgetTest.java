@@ -10,6 +10,12 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.stream.IntStream;
 import java.util.concurrent.atomic.AtomicInteger;
 import kr.co.fitdining.api.place.dto.PlaceSearchRequest;
 import org.junit.jupiter.api.AfterEach;
@@ -22,7 +28,7 @@ import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.web.client.RestClient;
 
 /**
- * 시간 예산(AC-7 ③, AC-8). MockRestServiceServer는 요청 팩토리를 바꿔 실제 제한 시간이 돌지 않으므로 JDK 내장 HTTP
+ * 시간 예산(AC-7 ③, AC-8)과 동시성 상한(AC-28). MockRestServiceServer는 요청 팩토리를 바꿔 실제 제한 시간이 돌지 않으므로 JDK 내장 HTTP
  * 서버로 늦게 응답한다. 예산은 짧게 준다.
  */
 @ExtendWith(OutputCaptureExtension.class)
@@ -205,6 +211,59 @@ class AiSearchClientBudgetTest {
 
 		assertThat(client().search(request(), null)).isPresent();
 		assertThat(calls).hasValue(2);
+	}
+
+	@Test
+	@DisplayName("상한_AI를기다리는검색이상한만큼있으면_부르지않고바로대체하고차단기는그대로다")
+	void inFlight_limitReached_fallsBackWithoutCalling(CapturedOutput output) throws Exception {
+		CountDownLatch release = new CountDownLatch(1);
+		handler = (exchange, call) -> {
+			release.await();
+			respond(exchange, 200, OK);
+		};
+		AiSearchClient client = new AiSearchClient("http://127.0.0.1:" + http.getAddress().getPort(), "", "",
+				Duration.ofSeconds(10), Clock.systemUTC());
+		ExecutorService pool = Executors.newFixedThreadPool(AiSearchClient.MAX_IN_FLIGHT);
+		try {
+			List<Future<Boolean>> waiting = IntStream.range(0, AiSearchClient.MAX_IN_FLIGHT)
+					.mapToObj(i -> pool.submit(() -> client.search(request(), null).isPresent()))
+					.toList();
+			long deadline = System.nanoTime() + Duration.ofSeconds(5).toNanos();
+			while (calls.get() < AiSearchClient.MAX_IN_FLIGHT && System.nanoTime() < deadline) {
+				Thread.sleep(10);
+			}
+			assertThat(calls).hasValue(AiSearchClient.MAX_IN_FLIGHT);
+
+			for (int i = 0; i < AiSearchClient.FAILURE_THRESHOLD; i++) {
+				long elapsed = timed(() -> assertThat(client.search(request(), null)).isEmpty());
+				assertThat(elapsed).isLessThan(500);
+			}
+			assertThat(calls).hasValue(AiSearchClient.MAX_IN_FLIGHT);
+
+			release.countDown();
+			for (Future<Boolean> search : waiting) {
+				assertThat(search.get()).isTrue();
+			}
+		} finally {
+			release.countDown();
+			pool.shutdownNow();
+		}
+		assertThat(client.search(request(), null)).isPresent();
+		assertThat(output.getAll()).contains("WARN").contains("in-flight limit reached")
+				.doesNotContain("circuit opened").doesNotContain(SECRET);
+	}
+
+	@Test
+	@DisplayName("상한_실패한검색도_자리를돌려준다")
+	void inFlight_failures_releaseSlots() {
+		// 차단기가 세지 않는 실패(4xx, 읽을 수 없는 응답)를 상한보다 많이 이어 보내도 모두 AI에 닿는다
+		handler = (exchange, call) -> respond(exchange, call % 2 == 0 ? 400 : 200, call % 2 == 0 ? BUSY : "{");
+		AiSearchClient client = client();
+
+		for (int i = 0; i < AiSearchClient.MAX_IN_FLIGHT * 2; i++) {
+			assertThat(client.search(request(), null)).isEmpty();
+		}
+		assertThat(calls).hasValue(AiSearchClient.MAX_IN_FLIGHT * 2);
 	}
 
 }
