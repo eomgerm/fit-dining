@@ -95,13 +95,10 @@ export function PastResultView({
             onCardPress={onCardPress}
           />
         </div>
-        <div className="flex shrink-0 flex-col gap-1.5 border-t border-line px-4 pt-3 pb-4">
+        <div className="shrink-0 border-t border-line px-4 pt-3 pb-4">
           <Button onClick={onRepeat} className="w-full">
             <RefreshIcon size="md" className="mr-1.5" />이 조건으로 다시 검색
           </Button>
-          <p className="text-center text-caption-sm text-ink-muted">
-            새 결과는 기록 끝에 추가되고, 이 결과는 그대로 남아요.
-          </p>
         </div>
       </section>
     </>
