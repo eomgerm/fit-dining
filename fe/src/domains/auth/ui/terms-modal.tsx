@@ -3,6 +3,7 @@
 import { Dialog } from "@base-ui/react/dialog";
 import type { ReactNode } from "react";
 import { termsContent, type TermsKind } from "../model/terms-content";
+import { TermsBody } from "./terms-body";
 import { Button } from "@/shared/ui/button/button";
 
 // Base UI가 중첩 팝업의 포커스와 Esc를 관리하도록 루트를 부모 팝업 안에 둔다.
@@ -37,18 +38,12 @@ export function TermsModal({
             {content.title}
           </Dialog.Title>
           <div
-            className="min-h-0 space-y-3 overflow-y-auto overscroll-contain"
+            className="min-h-0 overflow-y-auto overscroll-contain"
             tabIndex={0}
             role="region"
             aria-label={`${content.title} 본문`}
           >
-            <p className="text-body-md whitespace-pre-wrap">{content.body}</p>
-            <p className="text-body-sm text-ink-muted">
-              시행일:{" "}
-              <time dateTime={content.effectiveDate}>
-                {content.effectiveDate}
-              </time>
-            </p>
+            <TermsBody content={content} headingLevel={3} />
           </div>
           <Dialog.Close render={<Button />} className="shrink-0">
             닫기

@@ -129,7 +129,11 @@ export default function MyPage() {
                     ? handleLogout
                     : label === "저장한 장소"
                       ? openSaved
-                      : () => toast("준비 중이에요")
+                      : label === "이용약관"
+                        ? () => router.push("/terms")
+                        : label === "개인정보처리방침"
+                          ? () => router.push("/privacy")
+                          : () => toast("준비 중이에요")
                 }
                 className={`flex min-h-13 w-full items-center justify-between border-b border-line px-5 text-left text-body-md disabled:opacity-50 ${label === "탈퇴하기" ? "text-ink-muted" : "text-ink"}`}
               >

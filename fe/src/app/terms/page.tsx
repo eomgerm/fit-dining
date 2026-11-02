@@ -1,6 +1,7 @@
 "use client";
 
 import { termsContent } from "@/domains/auth/model/terms-content";
+import { TermsBody } from "@/domains/auth/ui/terms-body";
 import { useRouter } from "next/navigation";
 import { IconButton } from "@/shared/ui/button/icon-button";
 import { ChevronLeftIcon } from "@/shared/ui/icon/icons/chevron-left";
@@ -24,12 +25,8 @@ export default function TermsPage() {
           </IconButton>
         }
       />
-      <div className="space-y-3 px-5 py-6">
-        <p className="text-body-md">{content.body}</p>
-        <p className="text-body-sm text-ink-muted">
-          시행일:{" "}
-          <time dateTime={content.effectiveDate}>{content.effectiveDate}</time>
-        </p>
+      <div className="px-5 py-6">
+        <TermsBody content={content} headingLevel={2} />
       </div>
     </main>
   );

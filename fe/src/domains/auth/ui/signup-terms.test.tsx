@@ -26,18 +26,26 @@ it("약관 보기는 시트 위 모달을 열고 닫으면 시트로 복귀한�
       />,
     );
     const buttons = screen.getAllByRole("button", { name: "보기" });
-    for (const [index, title] of [
-      "서비스 이용약관",
-      "개인정보처리방침",
+    for (const [index, [title, firstHeading]] of [
+      ["서비스 이용약관", "제1조 (목적)"],
+      ["개인정보처리방침", "1. 수집하는 항목과 목적"],
     ].entries()) {
       const trigger = buttons[index];
       trigger.focus();
       fireEvent.click(trigger);
       const modal = await screen.findByRole("dialog", { name: title });
       expect(
-        within(modal).getByText("약관 본문은 준비 중이에요."),
+        within(modal).getByRole("heading", { level: 2, name: title }),
       ).toBeTruthy();
-      expect(within(modal).getByText("2026-10-23")).toBeTruthy();
+      expect(
+        within(modal).getByRole("heading", { level: 3, name: firstHeading }),
+      ).toBeTruthy();
+      expect(
+        within(modal).queryByText("약관 본문은 준비 중이에요."),
+      ).toBeNull();
+      expect(
+        within(modal).getByText("2026-11-02").getAttribute("datetime"),
+      ).toBe("2026-11-02");
       expect(within(modal).getByRole("region").className).toContain(
         "overflow-y-auto",
       );

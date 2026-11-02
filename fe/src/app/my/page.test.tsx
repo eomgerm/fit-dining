@@ -138,14 +138,20 @@ it("'저장한 장소'는 토스트 없이 저장한 장소 화면을 내 정보
   expect(savedViewState.entry()).toEqual({ from: "my" });
   expect(mocks.toast).not.toHaveBeenCalled();
 });
-it.each(["이용약관", "개인정보처리방침", "탈퇴하기"])(
-  "shows preparation toast for %s",
-  async (name) => {
-    render(<MyPage />);
-    fireEvent.click(await screen.findByRole("button", { name }));
-    expect(mocks.toast).toHaveBeenCalledWith("준비 중이에요");
-  },
-);
+it.each([
+  ["이용약관", "/terms"],
+  ["개인정보처리방침", "/privacy"],
+])("'%s'는 토스트 없이 %s로 이동한다", async (name, href) => {
+  render(<MyPage />);
+  fireEvent.click(await screen.findByRole("button", { name }));
+  expect(mocks.router.push).toHaveBeenCalledWith(href);
+  expect(mocks.toast).not.toHaveBeenCalled();
+});
+it("shows preparation toast for 탈퇴하기", async () => {
+  render(<MyPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "탈퇴하기" }));
+  expect(mocks.toast).toHaveBeenCalledWith("준비 중이에요");
+});
 it("redirects when another tab clears the session", async () => {
   render(<MyPage />);
   await screen.findByText("라테한잔");

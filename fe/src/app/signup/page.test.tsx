@@ -92,9 +92,7 @@ it.each([
       trigger.focus();
       fireEvent.click(trigger);
       const modal = await screen.findByRole("dialog", { name: title });
-      expect(
-        within(modal).getByText("약관 본문은 준비 중이에요."),
-      ).toBeTruthy();
+      expect(within(modal).getByText("2026-11-02")).toBeTruthy();
       fireEvent.click(within(modal).getByRole("button", { name: "닫기" }));
       await waitFor(() =>
         expect(screen.queryByRole("dialog", { name: title })).toBeNull(),

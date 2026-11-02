@@ -11,14 +11,38 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-it("지정된 대체 본문과 시행일을 표시한다", () => {
+it("절 제목과 본문, 시행일을 표시한다", () => {
   render(<PrivacyPage />);
   expect(
-    screen.getByRole("heading", { name: "개인정보처리방침" }),
+    screen.getByRole("heading", { level: 1, name: "개인정보처리방침" }),
   ).toBeTruthy();
-  expect(screen.getByText("약관 본문은 준비 중이에요.")).toBeTruthy();
-  expect(screen.getByText("2026-10-23").getAttribute("datetime")).toBe(
-    "2026-10-23",
+  expect(
+    screen.getByRole("heading", { level: 2, name: "1. 수집하는 항목과 목적" }),
+  ).toBeTruthy();
+  expect(
+    screen.getByRole("heading", { level: 2, name: "9. 변경" }),
+  ).toBeTruthy();
+  // 1절 표는 구분마다 항목·목적을 나열한다
+  expect(screen.getByText("이메일 가입")).toBeTruthy();
+  expect(
+    screen.getByText("이메일, 비밀번호(암호화된 값만 저장), 닉네임"),
+  ).toBeTruthy();
+  expect(screen.getAllByRole("term").map((term) => term.textContent)).toEqual(
+    Array.from({ length: 6 }, () => ["항목", "목적"]).flat(),
+  );
+  expect(screen.getByText("이메일: brightrain453@gmail.com")).toBeTruthy();
+  // 2절: 리뷰 작성 전 근처 확인 용도, 7절: 탈퇴는 연락처로 요청
+  expect(
+    screen.getByText(
+      /거리 계산과 근처 확인에만 쓰며 서버로 보내거나 저장하지 않습니다/,
+    ),
+  ).toBeTruthy();
+  expect(
+    screen.getByText(/탈퇴와 그 밖의 열람·정정·삭제 요청은 아래 연락처로/),
+  ).toBeTruthy();
+  expect(screen.queryByText("약관 본문은 준비 중이에요.")).toBeNull();
+  expect(screen.getByText("2026-11-02").getAttribute("datetime")).toBe(
+    "2026-11-02",
   );
 });
 

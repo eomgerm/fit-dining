@@ -11,12 +11,31 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-it("지정된 대체 본문과 시행일을 표시한다", () => {
+it("조 제목과 본문, 시행일을 표시한다", () => {
   render(<TermsPage />);
-  expect(screen.getByRole("heading", { name: "서비스 이용약관" })).toBeTruthy();
-  expect(screen.getByText("약관 본문은 준비 중이에요.")).toBeTruthy();
-  expect(screen.getByText("2026-10-23").getAttribute("datetime")).toBe(
-    "2026-10-23",
+  expect(
+    screen.getByRole("heading", { level: 1, name: "서비스 이용약관" }),
+  ).toBeTruthy();
+  expect(
+    screen.getByRole("heading", { level: 2, name: "제1조 (목적)" }),
+  ).toBeTruthy();
+  expect(
+    screen.getByRole("heading", { level: 2, name: "제10조 (약관 변경)" }),
+  ).toBeTruthy();
+  expect(screen.getByRole("heading", { level: 2, name: "부칙" })).toBeTruthy();
+  // 제8조: 탈퇴는 문의처로 요청하고, 리뷰는 장소 상세에서 지운다
+  expect(
+    screen.getByText(/개인정보처리방침의 문의처로 탈퇴를 요청할 수 있습니다/),
+  ).toBeTruthy();
+  expect(
+    screen.getByText(/장소 상세 화면의 내 리뷰에서 직접 삭제/),
+  ).toBeTruthy();
+  expect(
+    screen.getByText("이 약관은 2026년 11월 2일부터 시행합니다."),
+  ).toBeTruthy();
+  expect(screen.queryByText("약관 본문은 준비 중이에요.")).toBeNull();
+  expect(screen.getByText("2026-11-02").getAttribute("datetime")).toBe(
+    "2026-11-02",
   );
 });
 
