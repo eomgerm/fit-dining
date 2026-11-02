@@ -39,3 +39,10 @@ def fake_gms(monkeypatch: pytest.MonkeyPatch) -> Callable[[Answer], list[list[di
         return calls
 
     return install
+
+
+@pytest.fixture(autouse=True)
+def _no_remote_embedding(monkeypatch: pytest.MonkeyPatch) -> None:
+    """셸에 `EMBED_*`가 있어도 테스트가 Modal을 부르지 않게 지운다."""
+    for name in ("EMBED_BASE_URL", "EMBED_KEY", "EMBED_SECRET"):
+        monkeypatch.delenv(name, raising=False)

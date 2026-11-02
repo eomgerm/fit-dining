@@ -16,7 +16,7 @@ from fit_ai import embedding
 
 MAX_TEXTS = 64
 MAX_CHARS = 2000
-MODEL_VERSION = f"{embedding.MODEL_ID}@{embedding.REVISION}"
+MODEL_VERSION = embedding.MODEL_VERSION
 
 
 class EmbedRequest(BaseModel):
@@ -39,7 +39,7 @@ def create_api() -> FastAPI:
     @api.post("/embed")
     def embed(req: EmbedRequest, response: Response):
         encode = (
-            embedding.encode_queries
+            embedding.encode_queries_locally
             if req.kind == "query"
             else embedding.encode_documents
         )

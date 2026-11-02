@@ -37,6 +37,17 @@ def test_query_embeds_with_model_version(model, client):
     assert model.seen == ["query: 조용한 곳"]
 
 
+def test_query_stays_local_even_with_remote_set(model, client, monkeypatch):
+    # Modal 앱에 EMBED_*가 들어가도 자기 자신을 부르지 않는다
+    monkeypatch.setenv("EMBED_BASE_URL", "https://embed.example")
+    monkeypatch.setattr(embedding, "_client", lambda: pytest.fail("원격을 불렀다"))
+
+    res = client.post("/embed", json={"texts": ["조용한 곳"], "kind": "query"})
+
+    assert res.status_code == 200
+    assert model.seen == ["query: 조용한 곳"]
+
+
 def test_passage_is_encoded_without_prefix(model, client):
     client.post("/embed", json={"texts": ["조용한 곳"], "kind": "passage"})
     assert model.seen == ["조용한 곳"]
