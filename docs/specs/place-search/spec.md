@@ -7,7 +7,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 
 사용자는 자연어로 장소를 찾고 싶다. 입력하는 동안 장소 후보를 보고, 요청을 보내면 추천 장소를 지도와 카드 목록으로 받고, "더 조용하게" 같은 후속 조건으로 결과를 좁히고, 이번에 한 요청들을 되돌아보고, 카드를 눌러 장소 상세와 추천 이유를 보고 싶다. 화면 기준은 Figma "5. 검색·추천 결과"(5-01, 5-03~5-07)와 "6. 장소 상세"(6-01, 6-02, 6-04, 6-05)다(D-49). 첫 화면(아래 검색창, 주변 추천 카드, 최근 검색, 지도 위 버튼)은 S15P31A302-42에서 와이어프레임 `Start`, `StartRecent`, `StartNoLoc`, `Typing`, `Results`를 따른다(D-80). 같은 작업에서 입력 중(`Typing`), 검색 중(`Loading`), 요청 기록(`RequestHistory`), 과거 결과(`PastResult`), 장소 상세(`Detail`, `DetailMenu`, `DetailInfo`)도 와이어프레임에 맞춘다(D-87~D-94). 장소 상세의 리뷰 탭과 "방문 평가 남기기"는 리뷰 담당이 상세 화면이 연 자리에 붙인다(D-86).
 
-검색의 내부 로직(요청 해석, 임베딩, OpenSearch 질의, 점수 계산)은 AI 파트가 맡고 아직 데이터 구조와 전달 방식이 정해지지 않았다. 이 기능은 Spring BE와 Next.js FE를 연결하는 부분을 Mock 데이터로 끝까지 동작하게 만들고, 확정되면 구현과 DTO 레이어만 교체할 수 있게 한다(D-49, D-62, D-64).
+검색의 내부 로직(요청 해석, 임베딩, OpenSearch 질의, 점수 계산)은 AI 파트가 맡고 아직 데이터 구조와 전달 방식이 정해지지 않았다. 이 기능은 Spring BE와 Next.js FE를 연결하는 부분을 Mock 데이터로 끝까지 동작하게 만들고, 확정되면 구현과 DTO 레이어만 교체할 수 있게 한다(D-49, D-62, D-64). 이후 place-lookup-db가 DB 모드 엔진을, place-ai-search가 그 엔진에서 AI 검색 API를 부르는 연결(AI를 쓸 수 없으면 카탈로그 키워드 검색으로 대체)을 더했다.
 
 ## Assumptions
 
@@ -22,7 +22,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 7. 오류 응답은 `PlaceExceptionHandler`(`@RestControllerAdvice(basePackageClasses = PlaceController.class)`) 하나로 ProblemDetail을 만든다. `detail`은 일반 문구이고 예외 메시지와 요청 본문은 응답에 담지 않는다. 검색어와 요청 본문은 로그에도 남기지 않는다(DB 접근 오류의 예외 객체만 서버 로그에 남는다). 처리 대상은 검증 실패(`MethodArgumentNotValidException`, `HandlerMethodValidationException`), `HttpMessageNotReadableException`, `MethodArgumentTypeMismatchException`, `MissingServletRequestParameterException`, `InvalidCursorException`(400), 장소 없음(404), 검색을 쓸 수 없음(503: 엔진이 던진 `PlaceSearchUnavailableException`과 DB 접근 오류)이다(D-10, D-20, place-lookup-db D-14).
 8. 엔진이 잘못된 `cursor`를 알리는 방법은 `kr.co.fitdining.api.place.engine.InvalidCursorException`(`RuntimeException` 하위)을 던지는 것이다. 이 예외는 `PlaceSearchEngine` 계약의 일부이고 다른 예외는 400으로 바꾸지 않는다. 컨트롤러는 `cursor`를 해석하지 않는다(D-10, D-62).
 9. 알 수 없는 속성 거부와 null 필드 생략은 `application.yml`의 전역 JSON 설정이다. 정확한 속성 이름은 Spring Boot 4.1.1(Jackson 3)에서 구현 때 확인한다. 거부는 `mapBounds` 같은 중첩 record에도 적용하지만 `previousConditions` 내부와 `preferences` 원소에는 적용하지 않는다(D-41, D-64).
-10. 역직렬화되는 record(요청 DTO와 `places.json` 매핑)의 숫자와 boolean은 박싱 타입이다. 선택 필드의 명시적 `null`은 없는 것으로 본다. 타입은 Jackson 기본 변환을 따른다(`"query": 123`은 문자열로 받는다). 변환할 수 없는 값(문자열 자리의 객체, `previousConditions` 자리의 배열 등)만 400이다. `preferences`는 `List<String>`, `previousConditions`는 `Map<String, Object>`(JSON 객체)다(D-41, D-64).
+10. 역직렬화되는 record(요청 DTO와 `places.json` 매핑)의 숫자와 boolean은 박싱 타입이다. 선택 필드의 명시적 `null`은 없는 것으로 본다. 타입은 Jackson 기본 변환을 따른다(`"query": 123`은 문자열로 받는다). 변환할 수 없는 값(문자열 자리의 객체, `previousConditions` 자리의 배열 등)만 400이다. `preferences`는 온보딩 답 모양의 `Preferences` 객체(`mood`, `priorities`, `purposes`, `tastes`, 가입과 같은 검증. place-ai-search D-4), `previousConditions`는 `Map<String, Object>`(JSON 객체)다(D-41, D-64).
 11. 응답에서 null인 선택 필드는 JSON에서 생략하고, `conditions: {}`와 빈 목록은 그대로 내보낸다. `conditions` 내부의 null 값은 생략하지 않는다(`@JsonInclude(content = ALWAYS)`)(D-41, D-61).
 12. 프레임워크 로거는 기본 수준을 유지하고, JSON 파싱 오류 메시지가 입력을 로그에 남기는지는 AC-13 테스트로 확인한다. 테스트가 실패하면 해당 로거의 수준을 올리는 것은 허용한다(D-20).
 
@@ -83,12 +83,12 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 
 ### FE 첫 화면 (S15P31A302-42)
 
-53. thread와 최근 검색: 새 검색 하나가 thread 하나를 시작하고, 그 뒤의 후속 조건, "이 지역에서 검색", "이 조건으로 다시 검색"은 같은 thread에 요청으로 쌓인다(LLM 대화와 같이 요청은 따로 보이고 조건은 `previousConditions`로 이어진다). "새 검색"을 누르면 지금 thread가 닫힌다. thread는 첫 페이지 응답을 받을 때마다 `localStorage`에 저장한다. 요청마다 id, 종류, 기준 요청, 문장, 시각, 첫 페이지 요청 본문, 첫 페이지 응답(`nextCursor` 없이)을 두고, 개수 제한과 지우기 규칙은 없다. 저장에 실패하거나 저장된 값의 형식이 틀리면 그 thread는 저장되지 않거나 버려지고 화면과 검색은 그대로 동작한다. 첫 화면 검색창과 후속 입력창의 최근 검색 버튼은 "최근 검색" 시트(thread 목록)를 연다. 줄은 thread의 첫 문장과 마지막 요청 시각("오늘 오후 2:10", 다른 날은 "10월 14일", 요청 기록의 시각처럼 기기 시간대 기준)이고 마지막 요청 시각 최신순이며 지금 thread에는 "보는 중"을 붙인다. 줄을 누르면 시트를 닫고 그 thread로 바꾼다. 그 thread의 마지막 요청이 지금 보는 요청이 되어 네트워크 요청 없이 그때 결과로 보이고(다시 연 thread의 요청은 저장한 첫 페이지뿐이고 다음 페이지를 부르지 않는다), 이어서 후속 조건을 보낼 수 있다. 비어 있으면 "아직 검색한 요청이 없어요. 원하는 분위기나 목적을 말해 보세요."를 보인다. 재로드하면 첫 화면에서 시작한다. 저장소는 `ui/thread-storage.ts`(목록 읽기, thread 하나 읽기, `saveThread`)로만 읽고 써서 나중에 서버 저장(목록은 cursor paging)으로 이 모듈만 바꾼다. thread의 모양, 요청 더하기(`appendTurn`), 정렬, 형식 검사, 시각 문구는 `model/search-threads.ts`의 순수 함수다(D-91).
+53. thread와 최근 검색: 새 검색 하나가 thread 하나를 시작하고, 그 뒤의 후속 조건, "이 지역에서 검색", "이 조건으로 다시 검색"은 같은 thread에 요청으로 쌓인다(LLM 대화와 같이 요청은 따로 보이고 조건은 `previousConditions`로 이어진다). "새 검색"을 누르면 지금 thread가 닫힌다. thread는 첫 페이지 응답을 받을 때마다 저장한다. 비회원은 `localStorage`, 회원은 서버다(search-thread, V11). 요청마다 id, 종류, 기준 요청, 문장, 시각, 첫 페이지 요청 본문, 첫 페이지 응답(`nextCursor` 없이)을 두고, 개수 제한과 지우기 규칙은 없다. 저장에 실패하거나 저장된 값의 형식이 틀리면 그 thread는 저장되지 않거나 버려지고 화면과 검색은 그대로 동작한다. 첫 화면 검색창과 후속 입력창의 최근 검색 버튼은 "최근 검색" 시트(thread 목록)를 연다. 줄은 thread의 첫 문장과 마지막 요청 시각("오늘 오후 2:10", 다른 날은 "10월 14일", 요청 기록의 시각처럼 기기 시간대 기준)이고 마지막 요청 시각 최신순이며 지금 thread에는 "보는 중"을 붙인다. 줄을 누르면 시트를 닫고 그 thread로 바꾼다. 그 thread의 마지막 요청이 지금 보는 요청이 되어 검색을 다시 하지 않고 저장된 그때 결과로 보이고(다시 연 thread의 요청은 저장한 첫 페이지뿐이고 다음 페이지를 부르지 않는다), 이어서 후속 조건을 보낼 수 있다. 비어 있으면 "아직 검색한 요청이 없어요. 원하는 분위기나 목적을 말해 보세요."를 보인다. 재로드하면 첫 화면에서 시작한다. 저장소는 `ui/thread-storage.ts`로만 읽고 쓴다(지금은 `saveTurn`, `useThreadList` 등이고 회원은 서버 API, 비회원은 기기를 쓴다. search-thread). thread의 모양, 요청 더하기(`appendTurn`), 정렬, 형식 검사, 시각 문구는 `model/search-threads.ts`의 순수 함수다(D-91).
 54. 주변 추천 카드: 지금 보는 요청이 없고 검색 중이 아닐 때 첫 화면은 검색 API에 `{ query: "근처 맛집" }`(`nearbyRequest()`, 좌표와 `mapBounds` 없음)를 보낸 근처 응답에서 기준 지점과의 거리가 반경(42번) 이하인 카드를 응답 순서대로(모든 카드에 `score`가 없으면 기준 지점에서 가까운 순으로, place-lookup-db D-12) 앞에서 10곳까지 가로 목록으로 보여 주고, 지도에는 같은 순위 번호(1부터)의 핀을 찍는다. 이 요청은 요청 기록과 최근 검색에 넣지 않고, 쿼리는 `placeQueries.nearby()`(기록 항목과 다른 키, 페이지 세션 동안 다시 받지 않음)다. 받은 카드는 장소별 최근 카드에 둔다. 반경 안 카드가 없거나 요청이 실패하면 목록을 그리지 않는다(D-82).
 55. 주변 카드의 기준 지점은 기기 위치가 있으면 그 위치, 없으면(시도 전, 실패) 역삼역(위도 37.5006, 경도 127.0364)이다. 역삼역 기준일 때 카드의 거리는 "역삼역 350m"처럼 쓴다. 카드는 위쪽 사진(없으면 자리표시), 순위, 이름, 업종 · 거리 · 영업 상태, 핏 점수(`score`가 없으면 그리지 않는다), 라벨 2개이며 주의점은 없다. 가운데 카드가 선택된 카드이고, 넘기면 그 카드를 선택하고 지도를 그 핀으로 `panTo`한다. 핀이나 가운데가 아닌 카드를 누르면 그 카드로 넘긴다. 선택된 카드를 누르면 `/place?id=<id>`로 간다. 첫 화면의 "내 위치" 버튼은 카드 목록 바로 위 오른쪽(목록이 없으면 검색창 위 오른쪽)에 있다(D-82, D-83).
-56. 첫 화면과 결과 화면(결과 패널 중간 상태)의 지도 오른쪽 위에 "저장한 장소"(북마크 아이콘)와 "내 정보"(사람 아이콘) `Fab`을 세로로 두고, 누르면 "준비 중이에요" 토스트를 띄운다. "내 주변 추천" 라벨은 그리지 않는다(D-85, D-80).
+56. 첫 화면과 결과 화면(결과 패널 중간 상태)의 지도 오른쪽 위에 "저장한 장소"(북마크 아이콘)와 "내 정보"(사람 아이콘) `Fab`을 세로로 둔다. "저장한 장소"는 저장한 장소 화면을 열고(bookmark), "내 정보"는 `/my`로 간다(S15P31A302-104). "내 주변 추천" 라벨은 그리지 않는다(D-85, D-80).
 57. 과거 결과(와이어프레임 `PastResult`): 요청 기록에서 지금 보는 요청이 아닌 줄의 "결과 보기"는 지금 보는 요청을 바꾸지 않고 과거 결과 화면을 연다. 결과는 다시 받지 않는다. 이번 페이지 세션에 받은 요청은 캐시에 받아 둔 페이지를 그대로 보이며 다음 페이지를 더 부르지 않고, 다시 연 thread의 요청은 저장한 첫 페이지를 보인다. 영업 상태는 그때 값이다(D-79). 근처 응답이면 지금 보는 요청과 같이 위치로 거른다(41번). 화면은 지도 왼쪽 위 "현재 검색으로" 버튼, 결과 패널 위쪽 "<시각> 결과 · “<문장>”"(시각은 53번과 같은 문구), 순위가 붙은 카드 목록과 핀, 패널 아래 "이 조건으로 다시 검색" 버튼이다(버튼 아래 안내 문구는 없다, D-98). 패널 머리글(요청 기록, 새 검색), 후속 입력창, "이 지역에서 검색"은 없고, "내 위치"는 있고 지도 위 버튼(56번)은 없다(D-98). 카드와 핀은 38번대로 동작하며 선택은 과거 결과를 열거나 닫을 때 비운다. "현재 검색으로"는 요청 기록을 펼친 결과 패널로 돌아간다. "이 조건으로 다시 검색"은 그 요청의 첫 페이지 요청 본문을 그대로 같은 종류와 기준 요청으로 보내고, 성공하면 새 요청이 지금 thread 끝에 쌓여 지금 보는 요청이 되며 과거 결과 화면이 닫힌다. 원래 요청과 결과는 그대로 남는다. 과거 결과 화면은 `search-store`에 있어 상세에 갔다가 돌아와도 그대로다(D-90).
-58. 장소 상세의 모양(와이어프레임 `Detail`, `DetailMenu`, `DetailInfo`): 상단 막대 없이 사진(없으면 자리표시)이 화면 폭 가득 크게 보이고 아래쪽이 바탕색으로 흐려지며, 사진 위 왼쪽에 "뒤로", 오른쪽에 "공유" `Fab`을 띄우고 사진이 둘 이상이면 넘김 점을 둔다. 업종 · 거리, 이름, 핏 점수, 영업 상태와 오늘 안내, 상세 `tags`(검색 카드의 "내 취향" 근거와 문구가 같으면 주황, 그 밖은 회색. D-96)는 흐려진 사진 위 바탕에 둔다. 핏 점수는 "<점수> 핏 점수 ⓘ" 전체가 ⓘ 시트를 여는 하나의 버튼이다(카드에 `score`가 없으면 이 버튼은 없다). 탭은 화면 위쪽에 붙는다. 홈 탭은 섹션(추천 이유와 주의, 장소 정보, 메뉴, 리뷰 자리) 사이를 두꺼운 띠로 나누고(탭 바로 아래 첫 섹션에는 띠가 없다), 추천 이유 인용은 주황 선과 진한 본문으로 그리며, 추천 이유 아래에 `matched: false`인 `scoreItems`마다 "이 장소는 ‘<label>’ 취향을 확인할 근거가 부족해요"(출처가 REQUEST면 "요청을")를 흐린 안내로, 그 아래 주의점을 주의 안내로 보인다. 장소 정보의 영업시간 줄은 "<영업 상태> · 오늘 08:00 – 22:00"이고 펼치면 정보 탭과 같은 요일별 표다. 전화 줄은 ›, 웹사이트 줄은 도메인만 보이고 바깥 링크 아이콘이 붙고, "정보 더보기 ›"는 가운데 둥근 테두리 버튼이다. 메뉴 머리글은 "메뉴 <개수> ›" 링크로 메뉴 탭을 열고, 미리보기는 대표 메뉴를 먼저, 나머지를 원래 순서로 6개까지 보인다. 메뉴 탭은 카테고리 이름을 작은 흐린 글씨로, 줄마다 64px 사진, 굵은 이름과 옆의 작은 라벨·"대표" 칩, 이름 아래 흐린 설명(두 줄까지, 넘치면 말줄임), 오른쪽 가격 원문을 두고 줄 사이를 선으로 나눈다. 정보 탭 영업시간은 위에 "<영업 상태> · <오늘 안내>"(45번)를 두고, 요일별 표에서 오늘 줄은 "<요일> · 오늘"로 굵게, 브레이크타임은 하나마다 "15:00 – 16:00 브레이크타임", 라스트오더는 "14:30, 21:30 라스트오더" 줄로, 휴무일은 "정기휴무 (매주 <요일>요일)", 정보 없는 요일은 "정보 없음", `00:00`–`00:00`은 "24시간 영업"으로 쓴다. 시각 범위는 "08:00 – 22:00"으로 쓰고, 마감 `00:00`은 "24:00", 자정을 넘는 영업은 "17:00 – 02:00"이다. 주소 줄에는 "주소 복사" 버튼(클립보드에 넣고 "주소를 복사했어요", 실패하면 "주소를 복사하지 못했어요")을 두고, 시설은 아이콘이 붙은 테두리 칩(이름 그대로, 비슷한 시설을 묶은 아이콘, 묶음에 없는 이름은 기본 아이콘)이고, 그 아래 "제목 · 내용" 줄, 맨 아래에 "정보가 실제와 다를 수 있어요"를 둔다. 하단 막대는 "저장"(북마크 테두리 버튼)과 리뷰 자리의 `bottomAction`을 나란히 둔다. "공유"와 "저장"은 누르면 "준비 중이에요" 토스트를 띄운다. 리뷰 자리 안의 모양은 바꾸지 않는다(D-92, D-94, D-96).
+58. 장소 상세의 모양(와이어프레임 `Detail`, `DetailMenu`, `DetailInfo`): 상단 막대 없이 사진(없으면 자리표시)이 화면 폭 가득 크게 보이고 아래쪽이 바탕색으로 흐려지며, 사진 위 왼쪽에 "뒤로", 오른쪽에 "공유" `Fab`을 띄우고 사진이 둘 이상이면 넘김 점을 둔다. 업종 · 거리, 이름, 핏 점수, 영업 상태와 오늘 안내, 상세 `tags`(검색 카드의 "내 취향" 근거와 문구가 같으면 주황, 그 밖은 회색. D-96)는 흐려진 사진 위 바탕에 둔다. 핏 점수는 "<점수> 핏 점수 ⓘ" 전체가 ⓘ 시트를 여는 하나의 버튼이다(카드에 `score`가 없으면 이 버튼은 없다). 탭은 화면 위쪽에 붙는다. 홈 탭은 섹션(추천 이유와 주의, 장소 정보, 메뉴, 리뷰 자리) 사이를 두꺼운 띠로 나누고(탭 바로 아래 첫 섹션에는 띠가 없다), 추천 이유 인용은 주황 선과 진한 본문으로 그리며, 추천 이유 아래에 `matched: false`인 `scoreItems`마다 "이 장소는 ‘<label>’ 취향을 확인할 근거가 부족해요"(출처가 REQUEST면 "요청을")를 흐린 안내로, 그 아래 주의점을 주의 안내로 보인다. 장소 정보의 영업시간 줄은 "<영업 상태> · 오늘 08:00 – 22:00"이고 펼치면 정보 탭과 같은 요일별 표다. 전화 줄은 ›, 웹사이트 줄은 도메인만 보이고 바깥 링크 아이콘이 붙고, "정보 더보기 ›"는 가운데 둥근 테두리 버튼이다. 메뉴 머리글은 "메뉴 <개수> ›" 링크로 메뉴 탭을 열고, 미리보기는 대표 메뉴를 먼저, 나머지를 원래 순서로 6개까지 보인다. 메뉴 탭은 카테고리 이름을 작은 흐린 글씨로, 줄마다 64px 사진, 굵은 이름과 옆의 작은 라벨·"대표" 칩, 이름 아래 흐린 설명(두 줄까지, 넘치면 말줄임), 오른쪽 가격 원문을 두고 줄 사이를 선으로 나눈다. 정보 탭 영업시간은 위에 "<영업 상태> · <오늘 안내>"(45번)를 두고, 요일별 표에서 오늘 줄은 "<요일> · 오늘"로 굵게, 브레이크타임은 하나마다 "15:00 – 16:00 브레이크타임", 라스트오더는 "14:30, 21:30 라스트오더" 줄로, 휴무일은 "정기휴무 (매주 <요일>요일)", 정보 없는 요일은 "정보 없음", `00:00`–`00:00`은 "24시간 영업"으로 쓴다. 시각 범위는 "08:00 – 22:00"으로 쓰고, 마감 `00:00`은 "24:00", 자정을 넘는 영업은 "17:00 – 02:00"이다. 주소 줄에는 "주소 복사" 버튼(클립보드에 넣고 "주소를 복사했어요", 실패하면 "주소를 복사하지 못했어요")을 두고, 시설은 아이콘이 붙은 테두리 칩(이름 그대로, 비슷한 시설을 묶은 아이콘, 묶음에 없는 이름은 기본 아이콘)이고, 그 아래 "제목 · 내용" 줄, 맨 아래에 "정보가 실제와 다를 수 있어요"를 둔다. 하단 막대는 "저장"(북마크 테두리 버튼)과 리뷰 자리의 `bottomAction`을 나란히 둔다. "공유"는 누르면 "준비 중이에요" 토스트를 띄운다. "저장"은 북마크 버튼이다(bookmark). 리뷰 자리 안의 모양은 바꾸지 않는다(D-92, D-94, D-96).
 59. 정보 탭 위치 지도: 주소 줄 아래에 높이를 CSS로 정한 작은 `PlaceMap`을 두고 그 장소 핀 하나만 찍으며 중심은 그 장소다. 정보 탭을 열었을 때만 만들고(지도 사용량은 지도 생성 횟수), 지도 키가 없거나 인증이 실패하면 지도 자리를 그리지 않는다. 내 위치 점과 "이 지역에서 검색"은 없다(D-93).
 
 ## Usage
@@ -105,19 +105,19 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 ## Acceptance criteria
 
 - [x] AC-1: `GET /api/v1/places/suggest`는 `q`(1자 이상)에 대해 장소 후보(`type: PLACE`)와 "이 조건으로 추천받기"(`type: ACTION`)를 돌려준다. 장소 이름이 `q`와 같거나 `q`로 시작하는 후보가 있으면 그 장소가 맨 위이고, 없으면 `ACTION`이 맨 위다(메뉴, 업종 일치는 순서에 영향을 주지 않는다). 메뉴 이름으로 일치한 후보는 `matchedMenu`에 그 메뉴 이름을 담는다. (D-32, D-63, D-64) Mock 모드의 기준이다. DB 모드의 기준은 `docs/specs/place-lookup-db/spec.md`의 AC-1~AC-8이다.
-- [x] AC-2: `POST /api/v1/places/search`에 헤더 없이 일반 질의를 보내면 항목 20개, `totalCount`, `nextCursor`가 온다. 그 커서로 다시 보내면 나머지 항목이 오고 `nextCursor`가 없다. 두 페이지의 항목은 겹치지 않는다. (D-50, D-63, D-64)
+- [x] AC-2: `POST /api/v1/places/search`에 헤더 없이 일반 질의를 보내면 항목 20개, `totalCount`, `nextCursor`가 온다. 그 커서로 다시 보내면 나머지 항목이 오고 `nextCursor`가 없다. 두 페이지의 항목은 겹치지 않는다. Mock 모드 기준이며, DB 모드의 페이지와 커서는 place-ai-search를 따른다. (D-50, D-63, D-64)
 - [x] AC-3: 헤더 `X-Mock-Scenario: empty`로 검색하면 200이고 `items`는 비어 있으며 `totalCount`는 0이고 `emptyReason`에 원인과 수정 제안이 있다. (D-10, D-63)
-- [x] AC-4: 질의에 "근처"가 있으면 `nearby: true`이고 `nextCursor`가 없으며, Mock 모드에서 항목은 후보 전체(최대 100)를 `score` 내림차순으로 담는다. DB 모드에서는 카탈로그 전체(상한 없음)를 `place_id` 오름차순으로 담고 `score`가 없다(place-lookup-db AC-17, AC-18). (D-63, D-52)
+- [x] AC-4: 질의에 "근처"가 있으면 `nearby: true`이고 `nextCursor`가 없으며, Mock 모드에서 항목은 후보 전체(최대 100)를 `score` 내림차순으로 담는다. DB 모드에서 AI를 쓸 수 없어 대체할 때는 카탈로그 전체(상한 없음)를 `place_id` 오름차순으로 담고 `score`가 없다(place-lookup-db AC-17, AC-18). AI가 응답하면 AI 결과를 쓴다(place-ai-search). (D-63, D-52)
 - [x] AC-5: 요청에 `previousConditions`를 넣으면 Mock 응답의 `conditions`가 그 값을 그대로 담고 `changeSummary`가 있다. 넣지 않으면 `conditions`는 `{}`이고 `changeSummary`가 없다. BE는 `conditions`의 내부를 해석하지 않는다. (D-50, D-63, D-64)
-- [x] AC-6: 임의의 검색 응답에서 모든 `score`는 0 이상 100 이하의 정수, `labels`는 2개, `scoreItems`의 `evidenceCount`는 0 이상의 정수이고 `openStatus`는 정의된 값 중 하나다. FE는 점수를 정수 그대로 `%` 없이 표시한다. (D-41, D-64)
+- [x] AC-6: 임의의 검색 응답에서 모든 `score`는 0 이상 100 이하의 정수, `labels`는 2개(Mock 기준. DB 모드의 대체 결과는 `score`가 없고 `labels`가 비어 있을 수 있다, place-ai-search), `scoreItems`의 `evidenceCount`는 0 이상의 정수이고 `openStatus`는 정의된 값 중 하나다. FE는 점수를 정수 그대로 `%` 없이 표시한다. (D-41, D-64)
 - [x] AC-7: 요청 본문에 정의되지 않은 속성(예: `lat`, `lng`)이 있으면 400 ProblemDetail이고, 정의된 필드만 있는 요청은 정상 처리된다. (D-10, D-41)
 - [x] AC-8: 세 엔드포인트의 정상 응답 JSON 키는 문서화된 DTO 필드 집합을 벗어나지 않으며 외부 리뷰를 담는 필드가 없다. `conditions` 객체의 내부 키와 ProblemDetail 표준 키는 검사 대상이 아니다. (D-41, D-64)
 - [x] AC-9: Mock이 켜진 환경에서는 Mock이 정상 응답한다. Mock이 꺼진 환경(DB 모드)의 응답은 `docs/specs/place-lookup-db/spec.md`(AC-12, AC-17~AC-21)를 따른다. DB 모드가 생기기 전에는 엔진이 없어 세 엔드포인트가 503이었다. (D-63)
 - [x] AC-10: `GET /api/v1/places/{id}`는 알려진 `id`에 `hours`(7일), `menus`(카테고리는 있을 때만), `facilities`(시설 이름), `tags`, `photos`, `openStatus`를 돌려주고, 모르는 `id`에는 404, 정수가 아닌 `id`에는 400 ProblemDetail을 돌려준다. 상세 응답에는 `score`, `reasons`, `scoreItems`가 없다. (D-32, D-10, D-64)
 - [x] AC-11: 빈 값, 공백뿐인 값, 200자를 넘는 `q`와 `query`는 400 ProblemDetail이다. (D-10, D-64)
-- [x] AC-12: `Authorization` 헤더가 있든 없든 세 엔드포인트의 응답이 같다. `preferences`는 받아 두되 Mock은 결과에 반영하지 않는다. (D-33)
+- [x] AC-12: `Authorization` 헤더가 있든 없든 세 엔드포인트의 응답이 같다. `preferences`는 받아 두되 Mock은 결과에 반영하지 않는다. 이후 place-ai-search D-4가 검색을 바꿨다: 검색은 `Bearer` 토큰을 선택으로 받고 유효하지 않으면 401이며, 회원 id를 AI에 넘긴다. (D-33)
 - [x] AC-13: 검색과 자동완성 요청을 처리한 뒤(잘못된 요청으로 400이 난 경우 포함) BE 로그 출력에 요청 본문, `preferences`, `q`, `query` 값이 나타나지 않는다. (D-20)
-- [x] AC-14: 컨트롤러와 `PlaceService`는 `PlaceSearchEngine`의 반환값을 가공하거나 검증하지 않고 그대로 응답한다. 다른 `PlaceSearchEngine` 구현으로 바꿔도 컨트롤러와 `PlaceService`는 수정할 필요가 없다. (D-62, D-64, D-56)
+- [x] AC-14: 컨트롤러와 `PlaceService`는 `PlaceSearchEngine`의 반환값을 가공하거나 검증하지 않고 그대로 응답한다. 다른 `PlaceSearchEngine` 구현으로 바꿔도 컨트롤러와 `PlaceService`는 수정할 필요가 없다. 지금 컨트롤러는 엔진이 알린 대체 이유를 `X-Fallback` 헤더로 싣는다(place-ai-search). (D-62, D-64, D-56)
 - [x] AC-15: 자동완성은 입력이 멈춘 뒤 300ms 뒤에 한 번만 요청하고, 입력이 비면 요청하지 않으며, 새 요청을 보내면 이전 요청을 취소하고, 늦게 도착한 응답은 화면에 반영하지 않는다. (D-70)
 - [x] AC-16: FE가 만드는 검색 요청 본문에는 기기 위치를 얻었어도 그 좌표가 어떤 필드에도 들어가지 않는다. 검색 대상 지역인 `mapBounds`는 좌표 금지의 예외이며, 사용자가 "이 지역에서 검색"을 눌렀거나 위치를 얻지 못한 것이 확인된 뒤에만 담는다. 근처 응답이 오고 위치를 얻으면 FE는 현재 위치와 반경으로 항목을 걸러 낸다. (D-41, D-52)
 - [x] AC-17: 주소에 `?mock=empty`가 있어도 FE의 검색, 자동완성, 상세 요청에 `X-Mock-Scenario` 헤더가 붙지 않는다. (D-95)
@@ -137,13 +137,13 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 - [x] AC-31: 지금 보는 요청이 없으면 검색창("분위기나 목적을 말해 보세요")이 화면 아래에 있고 자동완성 후보는 검색창 위에 열린다. 결과가 있으면 이 검색창 대신 결과 패널 아래 후속 입력창이 화면 맨 아래에 있고 결과 목록은 그 위에 있다. (D-81)
 - [x] AC-32: 화면을 열 때 위치 권한이 이미 `granted`이면 위치를 받아 지도를 그 위치로 옮기고, 그 위치에서 반경 안의 주변 카드(최대 10곳)를 가로 목록으로, 같은 순위 번호의 핀과 함께 보인다. 권한이 `granted`가 아니면 열 때 위치를 요청하지 않는다(`denied`면 안내를 한 번 띄운다). (D-82, D-83)
 - [x] AC-33: 위치가 없거나 실패하면 주변 카드는 역삼역 기준 반경 안 장소이고 거리는 "역삼역 <거리>"로 보인다. 주변 카드의 검색 요청 본문은 `query`뿐이고 좌표와 `mapBounds`가 없으며, 이 요청은 요청 기록과 최근 검색에 쌓이지 않는다. 카드를 넘기면 그 카드가 선택되고 지도가 그 핀으로 옮겨 가며, 선택된 카드를 누르면 상세로 간다. (D-82, D-83)
-- [x] AC-34: 새 검색은 새 thread를 시작하고 후속 조건은 같은 thread에 쌓이며, 요청 기록에는 지금 thread의 요청만 보인다. thread는 재로드 뒤에도 "최근 검색" 시트에 첫 문장과 마지막 요청 시각으로 최신순으로 보이고, 줄을 누르면 네트워크 요청 없이 그 thread의 마지막 결과와 요청 기록이 보이며, 이어 보낸 후속 조건은 그 thread의 `conditions`를 `previousConditions`로 담아 같은 thread에 쌓인다. 기록이 없으면 빈 안내가 보이고, `localStorage`를 쓸 수 없거나 저장된 값이 깨져 있어도 검색은 동작한다. (D-91)
-- [x] AC-35: 첫 화면과 결과 화면의 지도 오른쪽 위에 "저장한 장소"와 "내 정보" 버튼이 있고, 누르면 "준비 중이에요" 토스트가 뜬다. (D-85)
+- [x] AC-34: 새 검색은 새 thread를 시작하고 후속 조건은 같은 thread에 쌓이며, 요청 기록에는 지금 thread의 요청만 보인다. thread는 재로드 뒤에도 "최근 검색" 시트에 첫 문장과 마지막 요청 시각으로 최신순으로 보이고, 줄을 누르면 네트워크 요청 없이 그 thread의 마지막 결과와 요청 기록이 보이며, 이어 보낸 후속 조건은 그 thread의 `conditions`를 `previousConditions`로 담아 같은 thread에 쌓인다. 기록이 없으면 빈 안내가 보이고, `localStorage`를 쓸 수 없거나 저장된 값이 깨져 있어도 검색은 동작한다. 회원의 thread는 서버에 저장한다(search-thread). (D-91)
+- [x] AC-35: 첫 화면과 결과 화면의 지도 오른쪽 위에 "저장한 장소"와 "내 정보" 버튼이 있다. "저장한 장소"는 저장한 장소 화면을, "내 정보"는 `/my`를 연다(처음에는 "준비 중이에요" 토스트였고 bookmark와 S15P31A302-104가 바꿨다). (D-85)
 - [x] AC-36: 자동완성 후보 상자는 응답에서 `ACTION`이 어디 있든 "이 조건으로 추천받기"를 맨 위에, 장소 후보를 응답 순서대로 그 아래에 보인다. 후보가 보이는 동안 어두운 막이 지도와 주변 카드를 가리고 막을 누르면 후보가 닫힌다. 입력이 있으면 "입력 지우기" 버튼이 있고 누르면 입력이 비워진다. (D-87)
 - [x] AC-37: 첫 페이지를 받는 동안 결과 패널은 "요청을 이해하는 중", "주변 장소를 찾는 중", "취향과 맞춰 보는 중"을 1.5초마다 차례로 보이고, 후속 입력창은 비활성이다. (D-88)
 - [x] AC-38: 결과 패널의 "요청 기록"을 누르면 모달 없이 패널 안에 요청 기록 타임라인이 펼쳐지고 후속 입력창은 그대로 보이며, 다시 누르면 결과 목록으로 돌아온다. "여기서 이어 검색"은 그 요청을 "보는 중"으로 바꾸고 결과 목록과 후속 입력창 초점으로 돌아온다. (D-89)
 - [x] AC-39: 과거 결과 화면은 그때의 카드를 네트워크 요청 없이 보이고 "<시각> 결과 · “<문장>”", "현재 검색으로", "이 조건으로 다시 검색"이 있으며 후속 입력창과 패널 머리글은 없다. "현재 검색으로"는 요청 기록을 펼친 결과 패널로 돌아가고 지금 보는 요청은 그대로다. "이 조건으로 다시 검색"은 같은 요청 본문을 보내 새 요청을 지금 thread 끝에 쌓고, 원래 요청과 그 결과는 그대로 남는다. (D-90)
-- [x] AC-40: 장소 상세는 상단 막대 없이 큰 사진 위에 "뒤로"와 "공유"가 있고, "<점수> 핏 점수 ⓘ" 버튼(카드에 `score`가 있을 때)이 ⓘ 시트를 연다. 홈 탭에 `matched: false` 항목마다 근거 부족 안내가, 정보 탭에 오늘 줄이 굵은 요일별 표와 "주소 복사", 아이콘이 붙은 시설 칩이 있다. 하단 막대에 "저장"과 리뷰 자리 버튼이 있고 "공유"와 "저장"은 "준비 중이에요"를 띄운다. (D-92, D-94)
+- [x] AC-40: 장소 상세는 상단 막대 없이 큰 사진 위에 "뒤로"와 "공유"가 있고, "<점수> 핏 점수 ⓘ" 버튼(카드에 `score`가 있을 때)이 ⓘ 시트를 연다. 홈 탭에 `matched: false` 항목마다 근거 부족 안내가, 정보 탭에 오늘 줄이 굵은 요일별 표와 "주소 복사", 아이콘이 붙은 시설 칩이 있다. 하단 막대에 "저장"과 리뷰 자리 버튼이 있고 "공유"는 "준비 중이에요"를 띄우고 "저장"은 북마크 버튼이다(bookmark). (D-92, D-94)
 - [x] AC-41: 정보 탭을 열면 지도 키가 있을 때 그 장소 핀 하나가 있는 작은 지도가 생기고, 홈과 메뉴 탭에서는 지도를 만들지 않는다. 키가 없거나 인증이 실패하면 지도 자리가 없고 정보 탭의 나머지는 보인다. (D-93)
 - [x] AC-42: 상세 위쪽 태그는 검색 카드의 "내 취향" 근거와 문구가 같으면 주황, "요청" 근거와 같거나 카드가 없으면 회색이다. 추천 이유 인용은 주황 선에 진한 본문이고, 홈 탭 메뉴 미리보기는 대표 메뉴를 먼저 6개까지 보인다. 웹사이트 줄은 도메인만 보이고 링크는 원래 주소이며, 요일별 표의 휴무 요일은 "정기휴무 (매주 <요일>요일)"이고 표 아래 휴무 안내를 따로 두지 않는다. (D-96)
 
@@ -183,7 +183,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 | `fe/src/shared/ui/display/carousel.tsx#Carousel` | reuse | D-82 |
 | `fe/src/domains/place/ui/locate-device.ts#locateIfGranted` | new | D-83 |
 | `fe/src/domains/place/model/search-threads.ts#appendTurn` | new | D-91 |
-| `fe/src/domains/place/ui/thread-storage.ts#saveThread` | new | D-91 |
+| `fe/src/domains/place/ui/thread-storage.ts#saveThread` | new | D-91 (지금은 `saveTurn`, `useThreadList`, search-thread) |
 | `fe/src/domains/place/ui/recent-search-sheet.tsx#RecentSearchSheet` | modify | D-91 |
 | `fe/src/shared/ui/button/fab.tsx#Fab` | reuse | D-85, D-94 |
 | `fe/src/domains/place/ui/place-detail-screen.tsx#PlaceDetailScreen` | modify | D-86, D-92, D-96 |
@@ -199,7 +199,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 
 ## Interfaces
 
-엔드포인트(모두 인증 없음, 오류는 Spring ProblemDetail):
+엔드포인트(자동완성과 상세는 인증 없음, 검색은 로그인 선택(place-ai-search D-4), 오류는 Spring ProblemDetail):
 
 | 메서드와 경로 | 요청 | 응답 |
 |---|---|---|
@@ -216,9 +216,10 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 public class InvalidCursorException extends RuntimeException {}
 
 // PlaceSearchEngine: 교체 지점. 구현이 바뀌면 시그니처도 바뀔 수 있다(D-62).
+// place-ai-search가 search를 바꿨다: 회원 id를 받고, 응답과 대체 이유를 담은 PlaceSearchResult를 돌려준다.
 public interface PlaceSearchEngine {
     List<PlaceSuggestResponse> suggest(String q);
-    PlaceSearchResponse search(PlaceSearchRequest request);
+    PlaceSearchResult search(PlaceSearchRequest request, String userId);
     Optional<PlaceDetailResponse> findPlace(long id);
 }
 ```
@@ -234,7 +235,7 @@ kr.co.fitdining.api.place.dto (D-64. 파일은 아래 들여쓰지 않은 7개�
                          (화면: 영업 중, 곧 마감, 브레이크타임, 영업 종료, 표시 안 함)
   PlaceSuggestResponse : type, place?(PlaceSummary), matchedMenu?(String), label?(String)
     enum SuggestType   : PLACE | ACTION
-  PlaceSearchRequest   : query(@NotBlank @Size(max = 200)), preferences?(String[] 태그 코드),
+  PlaceSearchRequest   : query(@NotBlank @Size(max = 200)), preferences?(Preferences: mood, priorities, purposes, tastes),
                    previousConditions?(JSON 객체, 불투명),
                    mapBounds?(MapBounds), cursor?(String, 불투명)
     MapBounds    : swLat?, swLng?, neLat?, neLng? (Double)
@@ -292,7 +293,7 @@ src/domains/place/             의존은 ui → api → model 방향만
   ui/place-map.tsx             PlaceMap (D-70)
   ui/nearby-carousel.tsx       첫 화면 주변 카드 가로 목록 NearbyCarousel (D-82)
   ui/locate-device.ts          locateDevice(), 권한이 이미 허용일 때만 위치를 받는 locateIfGranted() (D-83)
-  ui/thread-storage.ts         thread 저장소(지금은 localStorage, 나중에 서버). 목록 읽기, thread 하나 읽기, saveThread (D-91)
+  ui/thread-storage.ts         thread 저장소(비회원은 localStorage, 회원은 서버. search-thread). saveTurn, useThreadList 등 (D-91)
   ui/recent-search-sheet.tsx   최근 검색(thread 목록) 시트 RecentSearchSheet (D-91)
   ui/search-steps.tsx          검색 중 단계 문구 SearchSteps (D-88)
   ui/history-timeline.tsx      결과 패널 안에 펼치는 요청 기록 HistoryTimeline (D-89)
@@ -337,7 +338,7 @@ GET /config.json  : { env: "dev" | "prod", naverMapClientId?: string }, Cache-Co
 
 ## Out of scope
 
-- 5-02 "이 조건으로 추천받기" 토글, 5-08 지난날 결과 보기(와이어프레임 PastResult), 리뷰 탭 내용과 "방문 평가 남기기" 이후의 화면(리뷰 담당, 장소 상세는 자리만 연다), 6-06~6-12 리뷰 수정·삭제·신고, 저장한 장소와 내 정보 화면, 저장과 공유 기능(버튼만 그린다), 리뷰 자리 안의 모양(머리글, 닉네임과 재방문 배지와 태그와 사진이 있는 리뷰 항목, 리뷰 담당)(D-49, D-85, D-86, D-92, D-94)
+- 5-02 "이 조건으로 추천받기" 토글, 5-08 지난날 결과 보기(와이어프레임 PastResult), 리뷰 탭 내용과 "방문 평가 남기기" 이후의 화면(리뷰 담당, 장소 상세는 자리만 연다), 6-06~6-12 리뷰 수정·삭제·신고, 저장한 장소와 내 정보 화면, 저장과 공유 기능(버튼만 그린다. 이후 저장과 저장한 장소 화면은 bookmark, 내 정보는 S15P31A302-104가 만들었고 공유는 아직 없다), 리뷰 자리 안의 모양(머리글, 닉네임과 재방문 배지와 태그와 사진이 있는 리뷰 항목, 리뷰 담당)(D-49, D-85, D-86, D-92, D-94)
 - 와이어프레임의 "내 주변 추천" 라벨, 위치 권한 안내 화면(Location, LocationPrompt), 앱 설치 안내(StartInstall*)(D-80)
 - 서버에 저장하는 검색 기록, 온보딩, 인증과 JWT 처리(D-49, D-33)
 - 결과에 맞춘 지도 화면 맞춤(`fitBounds`), 지도 서브 모듈(D-70)
@@ -353,12 +354,10 @@ GET /config.json  : { env: "dev" | "prod", naverMapClientId?: string }, Cache-Co
 
 ## Open questions
 
-- 추천 이유와 핏 점수 설명을 검색 응답 항목에 담을지, 상세 호출이 검색 맥락을 받을지는 검색 구체화 뒤에 정한다(D-64).
 - 후속 조건 전달을 `previousConditions` 되돌려주기로 계속 갈지, 검색 측의 `thread_id`로 바꿀지 정해지지 않았다(D-50).
 - 근처 반경의 최종 값은 몇 미터인가요? 임시값은 1000m다(D-52).
 - 실제 BE가 상세 `tags`를 무엇으로 채울지 정해지지 않았다. 지금은 빈 목록이라 D-96의 태그 강조는 Mock에서만 보인다(D-92, D-96).
 - 실제 검색 엔진에서 첫 화면 주변 추천을 고정 문장 "근처 맛집"의 근처 검색으로 계속 받을지, 취향을 반영한 별도 요청으로 바꿀지 정해지지 않았다(D-82).
-- 검색 thread는 지금 `localStorage`에 둔다(D-91). 서버 저장(DB 테이블, thread 목록의 cursor paging API, 로그인 사용자와의 연결)은 인증이 붙은 뒤 정한다. 지금 보는 화면 상태(보는 요청, 선택, 지역 고정)는 메모리에 둔다(D-27).
 - 다시 보는 예전 검색 결과에서 시간이 지나 틀려질 수 있는 영업 상태를 어떻게 보여 줄지(그대로, 숨김, 기준 시각 표시, 다시 검색) 정해지지 않았다. 그동안은 그대로 둔다(D-79).
 - 요청 기록과 검색 결과 캐시에 개수 상한(예: 최근 N개만 유지)을 둘지 정해지지 않았다. 지금은 상한 없이 재로드 때까지 쌓인다(D-79).
 - 공통 응답과 예외 형식은 BE 팀 논의 뒤 정한다(지금은 ProblemDetail)(D-10).

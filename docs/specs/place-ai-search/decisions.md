@@ -76,7 +76,7 @@ Glossary: none · ADRs: none
 ## D-15 AI가 읽는 뷰는 BE 마이그레이션이 만든다
 - Status: provisional
 - Decision: AI DB 계정은 뷰 `ai_place_search`와 `user_preferences`만 읽을 수 있고(`infra/data/grant-ai-read.sh`), 뷰를 만들 수 있는 것은 BE 마이그레이션 계정뿐이라 BE가 Flyway 마이그레이션으로 만든다. 모양은 지금 AI 코드(`ai/src/fit_ai/match/pg_store.py`)가 읽는 모양에 맞춰 `places`와 `place_profiles`로 조립한다. 규칙은 spec.md "AI가 읽는 뷰"와 AC-24. 권한은 배포가 마이그레이션 뒤에 다시 맞춘다(`infra/deploy/deploy.sh`).
-- Default: 뷰의 `profile.embedding`(모델·리비전·`document`)은 BE DB에 없는 값이라 AI 코드의 상수를 그대로 적는다. 적재된 장소 벡터가 다른 인코더로 만들어졌다면 AI가 오류 없이 엉뚱하게 정렬하므로 적재 담당과 확인한다(D-13). 편의시설은 네이버 이름 `주차`·`발렛파킹`→`PARKING`, `무선 인터넷`→`WIFI`, `단체 이용 가능`→`GROUP`, `예약`→`RESERVATION`만 바꾸고, 없는 시설은 "없음"이 아니라 "모름"(키 없음)으로 둬 시설 조건에서 빠지지 않게 한다. 주차 안내 문구(`parking_note`)는 "주차 불가" 같은 부정문이 섞여 쓰지 않는다. AI가 BE 컬럼을 그대로 읽도록 바뀌면(AI 코드 주석의 예정) 뷰를 그 모양으로 바꾼다.
+- Default: 뷰의 `profile.embedding`(모델·리비전·`document`)은 BE DB에 없는 값이라 AI 코드의 상수를 그대로 적는다. 적재된 장소 벡터가 다른 인코더로 만들어졌다면 AI가 오류 없이 엉뚱하게 정렬하므로 적재 담당과 확인한다(D-13). 편의시설은 네이버 이름 `주차`·`발렛파킹`→`PARKING`, `무선 인터넷`→`WIFI`, `단체 이용 가능`→`GROUP`, `예약`→`RESERVATION`만 바꾸고, 없는 시설은 "없음"이 아니라 "모름"(키 없음)으로 둬 시설 조건에서 빠지지 않게 한다. 주차 안내 문구(`parking_note`)는 "주차 불가" 같은 부정문이 섞여 쓰지 않는다. 지금 AI 코드(`ai/src/fit_ai/match/pg_store.py`)는 이 뷰의 컬럼에 의존한다고 적고 있다. AI가 BE 컬럼을 그대로 읽기로 하면 뷰를 그 모양으로 바꾼다.
 - Rejected: BE 컬럼을 그대로 내보내는 뷰 → 지금 AI 코드는 `profile` 컬럼을 찾아 모든 조회가 `UndefinedColumn`으로 실패한다(로컬에서 AI `PgPlaceStore`로 확인). AI 팀이 뷰를 만들기 → AI 계정은 읽기 전용이다. 뷰 대신 테이블 복사 → 적재·갱신마다 따로 맞춰야 한다.
 
 ## D-16 FE 검색 요청

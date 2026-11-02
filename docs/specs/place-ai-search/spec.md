@@ -5,7 +5,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 
 ## Problem
 
-DB 모드(`PLACE_MOCK_ENABLED`가 꺼진 환경)의 추천 검색(`POST /api/v1/places/search`)은 문장에 "근처"가 들어 있으면 카탈로그 전체를 점수 없이 주고, 그 밖의 문장은 모두 503이다(place-lookup-db#D-13). AI 파트의 검색 API(`POST /v1/search`)가 요청 해석, 후보 추출, 정렬, 카드의 AI 필드를 만들 수 있게 됐지만 BE는 부르지 않는다. 그래서 운영에서는 자연어 검색을 쓸 수 없고, 홈 카드에도 점수와 라벨이 없다.
+이번 반복 전에는 DB 모드(`PLACE_MOCK_ENABLED`가 꺼진 환경)의 추천 검색(`POST /api/v1/places/search`)이 문장에 "근처"가 들어 있으면 카탈로그 전체를 점수 없이 주고, 그 밖의 문장은 모두 503이었다(place-lookup-db#D-13). AI 파트의 검색 API(`POST /v1/search`)가 요청 해석, 후보 추출, 정렬, 카드의 AI 필드를 만들 수 있게 됐지만 BE는 부르지 않았다. 그래서 운영에서는 자연어 검색을 쓸 수 없었고, 홈 카드에도 점수와 라벨이 없었다.
 
 이번 반복(Jira S15P31A302-133)은 BE와 FE를 함께 한다(D-1). DB 모드 엔진의 추천 검색이 AI 검색 API를 부르고, AI가 준 카드에 장소 정보와 영업 상태를 붙여 돌려준다. AI가 실패하면 오류 화면 대신 키워드나 카탈로그로 만든 대체 결과와 `X-Fallback` 헤더를 준다. 검색은 로그인을 선택으로 받아, 회원이면 회원 id를, 비회원이면 기기의 온보딩 답을 AI에 넘긴다. AI가 장소를 읽는 뷰를 BE 마이그레이션으로 만든다(D-15). FE는 검색 요청에 토큰이나 답을 싣고 대체 결과를 알린다(D-16). Mock 엔진은 바꾸지 않는다.
 
@@ -17,7 +17,7 @@ DB 모드(`PLACE_MOCK_ENABLED`가 꺼진 환경)의 추천 검색(`POST /api/v1/
 4. 회원 취향(`user_preferences.features`)은 -129가 가입 때 저장하고 AI가 DB에서 직접 읽는다. 검색 쪽 BE는 회원 id만 넘긴다(D-12).
 5. 액세스 토큰 확인(`AuthUseCases#authenticate`)은 DB를 보지 않고 서명과 만료만 본다. 만료면 `type`이 `urn:fitdining:auth:access-token-expired`인 `AuthFailure`(401)를 던진다(D-4).
 6. `migrate` 프로필은 웹 서버 없이 뜨고 인증 빈을 만들지 않는다. 지금 `PlaceController`는 이 프로필에서도 만들어진다(D-4).
-7. FE는 지금 검색 요청에 `preferences`와 토큰을 싣지 않는다(`fe/src/domains/place/model/search-request.ts`). 비회원 온보딩 답은 기기에 가입과 같은 모양으로 저장돼 있고, 읽을 때 지금 선택지에 맞지 않으면 지운다(`fe/src/domains/onboarding/model/storage.ts#readAnswers`)(D-4, D-16).
+7. 이번 반복 전 FE는 검색 요청에 `preferences`와 토큰을 싣지 않았다(`fe/src/domains/place/model/search-request.ts`). 비회원 온보딩 답은 기기에 가입과 같은 모양으로 저장돼 있고, 읽을 때 지금 선택지에 맞지 않으면 지운다(`fe/src/domains/onboarding/model/storage.ts#readAnswers`)(D-4, D-16).
 8. FE의 API 요청은 기본 10초에 끊기고 요청마다 바꿀 수 있다(`fe/src/shared/api/client.ts`의 `timeoutMs`). 대체 결과가 화면에 닿으려면 BE가 FE보다 먼저 응답해야 한다(D-3).
 9. AI DB 계정은 `ai_place_search`와 `user_preferences`만 읽고, 배포는 마이그레이션 뒤에 그 권한을 다시 맞춘다(`infra/data/grant-ai-read.sh`, `infra/deploy/deploy.sh`). 서버 dev DB에는 아직 이 뷰가 없다(D-15).
 10. FE의 도메인끼리는 서로 import하지 않고 app 계층이 잇는다(`fe/eslint.config.mjs`). place 도메인은 auth와 onboarding을 import하지 않는다(D-16).
@@ -92,7 +92,7 @@ AI가 읽는 뷰
 
 FE 검색 요청
 
-- [x] AC-25: FE의 추천 검색 요청(`POST /api/v1/places/search`, 홈 주변 카드와 다음 페이지 포함)은 15초가 지나야 시간 초과다. 그 밖의 FE API 요청은 지금처럼 10초다. (D-3, D-16)
+- [x] AC-25: FE의 추천 검색 요청(`POST /api/v1/places/search`, 홈 주변 카드와 다음 페이지 포함)은 15초가 지나야 시간 초과다. 그 밖의 FE API 요청은 기능이 따로 정하지 않으면 기본 10초다(취향 분석은 온보딩이 15초로 정했다). (D-3, D-16)
 - [x] AC-26: FE는 추천 검색 요청(홈 주변 카드, 첫 검색, 후속 검색, 다음 페이지)을 보낼 때마다 로그인 세션을 확인한다(검색 기록 저장과 같은 확인. 확인되지 않았으면 복원을 3초까지 기다린다). 확인된 회원이면 `Authorization: Bearer <그 세션의 AT>`를 싣고 `preferences`는 싣지 않으며, 만료로 401이 오면 토큰을 한 번 갱신해 다시 보낸다. 갱신하고도 실패하거나 보내는 사이 세션이 바뀌면 그 요청은 지금의 검색 실패와 같이 끝난다. 확인된 비회원이면 `Authorization` 없이, 기기에 저장된 온보딩 답이 있고 모든 칩의 `code`가 없거나 BE 규칙(`^[A-Z][A-Z0-9_]{0,63}$`)에 맞으면 그 값을 `preferences`로 싣고, 맞지 않으면 `preferences` 없이 보낸다. 확인하지 못했으면 둘 다 싣지 않는다. 검색 기록에 저장되는 요청(검색 thread의 turn)과 화면 상태의 요청에는 `preferences`가 들어가지 않는다(FE의 검색 요청 타입에 `preferences`가 없다). (D-4, D-16)
 - [x] AC-27: 첫 페이지 응답의 `X-Fallback` 값(쉼표로 나눈 원소)에 `AI_UNAVAILABLE`이 있고 응답 `items`가 하나 이상이면, 그 결과를 보여 줄 때 카드 목록 위(홈 주변 카드와 검색 결과 모두)에 안내 한 줄 "지금은 AI 추천을 쓸 수 없어 가게 이름·메뉴로 찾았어요"가 보인다. 응답 `items`가 없으면 안내 없이 지금 화면 그대로다. 헤더가 없거나 `AI_UNAVAILABLE`이 없으면 안내가 없다. 대체 여부는 응답 본문(검색 기록에 저장되는 첫 페이지) 밖에 두어, 검색 기록에서 연 결과에는 안내가 없다. 홈 주변 카드가 대체 결과였으면 홈 주변 카드를 다시 마운트할 때(첫 화면으로 돌아올 때) 새로 받고, 창 포커스나 네트워크 재연결로는 다시 받지 않는다. 대체가 아닌 홈 결과와 모든 검색 결과는 지금처럼 페이지가 열린 동안 다시 받지 않는다. (D-6, D-16)
 
@@ -192,7 +192,7 @@ AC-9 ~ AC-12가 규칙이다(D-6). 요약하면 다음과 같다.
 
 ### AI가 읽는 뷰
 
-뷰 `ai_place_search`는 Flyway 마이그레이션으로 만든다(D-15). 버전 번호는 머지 직전 develop과 먼저 머지될 브랜치의 가장 높은 번호 다음이다. 지금 develop은 V11이고 이 브랜치가 리뷰 FK 브랜치(S15P31A302-128)보다 먼저 머지되므로 V12다. 그 브랜치는 머지 전에 자기 번호를 V13으로 다시 맞춘다(Flyway는 이미 적용된 번호보다 낮은 새 번호를 거부한다). `places`와 `place_profiles`를 `place_id`로 이은 행이고, AI 코드(`ai/src/fit_ai/match/pg_store.py`)가 읽는 이름과 모양이 의무다.
+뷰 `ai_place_search`는 Flyway 마이그레이션으로 만든다(D-15). 버전 번호는 머지 직전 develop과 먼저 머지될 브랜치의 가장 높은 번호 다음이다. 이 뷰는 V12로 머지됐고, 뒤에 머지된 리뷰 FK(S15P31A302-128)는 V13이다(Flyway는 이미 적용된 번호보다 낮은 새 번호를 거부한다). `places`와 `place_profiles`를 `place_id`로 이은 행이고, AI 코드(`ai/src/fit_ai/match/pg_store.py`)가 읽는 이름과 모양이 의무다.
 
 | 컬럼 | 값 |
 |---|---|
@@ -201,7 +201,7 @@ AC-9 ~ AC-12가 규칙이다(D-6). 요약하면 다음과 같다.
 | `profile` | jsonb 객체 `{"schema": "place-profile/v0", "summary": {"text": place_profiles.summary_text}, "features": place_profiles.features, "embedding": {"model": "dragonkue/snowflake-arctic-embed-l-v2.0-ko", "revision": "55ec6e9358a56d56af759bc8372e970caf8c305f", "prompt": "document"}}` |
 | `summary_vector` | `place_profiles.summary_vector` 그대로 |
 
-`embedding`의 두 값은 AI 코드의 인코더 상수(`ai/src/fit_ai/embedding`)와 같아야 한다. 적재된 벡터가 그 인코더로 만들어졌는지는 이 spec이 보장하지 않는다(D-13, D-15 Default).
+`embedding`의 두 값은 AI 코드의 인코더 상수(`ai/src/fit_ai/embedding.py`)와 같아야 한다. 적재된 벡터가 그 인코더로 만들어졌는지는 이 spec이 보장하지 않는다(D-13, D-15 Default).
 
 ### FE 검색 요청
 
@@ -278,7 +278,7 @@ AC-25 ~ AC-27이 규칙이다(D-16). 요약하면 다음과 같다.
 - 대체 결과에 BE가 점수 매기기 (D-6)
 - 회원 취향 계산·저장(S15P31A302-129가 함) (D-12)
 - 인프라·AI 쪽 선행 작업: AI 컨테이너, `MODAL_BASE_URL` 내부 주소, dev·prod 장소 적재, AI 임베딩·적재 벡터의 인코더 확인·예시 id 맞추기, 근처 검색이 위치 없이 100곳만 주는 문제 (D-13)
-- 뷰를 BE 컬럼 그대로의 모양으로 바꾸기(AI가 바뀐 뒤) (D-15)
+- 뷰를 BE 컬럼 그대로의 모양으로 바꾸기(AI가 BE 컬럼을 그대로 읽기로 하면) (D-15)
 - BE가 Modal이나 OpenSearch를 직접 부르기 (D-2)
 - Mock 엔진이 AI를 부르기 (D-1)
 

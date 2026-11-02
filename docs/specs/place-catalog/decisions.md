@@ -4,7 +4,7 @@ Glossary: none · ADRs: none
 
 ## D-1 범위: 마이그레이션, 로컬 적재, 상세 응답 계약 변경
 - Status: settled
-- Decision: 이번 반복은 세 가지다. ① 장소 테이블 8개를 만드는 Flyway 마이그레이션 하나. ② 수집 CSV를 변형해 로컬 DB에만 넣는 적재 스크립트(D-15). ③ 실데이터에 맞춘 상세 응답 계약 변경과 그에 따른 BE DTO, mock, FE 수정(D-17, D-18, D-19). API는 이번에도 mock(`classpath:mock/places.json`)만 읽는다. DB 조회(JPA 엔티티, 리포지토리), mock과 DB를 고르는 설정, AI 검색 응답(`placeId`)과의 연결, dev와 운영 적재는 다음 작업에서 함께 한다. 이 변경이 place-search spec의 DTO와 화면 규칙을 바꾸므로, place-search spec의 해당 문단도 같은 커밋에서 맞춰 고친다.
+- Decision: 이번 반복은 세 가지다. ① 장소 테이블 8개를 만드는 Flyway 마이그레이션 하나. ② 수집 CSV를 변형해 로컬 DB에만 넣는 적재 스크립트(D-15). ③ 실데이터에 맞춘 상세 응답 계약 변경과 그에 따른 BE DTO, mock, FE 수정(D-17, D-18, D-19). API는 이번에도 mock(`classpath:mock/places.json`)만 읽는다. DB 조회(JPA 엔티티, 리포지토리), mock과 DB를 고르는 설정, AI 검색 응답(`placeId`)과의 연결, dev와 운영 적재는 다음 작업에서 함께 한다(DB 조회와 설정은 place-lookup-db, AI 연결은 place-ai-search가 했다). 이 변경이 place-search spec의 DTO와 화면 규칙을 바꾸므로, place-search spec의 해당 문단도 같은 커밋에서 맞춰 고친다.
 - Rejected: 마이그레이션만 → mock을 실데이터로 바꾸는 순간 브레이크 여러 개, 숫자 없는 가격 같은 계약의 빈틈이 화면에 드러난다. 상세를 DB에서 읽는 설정까지 지금 → 카드의 mock `id`와 DB `place_id`를 맞추는 일과 JPA가 함께 들어와 범위가 커진다. place-search를 따로 다시 열기 → 두 spec이 어긋난 채 남는다.
 
 ## D-2 장소 식별자
@@ -29,6 +29,7 @@ Glossary: none · ADRs: none
 ## D-6 다른 값으로 만들 수 있는 값은 저장하지 않는다
 - Status: settled
 - Decision: 저장된 다른 열에서 만들 수 있는 값은 열로 두지 않고 BE가 응답할 때 계산한다. 대표 사진(업체 사진 첫 장), 휴무 안내 문구(`closed`인 요일), 영업 상태, 기준 역과 거리(좌표로 강남·역삼·선릉 중 가장 가까운 역), 안심번호 여부(번호 형식), 링크 종류(도메인), 네이버 장소 링크(`naver_place_id`), 사진 프록시 주소, 노키즈존과 발렛(`facilities`의 "노키즈존", "발렛파킹"), 지하철 순서(도보 거리)가 해당한다. FE는 다시 계산하지 않는다. 예외는 기기 위치가 필요한 계산과 화면 표시용 서식이다. 영업시간과 BE의 `openStatus`로 오늘 안내 문구("내일 02:00까지" 등)를 고르는 일은 화면 표시용 서식이다. 또 하나의 예외로 구(`district`)와 동(`dong`)은 저장한다. 주소를 해석해 뽑는 값이라 응답마다 계산하지 않고 적재 때 한 번 한다.
+- Default: 이후 profile-storage가 `places`에 수집 지역 역(`station`)과 대표 사진(`thumbnail_url`)을 저장 열로 더했고, BE는 계산하지 않고 그 열을 읽는다.
 - Rejected: CSV의 `station_name`·`station_distance_km` 저장 → 좌표로 계산할 수 있다. 수집 순간 영업 상태 → 그 순간의 값이다. 날짜가 붙은 시간표 표시(`label_date`) → 휴무를 어차피 정확히 판별할 수 없다. 구·동을 응답마다 주소에서 계산 → 주소 형식이 일정하지 않아(지번 주소에 건물 표기 등) 매번 해석하는 것은 안전하지 않다.
 
 ## D-7 사진
@@ -102,7 +103,7 @@ Glossary: none · ADRs: none
 
 ## D-21 `reviews.place_id` FK는 나중에
 - Status: settled
-- Decision: 이번에는 `reviews.place_id`에 FK를 걸지 않는다. FK는 기존 행까지 검사하고 그 뒤 새 행도 막는데, 장소 적재는 로컬에서만 하므로 dev와 운영의 `places`는 비어 있고 리뷰는 mock 장소 id로 쓰인다. 모든 환경에 장소가 적재되고 화면의 장소 id가 DB `place_id`와 같아지는 작업(D-1의 다음 작업)에서 리뷰 담당과 함께 Flyway 마이그레이션으로 건다. `places.json`을 바꾸면 dev에 이미 있는 앱 리뷰가 같은 id의 다른 장소에 붙어 보이지만, 동작 오류는 없고 dev의 시험용 데이터라 그대로 둔다(리뷰 담당에게 알린다).
+- Decision: 이번에는 `reviews.place_id`에 FK를 걸지 않는다. 이후 리뷰 기능이 V13으로 걸었다(review#D-49: 기존 리뷰를 지우고 NO ACTION으로). FK는 기존 행까지 검사하고 그 뒤 새 행도 막는데, 장소 적재는 로컬에서만 하므로 dev와 운영의 `places`는 비어 있고 리뷰는 mock 장소 id로 쓰인다. 모든 환경에 장소가 적재되고 화면의 장소 id가 DB `place_id`와 같아지는 작업(D-1의 다음 작업)에서 리뷰 담당과 함께 Flyway 마이그레이션으로 건다. `places.json`을 바꾸면 dev에 이미 있는 앱 리뷰가 같은 id의 다른 장소에 붙어 보이지만, 동작 오류는 없고 dev의 시험용 데이터라 그대로 둔다(리뷰 담당에게 알린다).
 - Rejected: 이번에 걸기 → dev에서 리뷰 쓰기가 모두 실패하고, 이미 있는 리뷰 행 때문에 마이그레이션이 실패할 수 있다. `reviews`에 `naver_place_id` 열을 더하기 → 네이버 번호가 두 곳에 생긴다(D-2).
 
 ## D-22 절대 일어나면 안 되는 일

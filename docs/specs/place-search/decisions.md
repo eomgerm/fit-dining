@@ -162,7 +162,7 @@ Glossary: none · ADRs: none
 
 ## D-33 취향과 인증(취향은 검색에 쓰인다)
 - Status: settled
-- Decision: 취향은 요청 본문의 선택 필드(`preferences`, 태그 코드 목록)로 받고, JWT는 읽지 않는다. 실제 검색은 취향을 결과에 반영한다(팀 확인). Mock은 받아 두기만 하고 결과에 반영하지 않는다.
+- Decision: 취향은 요청 본문의 선택 필드(`preferences`, 태그 코드 목록)로 받고, JWT는 읽지 않는다. 실제 검색은 취향을 결과에 반영한다(팀 확인). Mock은 받아 두기만 하고 결과에 반영하지 않는다. 이후 place-ai-search D-4가 바꿨다: `preferences`는 온보딩 답 모양 객체이고, 검색은 토큰을 선택으로 읽어 회원 id를 AI에 넘긴다.
 
 ## D-34 Mock의 규모, 시나리오, 노출 범위(prod는 실제 데이터)
 - Status: superseded by D-47
@@ -317,7 +317,7 @@ Glossary: none · ADRs: none
 
 ## D-62 AI 파트와의 경계(엔진은 `place.engine` 하위 패키지)
 - Status: settled
-- Decision: BE는 인터페이스 하나(`PlaceSearchEngine`)만 두고 Mock 구현을 꽂는다. 요청 해석, 임베딩, OpenSearch 질의, 리랭크, 점수 계산을 이어 붙이는 주체는 미결이다. 구현을 교체할 때 DTO뿐 아니라 이 인터페이스의 시그니처(실패, 폴백 표시, 타임아웃 처리)도 바뀔 수 있으며, 이를 감수한다. 타임아웃, 서킷 브레이커, 예산, 속도 제한, `X-Fallback` 헤더는 이번 범위가 아니고 연동 시점에 다룬다(`docs/infra/design.md` §11.2, §12.1). 교체 지점인 엔진 관련 파일(`PlaceSearchEngine`, 그 구현, 엔진 계약의 예외 `InvalidCursorException`)은 하위 패키지 `kr.co.fitdining.api.place.engine`에 모아 교체 지점이 구조로 드러나게 한다. 엔진은 장소 기능 전용이라 최상위 패키지로 빼지 않는다.
+- Decision: BE는 인터페이스 하나(`PlaceSearchEngine`)만 두고 Mock 구현을 꽂는다. 요청 해석, 임베딩, OpenSearch 질의, 리랭크, 점수 계산을 이어 붙이는 주체는 place-ai-search D-1이 정했다(DB 모드 엔진이 AI 검색 API를 부른다). 구현을 교체할 때 DTO뿐 아니라 이 인터페이스의 시그니처(실패, 폴백 표시, 타임아웃 처리)도 바뀔 수 있으며, 이를 감수한다. 실제로 `search`는 회원 id를 받고 `PlaceSearchResult`(응답과 대체 이유)를 돌려주도록 바뀌었다. 타임아웃, 서킷 브레이커, 예산, `X-Fallback` 헤더는 place-ai-search가 다뤘고, 속도 제한은 아직 범위 밖이다(`docs/infra/design.md` §11.2, §12.1). 교체 지점인 엔진 관련 파일(`PlaceSearchEngine`, 그 구현, 엔진 계약의 예외 `InvalidCursorException`)은 하위 패키지 `kr.co.fitdining.api.place.engine`에 모아 교체 지점이 구조로 드러나게 한다. 엔진은 장소 기능 전용이라 최상위 패키지로 빼지 않는다.
 - Rejected: BE가 Modal과 OpenSearch를 직접 호출(`docs/infra/design.md` §12.2 제안) → 담당이 정해지지 않았다. 지금 실패 모델을 인터페이스에 넣기 → 실제 계약이 없어서 추측이 된다. 최상위 `kr.co.fitdining.api.search` → 엔진 시그니처가 `place.dto`를 써서 상호 의존이 생기고, 다른 기능이 함께 쓰는 모듈이 아니다. 이름에 `I` 접두사나 `Impl` 접미사 → Java 주류가 아니고, 구현이 Mock과 실제 엔진처럼 여럿이라 구현 이름은 특징을 담는다.
 - Anchors: `be/src/main/java/kr/co/fitdining/api/place/engine/PlaceSearchEngine.java#PlaceSearchEngine` (new)
 
@@ -329,7 +329,7 @@ Glossary: none · ADRs: none
 
 ## D-64 DTO는 응답별 파일에 하위 타입을 중첩한다
 - Status: settled
-- Decision: D-53의 필드 구성은 그대로 두고 DTO를 `kr.co.fitdining.api.place.dto` 패키지에 둔다. 엔드포인트의 요청과 응답은 `PlaceSuggestResponse`(자동완성 후보 1개), `PlaceSearchRequest`, `PlaceSearchResponse`, `PlaceDetailResponse`이고 각각 파일 하나다. 여러 곳이 함께 쓰는 `PlaceSummary`, `OpenStatus`와 하위 구조가 많은 `PlaceCard`도 파일 하나씩 둔다. 부모 하나에서만 쓰는 하위 record와 enum은 그 부모 안에 중첩한다(`PlaceSummary`의 `CategoryGroup`, `Station`, `PlaceSuggestResponse`의 `SuggestType`, `PlaceSearchRequest`의 `MapBounds`, `PlaceSearchResponse`의 `EmptyReason`, `PlaceCard`의 `Reason`, `ReasonTag`, `ScoreItem`, `EvidenceSource`, `PlaceDetailResponse`의 `Hours`, `Menu`, `DayCode`, `Facility`). 응답 하나의 모양이 파일 하나에 보이게 하려는 것이며 JSON 모양은 바뀌지 않는다. 역직렬화되는 record(요청과 Mock이 읽는 `places.json` 매핑 모두)의 숫자와 boolean은 박싱 타입(`Long`, `Integer`, `Double`, `Boolean`)이다. 장소 `id`는 ERD의 `places.place_id`(bigint)를 따라 정수다. 추천 이유와 핏 점수 설명은 검색 응답 카드에 담고 상세 응답에는 장소 고유 정보만 담는다. 이 값을 만드는 주체는 AI 파트이며, 상세 API가 검색 맥락을 받는 안도 열려 있어 검색 구체화 뒤에 다시 정한다. `conditions`와 `previousConditions`는 BE와 FE가 해석하지 않는 불투명한 JSON 객체다. BE는 엔진이 돌려준 내용을 검증하거나 가공하지 않는다.
+- Decision: D-53의 필드 구성은 그대로 두고 DTO를 `kr.co.fitdining.api.place.dto` 패키지에 둔다. 엔드포인트의 요청과 응답은 `PlaceSuggestResponse`(자동완성 후보 1개), `PlaceSearchRequest`, `PlaceSearchResponse`, `PlaceDetailResponse`이고 각각 파일 하나다. 여러 곳이 함께 쓰는 `PlaceSummary`, `OpenStatus`와 하위 구조가 많은 `PlaceCard`도 파일 하나씩 둔다. 부모 하나에서만 쓰는 하위 record와 enum은 그 부모 안에 중첩한다(`PlaceSummary`의 `CategoryGroup`, `Station`, `PlaceSuggestResponse`의 `SuggestType`, `PlaceSearchRequest`의 `MapBounds`, `PlaceSearchResponse`의 `EmptyReason`, `PlaceCard`의 `Reason`, `ReasonTag`, `ScoreItem`, `EvidenceSource`, `PlaceDetailResponse`의 `Hours`, `Menu`, `DayCode`, `Facility`). 응답 하나의 모양이 파일 하나에 보이게 하려는 것이며 JSON 모양은 바뀌지 않는다. 역직렬화되는 record(요청과 Mock이 읽는 `places.json` 매핑 모두)의 숫자와 boolean은 박싱 타입(`Long`, `Integer`, `Double`, `Boolean`)이다. 장소 `id`는 ERD의 `places.place_id`(bigint)를 따라 정수다. 추천 이유와 핏 점수 설명은 검색 응답 카드에 담고 상세 응답에는 장소 고유 정보만 담는다. 이 값을 만드는 주체는 AI 파트다(place-ai-search에서 AI가 카드의 점수와 이유를 준다). 상세 API는 장소 id만 받는다. `conditions`와 `previousConditions`는 BE와 FE가 해석하지 않는 불투명한 JSON 객체다. BE는 엔진이 돌려준 내용을 검증하거나 가공하지 않는다.
 - Rejected: 클래스마다 파일 하나(D-54) → 파일이 20개라 응답 하나의 모양을 보려면 여러 파일을 열어야 한다. 하위 패키지(`dto/search` 등)로 묶기 → 파일 수가 줄지 않는다. `PlaceDtos` 한 파일에 모으기 → 여러 사람이 DTO를 고칠 때 병합 충돌이 잦고 컨벤션의 이름 규칙과 다르다. 원시 타입 record → Jackson 3에서 값이 빠진 원시 타입은 원인을 알기 어려운 400이 된다.
 - Anchors: `be/src/main/java/kr/co/fitdining/api/place/dto/PlaceSearchRequest.java#PlaceSearchRequest` (new) · `be/src/main/java/kr/co/fitdining/api/place/dto/PlaceSearchResponse.java#PlaceSearchResponse` (new) · `be/src/main/java/kr/co/fitdining/api/place/dto/PlaceSuggestResponse.java#PlaceSuggestResponse` (new) · `be/src/main/java/kr/co/fitdining/api/place/dto/PlaceDetailResponse.java#PlaceDetailResponse` (new)
 
@@ -445,7 +445,7 @@ Glossary: none · ADRs: none
 
 ## D-85 지도 위 "저장한 장소"와 "내 정보" 버튼은 준비 중 토스트를 띄운다
 - Status: settled
-- Decision: 첫 화면과 결과 화면의 지도 오른쪽 위에 "저장한 장소"(북마크 아이콘)와 "내 정보"(사람 아이콘) `Fab`을 세로로 둔다. 연결할 화면이 아직 없으므로 누르면 "준비 중이에요" 토스트를 띄운다. 저장 화면과 내 정보 화면이 생기면 그 화면으로 이동하도록 바꾼다. 결과 패널이 전체 상태면 패널에 가려 보이지 않는다. 공유 버튼은 그리지 않는다.
+- Decision: 첫 화면과 결과 화면의 지도 오른쪽 위에 "저장한 장소"(북마크 아이콘)와 "내 정보"(사람 아이콘) `Fab`을 세로로 둔다. 연결할 화면이 아직 없으므로 누르면 "준비 중이에요" 토스트를 띄운다. 저장 화면과 내 정보 화면이 생기면 그 화면으로 이동하도록 바꾼다(바뀌었다: "저장한 장소"는 bookmark의 저장한 장소 화면, "내 정보"는 `/my`). 결과 패널이 전체 상태면 패널에 가려 보이지 않는다. 공유 버튼은 그리지 않는다.
 - Rejected: 눌러도 아무 일이 없는 버튼 → 사용자가 고장으로 여기고, 화면 낭독기가 반응 없는 버튼을 읽는다. 아직 없는 경로로 이동 → 404가 나고 로그인 담당(S15P31A302-38)과 경로를 정하지 않았다.
 - Anchors: `fe/src/shared/ui/button/fab.tsx#Fab` (reuse)
 
@@ -481,7 +481,7 @@ Glossary: none · ADRs: none
 
 ## D-91 검색은 thread로 묶고, 최근 검색은 thread 목록이다
 - Status: settled
-- Decision: D-84를 바꾼다. LLM 대화처럼, 새 검색 하나가 thread 하나를 시작하고 그 뒤의 후속 조건, "이 지역에서 검색", "이 조건으로 다시 검색"은 같은 thread에 요청으로 쌓인다. 패널의 "새 검색"은 지금 thread를 닫고 다음 새 검색이 새 thread를 연다. 요청 기록(D-89)은 지금 thread의 요청만 보인다. 요청마다 쌓인 조건은 D-50대로 `previousConditions`로 이어진다. thread는 첫 페이지 응답을 받을 때마다 `localStorage`에 저장해 재로드와 다음 접속 뒤에도 남는다. 요청마다 문장, 시각, 종류, 기준 요청, 첫 페이지 요청 본문, 첫 페이지 응답(커서 없이)을 저장한다. 개수 제한과 지우기 규칙은 두지 않는다(Mock 데모용 임시 저장이고 나중에 서버 저장으로 바뀐다). 저장에 실패하거나 저장된 값의 형식이 틀리면 그 thread는 저장되지 않거나 버려지고 화면과 검색은 그대로 동작한다. 기기 밖으로는 보내지 않는다. 최근 검색 시트(첫 화면 검색창과 후속 입력창의 기록 버튼)는 thread 목록이다. 줄은 thread의 첫 문장과 마지막 요청 시각이고 마지막 요청 시각 최신순이며, 지금 thread에는 "보는 중"을 붙인다. 줄을 누르면 시트를 닫고 그 thread로 바꾼다. 그 thread의 마지막 요청이 지금 보는 요청이 되어 일반 결과 화면에 네트워크 요청 없이 그때 결과로 보이고(다시 연 thread의 결과는 저장한 첫 페이지뿐이고 다음 페이지를 부르지 않는다), 요청 기록에는 그 thread의 요청들이 보이며, 후속 조건으로 이어서 검색할 수 있다. 목록이 비면 D-84의 빈 안내를 보인다. 재로드하면 첫 화면에서 시작하고 지금 thread는 없다. 저장소는 `ui`의 한 모듈(목록 읽기, thread 하나 읽기, thread 저장)로만 읽고 써서, 나중에 서버 저장(thread 목록은 cursor paging, thread는 하나씩 받기)으로 그 모듈만 바꾼다. thread의 모양, 요청 더하기, 목록 정렬, 형식 검사, 시각 문구는 `model`의 순수 함수다. 이 결정으로 D-50, D-67의 "요청 기록은 메모리에만"과 D-27의 요청 기록 보관 방식이 정해진다.
+- Decision: D-84를 바꾼다. LLM 대화처럼, 새 검색 하나가 thread 하나를 시작하고 그 뒤의 후속 조건, "이 지역에서 검색", "이 조건으로 다시 검색"은 같은 thread에 요청으로 쌓인다. 패널의 "새 검색"은 지금 thread를 닫고 다음 새 검색이 새 thread를 연다. 요청 기록(D-89)은 지금 thread의 요청만 보인다. 요청마다 쌓인 조건은 D-50대로 `previousConditions`로 이어진다. thread는 첫 페이지 응답을 받을 때마다 `localStorage`에 저장해 재로드와 다음 접속 뒤에도 남는다. 요청마다 문장, 시각, 종류, 기준 요청, 첫 페이지 요청 본문, 첫 페이지 응답(커서 없이)을 저장한다. 개수 제한과 지우기 규칙은 두지 않는다(Mock 데모용 임시 저장이고 나중에 서버 저장으로 바뀐다). 저장에 실패하거나 저장된 값의 형식이 틀리면 그 thread는 저장되지 않거나 버려지고 화면과 검색은 그대로 동작한다. 기기 밖으로는 보내지 않는다. 최근 검색 시트(첫 화면 검색창과 후속 입력창의 기록 버튼)는 thread 목록이다. 줄은 thread의 첫 문장과 마지막 요청 시각이고 마지막 요청 시각 최신순이며, 지금 thread에는 "보는 중"을 붙인다. 줄을 누르면 시트를 닫고 그 thread로 바꾼다. 그 thread의 마지막 요청이 지금 보는 요청이 되어 일반 결과 화면에 네트워크 요청 없이 그때 결과로 보이고(다시 연 thread의 결과는 저장한 첫 페이지뿐이고 다음 페이지를 부르지 않는다), 요청 기록에는 그 thread의 요청들이 보이며, 후속 조건으로 이어서 검색할 수 있다. 목록이 비면 D-84의 빈 안내를 보인다. 재로드하면 첫 화면에서 시작하고 지금 thread는 없다. 저장소는 `ui`의 한 모듈(목록 읽기, thread 하나 읽기, thread 저장)로만 읽고 써서, 나중에 서버 저장(thread 목록은 cursor paging, thread는 하나씩 받기)으로 그 모듈만 바꾼다. thread의 모양, 요청 더하기, 목록 정렬, 형식 검사, 시각 문구는 `model`의 순수 함수다. 이 결정으로 D-50, D-67의 "요청 기록은 메모리에만"과 D-27의 요청 기록 보관 방식이 정해진다. 이후 search-thread(S15P31A302-116)가 회원의 thread를 서버에 저장하게 했고, 비회원은 지금처럼 기기에 저장한다.
 - Rejected: 문장만 저장하고 누르면 새 검색(D-84) → 사용자가 최근 검색은 thread를 고르는 창이고 누르면 그 thread가 열려야 한다고 정했다. 새 검색 하나씩을 따로 저장 → 후속 조건이 빠져 대화가 끊긴다. 용량이 차면 오래된 thread부터 지우기 → Mock 데모의 임시 저장이라 서버 저장이 생기면 필요 없는 코드다. 같은 문장 합치기 → thread마다 결과가 다르다.
 - Anchors: `fe/src/domains/place/model/search-threads.ts#appendTurn` (new) · `fe/src/domains/place/ui/thread-storage.ts#saveThread` (new) · `fe/src/domains/place/ui/recent-search-sheet.tsx#RecentSearchSheet` (modify)
 
@@ -499,7 +499,7 @@ Glossary: none · ADRs: none
 
 ## D-94 장소 상세의 공유와 저장 버튼은 준비 중 토스트를 띄운다
 - Status: settled
-- Decision: D-85와 같은 방식으로, 상세 사진 위 오른쪽의 "공유"와 하단 막대의 "저장"(북마크 테두리 버튼)을 그리고 누르면 "준비 중이에요" 토스트를 띄운다. 기능이 생기면 동작만 바꾼다. D-85의 "공유 버튼은 그리지 않는다"는 이 결정으로 바뀐다.
+- Decision: D-85와 같은 방식으로, 상세 사진 위 오른쪽의 "공유"와 하단 막대의 "저장"(북마크 테두리 버튼)을 그리고 누르면 "준비 중이에요" 토스트를 띄운다. 기능이 생기면 동작만 바꾼다("저장"은 bookmark의 북마크 버튼으로 바뀌었고 "공유"는 아직 토스트다). D-85의 "공유 버튼은 그리지 않는다"는 이 결정으로 바뀐다.
 - Rejected: 그리지 않기 → 와이어프레임에 있고, 사용자가 D-85와 같이 두기로 했다.
 - Anchors: `fe/src/shared/ui/button/fab.tsx#Fab` (reuse)
 

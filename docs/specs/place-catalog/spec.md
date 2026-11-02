@@ -7,15 +7,15 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 
 장소 검색(place-search)은 지금 손으로 지어낸 Mock 장소로만 동작하고, 그 데이터는 "영업시간은 자정을 넘지 않는다", "메뉴에는 항상 카테고리가 있다", "사진이 없다"는 가정 위에 서 있다. 네이버에서 수집해 정제한 강남·역삼·선릉 주변 300곳(`data/naver-places/clean/`)은 이 가정을 모두 깬다. 자정을 넘는 영업, 24시간 영업, 하루 여러 번의 브레이크, 카테고리 없는 메뉴, "가격 변동" 같은 숫자 없는 가격, 사진, 주차·반려동물·콜키지 같은 안내가 있다.
 
-이번 반복은 세 가지를 한다(D-1). 첫째, 이 데이터를 담을 장소 테이블 8개를 PostgreSQL에 Flyway로 만든다. 둘째, CSV를 우리 스키마에 맞게 변형해 로컬 DB에만 넣는 적재 스크립트를 만든다. 셋째, 상세 응답 계약을 실데이터에 맞게 바꾸고 BE DTO, mock, FE를 고친다. API는 이번에도 mock만 읽는다. DB 조회는 다음 작업이다.
+이번 반복은 세 가지를 한다(D-1). 첫째, 이 데이터를 담을 장소 테이블 8개를 PostgreSQL에 Flyway로 만든다. 둘째, CSV를 우리 스키마에 맞게 변형해 로컬 DB에만 넣는 적재 스크립트를 만든다. 셋째, 상세 응답 계약을 실데이터에 맞게 바꾸고 BE DTO, mock, FE를 고친다. API는 이번에도 mock만 읽는다. DB 조회는 다음 작업이다(이후 place-lookup-db가 DB 엔진을, place-ai-search가 AI 검색 연결과 AI가 읽는 뷰 `ai_place_search`(V12)를 더했다).
 
 ## Assumptions
 
 1. DB는 PostgreSQL 16이다(`pgvector/pgvector:0.8.7-pg16`, 테스트도 같은 이미지).
 2. 마이그레이션은 migrate 프로필에서 마이그레이션 계정(`fit_migrator`)이 실행하고, 웹 앱은 DML만 하는 계정(`fit_dev_app`)으로 접속한다. 새 테이블과 identity 시퀀스에 대한 앱 계정 권한은 인프라(`infra/data/ensure-databases.sh`)와 테스트 지원이 설정한 기본 권한(`ALTER DEFAULT PRIVILEGES FOR ROLE fit_migrator`)으로 생긴다(D-1).
 3. 웹 앱은 `spring.jpa.hibernate.ddl-auto=validate`다. 이번에는 새 테이블의 JPA 엔티티를 만들지 않으므로 기동 검증에 영향이 없다(D-1).
-4. develop의 마지막 마이그레이션은 `V5__create_reason_tags.sql`이다. CI의 `lint:migrations`가 기존 마이그레이션의 수정과 버전 중복·역순을 막는다(D-1).
-5. develop의 `reviews`(V4)는 `reviews.place_id bigint`로 장소 번호를 FK 없이 받는다(D-21).
+4. 이 반복을 시작할 때 develop의 마지막 마이그레이션은 `V5__create_reason_tags.sql`이었다(지금은 V13까지 있다). CI의 `lint:migrations`가 기존 마이그레이션의 수정과 버전 중복·역순을 막는다(D-1).
+5. 이 반복 당시 develop의 `reviews`(V4)는 `reviews.place_id bigint`로 장소 번호를 FK 없이 받았다(D-21). 지금은 V13이 `fk_reviews_place_id`를 걸었다(review#D-49).
 6. 입력 데이터는 `data/naver-places/clean/`의 정제 CSV 30개와 `DATA_DICTIONARY.md`(2026-10-23 수집, 300곳, 강남·역삼·선릉 각 100곳)이고 git이 추적하지 않는다. 데이터 사전의 뜻을 따른다. 예를 들어 CSV `phone`은 일반 번호뿐이고 대표 번호는 `primary_phone`이며, CSV `booking_url`은 예약 검색 화면이고 가게 예약 페이지는 `naver_booking_url`이다(D-12, D-14).
 7. 실데이터의 모양(매장 시간표 기준): 300곳 모두 7일치 시간표 행이 있다. 자정을 넘는 요일 525개, 24시간 영업 요일 67개(7일 내내 24시간인 곳 8곳 이상), 하루 브레이크 최대 4개가 있다. 날짜가 붙은 휴무 요일은 10개(4곳, 그중 폴 바셋 강남삼성타운점은 7일 전부)이고, 날짜가 붙은 영업 줄도 있다(스타벅스 12곳의 매장 시간표 전부, 농민백암순대 본점 수요일). 기본 시간표가 없는 12곳(스타벅스)은 "매장", "딜리버스", "드라이브스루", "워크스루" 시간표가 있다. 메뉴가 있는 287곳 중 255곳은 카테고리가 없고, 메뉴가 없는 곳이 13곳이다. 업체 사진이 없는 곳은 카페드아마폴라 강남점 1곳이고, 이곳은 메뉴판 사진은 있고 메뉴는 없다. 업체·메뉴판 사진의 원본 순번은 중간이 빠져 있다(1, 3, …)(D-9, D-10, D-16, D-23, D-24).
 8. 네이버는 임시 휴무가 있는 요일의 정규 시간 줄을 날짜 휴무 줄로 바꿔서 주고, 수집 원본에도 그 요일의 정규 시간이 없다(D-24).
@@ -30,6 +30,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 # 1) 로컬 DB(infra/data 컴포즈)에 마이그레이션 적용 (migrate 프로필, 팀의 실행 방식대로)
 
 # 2) 로컬 DB에 300곳 적재 (스크립트는 data/naver-places/ 안, git 미추적)
+#    D-25 이후: ai/scripts/load_places.py가 정제 CSV로 SQL 한 묶음(한 트랜잭션)을 만들고, 넣을 DB는 실행하는 사람이 psql로 고른다
 data/naver-places/.venv/Scripts/python data/naver-places/<적재 스크립트> --host 127.0.0.1 --port 15432 --dbname fit_dev --user fit_dev_app
   → 버린 이유별 행 수와 테이블별 행 수 출력. 호스트가 로컬이 아니면 아무것도 쓰지 않고 종료
 
@@ -41,11 +42,11 @@ data/naver-places/.venv/Scripts/python data/naver-places/<mock 생성 스크립�
 # 4) PLACE_MOCK_ENABLED=true 로 앱을 띄우고 대응표의 id로 /place?id=<id> 를 연다
 ```
 
-적재가 장소 하나를 넣는 모습(장소 단위 한 트랜잭션, D-15):
+적재가 장소 하나를 넣는 모습(D-15 당시 장소 단위 한 트랜잭션. D-25 이후에는 전체가 한 트랜잭션이다):
 
 ```sql
-INSERT INTO places (naver_place_id, name, category_group, lat, lng, address, district, dong, facilities)
-VALUES ('1689752307', '슬로우커피', 'CAFE', 37.50, 127.03, '서울 강남구 …', '강남구', '역삼동', '{포장,무선 인터넷}')
+INSERT INTO places (naver_place_id, name, category_group, station, lat, lng, address, district, dong, facilities)
+VALUES ('1689752307', '슬로우커피', 'CAFE', 'YEOKSAM', 37.50, 127.03, '서울 강남구 …', '강남구', '역삼동', '{포장,무선 인터넷}')
 ON CONFLICT (naver_place_id) DO UPDATE SET name = EXCLUDED.name, /* … */ updated_at = now()
 RETURNING place_id;
 
@@ -105,7 +106,7 @@ FE 화면
 
 로컬 적재와 대응표
 
-- [x] AC-19: 적재 스크립트는 접속 대상을 `--host`, `--port`, `--dbname`, `--user` 인자로만 받는다(기본값 `127.0.0.1`, `15432`, `fit_dev`, `fit_dev_app`). 접속 URI나 접속 문자열을 받지 않는다(`--dbname`에 `=`나 `://`가 있으면 거부). 접속 전에 `PGHOST`, `PGHOSTADDR`, `PGSERVICE`, `PGSERVICEFILE` 환경 변수를 지워 호스트가 인자 말고 다른 곳에서 정해지지 않게 한다. 비밀번호는 `PGPASSWORD`, `~/.pgpass`, 입력 프롬프트 중 하나로 받는다. `--host`가 `localhost`, `127.0.0.1`, `::1`이 아니면 DB에 접속하기 전에 0이 아닌 코드로 끝난다. (D-15, D-22)
+- [x] AC-19: 적재 스크립트는 접속 대상을 `--host`, `--port`, `--dbname`, `--user` 인자로만 받는다(기본값 `127.0.0.1`, `15432`, `fit_dev`, `fit_dev_app`). 접속 URI나 접속 문자열을 받지 않는다(`--dbname`에 `=`나 `://`가 있으면 거부). 접속 전에 `PGHOST`, `PGHOSTADDR`, `PGSERVICE`, `PGSERVICEFILE` 환경 변수를 지워 호스트가 인자 말고 다른 곳에서 정해지지 않게 한다. 비밀번호는 `PGPASSWORD`, `~/.pgpass`, 입력 프롬프트 중 하나로 받는다. `--host`가 `localhost`, `127.0.0.1`, `::1`이 아니면 DB에 접속하기 전에 0이 아닌 코드로 끝난다. D-25 이후 적재 스크립트는 DB에 접속하지 않으므로 이 항목은 당시 스크립트에만 해당한다. (D-15, D-22, D-25)
 - [x] AC-20: 빈 로컬 DB에 마이그레이션 후 적재하면 300곳이 모두 들어가고(24:00 마감, 자정 넘김 장소 포함), 버린 이유별(예: 매장 외 시간표, 방문자·클립·영상 사진, 죽은 링크, 필수 값 없는 행) 행 수와 테이블별 행 수가 출력된다. 같은 입력으로 한 번 더 적재하면 모든 장소의 `place_id`가 처음과 같고, 장소 수와 테이블별 행 수가 같다. 각 장소의 메뉴 수, 사진 수, 지하철 수는 그 장소의 CSV 원본에서 규칙대로 센 수와 같다. (D-15, D-22)
 - [x] AC-21: mock 생성 스크립트는 `places.json`과 함께 `data/naver-places/` 안에 대응표 마크다운(`naver_place_id`, mock `id`, 이름, 넣은 이유)을 쓰고, 표의 모든 mock `id`는 `places.json`의 카드 `id`와 같은 장소다. 인자로 받은 `naver_place_id`는 `places.json`에 들어간다. 인자의 `naver_place_id`가 CSV에 없거나 최종 장소 수가 40곳을 넘으면 아무 파일도 쓰지 않고 0이 아닌 코드로 끝난다. (D-19, D-20)
 
@@ -117,7 +118,11 @@ FE 화면
 
 ### 스키마 (새 마이그레이션 하나)
 
-새 마이그레이션이 만드는 스키마 전부다. 여기에 없는 열, 인덱스, 제약은 더하지 않는다. 테이블 안 열의 순서만 구현 재량이고, 인덱스 안 열의 순서는 적힌 대로다. PK 제약 자체에는 이름을 붙이지 않는다(D-2, D-13).
+이 반복이 정한 스키마 전부다. 여기에 없는 열, 인덱스, 제약은 더하지 않는다.
+
+지금 상태: `places`는 V6(`V6__create_places_and_profiles.sql`, profile-storage)에 있고 profile-storage가 `food_type`(CHECK), `station`(NOT NULL, `GANGNAM`·`YEOKSAM`·`SEOLLEUNG` CHECK, 기본값 없음), `thumbnail_url`을 더했다. 나머지 7개 테이블은 V7(`V7__create_place_catalog.sql`)에 있다. `places`를 가리키는 테이블은 이 spec의 7개 말고도 `place_profiles`, `place_personas`(V6, ON DELETE CASCADE), `reviews`(V13, NO ACTION이라 리뷰가 있는 장소는 지울 수 없다)가 있다. `bookmarks.place_id`(V10)에는 아직 FK가 없다(bookmark#D-16).
+
+당시 규칙: 테이블 안 열의 순서만 구현 재량이고, 인덱스 안 열의 순서는 적힌 대로다. PK 제약 자체에는 이름을 붙이지 않는다(D-2, D-13).
 
 ```sql
 CREATE TABLE places (
@@ -307,7 +312,7 @@ enum Facility 삭제. PlaceSummary, PlaceCard, 검색·자동완성 응답은 �
 | 메뉴 | 원본 순서 전부를 `sort_order` 0부터. `category` ← `category_name`, `price`는 `FIXED`일 때만, `price_text`, `price_type`, `representative` ← `is_representative`, `labels` ← `menu_item_labels`(원본 순서), `photo_urls` ← `menu_item_images`(원본 순서), 응답 `photoUrl`은 첫 장 |
 | 사진 | `place_photos`에는 `photo_kind`가 `BUSINESS`이고 `media_source`가 `business`인 것(`source = business`)과 `MENU_BOARD`(`source = menuBoard`)만 넣고, `sort_order`는 출처마다 원본 순서로 0부터 다시 매긴다. 응답 `photos`는 업체 사진 다음 메뉴판 사진이고, `thumbnailUrl`은 업체 사진 첫 장(없으면 생략)이다 |
 | 교통, 좌석, 방송 | `place_transit`의 `SUBWAY` → 지하철(`stop_name`, `line_name`, `exit_number`, 도보), `BUS` → 버스(`stop_name`, `stop_code`, 도보), `place_seat_types` → 좌석(`seat_name`, `description`), `place_broadcasts` → 방송(`episode`는 문자열, `aired_on`). 모두 원본 순서로 넣는다 |
-| 기준 역 | mock의 `place.station` ← CSV `station_code`(이번에는 mock만 읽으므로 좌표 계산(D-6)은 DB 조회 작업에서 한다) |
+| 기준 역 | mock의 `place.station` ← CSV `station_code`. DB에서는 적재가 같은 값을 `places.station`에 저장하고 BE는 그 열을 읽는다(profile-storage, D-6) |
 | 지어내는 값(mock) | 점수, 추천 이유, 카드 `labels`, 상세 `tags`, `scoreItems`는 고정 문구 목록에서 지어낸다. 리뷰에서 나온 파일은 원천으로 쓰지 않는다 |
 | 넣지 않는 것 | AC-15의 파일 전부, `place_michelin`, 방문자·클립·영상·`pai` 사진, 메뉴 옵션과 코스 구성, 매장 외 시간표 |
 
@@ -319,8 +324,8 @@ enum Facility 삭제. PlaceSummary, PlaceCard, 검색·자동완성 응답은 �
 
 ## Constraints
 
-- 새 마이그레이션은 파일 하나이고, 버전은 그 시점 마지막 버전의 다음 번호다(작성 시점 V6). 기존 마이그레이션 파일은 고치지 않는다(D-1).
-- 새 마이그레이션에는 `CREATE TABLE`과 `CREATE INDEX`만 쓴다. 기존 객체의 ALTER와 DROP, `CREATE EXTENSION`, 트리거, 함수, GRANT, COMMENT는 쓰지 않는다. `reviews.place_id`에 FK를 걸지 않는다(D-1, D-11, D-21).
+- 새 마이그레이션은 파일 하나이고, 버전은 그 시점 마지막 버전의 다음 번호다(작성 시점 V6, 지금은 profile-storage가 V6을 쓰고 이 반복의 테이블은 V7이다. `places`는 V6에 있다). 기존 마이그레이션 파일은 고치지 않는다(D-1).
+- 새 마이그레이션에는 `CREATE TABLE`과 `CREATE INDEX`만 쓴다. 기존 객체의 ALTER와 DROP, `CREATE EXTENSION`, 트리거, 함수, GRANT, COMMENT는 쓰지 않는다. `reviews.place_id`에 FK를 걸지 않는다(D-1, D-11, D-21). 이 제약은 이 반복의 마이그레이션에만 해당하고, 리뷰 FK는 V13이 걸었다.
 - 리뷰 원문, 답글, 블로그 요약, 리뷰어 정보(작성자 해시 포함), 외부 리뷰 집계와 리뷰 사진을 담는 열이나 테이블을 만들지 않는다(D-4, D-5).
 - Interfaces에 없는 파생값 열(대표 사진, 휴무 안내, 영업 상태, 기준 역과 거리, 안심번호 여부, 링크 종류, 네이버 링크, 사진 프록시 주소, 노키즈존, 발렛, 지하철 순서)을 만들지 않는다(D-6).
 - 적재 스크립트, mock 생성 스크립트, 대응표는 `data/naver-places/` 안에 두고 커밋하지 않는다. 커밋하는 것은 생성된 `places.json`뿐이다(D-14, D-15, D-19, D-20).
@@ -339,7 +344,7 @@ enum Facility 삭제. PlaceSummary, PlaceCard, 검색·자동완성 응답은 �
 | `be/src/main/resources/application-migrate.yml#spring.flyway` | reuse | 마이그레이션은 migrate 프로필의 Flyway로만 실행한다. 새 파일은 기본 위치(`be/src/main/resources/db/migration/`)에 두고, 웹 앱 설정(`flyway.enabled: false`)은 그대로 둔다 | D-1 |
 | `be/src/test/java/kr/co/fitdining/api/support/PostgresTestSupport.java#PostgresTestSupport` | reuse | 테스트 DB를 같은 이미지, 마이그레이션 계정과 앱 계정, 기본 권한으로 구성하고 Flyway 기본 위치의 마이그레이션을 적용한다. 고치지 않는다 | D-1 |
 | `be/src/main/java/kr/co/fitdining/api/place/dto/PlaceDetailResponse.java#PlaceDetailResponse` | modify | Interfaces의 상세 응답 모양으로 필드와 중첩 타입만 바꾼다(`Facility` enum 삭제 포함) | D-17 |
-| `be/src/main/java/kr/co/fitdining/api/place/engine/MockPlaceSearchEngine.java#openStatus` | modify | 영업 상태 계산을 Interfaces의 "영업 상태 규칙"으로 바꾸고, 테스트가 영업시간을 넣어 판정을 부를 수 있게 한다(방법은 재량). 상세 응답을 다시 만드는 부분은 새 필드를 그대로 옮기게 고친다. 검색, 자동완성, 커서, `place.mock.enabled` 스위치의 동작은 그대로 둔다 | D-1, D-23 |
+| `be/src/main/java/kr/co/fitdining/api/place/engine/MockPlaceSearchEngine.java#openStatus` | modify | (지금 계산은 `be/src/main/java/kr/co/fitdining/api/place/catalog/OpenStatusCalculator.java`에 있다) 영업 상태 계산을 Interfaces의 "영업 상태 규칙"으로 바꾸고, 테스트가 영업시간을 넣어 판정을 부를 수 있게 한다(방법은 재량). 상세 응답을 다시 만드는 부분은 새 필드를 그대로 옮기게 고친다. 검색, 자동완성, 커서, `place.mock.enabled` 스위치의 동작은 그대로 둔다 | D-1, D-23 |
 | `be/src/main/resources/mock/places.json#places` | modify | 생성 스크립트의 출력으로 통째로 바꾼다. 루트 모양(`places[{card, detail}]`)은 그대로다 | D-19 |
 | `be/src/test/java/kr/co/fitdining/api/place/engine/MockPlaceSearchEngineTest.java#MockPlaceSearchEngineTest` | modify | 데이터 규칙을 AC-12로 바꾼다(장소 수, 사진, 영업시간 형식, 메뉴 카테고리와 "메뉴 1개 이상" 규칙만 바뀌고 나머지는 유지). "언제 검색해도 `UNKNOWN` 없음" 규칙은 지우고, 고정 시각 영업 상태 테스트는 테스트 안에서 만든 영업시간으로 옮겨 AC-11의 경우를 모두 확인하고, 카드와 상세가 같은 상태인지와 UTC 시계에서도 서울 시각으로 판정하는지는 mock 장소로 계속 확인한다. mock의 특정 장소 내용에 기대던 기대값은 새 mock에 맞추되 각 테스트가 확인하는 성질은 줄이지 않는다 | D-19, D-23 |
 | `be/src/test/java/kr/co/fitdining/api/place/PlaceControllerTest.java#PlaceControllerTest` | modify | `ResponseShape`의 키 집합을 Interfaces에 맞추고 새 중첩 타입의 키 집합을 더하며 모든 mock 장소를 검사한다. 다른 테스트는 mock 내용에 묶인 입력과 기대값(질의 문자열, 장소 이름, id, 장소 수, 페이지 경계, 자동완성 결과)만 새 mock에 맞추고, 각 테스트가 확인하는 성질(메뉴로만 맞는 장소, 대소문자 무시, 5개 제한, 두 페이지와 커서 등)과 검사 항목은 줄이지 않는다 | D-17, D-19 |
@@ -349,7 +354,7 @@ enum Facility 삭제. PlaceSummary, PlaceCard, 검색·자동완성 응답은 �
 | `fe/src/domains/place/model/opening-hours.ts#hoursText` | modify | "정보 없음", "24시간 영업", 자정 넘김 표기(AC-17) | D-23 |
 | `fe/src/domains/place/model/opening-hours.ts#hoursNotes` | modify | 브레이크마다 한 줄 | D-18, D-23 |
 | `fe/src/domains/place/model/opening-hours.test.ts#todayNotice` | modify | 픽스처를 새 타입 모양으로 바꾸고 AC-17 경우를 더한다. 기존 경우의 확인은 줄이지 않는다 | D-23 |
-| `fe/src/domains/place/model/place-labels.ts#FACILITY_LABELS` | modify | 코드→이름 표 대신 시설 이름→아이콘 묶음 표로 바꾼다 | D-18 |
+| `fe/src/domains/place/model/place-labels.ts#FACILITY_LABELS` | modify | 코드→이름 표 대신 시설 이름→아이콘 묶음 표로 바꾼다(지금은 `FACILITY_ICON_GROUPS`, `facilityIconGroup`) | D-18 |
 | `fe/src/domains/place/ui/place-detail-tabs.tsx#InfoTab` | modify | 정보 탭에 새 줄과 시설 칩 아이콘(AC-16) | D-18 |
 | `fe/src/domains/place/ui/place-detail-tabs.tsx#MenuTab` | modify | 메뉴 묶음과 카테고리 없는 메뉴(AC-18) | D-18 |
 | `fe/src/domains/place/ui/menu-card.tsx#MenuRow` | modify | 메뉴 탭 한 줄에 설명, 라벨·대표 칩, 가격 원문(AC-18). 홈 탭의 `MenuCard`는 고치지 않는다 | D-18 |
@@ -371,9 +376,9 @@ enum Facility 삭제. PlaceSummary, PlaceCard, 검색·자동완성 응답은 �
 
 ## Out of scope
 
-- API가 DB를 읽게 하는 일: JPA 엔티티, 리포지토리, mock/DB 선택 설정, AI 검색 응답(`placeId`)과 장소 정보 연결, 좌표로 기준 역 계산(D-1, D-6). 이 일은 `docs/specs/place-lookup-db/spec.md`가 한다(JPA 엔티티는 만들지 않고 SQL 읽기 모델로 한다. AI 검색 응답과의 연결과 좌표로 기준 역 계산은 여전히 범위 밖이다).
+- API가 DB를 읽게 하는 일: JPA 엔티티, 리포지토리, mock/DB 선택 설정, AI 검색 응답(`placeId`)과 장소 정보 연결, 좌표로 기준 역 계산(D-1, D-6). DB 조회는 `docs/specs/place-lookup-db/spec.md`가 했다(JPA 엔티티 없이 SQL 읽기 모델). AI 검색 응답과의 연결은 `docs/specs/place-ai-search/spec.md`가 했다. 기준 역은 좌표로 계산하지 않고 저장한 `places.station`을 쓴다.
 - dev와 운영 DB 적재, 적재 스크립트의 저장소 커밋(D-1, D-15).
-- `reviews.place_id`에서 `places.place_id`로 FK를 거는 일. 모든 환경에 장소가 적재되는 작업에서 리뷰 담당과 함께 한다(D-21).
+- `reviews.place_id`에서 `places.place_id`로 FK를 거는 일(D-21). 리뷰 기능이 V13으로 걸었다(review#D-49).
 - 검색 카드, `PlaceSummary`, 자동완성 응답의 변경, `PlaceSummary.station` 삭제, 홈 탭 변경(D-17, D-18).
 - "곧 마감" 상태 자체의 변경(D-23).
 - 사진 리사이즈 프록시(`src`/`srcSet`)(D-7).
@@ -383,7 +388,7 @@ enum Facility 삭제. PlaceSummary, PlaceCard, 검색·자동완성 응답은 �
 - 외부 리뷰 집계, 리뷰 원문, 블로그 요약의 저장. AI 검색 파트가 가져간다(D-4, D-5).
 - 역 테이블, 공간 인덱스와 확장, 법정동 코드(D-6, D-11).
 - `updated_at` 자동 갱신 트리거. 적재가 넣는다.
-- 찜(`saved_places`), 검색 기록 테이블. 회원 테이블 변경.
+- 찜, 검색 기록 테이블, 회원 테이블 변경. 찜은 bookmark(`bookmarks`, V10), 검색 기록은 search-thread(`search_threads`, V11)가 만들었다.
 - 시설 아이콘의 디자인 확정(D-18).
 
 ## Open questions
