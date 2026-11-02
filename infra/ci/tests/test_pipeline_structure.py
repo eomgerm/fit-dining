@@ -13,7 +13,8 @@ ROOT = Path(__file__).resolve().parents[3]
 CI = yaml.safe_load((ROOT / ".gitlab-ci.yml").read_text(encoding="utf-8"))
 
 RESERVED = {"stages", "workflow", "default", "variables", "include", "image", "services", "cache", "before_script", "after_script"}
-VERIFY_JOBS = ["be:test", "fe:check", "be:build", "fe:bundle-check"]
+VERIFY_JOBS = ["be:test", "fe:scope", "fe:check", "be:build", "fe:bundle-check"]
+BRANCH_VERIFY_JOBS = [j for j in VERIFY_JOBS if j != "fe:scope"]  # fe:scope는 MR 전용이다(develop·master는 전체 시험)
 ALWAYS_IN_MR = {"lint:guards", "lint:secrets", "lint:history"}  # 경로와 상관없이 모든 MR에서 도는 잡. MR에 파이프라인이 없으면 병합할 수 없다
 DEPLOY_TAGGED = ["build:images", "deploy:dev", "deploy:prod", "smoke:dev", "smoke:prod"]
 NEW_JOBS = VERIFY_JOBS + DEPLOY_TAGGED
@@ -218,11 +219,11 @@ class EvaluatorTest(unittest.TestCase):
 
 
 class JobsTest(unittest.TestCase):
-    def test_the_nine_jobs_exist(self):
-        # fe:test와 fe:build는 fe:check 하나로 합쳤다(컨테이너 기동, 설치, 무거운 잡 줄을 한 번만 쓴다)
+    def test_the_ten_jobs_exist(self):
+        # fe:test와 fe:build는 fe:check 하나로 합쳤다(컨테이너 기동, 설치, 무거운 잡 줄을 한 번만 쓴다). fe:scope는 MR에서 관련 시험만 고른다
         for name in NEW_JOBS:
             self.assertIn(name, CI, name)
-        self.assertEqual(len(NEW_JOBS), 9)
+        self.assertEqual(len(NEW_JOBS), 10)
         for gone in ("fe:test", "fe:build"):
             self.assertNotIn(gone, CI, gone)
 
@@ -235,7 +236,7 @@ class JobsTest(unittest.TestCase):
                 self.assertEqual(tags, ["verify"], name)
 
     def test_stages(self):
-        want = {"be:test": "verify", "fe:check": "verify", "be:build": "verify", "fe:bundle-check": "verify",
+        want = {"be:test": "verify", "fe:scope": "verify", "fe:check": "verify", "be:build": "verify", "fe:bundle-check": "verify",
                 "build:images": "build", "deploy:dev": "deploy", "deploy:prod": "deploy", "smoke:dev": "smoke", "smoke:prod": "smoke"}
         for name, stage in want.items():
             self.assertEqual(effective(name).get("stage"), stage, name)
@@ -349,7 +350,7 @@ class JobsTest(unittest.TestCase):
             filtered.append(name)
             for rule in mr_rules:
                 self.assertIn(".gitlab-ci.yml", rule["changes"], f"{name}: CI 설정을 바꾸면 이 잡도 다시 돌아야 한다")
-            if name != "lint:migrations":  # 이 잡은 MR 전용이다
+            if name not in ("lint:migrations", "fe:scope"):  # 이 잡들은 MR 전용이다
                 on_branches = [r for r in rules if '$CI_PIPELINE_SOURCE != "merge_request_event"' in r.get("if", "") and "changes" not in r]
                 self.assertTrue(on_branches, f"{name}: develop·master에서는 경로와 상관없이 항상 돈다")
         self.assertGreaterEqual(len(filtered), 8)
@@ -384,6 +385,24 @@ class JobsTest(unittest.TestCase):
             self.assertIn(path, job["cache"]["paths"], path)
         self.assertIn("pnpm lint --cache", script_text("fe:check"))
 
+    def test_fe_scope_runs_exactly_when_fe_check_runs_in_an_mr_and_never_on_branches(self):
+        # fe:check는 fe:scope의 결과를 기다린다(없으면 전체 시험). 둘의 MR 규칙이 어긋나면 MR에서 관련 시험 선택이 조용히 꺼진다
+        def mr_changes(name):
+            return [r["changes"] for r in effective(name)["rules"] if "merge_request_event" in r.get("if", "") and "!=" not in r.get("if", "")]
+        self.assertEqual(mr_changes("fe:scope"), mr_changes("fe:check"))
+        for rule in effective("fe:scope")["rules"]:
+            self.assertNotIn("!=", rule.get("if", ""), "fe:scope는 MR 전용이다")
+        needs = effective("fe:check")["needs"]
+        self.assertIn({"job": "fe:scope", "artifacts": True, "optional": True}, needs)
+        self.assertEqual(effective("fe:scope")["artifacts"]["reports"]["dotenv"], "fe-scope.env")
+
+    def test_fe_check_runs_all_tests_unless_the_scope_says_otherwise(self):
+        text = script_text("fe:check")
+        self.assertIn('"${FE_TEST_FULL:-true}" = "true"', text)  # 변수가 없으면 전체다(develop·master)
+        self.assertIn("pnpm test", text)
+        self.assertIn("vitest related --run --passWithNoTests $FE_TEST_FILES", text)
+        self.assertIn("set -f", text)  # [env] 같은 경로가 글롭으로 풀리지 않게 한다
+
     def test_fe_generates_next_types_before_type_checking(self):
         # Next 16의 LayoutProps 같은 전역 타입은 typegen이나 build가 만든다. 먼저 만들지 않으면 tsc가 실패한다
         lines = effective("fe:check")["script"]
@@ -407,7 +426,8 @@ class PipelineContentsTest(unittest.TestCase):
 
     def test_with_the_switch_off_only_the_tests_appear_everywhere(self):
         for kind in ("develop", "master", "mr"):
-            self.assertEqual(sorted(self.new_jobs(kind, "false")), ["be:test", "fe:check"], kind)
+            want = ["be:test", "fe:check", "fe:scope"] if kind == "mr" else ["be:test", "fe:check"]  # fe:scope는 MR에서만 관련 시험을 고른다
+            self.assertEqual(sorted(self.new_jobs(kind, "false")), want, kind)
 
     def test_no_pipeline_for_a_plain_branch_push_or_a_develop_to_master_mr(self):
         for kind in ("feature-push", "mr-from-develop"):
@@ -416,12 +436,12 @@ class PipelineContentsTest(unittest.TestCase):
 
     def test_switch_on_develop_runs_everything_up_to_dev_smoke(self):
         jobs = self.new_jobs("develop", "true")
-        self.assertEqual(sorted(jobs), sorted(VERIFY_JOBS + ["build:images", "deploy:dev", "smoke:dev"]))
+        self.assertEqual(sorted(jobs), sorted(BRANCH_VERIFY_JOBS + ["build:images", "deploy:dev", "smoke:dev"]))
         self.assertEqual(jobs["deploy:dev"], "on_success")
 
     def test_switch_on_master_waits_for_a_person_before_prod(self):
         jobs = self.new_jobs("master", "true")
-        self.assertEqual(sorted(jobs), sorted(VERIFY_JOBS + ["build:images", "deploy:prod", "smoke:prod"]))
+        self.assertEqual(sorted(jobs), sorted(BRANCH_VERIFY_JOBS + ["build:images", "deploy:prod", "smoke:prod"]))
         self.assertEqual(jobs["deploy:prod"], "manual")
 
     def test_switch_on_mr_runs_the_checks_but_never_builds_the_jar(self):
@@ -488,8 +508,8 @@ class MrPathTest(unittest.TestCase):
         self.assertEqual(self.mr(["README.md"]), ALWAYS_IN_MR)
 
     def test_fe_only_runs_the_fe_test_and_nothing_from_be_or_infra(self):
-        self.assertEqual(self.mr(["fe/src/app/page.tsx"], "false"), ALWAYS_IN_MR | {"fe:check"})
-        self.assertEqual(self.mr(["fe/src/app/page.tsx"], "true"), ALWAYS_IN_MR | {"fe:check", "fe:bundle-check"})
+        self.assertEqual(self.mr(["fe/src/app/page.tsx"], "false"), ALWAYS_IN_MR | {"fe:scope", "fe:check"})
+        self.assertEqual(self.mr(["fe/src/app/page.tsx"], "true"), ALWAYS_IN_MR | {"fe:scope", "fe:check", "fe:bundle-check"})
 
     def test_be_only_runs_the_be_test_and_the_migration_check_only_for_migrations(self):
         self.assertEqual(self.mr(["be/src/main/java/kr/co/fitdining/api/X.java"]), ALWAYS_IN_MR | {"be:test"})
@@ -514,6 +534,7 @@ class MrPathTest(unittest.TestCase):
     def test_a_bundle_check_script_change_runs_the_bundle_jobs_only_when_the_switch_is_on(self):
         # fe:bundle-check는 fe:check의 번들을 기다리므로 같은 변경에서 둘이 함께 나타나야 한다(없는 잡을 기다리면 파이프라인이 만들어지지 않는다)
         got = self.mr(["infra/ci/check_fe_bundle.py"], "true")
+        self.assertIn("fe:scope", got)
         self.assertIn("fe:check", got)
         self.assertIn("fe:bundle-check", got)
         self.assertEqual(self.mr(["infra/ci/check_fe_bundle.py"], "false"), ALWAYS_IN_MR)

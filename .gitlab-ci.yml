@@ -315,12 +315,44 @@ be:build:
     paths:
       - be/build/libs/*.jar
 
+# MR에서는 FE 시험을 바뀐 파일과 관련된 것만 돌린다(vitest related). develop·master는 전체를 돌린다.
+# node 이미지에는 git이 없어서 바뀐 파일은 git이 있는 이 가벼운 잡이 구해 fe:check에 dotenv로 넘긴다. 판단이 서지 않으면 전체다.
+# 규칙은 fe:check의 MR 규칙과 같아야 한다(구조 시험이 검사한다).
+fe:scope:
+  extends: .verify
+  image: $DOCKER_CLI_IMAGE
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - 'fe/**/*'
+        - '.gitlab-ci.yml'
+        - 'infra/ci/tool-images.sh'
+    - if: $FIT_CD_ENABLED == "true" && $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - 'infra/ci/check_fe_bundle.py'
+        - '.gitlab-ci.yml'
+        - 'infra/ci/tool-images.sh'
+  before_script:
+    - apk add --no-cache git
+  script:
+    - sh infra/ci/fe-test-scope.sh fe-scope.env
+    - cat fe-scope.env
+  artifacts:
+    reports:
+      dotenv: fe-scope.env
+    expire_in: 1 day
+
 # 린트, 타입 검사, 단위 시험을 하고 배포 스위치가 켜져 있으면 같은 잡에서 번들까지 만든다(검사가 모두 통과한 뒤에만).
 # 한 잡이라서 컨테이너 기동, 소스와 캐시 받기, pnpm install이 한 번이고 무거운 잡 줄에도 한 번만 선다.
 fe:check:
   extends: .verify
   image: $NODE_IMAGE
   resource_group: verify-heavy-fe
+  needs:
+    # MR에서만 있다. 없으면(develop·master) 전체 시험이다
+    - job: fe:scope
+      artifacts: true
+      optional: true
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
@@ -362,7 +394,17 @@ fe:check:
     # Next 16의 LayoutProps 같은 전역 타입은 typegen이나 build가 만든다. 먼저 만들지 않으면 tsc가 실패한다
     - pnpm exec next typegen
     - pnpm exec tsc --noEmit
-    - pnpm test
+    - |
+      if [ "${FE_TEST_FULL:-true}" = "true" ]; then
+        pnpm test
+      elif [ -n "${FE_TEST_FILES:-}" ]; then
+        echo "MR: 바뀐 파일과 관련된 시험만 돌린다: $FE_TEST_FILES"
+        set -f
+        pnpm exec vitest related --run --passWithNoTests $FE_TEST_FILES
+        set +f
+      else
+        echo "MR: 바뀐 소스 파일이 없어 시험을 건너뛴다"
+      fi
     - |
       if [ "$FIT_CD_ENABLED" = "true" ]; then
         DEPLOYMENT_VERSION="$CI_COMMIT_SHA" pnpm build
