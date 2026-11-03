@@ -17,8 +17,8 @@ KST = timezone(timedelta(hours=9))
         (datetime(2026, 11, 6, 22, 30, tzinfo=KST), 0),
         (datetime(2026, 11, 6, 3, 0, tzinfo=KST), 0),
         # 끝 날짜는 그날 밤 9시 전까지 켜고, 다음 날부터는 낮에도 끈다(잊고 둬도 비용이 멈춘다)
-        (datetime(2026, 11, 18, 20, 59, tzinfo=KST), 1),
-        (datetime(2026, 11, 19, 12, 0, tzinfo=KST), 0),
+        (datetime(2026, 11, 20, 20, 59, tzinfo=KST), 1),
+        (datetime(2026, 11, 21, 12, 0, tzinfo=KST), 0),
     ],
 )
 def test_warm_pool_size_follows_service_hours_in_korea(local, size):

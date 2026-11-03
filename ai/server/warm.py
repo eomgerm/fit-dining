@@ -21,8 +21,8 @@ KST = timezone(timedelta(hours=9))  # 한국은 서머타임이 없다
 WARM_FROM_HOUR = 9
 WARM_TO_HOUR = 21
 """한국 시각 [9시, 21시)에 켠다."""
-WARM_UNTIL = date(2026, 11, 18)
-"""이 날짜(한국 기준, 그날 포함)까지만 켠다. 운영 기간(11/06~11/18)이 끝나면 잊고 둬도 비용이 멈춘다."""
+WARM_UNTIL = date(2026, 11, 20)
+"""이 날짜(한국 기준, 그날 포함)까지만 켠다. 이 날이 지나면 잊고 둬도 비용이 멈춘다."""
 
 
 def warm_pool_size(now: datetime) -> int:
