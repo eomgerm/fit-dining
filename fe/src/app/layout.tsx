@@ -4,6 +4,7 @@ import { InstallBanner } from "@/domains/install/ui/install-banner";
 import "./globals.css";
 import { Providers } from "./providers";
 import { RegisterServiceWorker } from "./register-sw";
+import { siteDescription } from "./site";
 
 // ponytail: 가변 폰트 전체(2MB)를 한 번에 받는다. 첫 로딩이 문제되면 Pretendard dynamic subset으로 바꾼다
 const pretendard = localFont({
@@ -18,14 +19,14 @@ const pretendard = localFont({
 export const metadata: Metadata = {
   metadataBase: new URL("https://fitdining.co.kr"),
   title: { default: "핏다이닝", template: "%s | 핏다이닝" },
-  description: "오늘 끌리는 곳, 내 취향으로 찾기",
+  description: siteDescription,
   // 공유 이미지(og:image, twitter:image)는 opengraph-image.png 파일 규칙이 붙인다
   openGraph: {
     type: "website",
     siteName: "핏다이닝",
     locale: "ko_KR",
     title: "핏다이닝",
-    description: "오늘 끌리는 곳, 내 취향으로 찾기",
+    description: siteDescription,
   },
   twitter: { card: "summary_large_image" },
   // iOS는 매니페스트 아이콘 대신 apple-touch-icon(PNG)을 읽는다
