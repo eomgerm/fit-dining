@@ -557,6 +557,8 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
           onBack={handleSavedBack}
           onRetry={saved.retry}
           onOpen={(placeId) => router.push(placeDetailHref(placeId, true))}
+          onRemove={saved.remove}
+          removing={saved.removing}
           onRecommend={handleRecommend}
           edge={myLocationButton}
         />

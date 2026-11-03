@@ -107,6 +107,9 @@ function item(
 type Reply = () => Response | Promise<Response>;
 let listReplies: Reply[];
 let listCalls: string[];
+// 해제(DELETE) 요청의 경로. 응답은 removeReply가 정한다
+let removeCalls: string[];
+let removeReply: Reply;
 let searchCalls: number;
 let pendingSearch: ((response: Response) => void) | undefined;
 
@@ -148,6 +151,8 @@ beforeEach(() => {
   config.value = undefined;
   listReplies = [];
   listCalls = [];
+  removeCalls = [];
+  removeReply = () => new Response(null, { status: 204 });
   searchCalls = 0;
   pendingSearch = undefined;
   localStorage.clear();
@@ -155,6 +160,10 @@ beforeEach(() => {
     "fetch",
     vi.fn<typeof fetch>(async (input, init) => {
       const url = String(input);
+      if (init?.method === "DELETE") {
+        removeCalls.push(url);
+        return removeReply();
+      }
       if (url === "/api/v1/me/bookmarks") {
         listCalls.push(new Headers(init?.headers).get("Authorization") ?? "");
         const next = listReplies.shift();
@@ -250,10 +259,15 @@ function renderScreen(
 
 const savedPanel = () => screen.findByRole("region", { name: "저장한 장소" });
 const savedList = () => screen.findByRole("list", { name: "저장한 장소" });
-const cardNames = (listElement: HTMLElement) =>
+// 카드마다 ⋯ 메뉴 버튼이 따로 있어 상세를 여는 카드 버튼만 고른다
+const cards = (listElement: HTMLElement) =>
   within(listElement)
     .getAllByRole("button")
-    .map((card) => card.querySelector(".text-title-md")?.textContent);
+    .filter((button) => !button.hasAttribute("aria-label"));
+const cardNames = (listElement: HTMLElement) =>
+  cards(listElement).map(
+    (card) => card.querySelector(".text-title-md")?.textContent,
+  );
 
 describe("저장한 장소 화면 들어가기", () => {
   it("로그인한 사용자가 메인 버튼을 누르면 ?view=saved로 기록을 쌓고 저장한 장소만 보인다", async () => {
@@ -484,7 +498,7 @@ describe("목록 받기", () => {
     listReplies.push(list([item(3)]));
     renderScreen("/?view=saved");
 
-    const card = within(await savedList()).getByRole("button");
+    const [card] = cards(await savedList());
     expect(card.textContent).toContain("저장 장소 3");
     expect(card.textContent).toContain("카페");
     expect(card.textContent).toContain("영업 중 · 0m · 역삼로 3");
@@ -505,7 +519,7 @@ describe("목록 받기", () => {
     );
     renderScreen("/?view=saved");
 
-    const [unknown, open] = within(await savedList()).getAllByRole("button");
+    const [unknown, open] = cards(await savedList());
     expect(unknown.querySelector("p")).toBeNull();
     expect(unknown.querySelectorAll("li, span.rounded-full").length).toBe(0);
     expect(open.querySelector("p")?.textContent).toBe("영업 중");
@@ -733,7 +747,65 @@ describe("상세에서 돌아오기", () => {
     expect(
       screen.getByRole("tab", { name: "카페" }).getAttribute("aria-selected"),
     ).toBe("true");
-    // 목록 카드에는 해제 버튼이 없다
-    expect(screen.queryByRole("button", { name: /해제/ })).toBeNull();
+  });
+});
+
+describe("목록에서 해제(D-18)", () => {
+  async function removeFromMenu(name: string) {
+    fireEvent.click(
+      await screen.findByRole("button", { name: `${name} 메뉴` }),
+    );
+    fireEvent.click(await screen.findByRole("menuitem", { name: "해제" }));
+  }
+
+  it("⋯ 메뉴의 [해제]는 확인 없이 바로 해제하고, 목록을 다시 받지 않고 그 카드와 개수만 줄인다", async () => {
+    listReplies.push(list([item(2), item(3)]));
+    renderScreen("/?view=saved");
+    await savedList();
+
+    await removeFromMenu("저장 장소 2");
+
+    expect(await screen.findByText("저장을 해제했어요")).toBeTruthy();
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(removeCalls).toEqual(["/api/v1/me/bookmarks/2"]);
+    expect(cardNames(await savedList())).toEqual(["저장 장소 3"]);
+    expect(screen.getByRole("heading", { name: "저장한 장소1" })).toBeTruthy();
+    expect(listCalls).toHaveLength(1);
+  });
+
+  it("마지막 장소를 해제하면 빈 상태를 보인다", async () => {
+    listReplies.push(list([item(3)]));
+    renderScreen("/?view=saved");
+    await savedList();
+
+    await removeFromMenu("저장 장소 3");
+
+    expect(await screen.findByText("아직 저장한 장소가 없어요")).toBeTruthy();
+  });
+
+  it("해제하지 못하면 카드를 남기고 알린다", async () => {
+    removeReply = status(500);
+    listReplies.push(list([item(3)]));
+    renderScreen("/?view=saved");
+    await savedList();
+
+    await removeFromMenu("저장 장소 3");
+
+    expect(
+      await screen.findByText("저장을 해제하지 못했어요. 다시 시도해 주세요."),
+    ).toBeTruthy();
+    expect(cardNames(await savedList())).toEqual(["저장 장소 3"]);
+  });
+
+  it("해제 요청이 401로 끝나면 세션을 지우고 로그인 안내를 띄운다", async () => {
+    removeReply = status(401);
+    listReplies.push(list([item(3)]));
+    renderScreen("/?view=saved");
+    await savedList();
+
+    await removeFromMenu("저장 장소 3");
+
+    expect(await screen.findByRole("alertdialog")).toBeTruthy();
+    expect(harness.endSession).toHaveBeenCalled();
   });
 });

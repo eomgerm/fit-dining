@@ -11,10 +11,12 @@ import { Tag } from "@/shared/ui/display/tag";
 import { BookmarkIcon } from "@/shared/ui/icon/icons/bookmark";
 import { ChevronLeftIcon } from "@/shared/ui/icon/icons/chevron-left";
 import { MapIcon } from "@/shared/ui/icon/icons/map";
+import { MoreIcon } from "@/shared/ui/icon/icons/more";
 import { RefreshIcon } from "@/shared/ui/icon/icons/refresh";
 import { WarningIcon } from "@/shared/ui/icon/icons/warning";
 import { WifiOffIcon } from "@/shared/ui/icon/icons/wifi-off";
 import { TopBar } from "@/shared/ui/layout/top-bar";
+import { Menu, MenuItem } from "@/shared/ui/overlay/menu";
 
 import {
   CATEGORY_TABS,
@@ -54,6 +56,10 @@ type SavedPlacesViewProps = {
   onBack: () => void;
   onRetry: () => void;
   onOpen: (placeId: number) => void;
+  // 목록 카드의 ⋯ 메뉴에서 저장을 해제한다
+  onRemove: (placeId: number) => void;
+  // 해제하는 중인 장소
+  removing: ReadonlySet<number>;
   onRecommend: () => void;
   // 패널 위쪽 가장자리에 붙는 지도 버튼("내 위치")
   edge?: ReactNode;
@@ -72,6 +78,8 @@ export function SavedPlacesView({
   onBack,
   onRetry,
   onOpen,
+  onRemove,
+  removing,
   onRecommend,
   edge,
 }: SavedPlacesViewProps) {
@@ -200,13 +208,37 @@ export function SavedPlacesView({
             ) : (
               <ul aria-label={TITLE} className="flex flex-col">
                 {visible.map((item) => (
-                  <li key={item.place.id}>
+                  <li
+                    key={item.place.id}
+                    id={savedCardElementId(item.place.id)}
+                    className={cn(
+                      "flex scroll-my-4 items-start border-b border-line",
+                      item.place.id === selectedId && "bg-primary-soft",
+                    )}
+                  >
                     <SavedCard
                       item={item}
                       here={here}
-                      selected={item.place.id === selectedId}
                       onOpen={() => onOpen(item.place.id)}
                     />
+                    {/* 리뷰 ⋯ 메뉴와 같은 모양이다. 누르면 확인 없이 바로 해제한다(D-18) */}
+                    <div className="mt-1.5 -mr-2.5 shrink-0">
+                      <Menu
+                        trigger={
+                          <IconButton label={`${item.place.name} 메뉴`}>
+                            <MoreIcon size="md" className="text-ink-muted" />
+                          </IconButton>
+                        }
+                      >
+                        <MenuItem
+                          tone="danger"
+                          disabled={removing.has(item.place.id)}
+                          onClick={() => onRemove(item.place.id)}
+                        >
+                          해제
+                        </MenuItem>
+                      </Menu>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -259,12 +291,10 @@ function SavedSkeleton() {
 function SavedCard({
   item,
   here,
-  selected,
   onOpen,
 }: {
   item: BookmarkItem;
   here?: LatLng;
-  selected: boolean;
   onOpen: () => void;
 }) {
   const { place, address, tags, openStatus } = item;
@@ -286,12 +316,8 @@ function SavedCard({
   return (
     <button
       type="button"
-      id={savedCardElementId(place.id)}
       onClick={onOpen}
-      className={cn(
-        "flex w-full scroll-my-4 gap-3 border-b border-line py-3.5 text-left",
-        selected && "bg-primary-soft",
-      )}
+      className="flex min-w-0 flex-1 gap-3 py-3.5 text-left"
     >
       <PlacePhoto
         src={place.thumbnailUrl}
