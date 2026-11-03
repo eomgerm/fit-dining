@@ -85,6 +85,17 @@ public class SearchThreadService {
 		return new ThreadPage(items, new ThreadCursor(last.lastAt(), last.id()).encode());
 	}
 
+	/** turn까지 지운다. 그 thread에 turn을 더하는 중이면 그 트랜잭션이 끝난 뒤 지운다(D-18). */
+	@Transactional
+	public void deleteThread(String userId, String threadId) {
+		threads.deleteThread(userId, threadId);
+	}
+
+	@Transactional
+	public void deleteAll(String userId) {
+		threads.deleteAll(userId);
+	}
+
 	/**
 	 * thread 하나를 {@code {id, turns}} JSON으로 돌려준다. 요청과 응답은 jsonb가 내준 텍스트를 그대로 넣어 숫자가 double을
 	 * 거치지 않는다. {@code baseId}가 없는 turn은 키를 뺀다(FE {@code parseThreads}가 null을 거부한다).

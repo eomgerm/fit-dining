@@ -8,6 +8,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -70,6 +71,23 @@ public class SearchThreadController {
 		String userId = activeUser(authorization);
 		TurnFormat.requireThreadId(threadId);
 		service.addTurn(userId, threadId, TurnFormat.parse(turnId, body));
+	}
+
+	/** thread 하나와 그 turn을 지운다. 내 계정에 없어도 204다. 오류: 401(인증, 탈퇴), 400(id 형식)(D-18). */
+	@DeleteMapping("/{threadId}")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void deleteThread(@PathVariable String threadId,
+			@RequestHeader(name = HttpHeaders.AUTHORIZATION, required = false) String authorization) {
+		String userId = activeUser(authorization);
+		TurnFormat.requireThreadId(threadId);
+		service.deleteThread(userId, threadId);
+	}
+
+	/** 내 검색 기록을 모두 지운다. 오류: 401(인증, 탈퇴)(D-18). */
+	@DeleteMapping
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void deleteAll(@RequestHeader(name = HttpHeaders.AUTHORIZATION, required = false) String authorization) {
+		service.deleteAll(activeUser(authorization));
 	}
 
 	/** 인증 모듈을 직접 불러 AT에서 사용자 id를 꺼내고, 탈퇴하지 않은 회원인지 확인한다. */

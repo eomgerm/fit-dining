@@ -77,6 +77,13 @@ class SearchThreadRepository {
 			WHERE user_id = :userId AND thread_id = :threadId
 			ORDER BY seq""";
 
+	/** turn은 thread FK의 ON DELETE CASCADE로 함께 지워진다 */
+	private static final String DELETE_THREAD = """
+			DELETE FROM search_threads WHERE user_id = :userId AND thread_id = :threadId""";
+
+	private static final String DELETE_ALL = """
+			DELETE FROM search_threads WHERE user_id = :userId""";
+
 	private final NamedParameterJdbcTemplate jdbc;
 
 	/** thread 행을 잠그고 지금까지의 turn 수를 돌려준다. 없으면 비어 있다 */
@@ -138,6 +145,14 @@ class SearchThreadRepository {
 		return jdbc.query(TURNS, key(userId, threadId), (row, i) -> new StoredTurn(row.getString("turn_id"),
 				row.getString("kind"), row.getString("base_turn_id"), row.getLong("at"), row.getString("request"),
 				row.getString("response")));
+	}
+
+	void deleteThread(String userId, String threadId) {
+		jdbc.update(DELETE_THREAD, key(userId, threadId));
+	}
+
+	void deleteAll(String userId) {
+		jdbc.update(DELETE_ALL, Map.of("userId", userId));
 	}
 
 	private static Map<String, Object> key(String userId, String threadId) {

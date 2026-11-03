@@ -78,6 +78,10 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 	@Value("${local.server.port}")
 	int port;
 
+	/** 브라우저는 DELETE에 Origin을 붙이고, 인증 모듈의 웹 설정이 FE 출처인지 확인한다 */
+	@Value("${auth.frontend-origin}")
+	String origin;
+
 	private JdbcTemplate jdbc;
 
 	@BeforeEach
@@ -143,6 +147,9 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 		}
 		if (body != null) {
 			builder.header("Content-Type", "application/json");
+		}
+		if (method.equals("DELETE")) {
+			builder.header("Origin", origin);
 		}
 		return builder.method(method, body == null ? HttpRequest.BodyPublishers.noBody()
 				: HttpRequest.BodyPublishers.ofString(body)).build();
@@ -672,13 +679,129 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 	}
 
 	@Nested
+	@DisplayName("지우기")
+	class Delete {
+
+		@Test
+		@DisplayName("지우기_thread하나를지우면_204이고그turn까지지워지며다른thread는남는다")
+		void delete_oneThread_removesItsTurnsOnly() throws Exception {
+			String token = signIn(0);
+			String gone = threadId();
+			String first = turnId();
+			String second = turnId();
+			put(token, gone, first, newTurn(first, AT, "카페"));
+			put(token, gone, second, turn(second, "followUp", first, AT + 1, "조용한 곳"));
+			String kept = threadId();
+			String other = turnId();
+			put(token, kept, other, newTurn(other, AT, "식당"));
+
+			HttpResponse<String> deleted = send("DELETE", BASE + "/" + gone, token, null);
+
+			assertThat(deleted.statusCode()).isEqualTo(204);
+			assertThat(deleted.body()).isEmpty();
+			assertThat(send("GET", BASE + "/" + gone, token, null).statusCode()).isEqualTo(404);
+			assertThat(list(token, null).get("items").values()).extracting(item -> item.get("id").asString())
+					.containsExactly(kept);
+			assertThat(count("search_thread_turns")).isEqualTo(1);
+		}
+
+		@Test
+		@DisplayName("지우기_지운thread에이어서보내면_첫turn규칙에걸려400이고되살아나지않는다")
+		void delete_followUpAfterDelete_invalid() throws Exception {
+			String token = signIn(0);
+			String thread = threadId();
+			String first = turnId();
+			put(token, thread, first, newTurn(first, AT, "카페"));
+			send("DELETE", BASE + "/" + thread, token, null);
+			String next = turnId();
+
+			HttpResponse<String> response = put(token, thread, next, turn(next, "followUp", first, AT + 1, "조건"));
+
+			assertThat(response.statusCode()).isEqualTo(400);
+			assertThat(count("search_threads")).isZero();
+		}
+
+		@Test
+		@DisplayName("지우기_내계정에없는thread여도_204다")
+		void delete_missingThread_noContent() throws Exception {
+			String token = signIn(0);
+
+			assertThat(send("DELETE", BASE + "/" + threadId(), token, null).statusCode()).isEqualTo(204);
+		}
+
+		@Test
+		@DisplayName("지우기_남의thread와같은id로지워도_남의기록은그대로다")
+		void delete_sameIdOnOtherAccount_keepsTheirs() throws Exception {
+			String mine = signIn(0);
+			String theirs = signIn(1);
+			String thread = threadId();
+			String id = turnId();
+			put(theirs, thread, id, newTurn(id, AT, "남의 질문"));
+
+			assertThat(send("DELETE", BASE + "/" + thread, mine, null).statusCode()).isEqualTo(204);
+
+			assertThat(getThread(theirs, thread).get("turns")).hasSize(1);
+		}
+
+		@Test
+		@DisplayName("전체지우기_내기록만모두지우고_남의기록은남는다")
+		void deleteAll_removesOnlyMine() throws Exception {
+			String mine = signIn(0);
+			String theirs = signIn(1);
+			for (int i = 0; i < 2; i++) {
+				String id = turnId();
+				put(mine, threadId(), id, newTurn(id, AT + i, "내 질문" + i));
+			}
+			String theirThread = threadId();
+			String theirTurn = turnId();
+			put(theirs, theirThread, theirTurn, newTurn(theirTurn, AT, "남의 질문"));
+
+			HttpResponse<String> deleted = send("DELETE", BASE, mine, null);
+
+			assertThat(deleted.statusCode()).isEqualTo(204);
+			assertThat(list(mine, null).get("items")).isEmpty();
+			assertThat(list(theirs, null).get("items")).hasSize(1);
+			assertThat(count("search_thread_turns")).isEqualTo(1);
+		}
+
+		@Test
+		@DisplayName("지우기_요청출처가FE가아니면_403이고지우지않는다")
+		void delete_otherOrigin_forbidden() throws Exception {
+			String token = signIn(0);
+			String thread = threadId();
+			String id = turnId();
+			put(token, thread, id, newTurn(id, AT, "카페"));
+			HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + BASE))
+					.header("Authorization", "Bearer " + token).header("Origin", "https://evil.example")
+					.DELETE().build();
+
+			HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+			assertThat(response.statusCode()).isEqualTo(403);
+			assertThat(count("search_threads")).isEqualTo(1);
+		}
+
+		@Test
+		@DisplayName("지우기_형식이틀린thread_id면_400이다")
+		void delete_badThreadId_invalid() throws Exception {
+			String token = signIn(0);
+
+			HttpResponse<String> bad = send("DELETE", BASE + "/thread-ABC", token, null);
+
+			assertThat(bad.statusCode()).isEqualTo(400);
+			assertThat(type(bad)).isEqualTo(INVALID);
+		}
+	}
+
+	@Nested
 	@DisplayName("인증")
 	class Authentication {
 
 		/** 토큰이 없거나(none) 서명이 틀린(forged) 요청 */
 		@ParameterizedTest
-		@CsvSource({"list, none", "list, forged", "thread, none", "thread, forged", "turn, none", "turn, forged"})
-		@DisplayName("인증_토큰이없거나틀리면_세API모두401이다")
+		@CsvSource({"list, none", "list, forged", "thread, none", "thread, forged", "turn, none", "turn, forged",
+				"delete, none", "delete, forged", "deleteAll, none", "deleteAll, forged"})
+		@DisplayName("인증_토큰이없거나틀리면_다섯API모두401이다")
 		void anyApi_noOrBadToken_unauthorized(String api, String token) throws Exception {
 			String bearer = token.equals("none") ? null : token;
 			String thread = threadId();
@@ -687,6 +810,8 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 			HttpResponse<String> response = switch (api) {
 				case "list" -> send("GET", BASE, bearer, null);
 				case "thread" -> send("GET", BASE + "/" + thread, bearer, null);
+				case "delete" -> send("DELETE", BASE + "/" + thread, bearer, null);
+				case "deleteAll" -> send("DELETE", BASE, bearer, null);
 				default -> put(bearer, thread, id, newTurn(id, AT, "카페"));
 			};
 
@@ -696,8 +821,8 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 		/** 탈퇴 전에 thread 하나와 turn 하나를 저장해 둔다. 이 밖의 판단(404, 400, 409)보다 401이 먼저다 */
 		@ParameterizedTest
 		@ValueSource(strings = {"list", "badCursor", "storedThread", "missingThread", "badThreadId", "brokenBody",
-				"followUp"})
-		@DisplayName("인증_탈퇴한사용자는_목록_틀린cursor_있는thread_없는thread_틀린id_깨진본문_정상추가모두401이다")
+				"followUp", "delete", "deleteBadId", "deleteAll"})
+		@DisplayName("인증_탈퇴한사용자는_목록_틀린cursor_있는thread_없는thread_틀린id_깨진본문_정상추가_지우기모두401이다")
 		void anyApi_withdrawnUser_unauthorizedFirst(String request) throws Exception {
 			String token = signIn(0);
 			String thread = threadId();
@@ -713,6 +838,9 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 				case "missingThread" -> send("GET", BASE + "/" + threadId(), token, null);
 				case "badThreadId" -> send("GET", BASE + "/thread-ABC", token, null);
 				case "brokenBody" -> put(token, thread, next, "{");
+				case "delete" -> send("DELETE", BASE + "/" + thread, token, null);
+				case "deleteBadId" -> send("DELETE", BASE + "/thread-ABC", token, null);
+				case "deleteAll" -> send("DELETE", BASE, token, null);
 				default -> put(token, thread, next, turn(next, "followUp", id, AT, "카페"));
 			};
 
@@ -891,10 +1019,13 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 					send("GET", BASE + "?cursor=x", token, null),
 					send("GET", BASE + "/" + thread, token, null),
 					send("GET", BASE + "/" + threadId(), token, null),
-					send("GET", BASE, null, null));
+					send("GET", BASE, null, null),
+					send("DELETE", BASE + "/thread-ABC", token, null),
+					send("DELETE", BASE + "/" + thread, token, null),
+					send("DELETE", BASE, token, null));
 
 			assertThat(responses).extracting(HttpResponse::statusCode).containsExactly(204, 409, 400, 200, 400, 200,
-					404, 401);
+					404, 401, 400, 204, 204);
 			assertThat(responses).allSatisfy(response ->
 					assertThat(response.headers().firstValue("Cache-Control")).hasValue("no-store"));
 		}
