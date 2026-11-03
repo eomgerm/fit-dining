@@ -200,6 +200,11 @@ AC-9 ~ AC-12가 규칙이다(D-6). 요약하면 다음과 같다.
 | `facilities` | jsonb 객체. `places.facilities`(네이버 이름)에 `주차` 또는 `발렛파킹`이 있으면 `"PARKING": true`, `무선 인터넷`이면 `"WIFI": true`, `단체 이용 가능`이면 `"GROUP": true`, `예약`이면 `"RESERVATION": true`. 해당 이름이 없는 코드는 키가 없다 |
 | `profile` | jsonb 객체 `{"schema": "place-profile/v0", "summary": {"text": place_profiles.summary_text}, "features": place_profiles.features, "embedding": {"model": "dragonkue/snowflake-arctic-embed-l-v2.0-ko", "revision": "55ec6e9358a56d56af759bc8372e970caf8c305f", "prompt": "document"}}` |
 | `summary_vector` | `place_profiles.summary_vector` 그대로 |
+| `name`, `food_type`, `dong`, `district`, `pet_allowed`, `parking_free`, `corkage_allowed` | `places`의 값 그대로. V17이 뒤에 더했다(`CREATE OR REPLACE VIEW`, AI 검색 2차) |
+| `subways` | jsonb 배열 `[{"station", "exit", "walk_minutes"}]`. `place_subways`를 PK 순서로 모은다. 없으면 `[]`. V17 |
+| `hours` | jsonb 배열 `[{"day", "open", "close", "closed", "breaks"}]`. `place_hours`를 월요일부터 모은다. 시각은 `"HH:MM"`이고 없으면 null이다. 없으면 `[]`. V17 |
+| `menus` | jsonb 배열 `[{"name", "category", "price", "representative"}]`. `place_menus`를 `sort_order` 순서로 모은다. 없으면 `[]`. V17 |
+| `price` | integer. 가게 가격(원)이다. 네이버 리뷰 메뉴로 계산하는 값이라 장소 분석 적재가 채우기 전까지 NULL이다(place-catalog D-4). V17 |
 
 `embedding`의 두 값은 AI 코드의 인코더 상수(`ai/src/fit_ai/embedding.py`)와 같아야 한다. 적재된 벡터가 그 인코더로 만들어졌는지는 이 spec이 보장하지 않는다(D-13, D-15 Default).
 

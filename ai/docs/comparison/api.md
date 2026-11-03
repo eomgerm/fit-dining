@@ -1,6 +1,6 @@
 # AI 검색 API 명세
 
-Status: 초안 v0.5 · Jira: S15P31A302-41 · 작성일: 2026-10-23 · 고친 날: 2026-10-30
+Status: 초안 v0.6 · Jira: S15P31A302-41, S15P31A302-136 · 작성일: 2026-10-23 · 고친 날: 2026-11-02
 
 BE는 검색 첫 페이지마다 AI를 한 번 부른다. AI는 요청을 해석하고 DB에서 후보를 뽑아 정렬한 뒤 카드의 AI 필드를 돌려준다. BE는 카드에 장소 정보와 영업 상태를 붙여 FE에 준다.
 
@@ -29,7 +29,7 @@ JSON 이름은 camelCase다. 요청에 모르는 속성이 있으면 400이고(�
 | --- | --- | --- | --- |
 | `query` | O | 요청문. 1~200자, 공백만은 안 된다 | `query` |
 | `previousConditions` | | 후속 검색이면 직전 응답의 `conditions`. 읽지 못하면 새 검색으로 본다 | `previousConditions` |
-| `mapBounds` | | 지도 영역(숫자). 있으면 역 대신 이 영역으로 거른다. 빠진 값은 제한하지 않고 `{}`는 없는 것으로 본다 | `mapBounds` |
+| `mapBounds` | | 지도 영역(숫자). 이번 요청문에 지역이 없으면 이전 요청의 지역 대신 이 영역으로 거른다. 요청문에 지역이 있으면 그 지역이 앞선다(v0.6). 빠진 값은 제한하지 않고 `{}`는 없는 것으로 본다 | `mapBounds` |
 | `userId` | | 회원 id(1~64자). BE가 로그인으로 확인한 id만 보낸다. 있으면 AI가 회원 취향(`user_preferences`)을 직접 읽고 `tasteProfile`은 읽지 않는다. 취향이 저장돼 있지 않으면 취향 없이 정렬한다 | 로그인 사용자 |
 | `tasteProfile` | | 비회원 취향. 기기가 저장한 온보딩 답을 BE가 그대로 넘긴다(아래 예). 없으면 취향 없이 정렬한다. 모양이 틀리면 취향 없이 정렬하고 `TASTE_INVALID`를 담는다 | 없음(5장) |
 
@@ -52,6 +52,14 @@ JSON 이름은 camelCase다. 요청에 모르는 속성이 있으면 400이고(�
 - 모양이 틀린 경우: 모르는 필드(`features` 포함), 목록에 없는 값, 칩 20개 초과, 문구 1~100자 밖, 벡터 길이가 1024가 아님
 
 `conditions`에는 해석 결과만 있다. 후속 검색 때도 `userId`(또는 `tasteProfile`)와 `mapBounds`는 다시 보내야 한다. BE의 `preferences`와 `cursor`는 null이라도 넣으면 400이므로 AI 요청용 DTO를 따로 둔다.
+
+v0.6부터 `conditions`에 분류별 조각(`locations`, `menus`, `hours`, `price`, `placeName`, `features`, `avoidCategories`)이 붙는다. 뜻은 [spec.md](spec.md) 4.1절에 있다. null인 조각은 빠지고 빈 목록은 그대로 온다. BE와 FE는 지금처럼 해석하지 않고 돌려보내면 되고, 조각이 없는 v0.5 이전 `conditions`도 그대로 읽는다. 아래 예시는 v0.5 필드만 적었다.
+
+```json
+"conditions": {"text": "션릉역이나 역삼역 걸어서 5분 3만원 이하 초밥 매운 거 말고", "embeddingText": "3만원 이하 초밥", "codes": ["FOOD_JAPANESE"], "categoryGroup": "RESTAURANT", "station": "SEOLLEUNG", "nearby": false, "locations": [{"text": "션릉역", "kind": "STATION", "value": "선릉역"}, {"text": "역삼역 걸어서 5분", "kind": "STATION", "value": "역삼역", "walkMinutes": 5}], "menus": [{"text": "초밥", "value": "초밥", "code": "FOOD_JAPANESE", "want": true}, {"text": "매운 거", "value": "매운 음식", "code": "FOOD_SPICY", "want": false}], "hours": [], "price": {"text": "3만원 이하", "maxWon": 30000, "cheap": false}, "features": [], "avoidCategories": []}
+```
+
+AI는 `previousConditions`의 모르는 필드를 거부한다. 그래서 v0.6을 배포한 뒤 v0.5로 되돌리면, 조각이 붙은 `conditions`로 하는 후속 검색은 새 검색으로 바뀐다(`PREVIOUS_INVALID`).
 
 ### 응답
 
@@ -143,7 +151,7 @@ BE는 검색마다 `modal_llm_calls_total`과 `modal_embedding_calls_total`을 �
 
 #### 결과 없음
 
-뽑힌 장소가 없으면 `items`가 비고 `emptyReason`이 붙는다. `rankedBy`는 빠진다.
+뽑힌 장소가 없으면 `items`가 비고 `emptyReason`이 붙는다. `rankedBy`는 빠진다. 장소 데이터가 없는 지역(서비스 역 밖의 역·동, 랜드마크)이면 `cause`가 "코엑스는 아직 준비 중인 지역이에요"다(v0.6).
 
 ```json
 {"query": "선릉역 주차되는 카페"}
