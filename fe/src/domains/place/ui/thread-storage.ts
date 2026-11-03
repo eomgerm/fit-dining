@@ -29,7 +29,8 @@ import {
 // 검색 thread 저장소. 화면은 이 모듈로만 thread를 읽고 쓴다(search-thread D-9).
 // 검색을 시작할 때의 세션 키로 저장 위치를 고른다. 회원이면 서버, 비회원이면 기기, 아직 모르면 저장하지 않는다(D-6).
 // 회원 turn은 thread마다 만든 순서대로 하나씩 보내고, 연결 오류와 5xx만 같은 id로 정해진 횟수까지 다시 보낸다(D-5).
-// 대기분은 메모리에만 있어 세션이 바뀌거나 페이지가 끝나면 버린다. 개수 제한과 보관 기한은 없다(D-12).
+// 대기분은 메모리에만 있어 세션이 바뀌거나 페이지가 끝나면 버린다. 보관 기한은 없다(D-12).
+// thread는 회원(서버)과 비회원(기기) 모두 최근 20개만 남는다(D-19).
 // 사용자가 최근 검색에서 지운 thread는 그 페이지 세션 동안 다시 저장하지 않는다(D-18)
 
 export type MemberKey = { kind: "member"; userId: string; sessionId: string };
@@ -55,6 +56,9 @@ const GUEST: SessionKey = { kind: "guest" };
 // 주인 표시 없이 쌓인 예전 기기 기록. 읽지도 올리지도 않고 지운다(D-8)
 const LEGACY_KEY = "fit-dining:search-threads";
 const GUEST_KEY = "fit-dining:guest-search-threads";
+
+// 기기에 남기는 thread 수. 서버(BE MAX_THREADS)와 같다(D-19)
+const MAX_THREADS = 20;
 
 // 재전송 사이의 기다림. 길이가 다시 보내는 횟수다
 const RETRY_DELAYS_MS = [1_000, 3_000, 9_000];
@@ -88,7 +92,11 @@ function saveDeviceTurn(threadId: string, turn: ThreadTurn) {
     threadId,
     turn,
   );
-  const others = threads.filter(({ id }) => id !== threadId);
+  // 지금 thread는 남기고, 나머지는 최근 것부터 상한까지만 둔다
+  const others = sortThreads(threads.filter(({ id }) => id !== threadId)).slice(
+    0,
+    MAX_THREADS - 1,
+  );
   try {
     localStorage.setItem(GUEST_KEY, JSON.stringify([thread, ...others]));
   } catch {

@@ -204,6 +204,33 @@ describe("비회원", () => {
     expect(stored.map(({ id }: { id: string }) => id)).toEqual(["thread-1"]);
   });
 
+  it("thread가 상한 20개를 넘으면 가장 오래된 것부터 빼고, 지금 thread는 시각이 가장 일러도 남긴다(D-19)", async () => {
+    const { begin, save } = await load();
+    const at = (index: number) => 1_761_700_000_000 + index;
+    for (let index = 0; index <= 20; index += 1) {
+      save(begin(), `thread-${index}`, {
+        ...turn(`entry-${index}`),
+        at: at(index),
+      });
+    }
+    await flush();
+
+    const ids = () =>
+      JSON.parse(localStorage.getItem("fit-dining:guest-search-threads")!).map(
+        ({ id }: { id: string }) => id,
+      );
+    expect(ids()).toHaveLength(20);
+    expect(ids()).not.toContain("thread-0");
+    expect(ids()).toContain("thread-20");
+
+    save(begin(), "thread-past", { ...turn("entry-past"), at: at(-1) });
+    await flush();
+
+    expect(ids()).toHaveLength(20);
+    expect(ids()).toContain("thread-past");
+    expect(ids()).not.toContain("thread-1");
+  });
+
   it("저장소가 가득 차면 새 기록은 남지 않고 옛 기록은 그대로다", async () => {
     const { begin, save } = await load();
     save(begin(), "thread-1", turn("entry-1"));
