@@ -276,10 +276,19 @@ async function openRecent() {
   return screen.findByRole("dialog", { name: "최근 검색" });
 }
 
+// 줄마다 지우기 버튼이 따로 있어 줄을 여는 버튼만 고른다
 const rowsOf = (sheet: HTMLElement) =>
-  within(
-    within(sheet).getByRole("list", { name: "최근 검색 목록" }),
-  ).getAllByRole("button");
+  within(within(sheet).getByRole("list", { name: "최근 검색 목록" }))
+    .getAllByRole("button")
+    .filter((button) => !button.hasAttribute("aria-label"));
+
+function rowOf(sheet: HTMLElement, title: string) {
+  const row = rowsOf(sheet).find((button) =>
+    button.textContent?.startsWith(title),
+  );
+  if (!row) throw new Error(`최근 검색에 ${title} 줄이 없다`);
+  return row;
+}
 
 const firstScreen = () =>
   waitFor(() =>
@@ -555,7 +564,7 @@ describe("회원 최근 검색 시트", () => {
 
     const sheet = await openRecent();
     await waitFor(() => expect(rowsOf(sheet)).toHaveLength(2));
-    fireEvent.click(within(sheet).getByRole("button", { name: /강남 술집/ }));
+    fireEvent.click(rowOf(sheet, "강남 술집"));
     expect(await within(sheet).findByText("불러오는 중")).toBeTruthy();
     expect(
       screen.getByRole("heading", { name: "“역삼 카페”", hidden: true }),
@@ -595,7 +604,7 @@ describe("회원 최근 검색 시트", () => {
 
     const sheet = await openRecent();
     await waitFor(() => expect(rowsOf(sheet)).toHaveLength(2));
-    fireEvent.click(within(sheet).getByRole("button", { name: /강남 술집/ }));
+    fireEvent.click(rowOf(sheet, "강남 술집"));
     expect(
       await within(sheet).findByText("불러오지 못했어요. 눌러서 다시 시도"),
     ).toBeTruthy();
@@ -603,7 +612,7 @@ describe("회원 최근 검색 시트", () => {
       screen.getByRole("heading", { name: "“역삼 카페”", hidden: true }),
     ).toBeTruthy();
     fail = false;
-    fireEvent.click(within(sheet).getByRole("button", { name: /강남 술집/ }));
+    fireEvent.click(rowOf(sheet, "강남 술집"));
 
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "“강남 술집”" })).toBeTruthy(),
@@ -619,8 +628,8 @@ describe("회원 최근 검색 시트", () => {
 
     let sheet = await openRecent();
     await waitFor(() => expect(rowsOf(sheet)).toHaveLength(2));
-    fireEvent.click(within(sheet).getByRole("button", { name: /강남 술집/ }));
-    fireEvent.click(within(sheet).getByRole("button", { name: /홍대 카페/ }));
+    fireEvent.click(rowOf(sheet, "강남 술집"));
+    fireEvent.click(rowOf(sheet, "홍대 카페"));
     gate.release();
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "“홍대 카페”" })).toBeTruthy(),
@@ -631,7 +640,7 @@ describe("회원 최근 검색 시트", () => {
     server.gate.thread = gate.promise;
     sheet = await openRecent();
     await waitFor(() => expect(rowsOf(sheet)).toHaveLength(2));
-    fireEvent.click(within(sheet).getByRole("button", { name: /강남 술집/ }));
+    fireEvent.click(rowOf(sheet, "강남 술집"));
     // 닫히는 애니메이션 동안 응답이 와도 반영하지 않는다
     fireEvent.keyDown(sheet, { key: "Escape" });
     gate.release();
@@ -669,7 +678,7 @@ describe("회원 최근 검색 시트", () => {
 
     const sheet = await openRecent();
     await waitFor(() => expect(rowsOf(sheet)).toHaveLength(2));
-    fireEvent.click(within(sheet).getByRole("button", { name: /역삼 카페/ }));
+    fireEvent.click(rowOf(sheet, "역삼 카페"));
 
     await waitFor(() =>
       expect(searchStore.getSnapshot().threadId).toBe(thread),

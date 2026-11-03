@@ -53,3 +53,19 @@ export function putTurn(
     { method: "PUT", body: turn, headers: auth(accessToken) },
   );
 }
+
+// thread 하나와 그 turn을 지운다. 내 계정에 없어도 성공이다(D-18)
+export function deleteThread(threadId: string, accessToken: string) {
+  return request<void>(
+    `/v1/me/search-threads/${encodeURIComponent(threadId)}`,
+    { method: "DELETE", headers: auth(accessToken) },
+  );
+}
+
+// 내 검색 기록을 모두 지운다
+export function deleteAllThreads(accessToken: string) {
+  return request<void>("/v1/me/search-threads", {
+    method: "DELETE",
+    headers: auth(accessToken),
+  });
+}

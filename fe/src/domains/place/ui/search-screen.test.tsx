@@ -1477,6 +1477,12 @@ describe("SearchScreen", () => {
         return screen.findByRole("dialog", { name: "최근 검색" });
       }
 
+      // 줄마다 지우기 버튼이 따로 있어 줄을 여는 버튼만 고른다
+      const recentRows = (sheet: HTMLElement) =>
+        within(within(sheet).getByRole("list", { name: "최근 검색 목록" }))
+          .getAllByRole("button")
+          .filter((button) => !button.hasAttribute("aria-label"));
+
       it("기록이 없으면 빈 안내를 보인다", async () => {
         renderScreen();
 
@@ -1501,7 +1507,7 @@ describe("SearchScreen", () => {
         renderScreen();
         const sheet = await openRecent();
 
-        const rows = within(sheet).getAllByRole("button");
+        const rows = recentRows(sheet);
         expect(rows).toHaveLength(1);
         expect(within(rows[0]).getByText("역삼 카페")).toBeTruthy();
         expect(
@@ -1526,7 +1532,7 @@ describe("SearchScreen", () => {
           previousConditions: { area: "역삼", quiet: true },
         });
         const reopened = await openRecent();
-        expect(within(reopened).getAllByRole("button")).toHaveLength(1);
+        expect(recentRows(reopened)).toHaveLength(1);
         expect(within(reopened).getByText("보는 중")).toBeTruthy();
       });
 
@@ -1543,7 +1549,7 @@ describe("SearchScreen", () => {
         fireEvent.click(screen.getByRole("button", { name: "요청 기록" }));
 
         const sheet = await openRecent();
-        const rows = within(sheet).getAllByRole("button");
+        const rows = recentRows(sheet);
         expect(rows.map((row) => row.textContent)).toEqual([
           expect.stringMatching(/^강남 술집보는 중/),
           expect.stringMatching(/^역삼 카페오늘/),
@@ -1558,7 +1564,9 @@ describe("SearchScreen", () => {
 
         const sheet = await openRecent();
         fireEvent.click(
-          within(sheet).getByRole("button", { name: /역삼 카페/ }),
+          recentRows(sheet).find((row) =>
+            row.textContent?.startsWith("역삼 카페"),
+          )!,
         );
 
         await waitFor(() =>

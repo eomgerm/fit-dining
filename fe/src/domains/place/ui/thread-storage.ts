@@ -1,9 +1,15 @@
-import { useInfiniteQuery } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useQueryClient,
+  type InfiniteData,
+} from "@tanstack/react-query";
 import { useId, useRef, useState } from "react";
 
 import { isApiError } from "@/shared/api/api-error";
 
 import {
+  deleteAllThreads,
+  deleteThread,
   fetchThread,
   fetchThreadPage,
   putTurn,
@@ -23,7 +29,8 @@ import {
 // 검색 thread 저장소. 화면은 이 모듈로만 thread를 읽고 쓴다(search-thread D-9).
 // 검색을 시작할 때의 세션 키로 저장 위치를 고른다. 회원이면 서버, 비회원이면 기기, 아직 모르면 저장하지 않는다(D-6).
 // 회원 turn은 thread마다 만든 순서대로 하나씩 보내고, 연결 오류와 5xx만 같은 id로 정해진 횟수까지 다시 보낸다(D-5).
-// 대기분은 메모리에만 있어 세션이 바뀌거나 페이지가 끝나면 버린다. 개수 제한과 지우기 규칙은 없다(D-12)
+// 대기분은 메모리에만 있어 세션이 바뀌거나 페이지가 끝나면 버린다. 개수 제한과 보관 기한은 없다(D-12).
+// 사용자가 최근 검색에서 지운 thread는 그 페이지 세션 동안 다시 저장하지 않는다(D-18)
 
 export type MemberKey = { kind: "member"; userId: string; sessionId: string };
 
@@ -93,7 +100,13 @@ function deviceSummaries() {
   return sortThreads(readDevice()).map(summarizeThread);
 }
 
-type TurnQueue = { turns: ThreadTurn[]; running: boolean; failed: boolean };
+type TurnQueue = {
+  turns: ThreadTurn[];
+  running: boolean;
+  // 보내는 중일 때, 대기열이 빌 때까지
+  idle?: Promise<void>;
+  failed: boolean;
+};
 
 // 세션이 바뀌면 올린다. 그 전에 시작한 저장은 끝나도 아무것도 하지 않는다
 let generation = 0;
@@ -102,6 +115,9 @@ let pageEnded = false;
 let watchingPage = false;
 // 세션 키와 thread별 대기열. 끝내 실패한 thread는 페이지 세션이 끝날 때까지 뒤 turn을 보내지 않는다
 const queues = new Map<string, TurnQueue>();
+// 이 페이지 세션에서 저장하거나 연 thread와, 그중 사용자가 지운 thread. 키는 storeId다
+const touched = new Set<string>();
+const removed = new Set<string>();
 // 저장 위치를 확인하는 동안에도 turn이 만든 순서대로 대기열에 들어가게 잇는다
 let ordering: Promise<void> = Promise.resolve();
 
@@ -122,6 +138,15 @@ function watchPage() {
 export function resetThreadSession() {
   generation += 1;
   queues.clear();
+  touched.clear();
+  removed.clear();
+}
+
+// 세션 키와 thread를 함께 가리키는 키. 회원은 세션마다 따로다
+function storeId(key: SessionKey, threadId: string) {
+  return key.kind === "member"
+    ? `${key.userId}\n${key.sessionId}\n${threadId}`
+    : `${key.kind}\n${threadId}`;
 }
 
 // 검색을 시작할 때 저장 위치(세션 키)를 확인하기 시작한다. 인증이 이어지지 않은 화면은 비회원이다
@@ -145,6 +170,10 @@ export function saveTurn(
   ordering = ordering.then(async () => {
     const key = await target;
     if (started !== generation || pageEnded) return;
+    const id = storeId(key, threadId);
+    touched.add(id);
+    // 지운 thread는 화면에 남아 있어도 이어 검색을 저장하지 않는다(D-18)
+    if (removed.has(id)) return;
     if (key.kind === "guest") saveDeviceTurn(threadId, stored);
     if (key.kind === "member" && auth) enqueue(auth, key, threadId, stored);
   });
@@ -156,12 +185,13 @@ function enqueue(
   threadId: string,
   turn: ThreadTurn,
 ) {
-  const id = `${key.userId}\n${key.sessionId}\n${threadId}`;
+  const id = storeId(key, threadId);
   const queue = queues.get(id) ?? { turns: [], running: false, failed: false };
   queues.set(id, queue);
   if (queue.failed) return;
   queue.turns.push(turn);
-  if (!queue.running) void drain(auth, key, threadId, queue, generation);
+  if (!queue.running)
+    queue.idle = drain(auth, key, threadId, queue, generation);
 }
 
 async function drain(
@@ -217,7 +247,80 @@ async function send(
         return "failed";
     }
     await wait(RETRY_DELAYS_MS[attempt]);
-    if (started !== generation || pageEnded) return "stopped";
+    if (
+      started !== generation ||
+      pageEnded ||
+      removed.has(storeId(key, threadId))
+    )
+      return "stopped";
+  }
+}
+
+// 지울 thread의 대기분을 버리고, 보내는 중인 저장이 있으면 끝날 때까지 기다린다.
+// 늦게 도착한 저장이 지운 기록을 되살리지 않게 한다(D-18)
+async function settle(ids: string[]) {
+  const sending: Promise<void>[] = [];
+  for (const id of ids) {
+    const queue = queues.get(id);
+    if (!queue) continue;
+    queue.turns = [];
+    if (queue.running && queue.idle) sending.push(queue.idle);
+  }
+  await Promise.all(sending);
+}
+
+function forget(key: SessionKey, threadIds: string[]) {
+  const ids = threadIds.map((threadId) => storeId(key, threadId));
+  const added = ids.filter((id) => !removed.has(id));
+  added.forEach((id) => removed.add(id));
+  // 지우지 못하면 그 thread는 계속 저장한다
+  return { ids, restore: () => added.forEach((id) => removed.delete(id)) };
+}
+
+// 최근 검색에서 thread 하나를 지운다. 회원은 서버에서, 비회원은 기기에서 지운다(D-18)
+export async function removeThread(
+  key: SessionKey,
+  threadId: string,
+  auth?: ThreadAuth,
+) {
+  const { ids, restore } = forget(key, [threadId]);
+  try {
+    if (key.kind === "guest") {
+      const threads = readDevice().filter(({ id }) => id !== threadId);
+      localStorage.setItem(GUEST_KEY, JSON.stringify(threads));
+      return;
+    }
+    if (key.kind === "unknown" || !auth)
+      throw new Error("로그인 상태를 확인하지 못했어요");
+    await settle(ids);
+    await auth.send(key, (accessToken) => deleteThread(threadId, accessToken));
+  } catch (error) {
+    restore();
+    throw error;
+  }
+}
+
+// 최근 검색을 모두 지운다. 이 페이지 세션에서 저장하거나 연 thread도 다시 저장하지 않는다(D-18)
+export async function removeAllThreads(key: SessionKey, auth?: ThreadAuth) {
+  // 앞서 시작한 저장이 대기열에 들어간 뒤에 고른다
+  await ordering;
+  const prefix = storeId(key, "");
+  const threadIds = [...touched]
+    .filter((id) => id.startsWith(prefix))
+    .map((id) => id.slice(prefix.length));
+  const { ids, restore } = forget(key, threadIds);
+  try {
+    if (key.kind === "guest") {
+      localStorage.removeItem(GUEST_KEY);
+      return;
+    }
+    if (key.kind === "unknown" || !auth)
+      throw new Error("로그인 상태를 확인하지 못했어요");
+    await settle(ids);
+    await auth.send(key, (accessToken) => deleteAllThreads(accessToken));
+  } catch (error) {
+    restore();
+    throw error;
   }
 }
 
@@ -242,8 +345,10 @@ export function useThreadList(auth?: ThreadAuth) {
   const source = useRef<SessionKey>(opened);
   // 시트를 열 때마다 새 키라 이전에 열었을 때 받은 페이지를 쓰지 않는다
   const openId = useId();
+  const queryKey = ["search-threads", "list", openId];
+  const queryClient = useQueryClient();
   const query = useInfiniteQuery({
-    queryKey: ["search-threads", "list", openId],
+    queryKey,
     queryFn: async ({ pageParam, signal }): Promise<ThreadPage> => {
       const key =
         source.current.kind === "unknown" && auth
@@ -278,11 +383,41 @@ export function useThreadList(auth?: ThreadAuth) {
       const [thread] = parseThreads(JSON.stringify([data]));
       if (thread?.id !== threadId)
         throw new Error("검색 기록이 올바르지 않아요");
+      touched.add(storeId(key, threadId));
       return thread;
     }
     const thread = readDevice().find(({ id }) => id === threadId);
     if (!thread) throw new Error("검색 기록을 찾지 못했어요");
+    touched.add(storeId(key, threadId));
     return thread;
+  }
+
+  // 지운 뒤 다시 받지 않고 받은 목록에서 뺀다. 남은 줄의 cursor는 그대로 쓸 수 있다
+  function drop(keep: (item: ThreadSummary) => boolean) {
+    queryClient.setQueryData<InfiniteData<ThreadPage>>(
+      queryKey,
+      (data) =>
+        data && {
+          ...data,
+          pages: data.pages.map((page) => ({
+            ...page,
+            items: page.items.filter(keep),
+          })),
+        },
+    );
+  }
+
+  async function remove(threadId: string) {
+    await removeThread(source.current, threadId, auth);
+    drop(({ id }) => id !== threadId);
+  }
+
+  async function removeAll() {
+    await removeAllThreads(source.current, auth);
+    queryClient.setQueryData<InfiniteData<ThreadPage>>(queryKey, {
+      pages: [{ items: [] }],
+      pageParams: [undefined],
+    });
   }
 
   let state: ThreadListState;
@@ -304,5 +439,5 @@ export function useThreadList(auth?: ThreadAuth) {
   } else {
     state = { status: "loading" };
   }
-  return { state, load };
+  return { state, load, remove, removeAll };
 }

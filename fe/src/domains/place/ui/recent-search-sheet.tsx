@@ -2,11 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { Button } from "@/shared/ui/button/button";
+import { IconButton } from "@/shared/ui/button/icon-button";
 import { TextButton } from "@/shared/ui/button/text-button";
 import { Badge } from "@/shared/ui/display/badge";
-import { ChevronRightIcon } from "@/shared/ui/icon/icons/chevron-right";
+import { CloseIcon } from "@/shared/ui/icon/icons/close";
 import { HistoryIcon } from "@/shared/ui/icon/icons/history";
+import { TrashIcon } from "@/shared/ui/icon/icons/trash";
 import { BottomSheet } from "@/shared/ui/overlay/bottom-sheet";
+import { ConfirmDialog } from "@/shared/ui/overlay/confirm-dialog";
+import { useToast } from "@/shared/ui/overlay/toast";
 
 import { formatRecentAt, type SearchThread } from "../model/search-threads";
 import { LoadFailed } from "./load-failed";
@@ -42,6 +47,7 @@ export function RecentSearchSheet({
 
 const EMPTY_MESSAGE =
   "아직 검색한 요청이 없어요. 원하는 분위기나 목적을 말해 보세요.";
+const REMOVE_FAILED = "지우지 못했어요. 다시 시도해 주세요.";
 
 // 시트가 열릴 때마다 새로 그려져 목록을 첫 페이지부터 다시 받고, "오늘"을 가르는 기준 시각도 그때 잡는다
 function ThreadList({
@@ -53,7 +59,8 @@ function ThreadList({
 }: Omit<RecentSearchSheetProps, "onOpenChange"> & {
   onClose: () => void;
 }) {
-  const { state, load } = useThreadList(threadAuth);
+  const { state, load, remove, removeAll } = useThreadList(threadAuth);
+  const toast = useToast();
   const [now] = useState(() => Date.now());
   // 받는 중이거나 받지 못한 줄. 받는 동안 다른 줄을 고르면 마지막 것만 반영한다
   const [picking, setPicking] = useState<{
@@ -61,6 +68,10 @@ function ThreadList({
     status: "loading" | "failed";
   }>();
   const pickController = useRef<AbortController | undefined>(undefined);
+  // 지우는 중인 줄. 지운 뒤에도 뒤 화면은 그대로다(D-18)
+  const [removing, setRemoving] = useState<ReadonlySet<string>>(new Set());
+  const [confirmingAll, setConfirmingAll] = useState(false);
+  const [removingAll, setRemovingAll] = useState(false);
 
   // 시트를 닫으면 받던 thread를 버린다. 닫히는 애니메이션 동안에도 내용이 남아 있으므로 닫히는 순간 끊는다
   useEffect(() => {
@@ -88,93 +99,192 @@ function ThreadList({
     }
   }
 
-  if (state.status === "loading") {
-    return (
-      <p aria-busy className="pt-4 pb-6 text-body-sm text-ink-muted">
-        최근 검색을 불러오는 중이에요
-      </p>
-    );
+  async function handleRemove(id: string) {
+    if (picking?.id === id) {
+      pickController.current?.abort();
+      setPicking(undefined);
+    }
+    setRemoving((ids) => new Set(ids).add(id));
+    try {
+      await remove(id);
+    } catch {
+      toast(REMOVE_FAILED);
+    } finally {
+      setRemoving((ids) => {
+        const next = new Set(ids);
+        next.delete(id);
+        return next;
+      });
+    }
   }
-  if (state.status === "failed") {
-    return (
-      <LoadFailed
-        error={state.error}
-        title="최근 검색을 불러오지 못했어요"
-        onRetry={state.retry}
-        className="mb-6"
-      />
-    );
+
+  async function handleRemoveAll() {
+    pickController.current?.abort();
+    setPicking(undefined);
+    setRemovingAll(true);
+    try {
+      await removeAll();
+    } catch {
+      toast(REMOVE_FAILED);
+    } finally {
+      setRemovingAll(false);
+      setConfirmingAll(false);
+    }
   }
-  if (state.items.length === 0) {
-    return (
-      <p className="pt-4 pb-6 text-body-sm text-ink-muted">{EMPTY_MESSAGE}</p>
-    );
-  }
+
   return (
     <>
-      <ul
-        aria-label="최근 검색 목록"
-        className="flex flex-col divide-y divide-line"
-      >
-        {state.items.map((thread) => {
-          const loading =
-            picking?.id === thread.id && picking.status === "loading";
-          const failed =
-            picking?.id === thread.id && picking.status === "failed";
-          return (
-            <li key={thread.id}>
-              <button
-                type="button"
-                aria-busy={loading}
-                onClick={() => handlePick(thread.id)}
-                // 구분선 1px을 더해 줄 높이가 56px이다(4-02)
-                className="flex min-h-13.75 w-full items-center gap-3 py-1.5 text-left active:bg-surface-sunken"
-              >
-                <HistoryIcon size="md" className="text-icon-subtle" />
-                <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="flex items-center gap-2 text-body-md leading-5.5 text-ink">
-                    <span className="truncate">{thread.title}</span>
-                    {thread.id === currentThreadId && <Badge>보는 중</Badge>}
-                  </span>
-                  {loading ? (
-                    <span className="text-caption-sm text-ink-muted">
-                      불러오는 중
-                    </span>
-                  ) : failed ? (
-                    <span role="alert" className="text-caption-sm text-danger">
-                      불러오지 못했어요. 눌러서 다시 시도
-                    </span>
-                  ) : (
-                    <span className="text-caption-sm text-ink-muted">
-                      {formatRecentAt(thread.lastAt, now)}
-                    </span>
-                  )}
-                </span>
-                <ChevronRightIcon size="md" className="text-icon-subtle" />
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-      {state.hasMore &&
-        (state.loadMoreFailed ? (
-          <div className="flex items-center justify-between gap-2 py-2">
-            <p role="alert" className="text-body-sm text-danger">
-              최근 검색을 더 불러오지 못했어요
-            </p>
-            <TextButton onClick={state.loadMore}>다시 시도</TextButton>
-          </div>
-        ) : (
-          <div className="flex justify-center py-2">
-            <TextButton
-              onClick={state.loadMore}
-              disabled={state.loadingMore}
-              aria-busy={state.loadingMore}
-            >
-              더 보기
-            </TextButton>
-          </div>
-        ))}
+      {renderList()}
+      <ConfirmDialog
+        open={confirmingAll}
+        onOpenChange={(next) => {
+          if (!next && !removingAll) setConfirmingAll(false);
+        }}
+        tone="danger"
+        icon={<TrashIcon />}
+        title="최근 검색을 모두 지울까요?"
+        description={
+          <>
+            검색 기록은 복구할 수 없어요.
+            {/* 창 밖은 가려져 있어 창 안에서 알린다 */}
+            <span role="status" className="sr-only">
+              {removingAll ? "최근 검색을 지우고 있어요" : ""}
+            </span>
+          </>
+        }
+        secondaryAction={
+          <Button
+            variant="outline"
+            size="md"
+            disabled={removingAll}
+            focusableWhenDisabled
+            onClick={() => setConfirmingAll(false)}
+          >
+            취소
+          </Button>
+        }
+        action={
+          <Button
+            variant="danger"
+            size="md"
+            disabled={removingAll}
+            focusableWhenDisabled
+            aria-busy={removingAll}
+            onClick={handleRemoveAll}
+          >
+            {removingAll ? "삭제하는 중" : "삭제"}
+          </Button>
+        }
+      />
     </>
   );
+
+  function renderList() {
+    if (state.status === "loading") {
+      return (
+        <p aria-busy className="pt-4 pb-6 text-body-sm text-ink-muted">
+          최근 검색을 불러오는 중이에요
+        </p>
+      );
+    }
+    if (state.status === "failed") {
+      return (
+        <LoadFailed
+          error={state.error}
+          title="최근 검색을 불러오지 못했어요"
+          onRetry={state.retry}
+          className="mb-6"
+        />
+      );
+    }
+    if (state.items.length === 0) {
+      return (
+        <p className="pt-4 pb-6 text-body-sm text-ink-muted">{EMPTY_MESSAGE}</p>
+      );
+    }
+    return (
+      <>
+        <div className="-mt-3 flex justify-end">
+          <TextButton variant="muted" onClick={() => setConfirmingAll(true)}>
+            전체 삭제
+          </TextButton>
+        </div>
+        <ul
+          aria-label="최근 검색 목록"
+          className="flex flex-col divide-y divide-line"
+        >
+          {state.items.map((thread) => {
+            const loading =
+              picking?.id === thread.id && picking.status === "loading";
+            const failed =
+              picking?.id === thread.id && picking.status === "failed";
+            const deleting = removing.has(thread.id);
+            return (
+              <li key={thread.id} className="flex items-center">
+                <button
+                  type="button"
+                  aria-busy={loading}
+                  onClick={() => handlePick(thread.id)}
+                  // 구분선 1px을 더해 줄 높이가 56px이다(4-02)
+                  className="flex min-h-13.75 min-w-0 flex-1 items-center gap-3 py-1.5 text-left active:bg-surface-sunken"
+                >
+                  <HistoryIcon size="md" className="text-icon-subtle" />
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="flex items-center gap-2 text-body-md leading-5.5 text-ink">
+                      <span className="truncate">{thread.title}</span>
+                      {thread.id === currentThreadId && <Badge>보는 중</Badge>}
+                    </span>
+                    {loading ? (
+                      <span className="text-caption-sm text-ink-muted">
+                        불러오는 중
+                      </span>
+                    ) : failed ? (
+                      <span
+                        role="alert"
+                        className="text-caption-sm text-danger"
+                      >
+                        불러오지 못했어요. 눌러서 다시 시도
+                      </span>
+                    ) : (
+                      <span className="text-caption-sm text-ink-muted">
+                        {formatRecentAt(thread.lastAt, now)}
+                      </span>
+                    )}
+                  </span>
+                </button>
+                <IconButton
+                  label={`${thread.title} 검색 기록 지우기`}
+                  disabled={deleting}
+                  focusableWhenDisabled
+                  aria-busy={deleting}
+                  onClick={() => handleRemove(thread.id)}
+                >
+                  <CloseIcon size="md" className="text-icon-subtle" />
+                </IconButton>
+              </li>
+            );
+          })}
+        </ul>
+        {state.hasMore &&
+          (state.loadMoreFailed ? (
+            <div className="flex items-center justify-between gap-2 py-2">
+              <p role="alert" className="text-body-sm text-danger">
+                최근 검색을 더 불러오지 못했어요
+              </p>
+              <TextButton onClick={state.loadMore}>다시 시도</TextButton>
+            </div>
+          ) : (
+            <div className="flex justify-center py-2">
+              <TextButton
+                onClick={state.loadMore}
+                disabled={state.loadingMore}
+                aria-busy={state.loadingMore}
+              >
+                더 보기
+              </TextButton>
+            </div>
+          ))}
+      </>
+    );
+  }
 }

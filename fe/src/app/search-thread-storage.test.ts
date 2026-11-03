@@ -78,14 +78,23 @@ type Responder = (put: Put) => Response | Promise<Response>;
 
 let puts: Put[];
 let responder: Responder;
+// 지우기 요청의 경로. 응답은 deleteResponder가 정한다
+let deletes: string[];
+let deleteResponder: () => Response | Promise<Response>;
 
 function stubFetch() {
   puts = [];
   responder = () => new Response(null, { status: 204 });
+  deletes = [];
+  deleteResponder = () => new Response(null, { status: 204 });
   vi.stubGlobal(
     "fetch",
     vi.fn<typeof fetch>(async (input, init) => {
       const url = String(input);
+      if (init?.method === "DELETE") {
+        deletes.push(url);
+        return deleteResponder();
+      }
       const match = url.match(
         /^\/api\/v1\/me\/search-threads\/([^/]+)\/turns\/([^/]+)$/,
       );
@@ -512,5 +521,116 @@ describe("세션 전환 감지", () => {
     setSession(session("u1", "s1", "renewed"));
 
     expect(queryClient.clear).not.toHaveBeenCalled();
+  });
+});
+
+describe("최근 검색 지우기(D-18)", () => {
+  const member = { kind: "member", userId: "u1", sessionId: "s1" } as const;
+  const guestIds = () =>
+    JSON.parse(
+      localStorage.getItem("fit-dining:guest-search-threads") ?? "[]",
+    ).map(({ id }: { id: string }) => id);
+
+  describe("회원", () => {
+    beforeEach(() => {
+      auth.session = session("u1");
+    });
+
+    it("대기분을 버리고 보내는 중인 저장이 끝난 뒤 지우며, 그 뒤 그 thread의 이어 검색은 저장하지 않는다", async () => {
+      let release: () => void = () => {};
+      responder = ({ turn: id }) =>
+        id === "entry-1"
+          ? new Promise((resolve) => {
+              release = () => resolve(new Response(null, { status: 204 }));
+            })
+          : new Response(null, { status: 204 });
+      const { begin, save, removeThread, threadAuth } = await load();
+      save(begin(), "thread-1", turn("entry-1"));
+      save(begin(), "thread-1", turn("entry-2", "followUp", "entry-1"));
+      await flush();
+
+      const removing = removeThread(member, "thread-1", threadAuth);
+      await flush();
+      expect(deletes).toEqual([]);
+      release();
+      await flush();
+      await removing;
+
+      expect(deletes).toEqual(["/api/v1/me/search-threads/thread-1"]);
+      save(begin(), "thread-1", turn("entry-3", "followUp", "entry-1"));
+      await flush();
+      expect(puts.map(({ turn: id }) => id)).toEqual(["entry-1"]);
+    });
+
+    it("다시 보내려고 기다리던 turn도 지우면 다시 보내지 않는다", async () => {
+      responder = () => problem(503);
+      const { begin, save, removeThread, threadAuth } = await load();
+      save(begin(), "thread-1", turn("entry-1"));
+      await flush();
+
+      const removing = removeThread(member, "thread-1", threadAuth);
+      await vi.advanceTimersByTimeAsync(60_000);
+      await removing;
+
+      expect(puts).toHaveLength(1);
+      expect(deletes).toEqual(["/api/v1/me/search-threads/thread-1"]);
+    });
+
+    it("지우지 못하면 던지고, 그 thread는 계속 저장한다", async () => {
+      deleteResponder = () => problem(500);
+      const { begin, save, removeThread, threadAuth } = await load();
+      save(begin(), "thread-1", turn("entry-1"));
+      await flush();
+
+      await expect(
+        removeThread(member, "thread-1", threadAuth),
+      ).rejects.toBeInstanceOf(ApiError);
+      save(begin(), "thread-1", turn("entry-2", "followUp", "entry-1"));
+      await flush();
+
+      expect(puts.map(({ turn: id }) => id)).toEqual(["entry-1", "entry-2"]);
+    });
+
+    it("모두 지우면 이 페이지에서 저장한 thread는 다시 저장하지 않고, 새 thread는 저장한다", async () => {
+      const { begin, save, removeAllThreads, threadAuth } = await load();
+      save(begin(), "thread-1", turn("entry-1"));
+      await flush();
+
+      await removeAllThreads(member, threadAuth);
+      save(begin(), "thread-1", turn("entry-2", "followUp", "entry-1"));
+      save(begin(), "thread-2", turn("entry-3"));
+      await flush();
+
+      expect(deletes).toEqual(["/api/v1/me/search-threads"]);
+      expect(puts.map(({ turn: id }) => id)).toEqual(["entry-1", "entry-3"]);
+    });
+  });
+
+  describe("비회원", () => {
+    it("지운 thread는 기기에서 빠지고, 그 화면에서 이어 검색해도 다시 생기지 않는다", async () => {
+      const { begin, save, removeThread } = await load();
+      save(begin(), "thread-1", turn("entry-1"));
+      save(begin(), "thread-2", turn("entry-2"));
+      await flush();
+
+      await removeThread({ kind: "guest" }, "thread-1");
+      save(begin(), "thread-1", turn("entry-3", "followUp", "entry-1"));
+      await flush();
+
+      expect(guestIds()).toEqual(["thread-2"]);
+      expect(deletes).toEqual([]);
+    });
+
+    it("모두 지우면 기기 기록을 지운다", async () => {
+      const { begin, save, removeAllThreads } = await load();
+      save(begin(), "thread-1", turn("entry-1"));
+      await flush();
+
+      await removeAllThreads({ kind: "guest" });
+
+      expect(
+        localStorage.getItem("fit-dining:guest-search-threads"),
+      ).toBeNull();
+    });
   });
 });
