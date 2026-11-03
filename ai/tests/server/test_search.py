@@ -47,7 +47,7 @@ from server.common import Dependencies
 
 QUERY_TEXT = "역삼역 조용한 술집 찾아요"
 
-CONDITIONS = Conditions(
+CONDITIONS = Conditions.from_codes(
     text=QUERY_TEXT,
     embedding_text="역삼역 조용한 술집",
     codes=("QUIET",),
@@ -65,17 +65,24 @@ CONDITIONS_BODY = {
 }
 """1차 모양의 조건. 2차에 더한 조각 필드가 없다. 그대로 돌려보낸 이전 조건도 읽어야 한다."""
 
-EMPTY_SEGMENTS_BODY = {
-    "locations": [],
+CONDITIONS_V3_BODY = {
+    "version": 3,
+    "text": QUERY_TEXT,
+    "embeddingText": "역삼역 조용한 술집",
+    "categories": [{"code": "BAR", "want": True}],
+    "foodTypes": [],
+    "flavors": [],
     "menus": [],
+    "features": [
+        {"text": "조용하고 차분한 곳", "value": "조용하고 차분한 곳", "code": "QUIET"}
+    ],
+    "facilities": [],
+    "locations": [{"text": "역삼역", "kind": "STATION", "value": "역삼역"}],
     "hours": [],
-    "features": [],
-    "avoidCategories": [],
-    "avoidFoods": [],
 }
-"""조각이 없을 때 응답 조건에 붙는 필드. null인 조각(`price`, `placeName`)은 빠진다."""
+"""1차 조건(`CONDITIONS`)의 3차 응답 모양. 역은 지역이 된다. null인 값은 빠진다."""
 
-SEGMENT_CONDITIONS = Conditions(
+SEGMENT_CONDITIONS = Conditions.from_codes(
     text="션릉역 새벽까지 하는 3만원 이하 초밥",
     embedding_text="3만원 이하 초밥",
     codes=("QUIET",),
@@ -119,7 +126,26 @@ SEGMENT_BODY = {
     "avoidCategories": ["CAFE"],
     "avoidFoods": ["FOOD_SPICY"],
 }
-"""조각이 있는 조건의 응답 모양. null인 값은 빠진다."""
+"""2차 모양의 조건. 검색 대화에 저장된 이전 조건으로 돌아오므로 읽어야 한다."""
+
+SEGMENT_V3_BODY = {
+    "version": 3,
+    "text": "션릉역 새벽까지 하는 3만원 이하 초밥",
+    "embeddingText": "3만원 이하 초밥",
+    "categories": [
+        {"code": "RESTAURANT", "want": True},
+        {"code": "CAFE", "want": False},
+    ],
+    "foodTypes": [],
+    "flavors": [{"code": "SPICY", "want": False}],
+    "menus": SEGMENT_BODY["menus"],
+    "features": CONDITIONS_V3_BODY["features"],
+    "facilities": [],
+    "locations": SEGMENT_BODY["locations"],
+    "hours": SEGMENT_BODY["hours"],
+    "price": SEGMENT_BODY["price"],
+}
+"""조각이 있는 조건(`SEGMENT_CONDITIONS`)의 3차 응답 모양. null인 값은 빠진다."""
 
 VECTOR = [0.01] * 1024
 """칩 벡터. 길이만 맞춘 예시 값이다."""
@@ -263,7 +289,7 @@ class TestSearch:
         """검색_새검색이면_조건과BE카드모양과모델버전을돌려준다"""
         data = post(client())
 
-        assert data["conditions"] == {**CONDITIONS_BODY, **EMPTY_SEGMENTS_BODY}
+        assert data["conditions"] == CONDITIONS_V3_BODY
         assert data["nearby"] is False
         assert data["interpretedBy"] == "LLM"
         assert data["rankedBy"] == "SCORE"
@@ -344,18 +370,29 @@ class TestSearch:
         assert data["fallbacks"] == []
 
     def test_segments_in_response(self, searched: FakeSearch) -> None:
-        """검색_조건에조각이있으면_camelCase로돌려주고null인값은뺀다"""
+        """검색_조건에조각이있으면_3차모양camelCase로돌려주고null인값은뺀다"""
         searched.outcome = make_result(conditions=SEGMENT_CONDITIONS)
 
         data = post(client())
 
-        assert data["conditions"] == SEGMENT_BODY
+        assert data["conditions"] == SEGMENT_V3_BODY
 
-    def test_previous_segments_read(self, searched: FakeSearch) -> None:
-        """검색_이전조건에조각이있으면_조각까지읽어검색에넘긴다"""
-        post(client(), previousConditions=SEGMENT_BODY)
+    @pytest.mark.parametrize(
+        "previous",
+        [SEGMENT_BODY, SEGMENT_V3_BODY],
+        ids=["2차", "3차"],
+    )
+    def test_previous_segments_read(self, searched: FakeSearch, previous: dict) -> None:
+        """검색_이전조건이2차나3차모양이면_같은조건으로읽어검색에넘긴다"""
+        post(client(), previousConditions=previous)
 
         assert searched.calls[0][0].previous == SEGMENT_CONDITIONS
+
+    def test_previous_v1_read(self, searched: FakeSearch) -> None:
+        """검색_이전조건이1차모양이면_역을지역으로바꿔읽는다"""
+        post(client(), previousConditions=CONDITIONS_BODY)
+
+        assert searched.calls[0][0].previous == CONDITIONS
 
     @pytest.mark.parametrize(
         "previous",
@@ -371,6 +408,20 @@ class TestSearch:
             },
             {**SEGMENT_BODY, "avoidCodes": ["FOOD_SPICY"]},
             {**SEGMENT_BODY, "avoidFoods": ["QUIET"]},
+            # 3차 조건은 3차 모양으로만 읽는다.
+            {**SEGMENT_V3_BODY, "codes": ["QUIET"]},
+            {
+                **SEGMENT_V3_BODY,
+                "categories": [
+                    {"code": "CAFE", "want": True},
+                    {"code": "BAR", "want": True},
+                ],
+            },
+            {**SEGMENT_V3_BODY, "flavors": [{"code": "FOOD_SPICY", "want": False}]},
+            {
+                **SEGMENT_V3_BODY,
+                "features": [{"text": "조용", "value": "조용", "code": "FOOD_SPICY"}],
+            },
             # v0.7까지의 메뉴 음식 코드는 이제 모르는 필드다.
             {
                 **SEGMENT_BODY,
@@ -413,7 +464,9 @@ class TestSearch:
     def test_nearby(self, searched: FakeSearch) -> None:
         """검색_근처검색이면_같은점수로정렬하고폴백은아니다"""
         searched.outcome = make_result(
-            conditions=Conditions("근처 카페", "근처 카페", (), "CAFE", nearby=True)
+            conditions=Conditions.from_codes(
+                "근처 카페", "근처 카페", (), "CAFE", nearby=True
+            )
         )
 
         data = post(client())

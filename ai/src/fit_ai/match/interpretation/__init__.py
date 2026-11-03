@@ -22,6 +22,7 @@ import time
 import httpx
 
 from fit_ai import gms
+from fit_ai.match.interpretation.codes import FOOD_CODES, FOOD_TYPES, GROUP_SIZE
 from fit_ai.match.interpretation.llm import (
     DEFAULT_CHANGE_SUMMARY,
     MAX_CHANGE_SUMMARY_LENGTH,
@@ -31,9 +32,6 @@ from fit_ai.match.interpretation.llm import (
 )
 from fit_ai.match.interpretation.request import (
     CODE_PHRASES,
-    FOOD_CODES,
-    FOOD_TYPES,
-    GROUP_SIZE,
     MAX_CODES,
     MAX_TEXT_LENGTH,
     MAX_WALK_MINUTES,

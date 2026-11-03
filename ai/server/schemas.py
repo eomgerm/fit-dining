@@ -10,9 +10,15 @@ from pydantic import Field, field_validator
 
 from fit_ai.match.interpretation import (
     FOOD_CODES,
+    FOOD_TYPES,
     MAX_CODES,
     MAX_TEXT_LENGTH,
     MAX_WALK_MINUTES,
+)
+from fit_ai.match.interpretation.codes import (
+    FACILITY_CODES,
+    FEATURE_CODES,
+    FLAVOR_CODES,
 )
 from fit_ai.match.interpretation.segments import (
     DAYS,
@@ -40,7 +46,8 @@ MAX_USER_ID_LENGTH = 64
 MAX_GUEST_CHIPS = 20
 """비회원 칩 수 상한. 코드가 붙은 칩도 센다(요청당 비용 상한). FE는 10개까지 저장한다."""
 
-"""칩 벡터 길이. 임베딩 모델(arctic-ko)의 벡터 길이이고 DB `vector(1024)`와 같다."""
+MAX_PARTY_SIZE = 100
+"""조건의 인원 상한. 넘으면 옛 조건처럼 읽지 못한 이전 조건이다."""
 
 
 CategoryGroup = Literal["RESTAURANT", "CAFE", "BAR"]
@@ -208,12 +215,12 @@ class FeatureTextBody(Body):
     want: bool = True
 
 
-class ConditionsBody(Body):
-    """해석한 조건. BE와 FE에는 불투명한 객체다.
+class LegacyConditionsBody(Body):
+    """2차까지의 조건 모양. BE가 검색 대화에 저장해 둔 조건이 후속 조건으로 돌아오므로
+    읽는다(docs/comparison/conditions-v3.md 5장). 응답으로는 내지 않는다.
 
-    BE는 검색 응답의 `conditions`로 FE에 그대로 준다. FE는 후속 조건 때
-    `previousConditions`로 돌려보낸다. `locations`부터 뒤의 속성은 2차에 더했다. 그 전
-    응답을 돌려보낸 `previousConditions`에는 없으므로 모두 기본값이 있다.
+    `locations`부터 뒤의 속성은 2차에 더했다. 1차 응답을 돌려보낸 `previousConditions`에는
+    없으므로 모두 기본값이 있다.
 
     Attributes:
         text: 해석한 요청문. 후속 조건이면 이전 요청과 합친 문장이다.
@@ -250,6 +257,88 @@ class ConditionsBody(Body):
     avoid_foods: list[Literal[FOOD_CODES]] = Field(
         default_factory=list, max_length=len(FOOD_CODES)
     )
+
+
+class CategoryChoiceBody(Body):
+    """업종 항목. 속성은 `segments.Choice`와 같다."""
+
+    code: CategoryGroup
+    want: bool = True
+
+
+class FoodTypeChoiceBody(Body):
+    """음식 종류 항목. 속성은 `segments.Choice`와 같다."""
+
+    code: Literal[FOOD_TYPES]
+    want: bool = True
+
+
+class FlavorChoiceBody(Body):
+    """맛 항목. 속성은 `segments.Choice`와 같다."""
+
+    code: Literal[tuple(FLAVOR_CODES)]
+    want: bool = True
+
+
+class FeatureBody(Body):
+    """특징. 속성은 `segments.Feature`와 같다."""
+
+    text: Segment
+    value: Segment
+    code: Literal[FEATURE_CODES] | None = None
+
+
+class ConditionsBody(Body):
+    """해석한 조건(3차). BE와 FE에는 불투명한 객체다.
+
+    BE는 검색 응답의 `conditions`로 FE에 그대로 준다. FE는 후속 조건 때
+    `previousConditions`로 돌려보낸다. 모양은 docs/comparison/conditions-v3.md 3장이고,
+    속성은 `interpretation.Conditions`와 같다.
+
+    Attributes:
+        version: 조건 모양 판. 3이다. 없으면 옛 조건(`LegacyConditionsBody`)으로 읽는다.
+        text: 해석한 요청문. 후속 조건이면 이전 요청과 합친 문장이다.
+        embedding_text: 후보 추출에 쓸 문장
+        categories: 업종. 원함은 하나까지다.
+        food_types: 음식 종류
+        flavors: 맛
+        menus: 메뉴
+        features: 특징
+        facilities: 시설 코드
+        party_size: 인원. 요청에 없으면 null이다.
+        locations: 지역
+        hours: 시간
+        price: 가격. 요청에 없으면 null이다.
+        place_name: 가게 이름. 요청에 없으면 null이다.
+    """
+
+    version: Literal[3] = 3
+    text: str = Field(min_length=1, max_length=MAX_TEXT_LENGTH)
+    embedding_text: str = Field(min_length=1, max_length=MAX_TEXT_LENGTH)
+    categories: list[CategoryChoiceBody] = Field(default_factory=list, max_length=3)
+    food_types: list[FoodTypeChoiceBody] = Field(
+        default_factory=list, max_length=len(FOOD_TYPES)
+    )
+    flavors: list[FlavorChoiceBody] = Field(
+        default_factory=list, max_length=len(FLAVOR_CODES)
+    )
+    menus: list[MenuBody] = Field(default_factory=list, max_length=MAX_SEGMENTS)
+    features: list[FeatureBody] = Field(default_factory=list, max_length=MAX_CODES)
+    facilities: list[Literal[FACILITY_CODES]] = Field(
+        default_factory=list, max_length=len(FACILITY_CODES)
+    )
+    party_size: int | None = Field(default=None, ge=1, le=MAX_PARTY_SIZE)
+    locations: list[LocationBody] = Field(default_factory=list, max_length=MAX_SEGMENTS)
+    hours: list[HoursBody] = Field(default_factory=list, max_length=MAX_SEGMENTS)
+    price: PriceBody | None = None
+    place_name: PlaceNameBody | None = None
+
+    @field_validator("categories")
+    @classmethod
+    def _one_wanted(cls, value: list[CategoryChoiceBody]) -> list[CategoryChoiceBody]:
+        if sum(c.want for c in value) > 1:
+            raise ValueError("원하는 업종이 둘 이상이다")
+        return value
 
 
 class ReasonTagBody(Body):

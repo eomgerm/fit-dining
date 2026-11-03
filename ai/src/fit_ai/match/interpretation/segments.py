@@ -1,16 +1,16 @@
 """요청 해석의 분류별 조각. 해석 결과(`interpretation.Conditions`)가 담는다.
 
-요청은 업종, 지역, 메뉴, 음식 종류, 시간, 가격, 가게 이름, 특징, 기타로 나눈다(검색 2차 계획,
-2026-11-02; 메뉴와 음식 종류는 2026-11-03에 나눔). 업종, 음식 종류·매운맛, 코드표에 있는
-특징은 코드로 두고(`Conditions.category_group`, `codes`), 나머지는 여기의 조각으로 둔다.
-기타("맛있는", "추천해줘")는 버린다.
+요청은 업종, 지역, 메뉴, 음식 종류, 맛, 시간, 가격, 가게 이름, 특징, 시설, 기타로 나눈다(검색
+2차 계획, 2026-11-02; 메뉴와 음식 종류는 2026-11-03에 나눔; 분류별 칸은 2026-11-04,
+docs/comparison/conditions-v3.md). 업종, 음식 종류, 맛은 코드 항목(`Choice`)이고, 특징은
+코드표에 있으면 코드가 붙는다(`Feature`). 기타("맛있는", "추천해줘")는 버린다.
 
 조각마다 사용자가 쓴 말(`text`)과 LLM이 철자를 고치고 표준 이름으로 바꾼 값(`value`)을 같이
 둔다. 표준 이름은 아직 사전과 맞춰 보지 않은 값이다. 사전에 없으면 원문으로 찾는 일은 그
 조각을 쓰는 곳(지역 사전, 가게 이름 찾기)이 맡는다.
 
-피하는 것은 메뉴(`Menu.want`), 음식 종류·매운맛(`Conditions.avoid_foods`), 업종
-(`Conditions.avoid_categories`)에만 둔다. 그 밖의 부정은 1차처럼 바라는 쪽 코드로 바꾼다
+피하는 것은 업종, 음식 종류, 맛, 메뉴에만 항목마다 `want`로 둔다. 그 밖의 부정은 1차처럼
+바라는 쪽 코드로 바꾼다
 ("시끄러운 곳 말고" → `QUIET`). 피함을 넓게 두면 LLM이 칸을 잘못 골라 뜻이 뒤집히기
 때문이다(2026-11-02 평가).
 """
@@ -136,8 +136,39 @@ class PlaceName:
 
 
 @dataclass(frozen=True)
+class Choice:
+    """코드로 고르는 분류(업종, 음식 종류, 맛)의 항목 하나.
+
+    Attributes:
+        code: 코드(`RESTAURANT`, `FOOD_JAPANESE`, `SPICY` 등)
+        want: 원하면 True, 피하면("일식 말고") False
+    """
+
+    code: str
+    want: bool = True
+
+
+@dataclass(frozen=True)
+class Feature:
+    """장소 특징 하나. 원함만 받는다. 부정한 특징은 바라는 쪽으로 바꿔 둔다("시끄러운 곳
+    말고"는 `QUIET`).
+
+    Attributes:
+        text: 사용자가 쓴 말("북적이는 데 말고")
+        value: 표준 이름("조용하고 차분한 곳", "콘센트")
+        code: 공유 코드표의 성향 축·중요 기준·방문 목적 코드. 코드표에 없는 특징이면
+            None이다.
+    """
+
+    text: str
+    value: str
+    code: str | None = None
+
+
+@dataclass(frozen=True)
 class FeatureText:
-    """코드표에 없는 특징("콘센트", "반려견"). 코드가 있는 특징은 `Conditions.codes`에 둔다.
+    """규칙·LLM 해석이 찾은 코드표에 없는 특징("콘센트", "반려견"). 조건에는 원하는 것만
+    `Feature`로 들어간다.
 
     Attributes:
         text: 사용자가 쓴 말("충전되는")

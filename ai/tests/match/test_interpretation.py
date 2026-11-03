@@ -17,7 +17,7 @@ from fit_ai.match.interpretation import (
     interpret_by_rules,
 )
 from fit_ai.match.interpretation.segments import (
-    FeatureText,
+    Feature,
     Hours,
     Location,
     LocationKind,
@@ -26,7 +26,7 @@ from fit_ai.match.interpretation.segments import (
     Price,
 )
 
-PREVIOUS = Conditions(
+PREVIOUS = Conditions.from_codes(
     text="역삼역 모임하기 좋은 술집",
     embedding_text="역삼역 모임하기 좋은 술집",
     codes=("PURPOSE_GROUP",),
@@ -60,7 +60,7 @@ class TestLlm:
 
         result = interpret("강남역 시끄러운 곳 말고 카페")
 
-        assert result.conditions == Conditions(
+        assert result.conditions == Conditions.from_codes(
             text="강남역 시끄러운 곳 말고 카페",
             embedding_text="조용한 카페",
             codes=("QUIET",),
@@ -199,7 +199,7 @@ class TestLlm:
 
     def test_follow_up_repeat_with_location_gets_query(self, fake_gms: FakeGms) -> None:
         """LLM해석_후속에서이전벡터용문장에역만붙여내면_같은문장으로보고새요청을붙인다"""
-        previous = Conditions(
+        previous = Conditions.from_codes(
             "역삼역 모임하기 좋은 술집", "모임하기 좋은 술집", ("PURPOSE_GROUP",), "BAR"
         )
         fake_gms(
@@ -243,7 +243,7 @@ class TestLlm:
     def test_unknown_previous_codes_not_in_prompt(self, fake_gms: FakeGms) -> None:
         """LLM입력_이전조건의모르는코드는_프롬프트에넣지않는다"""
         calls = fake_gms(lambda messages: answer(text="역삼역 조용한 술집"))
-        previous = Conditions(
+        previous = Conditions.from_codes(
             text="역삼역 술집",
             embedding_text="역삼역 술집",
             codes=("QUIET", "X" * 5000),
@@ -391,7 +391,7 @@ class TestSegments:
         assert conditions.avoid_foods == ("FOOD_SPICY",)
         assert conditions.hours == (Hours("새벽까지", open_until="02:00"),)
         assert conditions.price == Price("3만원 이하", max_won=30000)
-        assert conditions.features == (FeatureText("충전되는", "콘센트"),)
+        assert conditions.features == (Feature("충전되는", "콘센트"),)
         assert conditions.corrections == (("션릉역", "선릉역"),)
 
     @pytest.mark.parametrize(
@@ -512,11 +512,9 @@ class TestSegments:
         conditions = result.conditions
         assert conditions.locations == ()
         assert conditions.menus == (Menu("라멘", "라멘"),)
-        assert (conditions.hours, conditions.price, conditions.features) == (
-            (),
-            None,
-            (),
-        )
+        # 코드가 붙은 특징(QUIET)만 남고 꼴이 틀린 특징 조각은 버린다.
+        assert (conditions.hours, conditions.price) == ((), None)
+        assert [f.code for f in conditions.features] == ["QUIET"]
         # 고른 업종과 같은 업종과 모르는 업종은 빼 달라는 업종이 아니다.
         assert conditions.avoid_categories == ()
 
@@ -527,7 +525,7 @@ class TestSegments:
                 text="선릉역 초밥 새벽까지", change_summary="시간을 더했어요"
             )
         )
-        previous = Conditions(
+        previous = Conditions.from_codes(
             text="선릉역 초밥",
             embedding_text="초밥",
             station="SEOLLEUNG",
@@ -627,7 +625,9 @@ class TestChecks:
                 text="역삼역 일식 늦게까지", codes=["FOOD_JAPANESE"]
             )
         )
-        previous = Conditions("역삼역 일식", "일식", ("FOOD_JAPANESE",), "RESTAURANT")
+        previous = Conditions.from_codes(
+            "역삼역 일식", "일식", ("FOOD_JAPANESE",), "RESTAURANT"
+        )
 
         conditions = interpret("늦게까지 하는 데", previous).conditions
 
@@ -783,7 +783,7 @@ class TestChecks:
                 text="역삼역 조용한 술집", category_group="BAR", codes=[]
             )
         )
-        previous = Conditions(
+        previous = Conditions.from_codes(
             "역삼역 조용한 카페", "조용한 카페", ("QUIET",), "CAFE", "YEOKSAM"
         )
 
@@ -798,7 +798,7 @@ class TestChecks:
         fake_gms(
             lambda messages: empty_answer(text="역삼역 활기찬 카페", codes=["LIVELY"])
         )
-        previous = Conditions(
+        previous = Conditions.from_codes(
             "역삼역 조용한 카페", "조용한 카페", ("QUIET",), "CAFE", "YEOKSAM"
         )
 
@@ -813,9 +813,9 @@ class TestCorrections:
     @pytest.mark.parametrize(
         ("conditions", "corrections"),
         [
-            (Conditions("역삼 카페", "카페"), ()),
+            (Conditions.from_codes("역삼 카페", "카페"), ()),
             (
-                Conditions(
+                Conditions.from_codes(
                     "역삼 카페",
                     "카페",
                     locations=(Location("역삼", LocationKind.STATION, "역삼역"),),
@@ -823,7 +823,7 @@ class TestCorrections:
                 (),
             ),
             (
-                Conditions(
+                Conditions.from_codes(
                     "스벅 강남",
                     "스타벅스",
                     place_name=PlaceName("스벅", "스타벅스"),
@@ -920,13 +920,13 @@ class TestRuleSegments:
     @pytest.mark.parametrize(
         ("query", "features"),
         [
-            ("충전되는 카페", (FeatureText("충전", "콘센트"),)),
-            ("강아지랑 반려견 동반 카페", (FeatureText("반려견", "반려견"),)),
-            ("애기랑 갈 식당", (FeatureText("애기랑", "아이 동반"),)),
+            ("충전되는 카페", (Feature("충전", "콘센트"),)),
+            ("강아지랑 반려견 동반 카페", (Feature("반려견", "반려견"),)),
+            ("애기랑 갈 식당", (Feature("애기랑", "아이 동반"),)),
             ("베이커리룸 카페", ()),
         ],
     )
-    def test_features(self, query: str, features: tuple[FeatureText, ...]) -> None:
+    def test_features(self, query: str, features: tuple[Feature, ...]) -> None:
         """규칙해석_코드표에없는특징낱말이있으면_표준이름하나로둔다"""
         assert interpret_by_rules(query).features == features
 
@@ -1027,7 +1027,7 @@ class TestRules:
         """규칙해석_역업종조건낱말이있으면_코드로바꾼다"""
         conditions = interpret_by_rules("선릉 주차되는 가성비 이자카야 맛집")
 
-        assert conditions == Conditions(
+        assert conditions == Conditions.from_codes(
             text="선릉 주차되는 가성비 이자카야 맛집",
             embedding_text="주차되는 가성비 이자카야 맛집",
             codes=("VALUE_FOR_MONEY", "PARKING"),
@@ -1108,7 +1108,7 @@ class TestRules:
         """규칙해석_후속이면_코드를더하고새업종만바꾸고문장을잇는다"""
         conditions = interpret_by_rules("조용한 식당으로", PREVIOUS)
 
-        assert conditions == Conditions(
+        assert conditions == Conditions.from_codes(
             text="역삼역 모임하기 좋은 술집 조용한 식당으로",
             embedding_text="모임하기 좋은 술집 조용한 식당으로",
             codes=("PURPOSE_GROUP", "QUIET"),
@@ -1120,7 +1120,9 @@ class TestRules:
 
     def test_follow_up_new_station_ends_nearby(self) -> None:
         """규칙해석_근처검색뒤역을말하면_근처검색을끄고그역으로찾는다"""
-        previous = Conditions("근처 카페", "근처 카페", (), "CAFE", nearby=True)
+        previous = Conditions.from_codes(
+            "근처 카페", "근처 카페", (), "CAFE", nearby=True
+        )
 
         conditions = interpret_by_rules("강남역에서 찾아줘", previous)
 
@@ -1134,14 +1136,16 @@ class TestRules:
 
     def test_follow_up_too_long(self) -> None:
         """규칙해석_합친문장이너무길면_새요청만남긴다"""
-        previous = Conditions(text="가" * MAX_TEXT_LENGTH, embedding_text="카페")
+        previous = Conditions.from_codes(
+            text="가" * MAX_TEXT_LENGTH, embedding_text="카페"
+        )
 
         assert interpret_by_rules("조용하게", previous).text == "조용하게"
 
 
 def test_facilities() -> None:
     """조건_시설코드만_facilities로고른다"""
-    conditions = Conditions("t", "t", codes=("QUIET", "PARKING", "WIFI"))
+    conditions = Conditions.from_codes("t", "t", codes=("QUIET", "PARKING", "WIFI"))
 
     assert conditions.facilities == ("PARKING", "WIFI")
 

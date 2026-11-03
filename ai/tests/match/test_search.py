@@ -171,7 +171,7 @@ def areas_of(store: FakeStore) -> tuple:
 
 GANGNAM = StationArea("강남역", "GANGNAM")
 BOUNDS = MapBounds(sw_lat=37.49, ne_lng=127.04)
-PREVIOUS = Conditions(
+PREVIOUS = Conditions.from_codes(
     "강남역 조용한 카페", "조용한 카페", ("QUIET",), "CAFE", "GANGNAM"
 )
 """1차 꼴의 이전 조건(지역 조각 없이 역만 있다)"""
@@ -624,7 +624,7 @@ class TestEmptyReason:
 
     def test_one_facility(self) -> None:
         """결과없음_시설하나면_그시설을빼보라고한다"""
-        conditions = Conditions("t", "t", ("PARKING",), "BAR", "YEOKSAM")
+        conditions = Conditions.from_codes("t", "t", ("PARKING",), "BAR", "YEOKSAM")
 
         reason = empty_reason(conditions, (StationArea("역삼역", "YEOKSAM"),))
 
@@ -633,7 +633,7 @@ class TestEmptyReason:
 
     def test_many_facilities(self) -> None:
         """결과없음_시설이여럿이면_시설조건을줄이라고한다"""
-        conditions = Conditions("t", "t", ("PARKING", "WIFI"), "CAFE")
+        conditions = Conditions.from_codes("t", "t", ("PARKING", "WIFI"), "CAFE")
 
         reason = empty_reason(conditions)
 
@@ -641,7 +641,7 @@ class TestEmptyReason:
 
     def test_map_bounds(self) -> None:
         """결과없음_지도영역으로걸렀으면_역대신이지역이라하고지도를옮기라고한다"""
-        conditions = Conditions("t", "t", (), "CAFE", "GANGNAM")
+        conditions = Conditions.from_codes("t", "t", (), "CAFE", "GANGNAM")
 
         reason = empty_reason(conditions, (BOUNDS,))
 
@@ -650,13 +650,13 @@ class TestEmptyReason:
 
     def test_nearby_without_category(self) -> None:
         """결과없음_근처검색에업종이없으면_역없이가게라고한다"""
-        conditions = Conditions("t", "t", station="GANGNAM", nearby=True)
+        conditions = Conditions.from_codes("t", "t", station="GANGNAM", nearby=True)
 
         assert empty_reason(conditions).cause == "가게 중 조건에 맞는 곳이 없어요"
 
     def test_walk_and_exit(self) -> None:
         """결과없음_역에도보거리나출구가있으면_그대로보여주고그조건을빼보라고한다"""
-        conditions = Conditions("t", "t", (), "CAFE")
+        conditions = Conditions.from_codes("t", "t", (), "CAFE")
         areas = (
             StationArea("강남역", "GANGNAM", exit="11"),
             StationArea("역삼역", "YEOKSAM", walk_minutes=5),
@@ -672,7 +672,7 @@ class TestEmptyReason:
 
     def test_hours(self) -> None:
         """결과없음_영업시간으로걸렀으면_영업시간조건을빼보라고한다"""
-        conditions = Conditions(
+        conditions = Conditions.from_codes(
             "t", "t", (), "BAR", hours=(Hours("새벽까지", open_until="02:00"),)
         )
 
@@ -693,7 +693,7 @@ class TestEmptyReason:
     )
     def test_menus(self, menus: tuple[Menu, ...], cause: str) -> None:
         """결과없음_메뉴로걸렀으면_그메뉴를파는곳이없다고하고메뉴를바꿔보라고한다"""
-        conditions = Conditions(
+        conditions = Conditions.from_codes(
             "t",
             "t",
             (),
@@ -709,7 +709,7 @@ class TestEmptyReason:
 
     def test_broad_menu_not_reason(self) -> None:
         """결과없음_넓은말메뉴는걸지않았으니_다른조건으로이유를정한다"""
-        conditions = Conditions(
+        conditions = Conditions.from_codes(
             "t", "t", (), "CAFE", menus=(Menu("커피", "커피"),), price=Price("x", 1, 2)
         )
 
@@ -717,7 +717,7 @@ class TestEmptyReason:
 
     def test_price(self) -> None:
         """결과없음_가격으로걸렀으면_가격조건을빼보라고한다"""
-        conditions = Conditions(
+        conditions = Conditions.from_codes(
             "t", "t", (), "CAFE", price=Price("만원 이하", max_won=10000)
         )
 
@@ -728,7 +728,7 @@ class TestEmptyReason:
 
     def test_now_and_cheap_not_filtered(self) -> None:
         """결과없음_지금영업중이나저렴한만있으면_거르지않았으니시간가격탓으로보지않는다"""
-        conditions = Conditions(
+        conditions = Conditions.from_codes(
             "t",
             "t",
             (),
@@ -741,7 +741,7 @@ class TestEmptyReason:
 
     def test_region(self) -> None:
         """결과없음_동이나구로걸렀으면_그이름을쓴다"""
-        conditions = Conditions("t", "t", (), "BAR")
+        conditions = Conditions.from_codes("t", "t", (), "BAR")
 
         reason = empty_reason(conditions, (RegionArea("역삼동", "YEOKSAM"),))
 
@@ -757,7 +757,7 @@ class TestEmptyReason:
     )
     def test_unready(self, unready: tuple[str, ...], cause: str) -> None:
         """결과없음_장소데이터가없는지역이면_시설조건보다앞서준비중이라고한다"""
-        conditions = Conditions("t", "t", ("PARKING",), "CAFE")
+        conditions = Conditions.from_codes("t", "t", ("PARKING",), "CAFE")
 
         reason = empty_reason(conditions, (), unready)
 

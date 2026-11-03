@@ -118,7 +118,7 @@ def main() -> None:
 def _previous(data: dict | None) -> Conditions | None:
     if data is None:
         return None
-    return Conditions(
+    return Conditions.from_codes(
         text=data["text"],
         embedding_text=data["embeddingText"],
         codes=tuple(data["codes"]),
@@ -169,6 +169,9 @@ def _check(case: dict, conditions: Conditions) -> dict:
 def _segments(conditions: Conditions) -> dict:
     """결과 파일에 남길 분류별 조각"""
     data = asdict(conditions)
+    # 빼 달라는 음식·업종은 칸이 아니라 분류의 피함에서 꺼낸다(3차 조건).
+    data["avoid_foods"] = list(conditions.avoid_foods)
+    data["avoid_categories"] = list(conditions.avoid_categories)
     return {key: data[key] for key in SEGMENT_CHECKS}
 
 
@@ -200,7 +203,8 @@ def _check_values(attr: str):
     """원하는 조각의 표준 이름이 기대한 것을 모두 담는지 본다. 더 붙은 조각은 틀리지 않다."""
 
     def check(expected: list[str], conditions: Conditions) -> bool:
-        got = [s.value for s in getattr(conditions, attr) if s.want]
+        # 특징(`Feature`)은 원함만 받아 `want`가 없다.
+        got = [s.value for s in getattr(conditions, attr) if getattr(s, "want", True)]
         return all(any(_same(e, g) for g in got) for e in expected)
 
     return check

@@ -5,12 +5,20 @@ LLM 해석, 코드 확인이 같이 쓰는 값과 함수(조각을 모아 조건
 """
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from fit_ai.features import FEATURES
 from fit_ai.match.conditions import CATEGORY_NAMES, CONDITIONS, STATION_NAMES, Layer
+from fit_ai.match.interpretation.codes import (
+    avoided_codes,
+    score_codes,
+    split_codes,
+)
 from fit_ai.match.interpretation.segments import (
     MAX_SEGMENTS,
+    Choice,
+    Feature,
     FeatureText,
     Hours,
     Location,
@@ -28,10 +36,6 @@ MAX_CODES = 30
 """조건 코드 수 상한"""
 
 
-GROUP_SIZE = 4
-"""이 인원 이상이면 모임(`PURPOSE_GROUP`)으로 본다. 임시 값이다."""
-
-
 CODE_PHRASES: dict[str, str] = {
     **{code: feature.phrase for code, feature in FEATURES.items()},
     **{
@@ -41,21 +45,6 @@ CODE_PHRASES: dict[str, str] = {
     },
 }
 """해석이 낼 수 있는 조건 코드와 LLM에 보여 줄 문구. 취향 코드표와 시설 코드다."""
-
-
-FOOD_TYPES = (
-    "FOOD_KOREAN",
-    "FOOD_JAPANESE",
-    "FOOD_CHINESE",
-    "FOOD_WESTERN",
-    "FOOD_ASIAN",
-)
-"""음식 종류 코드"""
-
-
-FOOD_CODES = (*FOOD_TYPES, "FOOD_SPICY")
-"""음식 코드. 음식 종류와 매운맛이다. 빼 달라는 음식(`Conditions.avoid_foods`)은 이 코드만
-받는다."""
 
 
 STATION_CODES = {
@@ -86,44 +75,163 @@ MAX_WALK_MINUTES = 60
 class Conditions:
     """해석한 검색 조건. FE가 다음 후속 조건 때 그대로 돌려보낸다.
 
-    요청을 분류별로 나눈 결과다(`segments` 모듈 설명). `locations`부터 뒤의 필드는 2차에
-    더했다. 그 전에 만든 이전 조건에는 없으므로 모두 기본값이 있다.
+    요청을 분류별로 나눈 결과다(`segments` 모듈 설명, docs/comparison/conditions-v3.md).
+    업종·음식 종류·맛·메뉴는 항목마다 원함과 피함이 있고, 특징·시설은 원함만 있다. 점수용
+    코드는 `codes`로 꺼낸다.
 
     Attributes:
         text: 해석한 요청문. 후속 조건이면 이전 요청과 합친 한 문장이다.
         embedding_text: 후보 추출에 쓸 문장. 부정 표현을 긍정형으로 바꿨고 위치 말(역
             이름, 근처, 지역 원문)은 뺐다.
-        codes: 원하는 조건 코드. 취향 코드표의 코드(음식 종류·매운맛 포함)와 시설
-            코드다. 인원은 목적 코드로 넣었다. 메뉴에서 음식 종류를 짐작해 넣지 않는다.
-        category_group: 업종. 요청에 없으면 None이다.
-        station: 지역 중 처음 나온 서비스 역. 없으면 None이다. 장소 저장소가 지역을 여러
-            개 거르기 전까지 쓰는 값이다.
-        nearby: 근처 검색인지. 서비스 역 없이 "여기"(`LocationKind.HERE`)를 말했으면 참이다.
-        locations: 지역. 여럿이면 그중 하나에 들면 된다.
+        categories: 업종. 원함은 하나까지다. 피함은 "카페 말고"다.
+        food_types: 음식 종류("일식", "일식 말고"). 메뉴에서 짐작해 넣지 않는다.
+        flavors: 맛("매운", "매운 거 빼고")
         menus: 메뉴. 피하는 메뉴("오이 빼고")는 `want`가 거짓이다.
+        features: 특징. 코드표에 있으면 코드가 붙는다.
+        facilities: 시설 코드(`PARKING` 등)
+        party_size: 인원. 요청에 없으면 None이다.
+        locations: 지역. 여럿이면 그중 하나에 들면 된다.
         hours: 시간
         price: 가격. 요청에 없으면 None이다.
         place_name: 가게 이름. 요청에 없으면 None이다.
-        features: 코드표에 없는 특징
-        avoid_categories: 빼 달라는 업종("카페 말고")
-        avoid_foods: 빼 달라는 음식 종류·매운맛 코드("일식 말고", "매운 거 빼고").
-            음식 코드(`FOOD_CODES`)만 둔다.
     """
 
     text: str
     embedding_text: str
-    codes: tuple[str, ...] = ()
-    category_group: str | None = None
-    station: str | None = None
-    nearby: bool = False
-    locations: tuple[Location, ...] = ()
+    categories: tuple[Choice, ...] = ()
+    food_types: tuple[Choice, ...] = ()
+    flavors: tuple[Choice, ...] = ()
     menus: tuple[Menu, ...] = ()
+    features: tuple[Feature, ...] = ()
+    facilities: tuple[str, ...] = ()
+    party_size: int | None = None
+    locations: tuple[Location, ...] = ()
     hours: tuple[Hours, ...] = ()
     price: Price | None = None
     place_name: PlaceName | None = None
-    features: tuple[FeatureText, ...] = ()
-    avoid_categories: tuple[str, ...] = ()
-    avoid_foods: tuple[str, ...] = ()
+
+    @classmethod
+    def from_codes(
+        cls,
+        text: str,
+        embedding_text: str,
+        codes: Sequence[str] = (),
+        category_group: str | None = None,
+        station: str | None = None,
+        nearby: bool = False,
+        locations: Sequence[Location] = (),
+        menus: Sequence[Menu] = (),
+        hours: Sequence[Hours] = (),
+        price: Price | None = None,
+        place_name: PlaceName | None = None,
+        features: Sequence[FeatureText | Feature] = (),
+        avoid_categories: Sequence[str] = (),
+        avoid_foods: Sequence[str] = (),
+    ) -> "Conditions":
+        """옛 꼴(코드 목록과 빼 달라는 업종·음식)의 값으로 조건을 만든다.
+
+        2차 조건과 같은 인자를 받는다. 코드는 분류로 나누고(`codes.split_codes`), 1차 꼴의
+        역과 근처는 지역 조각으로 바꾼다. 특징 인자는 코드표에 없는 특징만 읽는다. 코드가
+        있는 특징은 `codes`가 정한다. 피하는 특징은 버린다.
+
+        Args:
+            text: 해석한 요청문
+            embedding_text: 후보 추출에 쓸 문장
+            codes: 원하는 조건 코드(취향 코드표 코드와 시설 코드)
+            category_group: 원하는 업종
+            station: 1차 꼴의 역 코드. 지역이 있으면 읽지 않는다.
+            nearby: 1차 꼴의 근처 검색 여부. 지역이 있으면 읽지 않는다.
+            locations: 지역
+            menus: 메뉴
+            hours: 시간
+            price: 가격
+            place_name: 가게 이름
+            features: 코드표에 없는 특징
+            avoid_categories: 빼 달라는 업종
+            avoid_foods: 빼 달라는 음식 종류·매운맛 코드
+
+        Returns:
+            조건
+        """
+        feature_codes, food_types, flavors, facilities = split_codes(codes, avoid_foods)
+        if not locations and station in STATION_NAMES:
+            name = STATION_NAMES[station]
+            locations = (Location(name, LocationKind.STATION, name),)
+        elif not locations and nearby:
+            locations = (Location("근처", LocationKind.HERE),)
+        categories = (
+            () if category_group is None else (Choice(category_group),)
+        ) + tuple(
+            Choice(c, want=False)
+            for c in dict.fromkeys(avoid_categories)
+            if c != category_group
+        )
+        return cls(
+            text=text,
+            embedding_text=embedding_text,
+            categories=categories,
+            food_types=food_types,
+            flavors=flavors,
+            menus=tuple(menus),
+            features=tuple(
+                Feature(FEATURES[c].label, FEATURES[c].label, c) for c in feature_codes
+            )
+            + tuple(
+                dict.fromkeys(
+                    Feature(f.text, f.value)
+                    for f in features
+                    if isinstance(f, FeatureText)
+                    and f.want
+                    or isinstance(f, Feature)
+                    and f.code is None
+                )
+            ),
+            facilities=facilities,
+            locations=tuple(locations),
+            hours=tuple(hours),
+            price=price,
+            place_name=place_name,
+        )
+
+    @property
+    def codes(self) -> tuple[str, ...]:
+        """원하는 조건의 점수용 코드(`codes.score_codes`). 특징, 음식 종류, 맛, 시설, 인원
+        순서다."""
+        return score_codes(
+            (f.code for f in self.features),
+            self.food_types,
+            self.flavors,
+            self.facilities,
+            self.party_size,
+        )
+
+    @property
+    def avoid_foods(self) -> tuple[str, ...]:
+        """빼 달라는 음식 종류·매운맛 코드(`FOOD_*`)"""
+        return avoided_codes(self.food_types, self.flavors)
+
+    @property
+    def category_group(self) -> str | None:
+        """원하는 업종. 없으면 None이다."""
+        return next((c.code for c in self.categories if c.want), None)
+
+    @property
+    def avoid_categories(self) -> tuple[str, ...]:
+        """빼 달라는 업종("카페 말고")"""
+        return tuple(c.code for c in self.categories if not c.want)
+
+    @property
+    def station(self) -> str | None:
+        """지역 중 처음 나온 서비스 역 코드. 없으면 None이다. 로그와 1차 꼴 LLM 출력을
+        견줄 때 쓴다."""
+        return next((s for s in map(station_code, self.locations) if s), None)
+
+    @property
+    def nearby(self) -> bool:
+        """근처 검색인지. 서비스 역 없이 "여기"(`LocationKind.HERE`)를 말했으면 참이다."""
+        return self.station is None and any(
+            loc.kind is LocationKind.HERE for loc in self.locations
+        )
 
     @property
     def corrections(self) -> tuple[tuple[str, str], ...]:
@@ -138,16 +246,6 @@ class Conditions:
             and s.value
             and _plain(s.value) not in _plain(s.text)
             and _plain(s.text) not in _plain(s.value)
-        )
-
-    @property
-    def facilities(self) -> tuple[str, ...]:
-        """요청한 시설 코드. 장소 저장소가 그 시설이 없다고 확인된 장소를 빼고, 결과가
-        없을 때 이유 문구에도 쓴다."""
-        return tuple(
-            code
-            for code in self.codes
-            if code in CONDITIONS and CONDITIONS[code].layer is Layer.FACILITY
         )
 
 
@@ -172,22 +270,16 @@ class Interpretation:
 
 
 def locations_of(conditions: Conditions) -> tuple[Location, ...]:
-    """조건의 지역을 꺼낸다. 1차에 만든 조건은 지역 조각이 없으므로 역과 근처로 만든다.
+    """조건의 지역을 꺼낸다. 1차 꼴의 역과 근처는 조건을 만들 때 지역 조각으로 바꿨다
+    (`Conditions.from_codes`).
 
     Args:
-        conditions: 해석한 조건. FE가 돌려보낸 1차 꼴의 이전 조건일 수 있다.
+        conditions: 해석한 조건
 
     Returns:
         지역 조각. 지역이 없으면 빈 튜플이다.
     """
-    if conditions.locations:
-        return conditions.locations
-    if conditions.station in STATION_NAMES:
-        name = STATION_NAMES[conditions.station]
-        return (Location(name, LocationKind.STATION, name),)
-    if conditions.nearby:
-        return (Location("근처", LocationKind.HERE),)
-    return ()
+    return conditions.locations
 
 
 def _assemble(
@@ -201,19 +293,15 @@ def _assemble(
     hours: tuple[Hours, ...],
     price: Price | None,
     place_name: PlaceName | None,
-    features: tuple[FeatureText, ...],
+    features: tuple[FeatureText | Feature, ...],
     avoid_categories: tuple[str, ...],
     avoid_foods: tuple[str, ...],
 ) -> Conditions:
     """조각을 모아 조건을 만든다. LLM 해석과 규칙 해석이 같이 쓴다.
 
-    빼 달라는 음식 코드는 원하는 코드에서 뺀다. 역은 지역 중 처음 나온 서비스 역이고,
-    근처 검색은 서비스 역 없이 "여기"를 말했을 때다. 동네·랜드마크 원문은 벡터용 문장에서
-    지운다.
+    빼 달라는 음식 코드는 원하는 코드에서 뺀다. 동네·랜드마크 원문은 벡터용 문장에서
+    지운다. 코드는 분류로 나눠 담는다(`Conditions.from_codes`).
     """
-    avoided = tuple(dict.fromkeys(c for c in avoid_foods if c in FOOD_CODES))
-    station = next((s for s in map(station_code, locations) if s is not None), None)
-    nearby = station is None and any(loc.kind is LocationKind.HERE for loc in locations)
     for loc in locations:
         if loc.kind is LocationKind.STATION or loc.text not in embedding_text:
             continue
@@ -223,25 +311,21 @@ def _assemble(
             if any(ch.isalnum() for ch in stripped)
             else CATEGORY_NAMES.get(category_group or "", embedding_text)
         )
-    return Conditions(
+    return Conditions.from_codes(
         text=text.strip()[:MAX_TEXT_LENGTH],
         embedding_text=_without_location(embedding_text, category_group).strip()[
             :MAX_TEXT_LENGTH
         ],
-        codes=tuple(c for c in _known_codes(codes) if c not in avoided),
+        codes=_known_codes(codes),
         category_group=category_group,
-        station=station,
-        nearby=nearby,
         locations=tuple(dict.fromkeys(locations))[:MAX_SEGMENTS],
         menus=menus,
         hours=tuple(dict.fromkeys(hours))[:MAX_SEGMENTS],
         price=price,
         place_name=place_name,
         features=features,
-        avoid_categories=tuple(
-            dict.fromkeys(c for c in avoid_categories if c != category_group)
-        ),
-        avoid_foods=avoided,
+        avoid_categories=avoid_categories,
+        avoid_foods=avoid_foods,
     )
 
 

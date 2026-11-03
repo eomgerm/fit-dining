@@ -7,9 +7,8 @@
 import re
 from dataclasses import replace
 
+from fit_ai.match.interpretation.codes import FOOD_CODES, FOOD_TYPES
 from fit_ai.match.interpretation.request import (
-    FOOD_CODES,
-    FOOD_TYPES,
     Conditions,
     _assemble,
     _plain,

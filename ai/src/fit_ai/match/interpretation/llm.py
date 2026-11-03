@@ -10,10 +10,9 @@ from dataclasses import asdict
 
 from fit_ai.match.conditions import CATEGORY_NAMES, STATION_NAMES
 from fit_ai.match.interpretation.checks import _checked
+from fit_ai.match.interpretation.codes import FOOD_CODES, GROUP_SIZE
 from fit_ai.match.interpretation.request import (
     CODE_PHRASES,
-    FOOD_CODES,
-    GROUP_SIZE,
     MAX_WALK_MINUTES,
     Conditions,
     _join,
@@ -163,15 +162,29 @@ _CLOCK = re.compile(r"(?:[01]\d|2[0-3]):[0-5]\d")
 def _user_prompt(query: str, previous: Conditions | None) -> str:
     if previous is None:
         return f"요청: {query}"
-    data = asdict(previous)
     # 이전 조건은 LLM이 낼 꼴과 같게 보여 준다. 1차 조건의 역을 지역으로 바꾸지 않으면
-    # LLM이 이전 역을 잇지 못한다(2026-11-02 평가, 후속 12번 중 10번).
-    data["locations"] = [asdict(loc) for loc in locations_of(previous)]
-    for key in ("embedding_text", "station", "nearby"):
-        # 후보 추출용 문장은 LLM이 새로 쓴다. 역과 근처는 지역에서 다시 정한다.
-        del data[key]
-    # 이전 조건은 FE가 돌려보낸 값이라 모르는 코드로 프롬프트를 키울 수 있다.
-    data["codes"] = list(_known_codes(list(previous.codes)))
+    # LLM이 이전 역을 잇지 못한다(2026-11-02 평가, 후속 12번 중 10번). 후보 추출용 문장은
+    # LLM이 새로 쓰므로 보여 주지 않는다.
+    data = {
+        "text": previous.text,
+        # 이전 조건은 FE가 돌려보낸 값이라 모르는 코드로 프롬프트를 키울 수 있다.
+        "codes": list(_known_codes(list(previous.codes))),
+        "category_group": previous.category_group,
+        "locations": [asdict(loc) for loc in locations_of(previous)],
+        "menus": [asdict(m) for m in previous.menus],
+        "hours": [asdict(h) for h in previous.hours],
+        "price": None if previous.price is None else asdict(previous.price),
+        "place_name": None
+        if previous.place_name is None
+        else asdict(previous.place_name),
+        "features": [
+            {"text": f.text, "value": f.value, "want": True}
+            for f in previous.features
+            if f.code is None
+        ],
+        "avoid_categories": list(previous.avoid_categories),
+        "avoid_foods": list(previous.avoid_foods),
+    }
     return "\n".join(
         [f"이전 조건: {json.dumps(data, ensure_ascii=False)}", f"새 요청: {query}"]
     )

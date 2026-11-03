@@ -9,8 +9,8 @@ from dataclasses import dataclass
 
 from fit_ai.features import FEATURES
 from fit_ai.match.conditions import STATION_NAMES
+from fit_ai.match.interpretation.codes import GROUP_SIZE
 from fit_ai.match.interpretation.request import (
-    GROUP_SIZE,
     STATION_CODES,
     STATION_WORDS,
     Conditions,

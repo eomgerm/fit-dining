@@ -23,6 +23,8 @@ from fit_ai.match.candidates import MapBounds, StoreError
 from fit_ai.match.cards import Card
 from fit_ai.match.interpretation import Conditions
 from fit_ai.match.interpretation.segments import (
+    Choice,
+    Feature,
     FeatureText,
     Hours,
     Location,
@@ -45,7 +47,9 @@ from server.schemas import (
     EmptyReasonBody,
     GuestChipBody,
     GuestTasteBody,
+    LegacyConditionsBody,
     MapBoundsBody,
+    MenuBody,
     ModelsBody,
     ReasonBody,
     ReasonTagBody,
@@ -225,9 +229,12 @@ def _ranked_by(result: SearchResult) -> str | None:
 
 
 def _read_previous(data: dict[str, Any]) -> Conditions | None:
-    """FE가 돌려보낸 이전 조건을 읽는다. 읽지 못하면 None이다."""
+    """FE가 돌려보낸 이전 조건을 읽는다. 3차 조건이 아니면 옛 조건으로 읽는다. 읽지
+    못하면 None이다."""
     try:
-        return _conditions(ConditionsBody.model_validate(data))
+        if data.get("version") == 3:
+            return _conditions(ConditionsBody.model_validate(data))
+        return _legacy_conditions(LegacyConditionsBody.model_validate(data))
     except ValidationError:
         log("previous_invalid")
         return None
@@ -249,14 +256,30 @@ def _conditions(body: ConditionsBody) -> Conditions:
     return Conditions(
         text=body.text,
         embedding_text=body.embedding_text,
+        categories=tuple(Choice(c.code, c.want) for c in body.categories),
+        food_types=tuple(Choice(c.code, c.want) for c in body.food_types),
+        flavors=tuple(Choice(c.code, c.want) for c in body.flavors),
+        menus=tuple(_menu(m) for m in body.menus),
+        features=tuple(_segment(Feature, f) for f in body.features),
+        facilities=tuple(dict.fromkeys(body.facilities)),
+        party_size=body.party_size,
+        locations=tuple(_segment(Location, loc) for loc in body.locations),
+        hours=tuple(_segment(Hours, h) for h in body.hours),
+        price=_segment(Price, body.price),
+        place_name=_segment(PlaceName, body.place_name),
+    )
+
+
+def _legacy_conditions(body: LegacyConditionsBody) -> Conditions:
+    return Conditions.from_codes(
+        text=body.text,
+        embedding_text=body.embedding_text,
         codes=tuple(body.codes),
         category_group=body.category_group,
         station=body.station,
         nearby=body.nearby,
         locations=tuple(_segment(Location, loc) for loc in body.locations),
-        menus=tuple(
-            Menu(m.text, m.value, tuple(m.spellings), m.want) for m in body.menus
-        ),
+        menus=tuple(_menu(m) for m in body.menus),
         hours=tuple(_segment(Hours, h) for h in body.hours),
         price=_segment(Price, body.price),
         place_name=_segment(PlaceName, body.place_name),
@@ -264,6 +287,10 @@ def _conditions(body: ConditionsBody) -> Conditions:
         avoid_categories=tuple(body.avoid_categories),
         avoid_foods=tuple(body.avoid_foods),
     )
+
+
+def _menu(body: MenuBody) -> Menu:
+    return Menu(body.text, body.value, tuple(body.spellings), body.want)
 
 
 def _segment(cls, body: Body | None):
