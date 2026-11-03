@@ -31,7 +31,7 @@ Jira: S15P31A302-116 "검색 기록(thread) 서버 저장". 2026-10-29 grill 두
   6. `baseId`는 같은 thread의 turn만 가리킨다.
   7. 기록 저장 실패가 성공한 검색을 실패로 바꾸지 않는다.
   8. 다시 연 스냅샷은 다시 받아 오지 않는다. 후속 요청에는 그 스냅샷의 `conditions`를 그대로 보낸다.
-  9. 개수 제한이나 자동 삭제가 없다.
+  9. 사용자의 지우기(D-18), 상한(D-19), 탈퇴(D-13) 말고는 기록이 지워지지 않는다(처음에는 "개수 제한이나 자동 삭제가 없다"였다가 D-19에서 바꿈).
   10. 회원 목록 순서는 같은 시각까지 포함해 안정적이다. 비회원 목록은 지금 동작 그대로다.
   11. 저장 경로에서 검색 본문과 취향을 로그에 남기지 않는다.
 - Reuse: `be/src/main/java/kr/co/fitdining/api/auth/repository/AuthUserRepository.java#existsByIdAndDeletedAtIsNull` (reuse) — 탈퇴한 사용자를 401로 막는 확인
@@ -158,19 +158,21 @@ Jira: S15P31A302-116 "검색 기록(thread) 서버 저장". 2026-10-29 grill 두
 
 ## D-12 보관 기간과 삭제
 - Status: settled
-- Decision: 회원과 비회원 모두 개수 제한과 보관 기한을 넣지 않는다(지금 기기 저장과 같다). 데모 규모라 무한히 쌓이는 것을 감수한다. 비회원 기기 저장소가 가득 차면 지금처럼 새 기록은 저장되지 않고 옛 기록은 남으며, 검색은 그대로 동작한다. 탈퇴 때 처리는 D-13이다. 사용자가 최근 검색에서 지우는 기능은 D-18이다(처음에는 넣지 않기로 했다가 D-18에서 바꿈).
-- Rejected: 사용자별 개수 상한 → 요청에 없던 제한이다. 비회원 저장소가 차면 오래된 thread부터 지우기 → D-2의 9를 바꿔야 하고, 이번 범위는 서버 저장이다.
+- Decision: 회원과 비회원 모두 보관 기한을 넣지 않는다(지금 기기 저장과 같다). 비회원 기기 저장소가 가득 차면 지금처럼 새 기록은 저장되지 않고 옛 기록은 남으며, 검색은 그대로 동작한다. 탈퇴 때 처리는 D-13, 사용자가 최근 검색에서 지우는 기능은 D-18, 개수 상한은 D-19다(처음에는 지우기와 개수 상한을 넣지 않기로 했다가 D-18, D-19에서 바꿈).
+- Rejected: 비회원 저장소가 차면 오래된 thread부터 지우기 → 상한(D-19)으로 20개만 남아 저장소가 찰 일이 드물다.
 
 ## D-13 탈퇴할 때 기록
-- Status: provisional
-- Decision: 지금은 soft delete다. 탈퇴해도 검색 기록은 지우지 않고, 회원의 `deleted_at`(soft delete)이 기록의 삭제 표시를 겸한다. 탈퇴한 사용자는 모든 기록 API에서 401이라(D-2의 2) 기록을 읽거나 쓸 수 없다. 기록 저장 구조에 따로 삭제 표시를 두지 않고, 탈퇴 처리(`UserService.withdraw`)도 고치지 않는다. 기록의 회원 FK는 `ON DELETE CASCADE`라서(`user_preferences`와 같다) 회원 행이 실제로 지워지면 기록도 함께 지워진다.
-  - 감수: 탈퇴와 같은 순간 들어온 저장은 탈퇴 확인을 지나쳐 기록을 하나 더 쓸 수 있다. 읽히지 않으므로 잠금은 두지 않는다(리뷰 D-38과 같다).
-  - 감수: 탈퇴 때 취향(`user_preferences`)은 즉시 지우지만, 검색 기록의 요청 본문에 든 취향 태그 사본은 남는다. 팀과 RB-10에 알린다(다시 검토할 것).
-- Default: 위 동작대로 구현한다. PRD OQ-17(soft delete 탈퇴의 법·심사 위험)이 정해지거나 개인정보처리방침에 보관 기간이 생기면 다시 연다. 회원 행을 hard delete하기로 하면 CASCADE가 기록을 지우므로 이 작업은 고칠 것이 없다.
+- Status: settled
+- Decision: 탈퇴하면 탈퇴 트랜잭션(`UserService.withdraw`) 안에서 그 회원의 검색 기록(thread와 turn)을 모두 지운다(2026-11-03 사용자 결정, S15P31A302-141. 처음에는 soft delete로 남겼다). 기록에는 입력 문장, 취향 태그, 관심 지역이 들어 있어, 탈퇴 때 지우는 취향(`user_preferences`)과 맞춘다. 탈퇴한 사용자는 지금처럼 모든 기록 API에서 401이다(D-2의 2).
+  - **동시성:** 기록 저장은 같은 트랜잭션에서 회원 행을 잠그고(`FOR NO KEY UPDATE`) 탈퇴 여부를 다시 확인한다. 탈퇴도 회원 행을 잠그므로 둘은 줄을 선다. 탈퇴가 먼저 끝나면 저장은 401이고, 저장이 먼저 끝나면 그 뒤의 탈퇴가 그 기록까지 지운다. 그래서 탈퇴와 같은 순간 들어온 저장도 남지 않는다.
+  - **이미 탈퇴한 회원:** 없다고 보고 남은 기록을 지우는 일회성 마이그레이션은 두지 않는다(사용자 결정).
+  - 기록의 회원 FK는 그대로 `ON DELETE CASCADE`라서 회원 행이 실제로 지워져도 기록이 함께 지워진다. 기록에 따로 삭제 표시는 두지 않는다.
 - Rejected:
-  - 탈퇴 트랜잭션에서 기록 hard delete → 사용자가 탈퇴 직후 삭제하지 않는 쪽을 골랐다. 고르면 저장과 탈퇴를 회원 행 잠금으로 직렬화해야 한다.
+  - 탈퇴해도 기록을 남김(soft delete, 처음 결정) → 취향은 지우는데 기록 안의 취향 사본과 입력 문장이 남는다. 사용자가 탈퇴 때 지우기로 바꿨다.
+  - 이미 탈퇴한 회원의 기록을 지우는 마이그레이션 → 사용자가 그런 회원이 없다고 보고 빼기로 했다.
+  - 저장 쪽 잠금 없이 탈퇴 때 지우기만 → 탈퇴와 같은 순간 들어온 저장이 탈퇴 확인을 지나쳐 기록을 남길 수 있다.
   - 기록에 삭제 표시(`deleted_at`)를 따로 둠 → 읽는 곳이 없고, 표시 뒤 저장을 막는 동시성 처리만 늘어난다.
-  - 회원 FK를 NO ACTION(리뷰와 같음) → 회원 행 hard delete가 정해지면 기록 테이블이 막는다.
+- Anchors: `be/src/main/java/kr/co/fitdining/api/user/UserService.java#UserService.withdraw` (modify) · `be/src/main/java/kr/co/fitdining/api/searchthread/SearchThreadService.java#SearchThreadService.addTurn` (modify)
 
 ## D-14 Mock 장소 id로 쌓인 기록
 - Status: settled
@@ -191,7 +193,7 @@ Jira: S15P31A302-116 "검색 기록(thread) 서버 저장". 2026-10-29 grill 두
     - 첫 turn 동시 생성, 같은 turn·다른 turn 동시 추가에서 500, 중복, 유실 없음. 재전송해도 처음 순서와 마지막 요청 시각 유지.
     - `at`이 거꾸로 가도 제목 고정과 마지막 turn `at` 기준 목록.
     - 20개 초과와 같은 시각이 cursor 페이지를 넘는 경우, 주인 격리, 두 계정이 같은 id로 각각 저장.
-    - 탈퇴 뒤 기록이 남아 있고 모든 기록 API가 401(D-13).
+    - 탈퇴하면 기록이 지워지고 모든 기록 API가 401(D-13). 탈퇴와 저장이 동시에 와도 기록이 남지 않음.
   - **HTTP:**
     - 토큰 없음, 잘못된 토큰, 탈퇴한 사용자의 401(모든 API, 실제 계정 상태를 읽는 경로로). 탈퇴한 사용자는 없는 thread에도 404가 아니라 401.
     - 내 계정에 없는 thread 읽기의 404.
@@ -236,10 +238,19 @@ Jira: S15P31A302-116 "검색 기록(thread) 서버 저장". 2026-10-29 grill 두
   - 지운 thread에 삭제 표시(soft delete) → 사용자가 지운 개인정보가 서버에 남는다.
 - Anchors: `be/src/main/java/kr/co/fitdining/api/searchthread/SearchThreadController.java#SearchThreadController.deleteThread` (new) · `fe/src/domains/place/ui/thread-storage.ts#removeThread` (new) · `fe/src/domains/place/ui/recent-search-sheet.tsx#RecentSearchSheet` (modify)
 
+## D-19 최근 검색 상한
+- Status: settled
+- Decision: thread는 회원과 비회원 모두 최근 20개만 남긴다(2026-11-03 사용자 결정, S15P31A302-141). 20개는 최근 검색 시트 한 페이지(D-7)와 같아 "더 보기" 없이 모두 보이고, 결과 스냅샷이 커서 저장량도 줄어든다.
+  - **회원(서버):** turn 추가로 thread를 새로 만든 트랜잭션에서, 방금 만든 thread를 빼고 목록 순서(마지막 요청 시각 내림차순, thread id 내림차순)로 앞의 19개만 남기고 나머지를 turn까지 지운다. 기기 시각이 틀려 방금 만든 thread가 가장 오래돼도 지우지 않는다. 이미 있는 thread에 이어 쓰면 개수가 늘지 않으므로 지우지 않는다. 같은 회원의 저장끼리는 회원 행 잠금(D-13)으로 줄을 서서, 여러 기기에서 동시에 새 thread를 만들어도 정리가 엇갈리지 않는다. 이미 20개를 넘은 회원은 다음 새 thread 때 한 번에 정리되므로 마이그레이션은 없다.
+  - **비회원(기기):** 저장할 때마다 지금 thread를 남기고 나머지는 최근 것부터 19개만 둔다.
+  - thread 안의 turn 수에는 상한이 없다. 자르면 이어 검색의 기준 turn 사슬이 끊긴다.
+  - 감수: 다른 기기에서 새 thread가 쌓여, 지금 보는 가장 오래된 thread가 지워질 수 있다. 그 화면에서 이어 검색하면 저장만 조용히 실패하고(첫 turn 규칙 400, D-5) 검색은 그대로 된다.
+- Rejected: 50개 → 시트에서 "더 보기"가 필요하고 저장량이 늘며, 개인정보를 덜 남기는 쪽을 골랐다. 상한을 넘으면 새 기록을 저장하지 않음 → 최근 검색이 멈춘다. thread 안 turn 수 상한 → 기준 turn 사슬이 끊긴다.
+- Anchors: `be/src/main/java/kr/co/fitdining/api/searchthread/SearchThreadService.java#SearchThreadService.MAX_THREADS` (new) · `fe/src/domains/place/ui/thread-storage.ts#saveDeviceTurn` (modify)
+
 ## 다시 검토할 것
 
 결정은 있지만 사용자가 다시 확인하기로 한 항목이다. 바뀌면 grill을 다시 열어 해당 D-n을 고친다.
 
-- **D-13 탈퇴 때 기록:** PRD OQ-17이 정해지거나 개인정보처리방침에 보관 기간이 생기면 다시 연다.
-- **D-13 알릴 것:** 팀과 RB-10(`docs/infra/runbooks/RB-10.md`의 Postgres 개인정보 목록) 담당에게 넘긴다. 검색 기록에는 입력 문장, 취향 태그, 관심 지역(`mapBounds`)이 들어가고 탈퇴 뒤에도 남는다. 취향은 탈퇴 때 즉시 지우지만 검색 기록 안의 사본은 남는다. infra 문서는 직접 고치지 않는다.
+- **D-13 알릴 것:** 팀과 RB-10(`docs/infra/runbooks/RB-10.md`의 Postgres 개인정보 목록) 담당에게 넘긴다. 검색 기록에는 입력 문장, 취향 태그, 관심 지역(`mapBounds`)이 들어가고, 회원마다 최근 20개만 남으며(D-19) 사용자가 지울 수 있고(D-18) 탈퇴하면 지워진다(D-13). infra 문서는 직접 고치지 않는다.
 - **D-14 초기화:** S15P31A302-115를 grill할 때 local/dev 검색 기록과 북마크 초기화를 그 작업 범위에 넣는다.
