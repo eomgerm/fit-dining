@@ -10,7 +10,7 @@ import { PlaceMeta, PlacePhoto, RankBadge } from "./place-parts";
 
 type NearbyCarouselProps = {
   cards: PlaceCard[];
-  // 가운데에 있는 선택된 카드
+  // 선택된 카드
   selectedId: number;
   // 거리의 기준 지점과, 기기 위치가 아닐 때 거리 앞에 붙는 이름
   origin: LatLng;
@@ -21,7 +21,7 @@ type NearbyCarouselProps = {
   onOpen: (card: PlaceCard) => void;
 };
 
-// 첫 화면 검색창 위의 주변 추천 카드(와이어프레임 Start). 가운데 카드가 선택된 카드다
+// 첫 화면 검색창 위의 주변 추천 카드(와이어프레임 Start)
 export function NearbyCarousel({
   cards,
   selectedId,
@@ -44,17 +44,21 @@ export function NearbyCarousel({
         const card = cards[next];
         if (card && card.place.id !== selectedId) onSelect(card);
       }}
-      // 선택된 카드는 화면 왼쪽에서 24px(칸 여백 8px + 16px) 떨어진다
-      options={{ align: () => 16 }}
-      slideClassName="basis-80"
+      // 640px(sm) 미만은 칸이 틀 안쪽을 꽉 채워, 카드가 검색창처럼 화면 좌우 16px(틀 여백 12px + 칸 여백 4px)에 놓이고
+      // 이웃 카드가 양옆 틀 여백에 비친다. 그 이상은 칸 320px이 틀 안쪽에서 8px 들어가 카드가 화면 왼쪽 24px에 놓인다(D-103)
+      peek
+      options={{
+        align: (viewSize, snapSize) => (snapSize < viewSize ? 8 : 0),
+      }}
+      slideClassName="basis-full sm:basis-80"
       // 칸 위아래 여유(py-1)만큼 당긴다. 아래는 2px 덜 당겨 검색창과 14px 띄운다
       className="-mt-1 -mb-0.5"
     >
       {cards.map((card, cardIndex) => {
         const selected = card.place.id === selectedId;
         return (
-          // 칸 안쪽 여백으로 카드 사이를 8px 띄운다. 위아래 여유는 카드 밖 선택 링이 잘리지 않게 한다
-          <div key={card.place.id} className="py-1 pl-2">
+          // 칸 좌우 여백 4px씩으로 카드 사이를 8px 띄운다. 위아래 여유는 카드 밖 선택 링이 잘리지 않게 한다
+          <div key={card.place.id} className="px-1 py-1">
             <NearbyCard
               card={card}
               rank={cardIndex + 1}

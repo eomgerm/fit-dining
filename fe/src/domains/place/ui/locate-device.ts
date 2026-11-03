@@ -2,6 +2,8 @@ import type { LatLng } from "../model/place-types";
 import { searchStore } from "../model/search-store";
 
 const LOCATION_TIMEOUT_MS = 10_000;
+// 이 안에 얻은 위치는 브라우저가 새로 찾지 않고 돌려준다(D-101)
+const LOCATION_MAX_AGE_MS = 30_000;
 
 function currentPosition() {
   return new Promise<LatLng>((resolve, reject) => {
@@ -12,7 +14,7 @@ function currentPosition() {
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => resolve({ lat: coords.latitude, lng: coords.longitude }),
       reject,
-      { timeout: LOCATION_TIMEOUT_MS },
+      { timeout: LOCATION_TIMEOUT_MS, maximumAge: LOCATION_MAX_AGE_MS },
     );
   });
 }

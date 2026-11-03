@@ -555,4 +555,4 @@ Glossary: none · ADRs: none
 - Status: settled
 - Decision: D-82에 더한다. 화면 폭이 640px 미만이면 선택된 카드는 검색창과 같은 폭(화면 좌우 16px 여백)으로 가운데에 놓이고, 양옆 카드는 카드 사이 8px 간격 너머로 조금 보인다. 640px 이상이면 카드 폭은 320px이고 선택된 카드는 목록의 왼쪽 첫 자리에 놓인다. 실기기 피드백(2026-11-03)이다.
 - Rejected: 모든 폭에서 검색창과 같은 폭 → 넓은 화면에서 카드가 지나치게 넓어진다.
-- Anchors: `fe/src/domains/place/ui/nearby-carousel.tsx#NearbyCarousel` (modify)
+- Anchors: `fe/src/domains/place/ui/nearby-carousel.tsx#NearbyCarousel` (modify) · `fe/src/shared/ui/display/carousel.tsx#Carousel` (modify)

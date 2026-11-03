@@ -19,6 +19,7 @@ import type { LatLng, MapBounds } from "../model/place-types";
 type NaverLatLng = { lat(): number; lng(): number };
 type NaverMap = {
   getBounds(): { getSW(): NaverLatLng; getNE(): NaverLatLng };
+  getCenter(): NaverLatLng;
   panTo(coord: NaverLatLng): void;
   setSize(size: unknown): void;
   destroy(): void;
@@ -54,6 +55,10 @@ const DEFAULT_ZOOM = 15;
 const PIN_SIZE = 28;
 const SELECTED_PIN_SIZE = 40;
 const LOCATION_PIN_SIZE = 32;
+// panTo 뒤 지도가 멈췄다는 알림(idle)을 기다리는 최대 시간
+const PAN_SETTLE_MS = 1500;
+// 이만큼 가까우면 이미 그 위치다(위도·경도 차이, 약 1m)
+const SAME_CENTER_DEG = 0.00001;
 
 let scriptPromise: Promise<NaverMaps> | undefined;
 let authFailed = false;
@@ -147,7 +152,8 @@ export type MapPin = LatLng & { id: number; mark?: PinMark };
 export type PlaceMapHandle = {
   // 지도가 없으면 undefined
   getBounds(): MapBounds | undefined;
-  panTo(coord: LatLng): void;
+  // 지도가 그 위치로 이동을 마치면 끝난다. 이미 그 위치이거나 지도가 없으면 바로 끝난다
+  panTo(coord: LatLng): Promise<void>;
 };
 
 type PlaceMapProps = {
@@ -182,6 +188,8 @@ export function PlaceMap({
   const containerRef = useRef<HTMLDivElement>(null);
   const [loaded, setLoaded] = useState<{ naver: NaverMaps; map: NaverMap }>();
   const [failed, setFailed] = useState(false);
+  // 만든 지도. 화면이 숨겨져도 남겨 두었다가 다시 보일 때 그대로 쓴다
+  const kept = useRef<{ naver: NaverMaps; map: NaverMap }>(undefined);
   // 처음 중심은 지도를 만들 때 한 번만 쓴다
   const initialCenter = useRef(center ?? DEFAULT_CENTER);
   const markersRef = useRef(
@@ -192,35 +200,43 @@ export function PlaceMap({
   const ready = Boolean(active);
 
   useEffect(() => {
+    const container = containerRef.current;
     let cancelled = false;
-    let map: NaverMap | undefined;
     const fail = () => setFailed(true);
     authFailureListeners.add(fail);
 
-    loadRuntimeConfig()
-      .then((config) => {
-        if (!config?.naverMapClientId) throw new Error("지도 키가 없습니다");
-        return loadNaverMaps(config.naverMapClientId);
-      })
-      .then((naver) => {
-        if (cancelled || !containerRef.current) return;
-        if (authFailed) throw new Error("지도 인증에 실패했습니다");
-        map = new naver.Map(containerRef.current, {
-          center: new naver.LatLng(
-            initialCenter.current.lat,
-            initialCenter.current.lng,
-          ),
-          zoom: DEFAULT_ZOOM,
+    if (!kept.current) {
+      loadRuntimeConfig()
+        .then((config) => {
+          if (!config?.naverMapClientId) throw new Error("지도 키가 없습니다");
+          return loadNaverMaps(config.naverMapClientId);
+        })
+        .then((naver) => {
+          if (cancelled || !container) return;
+          if (authFailed) throw new Error("지도 인증에 실패했습니다");
+          const map = new naver.Map(container, {
+            center: new naver.LatLng(
+              initialCenter.current.lat,
+              initialCenter.current.lng,
+            ),
+            zoom: DEFAULT_ZOOM,
+          });
+          kept.current = { naver, map };
+          setLoaded(kept.current);
+        })
+        .catch(() => {
+          if (!cancelled) fail();
         });
-        setLoaded({ naver, map });
-      })
-      .catch(() => {
-        if (!cancelled) fail();
-      });
+    }
 
     return () => {
       cancelled = true;
       authFailureListeners.delete(fail);
+      // 다른 화면으로 갈 때 Next가 이 화면을 숨겨 두면 지도 DOM이 그대로 남는다. 지도를 없애지 않아
+      // 돌아왔을 때 보던 중심과 확대 정도가 그대로이고 지도 생성 횟수도 늘지 않는다(D-102)
+      if (container?.isConnected) return;
+      const map = kept.current?.map;
+      kept.current = undefined;
       ignoreSdkError(() => map?.destroy());
     };
   }, []);
@@ -356,7 +372,32 @@ export function PlaceMap({
         };
       },
       panTo({ lat, lng }) {
-        active?.map.panTo(new active.naver.LatLng(lat, lng));
+        if (!active) return Promise.resolve();
+        const { naver, map } = active;
+        return new Promise<void>((resolve) => {
+          let listener: unknown;
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          const finish = () => {
+            clearTimeout(timer);
+            ignoreSdkError(() => naver.Event.removeListener(listener));
+            resolve();
+          };
+          try {
+            const center = map.getCenter();
+            const moves =
+              Math.abs(center.lat() - lat) > SAME_CENTER_DEG ||
+              Math.abs(center.lng() - lng) > SAME_CENTER_DEG;
+            if (moves) {
+              listener = naver.Event.addListener(map, "idle", finish);
+              // 알림이 오지 않아도 기다림이 남지 않게 한다
+              timer = setTimeout(finish, PAN_SETTLE_MS);
+            }
+            map.panTo(new naver.LatLng(lat, lng));
+            if (!moves) finish();
+          } catch {
+            finish();
+          }
+        });
       },
     }),
     [active],

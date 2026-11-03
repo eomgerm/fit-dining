@@ -64,7 +64,10 @@ it.each(["success", "denied", "unavailable", "timeout"])(
     expect(screen.getByText(/허용하지 않으면 역삼역 주변/)).toBeTruthy();
     expect(allow.getAttribute("aria-disabled")).toBe("true");
     expect(mocks.position).toHaveBeenCalledTimes(1);
-    expect(mocks.position.mock.calls[0][2]).toEqual({ timeout: 10_000 });
+    expect(mocks.position.mock.calls[0][2]).toEqual({
+      timeout: 10_000,
+      maximumAge: 30_000,
+    });
     expect(mocks.replace).not.toHaveBeenCalled();
     await act(async () => {
       if (result === "success")

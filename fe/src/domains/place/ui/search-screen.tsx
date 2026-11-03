@@ -121,6 +121,8 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
   const pendingKey = useRef<QueryKey | undefined>(undefined);
   // 지도를 마지막으로 옮겨 준 기기 위치. 새 위치를 얻을 때만 지도를 옮긴다
   const centeredOn = useRef<LatLng | undefined>(undefined);
+  // "내 위치"를 눌러 위치를 찾고 지도를 옮기는 중. 버튼 아이콘이 파란색이다(D-100)
+  const [locating, setLocating] = useState(false);
 
   const saved = useSavedPlaces(bookmarks, savedView);
   const [savedPanel, setSavedPanel] = useState<SavedPanelState>(
@@ -201,7 +203,7 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
   const firstScreen = !showPanel && !past;
   const nearby = useNearbyPicks(firstScreen && !savedView);
   const nearbyOffline = isOfflineError(nearby.error);
-  // 가운데 카드가 선택된 카드다. 고른 적이 없으면 첫 카드
+  // 고른 적이 없으면 첫 카드가 선택된 카드다
   const selectedNearbyId = nearby.cards.some(
     ({ place }) => place.id === selectedPlaceId,
   )
@@ -219,12 +221,15 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
     locateOnOpen();
   }, []);
 
-  // 위치를 얻으면(화면을 열 때, "내 위치", 근처 응답) 지도를 그 위치로 옮긴다
+  // 위치를 얻으면(화면을 열 때, "내 위치", 근처 응답) 지도를 그 위치로 옮긴다. 이동을 마치면 파란색을 끈다
   useEffect(() => {
     if (!mapReady || !here || centeredOn.current === here) return;
     centeredOn.current = here;
-    mapRef.current?.panTo(here);
+    void mapRef.current?.panTo(here).then(() => setLocating(false));
   }, [mapReady, here]);
+
+  // 다른 화면으로 가면(Next가 이 화면을 숨기면) 찾는 중 표시를 끈다
+  useEffect(() => () => setLocating(false), []);
 
   useEffect(() => {
     if (focusRequest > 0 && !searching) followUpRef.current?.focus();
@@ -431,8 +436,14 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
     bookmarks.login(savedPlacesHref(savedView ? savedCategory : undefined));
   }
 
+  // 찾는 중에 다시 누르면 무시한다. 위치를 얻으면 위의 Effect가 지도를 옮긴 뒤 파란색을 끈다
   async function handleMyLocation() {
-    if (!(await locateDevice())) toast(LOCATION_FAILED_MESSAGE);
+    if (locating) return;
+    setLocating(true);
+    if (!(await locateDevice())) {
+      setLocating(false);
+      toast(LOCATION_FAILED_MESSAGE);
+    }
   }
 
   const savedItems =
@@ -472,8 +483,8 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
         onPinClick: handlePinClick,
       };
   const myLocationButton = mapReady && (
-    <Fab label="내 위치" onClick={handleMyLocation}>
-      <MyLocationIcon className="text-icon" />
+    <Fab label="내 위치" aria-busy={locating} onClick={handleMyLocation}>
+      <MyLocationIcon className={locating ? "text-location" : "text-icon"} />
     </Fab>
   );
 

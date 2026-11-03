@@ -233,6 +233,7 @@ function stubNaverMaps({ Marker }: { Marker?: unknown } = {}) {
   const created: {
     setSize: ReturnType<typeof vi.fn>;
     panTo: ReturnType<typeof vi.fn>;
+    getCenter: ReturnType<typeof vi.fn>;
   }[] = [];
   const maps = {
     Map: class {
@@ -243,6 +244,8 @@ function stubNaverMaps({ Marker }: { Marker?: unknown } = {}) {
         getSW: () => latLng(BOUNDS.swLat, BOUNDS.swLng),
         getNE: () => latLng(BOUNDS.neLat, BOUNDS.neLng),
       });
+      // 처음 중심은 기기 위치와 멀다. 테스트가 바꿔 "이미 그 위치"를 흉내 낸다
+      getCenter = vi.fn(() => latLng(0, 0));
       panTo = vi.fn();
       setSize = vi.fn();
       destroy() {}
@@ -495,6 +498,66 @@ describe("SearchScreen", () => {
         expect(within(list).getByText("장소 1")).toBeTruthy();
         expect(within(list).queryByText("장소 3")).toBeNull();
         expect(within(list).queryByText(/역삼역/)).toBeNull();
+      });
+
+      describe('"내 위치" 버튼 (D-100, D-101)', () => {
+        const locationButton = () =>
+          screen.getByRole("button", { name: "내 위치" });
+        const busy = () => locationButton().getAttribute("aria-busy");
+        const iconClass = () =>
+          locationButton().querySelector("svg")?.getAttribute("class");
+
+        it("누르면 지도가 그 위치로 이동을 마칠 때까지 파란색이고, 찾는 중에 다시 눌러도 다시 묻지 않는다", async () => {
+          const getCurrentPosition = stubLocation({
+            position: { lat: 37.5, lng: 127.03 },
+          });
+          renderScreen();
+          await waitFor(() => expect(mapState()).toBe("ready"));
+          expect(busy()).toBe("false");
+          expect(iconClass()).toContain("text-icon");
+
+          fireEvent.click(locationButton());
+          await waitFor(() => expect(map.created[0].panTo).toHaveBeenCalled());
+          expect(busy()).toBe("true");
+          expect(iconClass()).toContain("text-location");
+          fireEvent.click(locationButton());
+          expect(getCurrentPosition).toHaveBeenCalledTimes(1);
+          expect(getCurrentPosition).toHaveBeenCalledWith(
+            expect.any(Function),
+            expect.any(Function),
+            expect.objectContaining({ maximumAge: 30_000 }),
+          );
+
+          map.fire("idle");
+          await waitFor(() => expect(busy()).toBe("false"));
+          expect(iconClass()).toContain("text-icon");
+        });
+
+        it("지도가 이미 그 위치라 움직이지 않으면 바로 원래 색으로 돌아온다", async () => {
+          stubLocation({ position: { lat: 37.5, lng: 127.03 } });
+          renderScreen();
+          await waitFor(() => expect(mapState()).toBe("ready"));
+          map.created[0].getCenter.mockReturnValue({
+            lat: () => 37.5,
+            lng: () => 127.03,
+          });
+
+          fireEvent.click(locationButton());
+          await waitFor(() => expect(map.created[0].panTo).toHaveBeenCalled());
+          await waitFor(() => expect(busy()).toBe("false"));
+        });
+
+        it("위치를 얻지 못하면 알리고 원래 색으로 돌아온다", async () => {
+          stubLocation({});
+          renderScreen();
+          await waitFor(() => expect(mapState()).toBe("ready"));
+
+          fireEvent.click(locationButton());
+          expect(
+            await screen.findByText("위치를 확인할 수 없어요"),
+          ).toBeTruthy();
+          expect(busy()).toBe("false");
+        });
       });
 
       it("가운데가 아닌 카드를 누르면 선택하고 지도를 옮기며, 선택된 카드를 누르면 상세로 간다", async () => {
