@@ -1,0 +1,12 @@
+# AI 크롤러(GPTBot, ClaudeBot, PerplexityBot 등)도 자기 그룹이 없으면 이 * 규칙을 따른다
+User-Agent: *
+Allow: /
+Disallow: /api/
+Disallow: /my
+Disallow: /login
+Disallow: /signup
+Disallow: /location
+Disallow: /place/review
+Disallow: /auth-demo
+
+Sitemap: https://fitdining.co.kr/sitemap.xml

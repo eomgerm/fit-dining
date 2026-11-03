@@ -13,9 +13,21 @@ const pretendard = localFont({
   variable: "--font-pretendard",
 });
 
+// dev와 prod가 같은 이미지라 환경변수 대신 prod 주소로 고정한다. dev는 엣지 게이트가 크롤러를 막는다
+// canonical은 여기 두지 않는다. 두면 자기 값을 안 정한 모든 페이지가 홈을 가리킨다
 export const metadata: Metadata = {
-  title: "핏다이닝",
+  metadataBase: new URL("https://fitdining.co.kr"),
+  title: { default: "핏다이닝", template: "%s | 핏다이닝" },
   description: "오늘 끌리는 곳, 내 취향으로 찾기",
+  // 공유 이미지(og:image, twitter:image)는 opengraph-image.png 파일 규칙이 붙인다
+  openGraph: {
+    type: "website",
+    siteName: "핏다이닝",
+    locale: "ko_KR",
+    title: "핏다이닝",
+    description: "오늘 끌리는 곳, 내 취향으로 찾기",
+  },
+  twitter: { card: "summary_large_image" },
   // iOS는 매니페스트 아이콘 대신 apple-touch-icon(PNG)을 읽는다
   icons: { apple: "/icons/apple-touch-icon.png" },
   // statusBarStyle은 두지 않는다. black-translucent는 deprecated이고 홈 화면 앱은 상태바 아래에 그리지 못한다(WebKit 317153).
