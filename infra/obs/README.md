@@ -118,6 +118,26 @@ BE가 내는 지표의 이름은 [metrics.md](../../docs/infra/contracts/metrics
 
 `bash infra/obs/test/test-obs.sh up`이 데이터 스택(OpenSearch 포함)과 가짜 BE·Caddy·B, 웹훅 대역, TLS 서버를 띄우고 스택을 올린다. `run [구역...]`의 구역은 `stack init scrape rules alert grafana digest install hygiene`이다. 알림 구역은 가짜 BE를 내려 실제 알림이 Mattermost 형식으로 도착하는지 본다(시험 사본은 `for`를 0s로, 그룹 대기와 반복 간격을 짧게 바꾼다. 식과 라우팅은 같다). `down`이 시험이 만든 것을 모두 지운다.
 
+## 운영 서버 알림 시험 기록
+
+2026-11-03 08:51~09:00(KST)에 서버 A와 B의 Alertmanager로 시험 알림을 보내 Mattermost 도착을 확인했다(Jira S15P31A302-82). 사용자가 채널에서 아래가 모두 정상으로 오는 것을 확인했다.
+
+| 보낸 곳 | 알림(`FitTestFire*`) | 도착(설정상 대기 → 서버에서 확인한 시각) | 전송 수(시험 전 → 확인 시점) |
+|---|---|---|---|
+| A | critical, env=prod | 그룹 대기 30초 → 08:52에 확인 | 121 → 122 |
+| A | warning, env=dev | 그룹 대기 5분(`dev` 수신자) → 08:57에 확인 | 122 → 124(이 줄과 아래 해소 한 건의 합) |
+| A | critical 해소 | 그룹 간격 5분 → 08:57에 확인 | (위와 같음) |
+| B | critical, env=prod | 그룹 대기 30초 → 08:52에 확인 | 116 → 117 |
+| B | critical 해소 | 그룹 간격 5분 → 08:57에 확인 | 117 → 118 |
+
+메시지 제목은 `장애 1건 · A/prod`, `장애 1건 · B/prod`, `주의 1건 · A/dev`, `해소 · A/prod`, `해소 · B/prod`다.
+
+전송 실패는 양쪽 모두 0이었다. 같은 날 09:00:10의 일일 요약(`fit-daily-digest.service`)도 정상 도착했다.
+
+시험 알림을 보내는 법(각 서버에서): Alertmanager 컨테이너 안에서 `wget --header='Content-Type: application/json' --post-data='[{"labels":{"alertname":"FitTestFire","severity":"critical","env":"prod","site":"A"},"annotations":{"summary":"[시험] ...","description":"...","runbook":"시험"},"startsAt":"<UTC 시각>","endsAt":"<UTC 시각>"}]' http://localhost:9093/api/v2/alerts`. critical은 `endsAt`을 150초 뒤로 두면 해소 메시지까지 본다. warning·info와 dev는 그룹 대기(5분)가 있어서 `endsAt`을 그보다 길게(12분) 둬야 한다. 짧으면 해소가 먼저 되어 아무것도 보내지 않는다. 통합별 전송·실패 수는 `/metrics`의 `alertmanager_notifications_total{integration="slack"}`, `alertmanager_notifications_failed_total`이다(20개 통합이 나오므로 `slack`만 거른다).
+
+한계: 규칙이 실제 장애를 감지해 알림이 나는 경로(예: A의 Alertmanager를 멈춰 B가 알리는지)는 시험하지 않았다. Mattermost 쪽 장애 상황도 시험하지 않았다.
+
 ## 파일
 
 | 경로 | 내용 |
