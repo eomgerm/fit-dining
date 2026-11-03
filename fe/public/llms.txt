@@ -13,8 +13,3 @@
 ## 페이지
 
 - [홈](https://fitdining.co.kr/): 지도, 주변 추천, 자연어 검색
-
-## Optional
-
-- [서비스 이용약관](https://fitdining.co.kr/terms)
-- [개인정보처리방침](https://fitdining.co.kr/privacy)
