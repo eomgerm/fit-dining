@@ -34,12 +34,13 @@ class AiTasteAnalyzerTests {
                     {"polarity":"LIKE","label":"soup"}],"model":"test"}
                     """, MediaType.APPLICATION_JSON));
         var result = analyzer.analyze("sample");
-        assertEquals("FOOD_SPICY", result.get(0).code());
-        assertNull(result.get(1).code());
+        assertEquals("FOOD_SPICY", result.tastes().get(0).code());
+        assertNull(result.tastes().get(1).code());
+        assertEquals("test", result.model());
     }
     @Test void empty_staysEmpty() {
         server.expect(anything()).andRespond(withSuccess("{\"tastes\":[],\"model\":\"test\"}", MediaType.APPLICATION_JSON));
-        assertEquals(List.of(), analyzer.analyze("sample"));
+        assertEquals(List.of(), analyzer.analyze("sample").tastes());
     }
     @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.ValueSource(strings = {"{}", "null", "{", "{\"tastes\":[null]}",
@@ -89,7 +90,7 @@ class AiTasteAnalyzerTests {
             var configured = new AiTasteClient(Validation.buildDefaultValidatorFactory().getValidator(),
                     "http://127.0.0.1:" + http.getAddress().getPort(), credentials ? "key" : "",
                     credentials ? "secret" : "", 1000, 1000);
-            assertEquals(List.of(), configured.interpret("sample"));
+            assertEquals(List.of(), configured.interpret("sample").tastes());
             assertEquals(credentials ? "key" : null, headers.get().getFirst("Modal-Key"));
             assertEquals(credentials ? "secret" : null, headers.get().getFirst("Modal-Secret"));
         } finally { http.stop(0); }

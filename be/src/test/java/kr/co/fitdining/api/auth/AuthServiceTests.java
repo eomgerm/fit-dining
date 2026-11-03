@@ -67,7 +67,7 @@ class AuthServiceTests extends PostgresTestSupport {
         passwords.entered = null;
         passwords.release = null;
         jdbc = new JdbcTemplate(appSource());
-        for (String table : List.of("auth_refresh_tokens", "auth_security_events", "auth_login_attempts", "auth_social_accounts", "auth_users")) {
+        for (String table : List.of("taste_input_logs", "auth_refresh_tokens", "auth_security_events", "auth_login_attempts", "auth_social_accounts", "auth_users")) {
             jdbc.update("delete from " + table);
         }
         users.saveAndFlush(new AuthUser("user-1", "demo@example.com", "demo", passwords.hash("example-test-password1"), clock.instant(), "2026-10-23"));
@@ -464,12 +464,18 @@ class AuthServiceTests extends PostgresTestSupport {
             jdbc.update("insert into auth_login_attempts(address,action,created_at) values (?,'login',?)", "old", java.sql.Timestamp.from(clock.instant().minusSeconds(901)));
         }
         jdbc.update("insert into auth_login_attempts(address,action,created_at) values (?,'login',?)", "boundary", java.sql.Timestamp.from(clock.instant().minusSeconds(900)));
+        for (int i = 0; i < 3; i++) {
+            jdbc.update("insert into taste_input_logs(text,succeeded,created_at) values ('old',false,?)", java.sql.Timestamp.from(clock.instant().minusSeconds(91*86400)));
+        }
+        jdbc.update("insert into taste_input_logs(text,succeeded,created_at) values ('boundary',false,?)", java.sql.Timestamp.from(clock.instant().minusSeconds(90*86400)));
         cleanup.clean();
         assertEquals(0, jdbc.queryForObject("select count(*) from auth_refresh_tokens", Integer.class));
         assertEquals(1, jdbc.queryForObject("select count(*) from auth_security_events where family_id=?", Integer.class, first.identity().sessionId()));
         assertEquals(1, jdbc.queryForObject("select count(*) from auth_security_events where family_id='old'", Integer.class));
         assertEquals(1, jdbc.queryForObject("select count(*) from auth_login_attempts where address='old'", Integer.class));
         assertEquals(1, jdbc.queryForObject("select count(*) from auth_login_attempts where address='boundary'", Integer.class));
+        assertEquals(1, jdbc.queryForObject("select count(*) from taste_input_logs where text='old'", Integer.class));
+        assertEquals(1, jdbc.queryForObject("select count(*) from taste_input_logs where text='boundary'", Integer.class));
     }
 
     @Test @DisplayName("저장_발급과 시드 재실행_RT만 저장하고 비밀번호 유지")

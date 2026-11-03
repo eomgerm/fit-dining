@@ -15,7 +15,7 @@ public class MockTasteAnalyzer implements TasteAnalyzer {
         {"담백.*국물|국물.*담백", "담백한 국물"}, {"담백", "담백한 맛"}, {"국물", "국물"},
         {"매운|맵", "매운맛"}, {"달달|단맛", "달달한 맛"}, {"조용", "조용한 분위기"}, {"양\\s*많", "넉넉한 양"}
     };
-    @Override public List<TasteChip> analyze(String text) {
+    @Override public Interpretation analyze(String text) {
         if (text.contains("#실패")) throw new IllegalStateException("Mock analyzer unavailable");
         Set<TasteChip> chips = new LinkedHashSet<>();
         for (String fragment : text.split("[,，.!?\\n]|하고|하지만|그런데|좋아하며|좋아해요")) {
@@ -35,6 +35,6 @@ public class MockTasteAnalyzer implements TasteAnalyzer {
             if (end > 0 && Character.isHighSurrogate(label.charAt(end - 1))) end--;
             chips.add(new TasteChip(Polarity.LIKE, label.substring(0, end)));
         }
-        return chips.stream().limit(5).toList();
+        return new Interpretation(chips.stream().limit(5).toList(), "mock");
     }
 }

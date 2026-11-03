@@ -49,10 +49,10 @@ public class AiTasteClient {
         return builder.build();
     }
 
-    public List<Preferences.TasteChip> interpret(String text) {
+    public InterpretResponse interpret(String text) {
         var response = interpret.post().uri("/v1/taste/interpret").contentType(MediaType.APPLICATION_JSON)
                 .body(Map.of("text", text)).retrieve().body(InterpretResponse.class);
-        return checked(response).tastes();
+        return checked(response);
     }
 
     public List<TasteFeature> profile(Preferences preferences) {

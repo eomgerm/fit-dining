@@ -28,8 +28,15 @@ it("절 제목과 본문, 시행일을 표시한다", () => {
     screen.getByText("이메일, 비밀번호(암호화된 값만 저장), 닉네임"),
   ).toBeTruthy();
   expect(screen.getAllByRole("term").map((term) => term.textContent)).toEqual(
-    Array.from({ length: 6 }, () => ["항목", "목적"]).flat(),
+    Array.from({ length: 7 }, () => ["항목", "목적"]).flat(),
   );
+  // 직접 입력 기록은 비회원도 남고, 회원과 연결하지 않아 탈퇴와 무관하게 90일 보관한다
+  expect(screen.getByText("취향 직접 입력 기록")).toBeTruthy();
+  expect(
+    screen.getByText(
+      "취향 직접 입력 기록: 90일(회원 정보와 연결하지 않아 탈퇴해도 90일 동안 보관)",
+    ),
+  ).toBeTruthy();
   expect(screen.getByText("이메일: brightrain453@gmail.com")).toBeTruthy();
   // 2절: 리뷰 작성 전 근처 확인 용도, 7절: 탈퇴는 연락처로 요청
   expect(

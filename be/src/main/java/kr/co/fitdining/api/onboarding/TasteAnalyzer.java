@@ -10,5 +10,8 @@ public interface TasteAnalyzer {
      * @return possibly empty confirmed taste candidates, at most ten, labels of 1–20 characters
      * @throws RuntimeException when the analyzer is unavailable; caller maps failure to 503
      */
-    List<TasteChip> analyze(String text);
+    Interpretation analyze(String text);
+
+    /** @param model the model that produced the chips, null when the analyzer does not say */
+    record Interpretation(List<TasteChip> tastes, String model) {}
 }
