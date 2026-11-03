@@ -27,7 +27,7 @@
 | 약관 바텀시트 | `SignupTerms` (2-03) | 전체 동의와 필수 3개 항목. 모두 동의하면 “동의하고 시작하기”가 활성화된다. “보기”는 시트 위에 서비스 이용약관·개인정보처리방침 본문과 시행일(2026-11-02)을 모달로 보여 준다. 같은 본문을 `/terms`, `/privacy`에서도 보여 준다(`fe/src/domains/auth/model/terms-content.ts`). |
 | 가입 입력 오류 | `SignupEmailError` (2-E02) | 가입 실패 시 시트를 닫고 해당 입력칸 아래에 오류를 표시한다. 이메일 중복이면 로그인 링크도 표시한다. 일반 실패·시도 제한은 안내 문구로 표시한다. |
 | `/login` | `Login` (3-01), `LoginError` (3-E01) | 이메일·비밀번호 입력, 비밀번호 표시 전환, 로그인 오류 안내. “이메일로 가입하기”는 `/signup`으로 이동한다. 비밀번호 찾기는 준비 중 안내, 소셜 버튼으로 로그인을 시작한다. |
-| `/my` | `MyInfo` | 본인 프로필·로그인 방식 표시. 로그아웃 성공 시 `/` 이동. “이용약관”, “개인정보처리방침”은 `/terms`, `/privacy`로 이동한다. “탈퇴하기”는 준비 중 토스트. |
+| `/my` | `MyInfo` | 본인 프로필·로그인 방식 표시. 로그아웃 성공 시 `/` 이동. “로그아웃”은 확인 모달(“로그아웃할까요?”, [취소]·[로그아웃]) 뒤 로그아웃하며 401도 성공으로 본다. 실패하면 모달을 닫고 토스트. “이용약관”, “개인정보처리방침”은 `/terms`, `/privacy`로 이동한다. “탈퇴하기”는 `MyInfoWithdraw` 확인 모달(“탈퇴할까요?” / “저장한 장소와 남긴 리뷰가 모두 지워지고 되돌릴 수 없어요.”, [취소]·[탈퇴]) 뒤 `DELETE /api/v1/users/{userId}`를 호출한다. 성공하면 이 탭과 다른 탭의 세션을 비우고 `/` 이동 + “탈퇴했어요” 토스트, 401이면 `/login`, 그 밖 실패는 모달을 닫고 토스트. 처리 중에는 두 버튼이 비활성이고 모달이 닫히지 않는다. |
 | `/auth-demo` | 인증 확인용 화면 | 닉네임, 묶음 식별자, AT·묶음 만료 시각을 표시한다. 인증 API 호출, 수동 갱신, 현재 묶음 로그아웃을 제공한다. 토큰 원문은 표시하지 않는다. |
 
 가입 흐름은 `/signup` → `/signup/email` → 약관 시트 → 자동 로그인 → `/`다. `/login`의 로그인 성공 또는 기존 로그인 복구 성공은 `/`로 이동한다. `/auth-demo`는 복구와 `/me` 확인에 실패하여 401을 받으면 `/login`으로 이동하며, 로그아웃 성공 뒤에도 `/login`으로 이동한다.
@@ -63,6 +63,7 @@
 | POST | `/refresh` | RT 쿠키 | 200, 같은 묶음의 토큰 응답과 새 RT 쿠키 |
 | POST | `/logout` | RT 쿠키, Bearer AT 불필요 | 204, 현재 묶음 폐기와 쿠키 제거 |
 | GET | `/api/v1/users/{userId}` | Bearer AT, 본인만 | 200, `userId`, `nickname`, `loginMethod` (`email`, `google`, `kakao`, `naver`). 남의 id는 403, 탈퇴·없는 사용자는 404 |
+| DELETE | `/api/v1/users/{userId}` | Bearer AT, 본인만 | 204, soft delete·취향·소셜 연결 삭제, 모든 RT 폐기와 쿠키 제거. 남의 id는 403, 반복 탈퇴도 204 |
 | GET | `/me` | Bearer AT | 200, `nickname`, `email` |
 | GET | `/protected` | Bearer AT | 200, `message`, `userId` |
 
@@ -273,7 +274,7 @@ FE의 `fe/src/domains/auth/api/auth-client.ts`가 인증 요청·메모리 세�
 
 - AT는 모듈 메모리에만 저장한다. RT는 `fitdining_rt`라는 HttpOnly·SameSite=Strict·Path=/api/auth 쿠키다. Secure는 환경 설정을 따르며 운영 HTTPS에서는 true를 사용한다. Max-Age는 묶음 만료까지 남은 시간이다.
 - 탭 안에서는 갱신 Promise를 공유한다. 가입·로그인·갱신·로그아웃은 같은 Web Lock `fitdining-auth-cookie`에 참여한다. Web Locks가 없으면 인증 요청 전에 오류를 반환하므로 HTTPS 또는 localhost의 지원 브라우저가 필요하다.
-- 가입·로그인·로그아웃 성공, 갱신 401은 BroadcastChannel `fitdining-auth`로 다른 탭의 메모리 AT를 비운다. 토큰 자체를 방송하지 않는다. 같은 Origin·브라우저 프로필의 탭은 RT 쿠키를 공유한다.
+- 가입·로그인·로그아웃·탈퇴 성공, 갱신 401은 BroadcastChannel `fitdining-auth`로 다른 탭의 메모리 AT를 비운다. 토큰 자체를 방송하지 않는다. 같은 Origin·브라우저 프로필의 탭은 RT 쿠키를 공유한다.
 - 보호 요청은 메모리 세션이 없으면 복구한다. 401과 AT 만료 type이 함께 올 때만 갱신 후 한 번 재시도하며, 그 외 401에는 자동 갱신하지 않는다.
 - 로그아웃은 AT 유무·만료와 관계없이 쿠키 요청만 전송한다. 성공 시 메모리를 비우며, 미리 갱신하지 않는다.
 - 다중 서버는 같은 DB와 서명 키를 사용한다. 독립된 기기·브라우저 프로필의 묶음은 서로 영향을 받지 않는다.
