@@ -1,6 +1,6 @@
 # AI 검색 API 명세
 
-Status: 초안 v0.7 · Jira: S15P31A302-41, S15P31A302-136, S15P31A302-158 · 작성일: 2026-10-23 · 고친 날: 2026-11-03
+Status: 초안 v0.8 · Jira: S15P31A302-41, S15P31A302-136, S15P31A302-158 · 작성일: 2026-10-23 · 고친 날: 2026-11-03
 
 BE는 검색 첫 페이지마다 AI를 한 번 부른다. AI는 요청을 해석하고 DB에서 후보를 뽑아 핏 점수로 정렬한 뒤 카드의 AI 필드를 돌려준다. v0.7부터 정렬에 LLM을 쓰지 않는다. BE는 카드에 장소 정보와 영업 상태를 붙여 FE에 준다.
 
@@ -53,13 +53,15 @@ JSON 이름은 camelCase다. 요청에 모르는 속성이 있으면 400이고(�
 
 `conditions`에는 해석 결과만 있다. 후속 검색 때도 `userId`(또는 `tasteProfile`)와 `mapBounds`는 다시 보내야 한다. BE의 `preferences`와 `cursor`는 null이라도 넣으면 400이므로 AI 요청용 DTO를 따로 둔다.
 
-v0.6부터 `conditions`에 분류별 조각(`locations`, `menus`, `hours`, `price`, `placeName`, `features`, `avoidCategories`)이 붙는다. 뜻은 [spec.md](spec.md) 4.1절에 있다. null인 조각은 빠지고 빈 목록은 그대로 온다. BE와 FE는 지금처럼 해석하지 않고 돌려보내면 되고, 조각이 없는 v0.5 이전 `conditions`도 그대로 읽는다. 아래 예시는 v0.5 필드만 적었다.
+v0.6부터 `conditions`에 분류별 조각(`locations`, `menus`, `hours`, `price`, `placeName`, `features`, `avoidCategories`, v0.8의 `avoidFoods`)이 붙는다. 뜻은 [spec.md](spec.md) 4.1절에 있다. null인 조각은 빠지고 빈 목록은 그대로 온다. BE와 FE는 지금처럼 해석하지 않고 돌려보내면 되고, 조각이 없는 v0.5 이전 `conditions`도 그대로 읽는다. 아래 예시는 v0.5 필드만 적었다.
 
 ```json
-"conditions": {"text": "션릉역이나 역삼역 걸어서 5분 3만원 이하 초밥 매운 거 말고", "embeddingText": "3만원 이하 초밥", "codes": ["FOOD_JAPANESE"], "categoryGroup": "RESTAURANT", "station": "SEOLLEUNG", "nearby": false, "locations": [{"text": "션릉역", "kind": "STATION", "value": "선릉역"}, {"text": "역삼역 걸어서 5분", "kind": "STATION", "value": "역삼역", "walkMinutes": 5}], "menus": [{"text": "초밥", "value": "초밥", "code": "FOOD_JAPANESE", "want": true}, {"text": "매운 거", "value": "매운 음식", "code": "FOOD_SPICY", "want": false}], "hours": [], "price": {"text": "3만원 이하", "maxWon": 30000, "cheap": false}, "features": [], "avoidCategories": []}
+"conditions": {"text": "션릉역이나 역삼역 걸어서 5분 3만원 이하 초밥 매운 거 말고", "embeddingText": "3만원 이하 초밥", "codes": [], "categoryGroup": "RESTAURANT", "station": "SEOLLEUNG", "nearby": false, "locations": [{"text": "션릉역", "kind": "STATION", "value": "선릉역"}, {"text": "역삼역 걸어서 5분", "kind": "STATION", "value": "역삼역", "walkMinutes": 5}], "menus": [{"text": "초밥", "value": "초밥", "spellings": ["스시"], "want": true}], "hours": [], "price": {"text": "3만원 이하", "maxWon": 30000, "cheap": false}, "features": [], "avoidCategories": [], "avoidFoods": ["FOOD_SPICY"]}
 ```
 
 AI는 `previousConditions`의 모르는 필드를 거부한다. 그래서 v0.6을 배포한 뒤 v0.5로 되돌리면, 조각이 붙은 `conditions`로 하는 후속 검색은 새 검색으로 바뀐다(`PREVIOUS_INVALID`).
+
+v0.8부터 메뉴(`menus`)와 음식 종류·매운맛(`codes`, `avoidFoods`)을 나눈다. 메뉴 조각에는 음식 코드(`code`)가 없고 다른 표기(`spellings`)가 붙는다. 빼 달라는 음식은 `avoidFoods`다. 메뉴만 말한 요청("초밥")에는 음식 종류 코드가 붙지 않는다. v0.7 이전 응답의 `menus[].code`는 모르는 필드라, 배포 전후에 걸친 후속 검색은 새 검색으로 바뀐다(`PREVIOUS_INVALID`). BE와 FE는 바꿀 것이 없다.
 
 ### 응답
 
@@ -152,7 +154,7 @@ BE는 검색마다 `modal_llm_calls_total`과 `modal_embedding_calls_total`을 �
 
 #### 결과 없음
 
-뽑힌 장소가 없으면 `items`가 비고 `emptyReason`이 붙는다. `rankedBy`는 빠진다. 장소 데이터가 없는 지역(서비스 역 밖의 역·동, 랜드마크)이면 `cause`가 "코엑스는 아직 준비 중인 지역이에요"다(v0.6).
+뽑힌 장소가 없으면 `items`가 비고 `emptyReason`이 붙는다. `rankedBy`는 빠진다. 장소 데이터가 없는 지역(서비스 역 밖의 역·동, 랜드마크)이면 `cause`가 "코엑스는 아직 준비 중인 지역이에요"다(v0.6). 메뉴로 걸렀으면 "강남역 식당 중 돈까스를 파는 곳이 없어요" / "메뉴를 바꾸거나 빼고 다시 찾아 보세요"다(v0.8).
 
 ```json
 {"query": "선릉역 주차되는 카페"}

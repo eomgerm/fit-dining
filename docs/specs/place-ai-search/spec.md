@@ -205,6 +205,7 @@ AC-9 ~ AC-12가 규칙이다(D-6). 요약하면 다음과 같다.
 | `hours` | jsonb 배열 `[{"day", "open", "close", "closed", "breaks"}]`. `place_hours`를 월요일부터 모은다. 시각은 `"HH:MM"`이고 없으면 null이다. 없으면 `[]`. V17 |
 | `menus` | jsonb 배열 `[{"name", "category", "price", "representative"}]`. `place_menus`를 `sort_order` 순서로 모은다. 없으면 `[]`. V17 |
 | `price` | integer. 가게 가격(원)이다. 네이버 리뷰 메뉴로 계산하는 값이라 장소 분석 적재가 채우기 전까지 NULL이다(place-catalog D-4). V17 |
+| `category` | `places`의 네이버 업종 이름 그대로("카페,디저트", "돈가스"). AI 검색 메뉴 거르기가 메뉴판 없이도 메뉴를 찾는 데 쓴다. V19 |
 
 `embedding`의 두 값은 AI 코드의 인코더 상수(`ai/src/fit_ai/embedding.py`)와 같아야 한다. 적재된 벡터가 그 인코더로 만들어졌는지는 이 spec이 보장하지 않는다(D-13, D-15 Default).
 
