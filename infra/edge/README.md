@@ -80,7 +80,7 @@ prod 호스트의 `/_ops/prometheus/healthy`, `/_ops/alertmanager/healthy`만 �
 
 1. 첫날: `ACME_MODE=staging`, `HSTS_MODE=off`로 시작해 발급 경로(80 도달, DNS)를 확인한다.
 2. 이어서 `ACME_MODE=production`으로 바꿔 운영 인증서를 받는다. 이때부터 기본 이슈어 둘(Let's Encrypt, ZeroSSL)을 쓴다.
-3. 운영 인증서가 확정되면 `HSTS_MODE=on`으로 바꾼다.
+3. 운영 인증서가 확정되면 `HSTS_MODE=on`으로 바꾼다(2026-11-03 켰다). 이 값은 컨테이너를 만들 때만 읽어서 `edge.env`를 고친 뒤 `up -d --force-recreate`가 필요하고(`edgectl.sh reload`로는 반영되지 않는다) 2~3초 끊긴다. 이미 접속한 브라우저는 1년 동안 기억하므로 되돌리기 어렵다([RB-05](../../docs/infra/runbooks/RB-05.md)).
 
 ## 노트북에서 시험하기
 

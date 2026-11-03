@@ -359,7 +359,7 @@ Caddy 컨테이너(`caddy:2.x`, 구현 시 최신 2.x를 핀)가 A의 80·443만
 - **헤더:** `encode zstd gzip`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`를 붙이고 `Server`와 `X-Powered-By`를 지운다 (확인: upstream이 보내도 지워진다).
 - **스트리밍:** FE의 스트리밍 응답(Suspense, RSC)은 Caddy가 버퍼링하지 않고 그대로 흘려야 한다 (확인: `test-edge.sh`. `encode`를 켠 상태에서 첫 덩어리가 1.5초 뒤의 마지막 덩어리를 기다리지 않고 도착한다).
 - **환경 값:** FE는 `/etc/fit/fe-<env>.env`를 런타임에 읽는다(번들에 넣지 않는다). 브라우저가 쓸 공개 값은 `/config.json`(FE 라우트)이 돌려준다.
-- **HSTS:** `Strict-Transport-Security`는 운영 인증서가 확정된 뒤에만 켠다. staging 인증서 단계에서 켜면 브라우저가 거부해 테스트가 막힌다.
+- **HSTS:** `Strict-Transport-Security`는 운영 인증서가 확정된 뒤에만 켠다. staging 인증서 단계에서 켜면 브라우저가 거부해 테스트가 막힌다. 2026-11-03에 `max-age=31536000`(`includeSubDomains`, `preload` 없음)으로 켰다. 이미 접속한 브라우저에서는 되돌릴 수 없다(RB-05).
 - **CSP:** 프런트 팀과 합의한 뒤 추가한다.
 
 ### 5.4 dev 접근과 쿠키
@@ -710,7 +710,7 @@ Grafana는 팀원에게 viewer 계정을 준다. A503에서는 SSH 보유자만 
 
 - **prod 데이터 적재 경로:** 수집(Apify 등) → Postgres 적재 → 문서 전량 임베딩 백필(Modal) → OpenSearch 인덱스 생성과 별칭 연결. 중간에 멈춰도 이어서 돌릴 수 있어야 한다. 소요 시간과 비용은 dev에서 한 번 재서 기록한다(BE·AI 팀, 16절 #24). 첫 공개 때는 이 경로를 prod에서 다시 돌리지 않고 dev의 장소 테이블 10개를 `infra/data/copy-places.sh dev prod`로 한 번 복사한다(같은 모델의 벡터라 prod에서 다시 계산하지 않는다. 대상이 비어 있을 때만 하고 덮어쓰지 않는다).
 - **배치 중복 방지:** dev의 새벽 배치는 기본으로 끄고(`BATCH_ENABLED=false`) 필요하면 prod 벡터를 복사해 쓴다(Modal 비용 이중 발생 방지). prod 배치는 한 번에 하나만 돈다(BE 계약 #19).
-- **시험:** 알림 테스트 발화, 복원 리허설 2회, Modal 지출 한도·킬스위치·키워드 폴백 시험, 롤백 시험, 인증서 만료일과 `caddy_data` 백업 확인, 경량 부하 시험(4.4절 가정 기준).
+- **시험:** 알림 테스트 발화(2026-11-03 했다. infra/obs/README.md의 기록), 복원 리허설 2회, Modal 지출 한도·킬스위치·키워드 폴백 시험, 롤백 시험, 인증서 만료일과 `caddy_data` 백업 확인, 경량 부하 시험(4.4절 가정 기준).
 
 ### 10.8 브랜치·MR 운영 규칙
 
