@@ -1052,6 +1052,94 @@ class TestRules:
         assert interpret_by_rules(query).embedding_text == embedding_text
 
     @pytest.mark.parametrize(
+        ("query", "codes", "avoid_foods", "menus"),
+        [
+            ("강남역 매운 건 싫어", (), ("FOOD_SPICY",), ()),
+            (
+                "매운 짬뽕 말고 짜장",
+                (),
+                ("FOOD_SPICY",),
+                (("짜장면", True), ("짬뽕", False)),
+            ),
+            ("강남역 고기 없는 식당", (), (), (("고기", False),)),
+            ("고기없는 식당", (), (), (("고기", False),)),
+            (
+                "일식이나 중식 말고 한식",
+                ("FOOD_KOREAN",),
+                ("FOOD_JAPANESE", "FOOD_CHINESE"),
+                (),
+            ),
+            ("매운 거 먹고 싶다", ("FOOD_SPICY",), (), ()),
+            # 묻는 말은 부정이 아니다.
+            ("강남역 조용한 카페 없을까?", ("QUIET",), (), ()),
+            # 업종을 빼는 말 앞의 낱말은 부정하지 않는다.
+            ("강남역 조용한 카페 말고 술집", ("QUIET",), (), ()),
+            # 반대 극이 없는 코드를 부정하면 버린다. 웨이팅은 부정하면 짧은 대기다.
+            ("데이트 말고 혼밥", ("PURPOSE_SOLO",), (), ()),
+            ("주차 말고 예약 되는 곳", ("RESERVATION",), (), ()),
+            ("웨이팅 없이 바로", ("SHORT_WAIT",), (), ()),
+            ("시끄러운 곳 말고 데이트하기 좋은 데", ("QUIET", "PURPOSE_DATE"), (), ()),
+        ],
+    )
+    def test_negation(
+        self,
+        query: str,
+        codes: tuple[str, ...],
+        avoid_foods: tuple[str, ...],
+        menus: tuple[tuple[str, bool], ...],
+    ) -> None:
+        """규칙해석_싫어·없는·않은·말고로부정하면_그낱말만피함이나반대쪽으로읽는다"""
+        conditions = interpret_by_rules(query)
+
+        assert conditions.codes == codes
+        assert conditions.avoid_foods == avoid_foods
+        assert tuple((m.value, m.want) for m in conditions.menus) == menus
+
+    @pytest.mark.parametrize(
+        ("query", "categories"),
+        [
+            ("카페 싫고 매운 것도 싫어", (("RESTAURANT", True), ("CAFE", False))),
+            ("강남역 매운 건 싫어", (("RESTAURANT", True),)),
+            ("역삼역 카페 말고 술집", (("BAR", True), ("CAFE", False))),
+        ],
+    )
+    def test_negated_categories(
+        self, query: str, categories: tuple[tuple[str, bool], ...]
+    ) -> None:
+        """규칙해석_싫어로업종을빼면_빼달라는업종이고음식낱말은업종으로남는다"""
+        conditions = interpret_by_rules(query)
+
+        assert tuple((c.code, c.want) for c in conditions.categories) == categories
+
+    @pytest.mark.parametrize(
+        ("query", "embedding_text"),
+        [
+            ("시끄러운 데 말고 조용한 카페", "조용한 카페"),
+            ("매운 거 말고 담백한 국물 요리", "담백한 국물 요리"),
+            ("강남역 조용한 카페 말고 술집", "조용한 술집"),
+            # 다 지우면 업종 이름이다.
+            ("강남역 매운 건 싫어", "식당"),
+        ],
+    )
+    def test_negated_removed(self, query: str, embedding_text: str) -> None:
+        """규칙해석_벡터용문장의부정한말은_지운다"""
+        assert interpret_by_rules(query).embedding_text == embedding_text
+
+    def test_follow_up_overrides_menu(self) -> None:
+        """규칙해석_후속에서이전메뉴를빼면_그메뉴는피함이고나머지조건은잇는다"""
+        previous = interpret_by_rules("역삼역 조용한 파스타 식당 새벽까지")
+
+        conditions = interpret_by_rules("파스타 말고 일요일", previous)
+
+        assert [(m.value, m.want) for m in conditions.menus] == [("파스타", False)]
+        assert conditions.codes == ("QUIET",)
+        assert [(h.open_until, h.day) for h in conditions.hours] == [
+            ("02:00", None),
+            (None, "SUN"),
+        ]
+        assert conditions.station == "YEOKSAM"
+
+    @pytest.mark.parametrize(
         ("query", "codes"),
         [
             ("1명 식당", ("PURPOSE_SOLO",)),

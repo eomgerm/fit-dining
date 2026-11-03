@@ -8,17 +8,16 @@ import re
 from dataclasses import dataclass
 
 from fit_ai.features import FEATURES
-from fit_ai.match.conditions import STATION_NAMES
+from fit_ai.match.conditions import CATEGORY_NAMES, STATION_NAMES
 from fit_ai.match.interpretation.codes import GROUP_SIZE
+from fit_ai.match.interpretation.merge import merge
 from fit_ai.match.interpretation.request import (
     STATION_CODES,
     STATION_WORDS,
     Conditions,
     _assemble,
-    _join,
     _known_codes,
     _without_location,
-    locations_of,
 )
 from fit_ai.match.interpretation.segments import (
     DAYS,
@@ -78,7 +77,7 @@ NEARBY_WORDS = ("근처", "주변", "가까운")
 
 CODE_WORDS = {
     "QUIET": ("조용", "차분"),
-    "LIVELY": ("활기", "북적"),
+    "LIVELY": ("활기", "북적", "시끄", "시끌"),
     "SPACIOUS_SEATING": ("넓은", "넓고", "자리 넉넉", "자리가 넉넉"),
     "SHORT_WAIT": ("웨이팅", "대기", "기다리지"),
     "GENEROUS_PORTION": ("양 많", "양이 많", "푸짐"),
@@ -110,6 +109,12 @@ CODE_WORDS = {
 찾는다. "저렴"은 특징이 아니라 가격이다(`_CHEAP`). 음식 종류 코드는 음식 종류나 나라를 말한
 낱말로만 찾는다. 메뉴("라멘")는 메뉴 조각이다(`MENU_WORDS`). 코드 확인은 이 낱말이 없는데 LLM이
 낸 음식 종류 코드를 뗀다."""
+
+
+NEGATION_WANTS = frozenset({"SHORT_WAIT"})
+"""낱말을 부정하면 그 코드를 바라는 코드. 낱말이 피하고 싶은 것("웨이팅", "대기")이라 "웨이팅
+싫어", "웨이팅 없이"는 짧은 대기를 바라는 말이다. 그 밖에 반대 극이 없는 코드를 부정하면
+("데이트 말고") 버린다."""
 
 
 MENU_WORDS = {
@@ -194,9 +199,26 @@ VALUE_WORDS = ("가성비", "가격 대비", "가격대비", "값어치")
 가성비를 붙이면 이 낱말이 없을 때 뗀다."""
 
 
-_NEGATED_WIDE = re.compile(r"(?:\S+\s+)?\S+\s*(?:말고|대신|아니고|빼고)")
-"""코드와 메뉴의 부정을 찾는 꼴. "매운 거 말고"처럼 앞의 두 낱말까지 본다. 업종과 역은
-"역삼역 카페 말고"의 역까지 지우지 않도록 한 낱말만 보는 `_NEGATED`를 쓴다."""
+_MARKER = r"(?:말고|빼고|대신|아니고|제외|싫(?:어|고|은|다|음)|않(?:은|는|고|게)|없(?:는|이|고))"
+"""앞의 말을 부정하는 말. "고기 없는", "매운 건 싫어", "맵지 않은"도 본다. "조용한 카페
+없을까?"처럼 묻는 말(없을까, 없나)은 부정이 아니라서 "없"은 "없는", "없이", "없고"만 본다.
+규칙 해석이 "싫어", "없는"을 놓쳐 "매운 건 싫어"를 매운 음식을 원함으로 읽었다(2026-11-03)."""
+
+
+_GENERIC_HEAD = re.compile(
+    r"(?:거|건|것|게|걸|데|곳|집|쪽|음식|요리|메뉴|종류|분위기|스타일|느낌)"
+    r"(?:은|는|도|이|가|을|를|만|들)?"
+)
+"""뜻을 앞 낱말이 정하는 말. "매운 거 말고", "시끄러운 데 싫어"는 앞 낱말까지 부정이다."""
+
+
+_LISTED = re.compile(r"\S(?:이나|이랑|랑|하고|과|와|,)$")
+"""다음 낱말과 묶인 낱말("일식이나 중식 말고"의 "일식이나")"""
+
+
+_EXCLUDED_WIDE = re.compile(r"(?:\S+\s+)?\S+\s*(?:말고|대신|아니고|빼고)")
+"""후속에서 이전 코드를 뺐는지 보는 꼴(`_kept_codes`). 빼 달라는 말만 본다. "웨이팅 싫어"는
+짧은 대기를 원하는 말이라 "싫어"로 이전 코드를 빼지 않는다."""
 
 
 _PRICE_MAX_MIXED = re.compile(
@@ -235,8 +257,9 @@ _NOW = re.compile(r"지금\s*(?:열린|여는|영업|문\s*연)")
 _DAY_CODES = dict(zip("월화수목금토일", DAYS, strict=True))
 
 
-_NEGATED = re.compile(r"\S+\s*(?:말고|대신|아니고)")
-""""카페 말고 술집"의 "카페 말고"처럼 빼 달라는 말. 업종과 역을 찾을 때 지운다."""
+_NEGATED = re.compile(rf"\S+?\s*{_MARKER}\S*")
+""""카페 말고 술집"의 "카페 말고"처럼 부정한 낱말 하나와 부정하는 말. 지역을 찾을 때
+지운다("역삼역 카페 말고"의 역은 남는다)."""
 
 
 _PEOPLE = re.compile(r"(\d+)\s*(?:명|인)")
@@ -246,9 +269,9 @@ def interpret_by_rules(query: str, previous: Conditions | None = None) -> Condit
     """낱말 규칙으로 해석한다. LLM이 실패했을 때 쓰고, LLM이 놓친 조각을 채울 때도 쓴다.
 
     낱말이 들어 있는지만 본다. 지역은 서비스 역, 역 이름과 같은 동, 근처만 찾는다. 부정은
-    "말고", "빼고" 앞의 성향 축(활기↔조용), 음식, 업종만 알아듣는다. 가게 이름, 다른
-    동네·랜드마크, 철자 교정은 못 한다. 후속 조건이면 이전 조건에 새 조각을 더하고,
-    업종·지역·가격은 새 요청에 있을 때만 바꾼다.
+    "말고", "빼고", "싫어", "없는", "않은" 앞의 성향 축(활기↔조용), 음식, 메뉴, 특징, 업종만
+    알아듣는다(`_MARKER`). 가게 이름, 다른 동네·랜드마크, 철자 교정은 못 한다. 이번 요청만
+    해석하고, 후속 조건이면 이전 조건과 분류별 규칙으로 합친다(`merge.merge`).
 
     Args:
         query: 사용자가 이번에 입력한 요청문
@@ -258,44 +281,36 @@ def interpret_by_rules(query: str, previous: Conditions | None = None) -> Condit
         해석한 조건
     """
     parts = _rule_parts(query)
-    codes = list(parts.codes)
-    if previous is None:
-        return _assemble(
-            text=query,
-            embedding_text=_without_location(query, parts.category_group),
-            codes=codes,
-            category_group=parts.category_group,
-            locations=parts.locations,
-            menus=parts.menus,
-            hours=parts.hours,
-            price=parts.price,
-            place_name=None,
-            features=parts.features,
-            avoid_categories=parts.avoid_categories,
-            avoid_foods=parts.avoid_foods,
-        )
-    category_group = parts.category_group or previous.category_group
-    return _assemble(
-        text=_join(previous.text, query),
+    turn = _assemble(
+        text=query,
         embedding_text=_without_location(
-            _join(previous.embedding_text, query), category_group
+            _without_negated(query, parts.category_group), parts.category_group
         ),
-        codes=[*_kept_codes(previous, query, codes, parts.avoid_foods), *codes],
-        category_group=category_group,
-        # 새로 말한 지역이 있으면 그것을 따른다. "근처로"라고 하면 이전 역을 버린다.
-        locations=parts.locations or locations_of(previous),
-        menus=_merged(previous.menus, parts.menus),
-        hours=_merged(previous.hours, parts.hours),
-        price=parts.price or previous.price,
-        place_name=previous.place_name,
-        features=_merged(previous.features, parts.features),
-        avoid_categories=(*previous.avoid_categories, *parts.avoid_categories),
-        # 이번에 원한 음식 종류는 이전에 뺐어도 다시 원하는 것이다.
-        avoid_foods=(
-            *(c for c in previous.avoid_foods if c not in codes),
-            *parts.avoid_foods,
-        ),
+        codes=list(parts.codes),
+        category_group=parts.category_group,
+        locations=parts.locations,
+        menus=parts.menus,
+        hours=parts.hours,
+        price=parts.price,
+        place_name=None,
+        features=parts.features,
+        avoid_categories=parts.avoid_categories,
+        avoid_foods=parts.avoid_foods,
     )
+    if previous is None:
+        return turn
+    kept = set(_kept_codes(previous, query, list(turn.codes), turn.avoid_foods))
+    return merge(previous, turn, [c for c in previous.codes if c not in kept])
+
+
+def _without_negated(query: str, category_group: str | None) -> str:
+    """벡터용 문장에서 부정한 말("매운 건 싫어")을 지운다. 벡터 검색은 부정을 알아듣지
+    못해 그 말과 가까운 장소를 올린다. 지우고 남는 글자가 없으면 업종 이름, 업종도 없으면
+    요청문 그대로다."""
+    stripped = _strip_negated(query)
+    if any(ch.isalnum() for ch in stripped):
+        return stripped
+    return CATEGORY_NAMES.get(category_group or "", query)
 
 
 @dataclass(frozen=True)
@@ -313,9 +328,43 @@ class _RuleParts:
     features: tuple[FeatureText, ...]
 
 
+def _negated_spans(query: str) -> list[tuple[int, int]]:
+    """부정한 말의 위치. 부정한 낱말과 부정하는 말이고, 부정한 낱말이 뜻을 앞 낱말이 정하는
+    말("매운 거")이거나 메뉴("매운 짬뽕")이거나 앞 낱말과 묶였으면("일식이나 중식") 앞
+    낱말까지다. 업종 이름 앞의 낱말("조용한 카페 말고")은 부정하지 않는다. 업종을 빼 달라는
+    말이다."""
+    spans = []
+    for found in _NEGATED.finditer(query):
+        start = found.start()
+        word = re.split(_MARKER, found.group())[0].strip()
+        before = re.search(r"(\S+)\s+$", query[:start])
+        if before and (
+            _GENERIC_HEAD.fullmatch(word)
+            or any(menu in word for menu in MENU_WORDS)
+            or _LISTED.search(before.group(1))
+        ):
+            start = before.start(1)
+        spans.append((start, found.end()))
+    return spans
+
+
+def _negated_text(query: str) -> str:
+    """부정한 말만 이은 문장"""
+    return " ".join(query[a:b] for a, b in _negated_spans(query))
+
+
+def _strip_negated(query: str) -> str:
+    """부정한 말을 지운 문장"""
+    kept, end = [], 0
+    for a, b in _negated_spans(query):
+        kept.append(query[end:a])
+        end = b
+    return " ".join("".join([*kept, query[end:]]).split())
+
+
 def _rule_parts(query: str) -> _RuleParts:
     """요청문에서 규칙으로 찾을 수 있는 조각을 모두 찾는다."""
-    negated = " ".join(_NEGATED_WIDE.findall(query))
+    negated = _negated_text(query)
     codes = []
     avoid_foods = ["FOOD_SPICY"] if _SPICY_AVOID.search(query) else []
     for code, words in CODE_WORDS.items():
@@ -328,6 +377,9 @@ def _rule_parts(query: str) -> _RuleParts:
         elif _has(negated, words) and code.startswith("FOOD_"):
             # "매운 거 말고", "일식 말고"는 바라는 쪽 코드가 없어 빼 달라는 음식으로 둔다.
             avoid_foods.append(code)
+        elif _has(negated, words) and code not in NEGATION_WANTS:
+            # "데이트 말고", "주차 말고"는 바라는 쪽 코드가 없어 버린다.
+            continue
         elif code not in avoid_foods:
             # "안 매운"의 "매운"은 원하는 매운맛이 아니다.
             codes.append(code)
@@ -337,7 +389,8 @@ def _rule_parts(query: str) -> _RuleParts:
         elif int(count) >= GROUP_SIZE:
             codes.append("PURPOSE_GROUP")
     menus = _rule_menus(query, negated)
-    # "카페 말고 술집으로"에서 카페를 고르지 않도록 빼 달라는 말은 지우고 찾는다.
+    # "카페 말고 술집으로"에서 카페를 고르지 않도록 빼 달라는 말은 지우고 찾는다. 부정한
+    # 낱말 하나만 지워서 "역삼역 카페 말고"의 역과 "매운 건 싫어"의 음식 낱말(식당)은 남는다.
     wanted = _NEGATED.sub(" ", query)
     category_group = _first(CATEGORY_WORDS, wanted)
     avoid_categories = tuple(
@@ -438,7 +491,8 @@ def _rule_price(query: str) -> Price | None:
     if found := _CHEAP.search(query):
         return Price(found.group().strip(), cheap=True)
     # "비싼 데 말고"는 싼 곳을 바라는 말이다.
-    if span := next((s for s in _NEGATED_WIDE.findall(query) if "비싼" in s), None):
+    spans = (query[a:b] for a, b in _negated_spans(query))
+    if span := next((s for s in spans if "비싼" in s), None):
         return Price(span, cheap=True)
     return None
 
@@ -453,11 +507,6 @@ def _rule_features(query: str, negated: str) -> tuple[FeatureText, ...]:
     return tuple(found.values())
 
 
-def _merged(before: tuple, after: tuple) -> tuple:
-    """이전 조각 뒤에 새 조각을 붙인다. 같은 조각은 한 번만 남긴다."""
-    return tuple(dict.fromkeys([*before, *after]))[-MAX_SEGMENTS:]
-
-
 def _kept_codes(
     previous: Conditions,
     query: str,
@@ -467,7 +516,7 @@ def _kept_codes(
     """후속에서 남길 이전 코드. 이번 요청이 "말고"로 뺐거나, 반대 극을 바라거나, 빼 달라는
     음식이 된 코드는 버린다. LLM이 업종을 바꾸며 이전 조건을 통째로 버리는 일을 막는다
     ("카페 말고 술집으로")."""
-    negated = " ".join(_NEGATED_WIDE.findall(query))
+    negated = " ".join(_EXCLUDED_WIDE.findall(query))
     avoided = set(avoid_foods)
     kept = []
     for code in _known_codes(list(previous.codes)):
