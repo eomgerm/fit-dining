@@ -9,6 +9,8 @@ LLM 검색의 대화 기록(thread)은 지금 기기의 `localStorage`에만 있
 
 이번 작업은 회원의 thread를 서버에 저장해 어느 기기에서든 최근 검색, 그때의 결과, 이어 검색이 그대로 되게 한다. 비회원은 지금처럼 기기에 저장한다. Jira S15P31A302-116의 완료 기준은 "다른 기기에서 로그인해도 최근 검색과 이전 결과가 그대로 보이고, 이어서 후속 조건을 보낼 수 있음"이다.
 
+이번 반복(Jira S15P31A302-141, 2026-11-03 사용자 피드백)은 사용자가 최근 검색에서 기록을 지우게 한다. 기록에는 입력 문장, 취향 태그, 관심 지역이 들어 있는데 지울 방법이 없었다(D-18).
+
 ## Assumptions
 
 1. FE 세션은 `fe/src/domains/auth/api/auth-client.ts`의 메모리에만 있다. `getSession()`은 `userId`, `sessionId`가 든 세션이나 `null`을 돌려주고, `subscribe`가 세션이 바뀔 때 알린다. 다른 탭의 로그아웃이나 갱신 실패는 BroadcastChannel로 이 탭 세션을 `null`로 만든다. `restore()`가 쿠키로 세션을 되살린다.
@@ -46,7 +48,7 @@ GET /api/v1/me/search-threads/thread-3f2a…   → {"id":"thread-3f2a…","turns
 절대 일어나면 안 되는 것(D-2):
 
 - [x] AC-1: 어떤 요청이든 thread의 주인은 토큰의 사용자다. 다른 계정의 thread와 turn은 같은 id를 알아도 읽거나 바꿀 수 없다. 남의 thread id로 읽으면 404이고, 같은 id로 추가하면 내 계정의 별개 thread가 된다 (D-2, D-3)
-- [x] AC-2: 토큰이 아직 유효해도 탈퇴한 사용자는 세 기록 API 모두에서 401이다. 이 확인은 본문 파싱을 포함한 다른 판단보다 먼저라서, 탈퇴한 사용자는 없는 thread나 깨진 본문에도 401을 받는다. 예외: 탈퇴 트랜잭션과 같은 순간 들어온 저장 하나는 확인을 지나쳐 쓰일 수 있다(D-13에서 감수, 그 기록은 읽히지 않는다) (D-2, D-3, D-4, D-13)
+- [x] AC-2: 토큰이 아직 유효해도 탈퇴한 사용자는 모든 기록 API에서 401이다. 이 확인은 본문 파싱을 포함한 다른 판단보다 먼저라서, 탈퇴한 사용자는 없는 thread나 깨진 본문에도 401을 받는다. 예외: 탈퇴 트랜잭션과 같은 순간 들어온 저장 하나는 확인을 지나쳐 쓰일 수 있다(D-13에서 감수, 그 기록은 읽히지 않는다) (D-2, D-3, D-4, D-13)
 - [x] AC-3: 세션 키가 바뀌면([세션 규칙](#세션-규칙)) 이전 세션의 목록, 열린 thread, 과거 결과, 선택, 최신 카드, 쿼리 캐시 전체, 재전송 대기분이 어느 화면에도 남거나 새 세션으로 저장되지 않는다. 검색 화면이 떠 있지 않을 때 바뀌어도 장소 상세 화면에 이전 카드가 보이지 않는다. 바뀌기 전에 시작한 검색, 다음 페이지, thread 읽기, 저장의 응답이 늦게 와도 새 상태를 바꾸지 않고 저장되지 않는다 (D-2, D-5, D-6)
 - [x] AC-4: 같은 turn을 몇 번 보내든, 여러 기기에서 동시에 보내든 turn은 한 번만 저장되고, 이미 저장된 turn의 내용, 순서, thread의 마지막 요청 시각은 바뀌지 않는다. 동시 요청도 500이 되지 않는다 (D-1, D-2, D-4, D-17)
 - [x] AC-5: 성공한 첫 페이지 응답만 turn이 된다. 다음 페이지, 첫 화면 "근처 맛집" 카드, 실패하거나 버린 검색은 저장되지 않는다 (D-1, D-2)
@@ -64,7 +66,7 @@ API 동작:
 - [x] AC-14: 저장한 요청과 응답은 JSON 값으로 같게 돌아온다. 안쪽 `null`, 빈 객체, 서버가 모르는 필드, 숫자의 10진 값(예: `0.1`, `1e21`, 큰 정수)이 그대로다 (D-1, D-4, D-17)
 - [x] AC-15: 목록은 20개씩, 마지막으로 저장된 turn의 `at` 최신순(같으면 thread id 역순)이다. `title`은 첫 turn의 질문으로 고정이고, 나중에 저장된 turn의 `at`이 더 이르면 `lastAt`도 그 값이 된다. `nextCursor`는 다음 페이지가 실제로 있을 때만 있다. 형식이 틀린 cursor는 400이다 (D-3, D-7, D-17)
 - [x] AC-16: thread 하나의 turn은 서버에 처음 저장된 순서다. `baseId`가 없는 turn에는 `baseId` 키가 없고(`null`이 아니다), 응답 전체를 FE `parseThreads`에 넣으면 thread가 그대로 받아들여진다. 내 계정에 없는 thread는 404, 형식이 틀린 thread id는 400이다 (D-3, D-4, D-7)
-- [x] AC-17: 세 기록 API 핸들러가 만드는 모든 응답(오류 포함)에 `Cache-Control: no-store`가 붙는다. edge의 413과 Spring이 핸들러를 고르기 전에 끝내는 응답은 범위 밖이다 (D-3)
+- [x] AC-17: 기록 API 핸들러가 만드는 모든 응답(오류 포함)에 `Cache-Control: no-store`가 붙는다. edge의 413과 Spring이 핸들러를 고르기 전에 끝내는 응답은 범위 밖이다 (D-3)
 
 FE 동작:
 
@@ -81,6 +83,13 @@ FE 동작:
 - [x] AC-25: 탈퇴한 회원의 thread와 turn은 DB에 남고, 탈퇴 처리(`UserService.withdraw`)는 바뀌지 않는다. 회원 행이 실제로 지워지면 그 회원의 기록도 함께 지워진다 (D-13, D-17)
 - [x] AC-26: 두 기기, 두 계정으로 확인한다. 기기 A에서 회원이 검색과 후속 조건을 보낸 뒤 기기 B에서 같은 계정으로 로그인하면, 최근 검색에 그 thread가 보이고 검색 호출 없이 그때 결과가 복원된다. 아무 이전 turn에서나 후속 조건을 보내면 같은 thread에 이어서 쌓인다. 기기 A에서 새로고침하거나 다른 thread를 거쳐 그 thread를 다시 열면 기기 B에서 쌓은 turn까지 보이고, 최근 검색 목록의 마지막 요청 시각도 바뀌어 있다. 다른 계정에는 보이지 않는다 (D-1, D-3, D-9, D-16)
 
+지우기(S15P31A302-141):
+
+- [x] AC-27: `DELETE /api/v1/me/search-threads/{threadId}`는 내 계정의 그 thread와 모든 turn을 실제로 지우고 204다. 내 계정에 없는 thread여도 204이고, 다른 계정의 같은 id thread는 그대로다. 형식이 틀린 id는 400이고, 인증 없음과 탈퇴는 401이며 이 확인이 먼저다. `DELETE /api/v1/me/search-threads`는 내 기록만 모두 지우고 204다. 두 API 모두 `Cache-Control: no-store`이고, FE 출처가 아닌 `Origin`이면 403이다 (D-18)
+- [x] AC-28: 최근 검색 시트의 줄마다 오른쪽에 X(접근 이름 "<검색어> 검색 기록 지우기")가 있고, 누르면 확인 없이 그 줄을 지운다. 회원은 서버가 응답한 뒤 줄을 빼고, 실패하면 줄을 남기고 "지우지 못했어요. 다시 시도해 주세요." 토스트를 띄운다. 비회원은 기기 기록에서 바로 뺀다. 지운 뒤 목록을 다시 받지 않는다 (D-18)
+- [x] AC-29: 목록 위 "전체 삭제"는 확인 창(제목 "최근 검색을 모두 지울까요?", 설명 "검색 기록은 복구할 수 없어요.", [취소]·[삭제])을 띄운다. [취소]는 아무 요청 없이 닫고, [삭제]는 내 기록을 모두 지운 뒤 빈 안내를 보인다. 실패하면 목록을 남기고 AC-28과 같은 토스트를 띄운다 (D-18)
+- [x] AC-30: "보는 중"인 검색을 지워도 뒤 화면(결과, 요청 기록)은 그대로다. 그 페이지 세션 동안 지운 thread의 저장 대기분, 재전송, 그 화면에서 이어 보낸 검색은 저장하지 않고, 보내는 중인 저장이 있으면 끝난 뒤 지운다. 지우지 못하면 그 thread는 계속 저장한다. 전체 삭제는 그 페이지 세션에서 저장하거나 연 모든 thread에 같은 규칙이고, 새 검색은 새 thread로 저장된다 (D-18)
+
 ## Interfaces
 
 ### 기록 API
@@ -92,6 +101,8 @@ FE 동작:
 | `GET /api/v1/me/search-threads?cursor=<opaque>` | 200 `ThreadPage` | 400 `invalid`(cursor), 401 |
 | `GET /api/v1/me/search-threads/{threadId}` | 200 `Thread` | 400 `invalid`(id 형식), 401, 404 `not-found` |
 | `PUT /api/v1/me/search-threads/{threadId}/turns/{turnId}` | 204, 본문 없음 | 400 `invalid`, 401, 409 `base-missing`, 409 `conflict`, 413(edge) |
+| `DELETE /api/v1/me/search-threads/{threadId}` | 204, 본문 없음(내 계정에 없어도) | 400 `invalid`(id 형식), 401, 403(`Origin`) |
+| `DELETE /api/v1/me/search-threads` | 204, 본문 없음 | 401, 403(`Origin`) |
 
 ```ts
 type ThreadPage = {
@@ -206,7 +217,9 @@ FE의 저장 위치와 화면 비우기는 세션 키로 정한다(D-6).
 | `fe/src/domains/place/ui/thread-storage.ts#saveThread` | modify | 저장소 선택(비회원 기기, 회원 서버), turn 추가, 세션별 캐시, 재전송을 이 모듈 안으로 옮긴다. 비회원 기기 저장은 새 키를 쓰고 옛 키를 지운다 | D-5, D-8, D-9 |
 | `fe/src/domains/place/model/search-threads.ts#appendTurn` | reuse | turn 추가 규칙(`nextCursor` 제거) | D-9 |
 | `fe/src/domains/place/model/search-threads.ts#parseThreads` | reuse | 비회원 기기 기록과 서버 thread의 형식 검사 | D-4, D-9 |
-| `fe/src/domains/place/ui/recent-search-sheet.tsx#RecentSearchSheet` | modify | 로딩, 빈 목록, 실패, 더 보기, 줄별 열기 로딩과 다시 시도 | D-9 |
+| `fe/src/domains/place/ui/recent-search-sheet.tsx#RecentSearchSheet` | modify | 로딩, 빈 목록, 실패, 더 보기, 줄별 열기 로딩과 다시 시도. 줄별 지우기와 전체 삭제 | D-9, D-18 |
+| `fe/src/domains/place/ui/thread-storage.ts#removeThread` | new | 지운 thread의 대기분과 재전송을 멈추고 지운 뒤에는 저장하지 않는다. 회원은 서버, 비회원은 기기에서 지운다 | D-18 |
+| `be/src/main/java/kr/co/fitdining/api/searchthread/SearchThreadController.java#SearchThreadController.deleteThread` | new | thread 하나와 내 기록 전체를 지우는 API | D-18 |
 | `fe/src/domains/place/ui/search-screen.tsx#SearchScreen` | modify | thread 저장 호출과 thread 열기의 비동기, 실패 처리, 세션 전환 때 비우기와 늦은 응답 버리기 | D-6, D-9, D-10 |
 
 ## Seams & test plan
@@ -231,13 +244,15 @@ FE의 저장 위치와 화면 비우기는 세션 키로 정한다(D-6).
   - 회귀: 기존 비회원 시나리오는 그대로 통과한다. 옛 키를 채워 넣던 기존 테스트(`search-screen.test.tsx`의 "저장된 값이 깨져 있어도" 등)는 새 키 기준으로 고친다. 주요 시나리오(새 검색, 후속 조건, 요청 기록, 과거 결과) 몇 개를 회원 모드로도 돌린다.
   - Prior art: `fe/src/domains/place/ui/search-screen.test.tsx`.
 - **FE 순수 로직** (example), AC-10, AC-13, AC-22: Node 환경 Vitest로 `parseThreads`, 비회원 목록 정렬, 목록 요약 helper를 확인한다. place-search 테스트 계획의 FE 순수 로직 seam(Node 파서와 jsdom 경계)을 유지한다. BE가 받아들이는 turn의 대표 사례(최소 필드, `baseId` 있는 followUp, 안쪽 `null`이 든 `conditions`)를 `parseThreads`가 그대로 받는지 확인한다. 방향은 "BE가 받으면 FE도 받는다"이고, `parseThreads`는 고치지 않는다. Prior art: `fe/src/domains/place/model/search-threads.test.ts`.
+- **지우기** (example), AC-27, AC-28, AC-29, AC-30: BE는 위 BE seam에서 하나 지우기(turn까지), 없는 thread 204, 다른 계정 유지, 전체 지우기, 지운 thread의 후속 400, 틀린 id 400, 다른 출처 403, 인증·탈퇴 401, `no-store`를 확인한다. FE는 `recent-search-sheet.test.tsx`(줄 지우기와 응답 뒤 빼기, 실패 토스트, 비회원 기기, 전체 삭제 확인 창)와 `search-thread-storage.test.ts`(대기분 버리기와 보내는 중인 저장 뒤 지우기, 재전송 멈춤, 실패하면 계속 저장, 전체 삭제 뒤 새 thread만 저장, 비회원)로 확인한다.
+- **지우기 로컬 확인** (manual, 2026-11-03), AC-27, AC-28, AC-29, AC-30: local DB 모드, 회원, 375px에서 검색 기록 3개 중 하나를 열어 "보는 중"으로 만든 뒤 X로 지우면 `DELETE`가 FE 프록시를 거쳐 204이고(브라우저 Origin 통과) 그 줄만 빠지며 뒤 화면은 그대로였다. "전체 삭제" 확인 창의 문구를 보고 [삭제]를 누르면 `DELETE`가 204이고 빈 안내가 보였다. 실패 토스트, 비회원, [취소], 지운 thread의 이어 검색 미저장은 브라우저로 보지 않고 FE 테스트로만 확인했다(local은 AI 엔진이 없어 이어 검색을 보낼 수 없다).
 - **두 기기, 두 계정** (manual), AC-26: 브라우저 두 개(또는 일반 창과 시크릿 창)와 계정 두 개로 Usage의 흐름을 따라 한다. 잡는 것: 실제 FE와 BE가 이어진 복원과 이어 검색, 계정 격리. (D-16)
 - `UserService.withdraw`가 바뀌지 않았는지(AC-25)는 리뷰에서 diff로 확인한다.
 
 ## Out of scope
 
 - 로그인할 때 비회원 기록을 회원 계정으로 올리기(고도화 때) (D-8)
-- 최근 검색에서 지우기, 개수 상한, 보관 기한 (D-12)
+- 개수 상한, 보관 기한 (D-12)
 - 저장한 기록을 검색 엔진 입력으로 쓰기, 검색 API의 회원 판단과 개인화 (D-1, D-11)
 - 탈퇴 때 기록 hard delete, 재가입 때 이전 기록 처리(인증 파트) (D-13)
 - BE의 본문 크기 상한(edge가 맡는다), PostgreSQL 서버 로그 설정 (D-4)
