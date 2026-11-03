@@ -82,6 +82,24 @@ test("clearSession removes the in-memory session and notifies subscribers", asyn
   }
 });
 
+test("endSession clears the session and notifies other tabs", async () => {
+  const env = environment(async () => json(value()));
+  try {
+    const auth = await load();
+    await auth.login("demo@example.com", "password123");
+    env.messages.length = 0;
+    const listener = vi.fn();
+    const unsubscribe = auth.subscribe(listener);
+    auth.endSession();
+    assert.equal(auth.getSession(), null);
+    assert.equal(listener.mock.calls.length, 1);
+    assert.deepEqual(env.messages, ["session-changed"]);
+    unsubscribe();
+  } finally {
+    env.reset();
+  }
+});
+
 test("simultaneous expired API requests share one refresh and retry once", async () => {
   let refreshes = 0;
   const env = environment(async (url, options) => {

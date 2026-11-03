@@ -42,6 +42,12 @@ export const getSession = () => session;
 export function clearSession() {
   update(null);
 }
+// 서버에서 세션이 끝났을 때(예: 탈퇴) 메모리 세션을 비우고 다른 탭에도 알린다
+export function endSession() {
+  connectChannel();
+  update(null);
+  channel?.postMessage("session-changed");
+}
 export const getServerSession = () => null;
 
 async function browserLock<T>(work: () => Promise<T>) {

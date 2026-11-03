@@ -4,14 +4,18 @@ import { useRouter } from "next/navigation";
 import { getSession, logout, subscribe } from "@/domains/auth/api/auth-client";
 import {
   getUserProfile,
+  withdraw,
   type UserProfile,
 } from "@/domains/auth/api/user-profile";
 import { savedPlacesHref } from "@/domains/place/model/bookmark";
 import { savedViewState } from "@/domains/place/ui/saved-view-state";
 import { isApiError } from "@/shared/api/api-error";
+import { Button } from "@/shared/ui/button/button";
 import { IconButton } from "@/shared/ui/button/icon-button";
 import { ChevronLeftIcon } from "@/shared/ui/icon/icons/chevron-left";
 import { ChevronRightIcon } from "@/shared/ui/icon/icons/chevron-right";
+import { WarningIcon } from "@/shared/ui/icon/icons/warning";
+import { ConfirmDialog } from "@/shared/ui/overlay/confirm-dialog";
 import { useToast } from "@/shared/ui/overlay/toast";
 import { TopBar } from "@/shared/ui/layout/top-bar";
 const loginMessages = {
@@ -25,12 +29,15 @@ export default function MyPage() {
   const toast = useToast();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [error, setError] = useState("");
+  const [dialog, setDialog] = useState<"logout" | "withdraw" | null>(null);
   const [busy, setBusy] = useState(false);
+  // 로그아웃·탈퇴 중에는 세션이 비어도 /login으로 보내지 않는다(성공하면 /로 간다)
   const loggingOut = useRef(false);
+  const withdrawing = useRef(false);
   useEffect(() => {
     let active = true;
     const unsubscribe = subscribe(() => {
-      if (!getSession() && !loggingOut.current) {
+      if (!getSession() && !loggingOut.current && !withdrawing.current) {
         setProfile(null);
         router.replace("/login");
       }
@@ -55,6 +62,7 @@ export default function MyPage() {
     savedViewState.enter({ from: "my" });
     router.push(savedPlacesHref());
   }
+  // 화면을 옮길 때는 처리 중 상태를 풀지 않는다. 이동이 끝날 때까지 모달의 두 버튼을 막아 다시 누르지 못하게 한다
   async function handleLogout() {
     if (loggingOut.current) return;
     loggingOut.current = true;
@@ -65,12 +73,32 @@ export default function MyPage() {
     } catch (cause: unknown) {
       if (isApiError(cause) && cause.status === 401) router.replace("/");
       else {
+        loggingOut.current = false;
+        setBusy(false);
+        setDialog(null);
         toast("로그아웃하지 못했어요. 다시 시도해 주세요.");
         if (!getSession()) router.replace("/login");
       }
-    } finally {
-      loggingOut.current = false;
-      setBusy(false);
+    }
+  }
+  async function handleWithdraw() {
+    if (withdrawing.current) return;
+    withdrawing.current = true;
+    setBusy(true);
+    try {
+      await withdraw();
+      router.replace("/");
+      toast("탈퇴했어요");
+    } catch (cause: unknown) {
+      if (isApiError(cause) && cause.status === 401) router.replace("/login");
+      else {
+        withdrawing.current = false;
+        setBusy(false);
+        setDialog(null);
+        toast("탈퇴하지 못했어요. 다시 시도해 주세요.");
+        // 탈퇴 중 다른 탭이 로그아웃해 세션이 비었으면 subscribe가 건너뛴 이동을 여기서 한다
+        if (!getSession()) router.replace("/login");
+      }
     }
   }
   return (
@@ -123,19 +151,18 @@ export default function MyPage() {
               <button
                 key={label}
                 type="button"
-                disabled={label === "로그아웃" && busy}
                 onClick={
                   label === "로그아웃"
-                    ? handleLogout
+                    ? () => setDialog("logout")
                     : label === "저장한 장소"
                       ? openSaved
                       : label === "이용약관"
                         ? () => router.push("/terms")
                         : label === "개인정보처리방침"
                           ? () => router.push("/privacy")
-                          : () => toast("준비 중이에요")
+                          : () => setDialog("withdraw")
                 }
-                className={`flex min-h-13 w-full items-center justify-between border-b border-line px-5 text-left text-body-md disabled:opacity-50 ${label === "탈퇴하기" ? "text-ink-muted" : "text-ink"}`}
+                className={`flex min-h-13 w-full items-center justify-between border-b border-line px-5 text-left text-body-md ${label === "탈퇴하기" ? "text-ink-muted" : "text-ink"}`}
               >
                 {label}
                 {index < 3 && <ChevronRightIcon className="text-ink-muted" />}
@@ -144,6 +171,76 @@ export default function MyPage() {
           </nav>
         </>
       )}
+      <ConfirmDialog
+        open={dialog === "logout"}
+        onOpenChange={(open) => {
+          if (!open && !busy) setDialog(null);
+        }}
+        title="로그아웃할까요?"
+        secondaryAction={
+          <Button
+            variant="outline"
+            size="md"
+            disabled={busy}
+            focusableWhenDisabled
+            onClick={() => setDialog(null)}
+          >
+            취소
+          </Button>
+        }
+        action={
+          <Button
+            size="md"
+            disabled={busy}
+            focusableWhenDisabled
+            aria-busy={busy}
+            onClick={handleLogout}
+          >
+            로그아웃
+          </Button>
+        }
+      />
+      <ConfirmDialog
+        open={dialog === "withdraw"}
+        onOpenChange={(open) => {
+          if (!open && !busy) setDialog(null);
+        }}
+        tone="danger"
+        icon={<WarningIcon />}
+        title="탈퇴할까요?"
+        description={
+          <>
+            저장한 장소와 남긴 리뷰가 모두 지워지고 되돌릴 수 없어요.
+            {/* 창 밖은 가려져 있어 창 안에서 알린다 */}
+            <span role="status" className="sr-only">
+              {busy ? "탈퇴하고 있어요" : ""}
+            </span>
+          </>
+        }
+        secondaryAction={
+          <Button
+            variant="outline"
+            size="md"
+            disabled={busy}
+            focusableWhenDisabled
+            onClick={() => setDialog(null)}
+          >
+            취소
+          </Button>
+        }
+        action={
+          <Button
+            variant="danger"
+            size="md"
+            disabled={busy}
+            focusableWhenDisabled
+            aria-busy={busy}
+            onClick={handleWithdraw}
+          >
+            탈퇴
+          </Button>
+        }
+      />
     </main>
   );
 }
