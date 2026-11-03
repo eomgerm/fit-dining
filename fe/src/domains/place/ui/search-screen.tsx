@@ -221,11 +221,17 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
     locateOnOpen();
   }, []);
 
-  // 위치를 얻으면(화면을 열 때, "내 위치", 근처 응답) 지도를 그 위치로 옮긴다. 이동을 마치면 파란색을 끈다
+  // 위치를 얻으면(화면을 열 때, "내 위치", 근처 응답) 지도를 그 위치로 옮긴다. 이동을 마치면 파란색을 끈다.
+  // "내 위치"로 얻은 위치면(파란색인 동안) 확대 정도도 첫 화면과 같게 맞춘다(D-104)
+  const moveToHere = useEffectEvent((coord: LatLng) => {
+    void mapRef.current
+      ?.panTo(coord, { resetZoom: locating })
+      .then(() => setLocating(false));
+  });
   useEffect(() => {
     if (!mapReady || !here || centeredOn.current === here) return;
     centeredOn.current = here;
-    void mapRef.current?.panTo(here).then(() => setLocating(false));
+    moveToHere(here);
   }, [mapReady, here]);
 
   // 다른 화면으로 가면(Next가 이 화면을 숨기면) 찾는 중 표시를 끈다

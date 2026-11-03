@@ -20,7 +20,9 @@ type NaverLatLng = { lat(): number; lng(): number };
 type NaverMap = {
   getBounds(): { getSW(): NaverLatLng; getNE(): NaverLatLng };
   getCenter(): NaverLatLng;
+  getZoom(): number;
   panTo(coord: NaverLatLng): void;
+  morph(coord: NaverLatLng, zoom: number): void;
   setSize(size: unknown): void;
   destroy(): void;
 };
@@ -152,8 +154,9 @@ export type MapPin = LatLng & { id: number; mark?: PinMark };
 export type PlaceMapHandle = {
   // 지도가 없으면 undefined
   getBounds(): MapBounds | undefined;
-  // 지도가 그 위치로 이동을 마치면 끝난다. 이미 그 위치이거나 지도가 없으면 바로 끝난다
-  panTo(coord: LatLng): Promise<void>;
+  // 지도가 그 위치로 이동을 마치면 끝난다. resetZoom이면 확대 정도도 처음 화면과 같게 맞추며
+  // 함께 움직인다(D-104). 이미 그 위치(와 확대 정도)이거나 지도가 없으면 바로 끝난다
+  panTo(coord: LatLng, options?: { resetZoom?: boolean }): Promise<void>;
 };
 
 type PlaceMapProps = {
@@ -268,17 +271,23 @@ export function PlaceMap({
   }, [active]);
 
   const handleUserMove = useEffectEvent(() => onUserMove?.());
-  // 우리 코드는 확대·축소를 바꾸지 않으므로 zoom_changed는 사용자의 조작이다
+  // 코드가 확대 정도를 바꾸는 중인지(D-104). 그 움직임이 멈출 때(idle)까지 zoom_changed를 사용자 조작으로 세지 않는다
+  const zoomingByCode = useRef(false);
   useEffect(() => {
     if (!active) return;
     const { naver, map } = active;
     const listeners: unknown[] = [];
+    zoomingByCode.current = false;
     guard(() => {
-      for (const name of ["dragend", "zoom_changed"]) {
-        listeners.push(
-          naver.Event.addListener(map, name, () => handleUserMove()),
-        );
-      }
+      listeners.push(
+        naver.Event.addListener(map, "dragend", () => handleUserMove()),
+        naver.Event.addListener(map, "zoom_changed", () => {
+          if (!zoomingByCode.current) handleUserMove();
+        }),
+        naver.Event.addListener(map, "idle", () => {
+          zoomingByCode.current = false;
+        }),
+      );
     });
     return () =>
       ignoreSdkError(() =>
@@ -371,7 +380,7 @@ export function PlaceMap({
           neLng: ne.lng(),
         };
       },
-      panTo({ lat, lng }) {
+      panTo({ lat, lng }, { resetZoom = false } = {}) {
         if (!active) return Promise.resolve();
         const { naver, map } = active;
         return new Promise<void>((resolve) => {
@@ -384,7 +393,9 @@ export function PlaceMap({
           };
           try {
             const center = map.getCenter();
+            const zooms = resetZoom && map.getZoom() !== DEFAULT_ZOOM;
             const moves =
+              zooms ||
               Math.abs(center.lat() - lat) > SAME_CENTER_DEG ||
               Math.abs(center.lng() - lng) > SAME_CENTER_DEG;
             if (moves) {
@@ -392,7 +403,13 @@ export function PlaceMap({
               // 알림이 오지 않아도 기다림이 남지 않게 한다
               timer = setTimeout(finish, PAN_SETTLE_MS);
             }
-            map.panTo(new naver.LatLng(lat, lng));
+            const coord = new naver.LatLng(lat, lng);
+            if (resetZoom) {
+              zoomingByCode.current = zooms;
+              map.morph(coord, DEFAULT_ZOOM);
+            } else {
+              map.panTo(coord);
+            }
             if (!moves) finish();
           } catch {
             finish();

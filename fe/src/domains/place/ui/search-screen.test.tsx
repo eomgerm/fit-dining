@@ -233,7 +233,9 @@ function stubNaverMaps({ Marker }: { Marker?: unknown } = {}) {
   const created: {
     setSize: ReturnType<typeof vi.fn>;
     panTo: ReturnType<typeof vi.fn>;
+    morph: ReturnType<typeof vi.fn>;
     getCenter: ReturnType<typeof vi.fn>;
+    getZoom: ReturnType<typeof vi.fn>;
   }[] = [];
   const maps = {
     Map: class {
@@ -246,7 +248,10 @@ function stubNaverMaps({ Marker }: { Marker?: unknown } = {}) {
       });
       // 처음 중심은 기기 위치와 멀다. 테스트가 바꿔 "이미 그 위치"를 흉내 낸다
       getCenter = vi.fn(() => latLng(0, 0));
+      // 처음 확대 정도. 테스트가 바꿔 사용자가 확대·축소해 둔 지도를 흉내 낸다
+      getZoom = vi.fn(() => 15);
       panTo = vi.fn();
+      morph = vi.fn();
       setSize = vi.fn();
       destroy() {}
     },
@@ -490,6 +495,7 @@ describe("SearchScreen", () => {
         await waitFor(() => expect(mapState()).toBe("ready"));
 
         await waitFor(() => expect(map.created[0].panTo).toHaveBeenCalled());
+        expect(map.created[0].morph).not.toHaveBeenCalled();
         expect(getCurrentPosition).toHaveBeenCalledTimes(1);
         const list = await nearbyList();
         await waitFor(() =>
@@ -500,7 +506,7 @@ describe("SearchScreen", () => {
         expect(within(list).queryByText(/역삼역/)).toBeNull();
       });
 
-      describe('"내 위치" 버튼 (D-100, D-101)', () => {
+      describe('"내 위치" 버튼 (D-100, D-101, D-104)', () => {
         const locationButton = () =>
           screen.getByRole("button", { name: "내 위치" });
         const busy = () => locationButton().getAttribute("aria-busy");
@@ -517,7 +523,7 @@ describe("SearchScreen", () => {
           expect(iconClass()).toContain("text-icon");
 
           fireEvent.click(locationButton());
-          await waitFor(() => expect(map.created[0].panTo).toHaveBeenCalled());
+          await waitFor(() => expect(map.created[0].morph).toHaveBeenCalled());
           expect(busy()).toBe("true");
           expect(iconClass()).toContain("text-location");
           fireEvent.click(locationButton());
@@ -533,7 +539,7 @@ describe("SearchScreen", () => {
           expect(iconClass()).toContain("text-icon");
         });
 
-        it("지도가 이미 그 위치라 움직이지 않으면 바로 원래 색으로 돌아온다", async () => {
+        it("지도가 이미 그 위치이고 확대 정도가 15라 움직이지 않으면 바로 원래 색으로 돌아온다", async () => {
           stubLocation({ position: { lat: 37.5, lng: 127.03 } });
           renderScreen();
           await waitFor(() => expect(mapState()).toBe("ready"));
@@ -543,9 +549,39 @@ describe("SearchScreen", () => {
           });
 
           fireEvent.click(locationButton());
-          await waitFor(() => expect(map.created[0].panTo).toHaveBeenCalled());
+          await waitFor(() => expect(map.created[0].morph).toHaveBeenCalled());
           await waitFor(() => expect(busy()).toBe("false"));
         });
+
+        it.each([10, 19])(
+          "확대 정도가 %i여도 내 위치로 옮기며 15로 맞추고, 그 확대·축소로 '이 지역에서 검색'은 나타나지 않는다",
+          async (zoom) => {
+            stubLocation({ position: { lat: 37.5, lng: 127.03 } });
+            renderScreen();
+            await waitFor(() => expect(mapState()).toBe("ready"));
+            await newSearch("역삼 카페");
+            const created = map.created[0];
+            created.getCenter.mockReturnValue({
+              lat: () => 37.5,
+              lng: () => 127.03,
+            });
+            created.getZoom.mockReturnValue(zoom);
+
+            fireEvent.click(locationButton());
+            await waitFor(() =>
+              expect(created.morph).toHaveBeenCalledWith(expect.anything(), 15),
+            );
+            expect(created.panTo).not.toHaveBeenCalled();
+            map.fire("zoom_changed");
+            expect(regionButton()).toBeNull();
+            expect(busy()).toBe("true");
+
+            map.fire("idle");
+            await waitFor(() => expect(busy()).toBe("false"));
+            map.fire("zoom_changed");
+            expect(regionButton()).toBeTruthy();
+          },
+        );
 
         it("위치를 얻지 못하면 알리고 원래 색으로 돌아온다", async () => {
           stubLocation({});
