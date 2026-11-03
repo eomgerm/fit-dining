@@ -7,13 +7,14 @@ import { ReviewPhotoStrip } from "./review-photo-viewer";
 const embla = vi.hoisted(() => ({
   on: vi.fn(),
   off: vi.fn(),
+  destroy: vi.fn(),
   scrollTo: vi.fn(),
   selectedScrollSnap: vi.fn(() => 0),
   internalEngine: vi.fn(() => ({
     scrollBody: { duration: vi.fn(), useDuration: vi.fn() },
   })),
 }));
-vi.mock("embla-carousel-react", () => ({ default: () => [vi.fn(), embla] }));
+vi.mock("embla-carousel", () => ({ default: () => embla }));
 
 const photos = [1, 2].map((n) => ({
   photoId: `p${n}`,
