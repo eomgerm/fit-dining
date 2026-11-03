@@ -17,6 +17,7 @@ import { ChevronRightIcon } from "@/shared/ui/icon/icons/chevron-right";
 import { WarningIcon } from "@/shared/ui/icon/icons/warning";
 import { ConfirmDialog } from "@/shared/ui/overlay/confirm-dialog";
 import { useToast } from "@/shared/ui/overlay/toast";
+import { Screen } from "@/shared/ui/layout/screen";
 import { TopBar } from "@/shared/ui/layout/top-bar";
 const loginMessages = {
   email: "이메일로 로그인했어요",
@@ -102,7 +103,7 @@ export default function MyPage() {
     }
   }
   return (
-    <main className="min-h-dvh bg-surface text-ink">
+    <Screen>
       <TopBar
         title="내 정보"
         start={
@@ -241,6 +242,6 @@ export default function MyPage() {
           </Button>
         }
       />
-    </main>
+    </Screen>
   );
 }

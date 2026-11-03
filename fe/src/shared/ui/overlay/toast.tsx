@@ -4,6 +4,7 @@ import { Toast } from "@base-ui/react/toast";
 import type { ReactNode } from "react";
 
 // Figma 'Toast'. 화면 아래 96px 위 가운데에 잠깐 떴다 사라지는 한 줄 알림.
+// 아래 고정 버튼(BottomBar)이 홈 인디케이터만큼 높아지는 기기에서는 그만큼 같이 올라가 버튼과의 간격을 지킨다.
 // 모션 메모: 16px 아래에서 떠오르며 200ms, 2.5초 뒤 150ms에 사라진다. 한 번에 하나만 보인다
 export function ToastProvider({ children }: { children: ReactNode }) {
   return (
@@ -11,7 +12,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       <Toast.Portal>
         {/* 다이얼로그·시트의 딤은 나중에 body에 붙어 토스트를 덮으므로 z-index로 위에 둔다 */}
-        <Toast.Viewport className="fixed inset-x-4 bottom-24 z-10 flex justify-center">
+        <Toast.Viewport className="fixed inset-x-4 bottom-toast z-10 flex justify-center">
           <ToastList />
         </Toast.Viewport>
       </Toast.Portal>

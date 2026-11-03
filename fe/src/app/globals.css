@@ -264,6 +264,29 @@
   }
 }
 
+/*
+ * 노치·상태바·홈 인디케이터 영역(safe area). 화면 가장자리에 닿는 요소만 쓴다. 숫자는 Tailwind 간격(4px 단위)이다.
+ * 위: 상태바에는 글자가 있어 그 아래에 원래 간격을 더한다. pt-safe-0 = 상태바 높이만큼
+ * 아래: 홈 인디케이터는 얇은 막대라 원래 간격과 인디케이터 높이 중 큰 쪽을 쓴다(WebKit "Designing Websites for iPhone X").
+ * safe area가 없는 기기(안드로이드, 데스크톱)에서는 env()가 0이라 원래 간격과 같다
+ */
+@utility pt-safe-* {
+  padding-top: calc(--spacing(--value(number)) + env(safe-area-inset-top));
+}
+@utility top-safe-* {
+  top: calc(--spacing(--value(number)) + env(safe-area-inset-top));
+}
+@utility pb-safe-* {
+  padding-bottom: max(--spacing(--value(number)), env(safe-area-inset-bottom));
+}
+@utility bottom-safe-* {
+  bottom: max(--spacing(--value(number)), env(safe-area-inset-bottom));
+}
+/* 토스트 위치. BottomBar(pb-safe-4)가 인디케이터만큼 높아지면 같이 올라가 버튼과의 간격을 지킨다. 인디케이터가 없으면 96px */
+@utility bottom-toast {
+  bottom: calc(--spacing(20) + max(--spacing(4), env(safe-area-inset-bottom)));
+}
+
 /* 선택된 칩 테두리(Figma 1.5px). Tailwind 기본 테두리 두께에 없다 */
 @utility border-1.5 {
   border-width: 1.5px;

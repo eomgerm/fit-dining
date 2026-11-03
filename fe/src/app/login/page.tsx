@@ -9,6 +9,7 @@ import { Button } from "@/shared/ui/button/button";
 import { IconButton } from "@/shared/ui/button/icon-button";
 import { TextButton } from "@/shared/ui/button/text-button";
 import { TextField } from "@/shared/ui/form/text-field";
+import { Screen } from "@/shared/ui/layout/screen";
 import { Icon } from "@/shared/ui/icon/icon";
 import { CloseIcon } from "@/shared/ui/icon/icons/close";
 import { SocialButtons } from "@/domains/auth/ui/social-buttons";
@@ -75,7 +76,7 @@ export default function LoginPage() {
     }
   }
   return (
-    <main className="mx-auto flex min-h-svh w-full max-w-110 flex-col bg-surface px-5 pb-6 text-ink sm:px-8">
+    <Screen inset="page" bottom="md">
       <SocialError />
       <header className="-mx-3 flex min-h-14 items-center justify-end">
         <IconButton
@@ -212,6 +213,6 @@ export default function LoginPage() {
       >
         <SocialButtons from="login" />
       </section>
-    </main>
+    </Screen>
   );
 }

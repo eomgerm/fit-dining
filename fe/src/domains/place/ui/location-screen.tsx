@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/shared/ui/button/button";
 import { TextButton } from "@/shared/ui/button/text-button";
 import { PinIcon } from "@/shared/ui/icon/icons/pin";
+import { Screen } from "@/shared/ui/layout/screen";
 import { locateDevice } from "./locate-device";
 
 function PermissionIllustration() {
@@ -75,7 +76,7 @@ export function LocationScreen() {
   }
 
   return (
-    <main className="mx-auto flex min-h-svh w-full max-w-110 flex-col bg-linear-to-b from-primary-soft via-surface-warm to-surface px-5 pb-4 text-ink sm:px-8">
+    <Screen tone="glow" inset="page">
       <header className="-mx-3 flex min-h-14 items-center justify-end">
         <TextButton variant="muted" disabled={pending} onClick={skipLocation}>
           건너뛰기
@@ -138,7 +139,7 @@ export function LocationScreen() {
           )}
         </p>
       </div>
-      <div className="sticky bottom-0 pt-4 pb-0">
+      <div className="sticky bottom-0 pt-4 pb-safe-4">
         <Button
           className="w-full"
           disabled={pending}
@@ -148,6 +149,6 @@ export function LocationScreen() {
           위치 허용하기
         </Button>
       </div>
-    </main>
+    </Screen>
   );
 }

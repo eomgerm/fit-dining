@@ -34,7 +34,7 @@ export function InstallIntroDialog({
     >
       <AlertDialog.Portal>
         <AlertDialog.Backdrop className="fixed inset-0 bg-scrim transition-opacity duration-320 ease-enter data-ending-style:opacity-0 data-ending-style:duration-220 data-ending-style:ease-exit data-starting-style:opacity-0 motion-reduce:duration-120 motion-reduce:data-ending-style:duration-120" />
-        <AlertDialog.Popup className="fixed inset-x-4 bottom-4 mx-auto flex max-w-102 flex-col items-center gap-3 rounded-xl bg-surface px-5 pt-6 pb-5 text-center shadow-3 transition duration-320 ease-enter outline-none data-ending-style:translate-y-full data-ending-style:duration-220 data-ending-style:ease-exit data-starting-style:translate-y-full motion-reduce:transition-opacity motion-reduce:duration-120 motion-reduce:data-ending-style:translate-y-0 motion-reduce:data-ending-style:opacity-0 motion-reduce:data-starting-style:translate-y-0 motion-reduce:data-starting-style:opacity-0">
+        <AlertDialog.Popup className="fixed inset-x-4 bottom-safe-4 mx-auto flex max-w-102 flex-col items-center gap-3 rounded-xl bg-surface px-5 pt-6 pb-5 text-center shadow-3 transition duration-320 ease-enter outline-none data-ending-style:translate-y-full data-ending-style:duration-220 data-ending-style:ease-exit data-starting-style:translate-y-full motion-reduce:transition-opacity motion-reduce:duration-120 motion-reduce:data-ending-style:translate-y-0 motion-reduce:data-ending-style:opacity-0 motion-reduce:data-starting-style:translate-y-0 motion-reduce:data-starting-style:opacity-0">
           <Image src="/icons/icon-192.png" alt="" width={56} height={56} />
           <AlertDialog.Title className="text-title-lg text-ink">
             홈 화면에{" "}

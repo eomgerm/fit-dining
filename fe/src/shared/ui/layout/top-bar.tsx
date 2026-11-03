@@ -11,8 +11,10 @@ const topBarVariants = cva("relative flex h-14 items-center gap-3 px-2", {
       // 방문 평가·리뷰 수정처럼 내용이 아래로 스크롤되는 화면
       surface: "bg-surface",
     },
+    // 화면 맨 위에 붙어 상태바 자리까지 같은 바탕으로 채운다(리뷰 작성·수정처럼 바탕이 Screen이 아닐 때)
+    safeTop: { true: "box-content pt-safe-0", false: "" },
   },
-  defaultVariants: { tone: "transparent" },
+  defaultVariants: { tone: "transparent", safeTop: false },
 });
 
 type TopBarProps = Omit<ComponentProps<"header">, "className" | "title"> &
@@ -36,16 +38,20 @@ export function TopBar({
   children,
   end,
   tone,
+  safeTop,
   className,
   ...props
 }: TopBarProps) {
   return (
-    <header className={cn(topBarVariants({ tone }), className)} {...props}>
+    <header
+      className={cn(topBarVariants({ tone, safeTop }), className)}
+      {...props}
+    >
       <div className="flex min-w-11 shrink-0">{start}</div>
       <div className="flex min-w-0 flex-1 items-center">{children}</div>
       <div className="flex min-w-11 shrink-0 justify-end">{end}</div>
       {title && (
-        <h1 className="pointer-events-none absolute inset-0 flex items-center justify-center px-20 text-title-sm text-ink">
+        <h1 className="pointer-events-none absolute inset-x-0 bottom-0 flex h-14 items-center justify-center px-20 text-title-sm text-ink">
           <span className="truncate">{title}</span>
         </h1>
       )}

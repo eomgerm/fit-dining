@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { IconButton } from "@/shared/ui/button/icon-button";
 import { ChevronLeftIcon } from "@/shared/ui/icon/icons/chevron-left";
+import { Screen } from "@/shared/ui/layout/screen";
 import { TopBar } from "@/shared/ui/layout/top-bar";
 import { peekResume, takeResume } from "../model/storage";
 
@@ -18,7 +19,7 @@ export type InstallStep = {
 export function InstallGuide({ steps }: { steps: InstallStep[] }) {
   const router = useRouter();
   return (
-    <main className="mx-auto min-h-svh w-full max-w-110 bg-surface-warm text-ink">
+    <Screen tone="surface-warm">
       <TopBar
         start={
           <IconButton
@@ -36,7 +37,7 @@ export function InstallGuide({ steps }: { steps: InstallStep[] }) {
           </IconButton>
         }
       />
-      <div className="px-5 pt-1">
+      <div className="px-5 pt-1 pb-safe-0">
         <h1 className="mt-3 text-headline-md">
           홈 화면에 핏다이닝을
           <br />
@@ -68,6 +69,6 @@ export function InstallGuide({ steps }: { steps: InstallStep[] }) {
           ))}
         </ol>
       </div>
-    </main>
+    </Screen>
   );
 }

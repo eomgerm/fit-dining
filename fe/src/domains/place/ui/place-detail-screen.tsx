@@ -15,6 +15,7 @@ import { InfoIcon } from "@/shared/ui/icon/icons/info";
 import { PinOffIcon } from "@/shared/ui/icon/icons/pin-off";
 import { ShareIcon } from "@/shared/ui/icon/icons/share";
 import { BottomBar } from "@/shared/ui/layout/bottom-bar";
+import { Screen } from "@/shared/ui/layout/screen";
 import { Tab, TabList, TabPanel, Tabs } from "@/shared/ui/layout/tabs";
 import { useToast } from "@/shared/ui/overlay/toast";
 import { Tooltip } from "@/shared/ui/overlay/tooltip";
@@ -71,7 +72,7 @@ export function PlaceDetailScreen({
   // 저장한 장소 화면에서 열었으면 핏 점수와 추천 이유를 보이지 않는다(D-12)
   const fromSaved = params.get("from") === SAVED_VIEW;
   return (
-    <main className="relative flex min-h-dvh flex-col bg-surface-warm">
+    <Screen tone="surface-warm" bleedTop className="relative">
       {id === undefined ? (
         <>
           <BackBar />
@@ -85,14 +86,14 @@ export function PlaceDetailScreen({
           fromSaved={fromSaved}
         />
       )}
-    </main>
+    </Screen>
   );
 }
 
 // 사진이 없는 상태(찾을 수 없음, 불러오는 중, 오류)의 뒤로 버튼 줄
 function BackBar() {
   return (
-    <div className="flex h-19 shrink-0 items-center px-4">
+    <div className="box-content flex h-19 shrink-0 items-center px-4 pt-safe-0">
       <BackButton />
     </div>
   );
@@ -235,7 +236,7 @@ function PlaceDetailView({
             className="absolute top-72 left-1/2 -translate-x-1/2"
           />
         )}
-        <div className="absolute inset-x-4 top-4 flex justify-between">
+        <div className="absolute inset-x-4 top-safe-4 flex justify-between">
           <BackButton />
           <Fab label="공유" onClick={() => toast(NOT_READY_MESSAGE)}>
             <ShareIcon className="text-icon" />
@@ -287,7 +288,7 @@ function PlaceDetailView({
         className="mt-5 flex flex-1 flex-col"
       >
         {/* 탭은 사진이 지나간 뒤 화면 위쪽에 붙는다 */}
-        <div className="sticky top-0 z-10 bg-surface-warm">
+        <div className="sticky top-safe-0 z-10 bg-surface-warm">
           <TabList>
             <Tab value="home" className="flex-1">
               홈

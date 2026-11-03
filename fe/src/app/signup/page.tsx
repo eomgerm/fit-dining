@@ -10,6 +10,7 @@ import { TextButton } from "@/shared/ui/button/text-button";
 import { Carousel } from "@/shared/ui/display/carousel";
 import { SignupIntroMotion } from "@/domains/auth/ui/signup-intro-motion";
 import { AlertDialog } from "@/shared/ui/overlay/alert-dialog";
+import { Screen } from "@/shared/ui/layout/screen";
 import { TopBarAction } from "@/shared/ui/layout/top-bar";
 import { SocialButtons } from "@/domains/auth/ui/social-buttons";
 import { SocialError } from "@/domains/auth/ui/social-error";
@@ -66,9 +67,9 @@ export default function SignupPage() {
   const [index, setIndex] = useState(0);
   const [skip, setSkip] = useState(false);
   return (
-    <main className="relative mx-auto flex min-h-svh w-full max-w-110 flex-col bg-surface pb-6 text-ink">
+    <Screen bottom="md" bleedTop className="relative">
       <SocialError />
-      <header className="absolute inset-x-0 top-0 z-10 flex min-h-14 items-center justify-between px-2">
+      <header className="absolute inset-x-0 top-safe-0 z-10 flex min-h-14 items-center justify-between px-2">
         <IconButton
           label="처음 화면으로"
           role="link"
@@ -174,6 +175,6 @@ export default function SignupPage() {
           </div>
         }
       />
-    </main>
+    </Screen>
   );
 }

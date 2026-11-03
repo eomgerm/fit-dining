@@ -30,6 +30,7 @@ import {
   type ReviewUpdateRequest,
 } from "../model/review";
 import { editFailure, type EditFailure } from "./edit-failure";
+import { ReviewFrame } from "./review-frame";
 import { ReviewPhotoField } from "./review-photo-field";
 import { UNREADABLE_PHOTO, useReviewPhotos } from "./use-review-photos";
 
@@ -406,7 +407,6 @@ function BackButton({
   );
 }
 
-// 작성 화면처럼 높이를 뷰포트에 맞추고 가운데(children)만 스크롤한다
 function EditFrame({
   start,
   footer,
@@ -417,17 +417,11 @@ function EditFrame({
   children?: ReactNode;
 }) {
   return (
-    <div className="flex h-dvh flex-col bg-surface">
-      <TopBar
-        tone="surface"
-        start={start}
-        title="리뷰 수정"
-        className="shrink-0"
-      />
-      <div className="relative flex min-h-0 flex-1 flex-col overflow-y-auto">
-        {children}
-      </div>
-      {footer}
-    </div>
+    <ReviewFrame
+      top={<TopBar tone="surface" safeTop start={start} title="리뷰 수정" />}
+      footer={footer}
+    >
+      {children}
+    </ReviewFrame>
   );
 }

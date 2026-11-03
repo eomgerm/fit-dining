@@ -17,6 +17,7 @@ import {
 import { Button } from "@/shared/ui/button/button";
 import { IconButton } from "@/shared/ui/button/icon-button";
 import { TextField } from "@/shared/ui/form/text-field";
+import { Screen } from "@/shared/ui/layout/screen";
 import { ChevronLeftIcon } from "@/shared/ui/icon/icons/chevron-left";
 
 import { SignupTerms } from "@/domains/auth/ui/signup-terms";
@@ -91,7 +92,7 @@ export default function SignupEmailPage() {
     }
   }
   return (
-    <main className="mx-auto flex min-h-svh w-full max-w-110 flex-col bg-surface px-5 pb-4 text-ink sm:px-8">
+    <Screen inset="page" bottom="sm">
       <header className="relative -mx-3 flex min-h-14 items-center">
         <IconButton
           label="회원가입으로 돌아가기"
@@ -204,6 +205,6 @@ export default function SignupEmailPage() {
         setAgreements={setAgreements}
         start={start}
       />
-    </main>
+    </Screen>
   );
 }

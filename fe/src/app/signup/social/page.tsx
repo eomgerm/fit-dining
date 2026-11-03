@@ -9,6 +9,7 @@ import { SignupTerms } from "@/domains/auth/ui/signup-terms";
 import { Button } from "@/shared/ui/button/button";
 import { IconButton } from "@/shared/ui/button/icon-button";
 import { ChevronLeftIcon } from "@/shared/ui/icon/icons/chevron-left";
+import { Screen } from "@/shared/ui/layout/screen";
 export default function SocialSignupPage() {
   const router = useRouter();
   const submitting = useRef(false);
@@ -47,7 +48,7 @@ export default function SocialSignupPage() {
     }
   }
   return (
-    <main className="mx-auto flex min-h-svh w-full max-w-110 flex-col bg-surface px-5 pb-6 text-ink sm:px-8">
+    <Screen inset="page" bottom="md">
       <header className="-mx-3 flex min-h-14 items-center gap-2">
         <IconButton
           label="회원가입으로 돌아가기"
@@ -81,6 +82,6 @@ export default function SocialSignupPage() {
         setAgreements={setAgreements}
         start={start}
       />
-    </main>
+    </Screen>
   );
 }

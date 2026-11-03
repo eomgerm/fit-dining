@@ -2,7 +2,6 @@
 
 import { useEffect, useEffectEvent, useRef, type ReactNode } from "react";
 
-import { cn } from "@/shared/lib/cn";
 import { TextButton } from "@/shared/ui/button/text-button";
 import { EmptyState } from "@/shared/ui/display/empty-state";
 import { Note } from "@/shared/ui/display/note";
@@ -21,6 +20,7 @@ import type {
   PlaceCard as PlaceCardData,
   PlaceSearchResponse,
 } from "../model/place-types";
+import { MapPanel, type PanelState } from "./map-panel";
 import { PlaceCard, PlaceCardSkeleton } from "./place-card";
 import { SearchSteps } from "./search-steps";
 
@@ -32,9 +32,6 @@ export function AiFallbackNote({ className }: { className?: string }) {
     </Note>
   );
 }
-
-// 중간(5-04), 전체(5-05), 요청 기록 펼침(와이어프레임 RequestHistory)
-export type PanelState = "middle" | "full" | "history";
 
 // 추천하는 지역(5-E05)
 const SUPPORTED_AREAS = "강남역·역삼역·선릉역";
@@ -109,19 +106,7 @@ export function ResultPanel({
   const historyOpen = state === "history";
 
   return (
-    <section
-      aria-label="추천 결과"
-      className={cn(
-        "absolute inset-x-0 bottom-0 flex flex-col bg-surface shadow-sheet transition-all duration-320 ease-enter",
-        state === "full" && "h-full",
-        state === "middle" && "h-3/5 rounded-t-xl",
-        // 지도 위 버튼(저장한 장소, 내 정보) 아래까지 펼친다
-        historyOpen && "top-30 rounded-t-xl",
-      )}
-    >
-      {state === "middle" && edge && (
-        <div className="absolute right-4 bottom-full mb-3">{edge}</div>
-      )}
+    <MapPanel state={state} label="추천 결과" edge={edge}>
       <PanelHandle expanded={state !== "middle"} onChange={onStateChange} />
 
       {/* 머리글 버튼은 화면 왼쪽 8px, 오른쪽 12px에 붙는다 */}
@@ -192,8 +177,10 @@ export function ResultPanel({
         </div>
       )}
 
-      <div className="shrink-0 border-t border-line px-3 py-2">{footer}</div>
-    </section>
+      <div className="shrink-0 border-t border-line px-3 pt-2 pb-safe-2">
+        {footer}
+      </div>
+    </MapPanel>
   );
 }
 

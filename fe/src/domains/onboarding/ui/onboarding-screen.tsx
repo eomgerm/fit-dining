@@ -10,6 +10,7 @@ import { StepProgress } from "@/shared/ui/display/step-progress";
 import { Textarea } from "@/shared/ui/form/textarea";
 import { TopBar, TopBarAction } from "@/shared/ui/layout/top-bar";
 import { BottomBar } from "@/shared/ui/layout/bottom-bar";
+import { Screen } from "@/shared/ui/layout/screen";
 import { CheckIcon } from "@/shared/ui/icon/icons/check";
 import { ChevronLeftIcon } from "@/shared/ui/icon/icons/chevron-left";
 import { ClearIcon } from "@/shared/ui/icon/icons/clear";
@@ -177,10 +178,11 @@ export function OnboardingScreen({
   }
   if (step === 0)
     return (
-      <main className="relative mx-auto flex min-h-svh w-full max-w-110 flex-col bg-secondary">
+      // 영상은 상태바 아래까지 깔고 로고와 버튼만 시스템 영역 밖에 둔다
+      <Screen tone="secondary" bleedTop className="relative">
         <IntroBackground />
         <div className="absolute inset-0 bg-linear-to-b from-photo-shade/50 via-transparent to-photo-shade" />
-        <h1 className="relative m-5">
+        <h1 className="relative m-5 pt-safe-0">
           <Image
             src="/brand/fitdining-white.svg"
             alt="핏다이닝"
@@ -189,7 +191,7 @@ export function OnboardingScreen({
             loading="eager"
           />
         </h1>
-        <div className="relative mt-auto flex flex-col gap-3 p-6">
+        <div className="relative mt-auto flex flex-col gap-3 px-6 pt-6 pb-safe-6">
           <Button
             ref={startButton}
             className="w-full"
@@ -215,15 +217,15 @@ export function OnboardingScreen({
             기존 계정으로 로그인
           </TextButton>
         </div>
-      </main>
+      </Screen>
     );
   const busy = status === "analyzing";
   return (
-    <main className="mx-auto min-h-svh w-full max-w-110 bg-surface">
+    <Screen>
       <div
         inert={busy}
         aria-hidden={busy || undefined}
-        className="flex min-h-svh flex-col"
+        className="flex flex-1 flex-col"
       >
         <TopBar
           start={
@@ -525,6 +527,6 @@ export function OnboardingScreen({
           </>
         }
       />
-    </main>
+    </Screen>
   );
 }

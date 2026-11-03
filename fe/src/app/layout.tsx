@@ -18,12 +18,20 @@ export const metadata: Metadata = {
   description: "오늘 끌리는 곳, 내 취향으로 찾기",
   // iOS는 매니페스트 아이콘 대신 apple-touch-icon(PNG)을 읽는다
   icons: { apple: "/icons/apple-touch-icon.png" },
-  appleWebApp: { capable: true, title: "핏다이닝", statusBarStyle: "default" },
+  // 홈 화면 앱에서 영상·지도·사진을 상태바 아래까지 깐다. 콘텐츠가 화면 전체에 그려지고 상태바가 위를 덮는다(Apple Supported Meta Tags).
+  // 가려지면 안 되는 요소는 globals.css의 pt-safe-*·top-safe-*로 내린다
+  appleWebApp: {
+    capable: true,
+    title: "핏다이닝",
+    statusBarStyle: "black-translucent",
+  },
 };
 
-// 상단바를 페이지 바탕(--color-surface)과 같은 흰색으로 맞춘다
 export const viewport: Viewport = {
+  // 브라우저 상단바를 페이지 바탕(--color-surface)과 같은 흰색으로 맞춘다
   themeColor: "#ffffff",
+  // 자동 여백을 끄고 화면 전체에 그린다. 시스템 영역은 env(safe-area-inset-*)로 피한다
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

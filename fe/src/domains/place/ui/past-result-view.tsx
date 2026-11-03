@@ -14,6 +14,7 @@ import type {
 } from "../model/place-types";
 import type { HistoryEntry } from "../model/search-store";
 import { formatRecentAt } from "../model/search-threads";
+import { MapPanel } from "./map-panel";
 import { PanelResults } from "./result-panel";
 
 type PastResultViewProps = {
@@ -55,19 +56,13 @@ export function PastResultView({
       <button
         type="button"
         onClick={onBack}
-        className="absolute top-4 left-4 flex h-11 items-center gap-1 rounded-full bg-surface pr-4 pl-2.5 text-label-md text-ink shadow-2"
+        className="absolute top-safe-4 left-4 flex h-11 items-center gap-1 rounded-full bg-surface pr-4 pl-2.5 text-label-md text-ink shadow-2"
       >
         <ChevronLeftIcon size="md" />
         현재 검색으로
       </button>
 
-      <section
-        aria-label="과거 결과"
-        className="absolute inset-x-0 bottom-0 flex h-3/5 flex-col rounded-t-xl bg-surface shadow-sheet"
-      >
-        {edge && (
-          <div className="absolute right-4 bottom-full mb-3">{edge}</div>
-        )}
+      <MapPanel state="middle" label="과거 결과" edge={edge}>
         <div
           aria-hidden
           className="flex h-6 shrink-0 items-center justify-center"
@@ -95,12 +90,12 @@ export function PastResultView({
             onCardPress={onCardPress}
           />
         </div>
-        <div className="shrink-0 border-t border-line px-4 pt-3 pb-4">
+        <div className="shrink-0 border-t border-line px-4 pt-3 pb-safe-4">
           <Button onClick={onRepeat} className="w-full">
             <RefreshIcon size="md" className="mr-1.5" />이 조건으로 다시 검색
           </Button>
         </div>
-      </section>
+      </MapPanel>
     </>
   );
 }

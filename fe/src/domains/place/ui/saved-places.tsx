@@ -24,6 +24,7 @@ import {
 import { distanceMeters, formatDistance } from "../model/nearby";
 import { CATEGORY_LABELS, OPEN_STATUS_LABELS } from "../model/place-labels";
 import type { CategoryGroup, LatLng } from "../model/place-types";
+import { MapPanel } from "./map-panel";
 import { PlacePhoto, statusVariants } from "./place-parts";
 import { PanelHandle } from "./result-panel";
 import type { SavedPanelState } from "./saved-view-state";
@@ -79,7 +80,7 @@ export function SavedPlacesView({
     return (
       <section
         aria-label={TITLE}
-        className="absolute inset-0 flex flex-col bg-surface-warm"
+        className="absolute inset-0 flex flex-col bg-surface-warm pt-safe-0"
       >
         <TopBar
           start={
@@ -111,20 +112,15 @@ export function SavedPlacesView({
   return (
     <>
       {!full && (
-        <Fab label="뒤로" onClick={onBack} className="absolute top-4 left-4">
+        <Fab
+          label="뒤로"
+          onClick={onBack}
+          className="absolute top-safe-4 left-4"
+        >
           <ChevronLeftIcon className="text-icon" />
         </Fab>
       )}
-      <section
-        aria-label={TITLE}
-        className={cn(
-          "absolute inset-x-0 bottom-0 flex flex-col bg-surface shadow-sheet transition-all duration-320 ease-enter",
-          full ? "h-full" : "h-3/5 rounded-t-xl",
-        )}
-      >
-        {!full && edge && (
-          <div className="absolute right-4 bottom-full mb-3">{edge}</div>
-        )}
+      <MapPanel state={panel} label={TITLE} edge={edge}>
         <PanelHandle expanded={full} onChange={onPanelChange} />
 
         <div className="flex shrink-0 items-center gap-1 px-4 pb-2">
@@ -172,7 +168,7 @@ export function SavedPlacesView({
           </div>
         )}
 
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-safe-4">
           {content.kind === "loading" && <SavedSkeleton />}
           {content.kind === "failed" && (
             <EmptyState
@@ -222,13 +218,13 @@ export function SavedPlacesView({
             variant="outline"
             size="sm"
             onClick={() => onPanelChange("middle")}
-            className="absolute bottom-6 left-1/2 -translate-x-1/2"
+            className="absolute bottom-safe-6 left-1/2 -translate-x-1/2"
           >
             <MapIcon size="sm" className="mr-1" />
             지도 보기
           </Button>
         )}
-      </section>
+      </MapPanel>
     </>
   );
 }

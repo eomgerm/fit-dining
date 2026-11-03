@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode, type Ref } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ReactNode,
+} from "react";
 
 import { isApiError } from "@/shared/api/api-error";
 import { Button } from "@/shared/ui/button/button";
@@ -44,6 +50,7 @@ import {
   ReasonTagGroups,
   VisitDateButton,
 } from "./review-write-parts";
+import { ReviewFrame } from "./review-frame";
 import { ReviewPhotoField } from "./review-photo-field";
 import { submitFailure, type SubmitFailure } from "./submit-failure";
 import { UNREADABLE_PHOTO, useReviewPhotos } from "./use-review-photos";
@@ -538,36 +545,18 @@ function CloseButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-// 화면 높이를 뷰포트에 맞추고 가운데(children)만 스크롤해 스크롤 막대가 움직이는 범위와 같다
 function FormFrame({
   start,
   step,
-  sunken,
-  pinned,
-  footer,
-  scrollRef,
-  children,
-}: {
+  ...frame
+}: Omit<ComponentProps<typeof ReviewFrame>, "top"> & {
   start: ReactNode;
   step: 1 | 2;
-  // 7-01·7-02: 장소·방문일 줄 아래(질문과 태그 목록)를 회색 띠로 깐다
-  sunken?: boolean;
-  // 상단 막대 아래에서 스크롤하지 않는 내용(7-01·7-02의 장소·방문일 줄과 질문)
-  pinned?: ReactNode;
-  footer?: ReactNode;
-  scrollRef?: Ref<HTMLDivElement>;
-  children?: ReactNode;
 }) {
   return (
-    <div
-      className={
-        sunken
-          ? "flex h-dvh flex-col bg-surface-sunken"
-          : "flex h-dvh flex-col bg-surface"
-      }
-    >
-      <div className="shrink-0">
-        <TopBar tone="surface" start={start}>
+    <ReviewFrame
+      top={
+        <TopBar tone="surface" safeTop start={start}>
           <StepProgress
             step={step}
             total={2}
@@ -575,15 +564,8 @@ function FormFrame({
             className="mx-auto w-64"
           />
         </TopBar>
-        {pinned}
-      </div>
-      <div
-        ref={scrollRef}
-        className="relative flex min-h-0 flex-1 flex-col overflow-y-auto"
-      >
-        {children}
-      </div>
-      {footer}
-    </div>
+      }
+      {...frame}
+    />
   );
 }

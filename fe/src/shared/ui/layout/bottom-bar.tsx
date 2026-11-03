@@ -2,9 +2,9 @@ import { cva, type VariantProps } from "class-variance-authority";
 import type { ComponentProps, ReactNode } from "react";
 
 // sticky + mt-auto: 내용이 짧으면 화면 맨 아래로 내려가고, 길면 스크롤해도 아래에 붙는다.
-// 화면의 최상위 요소가 세로 flex(flex flex-1 flex-col)여야 한다
+// 화면의 최상위 요소가 세로 flex여야 한다(Screen 또는 리뷰 ReviewFrame). 아래 safe area 여백도 여기서 넣는다
 const bottomBarVariants = cva(
-  "sticky bottom-0 mt-auto flex flex-col gap-2 px-5 pb-4",
+  "sticky bottom-0 mt-auto flex flex-col gap-2 px-5 pb-safe-4",
   {
     variants: {
       variant: {

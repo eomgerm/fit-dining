@@ -59,7 +59,8 @@ import { PastResultView } from "./past-result-view";
 import { placeCardElementId } from "./place-card";
 import { PlaceMap, type PlaceMapHandle } from "./place-map";
 import { RecentSearchSheet } from "./recent-search-sheet";
-import { AiFallbackNote, ResultPanel, type PanelState } from "./result-panel";
+import type { PanelState } from "./map-panel";
+import { AiFallbackNote, ResultPanel } from "./result-panel";
 import { savedCardElementId, SavedPlacesView } from "./saved-places";
 import { savedViewState, type SavedPanelState } from "./saved-view-state";
 import { SearchBar } from "./search-bar";
@@ -496,7 +497,7 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
         <>
           {/* 과거 결과 화면에는 "현재 검색으로"만 둔다(D-98) */}
           {(firstScreen || (!past && panel !== "full")) && (
-            <div className="absolute top-4 right-4 flex flex-col gap-2">
+            <div className="absolute top-safe-4 right-4 flex flex-col gap-2">
               <Fab label="저장한 장소" onClick={handleOpenSaved}>
                 <BookmarkIcon className="text-icon" />
               </Fab>
@@ -516,7 +517,7 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
                 variant="outline"
                 size="sm"
                 onClick={handleRegionSearch}
-                className="absolute top-4 left-1/2 -translate-x-1/2"
+                className="absolute top-safe-4 left-1/2 -translate-x-1/2"
               >
                 <RefreshIcon size="sm" className="mr-1" />이 지역에서 검색
               </Button>
@@ -619,7 +620,7 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
             </div>
           )}
           {/* 아래부터 검색창, 주변 카드, "내 위치" 순서로 쌓는다(와이어프레임 Start) */}
-          <div className="absolute inset-x-0 bottom-0 flex flex-col gap-3 pb-4">
+          <div className="absolute inset-x-0 bottom-0 flex flex-col gap-3 pb-safe-4">
             {myLocationButton && !nearbyOffline && (
               <div className="flex justify-end px-4">{myLocationButton}</div>
             )}

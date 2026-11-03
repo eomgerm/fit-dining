@@ -1,4 +1,4 @@
-import type { PanelState } from "./result-panel";
+import type { PanelState } from "./map-panel";
 
 // 저장한 장소 패널은 중간과 전체 높이만 있다(요청 기록 펼침이 없다)
 export type SavedPanelState = Exclude<PanelState, "history">;
