@@ -5,6 +5,7 @@ BE가 `/actuator/prometheus`로 내야 하는 지표의 이름이다. 알림 규
 - 상태: **제안**. BE·AI 팀과 M1 전에 합의한다([README.md](README.md)).
 - 노출: 관리 포트 8081의 `/actuator/prometheus`. 공개하지 않는다(Prometheus가 `be-prod-blue:8081`, `be-prod-green:8081`, `be-dev:8081`을 긁는다). `env`(prod, dev)와 `color` 라벨은 Prometheus가 붙인다. BE가 내지 않는다.
 - 형식: heartbeat 지표는 counter가 아니라 gauge로 만든다(시계열이 처음부터 존재해야 `absent()`가 쓸모 있다. design.md 9.4절).
+- 이행 상태(2026-11-03): BE가 `batch_last_success_timestamp_seconds`, `modal_daily_budget_used_ratio`, Modal 호출·폴백 지표를 아직 내지 않고 당분간 낼 계획도 없다. 그동안 `FitBatchMetricMissing`과 `FitModalMetricMissing`은 7일 안에 낸 적이 있는 지표가 사라질 때만 울린다(처음부터 없는 지표로 매일 울리는 알림이 일일 요약을 채워 진짜 알림을 가렸다). 지표가 없는 동안은 `FitBatchStale`, `FitModalBudgetHigh`, `FitModalFallbackHigh`도 볼 값이 없어 울릴 수 없다. 이 공백은 알려진 것이고, BE가 지표를 내면 규칙을 고치지 않아도 모두 일한다.
 
 ## 필수 지표
 

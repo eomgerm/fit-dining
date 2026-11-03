@@ -618,7 +618,7 @@ Garage는 단일 노드라도 레이아웃 설정이 필요하다(`layout assign
 | Modal 예산 | 일일 호출 예산 80% 소진(Redis 카운터) | warning |
 | 백업 | 마지막 성공 pg >8시간, photos >36시간, caddy >9일, 복원 검증 실패나 36시간 넘게 없음, 전송 대기(outbox) 파일 | warning |
 | 수집 대상 | prometheus, alertmanager, node, cadvisor, caddy, postgres, opensearch, blackbox의 `up==0` 5분 | warning |
-| 지표 누락 | 반드시 있어야 하는 지표(BE HTTP, 배치, Modal 예산, 백업)가 15분 넘게 없음(`absent()`) | warning |
+| 지표 누락 | 반드시 있어야 하는 지표(BE HTTP, 배치, Modal 예산, 백업)가 15분 넘게 없음(`absent()`). 배치와 Modal 예산은 BE가 7일 안에 낸 적이 있을 때만(BE가 아직 내지 않는 동안 매일 울리는 소음을 막는다. 그 동안 배치 지연·예산·폴백 알림은 볼 값이 없다: 지표 계약 이행 상태) | warning |
 | B 도달 불가 | A에서 B의 TCP 22 프로브 실패 | warning (CI·백업 영향) |
 
 ### 9.3 B 알림

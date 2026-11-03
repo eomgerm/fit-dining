@@ -137,23 +137,15 @@ tests:
         alertname: FitBatchStale
         exp_alerts: []
 
-  # heartbeat 지표가 없으면 15분 뒤 울린다. 있으면 울리지 않는다
+  # BE가 heartbeat 지표를 한 번도 내지 않았으면 울리지 않는다(BE 계약 #11이 아직 안 지켜진다). HTTP 지표는 그래도 15분 뒤 울린다
   - interval: 1m
     input_series:
       - series: 'up{job="be", env="prod", color="blue"}'
         values: '1+0x30'
     alert_rule_test:
-      - eval_time: 10m
-        alertname: FitBatchMetricMissing
-        exp_alerts: []
       - eval_time: 20m
         alertname: FitBatchMetricMissing
-        exp_alerts:
-          - exp_labels: {severity: warning, env: prod}
-            exp_annotations:
-              summary: 배치 heartbeat 지표(batch_last_success_timestamp_seconds)가 없다
-              description: "prod BE가 이 지표를 시작부터 내야 한다(BE 계약 #11). 배포 전이라면 정상이다"
-              runbook: RB-07
+        exp_alerts: []
       - eval_time: 20m
         alertname: FitHttpMetricMissing
         exp_alerts:
@@ -174,4 +166,39 @@ tests:
         exp_alerts: []
       - eval_time: 25m
         alertname: FitHttpMetricMissing
+        exp_alerts: []
+
+  # 내던 heartbeat 지표가 사라지면 15분 뒤 울린다. 사라진 지 9분이면 아직이다
+  - interval: 1m
+    input_series:
+      - series: 'batch_last_success_timestamp_seconds{env="prod", color="blue"}'
+        values: '0+0x10 stale'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: FitBatchMetricMissing
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: FitBatchMetricMissing
+        exp_alerts:
+          - exp_labels: {severity: warning, env: prod}
+            exp_annotations:
+              summary: 배치 heartbeat 지표(batch_last_success_timestamp_seconds)가 사라졌다
+              description: prod BE가 7일 안에는 이 지표를 냈는데 지금은 없다. BE가 처음부터 내지 않는 동안은 울리지 않는다(BE 계약 #11)
+              runbook: RB-07
+  # 사라진 지 7일이 넘으면 더는 울리지 않는다(7일 창을 벗어난다). 5일째에는 울린다
+  - interval: 1h
+    input_series:
+      - series: 'batch_last_success_timestamp_seconds{env="prod", color="blue"}'
+        values: '0+0x2 stale'
+    alert_rule_test:
+      - eval_time: 5d
+        alertname: FitBatchMetricMissing
+        exp_alerts:
+          - exp_labels: {severity: warning, env: prod}
+            exp_annotations:
+              summary: 배치 heartbeat 지표(batch_last_success_timestamp_seconds)가 사라졌다
+              description: prod BE가 7일 안에는 이 지표를 냈는데 지금은 없다. BE가 처음부터 내지 않는 동안은 울리지 않는다(BE 계약 #11)
+              runbook: RB-07
+      - eval_time: 8d
+        alertname: FitBatchMetricMissing
         exp_alerts: []

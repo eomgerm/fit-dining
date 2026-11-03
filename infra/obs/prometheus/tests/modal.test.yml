@@ -59,20 +59,47 @@ tests:
               description: 예산 사용 85%. 소진되면 키워드 폴백으로 내려간다
               runbook: RB-11
 
-  # 예산 지표가 없으면 15분 뒤 울린다
+  # BE가 예산 지표를 한 번도 내지 않았으면 울리지 않는다(BE 계약이 아직 안 지켜진다)
   - interval: 1m
     input_series:
       - series: 'up{job="be", env="prod"}'
         values: '1+0x30'
     alert_rule_test:
-      - eval_time: 10m
+      - eval_time: 20m
         alertname: FitModalMetricMissing
         exp_alerts: []
+
+  # 내던 예산 지표가 사라지면 15분 뒤 울린다. 사라진 지 9분이면 아직이다
+  - interval: 1m
+    input_series:
+      - series: 'modal_daily_budget_used_ratio{env="prod", color="blue"}'
+        values: '0.1+0x10 stale'
+    alert_rule_test:
       - eval_time: 20m
+        alertname: FitModalMetricMissing
+        exp_alerts: []
+      - eval_time: 40m
         alertname: FitModalMetricMissing
         exp_alerts:
           - exp_labels: {severity: warning, env: prod}
             exp_annotations:
-              summary: Modal 예산 지표(modal_daily_budget_used_ratio)가 없다
-              description: prod BE가 Redis 카운터를 이 지표로 내야 한다(BE 계약). 배포 전이라면 정상이다
+              summary: Modal 예산 지표(modal_daily_budget_used_ratio)가 사라졌다
+              description: prod BE가 7일 안에는 이 지표를 냈는데 지금은 없다. BE가 처음부터 내지 않는 동안은 울리지 않는다(BE 계약)
               runbook: RB-11
+  # 사라진 지 7일이 넘으면 더는 울리지 않는다(7일 창을 벗어난다). 5일째에는 울린다
+  - interval: 1h
+    input_series:
+      - series: 'modal_daily_budget_used_ratio{env="prod", color="blue"}'
+        values: '0.1+0x2 stale'
+    alert_rule_test:
+      - eval_time: 5d
+        alertname: FitModalMetricMissing
+        exp_alerts:
+          - exp_labels: {severity: warning, env: prod}
+            exp_annotations:
+              summary: Modal 예산 지표(modal_daily_budget_used_ratio)가 사라졌다
+              description: prod BE가 7일 안에는 이 지표를 냈는데 지금은 없다. BE가 처음부터 내지 않는 동안은 울리지 않는다(BE 계약)
+              runbook: RB-11
+      - eval_time: 8d
+        alertname: FitModalMetricMissing
+        exp_alerts: []

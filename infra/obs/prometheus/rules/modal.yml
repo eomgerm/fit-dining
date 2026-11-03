@@ -43,11 +43,13 @@ groups:
           description: 예산 사용 {{ $value | humanizePercentage }}. 소진되면 키워드 폴백으로 내려간다
           runbook: RB-11
 
+      # 7일 안에 낸 적이 있는 지표가 사라졌을 때만 울린다. BE가 처음부터 내지 않는 동안(BE 계약 미이행)은 울리지 않는다.
+      # 그 동안은 FitModalBudgetHigh와 FitModalFallbackHigh도 볼 지표가 없어 못 울리므로 Modal 지출은 Modal 워크스페이스의 지출 한도가 막는다(알려진 공백)
       - alert: FitModalMetricMissing
-        expr: absent(modal_daily_budget_used_ratio{env="prod"})
+        expr: absent(modal_daily_budget_used_ratio{env="prod"}) and on() (count(last_over_time(modal_daily_budget_used_ratio{env="prod"}[7d])) > 0)
         for: 15m
         labels: {severity: warning, env: prod}
         annotations:
-          summary: Modal 예산 지표(modal_daily_budget_used_ratio)가 없다
-          description: prod BE가 Redis 카운터를 이 지표로 내야 한다(BE 계약). 배포 전이라면 정상이다
+          summary: Modal 예산 지표(modal_daily_budget_used_ratio)가 사라졌다
+          description: prod BE가 7일 안에는 이 지표를 냈는데 지금은 없다. BE가 처음부터 내지 않는 동안은 울리지 않는다(BE 계약)
           runbook: RB-11

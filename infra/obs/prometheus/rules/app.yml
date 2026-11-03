@@ -67,13 +67,15 @@ groups:
           description: 마지막 성공 후 {{ $value | humanizeDuration }}
           runbook: RB-07
 
+      # 7일 안에 낸 적이 있는 지표가 사라졌을 때만 울린다. BE가 처음부터 내지 않는 동안(BE 계약 #11 미이행)은 울리지 않는다:
+      # 할 일이 없는 알림이 일일 요약을 채워 진짜 알림을 가린다. 그 동안은 FitBatchStale도 없는 지표를 못 봐서 배치는 감시되지 않는다(알려진 공백)
       - alert: FitBatchMetricMissing
-        expr: absent(batch_last_success_timestamp_seconds{env="prod"})
+        expr: absent(batch_last_success_timestamp_seconds{env="prod"}) and on() (count(last_over_time(batch_last_success_timestamp_seconds{env="prod"}[7d])) > 0)
         for: 15m
         labels: {severity: warning, env: prod}
         annotations:
-          summary: 배치 heartbeat 지표(batch_last_success_timestamp_seconds)가 없다
-          description: "prod BE가 이 지표를 시작부터 내야 한다(BE 계약 #11). 배포 전이라면 정상이다"
+          summary: 배치 heartbeat 지표(batch_last_success_timestamp_seconds)가 사라졌다
+          description: prod BE가 7일 안에는 이 지표를 냈는데 지금은 없다. BE가 처음부터 내지 않는 동안은 울리지 않는다(BE 계약 #11)
           runbook: RB-07
 
       - alert: FitHttpMetricMissing
