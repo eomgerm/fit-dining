@@ -87,12 +87,18 @@ app = modal.App("fit-embed", image=image)
 # scaledown_window: 요청 간격이 이보다 짧으면 GPU가 계속 켜져 있어 그 시간만큼 비용이 든다(기본 60초에서 콜드 스타트가
 # fit-dev 요청 기준 16회에서 6회로 준다. 한도는 20분)
 # concurrent: 콜드 스타트 중에 요청이 더 와도 부팅 중인 컨테이너가 받게 해서 컨테이너를 하나 더 띄우지 않는다
+# 상시 가동(min_containers)은 여기 두지 않는다. server/warm.py가 서비스 시간(한국 09~21시)에만 1로 올린다
 @app.cls(gpu=["T4", "L4", "A10"], max_containers=2, scaledown_window=600)
 @modal.concurrent(max_inputs=4)
 class Embedder:
     @modal.enter()
     def load(self):
         warm_up()
+
+    @modal.method()
+    def ping(self) -> str:
+        """`server/warm.py`가 이 클래스의 오토스케일러를 조절할 때 붙잡는 손잡이다. 하는 일은 없다."""
+        return "ok"
 
     @modal.asgi_app(requires_proxy_auth=True)
     def api(self):
