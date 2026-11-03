@@ -1,8 +1,8 @@
 # AI 검색 API 명세
 
-Status: 초안 v0.6 · Jira: S15P31A302-41, S15P31A302-136 · 작성일: 2026-10-23 · 고친 날: 2026-11-02
+Status: 초안 v0.7 · Jira: S15P31A302-41, S15P31A302-136, S15P31A302-158 · 작성일: 2026-10-23 · 고친 날: 2026-11-03
 
-BE는 검색 첫 페이지마다 AI를 한 번 부른다. AI는 요청을 해석하고 DB에서 후보를 뽑아 정렬한 뒤 카드의 AI 필드를 돌려준다. BE는 카드에 장소 정보와 영업 상태를 붙여 FE에 준다.
+BE는 검색 첫 페이지마다 AI를 한 번 부른다. AI는 요청을 해석하고 DB에서 후보를 뽑아 핏 점수로 정렬한 뒤 카드의 AI 필드를 돌려준다. v0.7부터 정렬에 LLM을 쓰지 않는다. BE는 카드에 장소 정보와 영업 상태를 붙여 FE에 준다.
 
 ## 1. 주소
 
@@ -63,7 +63,7 @@ AI는 `previousConditions`의 모르는 필드를 거부한다. 그래서 v0.6�
 
 ### 응답
 
-로컬 DB(BE Mock 장소 30곳)에서 받은 응답이다. 카드는 하나만 남겼다.
+BE Mock 장소(`samples/place/mock.json`)와 실제 인코더·GMS로 받은 응답이다(2026-11-03). 카드는 하나만 남겼다.
 
 ```json
 {
@@ -71,15 +71,15 @@ AI는 `previousConditions`의 모르는 필드를 거부한다. 그래서 v0.6�
   "nearby": false,
   "items": [
     {
-      "placeId": 1,
-      "score": 100,
-      "labels": ["가격만큼 만족해요", "대화하기 좋아요"],
-      "reasons": [{"title": "리뷰에서 \"조용해요\"라는 말이 많아요", "tags": [{"source": "REQUEST", "label": "조용해요"}]}],
-      "scoreItems": [{"source": "REQUEST", "label": "조용해요", "matched": true, "evidenceCount": 4}]
+      "placeId": 5,
+      "score": 35,
+      "labels": ["혼밥하기 좋아요", "대화하기 좋아요"],
+      "reasons": [{"title": "리뷰에서 \"대화하기 좋아요\"라는 말이 많아요", "tags": [{"source": "REQUEST", "label": "대화하기 좋아요"}]}],
+      "scoreItems": [{"source": "REQUEST", "label": "조용해요", "matched": false, "evidenceCount": 0}, {"source": "REQUEST", "label": "대화하기 좋아요", "matched": true, "evidenceCount": 15}]
     }
   ],
   "interpretedBy": "LLM",
-  "rankedBy": "LLM",
+  "rankedBy": "SCORE",
   "fallbacks": [],
   "models": {"embedding": "dragonkue/snowflake-arctic-embed-l-v2.0-ko@55ec6e9358a56d56af759bc8372e970caf8c305f", "llm": "gpt-4o-mini"}
 }
@@ -90,18 +90,18 @@ AI는 `previousConditions`의 모르는 필드를 거부한다. 그래서 v0.6�
 | `conditions` | 해석한 조건. BE와 FE는 해석하지 않는다 | 그대로. FE가 후속 검색 때 돌려보낸다 |
 | `nearby` | 근처 검색인지 | 그대로 |
 | `changeSummary` | 후속 검색에서 바뀐 점. 새 검색이면 빠진다 | 그대로 |
-| `items` | 카드. `score` 내림차순, 일반 검색 20개·근처 검색 100개까지 | `placeId`로 `PlaceSummary`와 `openStatus`를 붙인다 |
+| `items` | 카드. `score` 내림차순(점수가 없으면 유사도 순서), 일반 검색 20개·근처 검색 100개까지 | `placeId`로 `PlaceSummary`와 `openStatus`를 붙인다 |
 | `emptyReason` | 결과가 없을 때 `{cause, suggestion}` | 그대로 |
-| `interpretedBy`, `rankedBy` | `LLM` 또는 `RULE`, `LLM` 또는 `SIMILARITY`. 결과가 없으면 `rankedBy`가 빠진다 | 지표에 쓴다 |
+| `interpretedBy`, `rankedBy` | `LLM` 또는 `RULE`, `SCORE` 또는 `SIMILARITY`(판정할 요청 조각도 취향도 없어 점수가 없을 때). 결과가 없으면 `rankedBy`가 빠진다(v0.7) | 지표에 쓴다 |
 | `fallbacks` | 대신 처리한 이유(아래 표) | 하나라도 있으면 `X-Fallback` 헤더에 쉼표로 붙인다(인프라 BE 계약 #17) |
 | `models` | 결과를 낸 모델 | 로그에 쓴다 |
 
 `totalCount`는 `items` 수이고 `nextCursor`는 없다. `PlaceCard`에는 `placeId`가 없으므로 응답도 AI 응답용 DTO로 받는다.
 
-카드 필드는 `PlaceCard`의 AI 필드와 이름이 같다. `labels`는 2개, `reasons`는 3개까지다. `scoreItems`는 요청 조건, 그다음 좋아하는 취향 순서이고 카드 조건(코드표 14개와 시설 4개)만 들어간다. `caution`과 `quote`는 MVP에 없다. 아래 두 필드는 BE Javadoc과 뜻이 달라 화면 문구를 맞춰야 한다.
+카드 필드는 `PlaceCard`의 AI 필드와 이름이 같다. `labels`는 2개, `reasons`는 3개까지다. `score`는 판정할 요청 조각도 취향도 없으면 빠진다(v0.7). `scoreItems`는 점수를 낸 조각 그대로다. 요청 조각, 그다음 좋아하는 취향 순서이고 카드 조건(코드표 14개와 시설 4개)과 확장 코드(음식 종류, 매운맛, 빨리 나옴, 음악, 독특한 컨셉)가 들어간다. 싫어하는 취향은 점수에만 들어가고 화면 문구가 정해질 때까지 넣지 않는다. 점수 계산은 [spec.md](spec.md) 4.3에 있다. `caution`과 `quote`는 MVP에 없다. 아래 두 필드는 BE Javadoc과 뜻이 달라 화면 문구를 맞춰야 한다.
 
-- `matched=false`: 근거가 부족할 때뿐 아니라 아니라는 리뷰가 더 많거나 장소 정보에 없다고 나올 때도 false다. 이때는 점수를 낮춘다.
-- `evidenceCount`: 앱 리뷰와 외부 리뷰를 합친 수다.
+- `matched`: 조건 점수가 0.7 이상(리뷰는 업종 범위 상위 30%, 장소 정보는 있음)일 때 true다. false는 근거가 부족하거나 아니라는 근거가 있을 때다. 점수에는 `matched`와 상관없이 조건 점수가 그대로 들어간다.
+- `evidenceCount`: 앱 리뷰와 외부 리뷰를 합친 수다. 장소 정보(시설, 음식 종류)로 판정한 항목은 0이다.
 
 | `fallbacks` 값 | AI가 대신 한 일 |
 | --- | --- |
@@ -109,13 +109,14 @@ AI는 `previousConditions`의 모르는 필드를 거부한다. 그래서 v0.6�
 | `TASTE_INVALID` | 취향을 읽지 못해(형식이 깨짐, 취향 저장소가 없거나 장애) 취향 없이 정렬했다 |
 | `INTERPRET_LLM_FAILED` | 해석 LLM이 실패해 낱말 규칙으로 해석했다 |
 | `PROFILE_INVALID` | 40 프로필을 읽지 못한 장소를 뺐다 |
-| `RANK_LLM_FAILED` | 정렬 LLM이 실패했거나 시간이 모자라 유사도로 정렬했다 |
 
-BE는 검색마다 `modal_llm_calls_total`과 `modal_embedding_calls_total`을 센다. 결과가 있고 근처 검색이 아니면 `modal_reranker_calls_total`도 센다. `INTERPRET_LLM_FAILED`, `EMBEDDING_UNAVAILABLE`, `RANK_LLM_FAILED`는 각각 llm, embedding, reranker의 `_fallback_total`로 센다(`contracts/metrics.md`).
+`RANK_LLM_FAILED`는 v0.7부터 나오지 않는다. 정렬 LLM을 뺐기 때문이다.
+
+BE는 검색마다 `modal_llm_calls_total`과 `modal_embedding_calls_total`을 센다. `INTERPRET_LLM_FAILED`, `EMBEDDING_UNAVAILABLE`은 각각 llm, embedding의 `_fallback_total`로 센다(`contracts/metrics.md`). v0.7부터 정렬 호출이 없어서, 결과가 있고 근처 검색이 아니면 세기로 한 `modal_reranker_calls_total`과 `RANK_LLM_FAILED`로 세기로 한 reranker `_fallback_total`은 세지 않는다. BE는 아직 이 지표를 구현하지 않았다(place-ai-search D-1).
 
 ### 경우별 응답
 
-로컬 DB에서 받은 실제 요청과 응답이다. 카드는 하나만 남겼다.
+같은 Mock 장소로 받은 실제 요청과 응답이다. 카드는 하나만 남겼다.
 
 #### 후속 검색
 
@@ -132,18 +133,18 @@ BE는 검색마다 `modal_llm_calls_total`과 `modal_embedding_calls_total`을 �
 {
   "conditions": {"text": "역삼역 조용하게 대화하기 좋은 식당 넓은 곳이면 좋겠어", "embeddingText": "조용하게 대화하기 좋은 넓은 곳", "codes": ["QUIET", "PURPOSE_TALK", "SPACIOUS_SEATING"], "categoryGroup": "RESTAURANT", "station": "YEOKSAM", "nearby": false},
   "nearby": false,
-  "changeSummary": "넓은 곳이면 좋겠어요",
+  "changeSummary": "넓은 곳이면 좋겠다고 했어요.",
   "items": [
     {
-      "placeId": 1,
-      "score": 84,
-      "labels": ["가격만큼 만족해요", "대화하기 좋아요"],
-      "reasons": [{"title": "리뷰에서 \"조용해요\"라는 말이 많아요", "tags": [{"source": "REQUEST", "label": "조용해요"}]}, {"title": "리뷰에서 \"대화하기 좋아요\"라는 말이 많아요", "tags": [{"source": "REQUEST", "label": "대화하기 좋아요"}]}],
-      "scoreItems": [{"source": "REQUEST", "label": "조용해요", "matched": true, "evidenceCount": 4}, {"source": "REQUEST", "label": "대화하기 좋아요", "matched": true, "evidenceCount": 12}, {"source": "REQUEST", "label": "자리가 넉넉해요", "matched": false, "evidenceCount": 0}]
+      "placeId": 5,
+      "score": 39,
+      "labels": ["혼밥하기 좋아요", "대화하기 좋아요"],
+      "reasons": [{"title": "리뷰에서 \"대화하기 좋아요\"라는 말이 많아요", "tags": [{"source": "REQUEST", "label": "대화하기 좋아요"}]}],
+      "scoreItems": [{"source": "REQUEST", "label": "조용해요", "matched": false, "evidenceCount": 0}, {"source": "REQUEST", "label": "대화하기 좋아요", "matched": true, "evidenceCount": 15}, {"source": "REQUEST", "label": "자리가 넉넉해요", "matched": false, "evidenceCount": 0}]
     }
   ],
   "interpretedBy": "LLM",
-  "rankedBy": "LLM",
+  "rankedBy": "SCORE",
   "fallbacks": [],
   "models": {"embedding": "dragonkue/snowflake-arctic-embed-l-v2.0-ko@55ec6e9358a56d56af759bc8372e970caf8c305f", "llm": "gpt-4o-mini"}
 }
@@ -171,7 +172,7 @@ BE는 검색마다 `modal_llm_calls_total`과 `modal_embedding_calls_total`을 �
 
 #### 근처 검색
 
-역 없이 근처를 찾으면 역으로 거르지 않고 100곳까지 준다. FE가 현재 위치로 반경 안만 남긴다. 정렬은 LLM 없이 유사도로 하지만 폴백이 아니라서 `fallbacks`는 비어 있다. 따질 조건이 없으면 `reasons`와 `scoreItems`도 비고 점수는 100점부터 순위대로 내려간다.
+역 없이 근처를 찾으면 역으로 거르지 않고 100곳까지 준다. FE가 현재 위치로 반경 안만 남긴다. 점수는 일반 검색과 같다. 따질 조건도 취향도 없으면 `score`가 빠지고 `reasons`와 `scoreItems`도 비며 유사도 순서다(`rankedBy`가 `SIMILARITY`). 폴백이 아니라서 `fallbacks`는 비어 있다.
 
 ```json
 {"query": "근처 카페"}
@@ -181,7 +182,7 @@ BE는 검색마다 `modal_llm_calls_total`과 `modal_embedding_calls_total`을 �
 {
   "conditions": {"text": "근처 카페", "embeddingText": "카페", "codes": [], "categoryGroup": "CAFE", "nearby": true},
   "nearby": true,
-  "items": [{"placeId": 29, "score": 100, "labels": ["자리가 넉넉해요", "조용해요"], "reasons": [], "scoreItems": []}],
+  "items": [{"placeId": 7, "labels": ["작업하기 좋아요", "조용해요"], "reasons": [], "scoreItems": []}],
   "interpretedBy": "LLM",
   "rankedBy": "SIMILARITY",
   "fallbacks": [],
@@ -194,15 +195,15 @@ BE는 검색마다 `modal_llm_calls_total`과 `modal_embedding_calls_total`을 �
 아래부터는 달라지는 필드만 보인다. 이전 조건이나 취향 프로필이 깨져 있으면 없는 것으로 보고 검색은 그대로 한다.
 
 ```json
-{"interpretedBy": "LLM", "rankedBy": "LLM", "fallbacks": ["PREVIOUS_INVALID", "TASTE_INVALID"]}
+{"interpretedBy": "LLM", "rankedBy": "SCORE", "fallbacks": ["PREVIOUS_INVALID", "TASTE_INVALID"]}
 ```
 
 #### GMS 장애
 
-해석은 낱말 규칙으로, 정렬은 유사도로 한다. `models.llm`이 빠진다.
+해석은 낱말 규칙으로 한다. 점수는 LLM을 쓰지 않아 그대로다. `models.llm`이 빠진다.
 
 ```json
-{"conditions": {"text": "역삼역 조용한 술집", "codes": ["QUIET"], "categoryGroup": "BAR", "station": "YEOKSAM", "nearby": false}, "items": [{"placeId": 17, "score": 64}, {"placeId": 21, "score": 52}], "interpretedBy": "RULE", "rankedBy": "SIMILARITY", "fallbacks": ["INTERPRET_LLM_FAILED", "RANK_LLM_FAILED"], "models": {"embedding": "dragonkue/snowflake-arctic-embed-l-v2.0-ko@55ec6e9358a56d56af759bc8372e970caf8c305f"}}
+{"conditions": {"text": "역삼역 조용한 술집", "codes": ["QUIET"], "categoryGroup": "BAR", "station": "YEOKSAM", "nearby": false}, "items": [{"placeId": 12, "score": 81}, {"placeId": 24, "score": 69}], "interpretedBy": "RULE", "rankedBy": "SCORE", "fallbacks": ["INTERPRET_LLM_FAILED"], "models": {"embedding": "dragonkue/snowflake-arctic-embed-l-v2.0-ko@55ec6e9358a56d56af759bc8372e970caf8c305f"}}
 ```
 
 ## 3. `GET /healthz`
