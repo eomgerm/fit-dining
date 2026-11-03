@@ -52,11 +52,12 @@ export function ReviewPhotoStrip({
         }}
       >
         <Dialog.Portal>
-          <Dialog.Popup className="fixed inset-0 flex flex-col bg-surface-inverse transition-opacity duration-200 outline-none data-ending-style:opacity-0 data-starting-style:opacity-0 motion-reduce:duration-120">
-            <div className="flex shrink-0 items-center justify-between px-2 pt-2">
-              <Dialog.Title className="pl-3 text-title-sm text-on-primary">
-                사진
-              </Dialog.Title>
+          {/* 뒤의 장소 상세가 비치도록 반투명하게 깐다. 흰 닫기 아이콘의 대비를 지키는 값이다(D-54) */}
+          <Dialog.Backdrop className="fixed inset-0 bg-surface-inverse/80 transition-opacity duration-200 data-ending-style:opacity-0 data-starting-style:opacity-0 motion-reduce:duration-120" />
+          <Dialog.Popup className="fixed inset-0 flex flex-col transition-opacity duration-200 outline-none data-ending-style:opacity-0 data-starting-style:opacity-0 motion-reduce:duration-120">
+            <div className="flex shrink-0 items-center justify-end px-2 pt-2">
+              {/* 화면에는 보이지 않고 화면 낭독기가 창 이름으로 읽는다 */}
+              <Dialog.Title className="sr-only">사진</Dialog.Title>
               <Dialog.Close
                 render={
                   <IconButton label="닫기">
