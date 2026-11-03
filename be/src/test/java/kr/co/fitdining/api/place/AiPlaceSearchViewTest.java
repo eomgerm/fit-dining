@@ -15,7 +15,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-/** AI가 읽는 뷰 {@code ai_place_search}의 모양(place-ai-search spec "AI가 읽는 뷰", AC-24)을 앱 계정으로 확인한다. */
+/**
+ * AI가 읽는 뷰 {@code ai_place_search}의 모양(place-ai-search spec "AI가 읽는 뷰", AC-24)을 앱 계정으로 확인한다. 검색 2차
+ * 컬럼(V17)도 본다.
+ */
 class AiPlaceSearchViewTest extends PostgresTestSupport {
 
 	private static final String VECTOR = "[" + String.join(",", Collections.nCopies(1024, "0.01")) + "]";
@@ -67,7 +70,8 @@ class AiPlaceSearchViewTest extends PostgresTestSupport {
 				SELECT column_name FROM information_schema.columns
 				WHERE table_name = 'ai_place_search' ORDER BY ordinal_position""", String.class))
 				.containsExactly("place_id", "category_group", "station", "lat", "lng", "facilities", "profile",
-						"summary_vector");
+						"summary_vector", "name", "food_type", "dong", "district", "subways", "hours", "menus",
+						"pet_allowed", "parking_free", "corkage_allowed", "price");
 	}
 
 	@Test
@@ -117,6 +121,66 @@ class AiPlaceSearchViewTest extends PostgresTestSupport {
 		insertProfile(id);
 
 		assertThat(column("facilities", id)).isEqualTo(JSON.readTree("{}"));
+	}
+
+	@Test
+	@DisplayName("AI뷰_검색2차장소컬럼은_장소값그대로이고가게가격은모름이다")
+	void view_searchPlaceColumns_readPlaceValuesAndUnknownPrice() {
+		long id = insertPlace();
+		insertProfile(id);
+		jdbc.update("""
+				UPDATE places SET food_type = 'FOOD_WESTERN', dong = '역삼동', district = '강남구',
+				    pet_allowed = true, parking_free = false
+				WHERE place_id = ?""", id);
+
+		assertThat(jdbc.queryForMap("""
+				SELECT name, food_type, dong, district, pet_allowed, parking_free, corkage_allowed, price
+				FROM ai_place_search WHERE place_id = ?""", id))
+				.containsEntry("name", "뷰 시험 카페").containsEntry("food_type", "FOOD_WESTERN")
+				.containsEntry("dong", "역삼동").containsEntry("district", "강남구")
+				.containsEntry("pet_allowed", true).containsEntry("parking_free", false)
+				.containsEntry("corkage_allowed", null).containsEntry("price", null);
+	}
+
+	@Test
+	@DisplayName("AI뷰_가까운역영업시간메뉴는_정한순서의JSON목록이다")
+	void view_subwaysHoursMenus_aggregatedInOrder() {
+		long id = insertPlace();
+		insertProfile(id);
+		jdbc.update("""
+				INSERT INTO place_subways (place_id, station, line, exit, walk_minutes, walk_meters)
+				VALUES (?, '역삼역', '2', '3', 4, 280), (?, '강남역', '2', NULL, NULL, NULL)""", id, id);
+		jdbc.update("""
+				INSERT INTO place_hours (place_id, day_of_week, open_time, close_time, closed, breaks)
+				VALUES (?, 'TUE', '18:00', '02:00', false, '[{"start": "15:00", "end": "17:00"}]'),
+				       (?, 'MON', NULL, NULL, true, '[]')""", id, id);
+		jdbc.update("""
+				INSERT INTO place_menus (place_id, sort_order, category, name, price, price_type, representative)
+				VALUES (?, 1, NULL, '시가 회', NULL, 'DYNAMIC', false),
+				       (?, 0, '파스타', '알리오올리오', 15000, 'FIXED', true)""", id, id);
+
+		// 가까운 역은 원본 순서, 영업시간은 월요일부터, 메뉴는 메뉴판 순서다
+		assertThat(column("subways", id)).isEqualTo(JSON.readTree("""
+				[{"station": "역삼역", "exit": "3", "walk_minutes": 4},
+				 {"station": "강남역", "exit": null, "walk_minutes": null}]"""));
+		assertThat(column("hours", id)).isEqualTo(JSON.readTree("""
+				[{"day": "MON", "open": null, "close": null, "closed": true, "breaks": []},
+				 {"day": "TUE", "open": "18:00", "close": "02:00", "closed": false,
+				  "breaks": [{"start": "15:00", "end": "17:00"}]}]"""));
+		assertThat(column("menus", id)).isEqualTo(JSON.readTree("""
+				[{"name": "알리오올리오", "category": "파스타", "price": 15000, "representative": true},
+				 {"name": "시가 회", "category": null, "price": null, "representative": false}]"""));
+	}
+
+	@Test
+	@DisplayName("AI뷰_가까운역영업시간메뉴가없으면_빈목록이다")
+	void view_noSubwaysHoursMenus_emptyArrays() {
+		long id = insertPlace();
+		insertProfile(id);
+
+		assertThat(column("subways", id)).isEqualTo(JSON.readTree("[]"));
+		assertThat(column("hours", id)).isEqualTo(JSON.readTree("[]"));
+		assertThat(column("menus", id)).isEqualTo(JSON.readTree("[]"));
 	}
 
 	@Test

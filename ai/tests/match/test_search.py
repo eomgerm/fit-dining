@@ -1,7 +1,7 @@
 """요청 해석부터 카드 만들기까지 잇는 검색 한 번을 확인한다.
 
-거르기 조건 만들기, 일반 검색, 근처 검색, LLM 실패, 후보 없음, 인코딩·저장소 실패와
-결과 없음 문구를 본다. 공유 모듈 `fit_ai.embedding`, `fit_ai.gms`는 가짜로 바꿔 끼우고
+거르기 조건 만들기(지역 우선순위 포함), 일반 검색, 근처 검색, LLM 실패, 후보 없음,
+인코딩·저장소 실패와 결과 없음 문구를 본다. 공유 모듈 `fit_ai.embedding`, `fit_ai.gms`는 가짜로 바꿔 끼우고
 장소 저장소도 가짜다. LLM에 넣는 후보는 섞지 않는다.
 """
 
@@ -18,12 +18,16 @@ from fit_ai.match.candidates import (
     Candidate,
     Found,
     MapBounds,
+    OpenHours,
     PlaceFilter,
+    RegionArea,
+    StationArea,
     StoreError,
 )
 from fit_ai.match.cards import Source
 from fit_ai.match.conditions import Layer
 from fit_ai.match.interpretation import Conditions
+from fit_ai.match.interpretation.segments import Hours, Price
 from fit_ai.match.place import ConditionEvidence, Place, PlaceInfo
 from fit_ai.match.search import (
     EmbeddingError,
@@ -31,6 +35,8 @@ from fit_ai.match.search import (
     SearchRequest,
     SearchResult,
     empty_reason,
+    open_hours,
+    price_range,
     search,
 )
 from fit_ai.match.taste_select import TasteFeature, TasteProfile
@@ -82,23 +88,30 @@ class NoShuffle(random.Random):
 
 
 class FakeStore:
-    """정해 둔 후보를 돌려주고 받은 거르기 조건, 요청문 벡터, k를 남긴다."""
+    """정해 둔 후보를 돌려주고 받은 거르기 조건, 요청문 벡터, k를 남긴다.
+
+    `matches`가 거짓인 거르기 조건에는 아무 곳도 돌려주지 않는다.
+    """
 
     def __init__(
         self,
         candidates: Sequence[Candidate] = CANDIDATES,
         invalid: tuple[int, ...] = (),
         fail: bool = False,
+        matches: Callable[[PlaceFilter], bool] = lambda place_filter: True,
     ) -> None:
         self.candidates = tuple(candidates)
         self.invalid = invalid
         self.fail = fail
+        self.matches = matches
         self.calls: list[tuple[PlaceFilter, Sequence[float], int]] = []
 
     def find(self, place_filter: PlaceFilter, query: Sequence[float], k: int) -> Found:
         if self.fail:
             raise StoreError("장소 저장소를 읽지 못했다: OperationalError")
         self.calls.append((place_filter, query, k))
+        if not self.matches(place_filter):
+            return Found(())
         return Found(self.candidates[:k], self.invalid)
 
     def mismatched(self) -> int:
@@ -156,6 +169,25 @@ def scores(result: SearchResult) -> list[tuple[int, int]]:
     return [(card.place_id, card.score) for card in result.cards]
 
 
+def areas_of(store: FakeStore) -> tuple:
+    """처음 뽑을 때 거른 지역"""
+    place_filter, _, _ = store.calls[0]
+    return place_filter.areas
+
+
+GANGNAM = StationArea("강남역", "GANGNAM")
+BOUNDS = MapBounds(sw_lat=37.49, ne_lng=127.04)
+PREVIOUS = Conditions(
+    "강남역 조용한 카페", "조용한 카페", ("QUIET",), "CAFE", "GANGNAM"
+)
+"""1차 꼴의 이전 조건(지역 조각 없이 역만 있다)"""
+
+
+def location(text: str, kind: str, value: str | None = None, **extra: object) -> dict:
+    """LLM이 내는 지역 조각"""
+    return {"text": text, "kind": kind, "value": value, **extra}
+
+
 class TestFilter:
     """거르기 조건과 요청문 벡터"""
 
@@ -171,23 +203,226 @@ class TestFilter:
         assert store.calls == [
             (
                 PlaceFilter(
-                    category_group="CAFE", station="GANGNAM", facilities=("PARKING",)
+                    category_group="CAFE", areas=(GANGNAM,), facilities=("PARKING",)
                 ),
                 [1.0, 0.0],
                 20,
             )
         ]
 
-    def test_map_bounds_replace_station(self, fake_gms: FakeGms) -> None:
-        """거르기_지도영역이있으면_역대신좌표로거른다"""
+    def test_avoided_category_excluded(self, fake_gms: FakeGms) -> None:
+        """거르기_빼달라는업종이있으면_그업종을뺀다"""
+        fake_gms(
+            answers(
+                ranking((1, "딱 맞음")),
+                category_group=None,
+                avoid_categories=["BAR"],
+            )
+        )
+        store = FakeStore()
+
+        search(SearchRequest("강남역 조용한 곳 술집 말고"), store, NoShuffle())
+
+        place_filter, _, _ = store.calls[0]
+        assert place_filter.excluded_categories == ("BAR",)
+
+    def test_hours_and_price(self, fake_gms: FakeGms) -> None:
+        """거르기_시간과가격이있으면_영업시간조건하나와여유폭을둔가격범위로거른다"""
+        fake_gms(
+            answers(
+                ranking((1, "딱 맞음")),
+                hours=[
+                    {"text": "일요일", "day": "SUN"},
+                    {"text": "새벽까지", "open_until": "02:00"},
+                ],
+                price={"text": "2만원 이하", "max_won": 20000},
+            )
+        )
+        store = FakeStore()
+
+        search(SearchRequest("일요일 새벽까지 2만원 이하 술집"), store, NoShuffle())
+
+        place_filter, _, _ = store.calls[0]
+        assert place_filter.hours == OpenHours(("SUN",), until=26 * 60)
+        assert (place_filter.min_price, place_filter.max_price) == (None, 22000)
+
+    @pytest.mark.parametrize(
+        ("hours", "expected"),
+        [
+            # 새벽 시각은 다음 날로, 자정은 24시로 본다.
+            ([Hours("새벽까지", open_until="02:00")], OpenHours(until=26 * 60)),
+            ([Hours("밤 11시까지", open_until="23:00")], OpenHours(until=23 * 60)),
+            ([Hours("자정까지", open_until="00:00")], OpenHours(until=24 * 60)),
+            (
+                [
+                    Hours("토요일", day="SAT"),
+                    Hours("일요일", day="SUN"),
+                    Hours("아침 8시 전", open_from="08:00"),
+                    Hours("10시 전", open_from="10:00"),
+                ],
+                OpenHours(("SAT", "SUN"), since=8 * 60),
+            ),
+            ([Hours("지금 여는", now=True)], None),
+            ([], None),
+        ],
+    )
+    def test_open_hours(self, hours: list[Hours], expected: object) -> None:
+        """거르기_시간조각을_요일과마감시작시각하나로합친다"""
+        assert open_hours(hours) == expected
+
+    @pytest.mark.parametrize(
+        ("price", "expected"),
+        [
+            (Price("2만원대", min_won=20000, max_won=29999), (18000, 32999)),
+            (Price("만원 이하", max_won=10000), (None, 11000)),
+            (Price("저렴한", cheap=True), (None, None)),
+            (None, (None, None)),
+        ],
+    )
+    def test_price_range(self, price: Price | None, expected: tuple) -> None:
+        """거르기_가격조각을_양쪽에여유폭10퍼센트를둔범위로바꾸고저렴한은거르지않는다"""
+        assert price_range(price) == expected
+
+
+class TestWhere:
+    """거를 지역. 이번 요청에 말한 지역 > 지도 영역 > 이전 요청의 지역"""
+
+    def test_said_location_beats_map_bounds(self, fake_gms: FakeGms) -> None:
+        """지역_이번요청에역을말하면_지도영역이있어도역으로거른다"""
         fake_gms(answers(ranking((1, "딱 맞음"))))
         store = FakeStore()
 
-        run(store, bounds=MapBounds(sw_lat=37.49, ne_lng=127.04))
+        run(store, bounds=BOUNDS)
 
-        place_filter, _, _ = store.calls[0]
-        assert place_filter.station is None
-        assert place_filter.bounds == MapBounds(sw_lat=37.49, ne_lng=127.04)
+        assert areas_of(store) == (GANGNAM,)
+
+    def test_map_bounds_beat_previous_location(self, fake_gms: FakeGms) -> None:
+        """지역_이번요청에지역이없고지도영역이있으면_이전역대신지도영역으로거른다"""
+        # 해석은 이전 역을 이어 붙인다.
+        fake_gms(answers(ranking((1, "딱 맞음"))))
+        store = FakeStore()
+
+        search(
+            SearchRequest("주차되는 데로", previous=PREVIOUS, bounds=BOUNDS),
+            store,
+            NoShuffle(),
+        )
+
+        assert areas_of(store) == (BOUNDS,)
+
+    def test_previous_location_without_bounds(self, fake_gms: FakeGms) -> None:
+        """지역_이번요청에지역도지도영역도없으면_이전역으로거른다"""
+        fake_gms(answers(ranking((1, "딱 맞음"))))
+        store = FakeStore()
+
+        search(SearchRequest("주차되는 데로", previous=PREVIOUS), store, NoShuffle())
+
+        assert areas_of(store) == (GANGNAM,)
+
+    def test_new_location_in_follow_up(self, fake_gms: FakeGms) -> None:
+        """지역_후속조건에서다른역을말하면_지도영역보다그역이앞선다"""
+        fake_gms(answers(ranking((1, "딱 맞음")), station="YEOKSAM"))
+        store = FakeStore()
+
+        search(
+            SearchRequest("역삼역으로 바꿔줘", previous=PREVIOUS, bounds=BOUNDS),
+            store,
+            NoShuffle(),
+        )
+
+        assert areas_of(store) == (StationArea("역삼역", "YEOKSAM"),)
+
+    def test_here_uses_map_bounds(self, fake_gms: FakeGms) -> None:
+        """지역_근처를말하고지도영역이있으면_지도영역으로100곳을뽑는다"""
+        fake_gms(answers(nearby=True, station=None))
+        store = FakeStore()
+
+        search(SearchRequest("근처 조용한 카페", bounds=BOUNDS), store, NoShuffle())
+
+        assert (areas_of(store), store.calls[0][2]) == ((BOUNDS,), 100)
+
+    def test_many_locations_with_walk_and_exit(self, fake_gms: FakeGms) -> None:
+        """지역_역이여럿이고도보거리와출구가있으면_역마다그대로거른다"""
+        locations = [
+            location("강남역 11번 출구", "STATION", "강남역", exit="11"),
+            location("신논현역 걸어서 5분", "STATION", "신논현역", walk_minutes=5),
+        ]
+        fake_gms(answers(ranking((1, "딱 맞음")), station=None, locations=locations))
+        store = FakeStore()
+
+        query = "강남역 11번 출구나 신논현역 걸어서 5분 카페"
+        search(SearchRequest(query), store, NoShuffle())
+
+        assert areas_of(store) == (
+            StationArea("강남역", "GANGNAM", exit="11"),
+            StationArea("신논현역", walk_minutes=5),
+        )
+
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            ("역삼동", RegionArea("역삼동", "YEOKSAM")),
+            ("역삼1동", RegionArea("역삼동", "YEOKSAM")),
+            ("대치동", RegionArea("대치동")),
+            ("강남구", RegionArea("강남구")),
+            ("강남", GANGNAM),
+        ],
+    )
+    def test_region(self, fake_gms: FakeGms, value: str, expected: object) -> None:
+        """지역_동이나구면_행정구역으로거르고서비스역이름이면_역으로거른다"""
+        locations = [location(value, "AREA", value)]
+        fake_gms(answers(ranking((1, "딱 맞음")), station=None, locations=locations))
+        store = FakeStore()
+
+        search(SearchRequest(f"{value} 조용한 카페"), store, NoShuffle())
+
+        assert areas_of(store) == (expected,)
+
+    def test_landmark_only_not_searched(self, fake_gms: FakeGms, encoder: list) -> None:
+        """지역_랜드마크만말하면_찾지않고준비중인지역이라고한다"""
+        locations = [location("코엑스", "AREA", "코엑스")]
+        calls = fake_gms(answers(station=None, locations=locations))
+        store = FakeStore()
+
+        result = search(SearchRequest("코엑스 조용한 카페"), store, NoShuffle())
+
+        assert (store.calls, encoder, rank_calls(calls)) == ([], [], 0)
+        assert result.cards == ()
+        assert result.empty_reason is not None
+        assert result.empty_reason.cause == "코엑스는 아직 준비 중인 지역이에요"
+
+    def test_landmark_with_station(self, fake_gms: FakeGms) -> None:
+        """지역_랜드마크와역을같이말하면_역으로만거른다"""
+        locations = [
+            location("코엑스", "AREA", "코엑스"),
+            location("선릉역", "STATION", "선릉역"),
+        ]
+        fake_gms(answers(ranking((1, "딱 맞음")), station=None, locations=locations))
+        store = FakeStore()
+
+        result = search(SearchRequest("코엑스나 선릉역 카페"), store, NoShuffle())
+
+        assert areas_of(store) == (StationArea("선릉역", "SEOLLEUNG"),)
+        assert len(result.cards) == 3
+
+    def test_station_without_places(self, fake_gms: FakeGms) -> None:
+        """지역_장소가하나도없는역이면_준비중인지역이라고한다"""
+        locations = [location("홍대", "STATION", "홍대입구역")]
+        fake_gms(answers(station=None, locations=locations))
+        store = FakeStore(candidates=())
+
+        result = search(SearchRequest("홍대 조용한 카페"), store, NoShuffle())
+
+        # 처음 뽑기와, 도보 거리·업종 없이 그 역에 장소가 있는지 본 것
+        assert [(f.areas, f.category_group, k) for f, _, k in store.calls] == [
+            ((StationArea("홍대입구역"),), "CAFE", 20),
+            ((StationArea("홍대입구역"),), None, 1),
+        ]
+        assert result.empty_reason is not None
+        assert result.empty_reason.cause == "홍대입구역은 아직 준비 중인 지역이에요"
+        assert result.empty_reason.suggestion == (
+            "강남역, 역삼역, 선릉역 근처에서 찾아 보세요"
+        )
 
 
 class TestRanking:
@@ -229,10 +464,11 @@ class TestRanking:
         calls = fake_gms(answers(nearby=True, station=None))
         store = FakeStore()
 
-        result = run(store)
+        # 요청문에 역이 있으면 역이 근처보다 앞서므로 근처 말만 있는 요청문을 쓴다.
+        result = search(SearchRequest("근처 조용한 카페"), store, NoShuffle())
 
         place_filter, _, k = store.calls[0]
-        assert (place_filter.station, k) == (None, 100)
+        assert (place_filter.areas, k) == ((), 100)
         assert rank_calls(calls) == 0
         assert scores(result) == [(1, 100), (2, 95), (3, 90)]
         assert result.trace.fallback is Fallback.NEARBY
@@ -328,7 +564,10 @@ class TestEmptyAndFailures:
         """검색_뽑힌장소가없으면_정렬LLM을부르지않고결과없음이유를준다"""
         calls = fake_gms(answers(codes=["PARKING"]))
 
-        result = run(FakeStore(candidates=()))
+        # 강남역에 장소는 있지만 주차 조건에 맞는 곳이 없다.
+        result = run(
+            FakeStore(matches=lambda place_filter: not place_filter.facilities)
+        )
 
         assert result.cards == ()
         assert rank_calls(calls) == 0
@@ -377,7 +616,7 @@ class TestEmptyReason:
         """결과없음_시설하나면_그시설을빼보라고한다"""
         conditions = Conditions("t", "t", ("PARKING",), "BAR", "YEOKSAM")
 
-        reason = empty_reason(conditions, in_map_bounds=False)
+        reason = empty_reason(conditions, (StationArea("역삼역", "YEOKSAM"),))
 
         assert reason.cause == "역삼역 술집 중 주차할 수 있는 곳이 없어요"
         assert reason.suggestion == "주차 조건을 빼고 다시 찾아 보세요"
@@ -386,7 +625,7 @@ class TestEmptyReason:
         """결과없음_시설이여럿이면_시설조건을줄이라고한다"""
         conditions = Conditions("t", "t", ("PARKING", "WIFI"), "CAFE")
 
-        reason = empty_reason(conditions, in_map_bounds=False)
+        reason = empty_reason(conditions)
 
         assert reason.cause == "카페 중 요청한 시설을 모두 갖춘 곳이 없어요"
 
@@ -394,7 +633,7 @@ class TestEmptyReason:
         """결과없음_지도영역으로걸렀으면_역대신이지역이라하고지도를옮기라고한다"""
         conditions = Conditions("t", "t", (), "CAFE", "GANGNAM")
 
-        reason = empty_reason(conditions, in_map_bounds=True)
+        reason = empty_reason(conditions, (BOUNDS,))
 
         assert reason.cause == "이 지역 카페 중 조건에 맞는 곳이 없어요"
         assert reason.suggestion == "지도를 옮기거나 넓혀서 다시 찾아 보세요"
@@ -403,6 +642,80 @@ class TestEmptyReason:
         """결과없음_근처검색에업종이없으면_역없이가게라고한다"""
         conditions = Conditions("t", "t", station="GANGNAM", nearby=True)
 
-        assert empty_reason(conditions, in_map_bounds=False).cause == (
-            "가게 중 조건에 맞는 곳이 없어요"
+        assert empty_reason(conditions).cause == "가게 중 조건에 맞는 곳이 없어요"
+
+    def test_walk_and_exit(self) -> None:
+        """결과없음_역에도보거리나출구가있으면_그대로보여주고그조건을빼보라고한다"""
+        conditions = Conditions("t", "t", (), "CAFE")
+        areas = (
+            StationArea("강남역", "GANGNAM", exit="11"),
+            StationArea("역삼역", "YEOKSAM", walk_minutes=5),
         )
+
+        reason = empty_reason(conditions, areas)
+
+        assert (
+            reason.cause
+            == "강남역 11번 출구·역삼역 도보 5분 카페 중 조건에 맞는 곳이 없어요"
+        )
+        assert reason.suggestion == "도보 거리나 출구 조건을 빼고 다시 찾아 보세요"
+
+    def test_hours(self) -> None:
+        """결과없음_영업시간으로걸렀으면_영업시간조건을빼보라고한다"""
+        conditions = Conditions(
+            "t", "t", (), "BAR", hours=(Hours("새벽까지", open_until="02:00"),)
+        )
+
+        reason = empty_reason(conditions, (GANGNAM,))
+
+        assert reason.cause == "강남역 술집 중 요청한 시간에 여는 곳이 없어요"
+        assert reason.suggestion == "영업시간 조건을 빼고 다시 찾아 보세요"
+
+    def test_price(self) -> None:
+        """결과없음_가격으로걸렀으면_가격조건을빼보라고한다"""
+        conditions = Conditions(
+            "t", "t", (), "CAFE", price=Price("만원 이하", max_won=10000)
+        )
+
+        reason = empty_reason(conditions)
+
+        assert reason.cause == "카페 중 요청한 가격대인 곳이 없어요"
+        assert reason.suggestion == "가격 조건을 빼고 다시 찾아 보세요"
+
+    def test_now_and_cheap_not_filtered(self) -> None:
+        """결과없음_지금영업중이나저렴한만있으면_거르지않았으니시간가격탓으로보지않는다"""
+        conditions = Conditions(
+            "t",
+            "t",
+            (),
+            "CAFE",
+            hours=(Hours("지금 여는", now=True),),
+            price=Price("저렴한", cheap=True),
+        )
+
+        assert empty_reason(conditions).cause == "카페 중 조건에 맞는 곳이 없어요"
+
+    def test_region(self) -> None:
+        """결과없음_동이나구로걸렀으면_그이름을쓴다"""
+        conditions = Conditions("t", "t", (), "BAR")
+
+        reason = empty_reason(conditions, (RegionArea("역삼동", "YEOKSAM"),))
+
+        assert reason.cause == "역삼동 술집 중 조건에 맞는 곳이 없어요"
+
+    @pytest.mark.parametrize(
+        ("unready", "cause"),
+        [
+            (("코엑스",), "코엑스는 아직 준비 중인 지역이에요"),
+            (("홍대입구역", "신촌역"), "홍대입구역·신촌역은 아직 준비 중인 지역이에요"),
+            (("COEX",), "COEX은(는) 아직 준비 중인 지역이에요"),
+        ],
+    )
+    def test_unready(self, unready: tuple[str, ...], cause: str) -> None:
+        """결과없음_장소데이터가없는지역이면_시설조건보다앞서준비중이라고한다"""
+        conditions = Conditions("t", "t", ("PARKING",), "CAFE")
+
+        reason = empty_reason(conditions, (), unready)
+
+        assert reason.cause == cause
+        assert reason.suggestion == "강남역, 역삼역, 선릉역 근처에서 찾아 보세요"

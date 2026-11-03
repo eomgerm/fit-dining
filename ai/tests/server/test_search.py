@@ -25,6 +25,13 @@ from fit_ai.match.candidates import (
 from fit_ai.match.cards import Card, Reason, ReasonTag, ScoreItem, Source
 from fit_ai.match.conditions import Layer
 from fit_ai.match.interpretation import Conditions, Interpretation
+from fit_ai.match.interpretation.segments import (
+    Hours,
+    Location,
+    LocationKind,
+    Menu,
+    Price,
+)
 from fit_ai.match.search import (
     EmbeddingError,
     EmptyReason,
@@ -56,6 +63,63 @@ CONDITIONS_BODY = {
     "station": "YEOKSAM",
     "nearby": False,
 }
+"""1차 모양의 조건. 2차에 더한 조각 필드가 없다. 그대로 돌려보낸 이전 조건도 읽어야 한다."""
+
+EMPTY_SEGMENTS_BODY = {
+    "locations": [],
+    "menus": [],
+    "hours": [],
+    "features": [],
+    "avoidCategories": [],
+}
+"""조각이 없을 때 응답 조건에 붙는 필드. null인 조각(`price`, `placeName`)은 빠진다."""
+
+SEGMENT_CONDITIONS = Conditions(
+    text="션릉역 새벽까지 하는 3만원 이하 초밥",
+    embedding_text="3만원 이하 초밥",
+    codes=("FOOD_JAPANESE",),
+    category_group="RESTAURANT",
+    station="SEOLLEUNG",
+    locations=(
+        Location("션릉역", LocationKind.STATION, "선릉역"),
+        Location("역삼역 걸어서 5분", LocationKind.STATION, "역삼역", 5, "3"),
+    ),
+    menus=(
+        Menu("초밥", "초밥", "FOOD_JAPANESE"),
+        Menu("매운 거", "매운 음식", "FOOD_SPICY", want=False),
+    ),
+    hours=(Hours("새벽까지", open_until="02:00"),),
+    price=Price("3만원 이하", max_won=30000),
+    avoid_categories=("CAFE",),
+)
+
+SEGMENT_BODY = {
+    "text": "션릉역 새벽까지 하는 3만원 이하 초밥",
+    "embeddingText": "3만원 이하 초밥",
+    "codes": ["FOOD_JAPANESE"],
+    "categoryGroup": "RESTAURANT",
+    "station": "SEOLLEUNG",
+    "nearby": False,
+    "locations": [
+        {"text": "션릉역", "kind": "STATION", "value": "선릉역"},
+        {
+            "text": "역삼역 걸어서 5분",
+            "kind": "STATION",
+            "value": "역삼역",
+            "walkMinutes": 5,
+            "exit": "3",
+        },
+    ],
+    "menus": [
+        {"text": "초밥", "value": "초밥", "code": "FOOD_JAPANESE", "want": True},
+        {"text": "매운 거", "value": "매운 음식", "code": "FOOD_SPICY", "want": False},
+    ],
+    "hours": [{"text": "새벽까지", "openUntil": "02:00", "now": False}],
+    "price": {"text": "3만원 이하", "maxWon": 30000, "cheap": False},
+    "features": [],
+    "avoidCategories": ["CAFE"],
+}
+"""조각이 있는 조건의 응답 모양. null인 값은 빠진다."""
 
 VECTOR = [0.01] * 1024
 """칩 벡터. 길이만 맞춘 예시 값이다."""
@@ -205,7 +269,7 @@ class TestSearch:
         """검색_새검색이면_조건과BE카드모양과모델버전을돌려준다"""
         data = post(client())
 
-        assert data["conditions"] == CONDITIONS_BODY
+        assert data["conditions"] == {**CONDITIONS_BODY, **EMPTY_SEGMENTS_BODY}
         assert data["nearby"] is False
         assert data["interpretedBy"] == "LLM"
         assert data["rankedBy"] == "LLM"
@@ -285,8 +349,34 @@ class TestSearch:
         assert data["changeSummary"] == "넓은 곳을 더했어요"
         assert data["fallbacks"] == []
 
+    def test_segments_in_response(self, searched: FakeSearch) -> None:
+        """검색_조건에조각이있으면_camelCase로돌려주고null인값은뺀다"""
+        searched.outcome = make_result(conditions=SEGMENT_CONDITIONS)
+
+        data = post(client())
+
+        assert data["conditions"] == SEGMENT_BODY
+
+    def test_previous_segments_read(self, searched: FakeSearch) -> None:
+        """검색_이전조건에조각이있으면_조각까지읽어검색에넘긴다"""
+        post(client(), previousConditions=SEGMENT_BODY)
+
+        assert searched.calls[0][0].previous == SEGMENT_CONDITIONS
+
     @pytest.mark.parametrize(
-        "previous", [{}, {"text": "x"}, {**CONDITIONS_BODY, "codes": "QUIET"}]
+        "previous",
+        [
+            {},
+            {"text": "x"},
+            {**CONDITIONS_BODY, "codes": "QUIET"},
+            {**SEGMENT_BODY, "hours": [{"text": "밤", "openUntil": "25:00"}]},
+            {**SEGMENT_BODY, "locations": [{"text": "역삼", "kind": "CITY"}]},
+            {
+                **SEGMENT_BODY,
+                "locations": [{"text": "역삼역", "kind": "STATION", "walkMinutes": 0}],
+            },
+            {**SEGMENT_BODY, "avoidCodes": ["FOOD_SPICY"]},
+        ],
     )
     def test_invalid_previous_is_new_search(
         self, searched: FakeSearch, previous: dict

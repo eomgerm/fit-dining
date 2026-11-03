@@ -3,7 +3,8 @@
 pgserver(개발 의존성)로 Docker 없이 띄운다. BE Mock 장소
 (`be/src/main/resources/mock/places.json`)를 40 장소 프로필 모양으로 바꾸고, 요약
 문장을 공유 모듈 `fit_ai.embedding`의 문서 쪽 함수로 인코딩해 넣는다. 리뷰 수는 Mock 카드의 라벨과
-태그로 만든 예시 값이라 실제 데이터와 다르다.
+태그로 만든 예시 값이라 실제 데이터와 다르다. Mock에는 지번 주소가 없어 동은 비워 둔다. 가게
+가격은 Mock에 리뷰 메뉴가 없어 메뉴판으로만 계산한다(`fit_ai.match.price`).
 
 AI가 읽는 장소는 뷰 `ai_place_search` 하나다(`fit_ai.match.pg_store`). 여기서는 BE
 장소 테이블과 40 프로필 테이블을 조인한 뷰로 만들어, 실제 테이블 모양과 상관없이
@@ -32,6 +33,7 @@ import psycopg
 from fit_ai import embedding
 from fit_ai.features import FEATURES
 from fit_ai.match.conditions import CATEGORY_NAMES, CONDITIONS, STATION_NAMES
+from fit_ai.match.price import MenuPrice, store_price
 
 DEFAULT_DATA = Path.home() / ".cache" / "fitdining-ai" / "devdb"
 REPO = Path(__file__).resolve().parents[2]
@@ -41,24 +43,72 @@ SCHEMA_SQL = """
 CREATE EXTENSION IF NOT EXISTS vector;
 DROP VIEW IF EXISTS ai_place_search;
 DROP TABLE IF EXISTS place_profile;
+DROP TABLE IF EXISTS place_subway;
+DROP TABLE IF EXISTS place_hour;
+DROP TABLE IF EXISTS place_menu;
 DROP TABLE IF EXISTS place;
 CREATE TABLE place (
   id bigint PRIMARY KEY,
   name text NOT NULL,
   category_group text NOT NULL,
+  food_type text,
   station text NOT NULL,
+  dong text,
+  district text,
   lat double precision,
   lng double precision,
-  facilities jsonb NOT NULL DEFAULT '{}'
+  facilities jsonb NOT NULL DEFAULT '{}',
+  pet_allowed boolean,
+  parking_free boolean,
+  corkage_allowed boolean
+);
+CREATE TABLE place_subway (
+  place_id bigint NOT NULL REFERENCES place (id),
+  station text NOT NULL,
+  exit text,
+  walk_minutes integer
+);
+CREATE TABLE place_hour (
+  place_id bigint NOT NULL REFERENCES place (id),
+  day_of_week text NOT NULL,
+  open_time time,
+  close_time time,
+  closed boolean NOT NULL,
+  breaks jsonb NOT NULL DEFAULT '[]'
+);
+CREATE TABLE place_menu (
+  place_id bigint NOT NULL REFERENCES place (id),
+  sort_order integer NOT NULL,
+  category text,
+  name text NOT NULL,
+  price integer,
+  representative boolean NOT NULL
 );
 CREATE TABLE place_profile (
   place_id bigint PRIMARY KEY REFERENCES place (id),
   profile jsonb NOT NULL,
-  summary_vector vector(1024)
+  summary_vector vector(1024),
+  price integer
 );
 CREATE VIEW ai_place_search AS
 SELECT p.id AS place_id, p.category_group, p.station, p.lat, p.lng, p.facilities,
-       pp.profile, pp.summary_vector
+       pp.profile, pp.summary_vector, p.name, p.food_type, p.dong, p.district,
+       coalesce((
+         SELECT jsonb_agg(jsonb_build_object(
+                  'station', s.station, 'exit', s.exit, 'walk_minutes', s.walk_minutes))
+         FROM place_subway s WHERE s.place_id = p.id), '[]') AS subways,
+       coalesce((
+         SELECT jsonb_agg(jsonb_build_object(
+                  'day', h.day_of_week, 'open', to_char(h.open_time, 'HH24:MI'),
+                  'close', to_char(h.close_time, 'HH24:MI'), 'closed', h.closed,
+                  'breaks', h.breaks))
+         FROM place_hour h WHERE h.place_id = p.id), '[]') AS hours,
+       coalesce((
+         SELECT jsonb_agg(jsonb_build_object(
+                  'name', m.name, 'category', m.category, 'price', m.price,
+                  'representative', m.representative) ORDER BY m.sort_order)
+         FROM place_menu m WHERE m.place_id = p.id), '[]') AS menus,
+       p.pet_allowed, p.parking_free, p.corkage_allowed, pp.price
 FROM place p JOIN place_profile pp ON pp.place_id = p.id;
 DROP TABLE IF EXISTS user_preferences;
 CREATE TABLE user_preferences (
@@ -70,8 +120,11 @@ CREATE TABLE user_preferences (
   features jsonb NOT NULL DEFAULT '[]'
 );
 """
-"""개발 DB 스키마. `user_preferences`는 BE 마이그레이션 V2·V6의 컬럼 중 AI가 읽는 것과
-온보딩 원본만 둔다(docs/specs/profile-storage/spec.md)."""
+"""개발 DB 스키마. 뷰는 BE 마이그레이션 V12·V17의 `ai_place_search`와 같은 컬럼이다. 가까운
+역(`place_subway`), 영업시간(`place_hour`), 메뉴(`place_menu`)는 BE `place_subways`,
+`place_hours`, `place_menus`(V7)처럼 따로 두고 뷰에서 모은다. 가게 가격(`place_profile.price`)은
+장소 분석 적재가 프로필 쪽에 넣는다고 가정한 자리다. `user_preferences`는 BE 마이그레이션 V2·V6의 컬럼 중 AI가 읽는 것과 온보딩 원본만
+둔다(docs/specs/profile-storage/spec.md)."""
 
 SAMPLE_TASTES = REPO / "ai/samples/taste/profiles.json"
 """회원 취향 예시. 취향 분석의 샘플 사용자 7명이고 회원 id는 파일의 키("1"~"7")다."""
@@ -136,8 +189,8 @@ def main() -> None:
     uri = pgserver.get_server(args.data, cleanup_mode=None).get_uri()
     with psycopg.connect(uri) as conn:
         conn.execute(SCHEMA_SQL)
-        for place, row in zip(places, rows, strict=True):
-            _insert(conn, row, place["card"]["place"]["name"])
+        for row in rows:
+            _insert(conn, row)
         tastes = json.loads(SAMPLE_TASTES.read_text(encoding="utf-8"))
         for user_id, profile in tastes.items():
             _insert_taste(conn, user_id, profile)
@@ -197,15 +250,53 @@ def _features(place: dict, rng: random.Random) -> list[dict]:
 
 def _row(place: dict, summary: str, vector: list[float]) -> dict:
     """Mock 장소 하나를 뷰 `ai_place_search`의 행 모양으로 만든다. 요약 벡터는 프로필 안에 둔다."""
-    info = place["card"]["place"]
-    present = {FACILITY_CODES.get(name) for name in place["detail"]["facilities"]}
+    info, detail = place["card"]["place"], place["detail"]
+    present = {FACILITY_CODES.get(name) for name in detail["facilities"]}
     # 편의시설에 주차가 없어도 주차 안내가 있으면 주차할 수 있다고 본다.
-    if place["detail"].get("parking"):
+    if detail.get("parking"):
         present.add("PARKING")
+    menus = [
+        {
+            "name": menu["name"],
+            "category": menu.get("category"),
+            "price": menu.get("price"),
+            "representative": menu["representative"],
+        }
+        for menu in detail["menus"]
+    ]
     return {
         "place_id": info["id"],
         "category_group": info["categoryGroup"],
         "station": info["station"],
+        "name": info["name"],
+        "food_type": None,
+        "dong": None,
+        "district": _district(detail["address"]),
+        "subways": [
+            {
+                "station": subway["station"],
+                "exit": subway.get("exit"),
+                "walk_minutes": subway.get("walkMinutes"),
+            }
+            for subway in detail.get("subways") or []
+        ],
+        "hours": [
+            {
+                "day": hours["dayOfWeek"],
+                "open": hours.get("open"),
+                "close": hours.get("close"),
+                "closed": hours["closed"],
+                "breaks": hours["breaks"],
+            }
+            for hours in detail["hours"]
+        ],
+        "menus": menus,
+        "pet_allowed": (detail.get("pet") or {}).get("allowed"),
+        "parking_free": (detail.get("parking") or {}).get("free"),
+        "corkage_allowed": None,
+        "price": store_price(
+            [MenuPrice(m["name"], m["price"], m["representative"]) for m in menus]
+        ),
         "lat": info["lat"],
         "lng": info["lng"],
         # Mock은 있는 시설만 적는다. 예시라서 적히지 않은 시설은 없음으로 둔다.
@@ -227,26 +318,72 @@ def _row(place: dict, summary: str, vector: list[float]) -> dict:
     }
 
 
-def _insert(conn: psycopg.Connection, row: dict, name: str) -> None:
+def _district(address: str | None) -> str | None:
+    """주소("서울 강남구 선릉로68길 7")의 구. 없으면 None이다."""
+    return next((part for part in (address or "").split() if part.endswith("구")), None)
+
+
+def _insert(conn: psycopg.Connection, row: dict) -> None:
     conn.execute(
-        "INSERT INTO place VALUES (%s, %s, %s, %s, %s, %s, %s)",
+        "INSERT INTO place VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
         (
             row["place_id"],
-            name,
+            row["name"],
             row["category_group"],
+            row["food_type"],
             row["station"],
+            row["dong"],
+            row["district"],
             row["lat"],
             row["lng"],
             json.dumps(row["facilities"]),
+            row["pet_allowed"],
+            row["parking_free"],
+            row["corkage_allowed"],
         ),
     )
+    for subway in row["subways"]:
+        conn.execute(
+            "INSERT INTO place_subway VALUES (%s, %s, %s, %s)",
+            (
+                row["place_id"],
+                subway["station"],
+                subway["exit"],
+                subway["walk_minutes"],
+            ),
+        )
+    for hours in row["hours"]:
+        conn.execute(
+            "INSERT INTO place_hour VALUES (%s, %s, %s, %s, %s, %s)",
+            (
+                row["place_id"],
+                hours["day"],
+                hours["open"],
+                hours["close"],
+                hours["closed"],
+                json.dumps(hours["breaks"]),
+            ),
+        )
+    for order, menu in enumerate(row["menus"]):
+        conn.execute(
+            "INSERT INTO place_menu VALUES (%s, %s, %s, %s, %s, %s)",
+            (
+                row["place_id"],
+                order,
+                menu["category"],
+                menu["name"],
+                menu["price"],
+                menu["representative"],
+            ),
+        )
     vector = row["profile"]["summary"]["vector"]
     conn.execute(
-        "INSERT INTO place_profile VALUES (%s, %s, %s::vector)",
+        "INSERT INTO place_profile VALUES (%s, %s, %s::vector, %s)",
         (
             row["place_id"],
             json.dumps(row["profile"], ensure_ascii=False),
             "[" + ",".join(repr(value) for value in vector) + "]",
+            row["price"],
         ),
     )
 

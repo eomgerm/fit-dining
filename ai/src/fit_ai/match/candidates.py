@@ -51,21 +51,91 @@ class MapBounds:
 
 
 @dataclass(frozen=True)
+class StationArea:
+    """역 지역.
+
+    도보 거리와 출구가 없으면 수집 역이 같거나 가까운 역 목록에 그 역이 있으면 든다.
+    가까운 역 목록만 보면 강남에서 수집했지만 가장 가까운 역이 신논현역인 곳이 "강남역"
+    검색에서 빠지기 때문이다(2026-11-02 결정). 도보 거리나 출구가 있으면 가까운 역
+    목록으로만 본다.
+
+    Attributes:
+        name: 역 이름("강남역"). 가까운 역 목록(`place_subways.station`)과 같은 표기다.
+        code: 서비스 역 코드(`GANGNAM`). 수집 역과 견준다. 서비스 역이 아니면 None이다.
+        walk_minutes: 그 역까지 도보 몇 분 이하인 곳. 없으면 None이다.
+        exit: 가장 가까운 출구가 이 출구인 곳. 없으면 None이다.
+    """
+
+    name: str
+    code: str | None = None
+    walk_minutes: int | None = None
+    exit: str | None = None
+
+
+@dataclass(frozen=True)
+class RegionArea:
+    """동이나 구. 장소의 동(`places.dong`)이나 구(`places.district`)가 이 이름이면 든다.
+
+    동 정보가 없는 장소는 이름이 같은 서비스 역("역삼동"이면 역삼역)의 장소로 본다.
+    1차와 같은 동작이다.
+
+    Attributes:
+        name: 동이나 구 이름("역삼동", "강남구"). 법정동 이름이다.
+        code: 이름이 같은 서비스 역 코드. 없으면 None이다.
+    """
+
+    name: str
+    code: str | None = None
+
+
+Area = StationArea | RegionArea | MapBounds
+"""거르기 지역. 역, 동·구, 지도 영역이다."""
+
+
+@dataclass(frozen=True)
+class OpenHours:
+    """영업시간 조건. 요청한 요일 중 하루라도 안 맞는다고 확인되지 않은 곳을 남긴다.
+
+    그 요일에 쉬거나, 여는·닫는 시각을 아는데 조건에 못 미치면 그 요일은 안 맞는다. 그
+    요일의 영업시간을 모르면 남긴다(2026-11-03 결정). 여는 시각과 닫는 시각이 같으면 24시간
+    영업으로 본다. 닫는 시각이 여는 시각보다 이르면 다음 날 닫는다.
+
+    Attributes:
+        days: 요일(`MON`~`SUN`). 비어 있으면 아무 요일이나 된다.
+        until: 이 시각까지 여는 곳. 그날 0시부터 센 분이고, 다음 날 새벽이면 1440을
+            넘는다("새벽 2시까지"는 1560). 없으면 None이다.
+        since: 이 시각 전에 여는 곳. 그날 0시부터 센 분이다. 없으면 None이다.
+    """
+
+    days: tuple[str, ...] = ()
+    until: int | None = None
+    since: int | None = None
+
+
+@dataclass(frozen=True)
 class PlaceFilter:
     """후보를 거르는 조건.
 
     Attributes:
         category_group: 업종. None이면 거르지 않는다.
-        station: 역. None이면 거르지 않는다. 지도 영역이나 근처 검색이면 None이다.
-        bounds: 지도 영역. None이면 좌표로 거르지 않는다.
+        areas: 지역. 여럿이면 그중 하나에 들면 된다. 비어 있으면 위치로 거르지 않는다.
+            근처 검색은 폰이 현재 위치로 거르므로 비어 있다.
         facilities: 요청한 시설. 그 시설이 없다고 확인된 장소만 뺀다.
             모르는 장소는 남긴다.
+        excluded_categories: 빼 달라는 업종("카페 말고")
+        hours: 영업시간. None이면 거르지 않는다.
+        min_price: 가게 가격(`price.store_price`) 하한(원). 가격을 모르는 장소는 남긴다.
+            None이면 거르지 않는다.
+        max_price: 가게 가격 상한(원). 하한과 같다.
     """
 
     category_group: str | None = None
-    station: str | None = None
-    bounds: MapBounds | None = None
+    areas: tuple[Area, ...] = ()
     facilities: tuple[str, ...] = field(default_factory=tuple)
+    excluded_categories: tuple[str, ...] = ()
+    hours: OpenHours | None = None
+    min_price: int | None = None
+    max_price: int | None = None
 
 
 @dataclass(frozen=True)

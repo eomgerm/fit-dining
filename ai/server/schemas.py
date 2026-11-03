@@ -8,7 +8,18 @@ from typing import Annotated, Any, Literal
 
 from pydantic import Field, field_validator
 
-from fit_ai.match.interpretation import MAX_CODES, MAX_TEXT_LENGTH
+from fit_ai.match.interpretation import (
+    FOOD_CODES,
+    MAX_CODES,
+    MAX_TEXT_LENGTH,
+    MAX_WALK_MINUTES,
+)
+from fit_ai.match.interpretation.segments import (
+    DAYS,
+    MAX_SEGMENT_LENGTH,
+    MAX_SEGMENTS,
+    LocationKind,
+)
 from fit_ai.match.taste_select import MAX_FREE_TEXT_LENGTH
 from server.common import Body
 from server.taste_profile import PRIORITIES, PURPOSES, ProfileBody, TasteChip
@@ -131,19 +142,87 @@ class SearchBody(Body):
         return value
 
 
+Segment = Annotated[str, Field(min_length=1, max_length=MAX_SEGMENT_LENGTH)]
+"""조각의 원문과 표준 이름"""
+
+Clock = Annotated[str, Field(pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")]
+"""시각("HH:MM")"""
+
+
+class LocationBody(Body):
+    """지역 조각. 속성은 `segments.Location`과 같다."""
+
+    text: Segment
+    kind: LocationKind
+    value: Segment | None = None
+    walk_minutes: int | None = Field(default=None, ge=1, le=MAX_WALK_MINUTES)
+    exit: Segment | None = None
+
+
+class MenuBody(Body):
+    """메뉴·음식 조각. 속성은 `segments.Menu`와 같다."""
+
+    text: Segment
+    value: Segment
+    code: Literal[FOOD_CODES] | None = None
+    want: bool = True
+
+
+class HoursBody(Body):
+    """시간 조각. 속성은 `segments.Hours`와 같다."""
+
+    text: Segment
+    day: Literal[DAYS] | None = None
+    open_until: Clock | None = None
+    open_from: Clock | None = None
+    now: bool = False
+
+
+class PriceBody(Body):
+    """가격 조각. 속성은 `segments.Price`와 같다."""
+
+    text: Segment
+    min_won: int | None = Field(default=None, ge=0)
+    max_won: int | None = Field(default=None, ge=0)
+    cheap: bool = False
+
+
+class PlaceNameBody(Body):
+    """가게 이름 조각. 속성은 `segments.PlaceName`과 같다."""
+
+    text: Segment
+    value: Segment
+
+
+class FeatureTextBody(Body):
+    """코드표에 없는 특징. 속성은 `segments.FeatureText`와 같다."""
+
+    text: Segment
+    value: Segment
+    want: bool = True
+
+
 class ConditionsBody(Body):
     """해석한 조건. BE와 FE에는 불투명한 객체다.
 
     BE는 검색 응답의 `conditions`로 FE에 그대로 준다. FE는 후속 조건 때
-    `previousConditions`로 돌려보낸다.
+    `previousConditions`로 돌려보낸다. `locations`부터 뒤의 속성은 2차에 더했다. 그 전
+    응답을 돌려보낸 `previousConditions`에는 없으므로 모두 기본값이 있다.
 
     Attributes:
         text: 정렬 LLM에 넣을 요청문. 후속 조건이면 이전 요청과 합친 문장이다.
         embedding_text: 후보 추출에 쓸 문장. 부정 표현을 긍정형으로 바꿨고 위치 말은 뺐다.
-        codes: 요청 조건 코드. 취향 코드표 코드와 시설 코드다.
+        codes: 원하는 조건 코드. 취향 코드표 코드와 시설 코드다.
         category_group: 업종. 요청에 없으면 null이다.
-        station: 역. 요청에 없으면 null이다.
+        station: 지역 중 처음 나온 서비스 역. 없으면 null이다.
         nearby: 근처 검색인지
+        locations: 지역. 여럿이면 그중 하나에 들면 된다.
+        menus: 메뉴·음식. 피하는 음식은 `want`가 거짓이다.
+        hours: 시간
+        price: 가격. 요청에 없으면 null이다.
+        place_name: 가게 이름. 요청에 없으면 null이다.
+        features: 코드표에 없는 특징
+        avoid_categories: 빼 달라는 업종
     """
 
     text: str = Field(min_length=1, max_length=MAX_TEXT_LENGTH)
@@ -152,6 +231,15 @@ class ConditionsBody(Body):
     category_group: CategoryGroup | None = None
     station: Station | None = None
     nearby: bool = False
+    locations: list[LocationBody] = Field(default_factory=list, max_length=MAX_SEGMENTS)
+    menus: list[MenuBody] = Field(default_factory=list, max_length=MAX_SEGMENTS)
+    hours: list[HoursBody] = Field(default_factory=list, max_length=MAX_SEGMENTS)
+    price: PriceBody | None = None
+    place_name: PlaceNameBody | None = None
+    features: list[FeatureTextBody] = Field(
+        default_factory=list, max_length=MAX_SEGMENTS
+    )
+    avoid_categories: list[CategoryGroup] = Field(default_factory=list, max_length=3)
 
 
 class ReasonTagBody(Body):

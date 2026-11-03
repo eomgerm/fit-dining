@@ -11,6 +11,7 @@ docs/comparison/api.md에 있다.
 
 import threading
 from collections.abc import Callable
+from dataclasses import asdict
 from typing import Any
 
 from fastapi import APIRouter
@@ -21,6 +22,14 @@ from fit_ai import embedding, gms
 from fit_ai.match.candidates import MapBounds, StoreError
 from fit_ai.match.cards import Card
 from fit_ai.match.interpretation import Conditions
+from fit_ai.match.interpretation.segments import (
+    FeatureText,
+    Hours,
+    Location,
+    Menu,
+    PlaceName,
+    Price,
+)
 from fit_ai.match.search import (
     EmbeddingError,
     Fallback,
@@ -30,7 +39,7 @@ from fit_ai.match.search import (
 )
 from fit_ai.match.taste_select import TasteProfile, TasteStore
 from fit_ai.taste.profile import compute_features
-from server.common import Dependencies, log, problem
+from server.common import Body, Dependencies, log, problem
 from server.schemas import (
     CardBody,
     ConditionsBody,
@@ -252,18 +261,24 @@ def _conditions(body: ConditionsBody) -> Conditions:
         category_group=body.category_group,
         station=body.station,
         nearby=body.nearby,
+        locations=tuple(_segment(Location, loc) for loc in body.locations),
+        menus=tuple(_segment(Menu, m) for m in body.menus),
+        hours=tuple(_segment(Hours, h) for h in body.hours),
+        price=_segment(Price, body.price),
+        place_name=_segment(PlaceName, body.place_name),
+        features=tuple(_segment(FeatureText, f) for f in body.features),
+        avoid_categories=tuple(body.avoid_categories),
     )
+
+
+def _segment(cls, body: Body | None):
+    """조각 본문을 같은 이름의 속성을 가진 조각으로 바꾼다."""
+    return None if body is None else cls(**body.model_dump())
 
 
 def _conditions_body(conditions: Conditions) -> ConditionsBody:
-    return ConditionsBody(
-        text=conditions.text,
-        embedding_text=conditions.embedding_text,
-        codes=list(conditions.codes),
-        category_group=conditions.category_group,
-        station=conditions.station,
-        nearby=conditions.nearby,
-    )
+    # 조각은 속성 이름이 본문과 같아 dataclass를 dict로 바꿔 그대로 넘긴다.
+    return ConditionsBody.model_validate(asdict(conditions))
 
 
 def _resolve_taste(

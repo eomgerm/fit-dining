@@ -16,13 +16,18 @@ from typing import Any, TypeGuard
 
 from fit_ai import embedding
 from fit_ai.match.candidates import (
+    Area,
     Candidate,
     Found,
     MapBounds,
+    OpenHours,
     PlaceFilter,
+    RegionArea,
+    StationArea,
     StoreError,
     VectorCounts,
 )
+from fit_ai.match.interpretation.segments import DAYS
 from fit_ai.match.place import Place, PlaceInfo, read_facilities
 
 
@@ -132,11 +137,13 @@ def _matches(row: dict[str, Any], place_filter: PlaceFilter) -> bool:
         and row.get("category_group") != place_filter.category_group
     ):
         return False
-    if place_filter.station is not None and row.get("station") != place_filter.station:
+    if row.get("category_group") in place_filter.excluded_categories:
         return False
-    if place_filter.bounds is not None and not _inside(
-        row.get("lat"), row.get("lng"), place_filter.bounds
-    ):
+    if place_filter.areas and not any(_in_area(row, a) for a in place_filter.areas):
+        return False
+    if not _in_price(row.get("price"), place_filter):
+        return False
+    if place_filter.hours is not None and not _open(row, place_filter.hours):
         return False
     facilities = row.get("facilities")
     # 없다고 확인된(false) 시설만 뺀다. 키가 없거나 null이면 모름이라 남긴다.
@@ -144,6 +151,98 @@ def _matches(row: dict[str, Any], place_filter: PlaceFilter) -> bool:
         isinstance(facilities, dict)
         and any(facilities.get(code) is False for code in place_filter.facilities)
     )
+
+
+def _in_area(row: dict[str, Any], area: Area) -> bool:
+    """장소가 지역 하나에 드는지. FIND_SQL의 `area` 조건과 같다."""
+    match area:
+        case StationArea():
+            collected = (
+                area.walk_minutes is None
+                and area.exit is None
+                and area.code is not None
+                and row.get("station") == area.code
+            )
+            return collected or any(_near(subway, area) for subway in _subways(row))
+        case RegionArea():
+            dong = row.get("dong")
+            if area.name in (dong, row.get("district")):
+                return True
+            return (
+                dong is None
+                and area.code is not None
+                and row.get("station") == area.code
+            )
+        case MapBounds():
+            return _inside(row.get("lat"), row.get("lng"), area)
+
+
+def _subways(row: dict[str, Any]) -> list[dict[str, Any]]:
+    """가까운 역 목록. 없거나 모양이 틀리면 빈 목록이다."""
+    subways = row.get("subways")
+    if not isinstance(subways, list):
+        return []
+    return [subway for subway in subways if isinstance(subway, dict)]
+
+
+def _near(subway: dict[str, Any], area: StationArea) -> bool:
+    """가까운 역 하나가 역 지역의 이름, 도보 거리, 출구에 맞는지.
+
+    도보 거리를 모르는 역은 도보 거리 조건에 맞지 않는 것으로 본다(SQL의 NULL 비교).
+    """
+    if subway.get("station") != area.name:
+        return False
+    walk = subway.get("walk_minutes")
+    if area.walk_minutes is not None and not (
+        _is_number(walk) and walk <= area.walk_minutes
+    ):
+        return False
+    return area.exit is None or subway.get("exit") == area.exit
+
+
+def _in_price(price: object, place_filter: PlaceFilter) -> bool:
+    """가게 가격이 범위 안인지. 가격을 모르면 남긴다(SQL의 NULL 처리와 같다)."""
+    if not _is_number(price):
+        return True
+    low, high = place_filter.min_price, place_filter.max_price
+    return (low is None or price >= low) and (high is None or price <= high)
+
+
+def _open(row: dict[str, Any], hours: OpenHours) -> bool:
+    """요청한 요일 중 안 맞는다고 확인되지 않은 날이 하루라도 있는지. FIND_SQL의 영업시간
+    조건과 같다."""
+    days = {
+        day.get("day"): day
+        for day in row.get("hours") or []
+        if isinstance(day, dict) and isinstance(day.get("day"), str)
+    }
+    return any(not _closed_for(days.get(day), hours) for day in hours.days or DAYS)
+
+
+def _closed_for(day: dict[str, Any] | None, hours: OpenHours) -> bool:
+    """그 요일에 쉬거나 시각이 조건에 못 미친다고 확인됐는지. 모르면 거짓이다."""
+    if day is None:
+        return False
+    if day.get("closed") is True:
+        return True
+    open_at, close_at = _minutes(day.get("open")), _minutes(day.get("close"))
+    if open_at is None or close_at is None or open_at == close_at:
+        return False
+    if close_at < open_at:
+        close_at += 24 * 60
+    return (hours.until is not None and close_at < hours.until) or (
+        hours.since is not None and open_at > hours.since
+    )
+
+
+def _minutes(clock: object) -> int | None:
+    """시각("HH:MM")을 0시부터 센 분으로 바꾼다. 모양이 틀리면 None이다."""
+    if not isinstance(clock, str):
+        return None
+    hour, _, minute = clock.partition(":")
+    if not (hour.isdigit() and minute.isdigit()):
+        return None
+    return int(hour) * 60 + int(minute)
 
 
 def _inside(lat: object, lng: object, bounds: MapBounds) -> bool:

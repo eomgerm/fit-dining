@@ -12,6 +12,7 @@ import json
 import os
 import statistics
 from collections import Counter, defaultdict
+from dataclasses import asdict
 from datetime import date
 from pathlib import Path
 
@@ -47,7 +48,11 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--runs", type=int, default=2, help="LLM 해석을 돌릴 횟수")
     parser.add_argument("--label", default=str(date.today()), help="결과 파일 이름")
+    parser.add_argument("--model", help="해석 모델. 없으면 공유 모듈의 모델을 쓴다")
     args = parser.parse_args()
+    if args.model:
+        # 공유 모듈은 모델 하나로 고정이라 실험에서만 바꿔 끼운다.
+        gms.MODEL = args.model
     cases = json.loads((HERE / "cases.json").read_text(encoding="utf-8"))["cases"]
     timeout = float(os.environ.get("GMS_TIMEOUT_SECONDS", "5.0"))
     gms.call_json = _record(gms.call_json)
@@ -148,10 +153,99 @@ def _check(case: dict, conditions: Conditions) -> dict:
         "must": len(must),
     }
     result["codes_ok"] = not result["extra"] and not result["missing"]
+    result["segments"] = _segments(conditions)
+    # 분류별 조각은 기대 답에 그 분류가 있을 때만 채점한다(1차 질의는 채점 방식이 그대로다).
+    result["segment_ok"] = {
+        key: check(expect[key], conditions)
+        for key, check in SEGMENT_CHECKS.items()
+        if key in expect
+    }
     result["all_ok"] = all(
         result[k] for k in ("codes_ok", "category_ok", "station_ok", "nearby_ok")
-    )
+    ) and all(result["segment_ok"].values())
     return result
+
+
+def _segments(conditions: Conditions) -> dict:
+    """결과 파일에 남길 분류별 조각"""
+    data = asdict(conditions)
+    data["avoid_menus"] = [m for m in data["menus"] if not m["want"]]
+    return {key: data[key] for key in SEGMENT_CHECKS}
+
+
+def _same(expected: str | None, value: str | None) -> bool:
+    """표준 이름 비교. 띄어쓰기를 무시하고 한쪽이 다른 쪽에 들어 있으면 맞다("국물"과
+    "국물 요리")."""
+    if expected is None or value is None:
+        return expected is value
+    a, b = "".join(expected.split()), "".join(value.split())
+    return a in b or b in a
+
+
+def _check_locations(expected: list[dict], conditions: Conditions) -> bool:
+    """기대한 지역이 모두 나왔는지 본다. 지역마다 적은 속성(kind, value, walk_minutes,
+    exit)만 본다. 기대가 빈 목록이면 지역이 없어야 맞다."""
+    if not expected:
+        return not conditions.locations
+
+    def matches(e: dict, got) -> bool:
+        return all(
+            _same(v, got.value) if k == "value" else getattr(got, k) == v
+            for k, v in e.items()
+        )
+
+    return all(any(matches(e, got) for got in conditions.locations) for e in expected)
+
+
+def _check_values(attr: str):
+    """원하는 조각의 표준 이름이 기대한 것을 모두 담는지 본다. 더 붙은 조각은 틀리지 않다."""
+
+    def check(expected: list[str], conditions: Conditions) -> bool:
+        got = [s.value for s in getattr(conditions, attr) if s.want]
+        return all(any(_same(e, g) for g in got) for e in expected)
+
+    return check
+
+
+def _check_hours(expected: list[dict], conditions: Conditions) -> bool:
+    return all(
+        any(all(getattr(h, k) == v for k, v in e.items()) for h in conditions.hours)
+        for e in expected
+    )
+
+
+def _check_price(expected: dict | None, conditions: Conditions) -> bool:
+    got = conditions.price
+    if expected is None or got is None:
+        return expected is None and got is None
+    return all(getattr(got, k) == v for k, v in expected.items())
+
+
+def _check_avoid_menus(expected: list[str], conditions: Conditions) -> bool:
+    """피하는 메뉴가 기대한 것과 같은지 본다. 기대는 음식 코드나 표준 이름이다."""
+    avoided = [m for m in conditions.menus if not m.want]
+    found = all(
+        any(e == m.code or _same(e, m.value) for m in avoided) for e in expected
+    )
+    return found and len(avoided) <= len(expected)
+
+
+def _check_place_name(expected: str | None, conditions: Conditions) -> bool:
+    got = conditions.place_name
+    return _same(expected, got.value if got else None)
+
+
+SEGMENT_CHECKS = {
+    "locations": _check_locations,
+    "menus": _check_values("menus"),
+    "hours": _check_hours,
+    "price": _check_price,
+    "place_name": _check_place_name,
+    "features": _check_values("features"),
+    "avoid_menus": _check_avoid_menus,
+    "avoid_categories": lambda e, c: set(e) == set(c.avoid_categories),
+}
+"""분류별 조각 채점. 기대 답(`expect`)의 키와 같은 이름이다."""
 
 
 def _one_of(expected: object, value: object) -> bool:
@@ -208,6 +302,11 @@ def _report(rows: list[dict]) -> None:
             wrong.append(f"역 {run['station']} (기대 {row['expect']['station']})")
         if not run["nearby_ok"]:
             wrong.append(f"근처 {run['nearby']}")
+        for key, ok in run["segment_ok"].items():
+            if not ok:
+                wrong.append(
+                    f"{key} {run['segments'][key]} (기대 {row['expect'][key]})"
+                )
         print(f"{row['id']:3} {row['query']}  →  {'; '.join(wrong)}")
 
     kept = sum(len(r["llm"][0]["uncovered_kept"]) for r in rows)
@@ -249,10 +348,25 @@ def _summary(name: str, runs: list[dict]) -> None:
     )
     if extras:
         print(f"  근거 없이 붙은 코드: {dict(extras.most_common())}")
+    segments = defaultdict(list)
+    for run in runs:
+        for key, ok in run["segment_ok"].items():
+            segments[key].append(ok)
+    if segments:
+        print(
+            "  분류별 조각: "
+            + ", ".join(f"{k} {sum(v)}/{len(v)}" for k, v in segments.items())
+        )
 
 
 def _signature(run: dict) -> tuple:
-    return (tuple(sorted(run["codes"])), run["category"], run["station"], run["nearby"])
+    return (
+        tuple(sorted(run["codes"])),
+        run["category"],
+        run["station"],
+        run["nearby"],
+        json.dumps(run["segments"], ensure_ascii=False, sort_keys=True),
+    )
 
 
 if __name__ == "__main__":

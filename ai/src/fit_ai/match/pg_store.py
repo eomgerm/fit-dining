@@ -3,13 +3,17 @@
 
 장소는 거르기와 유사도 계산(pgvector `<=>`, 코사인 거리)을 SQL 한 번으로 한다. 장소가
 300곳 남짓이라 인덱스 없이 전부 계산해도 빠르고 결과가 정확하다. 장소 뷰는 BE
-마이그레이션 V12(`ai_place_search`)가 `places`와 `place_profiles`로 만든다. AI는 그 컬럼
-`place_id`, `category_group`, `station`, `lat`, `lng`, `facilities`, `profile`,
-`summary_vector`에만 의존한다. 로컬 개발 DB(`scripts/dev_db.py`)는 같은 컬럼의 뷰를
-만든다. 취향 표 `user_preferences`의 `features`, `tastes`는 저장 설계
+마이그레이션 V12(`ai_place_search`)가 `places`와 `place_profiles`로 만들고 V17이 검색 2차
+컬럼을 뒤에 더한다. AI는 그 컬럼 중 `place_id`, `category_group`, `station`, `dong`,
+`district`, `subways`(`place_subways`를 모은 `[{station, exit, walk_minutes}]`), `hours`
+(`place_hours`를 모은 `[{day, open, close, closed, breaks}]`), `price`(가게 가격), `lat`, `lng`,
+`facilities`, `profile`, `summary_vector`에 의존한다. `price`는 장소 분석 적재가 채우기
+전까지 모두 NULL(모름)이다(docs/comparison/spec.md 4.2). 로컬 개발 DB(`scripts/dev_db.py`)는
+같은 컬럼의 뷰를 만든다. 취향 표 `user_preferences`의 `features`, `tastes`는 저장 설계
 (docs/specs/profile-storage/spec.md, BE 마이그레이션 V2·V6)를 따른다.
 """
 
+import json
 from collections.abc import Sequence
 from typing import Any
 
@@ -18,12 +22,18 @@ from psycopg_pool import ConnectionPool, PoolTimeout
 
 from fit_ai import embedding
 from fit_ai.match.candidates import (
+    Area,
     Candidate,
     Found,
+    MapBounds,
+    OpenHours,
     PlaceFilter,
+    RegionArea,
+    StationArea,
     StoreError,
     VectorCounts,
 )
+from fit_ai.match.interpretation.segments import DAYS
 from fit_ai.match.place import Place, PlaceInfo, read_facilities
 from fit_ai.match.taste_select import TasteProfile
 
@@ -31,25 +41,80 @@ FIND_SQL = """
 SELECT place_id, category_group, station, facilities,
        profile #- '{summary,vector}' AS profile,
        1 - (summary_vector <=> %(query)s::vector) AS similarity
-FROM ai_place_search
+FROM ai_place_search AS p
 WHERE summary_vector IS NOT NULL
   AND profile -> 'embedding' ->> 'model' = %(model)s
   AND profile -> 'embedding' ->> 'revision' = %(revision)s
   AND profile -> 'embedding' ->> 'prompt' = 'document'
   AND (%(category)s::text IS NULL OR category_group = %(category)s::text)
-  AND (%(station)s::text IS NULL OR station = %(station)s::text)
-  AND (%(sw_lat)s::float8 IS NULL OR lat >= %(sw_lat)s::float8)
-  AND (%(sw_lng)s::float8 IS NULL OR lng >= %(sw_lng)s::float8)
-  AND (%(ne_lat)s::float8 IS NULL OR lat <= %(ne_lat)s::float8)
-  AND (%(ne_lng)s::float8 IS NULL OR lng <= %(ne_lng)s::float8)
+  AND NOT coalesce(category_group = ANY(%(excluded)s::text[]), false)
+  AND (
+    jsonb_array_length(%(areas)s::jsonb) = 0
+    OR EXISTS (
+      SELECT 1
+      FROM jsonb_to_recordset(%(areas)s::jsonb) AS area(
+        kind text, name text, code text, walk_minutes int, exit text,
+        sw_lat float8, sw_lng float8, ne_lat float8, ne_lng float8)
+      WHERE CASE area.kind
+        WHEN 'STATION' THEN
+          (area.walk_minutes IS NULL AND area.exit IS NULL AND p.station = area.code)
+          OR EXISTS (
+            SELECT 1
+            FROM jsonb_to_recordset(coalesce(p.subways, '[]'::jsonb))
+              AS near(station text, exit text, walk_minutes int)
+            WHERE near.station = area.name
+              AND (area.walk_minutes IS NULL OR near.walk_minutes <= area.walk_minutes)
+              AND (area.exit IS NULL OR near.exit = area.exit))
+        WHEN 'REGION' THEN
+          p.dong = area.name OR p.district = area.name
+          OR (p.dong IS NULL AND p.station = area.code)
+        ELSE
+          (area.sw_lat IS NULL OR p.lat >= area.sw_lat)
+          AND (area.sw_lng IS NULL OR p.lng >= area.sw_lng)
+          AND (area.ne_lat IS NULL OR p.lat <= area.ne_lat)
+          AND (area.ne_lng IS NULL OR p.lng <= area.ne_lng)
+      END
+    )
+  )
   AND NOT EXISTS (
     SELECT 1 FROM unnest(%(facilities)s::text[]) AS requested(code)
     WHERE facilities -> requested.code = 'false'::jsonb
   )
+  AND (%(min_price)s::int IS NULL OR p.price IS NULL OR p.price >= %(min_price)s::int)
+  AND (%(max_price)s::int IS NULL OR p.price IS NULL OR p.price <= %(max_price)s::int)
+  AND (
+    %(hours)s::jsonb IS NULL
+    OR EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements_text(%(hours)s::jsonb -> 'days') AS requested(day)
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM jsonb_to_recordset(coalesce(p.hours, '[]'::jsonb))
+          AS h(day text, open time, close time, closed boolean)
+        CROSS JOIN LATERAL (
+          SELECT extract(epoch FROM h.open) / 60 AS open_at,
+                 extract(epoch FROM h.close) / 60
+                   + CASE WHEN h.close <= h.open THEN 1440 ELSE 0 END AS close_at
+        ) AS t
+        WHERE h.day = requested.day
+          AND (
+            coalesce(h.closed, false)
+            OR (h.open <> h.close AND (
+              coalesce(t.close_at < (%(hours)s::jsonb ->> 'until')::int, false)
+              OR coalesce(t.open_at > (%(hours)s::jsonb ->> 'since')::int, false)))
+          )
+      )
+    )
+  )
 ORDER BY summary_vector <=> %(query)s::vector
 LIMIT %(k)s
 """
-"""거르기와 유사도 상위 k곳을 한 번에 뽑는다. 요약 벡터는 가져오지 않는다."""
+"""거르기와 유사도 상위 k곳을 한 번에 뽑는다. 요약 벡터는 가져오지 않는다.
+
+지역은 JSON 목록(`_area_json`)으로 받아 그중 하나에 들면 남긴다. 역과 동에 드는 규칙은
+`candidates.StationArea`, `RegionArea`에 있다. 목록이 비면 위치로 거르지 않는다. 영업시간은
+JSON(`_hours_json`)으로 받아, 요청한 요일 중 쉬거나 시각이 못 미친다고 확인되지 않은 날이
+하루라도 있으면 남긴다(`candidates.OpenHours`). 가격과 영업시간을 모르는 장소는 남긴다."""
 
 COUNT_SQL = """
 SELECT count(*) FILTER (WHERE comparable), count(*) FILTER (WHERE NOT comparable)
@@ -102,7 +167,6 @@ class PgPlaceStore:
         Raises:
             StoreError: 저장소를 읽지 못했을 때
         """
-        bounds = place_filter.bounds
         rows = self._fetch(
             FIND_SQL,
             {
@@ -110,12 +174,12 @@ class PgPlaceStore:
                 "model": embedding.MODEL_ID,
                 "revision": embedding.REVISION,
                 "category": place_filter.category_group,
-                "station": place_filter.station,
-                "sw_lat": bounds.sw_lat if bounds else None,
-                "sw_lng": bounds.sw_lng if bounds else None,
-                "ne_lat": bounds.ne_lat if bounds else None,
-                "ne_lng": bounds.ne_lng if bounds else None,
+                "excluded": list(place_filter.excluded_categories),
+                "areas": json.dumps([_area_json(a) for a in place_filter.areas]),
                 "facilities": list(place_filter.facilities),
+                "min_price": place_filter.min_price,
+                "max_price": place_filter.max_price,
+                "hours": _hours_json(place_filter.hours),
                 "k": k,
             },
         )
@@ -220,6 +284,38 @@ def _fetch(
     except (psycopg.Error, PoolTimeout) as e:
         # 메시지에 접속 주소나 값이 섞일 수 있어 종류만 남긴다.
         raise StoreError(f"{name} 저장소를 읽지 못했다: {type(e).__name__}") from e
+
+
+def _area_json(area: Area) -> dict[str, Any]:
+    """FIND_SQL의 `area` 행 모양으로 바꾼다. 종류(`kind`)에 따라 쓰는 키가 다르다."""
+    match area:
+        case StationArea():
+            return {
+                "kind": "STATION",
+                "name": area.name,
+                "code": area.code,
+                "walk_minutes": area.walk_minutes,
+                "exit": area.exit,
+            }
+        case RegionArea():
+            return {"kind": "REGION", "name": area.name, "code": area.code}
+        case MapBounds():
+            return {
+                "kind": "BOUNDS",
+                "sw_lat": area.sw_lat,
+                "sw_lng": area.sw_lng,
+                "ne_lat": area.ne_lat,
+                "ne_lng": area.ne_lng,
+            }
+
+
+def _hours_json(hours: OpenHours | None) -> str | None:
+    """FIND_SQL의 영업시간 조건 모양으로 바꾼다. 요일이 없으면 모든 요일이다."""
+    if hours is None:
+        return None
+    return json.dumps(
+        {"days": list(hours.days or DAYS), "until": hours.until, "since": hours.since}
+    )
 
 
 def _vector_text(vector: Sequence[float]) -> str:

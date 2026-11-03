@@ -3,12 +3,15 @@
 요청 해석 → 요청문 인코딩 → ① 후보 뽑기(장소 저장소) → ⓪ 취향 고르기 → ② 정렬 →
 ③ 카드 만들기 순서다. 뽑힌 장소가 없으면 정렬하지 않고 결과 없음 이유를 만든다. 근처
 검색과 LLM 실패 때는 LLM 없이 같은 모양의 카드를 만든다(docs/comparison/spec.md 3장).
+후보를 거를 지역은 이번 요청에 말한 지역, 지도 영역, 이전 요청의 지역 순서로 정한다.
+영업시간과 가격은 안 맞는다고 확인된 곳만 거른다(docs/comparison/spec.md 4.2).
 검색 한 번은 시간 예산(`SEARCH_BUDGET_SECONDS`) 안에서 끝내려고, 남은 시간이 모자라면
 정렬 LLM을 부르지 않는다. HTTP 요청·응답 모양과 폴백 코드로 바꾸는 일은
 API(`server/search.py`)가 한다.
 """
 
 import random
+import re
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
@@ -20,14 +23,31 @@ from fit_ai import embedding
 from fit_ai.match.candidates import (
     GENERAL_K,
     NEARBY_K,
+    Area,
     Candidate,
     MapBounds,
+    OpenHours,
     PlaceFilter,
     PlaceStore,
+    RegionArea,
+    StationArea,
 )
 from fit_ai.match.cards import Card, build_card
 from fit_ai.match.conditions import CATEGORY_NAMES, STATION_NAMES
-from fit_ai.match.interpretation import Conditions, Interpretation, interpret
+from fit_ai.match.interpretation import (
+    Conditions,
+    Interpretation,
+    interpret,
+    locations_of,
+    station_code,
+)
+from fit_ai.match.interpretation.segments import (
+    DAYS,
+    Hours,
+    Location,
+    LocationKind,
+    Price,
+)
 from fit_ai.match.ranking import RankingError, rank_by_similarity, rank_with_llm
 from fit_ai.match.taste_select import TasteProfile, select_tastes
 
@@ -46,6 +66,20 @@ SEARCH_BUDGET_SECONDS = 9.0
 
 MIN_RANK_WAIT_SECONDS = 1.5
 """정렬 LLM 한 번에 줄 수 있는 가장 짧은 대기 시간. 이보다 짧으면 부르지 않는다."""
+
+PRICE_MARGIN = 0.1
+"""가격 거르기 여유 폭. 가게 가격이 요청 금액을 이 비율까지 넘어도 남긴다("2만원 이하"면
+22,000원까지). 가게 가격이 메뉴판으로 추정한 값이라 둔다. 시작값이다(2026-11-02)."""
+
+NEXT_DAY_BEFORE = 6 * 60
+"""이 시각 전의 마감 시각 요청은 다음 날 새벽으로 본다("새벽 2시까지"는 그날 26시)."""
+
+_REGION = re.compile(r"[가-힣]+?(\d*)([동구])")
+"""동이나 구 이름. "역삼1동"처럼 숫자가 붙은 행정동도 받는다. 그 밖의 동네·랜드마크
+(가로수길, 코엑스)는 장소 데이터에 없어 거르지 못한다."""
+
+_STATION_CODES = {name: code for code, name in STATION_NAMES.items()}
+"""서비스 역 이름("강남역")으로 역 코드를 찾는 표"""
 
 
 class Fallback(StrEnum):
@@ -70,7 +104,8 @@ class SearchRequest:
         query: 사용자가 이번에 입력한 요청문
         previous: 후속 조건이면 기준 요청의 조건. 새 검색이면 None이다.
         taste: 사용자 취향 프로필. 취향이 없거나 읽지 못했으면 None이다.
-        bounds: 지도 영역("이 지역에서 검색"). 있으면 역 대신 좌표로 거른다.
+        bounds: 지도 영역("이 지역에서 검색"). 이번 요청에 지역을 말하지 않았으면 이전
+            요청의 지역 대신 이 영역으로 거른다.
     """
 
     query: str
@@ -90,6 +125,19 @@ class EmptyReason:
 
     cause: str
     suggestion: str
+
+
+@dataclass(frozen=True)
+class _Where:
+    """후보를 거를 곳.
+
+    Attributes:
+        areas: 거를 지역. 비어 있으면 위치로 거르지 않는다.
+        unready: 장소 데이터에 없어 거르지 못하는 지역(랜드마크 등)의 이름
+    """
+
+    areas: tuple[Area, ...] = ()
+    unready: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -163,6 +211,11 @@ def search(
     deadline = time.perf_counter() + SEARCH_BUDGET_SECONDS
     interpretation = interpret(request.query, request.previous, timeout, client)
     conditions = interpretation.conditions
+    where = _where(conditions, request.previous, request.query, request.bounds)
+    if where.unready and not where.areas:
+        # 거를 수 있는 지역 없이 랜드마크만 말했으면 어디서 찾을지 몰라 찾지 않는다.
+        reason = empty_reason(conditions, unready=where.unready)
+        return SearchResult(interpretation, (), reason, (), SearchTrace(0.0, 0.0, 0))
 
     start = time.perf_counter()
     query = _encode(conditions.embedding_text)
@@ -170,7 +223,7 @@ def search(
 
     start = time.perf_counter()
     found = store.find(
-        _place_filter(conditions, request.bounds),
+        _place_filter(conditions, where.areas),
         query,
         NEARBY_K if conditions.nearby else GENERAL_K,
     )
@@ -179,7 +232,8 @@ def search(
     )
 
     if not found.candidates:
-        reason = empty_reason(conditions, in_map_bounds=request.bounds is not None)
+        unready = _unready(store, where, query)
+        reason = empty_reason(conditions, where.areas, unready)
         return SearchResult(interpretation, (), reason, found.invalid, trace)
     wait, skipped = _rank_wait(interpretation, deadline, timeout)
     cards, trace = _rank_cards(
@@ -188,21 +242,30 @@ def search(
     return SearchResult(interpretation, cards, None, found.invalid, trace)
 
 
-def empty_reason(conditions: Conditions, in_map_bounds: bool) -> EmptyReason:
+def empty_reason(
+    conditions: Conditions,
+    areas: Sequence[Area] = (),
+    unready: Sequence[str] = (),
+) -> EmptyReason:
     """뽑힌 장소가 없을 때 원인과 제안을 만든다.
 
     Args:
         conditions: 해석한 조건
-        in_map_bounds: 역 대신 지도 영역으로 걸렀는지
+        areas: 후보를 거른 지역. 비어 있으면 위치로 거르지 않았다(근처 검색 등).
+        unready: 장소 데이터가 없어 결과가 없는 지역의 이름. 있으면 다른 조건보다 앞서
+            준비 중인 지역이라고 한다.
 
     Returns:
         원인과 제안
     """
-    where = None
-    if in_map_bounds:
-        where = "이 지역"
-    elif conditions.station and not conditions.nearby:
-        where = STATION_NAMES[conditions.station]
+    if unready:
+        names = "·".join(unready)
+        return EmptyReason(
+            f"{names}{_topic(names)} 아직 준비 중인 지역이에요",
+            f"{', '.join(STATION_NAMES.values())} 근처에서 찾아 보세요",
+        )
+    in_map_bounds = any(isinstance(area, MapBounds) for area in areas)
+    where = "이 지역" if in_map_bounds else "·".join(map(_area_label, areas)) or None
     what = CATEGORY_NAMES.get(conditions.category_group or "", "가게")
     scope = f"{where} {what}" if where else what
     facilities = conditions.facilities
@@ -216,14 +279,156 @@ def empty_reason(conditions: Conditions, in_map_bounds: bool) -> EmptyReason:
             f"{scope} 중 요청한 시설을 모두 갖춘 곳이 없어요",
             "시설 조건을 줄여서 다시 찾아 보세요",
         )
+    if open_hours(conditions.hours) is not None:
+        return EmptyReason(
+            f"{scope} 중 요청한 시간에 여는 곳이 없어요",
+            "영업시간 조건을 빼고 다시 찾아 보세요",
+        )
+    if price_range(conditions.price) != (None, None):
+        return EmptyReason(
+            f"{scope} 중 요청한 가격대인 곳이 없어요",
+            "가격 조건을 빼고 다시 찾아 보세요",
+        )
     if in_map_bounds:
         return EmptyReason(
             f"{scope} 중 조건에 맞는 곳이 없어요",
             "지도를 옮기거나 넓혀서 다시 찾아 보세요",
         )
+    if any(
+        isinstance(area, StationArea) and (area.walk_minutes or area.exit)
+        for area in areas
+    ):
+        return EmptyReason(
+            f"{scope} 중 조건에 맞는 곳이 없어요",
+            "도보 거리나 출구 조건을 빼고 다시 찾아 보세요",
+        )
     return EmptyReason(
         f"{scope} 중 조건에 맞는 곳이 없어요", "다른 역이나 업종으로 다시 찾아 보세요"
     )
+
+
+def _area_label(area: Area) -> str:
+    """결과 없음 문구에 쓰는 지역 이름("강남역 11번 출구", "역삼역 도보 5분")."""
+    match area:
+        case StationArea():
+            exit_text = f" {area.exit}번 출구" if area.exit else ""
+            walk_text = f" 도보 {area.walk_minutes}분" if area.walk_minutes else ""
+            return f"{area.name}{exit_text}{walk_text}"
+        case RegionArea():
+            return area.name
+        case MapBounds():
+            return "이 지역"
+
+
+def _topic(word: str) -> str:
+    """주제 조사. 받침이 있으면 "은", 없으면 "는"이다. 한글이 아니면 "은(는)"이다."""
+    last = word[-1] if word else ""
+    if not "가" <= last <= "힣":
+        return "은(는)"
+    return "은" if (ord(last) - ord("가")) % 28 else "는"
+
+
+def _where(
+    conditions: Conditions,
+    previous: Conditions | None,
+    query: str,
+    bounds: MapBounds | None,
+) -> _Where:
+    """후보를 거를 곳을 정한다.
+
+    이번 요청에 말한 지역, 지도 영역, 이전 요청의 지역 순서로 앞선다(2026-11-02 결정).
+    "강남역 카페"를 찾고 지도를 옮겨 "이 지역에서 검색"을 누르면 지도 영역으로 찾고, 거기서
+    "선릉역으로"라고 하면 선릉역으로 찾는다. 해석은 이전 지역을 이어 붙이므로 이번 요청에
+    말했는지는 이전 지역에 없거나 원문이 요청문에 있는지로 본다. 어딘지 알 수 없는
+    곳("회사 근처")은 말하지 않은 것으로 본다.
+    """
+    locations = locations_of(conditions)
+    carried = (
+        {_location_key(loc) for loc in locations_of(previous)} if previous else set()
+    )
+    said = [
+        loc
+        for loc in locations
+        if loc.kind is not LocationKind.UNKNOWN
+        and (_location_key(loc) not in carried or _plain(loc.text) in _plain(query))
+    ]
+    if said:
+        return _areas(said, bounds)
+    if bounds is not None:
+        return _Where((bounds,))
+    return _areas(locations, None)
+
+
+def _areas(locations: Sequence[Location], bounds: MapBounds | None) -> _Where:
+    """지역 조각을 거르기 지역으로 바꾼다.
+
+    역은 역 지역, 동·구는 행정 구역이다. 서비스 역 이름을 동네로 낸 것("강남")은 역으로
+    본다. 그 밖의 동네·랜드마크는 장소 데이터에 없어 거르지 못하는 지역으로 둔다(2026-11-02
+    결정). 근처("여기")는 지도 영역이 있으면 지도 영역이고, 없으면 폰이 현재 위치로
+    거르므로 넣지 않는다.
+    """
+    areas: list[Area] = []
+    unready: list[str] = []
+    for loc in locations:
+        name = _plain(loc.value or loc.text)
+        station = name.removesuffix("역") + "역"
+        region = _REGION.fullmatch(name)
+        if loc.kind is LocationKind.STATION or (
+            loc.kind is LocationKind.AREA and station in _STATION_CODES
+        ):
+            code = station_code(loc) or _STATION_CODES.get(station)
+            name = STATION_NAMES[code] if code else station
+            areas.append(StationArea(name, code, loc.walk_minutes, loc.exit))
+        elif loc.kind is LocationKind.AREA and region:
+            # 행정동("역삼1동")은 장소 데이터의 법정동("역삼동")으로 찾는다.
+            name = name[: region.start(1)] + region.group(2)
+            code = _STATION_CODES.get(name.removesuffix("동") + "역")
+            areas.append(RegionArea(name, code))
+        elif loc.kind is LocationKind.AREA:
+            unready.append(loc.value or loc.text)
+        elif loc.kind is LocationKind.HERE and bounds is not None:
+            areas.append(bounds)
+    return _Where(tuple(dict.fromkeys(areas)), tuple(dict.fromkeys(unready)))
+
+
+def _unready(
+    store: PlaceStore, where: _Where, query: Sequence[float]
+) -> tuple[str, ...]:
+    """결과가 없을 때 지역 탓인지 본다.
+
+    거른 역·동이 모두 장소가 하나도 없는 곳이면 그 이름(랜드마크 포함)을 낸다. 지도 영역으로
+    걸렀거나 장소가 있는 지역이 하나라도 있으면 다른 조건 탓이라 빈 튜플이다. 결과가 없을
+    때만 지역마다 한 곳씩 더 찾아본다.
+
+    Raises:
+        StoreError: 장소 저장소를 읽지 못했을 때
+    """
+    if any(isinstance(area, MapBounds) for area in where.areas):
+        return ()
+    named = [a for a in where.areas if isinstance(a, StationArea | RegionArea)]
+    if not named or any(_has_places(store, area, query) for area in named):
+        return ()
+    return (*where.unready, *(area.name for area in named))
+
+
+def _has_places(
+    store: PlaceStore, area: StationArea | RegionArea, query: Sequence[float]
+) -> bool:
+    """지역에 검색할 수 있는 장소가 하나라도 있는지. 도보 거리와 출구는 보지 않는다."""
+    if isinstance(area, StationArea):
+        area = replace(area, walk_minutes=None, exit=None)
+    found = store.find(PlaceFilter(areas=(area,)), query, 1)
+    return bool(found.candidates or found.invalid)
+
+
+def _location_key(location: Location) -> tuple[LocationKind, str]:
+    """이전 지역과 같은지 견줄 때 쓰는 값. 종류와 표준 이름(없으면 원문)이다."""
+    return location.kind, _plain(location.value or location.text)
+
+
+def _plain(text: str) -> str:
+    """띄어쓰기를 지운 말"""
+    return "".join(text.split())
 
 
 def _encode(text: str) -> list[float]:
@@ -239,14 +444,71 @@ def _encode(text: str) -> list[float]:
     return query
 
 
-def _place_filter(conditions: Conditions, bounds: MapBounds | None) -> PlaceFilter:
-    """해석한 조건으로 거르기 조건을 만든다."""
+def open_hours(hours: Sequence[Hours]) -> OpenHours | None:
+    """시간 조각을 영업시간 조건 하나로 합친다.
+
+    "일요일"과 "새벽까지"처럼 나뉘어 와도 "일요일 새벽 2시까지"로 본다. 요일이 여럿이면
+    그중 하루라도 맞으면 된다. 시각이 여럿이면 가장 늦은 마감과 가장 이른 시작을 쓴다.
+    "지금 영업 중"(`now`)은 거르지 않는다. 검색 시각이 필요하고, BE가 카드에 영업 상태를
+    붙인다.
+
+    Args:
+        hours: 시간 조각
+
+    Returns:
+        영업시간 조건. 요일도 시각도 없으면 None이다.
+    """
+    days = tuple(dict.fromkeys(h.day for h in hours if h.day in DAYS))
+    untils = [m for h in hours if (m := _clock_minutes(h.open_until)) is not None]
+    sinces = [m for h in hours if (m := _clock_minutes(h.open_from)) is not None]
+    until = max(
+        (m + 24 * 60 if m < NEXT_DAY_BEFORE else m for m in untils), default=None
+    )
+    since = min(sinces, default=None)
+    if not days and until is None and since is None:
+        return None
+    return OpenHours(days, until, since)
+
+
+def price_range(price: Price | None) -> tuple[int | None, int | None]:
+    """가격 조각을 거를 가게 가격 범위로 바꾼다. 양쪽에 여유 폭(`PRICE_MARGIN`)을 둔다.
+
+    "저렴한"(`cheap`)은 거르지 않는다. 같은 업종 안에서 견주는 점수로 쓸 예정이다.
+
+    Args:
+        price: 가격 조각. 요청에 없으면 None이다.
+
+    Returns:
+        (하한, 상한) 원. 없는 쪽은 None이다.
+    """
+    if price is None:
+        return None, None
+    low, high = price.min_won, price.max_won
+    return (
+        None if low is None else round(low * (1 - PRICE_MARGIN)),
+        None if high is None else round(high * (1 + PRICE_MARGIN)),
+    )
+
+
+def _clock_minutes(clock: str | None) -> int | None:
+    """시각("HH:MM")을 0시부터 센 분으로 바꾼다. 없거나 모양이 틀리면 None이다."""
+    hour, _, minute = (clock or "").partition(":")
+    if not (hour.isdigit() and minute.isdigit()):
+        return None
+    return int(hour) * 60 + int(minute)
+
+
+def _place_filter(conditions: Conditions, areas: tuple[Area, ...]) -> PlaceFilter:
+    """해석한 조건과 거를 지역으로 거르기 조건을 만든다."""
+    min_price, max_price = price_range(conditions.price)
     return PlaceFilter(
         category_group=conditions.category_group,
-        # 지도 영역이 있으면 좌표로 거르고, 근처 검색은 폰이 현재 위치로 거른다.
-        station=None if bounds or conditions.nearby else conditions.station,
-        bounds=bounds,
+        areas=areas,
         facilities=conditions.facilities,
+        excluded_categories=conditions.avoid_categories,
+        hours=open_hours(conditions.hours),
+        min_price=min_price,
+        max_price=max_price,
     )
 
 

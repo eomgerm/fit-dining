@@ -12,7 +12,15 @@ from collections.abc import Iterator
 import pytest
 
 from fit_ai import embedding
-from fit_ai.match.candidates import MapBounds, PlaceFilter, StoreError, VectorCounts
+from fit_ai.match.candidates import (
+    MapBounds,
+    OpenHours,
+    PlaceFilter,
+    RegionArea,
+    StationArea,
+    StoreError,
+    VectorCounts,
+)
 
 pgserver = pytest.importorskip("pgserver")
 psycopg = pytest.importorskip("psycopg")
@@ -45,6 +53,109 @@ ROWS = [
     (6, "CAFE", "GANGNAM", 37.50, 127.02, {}, profile(6, prompt="query"), (1.0, 0.0)),
     (7, "CAFE", "GANGNAM", 37.50, 127.02, {}, {"schema": "place-profile/v1"}, (1, 0)),
     (8, "CAFE", "GANGNAM", 37.50, 127.02, {}, profile(8), None),
+]
+
+# 장소별 (동, 구, 가까운 역). test_json_store.py와 같다. 비교할 수 있는 1~4번에만 둔다. 2번은 강남에서 수집했지만 가장
+# 가까운 역이 신논현역이고, 4번은 강남에서 수집했지만 역삼역도 가깝다. 4번의 강남역 도보
+# 분은 모른다.
+AREAS = {
+    1: ("역삼동", "강남구", [{"station": "강남역", "exit": "11", "walk_minutes": 3}]),
+    2: (None, "강남구", [{"station": "신논현역", "exit": "5", "walk_minutes": 4}]),
+    3: (None, "강남구", [{"station": "역삼역", "exit": "3", "walk_minutes": 6}]),
+    4: (
+        "서초동",
+        "서초구",
+        [
+            {"station": "강남역", "exit": "10", "walk_minutes": None},
+            {"station": "역삼역", "exit": "7", "walk_minutes": 9},
+        ],
+    ),
+}
+
+# 장소별 (영업시간, 가게 가격). test_json_store.py와 같다. 1번은 매일 22시까지, 2번은
+# 일요일에 쉬고 다른 날은 새벽 2시까지, 3번은 월요일 시각만 모르고, 4번은 일요일에 쉬고
+# 다른 날은 24시간 연다. 3번은 가격도 모른다.
+WEEKDAYS = ("MON", "TUE", "WED", "THU", "FRI", "SAT")
+SUNDAY_OFF = {"day": "SUN", "open": None, "close": None, "closed": True}
+HOURS = {
+    1: (
+        [
+            {"day": d, "open": "10:00", "close": "22:00", "closed": False}
+            for d in (*WEEKDAYS, "SUN")
+        ],
+        9000,
+    ),
+    2: (
+        [
+            *(
+                {"day": d, "open": "18:00", "close": "02:00", "closed": False}
+                for d in WEEKDAYS
+            ),
+            SUNDAY_OFF,
+        ],
+        15000,
+    ),
+    3: ([{"day": "MON", "open": None, "close": None, "closed": False}], None),
+    4: (
+        [
+            *(
+                {"day": d, "open": "00:00", "close": "00:00", "closed": False}
+                for d in WEEKDAYS
+            ),
+            SUNDAY_OFF,
+        ],
+        30000,
+    ),
+}
+
+# (거르기 조건, 뽑히는 장소). 안 맞는다고 확인된 곳만 빼고 모르면 남긴다.
+HOURS_PRICE_CASES = [
+    # 요일이 없으면 하루라도 그 시각까지 열 수 있으면 남는다.
+    (PlaceFilter(hours=OpenHours(until=26 * 60)), [4, 2, 3]),
+    (PlaceFilter(hours=OpenHours(until=22 * 60)), [1, 4, 2, 3]),
+    (PlaceFilter(hours=OpenHours(since=8 * 60)), [4, 3]),
+    (PlaceFilter(hours=OpenHours(days=("SUN",))), [1, 3]),
+    (PlaceFilter(hours=OpenHours(days=("SUN",), until=26 * 60)), [3]),
+    # 요일이 여럿이면 그중 하루라도 맞으면 된다.
+    (PlaceFilter(hours=OpenHours(days=("FRI", "SUN"), until=23 * 60)), [4, 2, 3]),
+    (PlaceFilter(max_price=10000), [1, 3]),
+    (PlaceFilter(max_price=15000), [1, 2, 3]),
+    (PlaceFilter(min_price=18000, max_price=32999), [4, 3]),
+]
+
+YEOKSAM_CAFE = PlaceFilter(
+    category_group="CAFE", areas=(StationArea("역삼역", "YEOKSAM"),)
+)
+"""3번 장소만 뽑는 거르기 조건"""
+
+# (거르기 조건, 뽑히는 장소). 유사도 순서는 1, 4, 2, 3번이다.
+AREA_CASES = [
+    # 도보 거리가 없는 역은 수집 역이 같거나 가까운 역 목록에 있으면 든다.
+    (
+        PlaceFilter(category_group="CAFE", areas=(StationArea("강남역", "GANGNAM"),)),
+        [1, 2],
+    ),
+    (PlaceFilter(areas=(StationArea("역삼역", "YEOKSAM"),)), [4, 3]),
+    (PlaceFilter(areas=(StationArea("신논현역"),)), [2]),
+    # 도보 거리나 출구가 있으면 가까운 역 목록만 보고, 도보 분을 모르면 뺀다.
+    (PlaceFilter(areas=(StationArea("강남역", "GANGNAM", walk_minutes=5),)), [1]),
+    (PlaceFilter(areas=(StationArea("역삼역", "YEOKSAM", walk_minutes=8),)), [3]),
+    (PlaceFilter(areas=(StationArea("강남역", "GANGNAM", exit="10"),)), [4]),
+    # 동이 없으면 이름이 같은 서비스 역의 장소로 본다.
+    (PlaceFilter(areas=(RegionArea("역삼동", "YEOKSAM"),)), [1, 3]),
+    (PlaceFilter(areas=(RegionArea("서초구"),)), [4]),
+    # 지역이 여럿이면 그중 하나에 들면 된다.
+    (
+        PlaceFilter(
+            areas=(
+                StationArea("신논현역"),
+                StationArea("역삼역", "YEOKSAM", walk_minutes=8),
+            )
+        ),
+        [2, 3],
+    ),
+    (PlaceFilter(areas=(MapBounds(ne_lat=37.495), StationArea("신논현역"))), [4, 2]),
+    (PlaceFilter(excluded_categories=("BAR",)), [1, 2, 3]),
 ]
 
 
@@ -87,15 +198,27 @@ def database(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
             """
             CREATE TABLE ai_place_search (
               place_id bigint, category_group text, station text,
+              dong text, district text, subways jsonb, hours jsonb, price integer,
               lat double precision, lng double precision, facilities jsonb,
               profile jsonb, summary_vector vector(2)
             )"""
         )
-        for *head, facilities, data, vector in ROWS:
+        for place_id, category, station, *coords, facilities, data, vector in ROWS:
+            dong, district, subways = AREAS.get(place_id, (None, None, []))
+            hours, price = HOURS.get(place_id, ([], None))
             conn.execute(
-                "INSERT INTO ai_place_search VALUES (%s,%s,%s,%s,%s,%s,%s,%s::vector)",
+                "INSERT INTO ai_place_search "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::vector)",
                 (
-                    *head,
+                    place_id,
+                    category,
+                    station,
+                    dong,
+                    district,
+                    json.dumps(subways, ensure_ascii=False),
+                    json.dumps(hours),
+                    price,
+                    *coords,
                     json.dumps(facilities),
                     json.dumps(data, ensure_ascii=False),
                     None if vector is None else f"[{vector[0]},{vector[1]}]",
@@ -144,18 +267,43 @@ def test_limit_k(store: PgPlaceStore) -> None:
     assert find_ids(store, PlaceFilter(), k=2) == [1, 4]
 
 
-def test_category_and_station(store: PgPlaceStore) -> None:
-    """저장소_업종과역이있으면_둘다맞는곳만뽑는다"""
-    place_filter = PlaceFilter(category_group="CAFE", station="GANGNAM")
-
-    assert find_ids(store, place_filter) == [1, 2]
-
-
 def test_map_bounds(store: PgPlaceStore) -> None:
     """저장소_지도영역이있으면_좌표안만뽑고빠진값은제한하지않는다"""
-    place_filter = PlaceFilter(bounds=MapBounds(sw_lat=37.495, ne_lng=127.035))
+    place_filter = PlaceFilter(areas=(MapBounds(sw_lat=37.495, ne_lng=127.035),))
 
     assert find_ids(store, place_filter) == [1, 2]
+
+
+@pytest.mark.parametrize(("place_filter", "expected"), AREA_CASES)
+def test_areas(
+    store: PgPlaceStore, place_filter: PlaceFilter, expected: list[int]
+) -> None:
+    """저장소_역동구지도영역과뺄업종이있으면_조건하나에라도드는곳을뽑는다"""
+    assert find_ids(store, place_filter) == expected
+
+
+def test_areas_without_subways(store: PgPlaceStore, database: str) -> None:
+    """저장소_가까운역목록이없으면_수집역으로만거른다"""
+    with psycopg.connect(database) as conn:
+        conn.execute("UPDATE ai_place_search SET subways = NULL WHERE place_id = 4")
+    try:
+        found = find_ids(store, PlaceFilter(areas=(StationArea("역삼역", "YEOKSAM"),)))
+    finally:
+        with psycopg.connect(database) as conn:
+            conn.execute(
+                "UPDATE ai_place_search SET subways = %s::jsonb WHERE place_id = 4",
+                (json.dumps(AREAS[4][2], ensure_ascii=False),),
+            )
+
+    assert found == [3]
+
+
+@pytest.mark.parametrize(("place_filter", "expected"), HOURS_PRICE_CASES)
+def test_hours_and_price(
+    store: PgPlaceStore, place_filter: PlaceFilter, expected: list[int]
+) -> None:
+    """저장소_영업시간이나가격이있으면_안맞는다고확인된곳만빼고모르면남긴다"""
+    assert find_ids(store, place_filter) == expected
 
 
 def test_facility_known_absent_excluded(store: PgPlaceStore) -> None:
@@ -173,7 +321,7 @@ def test_unreadable_profile_reported(store: PgPlaceStore, database: str) -> None
             "WHERE place_id = 3"
         )
     try:
-        found = store.find(PlaceFilter(station="YEOKSAM"), QUERY, 10)
+        found = store.find(YEOKSAM_CAFE, QUERY, 10)
     finally:
         with psycopg.connect(database) as conn:
             conn.execute(
@@ -204,7 +352,7 @@ def test_facilities_not_object(
             (facilities,),
         )
     try:
-        found = store.find(PlaceFilter(station="YEOKSAM"), QUERY, 10)
+        found = store.find(YEOKSAM_CAFE, QUERY, 10)
     finally:
         with psycopg.connect(database) as conn:
             conn.execute(
@@ -223,7 +371,7 @@ def test_non_bool_facility_is_unknown(store: PgPlaceStore, database: str) -> Non
             "WHERE place_id = 3"
         )
     try:
-        found = store.find(PlaceFilter(station="YEOKSAM"), QUERY, 10)
+        found = store.find(YEOKSAM_CAFE, QUERY, 10)
     finally:
         with psycopg.connect(database) as conn:
             conn.execute(

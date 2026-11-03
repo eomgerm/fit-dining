@@ -16,6 +16,15 @@ from fit_ai.match.interpretation import (
     interpret,
     interpret_by_rules,
 )
+from fit_ai.match.interpretation.segments import (
+    FeatureText,
+    Hours,
+    Location,
+    LocationKind,
+    Menu,
+    PlaceName,
+    Price,
+)
 
 PREVIOUS = Conditions(
     text="역삼역 모임하기 좋은 술집",
@@ -57,6 +66,8 @@ class TestLlm:
             codes=("QUIET",),
             category_group="CAFE",
             station="GANGNAM",
+            # 1차 꼴(station)로 낸 역도 지역 조각으로 바꿔 둔다.
+            locations=(Location("강남역", LocationKind.STATION, "강남역"),),
         )
         assert result.change_summary is None
         assert result.llm_error is None
@@ -291,6 +302,669 @@ class TestLlm:
         assert result.change_summary == DEFAULT_CHANGE_SUMMARY
 
 
+def segment_answer(**overrides: object) -> dict:
+    """분류별 조각을 담은 2차 꼴의 LLM 출력"""
+    data = {
+        "text": None,
+        "embedding_text": "선릉역 3만원 이하 초밥 콘센트",
+        "category_group": "RESTAURANT",
+        "avoid_categories": [],
+        "locations": [
+            {
+                "text": "션릉역",
+                "kind": "STATION",
+                "value": "선릉역",
+                "walk_minutes": None,
+                "exit": None,
+            }
+        ],
+        "codes": [],
+        "menus": [
+            {"text": "스시", "value": "초밥", "code": "FOOD_JAPANESE", "want": True},
+            {
+                "text": "매운 거",
+                "value": "매운 음식",
+                "code": "FOOD_SPICY",
+                "want": False,
+            },
+        ],
+        "hours": [
+            {
+                "text": "새벽까지",
+                "day": None,
+                "open_until": "02:00",
+                "open_from": None,
+                "now": False,
+            }
+        ],
+        "price": {
+            "text": "3만원 이하",
+            "min_won": None,
+            "max_won": 30000,
+            "cheap": False,
+        },
+        "place_name": None,
+        "features": [{"text": "충전되는", "value": "콘센트", "want": True}],
+        "change_summary": None,
+    }
+    data.update(overrides)
+    return data
+
+
+def empty_answer(**overrides: object) -> dict:
+    """조각이 하나도 없는 2차 꼴의 LLM 출력. 코드 확인을 볼 때 바꿀 칸만 채운다."""
+    return segment_answer(
+        **{
+            "embedding_text": "검색어",
+            "category_group": None,
+            "locations": [],
+            "menus": [],
+            "hours": [],
+            "price": None,
+            "features": [],
+            **overrides,
+        }
+    )
+
+
+class TestSegments:
+    """LLM 해석의 분류별 조각"""
+
+    def test_segments(self, fake_gms: FakeGms) -> None:
+        """LLM해석_분류별조각을내면_조각으로읽고역코드와음식코드를채운다"""
+        fake_gms(lambda messages: segment_answer())
+
+        conditions = interpret(
+            "션릉역 새벽까지 3만원 이하 스시 충전되는 곳 매운 거 말고"
+        ).conditions
+
+        assert conditions.locations == (
+            Location("션릉역", LocationKind.STATION, "선릉역"),
+        )
+        assert (conditions.station, conditions.nearby) == ("SEOLLEUNG", False)
+        # 원하는 음식 코드는 메뉴에만 있어도 코드로 모으고, 피하는 음식 코드는 뺀다.
+        assert conditions.codes == ("FOOD_JAPANESE",)
+        assert conditions.menus == (
+            Menu("스시", "초밥", "FOOD_JAPANESE"),
+            Menu("매운 거", "매운 음식", "FOOD_SPICY", want=False),
+        )
+        assert conditions.hours == (Hours("새벽까지", open_until="02:00"),)
+        assert conditions.price == Price("3만원 이하", max_won=30000)
+        assert conditions.features == (FeatureText("충전되는", "콘센트"),)
+        assert conditions.corrections == (("션릉역", "선릉역"),)
+
+    @pytest.mark.parametrize(
+        ("locations", "station", "nearby"),
+        [
+            ([{"text": "근처", "kind": "HERE", "value": "강남역"}], None, True),
+            (
+                [{"text": "신논현역", "kind": "STATION", "value": "신논현역"}],
+                None,
+                False,
+            ),
+            ([{"text": "역삼동", "kind": "AREA", "value": "역삼동"}], "YEOKSAM", False),
+            ([{"text": "코엑스", "kind": "AREA", "value": "코엑스"}], None, False),
+            ([{"text": "강남역 근처", "kind": "STATION"}], "GANGNAM", False),
+            (
+                [
+                    {"text": "신논현역", "kind": "STATION", "value": "신논현역"},
+                    {"text": "선릉역", "kind": "STATION", "value": "선릉역"},
+                ],
+                "SEOLLEUNG",
+                False,
+            ),
+        ],
+    )
+    def test_locations(
+        self,
+        fake_gms: FakeGms,
+        locations: list[dict],
+        station: str | None,
+        nearby: bool,
+    ) -> None:
+        """LLM해석_지역종류에따라_처음나온서비스역과근처검색을정한다"""
+        fake_gms(lambda messages: empty_answer(locations=locations))
+
+        conditions = interpret("질의").conditions
+
+        assert (conditions.station, conditions.nearby) == (station, nearby)
+
+    def test_walk_and_exit(self, fake_gms: FakeGms) -> None:
+        """LLM해석_도보거리와출구가있으면_지역조각에두고말이안되는값은버린다"""
+        fake_gms(
+            lambda messages: empty_answer(
+                locations=[
+                    {
+                        "text": "역삼역 걸어서 5분",
+                        "kind": "STATION",
+                        "value": "역삼역",
+                        "walk_minutes": 5,
+                        "exit": "3",
+                    },
+                    {
+                        "text": "선릉역",
+                        "kind": "STATION",
+                        "value": "선릉역",
+                        "walk_minutes": 90,
+                        "exit": True,
+                    },
+                ]
+            )
+        )
+
+        assert interpret("질의").conditions.locations == (
+            Location("역삼역 걸어서 5분", LocationKind.STATION, "역삼역", 5, "3"),
+            Location("선릉역", LocationKind.STATION, "선릉역"),
+        )
+
+    def test_here_has_no_value(self, fake_gms: FakeGms) -> None:
+        """LLM해석_지금보는곳이면_표준이름을두지않는다"""
+        fake_gms(
+            lambda messages: empty_answer(
+                locations=[{"text": "근처", "kind": "HERE", "value": "강남역"}]
+            )
+        )
+
+        assert interpret("근처 초밥").conditions.locations == (
+            Location("근처", LocationKind.HERE),
+        )
+
+    @pytest.mark.parametrize(
+        ("embedding_text", "expected"),
+        [("코엑스 조용한 카페", "조용한 카페"), ("코엑스", "카페")],
+    )
+    def test_area_removed_from_embedding_text(
+        self, fake_gms: FakeGms, embedding_text: str, expected: str
+    ) -> None:
+        """LLM해석_동네랜드마크면_벡터용문장에서지우고남는게없으면업종이름을쓴다"""
+        fake_gms(
+            lambda messages: empty_answer(
+                locations=[{"text": "코엑스", "kind": "AREA", "value": "코엑스"}],
+                embedding_text=embedding_text,
+                category_group="CAFE",
+            )
+        )
+
+        assert interpret("코엑스 조용한 카페").conditions.embedding_text == expected
+
+    def test_bad_segments_are_dropped(self, fake_gms: FakeGms) -> None:
+        """LLM해석_조각형식이틀리면_그조각만버리고규칙으로떨어지지않는다"""
+        fake_gms(
+            lambda messages: empty_answer(
+                locations=[{"text": "역삼", "kind": "CITY"}, "강남역"],
+                menus=[{"value": "초밥"}, "스시", {"text": "라멘", "code": "RAMEN"}],
+                hours=[
+                    {"text": "밤", "open_until": "25:00"},
+                    {"text": "일요일", "day": "SUNDAY"},
+                ],
+                price={"text": "가격", "min_won": 50000, "max_won": 10000},
+                features={"text": "콘센트"},
+                codes=["QUIET"],
+                category_group="RESTAURANT",
+                avoid_categories=["RESTAURANT", "PUB"],
+            )
+        )
+
+        result = interpret("질의")
+
+        assert result.llm_error is None
+        conditions = result.conditions
+        assert conditions.locations == ()
+        assert conditions.menus == (Menu("라멘", "라멘"),)
+        assert (conditions.hours, conditions.price, conditions.features) == (
+            (),
+            None,
+            (),
+        )
+        # 고른 업종과 같은 업종과 모르는 업종은 빼 달라는 업종이 아니다.
+        assert conditions.avoid_categories == ()
+
+    def test_follow_up_prompt_has_segments(self, fake_gms: FakeGms) -> None:
+        """LLM해석_후속조건이면_이전조건을LLM이낼꼴과같게프롬프트에넣는다"""
+        calls = fake_gms(
+            lambda messages: segment_answer(
+                text="선릉역 초밥 새벽까지", change_summary="시간을 더했어요"
+            )
+        )
+        previous = Conditions(
+            text="선릉역 초밥",
+            embedding_text="초밥",
+            station="SEOLLEUNG",
+            locations=(Location("선릉역", LocationKind.STATION, "선릉역"),),
+            menus=(Menu("스시", "초밥", "FOOD_JAPANESE"),),
+        )
+
+        interpret("새벽까지 하는 데", previous)
+
+        prompt = calls[0][1]["content"]
+        assert '"locations": [{"text": "선릉역", "kind": "STATION"' in prompt
+        assert (
+            '"menus": [{"text": "스시", "value": "초밥", "code": "FOOD_JAPANESE"'
+            in prompt
+        )
+
+    def test_legacy_previous_shown_as_locations(self, fake_gms: FakeGms) -> None:
+        """LLM입력_1차꼴의이전조건이면_역을지역으로바꿔보여주고역과근처칸은빼다"""
+        calls = fake_gms(lambda messages: answer(text="역삼역 모임하기 좋은 술집"))
+
+        interpret("주차도 되면 좋겠어", PREVIOUS)
+
+        prompt = calls[0][1]["content"]
+        assert (
+            '"locations": [{"text": "역삼역", "kind": "STATION", "value": "역삼역"'
+            in prompt
+        )
+        assert '"station"' not in prompt
+        assert '"nearby"' not in prompt
+
+
+class TestChecks:
+    """LLM 해석을 규칙으로 바로잡기"""
+
+    @pytest.mark.parametrize(
+        ("query", "want"), [("매운 거 먹고 싶다", True), ("매운 거 말고 국물", False)]
+    )
+    def test_avoid_needs_negation(
+        self, fake_gms: FakeGms, query: str, want: bool
+    ) -> None:
+        """코드확인_피하는말이없으면_LLM이피함으로둔메뉴를원함으로되돌린다"""
+        fake_gms(
+            lambda messages: empty_answer(
+                menus=[
+                    {
+                        "text": "매운 거",
+                        "value": "매운 음식",
+                        "code": "FOOD_SPICY",
+                        "want": False,
+                    }
+                ]
+            )
+        )
+
+        conditions = interpret(query).conditions
+
+        spicy = next(m for m in conditions.menus if m.code == "FOOD_SPICY")
+        assert spicy.want is want
+        assert ("FOOD_SPICY" in conditions.codes) is want
+
+    def test_here_from_rules(self, fake_gms: FakeGms) -> None:
+        """코드확인_LLM이근처를비우면_규칙이찾은근처를쓴다"""
+        fake_gms(lambda messages: empty_answer(category_group="CAFE"))
+
+        conditions = interpret("근처 카페").conditions
+
+        assert conditions.locations == (Location("근처", LocationKind.HERE),)
+        assert (conditions.station, conditions.nearby) == (None, True)
+
+    def test_station_beats_here(self, fake_gms: FakeGms) -> None:
+        """코드확인_LLM이근처만내도이번요청에역이있으면_역을기준으로찾는다"""
+        fake_gms(
+            lambda messages: empty_answer(
+                locations=[{"text": "근처", "kind": "HERE"}],
+                category_group="RESTAURANT",
+            )
+        )
+
+        conditions = interpret("선릉역 근처 밥집").conditions
+
+        assert (conditions.station, conditions.nearby) == ("SEOLLEUNG", False)
+
+    def test_rule_code_fills_menu(self, fake_gms: FakeGms) -> None:
+        """코드확인_LLM이피하는메뉴의음식코드를비우면_규칙메뉴의코드로채우고코드에서뺀다"""
+        fake_gms(
+            lambda messages: empty_answer(
+                codes=["FOOD_SPICY"],
+                menus=[
+                    {
+                        "text": "매운 거",
+                        "value": "매운 음식",
+                        "code": None,
+                        "want": False,
+                    }
+                ],
+            )
+        )
+
+        conditions = interpret("매운 거 말고 담백한 국물 요리").conditions
+
+        assert (
+            Menu("매운 거", "매운 음식", "FOOD_SPICY", want=False) in conditions.menus
+        )
+        assert "FOOD_SPICY" not in conditions.codes
+
+    def test_similar_place_is_not_name(self, fake_gms: FakeGms) -> None:
+        """코드확인_○○같은곳이면_가게이름으로보지않는다"""
+        fake_gms(
+            lambda messages: empty_answer(
+                place_name={"text": "바바인디아", "value": "바바인디아"}
+            )
+        )
+
+        assert interpret("바바인디아 같은 인도 음식점").conditions.place_name is None
+
+    def test_follow_up_inherits_location(self, fake_gms: FakeGms) -> None:
+        """코드확인_후속에서LLM이지역을비우면_이전지역을잇는다"""
+        fake_gms(lambda messages: empty_answer(text="역삼역 모임하기 좋은 술집 주차"))
+
+        conditions = interpret("주차도 되면 좋겠어", PREVIOUS).conditions
+
+        assert conditions.locations == (
+            Location("역삼역", LocationKind.STATION, "역삼역"),
+        )
+        assert conditions.station == "YEOKSAM"
+
+    def test_follow_up_here_replaces_carried_station(self, fake_gms: FakeGms) -> None:
+        """코드확인_이번요청이근처만말하면_LLM이남긴이전역을버린다"""
+        fake_gms(
+            lambda messages: empty_answer(
+                text="근처 모임하기 좋은 술집",
+                locations=[{"text": "역삼역", "kind": "STATION", "value": "역삼역"}],
+            )
+        )
+
+        conditions = interpret("근처로 찾아줘", PREVIOUS).conditions
+
+        assert (conditions.station, conditions.nearby) == (None, True)
+
+    def test_rules_fill_missed_menu(self, fake_gms: FakeGms) -> None:
+        """코드확인_LLM이메뉴를놓치면_규칙이찾은메뉴를더한다"""
+        fake_gms(lambda messages: empty_answer(category_group="BAR"))
+
+        assert interpret("와인 종류 많은 바").conditions.menus == (
+            Menu("와인", "와인"),
+        )
+
+    def test_rule_hours_preferred(self, fake_gms: FakeGms) -> None:
+        """코드확인_규칙이시간을찾으면_LLM의시간대신쓴다"""
+        fake_gms(
+            lambda messages: empty_answer(
+                hours=[{"text": "아침 7시 전에", "open_until": "07:00"}]
+            )
+        )
+
+        assert interpret("아침 7시 전에 여는 카페").conditions.hours == (
+            Hours("아침 7시 전에", open_from="07:00"),
+        )
+
+    @pytest.mark.parametrize(
+        ("query", "codes"),
+        [("저렴한 이자카야", ()), ("가성비 좋고 저렴한 술집", ("VALUE_FOR_MONEY",))],
+    )
+    def test_cheap_is_not_value_for_money(
+        self, fake_gms: FakeGms, query: str, codes: tuple[str, ...]
+    ) -> None:
+        """코드확인_싼곳을찾는데가성비낱말이없으면_가성비코드를뗀다"""
+        fake_gms(lambda messages: empty_answer(codes=["VALUE_FOR_MONEY"]))
+
+        conditions = interpret(query).conditions
+
+        assert conditions.codes == codes
+        assert conditions.price is not None and conditions.price.cheap
+
+    def test_category_from_rules(self, fake_gms: FakeGms) -> None:
+        """코드확인_LLM이업종을비우면_규칙이찾은업종을쓴다"""
+        fake_gms(lambda messages: empty_answer())
+
+        assert interpret("매운 거 먹고 싶다").conditions.category_group == "RESTAURANT"
+
+    def test_follow_up_keeps_previous_codes(self, fake_gms: FakeGms) -> None:
+        """코드확인_후속에서업종을바꾸며이전코드를버리면_빼지않은코드는남긴다"""
+        fake_gms(
+            lambda messages: empty_answer(
+                text="역삼역 조용한 술집", category_group="BAR", codes=[]
+            )
+        )
+        previous = Conditions(
+            "역삼역 조용한 카페", "조용한 카페", ("QUIET",), "CAFE", "YEOKSAM"
+        )
+
+        conditions = interpret("카페 말고 술집으로", previous).conditions
+
+        assert conditions.codes == ("QUIET",)
+        assert conditions.category_group == "BAR"
+        assert conditions.avoid_categories == ("CAFE",)
+
+    def test_follow_up_drops_negated_code(self, fake_gms: FakeGms) -> None:
+        """코드확인_후속에서말고로뺀이전코드는_남기지않는다"""
+        fake_gms(
+            lambda messages: empty_answer(text="역삼역 활기찬 카페", codes=["LIVELY"])
+        )
+        previous = Conditions(
+            "역삼역 조용한 카페", "조용한 카페", ("QUIET",), "CAFE", "YEOKSAM"
+        )
+
+        conditions = interpret("조용한 거 말고 활기찬 곳으로", previous).conditions
+
+        assert conditions.codes == ("LIVELY",)
+
+
+class TestCorrections:
+    """고친 말"""
+
+    @pytest.mark.parametrize(
+        ("conditions", "corrections"),
+        [
+            (Conditions("역삼 카페", "카페"), ()),
+            (
+                Conditions(
+                    "역삼 카페",
+                    "카페",
+                    locations=(Location("역삼", LocationKind.STATION, "역삼역"),),
+                ),
+                (),
+            ),
+            (
+                Conditions(
+                    "스벅 강남",
+                    "스타벅스",
+                    place_name=PlaceName("스벅", "스타벅스"),
+                ),
+                (("스벅", "스타벅스"),),
+            ),
+        ],
+    )
+    def test_corrections(
+        self, conditions: Conditions, corrections: tuple[tuple[str, str], ...]
+    ) -> None:
+        """고친말_한쪽이다른쪽에들어있지않을때만_고친것으로본다"""
+        assert conditions.corrections == corrections
+
+
+class TestRuleSegments:
+    """규칙 해석의 분류별 조각"""
+
+    @pytest.mark.parametrize(
+        ("query", "hours"),
+        [
+            ("강남역 새벽까지 하는 술집", (Hours("새벽까지", open_until="02:00"),)),
+            ("새벽 3시까지 하는 술집", (Hours("새벽 3시까지", open_until="03:00"),)),
+            ("늦게까지 하는 카페", (Hours("늦게까지", open_until="23:00"),)),
+            (
+                "밤 10시 넘어서까지 하는 카페",
+                (Hours("밤 10시 넘어서까지", open_until="22:00"),),
+            ),
+            ("아침 8시 전에 여는 카페", (Hours("아침 8시 전에", open_from="08:00"),)),
+            ("일요일에 여는 식당", (Hours("일요일", day="SUN"),)),
+            ("지금 열린 카페", (Hours("지금 열린", now=True),)),
+            ("조용한 카페", ()),
+        ],
+    )
+    def test_hours(self, query: str, hours: tuple[Hours, ...]) -> None:
+        """규칙해석_시간말이있으면_요일과시각으로바꾼다"""
+        assert interpret_by_rules(query).hours == hours
+
+    @pytest.mark.parametrize(
+        ("query", "price"),
+        [
+            ("1만5천원 이하 밥집", Price("1만5천원 이하", max_won=15000)),
+            ("3만원 이하 오마카세", Price("3만원 이하", max_won=30000)),
+            ("5천원 이하 카페", Price("5천원 이하", max_won=5000)),
+            ("만원 이하 점심", Price("만원 이하", max_won=10000)),
+            ("2만원대 파스타", Price("2만원대", min_won=20000, max_won=29999)),
+            ("저렴한 술집", Price("저렴", cheap=True)),
+            ("안 비싼 술집", Price("안 비싼", cheap=True)),
+            ("비싼 데 말고 술집", Price("비싼 데 말고", cheap=True)),
+            ("비싼 술집", None),
+            ("가성비 좋은 술집", None),
+        ],
+    )
+    def test_price(self, query: str, price: Price | None) -> None:
+        """규칙해석_가격말이있으면_금액이나싼곳으로바꾸고가성비는가격으로보지않는다"""
+        assert interpret_by_rules(query).price == price
+
+    def test_cheap_is_not_value_for_money(self) -> None:
+        """규칙해석_저렴은_가성비코드가아니다"""
+        assert interpret_by_rules("저렴한 술집").codes == ()
+
+    @pytest.mark.parametrize(
+        ("query", "codes", "menus"),
+        [
+            (
+                "매운 거 말고 담백한 국물 요리",
+                (),
+                (
+                    Menu("국물", "국물 요리"),
+                    Menu("매운", "매운 음식", "FOOD_SPICY", want=False),
+                ),
+            ),
+            (
+                "매운 거 먹고 싶다",
+                ("FOOD_SPICY",),
+                (Menu("매운", "매운 음식", "FOOD_SPICY"),),
+            ),
+            (
+                "맵지 않은 중식",
+                ("FOOD_CHINESE",),
+                (
+                    Menu("중식", "중식", "FOOD_CHINESE"),
+                    Menu("맵지 않", "매운 음식", "FOOD_SPICY", want=False),
+                ),
+            ),
+            (
+                "역삼 스시 먹고 싶어",
+                ("FOOD_JAPANESE",),
+                (Menu("스시", "초밥", "FOOD_JAPANESE"),),
+            ),
+            (
+                "일식 말고 한식",
+                ("FOOD_KOREAN",),
+                (
+                    Menu("일식", "일식", "FOOD_JAPANESE", want=False),
+                    Menu("한식", "한식", "FOOD_KOREAN"),
+                ),
+            ),
+            ("북적이는 데 말고 카페", ("QUIET",), ()),
+        ],
+    )
+    def test_menus_and_negation(
+        self, query: str, codes: tuple[str, ...], menus: tuple[Menu, ...]
+    ) -> None:
+        """규칙해석_말고앞의음식은피하는메뉴로두고성향축은반대극을바란다"""
+        conditions = interpret_by_rules(query)
+
+        assert conditions.codes == codes
+        assert conditions.menus == menus
+
+    @pytest.mark.parametrize(
+        ("query", "features"),
+        [
+            ("충전되는 카페", (FeatureText("충전", "콘센트"),)),
+            ("강아지랑 반려견 동반 카페", (FeatureText("반려견", "반려견"),)),
+            ("애기랑 갈 식당", (FeatureText("애기랑", "아이 동반"),)),
+            ("베이커리룸 카페", ()),
+        ],
+    )
+    def test_features(self, query: str, features: tuple[FeatureText, ...]) -> None:
+        """규칙해석_코드표에없는특징낱말이있으면_표준이름하나로둔다"""
+        assert interpret_by_rules(query).features == features
+
+    @pytest.mark.parametrize(
+        ("query", "category", "avoid"),
+        [
+            ("카페 말고 다른 데", None, ("CAFE",)),
+            ("카페 말고 술집으로", "BAR", ("CAFE",)),
+        ],
+    )
+    def test_avoid_categories(
+        self, query: str, category: str | None, avoid: tuple[str, ...]
+    ) -> None:
+        """규칙해석_말고앞의업종은_빼달라는업종이다"""
+        conditions = interpret_by_rules(query)
+
+        assert (conditions.category_group, conditions.avoid_categories) == (
+            category,
+            avoid,
+        )
+
+    @pytest.mark.parametrize(
+        ("query", "locations", "station", "nearby"),
+        [
+            ("근처 카페", (Location("근처", LocationKind.HERE),), None, True),
+            (
+                "역삼동 카페",
+                (Location("역삼동", LocationKind.AREA, "역삼동"),),
+                "YEOKSAM",
+                False,
+            ),
+            (
+                "강남역 근처 술집",
+                (Location("강남역", LocationKind.STATION, "강남역"),),
+                "GANGNAM",
+                False,
+            ),
+            (
+                "강남역이나 역삼역 술집",
+                (
+                    Location("강남역", LocationKind.STATION, "강남역"),
+                    Location("역삼역", LocationKind.STATION, "역삼역"),
+                ),
+                "GANGNAM",
+                False,
+            ),
+            (
+                "선릉역 걸어서 5분 카페",
+                (Location("선릉역", LocationKind.STATION, "선릉역", walk_minutes=5),),
+                "SEOLLEUNG",
+                False,
+            ),
+            (
+                "강남역 11번 출구나 역삼역",
+                (
+                    Location("강남역", LocationKind.STATION, "강남역", exit="11"),
+                    Location("역삼역", LocationKind.STATION, "역삼역"),
+                ),
+                "GANGNAM",
+                False,
+            ),
+        ],
+    )
+    def test_locations(
+        self,
+        query: str,
+        locations: tuple[Location, ...],
+        station: str | None,
+        nearby: bool,
+    ) -> None:
+        """규칙해석_역동근처를지역조각으로두고_도보거리는모든역에출구는앞의역에붙인다"""
+        conditions = interpret_by_rules(query)
+
+        assert conditions.locations == locations
+        assert (conditions.station, conditions.nearby) == (station, nearby)
+
+    def test_follow_up_merges_segments(self) -> None:
+        """규칙해석_후속이면_조각을더하고가격은새로말할때만바꾼다"""
+        previous = interpret_by_rules("선릉역 스시 2만원대")
+
+        later = interpret_by_rules("새벽까지 하는 데로", previous)
+        cheaper = interpret_by_rules("만원 이하로", previous)
+
+        assert later.menus == previous.menus
+        assert later.locations == previous.locations
+        assert later.price == previous.price
+        assert later.hours == (Hours("새벽까지", open_until="02:00"),)
+        assert cheaper.price == Price("만원 이하", max_won=10000)
+
+
 class TestRules:
     """규칙 해석"""
 
@@ -304,6 +978,7 @@ class TestRules:
             codes=("VALUE_FOR_MONEY", "PARKING"),
             category_group="BAR",
             station="SEOLLEUNG",
+            locations=(Location("선릉", LocationKind.STATION, "선릉역"),),
         )
 
     @pytest.mark.parametrize(
@@ -381,6 +1056,8 @@ class TestRules:
             codes=("PURPOSE_GROUP", "QUIET"),
             category_group="RESTAURANT",
             station="YEOKSAM",
+            # 새 요청에 지역이 없으면 이전 역을 지역 조각으로 잇는다.
+            locations=(Location("역삼역", LocationKind.STATION, "역삼역"),),
         )
 
     def test_follow_up_new_station_ends_nearby(self) -> None:
