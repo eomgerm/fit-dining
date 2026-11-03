@@ -129,7 +129,7 @@ curl --fail --header "PRIVATE-TOKEN: $GITLAB_API_TOKEN" \
 ```
 
 - [x] `dev`: 두 호출을 실행했다. 첫 응답과 두 번째 응답(목록)의 `dev`가 `process_mode: oldest_first`다(사용자 보고, 2026-10-26). 목록에는 `verify-heavy`(`unordered`)도 있고 설계는 이 그룹을 바꾸지 않는다.
-- [ ] `prod`: 첫 master 파이프라인(`deploy:prod`가 생긴 뒤)이 만들어진 다음 같은 호출을 키 `prod`로 실행한다. 성공하면 상태 코드 200이고 응답의 `process_mode`가 `oldest_first`다. 실패하면 400이다.
+- [x] `prod`: 첫 master 파이프라인(2026-11-02 16:36에 그룹이 생겼다) 뒤 같은 호출을 키 `prod`로 실행했다. 응답은 상태 코드 200이고 `process_mode`가 `oldest_first`다(사용자 보고, 2026-11-03 12:00). 그룹 목록에서 `dev`와 `prod`는 `oldest_first`이고 `verify-heavy`, `verify-heavy-be`, `verify-heavy-fe`는 `unordered`다(설계는 verify 그룹을 바꾸지 않는다).
 
 ## 확인 결과 기록
 
@@ -144,4 +144,4 @@ curl --fail --header "PRIVATE-TOKEN: $GITLAB_API_TOKEN" \
 | 2단계 완료 (러너 online) | 러너 2개 online, MR 38 파이프라인 통과, Pipelines must succeed 켬, B의 `concurrent 2` 적용. Rebase 버튼 확인만 남음 | 2026-10-23 | 인프라 담당 |
 | 보호된 환경 (CE) | 불가 (Premium 이상, GitLab 문서). 위 3단계의 대체 확인이 남음 | 2026-10-23 | 문서 조사 |
 | 3단계의 환경 보호 대체 확인(Developer의 `deploy:prod` 불가, `develop`·`master` 보호, Rebase 버튼) | 모두 확인함(사용자 보고) | 2026-10-23 | 인프라 담당 |
-| 3단계 완료 (`oldest_first`) | `dev` 적용함(응답과 목록 모두 `oldest_first`). `prod`는 첫 master 파이프라인이 생긴 뒤에 한다 | 2026-10-26 | 인프라 담당 |
+| 3단계 완료 (`oldest_first`) | `dev`(2026-10-26)와 `prod`(2026-11-03) 모두 적용함(응답 200, 목록의 두 그룹이 `oldest_first`) | 2026-11-03 | 인프라 담당 |
