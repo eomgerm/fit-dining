@@ -382,6 +382,23 @@ class PlaceControllerTest {
 	}
 
 	@Nested
+	@DisplayName("장소 id 목록")
+	class PlaceIds {
+
+		@Test
+		@DisplayName("장소id목록_모든장소의id를_오름차순으로준다")
+		void placeIds_everyPlace_inAscendingOrder() throws Exception {
+			String body = mockMvc.perform(get("/api/v1/places/ids"))
+					.andExpect(status().isOk())
+					.andExpect(content().contentType(MediaType.APPLICATION_JSON))
+					.andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+
+			List<Integer> ids = JsonPath.read(body, "$");
+			assertThat(ids).hasSize(36).startsWith(1).isSorted().doesNotHaveDuplicates();
+		}
+	}
+
+	@Nested
 	@DisplayName("요청 본문 검증")
 	class RequestBodyValidation {
 

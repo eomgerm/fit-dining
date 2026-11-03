@@ -112,6 +112,11 @@ class PlaceControllerPassThroughTest {
 		public Optional<PlaceDetailResponse> findPlace(long id) {
 			return id == 7 ? Optional.of(DETAIL) : Optional.empty();
 		}
+
+		@Override
+		public List<Long> placeIds() {
+			return List.of();
+		}
 	}
 
 	@Autowired

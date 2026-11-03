@@ -43,4 +43,11 @@ public interface PlaceSearchEngine {
 	 */
 	Optional<PlaceDetailResponse> findPlace(long id);
 
+	/**
+	 * 상세를 열 수 있는 모든 장소의 id. 장소 sitemap이 쓴다.
+	 *
+	 * @return 장소 id 목록(오름차순)
+	 */
+	List<Long> placeIds();
+
 }

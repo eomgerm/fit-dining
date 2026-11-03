@@ -285,6 +285,21 @@ class JdbcPlaceCatalogTest extends PostgresTestSupport {
 	}
 
 	@Test
+	@DisplayName("장소id목록_모든장소를_id오름차순으로읽는다")
+	void placeIds_everyPlace_inIdOrder() {
+		long first = place("가", "CAFE", "GANGNAM");
+		long second = place("나", "BAR", "SEOLLEUNG");
+
+		assertThat(catalog.placeIds()).containsExactly(first, second);
+	}
+
+	@Test
+	@DisplayName("장소id목록_장소가없으면_빈목록이다")
+	void placeIds_noPlace_returnsEmpty() {
+		assertThat(catalog.placeIds()).isEmpty();
+	}
+
+	@Test
 	@DisplayName("id로카드읽기_없는id가섞여있으면_있는id만읽고점수와이유는비어있다")
 	void cards_byIds_readsKnownOnlyWithoutScore() {
 		long first = place("가", "CAFE", "GANGNAM");

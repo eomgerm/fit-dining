@@ -32,4 +32,8 @@ public class PlaceService {
 		return engine.findPlace(id).orElseThrow(PlaceNotFoundException::new);
 	}
 
+	public List<Long> placeIds() {
+		return engine.placeIds();
+	}
+
 }

@@ -32,6 +32,11 @@ final class FakePlaceCatalog implements PlaceCatalog {
 	}
 
 	@Override
+	public List<Long> placeIds() {
+		throw new UnsupportedOperationException();
+	}
+
+	@Override
 	public List<PlaceCard> nearbyCandidates() {
 		throw new UnsupportedOperationException();
 	}

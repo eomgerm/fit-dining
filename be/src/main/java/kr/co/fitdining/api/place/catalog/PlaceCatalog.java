@@ -20,6 +20,13 @@ public interface PlaceCatalog {
 	Optional<PlaceDetailResponse> findPlace(long id);
 
 	/**
+	 * 카탈로그에 있는 모든 장소의 id. 장소 sitemap이 쓴다.
+	 *
+	 * @return 장소 id 목록({@code place_id} 오름차순)
+	 */
+	List<Long> placeIds();
+
+	/**
 	 * 첫 화면 주변 카드의 후보. 서버가 위치를 모르므로 카탈로그 전체를 돌려주고 FE가 거른다.
 	 *
 	 * @return 카탈로그 전체의 카드({@code place_id} 오름차순). 점수, 라벨, 이유는 비어 있다.

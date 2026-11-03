@@ -167,4 +167,9 @@ public class CatalogPlaceSearchEngine implements PlaceSearchEngine {
 		return catalog.findPlace(id);
 	}
 
+	@Override
+	public List<Long> placeIds() {
+		return catalog.placeIds();
+	}
+
 }

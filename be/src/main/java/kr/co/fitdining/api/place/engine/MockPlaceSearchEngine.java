@@ -140,6 +140,11 @@ public class MockPlaceSearchEngine implements PlaceSearchEngine {
 				.map(place -> withOpenStatus(place.detail(), openStatus(place.detail().hours(), now)));
 	}
 
+	@Override
+	public List<Long> placeIds() {
+		return places.stream().map(place -> place.detail().place().id()).sorted().toList();
+	}
+
 	/** 점수 내림차순, 같으면 파일 순서다. */
 	private List<PlaceCard> rankedCards() {
 		LocalDateTime now = now();

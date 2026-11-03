@@ -97,6 +97,18 @@ public class PlaceController {
 		return placeService.getPlace(id);
 	}
 
+	/**
+	 * 상세를 열 수 있는 모든 장소의 id를 돌려준다. FE의 장소 sitemap이 쓴다. 로그인은 필요 없다.
+	 *
+	 * <p>오류: DB를 읽지 못하면 503.
+	 *
+	 * @return 장소 id 목록(오름차순)
+	 */
+	@GetMapping("/ids")
+	public List<Long> placeIds() {
+		return placeService.placeIds();
+	}
+
 	private String userId(String authorization) {
 		if (!authorization.startsWith(BEARER)) {
 			throw new AuthFailure("로그인이 필요합니다.");

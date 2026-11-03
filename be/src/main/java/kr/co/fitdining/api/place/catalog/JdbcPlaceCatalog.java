@@ -73,6 +73,7 @@ public class JdbcPlaceCatalog implements PlaceCatalog {
 	private static final String MENUS_SQL = """
 			SELECT category, name, description, price, price_text, labels, representative, photo_urls
 			FROM place_menus WHERE place_id = :id ORDER BY sort_order""";
+	private static final String PLACE_IDS_SQL = "SELECT place_id FROM places ORDER BY place_id";
 	private static final String PHOTOS_SQL = """
 			SELECT url FROM place_photos WHERE place_id = :id ORDER BY (source = 'menuBoard'), sort_order""";
 	private static final String SUBWAYS_SQL = """
@@ -111,6 +112,11 @@ public class JdbcPlaceCatalog implements PlaceCatalog {
 	public Optional<PlaceDetailResponse> findPlace(long id) {
 		return jdbc.sql(PLACE_SQL).param("id", id).query(JdbcPlaceCatalog::placeRow).optional()
 				.map(row -> detail(id, row));
+	}
+
+	@Override
+	public List<Long> placeIds() {
+		return jdbc.sql(PLACE_IDS_SQL).query(Long.class).list();
 	}
 
 	@Override
