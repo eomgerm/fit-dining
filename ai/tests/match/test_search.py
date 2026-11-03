@@ -25,13 +25,14 @@ from fit_ai.match.candidates import (
 from fit_ai.match.cards import Source
 from fit_ai.match.conditions import Layer
 from fit_ai.match.interpretation import Conditions
-from fit_ai.match.interpretation.segments import Hours, Price
+from fit_ai.match.interpretation.segments import Hours, Menu, Price
 from fit_ai.match.place import ConditionEvidence, Place, PlaceInfo
 from fit_ai.match.search import (
     EmbeddingError,
     SearchRequest,
     SearchResult,
     empty_reason,
+    menu_terms,
     open_hours,
     price_range,
     search,
@@ -236,6 +237,48 @@ class TestFilter:
         place_filter, _, _ = store.calls[0]
         assert place_filter.hours == OpenHours(("SUN",), until=26 * 60)
         assert (place_filter.min_price, place_filter.max_price) == (None, 22000)
+
+    def test_menus(self, fake_gms: FakeGms) -> None:
+        """거르기_메뉴가있으면_메뉴마다찾을말로거르고넓은말과피하는메뉴는거르지않는다"""
+        fake_gms(
+            answers(
+                codes=[],
+                category_group="RESTAURANT",
+                menus=[
+                    {"text": "돈까스", "value": "돈가스", "spellings": ["돈카츠"]},
+                    {"text": "맥주", "value": "맥주"},
+                    {"text": "오이", "value": "오이", "want": False},
+                ],
+            )
+        )
+        store = FakeStore()
+
+        search(SearchRequest("강남역 돈까스에 맥주 오이 빼고"), store)
+
+        place_filter, _, _ = store.calls[0]
+        assert place_filter.menus == (("돈까스", "돈가스", "돈카츠"),)
+
+    @pytest.mark.parametrize(
+        ("menus", "expected"),
+        [
+            # 띄어쓰기와 기호를 지우고 영문은 소문자로 바꾼다. 같은 말은 한 번만 둔다.
+            ([Menu("등심 돈까스", "등심돈가스")], (("등심돈까스", "등심돈가스"),)),
+            ([Menu("IPA", "IPA 맥주")], (("ipa", "ipa맥주"),)),
+            (
+                [Menu("삼겹살", "삼겹살"), Menu("냉면", "냉면")],
+                (("삼겹살",), ("냉면",)),
+            ),
+            # 사용자 말이나 표준 이름이 넓은 말이면 거르지 않는다.
+            ([Menu("마실 거", "음료")], ()),
+            ([Menu("커피", "커피")], ()),
+            ([Menu("일식", "일식")], ()),
+            ([Menu("오이", "오이", want=False)], ()),
+            ([Menu("!!", "")], ()),
+        ],
+    )
+    def test_menu_terms(self, menus: list[Menu], expected: tuple) -> None:
+        """거르기_메뉴조각을_메뉴마다견주는꼴의찾을말묶음으로바꾼다"""
+        assert menu_terms(menus) == expected
 
     @pytest.mark.parametrize(
         ("hours", "expected"),
@@ -637,6 +680,40 @@ class TestEmptyReason:
 
         assert reason.cause == "강남역 술집 중 요청한 시간에 여는 곳이 없어요"
         assert reason.suggestion == "영업시간 조건을 빼고 다시 찾아 보세요"
+
+    @pytest.mark.parametrize(
+        ("menus", "cause"),
+        [
+            ((Menu("돈까스", "돈가스"),), "강남역 식당 중 돈가스를 파는 곳이 없어요"),
+            (
+                (Menu("삼겹살", "삼겹살"), Menu("냉면", "냉면")),
+                "강남역 식당 중 삼겹살·냉면을 모두 파는 곳이 없어요",
+            ),
+        ],
+    )
+    def test_menus(self, menus: tuple[Menu, ...], cause: str) -> None:
+        """결과없음_메뉴로걸렀으면_그메뉴를파는곳이없다고하고메뉴를바꿔보라고한다"""
+        conditions = Conditions(
+            "t",
+            "t",
+            (),
+            "RESTAURANT",
+            menus=menus,
+            price=Price("만원 이하", max_won=10000),
+        )
+
+        reason = empty_reason(conditions, (GANGNAM,))
+
+        assert reason.cause == cause
+        assert reason.suggestion == "메뉴를 바꾸거나 빼고 다시 찾아 보세요"
+
+    def test_broad_menu_not_reason(self) -> None:
+        """결과없음_넓은말메뉴는걸지않았으니_다른조건으로이유를정한다"""
+        conditions = Conditions(
+            "t", "t", (), "CAFE", menus=(Menu("커피", "커피"),), price=Price("x", 1, 2)
+        )
+
+        assert empty_reason(conditions).cause == "카페 중 요청한 가격대인 곳이 없어요"
 
     def test_price(self) -> None:
         """결과없음_가격으로걸렀으면_가격조건을빼보라고한다"""

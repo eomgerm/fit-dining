@@ -254,12 +254,15 @@ def _conditions(body: ConditionsBody) -> Conditions:
         station=body.station,
         nearby=body.nearby,
         locations=tuple(_segment(Location, loc) for loc in body.locations),
-        menus=tuple(_segment(Menu, m) for m in body.menus),
+        menus=tuple(
+            Menu(m.text, m.value, tuple(m.spellings), m.want) for m in body.menus
+        ),
         hours=tuple(_segment(Hours, h) for h in body.hours),
         price=_segment(Price, body.price),
         place_name=_segment(PlaceName, body.place_name),
         features=tuple(_segment(FeatureText, f) for f in body.features),
         avoid_categories=tuple(body.avoid_categories),
+        avoid_foods=tuple(body.avoid_foods),
     )
 
 

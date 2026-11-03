@@ -127,6 +127,40 @@ HOURS_PRICE_CASES = [
 # 장소별 (음식 종류, 분석 리뷰 수). test_json_store.py와 같다. 3번은 리뷰 수를 모른다.
 REVIEWS = {1: ("FOOD_WESTERN", 120), 2: (None, 80), 3: (None, None), 4: (None, 100)}
 
+# 장소별 (가게 이름, 네이버 업종 이름, 메뉴판). test_json_store.py와 같다. 3번은 메뉴판이 없다.
+MENUS = {
+    1: ("도치피자 강남", "피자", ["[대표] 마르게리따 피자", "크림 파스타"]),
+    2: ("냉동고집", "돼지고기구이", ["안주 돈까스", "생삼겹살 150g"]),
+    3: ("동네카페", "카페,디저트", []),
+    4: ("기네스72", "맥주,호프", ["Guinness 생맥주", "피쉬앤칩스"]),
+}
+
+# (거르기 조건, 뽑히는 장소). 메뉴마다 찾을 말 중 하나가 메뉴 이름, 업종 이름, 가게 이름에
+# 들어 있어야 남는다.
+MENU_CASES = [
+    (PlaceFilter(menus=(("돈까스", "돈가스"),)), [2]),
+    # 다른 표기가 없으면 "돈까스" 메뉴를 못 찾는다.
+    (PlaceFilter(menus=(("돈가스",),)), []),
+    (PlaceFilter(menus=(("피자",),)), [1]),
+    # 메뉴판이 없어도 업종 이름으로 찾는다.
+    (PlaceFilter(menus=(("디저트",),)), [3]),
+    # 영문은 소문자로 견주고, 가게 이름으로도 찾는다.
+    (PlaceFilter(menus=(("guinness",),)), [4]),
+    (PlaceFilter(menus=(("기네스",),)), [4]),
+    # 메뉴가 여럿이면 모두 있어야 한다.
+    (PlaceFilter(menus=(("피자",), ("파스타",))), [1]),
+    (PlaceFilter(menus=(("피자",), ("돈까스",))), []),
+]
+
+
+def menu_items(names: list[str]) -> list[dict]:
+    """뷰 `menus` 모양의 메뉴판"""
+    return [
+        {"name": n, "category": None, "price": None, "representative": False}
+        for n in names
+    ]
+
+
 YEOKSAM_CAFE = PlaceFilter(
     category_group="CAFE", areas=(StationArea("역삼역", "YEOKSAM"),)
 )
@@ -202,6 +236,7 @@ def database(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
             """
             CREATE TABLE ai_place_search (
               place_id bigint, category_group text, station text,
+              name text, category text, menus jsonb,
               dong text, district text, subways jsonb, hours jsonb, price integer,
               food_type text, analyzed_review_count integer,
               lat double precision, lng double precision, facilities jsonb,
@@ -212,13 +247,17 @@ def database(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
             dong, district, subways = AREAS.get(place_id, (None, None, []))
             hours, price = HOURS.get(place_id, ([], None))
             food_type, review_count = REVIEWS.get(place_id, (None, 50))
+            name, naver_category, menus = MENUS.get(place_id, (None, None, []))
             conn.execute(
                 "INSERT INTO ai_place_search "
-                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::vector)",
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::vector)",
                 (
                     place_id,
                     category,
                     station,
+                    name,
+                    naver_category,
+                    json.dumps(menu_items(menus), ensure_ascii=False),
                     dong,
                     district,
                     json.dumps(subways, ensure_ascii=False),
@@ -344,6 +383,14 @@ def test_hours_and_price(
     store: PgPlaceStore, place_filter: PlaceFilter, expected: list[int]
 ) -> None:
     """저장소_영업시간이나가격이있으면_안맞는다고확인된곳만빼고모르면남긴다"""
+    assert find_ids(store, place_filter) == expected
+
+
+@pytest.mark.parametrize(("place_filter", "expected"), MENU_CASES)
+def test_menus(
+    store: PgPlaceStore, place_filter: PlaceFilter, expected: list[int]
+) -> None:
+    """저장소_메뉴가있으면_메뉴마다찾을말하나가메뉴이름업종이름가게이름에든곳만뽑는다"""
     assert find_ids(store, place_filter) == expected
 
 

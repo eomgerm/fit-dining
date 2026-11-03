@@ -131,6 +131,40 @@ HOURS_PRICE_CASES = [
     (PlaceFilter(min_price=18000, max_price=32999), [4, 3]),
 ]
 
+# 장소별 (가게 이름, 네이버 업종 이름, 메뉴판). test_pg_store.py와 같다. 3번은 메뉴판이 없다.
+MENUS = {
+    1: ("도치피자 강남", "피자", ["[대표] 마르게리따 피자", "크림 파스타"]),
+    2: ("냉동고집", "돼지고기구이", ["안주 돈까스", "생삼겹살 150g"]),
+    3: ("동네카페", "카페,디저트", []),
+    4: ("기네스72", "맥주,호프", ["Guinness 생맥주", "피쉬앤칩스"]),
+}
+
+# (거르기 조건, 뽑히는 장소). 메뉴마다 찾을 말 중 하나가 메뉴 이름, 업종 이름, 가게 이름에
+# 들어 있어야 남는다.
+MENU_CASES = [
+    (PlaceFilter(menus=(("돈까스", "돈가스"),)), [2]),
+    # 다른 표기가 없으면 "돈까스" 메뉴를 못 찾는다.
+    (PlaceFilter(menus=(("돈가스",),)), []),
+    (PlaceFilter(menus=(("피자",),)), [1]),
+    # 메뉴판이 없어도 업종 이름으로 찾는다.
+    (PlaceFilter(menus=(("디저트",),)), [3]),
+    # 영문은 소문자로 견주고, 가게 이름으로도 찾는다.
+    (PlaceFilter(menus=(("guinness",),)), [4]),
+    (PlaceFilter(menus=(("기네스",),)), [4]),
+    # 메뉴가 여럿이면 모두 있어야 한다.
+    (PlaceFilter(menus=(("피자",), ("파스타",))), [1]),
+    (PlaceFilter(menus=(("피자",), ("돈까스",))), []),
+]
+
+
+def menu_items(names: list[str]) -> list[dict]:
+    """뷰 `menus` 모양의 메뉴판"""
+    return [
+        {"name": n, "category": None, "price": None, "representative": False}
+        for n in names
+    ]
+
+
 YEOKSAM_CAFE = PlaceFilter(
     category_group="CAFE", areas=(StationArea("역삼역", "YEOKSAM"),)
 )
@@ -181,11 +215,17 @@ def write(path: Path, rows: list) -> Path:
                 strict=True,
             )
         )
+        | _menu_fields(head[0])
         | {"profile": p}
         for *head, p in rows
     ]
     path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
     return path
+
+
+def _menu_fields(place_id: int) -> dict:
+    name, category, names = MENUS.get(place_id, (None, None, []))
+    return {"name": name, "category": category, "menus": menu_items(names)}
 
 
 def changed(row_id: int, **values: object) -> list:
@@ -296,6 +336,26 @@ class TestFind:
         )
 
         assert find_ids(store, place_filter) == [1, 3]
+
+    @pytest.mark.parametrize(("place_filter", "expected"), MENU_CASES)
+    def test_menus(
+        self, store: JsonPlaceStore, place_filter: PlaceFilter, expected: list[int]
+    ) -> None:
+        """저장소_메뉴가있으면_test_pg_store와같은장소를뽑는다"""
+        assert find_ids(store, place_filter) == expected
+
+    def test_menus_malformed(self, tmp_path: Path) -> None:
+        """저장소_메뉴판모양이틀리면_그메뉴는건너뛰고업종과가게이름으로만본다"""
+        path = write(tmp_path / "p.json", ROWS)
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data[0]["menus"] = ["피자", {"name": 3}, {"name": "파스타"}]
+        data[1]["menus"] = {"name": "돈까스"}
+        path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        store = JsonPlaceStore(path)
+
+        assert find_ids(store, PlaceFilter(menus=(("파스타",),))) == [1]
+        assert find_ids(store, PlaceFilter(menus=(("피자",),))) == [1]
+        assert find_ids(store, PlaceFilter(menus=(("돈까스",),))) == []
 
     def test_facility_known_absent_excluded(self, store: JsonPlaceStore) -> None:
         """저장소_시설을요청하면_없다고확인된곳만빼고모르는곳은남긴다"""

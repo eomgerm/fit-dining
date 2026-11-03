@@ -26,6 +26,7 @@ from fit_ai.match.candidates import (
     StationArea,
     StoreError,
     VectorCounts,
+    menu_key,
 )
 from fit_ai.match.interpretation.segments import DAYS
 from fit_ai.match.place import Place, PlaceInfo, read_facilities
@@ -163,6 +164,8 @@ def _matches(row: dict[str, Any], place_filter: PlaceFilter) -> bool:
         return False
     if place_filter.hours is not None and not _open(row, place_filter.hours):
         return False
+    if not all(_sells(row, words) for words in place_filter.menus):
+        return False
     facilities = row.get("facilities")
     # 없다고 확인된(false) 시설만 뺀다. 키가 없거나 null이면 모름이라 남긴다.
     return not (
@@ -216,6 +219,23 @@ def _near(subway: dict[str, Any], area: StationArea) -> bool:
     ):
         return False
     return area.exit is None or subway.get("exit") == area.exit
+
+
+def _sells(row: dict[str, Any], words: Sequence[str]) -> bool:
+    """찾을 말 중 하나가 메뉴 이름, 업종 이름, 가게 이름에 들어 있는지. FIND_SQL의 메뉴
+    조건과 같다. 모양이 틀린 메뉴는 건너뛴다."""
+    menus = row.get("menus")
+    texts = [
+        menu.get("name")
+        for menu in (menus if isinstance(menus, list) else [])
+        if isinstance(menu, dict)
+    ]
+    keys = [
+        menu_key(text)
+        for text in (*texts, row.get("category"), row.get("name"))
+        if isinstance(text, str)
+    ]
+    return any(word in key for word in words for key in keys)
 
 
 def _in_price(price: object, place_filter: PlaceFilter) -> bool:

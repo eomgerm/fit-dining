@@ -18,6 +18,7 @@ from fit_ai.match.interpretation.segments import (
     DAYS,
     MAX_SEGMENT_LENGTH,
     MAX_SEGMENTS,
+    MAX_SPELLINGS,
     LocationKind,
 )
 from fit_ai.match.taste_select import MAX_FREE_TEXT_LENGTH
@@ -160,11 +161,11 @@ class LocationBody(Body):
 
 
 class MenuBody(Body):
-    """메뉴·음식 조각. 속성은 `segments.Menu`와 같다."""
+    """메뉴 조각. 속성은 `segments.Menu`와 같다."""
 
     text: Segment
     value: Segment
-    code: Literal[FOOD_CODES] | None = None
+    spellings: list[Segment] = Field(default_factory=list, max_length=MAX_SPELLINGS)
     want: bool = True
 
 
@@ -212,17 +213,18 @@ class ConditionsBody(Body):
     Attributes:
         text: 해석한 요청문. 후속 조건이면 이전 요청과 합친 문장이다.
         embedding_text: 후보 추출에 쓸 문장. 부정 표현을 긍정형으로 바꿨고 위치 말은 뺐다.
-        codes: 원하는 조건 코드. 취향 코드표 코드와 시설 코드다.
+        codes: 원하는 조건 코드. 취향 코드표 코드(음식 종류·매운맛 포함)와 시설 코드다.
         category_group: 업종. 요청에 없으면 null이다.
         station: 지역 중 처음 나온 서비스 역. 없으면 null이다.
         nearby: 근처 검색인지
         locations: 지역. 여럿이면 그중 하나에 들면 된다.
-        menus: 메뉴·음식. 피하는 음식은 `want`가 거짓이다.
+        menus: 메뉴. 피하는 메뉴는 `want`가 거짓이다.
         hours: 시간
         price: 가격. 요청에 없으면 null이다.
         place_name: 가게 이름. 요청에 없으면 null이다.
         features: 코드표에 없는 특징
         avoid_categories: 빼 달라는 업종
+        avoid_foods: 빼 달라는 음식 종류·매운맛 코드
     """
 
     text: str = Field(min_length=1, max_length=MAX_TEXT_LENGTH)
@@ -240,6 +242,9 @@ class ConditionsBody(Body):
         default_factory=list, max_length=MAX_SEGMENTS
     )
     avoid_categories: list[CategoryGroup] = Field(default_factory=list, max_length=3)
+    avoid_foods: list[Literal[FOOD_CODES]] = Field(
+        default_factory=list, max_length=len(FOOD_CODES)
+    )
 
 
 class ReasonTagBody(Body):

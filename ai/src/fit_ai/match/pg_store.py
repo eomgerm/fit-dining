@@ -3,11 +3,13 @@
 
 장소는 거르기와 유사도 계산(pgvector `<=>`, 코사인 거리)을 SQL 한 번으로 한다. 장소가
 300곳 남짓이라 인덱스 없이 전부 계산해도 빠르고 결과가 정확하다. 장소 뷰는 BE
-마이그레이션 V12(`ai_place_search`)가 `places`와 `place_profiles`로 만들고 V17·V18이 검색
-2차 컬럼을 뒤에 더한다. AI는 그 컬럼 중 `place_id`, `category_group`, `station`, `dong`,
-`district`, `subways`(`place_subways`를 모은 `[{station, exit, walk_minutes}]`), `hours`
-(`place_hours`를 모은 `[{day, open, close, closed, breaks}]`), `price`(가게 가격), `lat`, `lng`,
-`facilities`, `food_type`, `analyzed_review_count`, `profile`, `summary_vector`에 의존한다. `price`는 장소 분석 적재가 채우기
+마이그레이션 V12(`ai_place_search`)가 `places`와 `place_profiles`로 만들고 V17~V19가 검색
+2차 컬럼을 뒤에 더한다. AI는 그 컬럼 중 `place_id`, `category_group`, `station`, `name`,
+`category`(네이버 업종 이름), `dong`, `district`, `subways`(`place_subways`를 모은
+`[{station, exit, walk_minutes}]`), `hours`(`place_hours`를 모은 `[{day, open, close, closed,
+breaks}]`), `menus`(`place_menus`를 모은 `[{name, category, price, representative}]`),
+`price`(가게 가격), `lat`, `lng`, `facilities`, `food_type`, `analyzed_review_count`,
+`profile`, `summary_vector`에 의존한다. `price`는 장소 분석 적재가 채우기
 전까지 모두 NULL(모름)이다(docs/comparison/spec.md 4.2). 로컬 개발 DB(`scripts/dev_db.py`)는
 같은 컬럼의 뷰를 만든다. 취향 표 `user_preferences`의 `features`, `tastes`는 저장 설계
 (docs/specs/profile-storage/spec.md, BE 마이그레이션 V2·V6)를 따른다.
@@ -82,6 +84,22 @@ WHERE summary_vector IS NOT NULL
     SELECT 1 FROM unnest(%(facilities)s::text[]) AS requested(code)
     WHERE facilities -> requested.code = 'false'::jsonb
   )
+  AND NOT EXISTS (
+    SELECT 1 FROM jsonb_array_elements(%(menus)s::jsonb) AS requested(words)
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements_text(requested.words) AS w(word)
+      WHERE strpos(regexp_replace(lower(coalesce(p.name, '')), '[^0-9a-z가-힣]', '', 'g'),
+                   w.word) > 0
+         OR strpos(regexp_replace(lower(coalesce(p.category, '')), '[^0-9a-z가-힣]', '', 'g'),
+                   w.word) > 0
+         OR EXISTS (
+           SELECT 1 FROM jsonb_array_elements(coalesce(p.menus, '[]'::jsonb)) AS m(item)
+           WHERE strpos(
+             regexp_replace(lower(coalesce(m.item ->> 'name', '')), '[^0-9a-z가-힣]', '', 'g'),
+             w.word) > 0)
+    )
+  )
   AND (%(min_price)s::int IS NULL OR p.price IS NULL OR p.price >= %(min_price)s::int)
   AND (%(max_price)s::int IS NULL OR p.price IS NULL OR p.price <= %(max_price)s::int)
   AND (
@@ -116,7 +134,10 @@ LIMIT %(k)s
 지역은 JSON 목록(`_area_json`)으로 받아 그중 하나에 들면 남긴다. 역과 동에 드는 규칙은
 `candidates.StationArea`, `RegionArea`에 있다. 목록이 비면 위치로 거르지 않는다. 영업시간은
 JSON(`_hours_json`)으로 받아, 요청한 요일 중 쉬거나 시각이 못 미친다고 확인되지 않은 날이
-하루라도 있으면 남긴다(`candidates.OpenHours`). 가격과 영업시간을 모르는 장소는 남긴다."""
+하루라도 있으면 남긴다(`candidates.OpenHours`). 가격과 영업시간을 모르는 장소는 남긴다.
+메뉴는 메뉴마다 찾을 말 목록(JSON)으로 받아, 모든 메뉴에 대해 그중 하나가 메뉴 이름, 업종
+이름, 가게 이름에 들어 있는 장소만 남긴다(`candidates.PlaceFilter.menus`). 견주는 꼴은
+`candidates.menu_key`와 같다."""
 
 PLACES_SQL = """
 SELECT place_id, category_group, station, facilities, food_type, analyzed_review_count,
@@ -196,6 +217,9 @@ class PgPlaceStore:
                 "min_price": place_filter.min_price,
                 "max_price": place_filter.max_price,
                 "hours": _hours_json(place_filter.hours),
+                "menus": json.dumps(
+                    [list(words) for words in place_filter.menus], ensure_ascii=False
+                ),
                 "k": k,
             },
         )

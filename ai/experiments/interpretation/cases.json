@@ -1,5 +1,5 @@
 {
-  "about": "요청 해석 평가 질의. expect.codes는 반드시 나와야 할 코드, optional은 나와도 틀리지 않은 코드, uncovered는 코드표로 못 잡아 문장에만 남아야 할 표현이다. category, station에 목록을 주면 그중 하나면 맞다. previous가 있으면 후속 검색이다. locations, menus, hours, price, place_name, features, avoid_menus, avoid_categories는 분류별 조각(2026-11-02 확정)이고 기대 답에 있을 때만 채점한다. menus, features는 원하는 조각의 표준 이름이 모두 나오면 맞고, avoid_menus는 피하는 메뉴의 음식 코드나 표준 이름이 같아야 맞고, locations, hours, price는 적은 속성만 본다. 표준 이름은 띄어쓰기를 무시하고 한쪽이 다른 쪽에 들어 있으면 맞다.",
+  "about": "요청 해석 평가 질의. expect.codes는 반드시 나와야 할 코드, optional은 나와도 틀리지 않은 코드, uncovered는 코드표로 못 잡아 문장에만 남아야 할 표현이다. category, station에 목록을 주면 그중 하나면 맞다. previous가 있으면 후속 검색이다. locations, menus, hours, price, place_name, features, avoid_foods, avoid_categories는 분류별 조각(2026-11-02 확정)이고 기대 답에 있을 때만 채점한다. menus, features는 원하는 조각의 표준 이름이 모두 나오면 맞고, avoid_foods는 피하는 메뉴의 음식 코드나 표준 이름이 같아야 맞고, locations, hours, price는 적은 속성만 본다. 표준 이름은 띄어쓰기를 무시하고 한쪽이 다른 쪽에 들어 있으면 맞다. 메뉴만 말한 질의(초밥, 파스타)는 음식 종류 코드가 아니라 메뉴 조각이다(2026-11-03)",
   "cases": [
     {"id": "A1", "type": "업종·역", "query": "강남역 카페", "expect": {"codes": [], "category": "CAFE", "station": "GANGNAM", "nearby": false}},
     {"id": "A2", "type": "업종·역", "query": "역삼역 술집 추천해줘", "expect": {"codes": [], "category": "BAR", "station": "YEOKSAM", "nearby": false}},
@@ -30,15 +30,15 @@
     {"id": "D4", "type": "시설", "query": "예약 가능한 강남역 식당", "expect": {"codes": ["RESERVATION"], "category": "RESTAURANT", "station": "GANGNAM", "nearby": false}},
 
     {"id": "E1", "type": "음식", "query": "한식 먹고 싶어", "expect": {"codes": ["FOOD_KOREAN"], "category": "RESTAURANT", "station": null, "nearby": false}},
-    {"id": "E2", "type": "음식", "query": "역삼역 초밥집", "expect": {"codes": ["FOOD_JAPANESE"], "category": "RESTAURANT", "station": "YEOKSAM", "nearby": false}},
+    {"id": "E2", "type": "음식", "query": "역삼역 초밥집", "expect": {"codes": [], "category": "RESTAURANT", "station": "YEOKSAM", "nearby": false, "menus": ["초밥"]}},
     {"id": "E3", "type": "음식", "query": "매운 거 먹고 싶다", "expect": {"codes": ["FOOD_SPICY"], "optional": ["FOOD_KOREAN"], "category": "RESTAURANT", "station": null, "nearby": false}},
-    {"id": "E4", "type": "음식", "query": "파스타 맛있는 곳", "expect": {"codes": ["FOOD_WESTERN"], "category": "RESTAURANT", "station": null, "nearby": false}},
-    {"id": "E5", "type": "음식", "query": "강남역 쌀국수", "expect": {"codes": ["FOOD_ASIAN"], "category": "RESTAURANT", "station": "GANGNAM", "nearby": false}},
+    {"id": "E4", "type": "음식", "query": "파스타 맛있는 곳", "expect": {"codes": [], "category": "RESTAURANT", "station": null, "nearby": false, "menus": ["파스타"]}},
+    {"id": "E5", "type": "음식", "query": "강남역 쌀국수", "expect": {"codes": [], "category": "RESTAURANT", "station": "GANGNAM", "nearby": false, "menus": ["쌀국수"]}},
 
     {"id": "F1", "type": "부정 표현", "query": "시끄러운 곳 말고 데이트하기 좋은 데", "expect": {"codes": ["QUIET", "PURPOSE_DATE"], "category": null, "station": null, "nearby": false}},
     {"id": "F2", "type": "부정 표현", "query": "웨이팅 긴 데는 싫어", "expect": {"codes": ["SHORT_WAIT"], "category": null, "station": null, "nearby": false}},
     {"id": "F3", "type": "부정 표현", "query": "비싼 데 말고 술집", "expect": {"codes": [], "category": "BAR", "station": null, "nearby": false, "price": {"cheap": true}}},
-    {"id": "F4", "type": "부정 표현", "query": "매운 거 말고 담백한 국물 요리", "expect": {"codes": [], "category": "RESTAURANT", "station": null, "nearby": false, "uncovered": ["국물"], "menus": ["국물"], "avoid_menus": ["FOOD_SPICY"]}},
+    {"id": "F4", "type": "부정 표현", "query": "매운 거 말고 담백한 국물 요리", "expect": {"codes": [], "category": "RESTAURANT", "station": null, "nearby": false, "uncovered": ["국물"], "menus": ["국물"], "avoid_foods": ["FOOD_SPICY"]}},
 
     {"id": "G1", "type": "근처", "query": "근처 카페", "expect": {"codes": [], "category": "CAFE", "station": null, "nearby": true}},
     {"id": "G2", "type": "근처", "query": "주변에 혼밥할 만한 곳", "expect": {"codes": ["PURPOSE_SOLO"], "category": [null, "RESTAURANT"], "station": null, "nearby": true}},
@@ -54,7 +54,7 @@
     {"id": "R1", "type": "이전 오류", "query": "강남역 근처 4명이서 갈 만한 식당", "expect": {"codes": ["PURPOSE_GROUP"], "category": "RESTAURANT", "station": "GANGNAM", "nearby": false}},
     {"id": "R2", "type": "이전 오류", "query": "주차되는 술집", "expect": {"codes": ["PARKING"], "category": "BAR", "station": null, "nearby": false}},
     {"id": "R3", "type": "이전 오류", "query": "혼밥하기 편한 가성비 좋은 한식", "expect": {"codes": ["PURPOSE_SOLO", "VALUE_FOR_MONEY", "FOOD_KOREAN"], "category": "RESTAURANT", "station": null, "nearby": false}},
-    {"id": "R4", "type": "이전 오류", "query": "강남역 쌀국수 같은 국물 요리", "expect": {"codes": [], "optional": ["FOOD_ASIAN"], "category": "RESTAURANT", "station": "GANGNAM", "nearby": false, "uncovered": ["국물"]}},
+    {"id": "R4", "type": "이전 오류", "query": "강남역 쌀국수 같은 국물 요리", "expect": {"codes": [], "category": "RESTAURANT", "station": "GANGNAM", "nearby": false, "uncovered": ["국물"]}},
 
     {"id": "I1", "type": "코드 밖 표현", "query": "와인 종류 많은 바", "expect": {"codes": [], "category": "BAR", "station": null, "nearby": false, "uncovered": ["와인"], "menus": ["와인"]}},
     {"id": "I2", "type": "코드 밖 표현", "query": "디저트 맛있는 카페", "expect": {"codes": [], "category": "CAFE", "station": null, "nearby": false, "uncovered": ["디저트"], "menus": ["디저트"]}},
@@ -76,7 +76,7 @@
     {"id": "T3", "type": "시간", "query": "새벽 2시까지 하는 포차", "expect": {"codes": [], "category": "BAR", "station": null, "nearby": false, "hours": [{"open_until": "02:00"}]}},
     {"id": "T4", "type": "시간", "query": "아침 7시 전에 여는 카페", "expect": {"codes": [], "category": "CAFE", "station": null, "nearby": false, "hours": [{"open_from": "07:00"}]}},
 
-    {"id": "P1", "type": "가격", "query": "2만원대 파스타", "expect": {"codes": ["FOOD_WESTERN"], "category": "RESTAURANT", "station": null, "nearby": false, "menus": ["파스타"], "price": {"min_won": 20000, "max_won": 29999}}},
+    {"id": "P1", "type": "가격", "query": "2만원대 파스타", "expect": {"codes": [], "category": "RESTAURANT", "station": null, "nearby": false, "menus": ["파스타"], "price": {"min_won": 20000, "max_won": 29999}}},
     {"id": "P2", "type": "가격", "query": "만원 이하 점심 밥집", "expect": {"codes": [], "category": "RESTAURANT", "station": null, "nearby": false, "price": {"max_won": 10000}}},
     {"id": "P3", "type": "가격", "query": "저렴한 이자카야", "expect": {"codes": [], "category": "BAR", "station": null, "nearby": false, "price": {"cheap": true}}},
     {"id": "P4", "type": "가격", "query": "가성비 좋은 고깃집", "expect": {"codes": ["VALUE_FOR_MONEY"], "category": "RESTAURANT", "station": null, "nearby": false, "price": null, "menus": ["고기"]}},
@@ -86,13 +86,13 @@
     {"id": "N3", "type": "가게 이름", "query": "바바인디아 같은 인도 음식점", "expect": {"codes": [], "category": "RESTAURANT", "station": null, "nearby": false, "place_name": null, "optional": ["FOOD_ASIAN"]}},
 
     {"id": "S1", "type": "오타·줄임말", "query": "션릉역 카페", "expect": {"codes": [], "category": "CAFE", "station": "SEOLLEUNG", "nearby": false, "locations": [{"kind": "STATION", "value": "선릉역"}]}},
-    {"id": "S2", "type": "오타·줄임말", "query": "역삼 스시", "expect": {"codes": ["FOOD_JAPANESE"], "category": "RESTAURANT", "station": "YEOKSAM", "nearby": false, "menus": ["초밥"]}},
+    {"id": "S2", "type": "오타·줄임말", "query": "역삼 스시", "expect": {"codes": [], "category": "RESTAURANT", "station": "YEOKSAM", "nearby": false, "menus": ["초밥"]}},
     {"id": "S3", "type": "오타·줄임말", "query": "충전되는 카페", "expect": {"codes": [], "category": "CAFE", "station": null, "nearby": false, "features": ["콘센트"], "optional": ["PURPOSE_WORK"]}},
     {"id": "S4", "type": "오타·줄임말", "query": "강남녁 술집", "expect": {"codes": [], "category": "BAR", "station": "GANGNAM", "nearby": false}},
 
     {"id": "V1", "type": "피함", "query": "카페 말고 다른 데", "expect": {"codes": [], "category": [null, "RESTAURANT", "BAR"], "station": null, "nearby": false, "avoid_categories": ["CAFE"]}},
-    {"id": "V2", "type": "피함", "query": "일식 말고 한식", "expect": {"codes": ["FOOD_KOREAN"], "category": "RESTAURANT", "station": null, "nearby": false, "avoid_menus": ["FOOD_JAPANESE"]}},
-    {"id": "V3", "type": "피함", "query": "맵지 않은 중식", "expect": {"codes": ["FOOD_CHINESE"], "category": "RESTAURANT", "station": null, "nearby": false, "avoid_menus": ["FOOD_SPICY"]}},
+    {"id": "V2", "type": "피함", "query": "일식 말고 한식", "expect": {"codes": ["FOOD_KOREAN"], "category": "RESTAURANT", "station": null, "nearby": false, "avoid_foods": ["FOOD_JAPANESE"]}},
+    {"id": "V3", "type": "피함", "query": "맵지 않은 중식", "expect": {"codes": ["FOOD_CHINESE"], "category": "RESTAURANT", "station": null, "nearby": false, "avoid_foods": ["FOOD_SPICY"]}},
 
     {"id": "M1", "type": "지역 여러 개·거리", "query": "강남역이나 역삼역 술집", "expect": {"codes": [], "category": "BAR", "station": "GANGNAM", "nearby": false, "locations": [{"kind": "STATION", "value": "강남역"}, {"kind": "STATION", "value": "역삼역"}]}},
     {"id": "M2", "type": "지역 여러 개·거리", "query": "선릉역 걸어서 5분 카페", "expect": {"codes": [], "category": "CAFE", "station": "SEOLLEUNG", "nearby": false, "locations": [{"kind": "STATION", "value": "선릉역", "walk_minutes": 5}]}},

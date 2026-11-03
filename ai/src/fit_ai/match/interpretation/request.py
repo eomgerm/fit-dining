@@ -54,7 +54,8 @@ FOOD_TYPES = (
 
 
 FOOD_CODES = (*FOOD_TYPES, "FOOD_SPICY")
-"""메뉴 조각의 음식 코드. 음식 종류와 매운맛이다."""
+"""음식 코드. 음식 종류와 매운맛이다. 빼 달라는 음식(`Conditions.avoid_foods`)은 이 코드만
+받는다."""
 
 
 STATION_CODES = {
@@ -92,19 +93,21 @@ class Conditions:
         text: 해석한 요청문. 후속 조건이면 이전 요청과 합친 한 문장이다.
         embedding_text: 후보 추출에 쓸 문장. 부정 표현을 긍정형으로 바꿨고 위치 말(역
             이름, 근처, 지역 원문)은 뺐다.
-        codes: 원하는 조건 코드. 취향 코드표의 코드와 시설 코드다. 인원은 목적 코드로,
-            원하는 메뉴의 음식 코드도 넣었다.
+        codes: 원하는 조건 코드. 취향 코드표의 코드(음식 종류·매운맛 포함)와 시설
+            코드다. 인원은 목적 코드로 넣었다. 메뉴에서 음식 종류를 짐작해 넣지 않는다.
         category_group: 업종. 요청에 없으면 None이다.
         station: 지역 중 처음 나온 서비스 역. 없으면 None이다. 장소 저장소가 지역을 여러
             개 거르기 전까지 쓰는 값이다.
         nearby: 근처 검색인지. 서비스 역 없이 "여기"(`LocationKind.HERE`)를 말했으면 참이다.
         locations: 지역. 여럿이면 그중 하나에 들면 된다.
-        menus: 메뉴·음식. 피하는 음식("매운 거 말고")은 `want`가 거짓이다.
+        menus: 메뉴. 피하는 메뉴("오이 빼고")는 `want`가 거짓이다.
         hours: 시간
         price: 가격. 요청에 없으면 None이다.
         place_name: 가게 이름. 요청에 없으면 None이다.
         features: 코드표에 없는 특징
         avoid_categories: 빼 달라는 업종("카페 말고")
+        avoid_foods: 빼 달라는 음식 종류·매운맛 코드("일식 말고", "매운 거 빼고").
+            음식 코드(`FOOD_CODES`)만 둔다.
     """
 
     text: str
@@ -120,6 +123,7 @@ class Conditions:
     place_name: PlaceName | None = None
     features: tuple[FeatureText, ...] = ()
     avoid_categories: tuple[str, ...] = ()
+    avoid_foods: tuple[str, ...] = ()
 
     @property
     def corrections(self) -> tuple[tuple[str, str], ...]:
@@ -199,15 +203,15 @@ def _assemble(
     place_name: PlaceName | None,
     features: tuple[FeatureText, ...],
     avoid_categories: tuple[str, ...],
+    avoid_foods: tuple[str, ...],
 ) -> Conditions:
     """조각을 모아 조건을 만든다. LLM 해석과 규칙 해석이 같이 쓴다.
 
-    원하는 메뉴의 음식 코드는 코드에 더하고 피하는 메뉴의 코드는 뺀다. 역은 지역 중 처음
-    나온 서비스 역이고, 근처 검색은 서비스 역 없이 "여기"를 말했을 때다. 동네·랜드마크
-    원문은 벡터용 문장에서 지운다.
+    빼 달라는 음식 코드는 원하는 코드에서 뺀다. 역은 지역 중 처음 나온 서비스 역이고,
+    근처 검색은 서비스 역 없이 "여기"를 말했을 때다. 동네·랜드마크 원문은 벡터용 문장에서
+    지운다.
     """
-    avoided = {m.code for m in menus if not m.want and m.code}
-    wanted = [m.code for m in menus if m.want and m.code]
+    avoided = tuple(dict.fromkeys(c for c in avoid_foods if c in FOOD_CODES))
     station = next((s for s in map(station_code, locations) if s is not None), None)
     nearby = station is None and any(loc.kind is LocationKind.HERE for loc in locations)
     for loc in locations:
@@ -224,7 +228,7 @@ def _assemble(
         embedding_text=_without_location(embedding_text, category_group).strip()[
             :MAX_TEXT_LENGTH
         ],
-        codes=tuple(c for c in _known_codes([*codes, *wanted]) if c not in avoided),
+        codes=tuple(c for c in _known_codes(codes) if c not in avoided),
         category_group=category_group,
         station=station,
         nearby=nearby,
@@ -237,6 +241,7 @@ def _assemble(
         avoid_categories=tuple(
             dict.fromkeys(c for c in avoid_categories if c != category_group)
         ),
+        avoid_foods=avoided,
     )
 
 

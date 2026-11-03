@@ -51,6 +51,7 @@ CREATE TABLE place (
   id bigint PRIMARY KEY,
   name text NOT NULL,
   category_group text NOT NULL,
+  category text,
   food_type text,
   station text NOT NULL,
   dong text,
@@ -110,7 +111,7 @@ SELECT p.id AS place_id, p.category_group, p.station, p.lat, p.lng, p.facilities
                   'representative', m.representative) ORDER BY m.sort_order)
          FROM place_menu m WHERE m.place_id = p.id), '[]') AS menus,
        p.pet_allowed, p.parking_free, p.corkage_allowed, pp.price,
-       pp.analyzed_review_count
+       pp.analyzed_review_count, p.category
 FROM place p JOIN place_profile pp ON pp.place_id = p.id;
 DROP TABLE IF EXISTS user_preferences;
 CREATE TABLE user_preferences (
@@ -122,7 +123,7 @@ CREATE TABLE user_preferences (
   features jsonb NOT NULL DEFAULT '[]'
 );
 """
-"""개발 DB 스키마. 뷰는 BE 마이그레이션 V12·V17·V18의 `ai_place_search`와 같은 컬럼이다. 가까운
+"""개발 DB 스키마. 뷰는 BE 마이그레이션 V12·V17~V19의 `ai_place_search`와 같은 컬럼이다. 가까운
 역(`place_subway`), 영업시간(`place_hour`), 메뉴(`place_menu`)는 BE `place_subways`,
 `place_hours`, `place_menus`(V7)처럼 따로 두고 뷰에서 모은다. 가게 가격(`place_profile.price`)은
 장소 분석 적재가 프로필 쪽에 넣는다고 가정한 자리다. `user_preferences`는 BE 마이그레이션 V2·V6의 컬럼 중 AI가 읽는 것과 온보딩 원본만
@@ -275,6 +276,8 @@ def _row(place: dict, summary: str, vector: list[float]) -> dict:
         "category_group": info["categoryGroup"],
         "station": info["station"],
         "name": info["name"],
+        # BE Mock에는 네이버 업종 이름이 없다.
+        "category": None,
         "food_type": None,
         "dong": None,
         "district": _district(detail["address"]),
@@ -333,11 +336,13 @@ def _district(address: str | None) -> str | None:
 
 def _insert(conn: psycopg.Connection, row: dict) -> None:
     conn.execute(
-        "INSERT INTO place VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+        "INSERT INTO place VALUES "
+        "(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
         (
             row["place_id"],
             row["name"],
             row["category_group"],
+            row["category"],
             row["food_type"],
             row["station"],
             row["dong"],

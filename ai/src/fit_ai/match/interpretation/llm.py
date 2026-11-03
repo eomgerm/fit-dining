@@ -25,6 +25,7 @@ from fit_ai.match.interpretation.segments import (
     DAYS,
     MAX_SEGMENT_LENGTH,
     MAX_SEGMENTS,
+    MAX_SPELLINGS,
     FeatureText,
     Hours,
     Location,
@@ -47,10 +48,10 @@ SYSTEM_PROMPT = f"""\
 바꾼다. 조각마다 사용자가 쓴 말은 text에 그대로 두고, 철자가 틀렸거나 줄여 쓴 말은 \
 고쳐서 value에 표준 이름으로 쓴다.
 - category_group: RESTAURANT(식당), CAFE(카페), BAR(술집) 중 하나. \
-음식 종류나 메뉴(한식, 라멘, 파스타, 국물 요리 등)를 말하면 RESTAURANT다. \
+음식 종류나 식사 메뉴(한식, 라멘, 파스타, 국물 요리 등)를 말하면 RESTAURANT다. \
 맛집, 밥집, 먹을 데처럼 식사하는 곳을 찾는 말도 RESTAURANT다. \
-술 마시는 곳(이자카야, 포차, 호프, 와인바, 칵테일바, 루프탑 바 등)은 BAR다. \
-커피나 디저트를 먹는 곳은 CAFE다. 알 수 없으면 null.
+술 마시는 곳(이자카야, 포차, 호프, 와인바, 칵테일바, 루프탑 바 등)과 술 메뉴(하이볼, \
+와인)는 BAR다. 커피, 음료, 디저트 메뉴(케이크, 빙수)는 CAFE다. 알 수 없으면 null.
 - avoid_categories: "카페 말고"처럼 빼 달라는 업종. 없으면 빈 목록이다.
 - locations: 지역 목록. 없으면 빈 목록이다. "강남역이나 역삼역"처럼 여럿이면 모두 \
 넣는다. [{{"text", "kind", "value", "walk_minutes", "exit"}}]. kind는 STATION(역. \
@@ -66,17 +67,22 @@ AREA(동네, 거리, 랜드마크. 신사동, 가로수길, 코엑스), HERE(근
 인원은 1명이면 PURPOSE_SOLO, {GROUP_SIZE}명 이상이면 PURPOSE_GROUP으로 바꾼다. \
 "가성비"는 VALUE_FOR_MONEY다. "저렴한", "싼", "비싸지 않은"은 VALUE_FOR_MONEY가 \
 아니라 price다.
+- 음식 종류 코드(FOOD_KOREAN, FOOD_JAPANESE, FOOD_CHINESE, FOOD_WESTERN, FOOD_ASIAN)는 \
+한식, 일식, 중국집, 양식, 베트남 음식처럼 음식 종류를 직접 말했을 때만 codes에 넣는다. \
+메뉴 이름(라멘, 돈가스, 파스타)만으로 음식 종류 코드를 넣지 않는다. 매운 음식을 원하면 \
+FOOD_SPICY다.
 - codes에는 요청에 없는 조건을 넣지 않는다. "식당"이라는 말만으로 음식 종류 코드를, \
 "모임", "회식", 인원만으로 시설 GROUP을 넣지 않는다. GROUP은 단체석, 단체 예약처럼 \
 시설을 말할 때만 넣는다.
-- menus: 먹고 마시는 것(메뉴, 음식 종류, 술, 음료, 디저트). 없으면 빈 목록이다. \
-[{{"text", "value", "code", "want"}}]. value는 표준 이름이다("스시"는 "초밥", \
-"스파게티"는 "파스타"). code는 음식 코드다. 라멘·초밥은 FOOD_JAPANESE, \
-파스타·스테이크는 FOOD_WESTERN, 쌀국수·팟타이는 FOOD_ASIAN, 짜장면·마라탕은 \
-FOOD_CHINESE, 한식은 FOOD_KOREAN, 매운 음식은 FOOD_SPICY다. 국물 요리, 국밥, 고기, \
-술, 음료, 디저트처럼 정할 수 없으면 null이다. want는 원하면 true다. "말고", "빼고", \
-"싫어", "않은"처럼 피한다고 분명히 말했을 때만 false다. 원하는 음식 코드는 codes에도 \
-넣는다.
+- avoid_foods: "일식 말고", "매운 거 빼고"처럼 빼 달라는 음식 종류나 매운맛의 코드. \
+없으면 빈 목록이다.
+- menus: 먹고 마시는 메뉴(돈가스, 라멘, 하이볼, 케이크, 커피, 술, 디저트). 음식 종류(한식, \
+일식)와 매운맛은 menus가 아니라 codes다. 없으면 빈 목록이다. \
+[{{"text", "value", "spellings", "want"}}]. value는 표준 이름이다("스시"는 "초밥", \
+"스파게티"는 "파스타"). spellings는 메뉴판에 흔히 쓰는 같은 메뉴의 다른 \
+표기다("돈가스"는 ["돈까스", "돈카츠"]). 다른 메뉴나 더 넓은 말은 넣지 않고, 없으면 \
+빈 목록이다. want는 원하면 true다. "말고", "빼고", "싫어", "않은"처럼 피한다고 분명히 \
+말했을 때만 false다.
 - hours: 영업시간. 없으면 빈 목록이다. [{{"text", "day", "open_until", "open_from", \
 "now"}}]. day는 요일(MON, TUE, WED, THU, FRI, SAT, SUN)이고 없으면 null이다. \
 open_until은 그 시각 이후까지 여는 곳이다("늦게까지"는 "23:00", "새벽까지"는 \
@@ -111,8 +117,8 @@ change_summary는 바뀐 점을 "~했어요"로 끝나는 짧은 한 문장으�
 예시:
 - "선릉역 라멘집" → category_group "RESTAURANT", \
 locations [{{"text": "선릉역", "kind": "STATION", "value": "선릉역"}}], \
-codes ["FOOD_JAPANESE"], menus [{{"text": "라멘", "value": "라멘", \
-"code": "FOOD_JAPANESE", "want": true}}], embedding_text "선릉역 라멘집"
+menus [{{"text": "라멘", "value": "라멘", "spellings": [], "want": true}}], \
+embedding_text "선릉역 라멘집"
 - "북적이는 데 말고 공부할 카페" → category_group "CAFE", \
 codes ["QUIET", "PURPOSE_WORK"], embedding_text "조용하고 공부하기 좋은 카페"
 - "역삼 포차" → category_group "BAR", \
@@ -126,28 +132,26 @@ codes ["PARKING"], embedding_text "주차할 수 있는 곳"
 - "논현동이나 신사역 걸어서 10분 3만원 이하 오마카세 밤 11시까지" → \
 category_group "RESTAURANT", locations [{{"text": "논현동", "kind": "AREA", \
 "value": "논현동"}}, {{"text": "신사역 걸어서 10분", "kind": "STATION", \
-"value": "신사역", "walk_minutes": 10}}], codes ["FOOD_JAPANESE"], \
-menus [{{"text": "오마카세", "value": "오마카세", "code": "FOOD_JAPANESE", \
-"want": true}}], hours [{{"text": "밤 11시까지", "open_until": "23:00"}}], \
+"value": "신사역", "walk_minutes": 10}}], \
+menus [{{"text": "오마카세", "value": "오마카세", "spellings": [], "want": true}}], \
+hours [{{"text": "밤 11시까지", "open_until": "23:00"}}], \
 price {{"text": "3만원 이하", "max_won": 30000}}, embedding_text "3만원 이하 오마카세"
 - "투썸 신논현 3번 출구" → category_group "CAFE", \
 locations [{{"text": "신논현 3번 출구", "kind": "STATION", "value": "신논현역", \
 "exit": "3"}}], place_name {{"text": "투썸", "value": "투썸플레이스"}}, \
 embedding_text "투썸플레이스"
-- "얼큰한 짬뽕집" → category_group "RESTAURANT", \
-codes ["FOOD_CHINESE", "FOOD_SPICY"], menus [{{"text": "짬뽕", "value": "짬뽕", \
-"code": "FOOD_CHINESE", "want": true}}, {{"text": "얼큰한", "value": "매운 음식", \
-"code": "FOOD_SPICY", "want": true}}], embedding_text "얼큰한 짬뽕집"
+- "얼큰한 짬뽕집" → category_group "RESTAURANT", codes ["FOOD_SPICY"], \
+menus [{{"text": "짬뽕", "value": "짬뽕", "spellings": [], "want": true}}], \
+embedding_text "얼큰한 짬뽕집"
 - "애기랑 갈 만한 데 일요일 점심 매운 거 빼고" → category_group "RESTAURANT", \
-menus [{{"text": "매운 거", "value": "매운 음식", "code": "FOOD_SPICY", \
-"want": false}}], hours [{{"text": "일요일", "day": "SUN"}}], \
+avoid_foods ["FOOD_SPICY"], hours [{{"text": "일요일", "day": "SUN"}}], \
 features [{{"text": "애기랑", "value": "아이 동반", "want": true}}], \
 embedding_text "아이와 가기 좋은 담백한 점심 식당"
 
 아래 형식의 JSON만 출력한다. 값이 없는 분류도 빼지 않는다.
 {{"text": null, "embedding_text": "<긍정형 검색어>", "category_group": null, \
-"avoid_categories": [], "locations": [], "codes": [], "menus": [], "hours": [], \
-"price": null, "place_name": null, "features": [], "change_summary": null}}"""
+"avoid_categories": [], "locations": [], "codes": [], "avoid_foods": [], "menus": [], \
+"hours": [], "price": null, "place_name": null, "features": [], "change_summary": null}}"""
 """요청 해석 시스템 지시. 예시 문장은 평가 질의(experiments/interpretation)와
 겹치지 않게 고른다."""
 
@@ -241,6 +245,7 @@ def _parse(
         avoid_categories=tuple(
             c for c in _list(data.get("avoid_categories")) if c in CATEGORY_NAMES
         ),
+        avoid_foods=tuple(c for c in _list(data.get("avoid_foods")) if c in FOOD_CODES),
     )
     return conditions, summary
 
@@ -286,14 +291,21 @@ def _location(data: dict) -> Location | None:
 
 
 def _menu(data: dict) -> Menu | None:
+    """LLM이 낸 메뉴를 읽는다. 음식 코드(`code`)를 내도 버린다. 메뉴에는 음식 종류를 붙이지
+    않는다."""
     text = _segment(data.get("text"))
     if text is None:
         return None
-    code = data.get("code")
+    value = _segment(data.get("value")) or text
+    spellings = (_segment(s) for s in _list(data.get("spellings")))
     return Menu(
         text=text,
-        value=_segment(data.get("value")) or text,
-        code=code if code in FOOD_CODES else None,
+        value=value,
+        spellings=tuple(
+            dict.fromkeys(
+                s for s in spellings if s is not None and s not in (text, value)
+            )
+        )[:MAX_SPELLINGS],
         want=data.get("want") is not False,
     )
 

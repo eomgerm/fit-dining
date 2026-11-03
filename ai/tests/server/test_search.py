@@ -71,32 +71,31 @@ EMPTY_SEGMENTS_BODY = {
     "hours": [],
     "features": [],
     "avoidCategories": [],
+    "avoidFoods": [],
 }
 """조각이 없을 때 응답 조건에 붙는 필드. null인 조각(`price`, `placeName`)은 빠진다."""
 
 SEGMENT_CONDITIONS = Conditions(
     text="션릉역 새벽까지 하는 3만원 이하 초밥",
     embedding_text="3만원 이하 초밥",
-    codes=("FOOD_JAPANESE",),
+    codes=("QUIET",),
     category_group="RESTAURANT",
     station="SEOLLEUNG",
     locations=(
         Location("션릉역", LocationKind.STATION, "선릉역"),
         Location("역삼역 걸어서 5분", LocationKind.STATION, "역삼역", 5, "3"),
     ),
-    menus=(
-        Menu("초밥", "초밥", "FOOD_JAPANESE"),
-        Menu("매운 거", "매운 음식", "FOOD_SPICY", want=False),
-    ),
+    menus=(Menu("초밥", "초밥", ("스시",)), Menu("오이", "오이", want=False)),
     hours=(Hours("새벽까지", open_until="02:00"),),
     price=Price("3만원 이하", max_won=30000),
     avoid_categories=("CAFE",),
+    avoid_foods=("FOOD_SPICY",),
 )
 
 SEGMENT_BODY = {
     "text": "션릉역 새벽까지 하는 3만원 이하 초밥",
     "embeddingText": "3만원 이하 초밥",
-    "codes": ["FOOD_JAPANESE"],
+    "codes": ["QUIET"],
     "categoryGroup": "RESTAURANT",
     "station": "SEOLLEUNG",
     "nearby": False,
@@ -111,13 +110,14 @@ SEGMENT_BODY = {
         },
     ],
     "menus": [
-        {"text": "초밥", "value": "초밥", "code": "FOOD_JAPANESE", "want": True},
-        {"text": "매운 거", "value": "매운 음식", "code": "FOOD_SPICY", "want": False},
+        {"text": "초밥", "value": "초밥", "spellings": ["스시"], "want": True},
+        {"text": "오이", "value": "오이", "spellings": [], "want": False},
     ],
     "hours": [{"text": "새벽까지", "openUntil": "02:00", "now": False}],
     "price": {"text": "3만원 이하", "maxWon": 30000, "cheap": False},
     "features": [],
     "avoidCategories": ["CAFE"],
+    "avoidFoods": ["FOOD_SPICY"],
 }
 """조각이 있는 조건의 응답 모양. null인 값은 빠진다."""
 
@@ -370,6 +370,12 @@ class TestSearch:
                 "locations": [{"text": "역삼역", "kind": "STATION", "walkMinutes": 0}],
             },
             {**SEGMENT_BODY, "avoidCodes": ["FOOD_SPICY"]},
+            {**SEGMENT_BODY, "avoidFoods": ["QUIET"]},
+            # v0.7까지의 메뉴 음식 코드는 이제 모르는 필드다.
+            {
+                **SEGMENT_BODY,
+                "menus": [{"text": "초밥", "value": "초밥", "code": "FOOD_JAPANESE"}],
+            },
         ],
     )
     def test_invalid_previous_is_new_search(

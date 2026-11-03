@@ -185,24 +185,30 @@ class TasteStore(Protocol):
 
 
 def select_tastes(
-    features: Sequence[TasteFeature], request_codes: Iterable[str]
+    features: Sequence[TasteFeature],
+    request_codes: Iterable[str],
+    menu_requested: bool = False,
 ) -> tuple[TasteFeature, ...]:
     """요청과 겹치는 묶음의 취향을 뺀다.
 
     묶음은 소음(성향 축), 방문 목적, 음식 종류, 매운맛 네 가지다. 요청에 한 묶음의
-    코드가 하나라도 있으면 그 묶음의 취향은 좋아함과 싫어함을 모두 뺀다. 중요 기준과
-    시설은 요청과 같은 코드여도 남긴다. 카드에서는 요청 쪽으로 한 번만 보인다.
-    코드가 없는 취향 문장(`free_texts`)은 묶음을 알 수 없어 거르지 않고 그대로 쓴다.
+    코드가 하나라도 있으면 그 묶음의 취향은 좋아함과 싫어함을 모두 뺀다. 메뉴로 거른
+    요청("라멘")도 음식 종류를 정한 것이라 음식 종류 취향을 뺀다. 중요 기준과 시설은
+    요청과 같은 코드여도 남긴다. 카드에서는 요청 쪽으로 한 번만 보인다. 코드가 없는 취향
+    문장(`free_texts`)은 묶음을 알 수 없어 거르지 않고 그대로 쓴다.
 
     Args:
         features: 취향 목록
         request_codes: 요청 해석이 낸 조건 코드. 인원은 목적 코드(`PURPOSE_GROUP` 등)로
             바꿔서 넘긴다.
+        menu_requested: 요청이 메뉴로 걸렀는지(`search.menu_terms`가 비지 않았는지)
 
     Returns:
         남은 취향. 순서는 그대로다.
     """
     request_groups = {_group(code) for code in request_codes} - {None}
+    if menu_requested:
+        request_groups.add(Layer.FOOD)
     return tuple(
         feature for feature in features if _group(feature.code) not in request_groups
     )

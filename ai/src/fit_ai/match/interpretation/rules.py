@@ -45,6 +45,9 @@ CATEGORY_WORDS = {
     "맥주": "BAR",
     "커피": "CAFE",
     "디저트": "CAFE",
+    "케이크": "CAFE",
+    "빙수": "CAFE",
+    "하이볼": "BAR",
     "맛집": "RESTAURANT",
     "한식": "RESTAURANT",
     "일식": "RESTAURANT",
@@ -59,7 +62,8 @@ CATEGORY_WORDS = {
     "매운": "RESTAURANT",
 }
 """규칙 해석에서 업종을 찾는 낱말. 앞에 있는 낱말이 먼저다.
-"카페 맛집"처럼 업종 이름이 함께 있으면 업종 이름을 따른다. 음식 낱말은 식당이다."""
+"카페 맛집"처럼 업종 이름이 함께 있으면 업종 이름을 따른다. 음식 낱말은 식당이고, 디저트는
+카페, 술 메뉴는 술집이다."""
 
 
 NEARBY_WORDS = ("근처", "주변", "가까운")
@@ -81,11 +85,11 @@ CODE_WORDS = {
     "PURPOSE_DATE": ("데이트", "기념일", "특별한 날"),
     "PURPOSE_GROUP": ("모임", "단체", "회식"),
     "PURPOSE_WORK": ("작업", "공부", "노트북", "카공"),
-    "FOOD_KOREAN": ("한식",),
-    "FOOD_JAPANESE": ("일식", "초밥", "스시", "라멘"),
-    "FOOD_CHINESE": ("중식", "중국집"),
-    "FOOD_WESTERN": ("양식", "파스타", "스테이크"),
-    "FOOD_ASIAN": ("아시안", "쌀국수"),
+    "FOOD_KOREAN": ("한식", "한국 음식", "한정식"),
+    "FOOD_JAPANESE": ("일식", "일본"),
+    "FOOD_CHINESE": ("중식", "중국", "중화"),
+    "FOOD_WESTERN": ("양식", "서양", "이탈리", "프렌치", "프랑스", "스페인", "멕시"),
+    "FOOD_ASIAN": ("아시안", "아시아", "동남아", "베트남", "태국", "인도"),
     "FOOD_SPICY": ("매운", "매콤", "얼큰"),
     "UNIQUE_CONCEPT": ("컨셉", "독특"),
     "FAST_SERVING": ("빨리 나오", "빨리 먹"),
@@ -97,44 +101,39 @@ CODE_WORDS = {
 }
 """규칙 해석에서 조건 코드를 찾는 낱말. "리뷰"의 "뷰", "비싼"의 "싼"처럼 다른 말에
 섞이는 짧은 낱말은 넣지 않는다. 시설 `GROUP`은 모임과 헷갈리지 않게 "단체석"으로만
-찾는다. "저렴"은 특징이 아니라 가격이다(`_CHEAP`)."""
+찾는다. "저렴"은 특징이 아니라 가격이다(`_CHEAP`). 음식 종류 코드는 음식 종류나 나라를 말한
+낱말로만 찾는다. 메뉴("라멘")는 메뉴 조각이다(`MENU_WORDS`). 코드 확인은 이 낱말이 없는데 LLM이
+낸 음식 종류 코드를 뗀다."""
 
 
 MENU_WORDS = {
-    "초밥": ("초밥", "FOOD_JAPANESE"),
-    "스시": ("초밥", "FOOD_JAPANESE"),
-    "라멘": ("라멘", "FOOD_JAPANESE"),
-    "오마카세": ("오마카세", "FOOD_JAPANESE"),
-    "일식": ("일식", "FOOD_JAPANESE"),
-    "파스타": ("파스타", "FOOD_WESTERN"),
-    "스파게티": ("파스타", "FOOD_WESTERN"),
-    "스테이크": ("스테이크", "FOOD_WESTERN"),
-    "양식": ("양식", "FOOD_WESTERN"),
-    "쌀국수": ("쌀국수", "FOOD_ASIAN"),
-    "팟타이": ("팟타이", "FOOD_ASIAN"),
-    "마라탕": ("마라탕", "FOOD_CHINESE"),
-    "짜장": ("짜장면", "FOOD_CHINESE"),
-    "짬뽕": ("짬뽕", "FOOD_CHINESE"),
-    "중식": ("중식", "FOOD_CHINESE"),
-    "국밥": ("국밥", None),
-    "삼겹살": ("삼겹살", None),
-    "한식": ("한식", "FOOD_KOREAN"),
-    "국물": ("국물 요리", None),
-    "와인": ("와인", None),
-    "하이볼": ("하이볼", None),
-    "칵테일": ("칵테일", None),
-    "디카페인": ("디카페인", None),
-    "케이크": ("케이크", None),
-    "디저트": ("디저트", None),
-    "브런치": ("브런치", None),
-    "고기": ("고기", None),
-    "고깃": ("고기", None),
-    "매운": ("매운 음식", "FOOD_SPICY"),
-    "매콤": ("매운 음식", "FOOD_SPICY"),
-    "얼큰": ("매운 음식", "FOOD_SPICY"),
+    "초밥": "초밥",
+    "스시": "초밥",
+    "라멘": "라멘",
+    "오마카세": "오마카세",
+    "파스타": "파스타",
+    "스파게티": "파스타",
+    "스테이크": "스테이크",
+    "쌀국수": "쌀국수",
+    "팟타이": "팟타이",
+    "마라탕": "마라탕",
+    "짜장": "짜장면",
+    "짬뽕": "짬뽕",
+    "국밥": "국밥",
+    "삼겹살": "삼겹살",
+    "국물": "국물 요리",
+    "와인": "와인",
+    "하이볼": "하이볼",
+    "칵테일": "칵테일",
+    "디카페인": "디카페인",
+    "케이크": "케이크",
+    "디저트": "디저트",
+    "브런치": "브런치",
+    "고기": "고기",
+    "고깃": "고기",
 }
-"""규칙 해석에서 메뉴·음식을 찾는 낱말과 (표준 이름, 음식 코드). 같은 음식의 다른
-표기("스시")는 표준 이름("초밥")으로 바꾼다. "고깃집"은 "고기"를 품지 않아 따로 둔다."""
+"""규칙 해석에서 메뉴를 찾는 낱말과 표준 이름. 같은 메뉴의 다른 표기("스시")는 표준 이름
+("초밥")으로 바꾼다. "고깃집"은 "고기"를 품지 않아 따로 둔다."""
 
 
 FEATURE_WORDS = {
@@ -267,6 +266,7 @@ def interpret_by_rules(query: str, previous: Conditions | None = None) -> Condit
             place_name=None,
             features=parts.features,
             avoid_categories=parts.avoid_categories,
+            avoid_foods=parts.avoid_foods,
         )
     category_group = parts.category_group or previous.category_group
     return _assemble(
@@ -274,7 +274,7 @@ def interpret_by_rules(query: str, previous: Conditions | None = None) -> Condit
         embedding_text=_without_location(
             _join(previous.embedding_text, query), category_group
         ),
-        codes=[*_kept_codes(previous, query, codes, parts.menus), *codes],
+        codes=[*_kept_codes(previous, query, codes, parts.avoid_foods), *codes],
         category_group=category_group,
         # 새로 말한 지역이 있으면 그것을 따른다. "근처로"라고 하면 이전 역을 버린다.
         locations=parts.locations or locations_of(previous),
@@ -284,6 +284,11 @@ def interpret_by_rules(query: str, previous: Conditions | None = None) -> Condit
         place_name=previous.place_name,
         features=_merged(previous.features, parts.features),
         avoid_categories=(*previous.avoid_categories, *parts.avoid_categories),
+        # 이번에 원한 음식 종류는 이전에 뺐어도 다시 원하는 것이다.
+        avoid_foods=(
+            *(c for c in previous.avoid_foods if c not in codes),
+            *parts.avoid_foods,
+        ),
     )
 
 
@@ -294,6 +299,7 @@ class _RuleParts:
     codes: tuple[str, ...]
     category_group: str | None
     avoid_categories: tuple[str, ...]
+    avoid_foods: tuple[str, ...]
     locations: tuple[Location, ...]
     menus: tuple[Menu, ...]
     hours: tuple[Hours, ...]
@@ -305,6 +311,7 @@ def _rule_parts(query: str) -> _RuleParts:
     """요청문에서 규칙으로 찾을 수 있는 조각을 모두 찾는다."""
     negated = " ".join(_NEGATED_WIDE.findall(query))
     codes = []
+    avoid_foods = ["FOOD_SPICY"] if _SPICY_AVOID.search(query) else []
     for code, words in CODE_WORDS.items():
         if not _has(query, words):
             continue
@@ -313,9 +320,10 @@ def _rule_parts(query: str) -> _RuleParts:
             # "북적이는 데 말고"는 반대 극(조용함)을 바라는 말이다.
             codes.append(opposite)
         elif _has(negated, words) and code.startswith("FOOD_"):
-            # "매운 거 말고", "일식 말고"는 바라는 쪽 코드가 없어 메뉴의 피함으로 둔다.
-            continue
-        else:
+            # "매운 거 말고", "일식 말고"는 바라는 쪽 코드가 없어 빼 달라는 음식으로 둔다.
+            avoid_foods.append(code)
+        elif code not in avoid_foods:
+            # "안 매운"의 "매운"은 원하는 매운맛이 아니다.
             codes.append(code)
     for count in _PEOPLE.findall(query):
         if int(count) == 1:
@@ -337,6 +345,7 @@ def _rule_parts(query: str) -> _RuleParts:
         codes=tuple(codes),
         category_group=category_group,
         avoid_categories=avoid_categories,
+        avoid_foods=tuple(dict.fromkeys(avoid_foods)),
         locations=_rule_locations(wanted),
         menus=menus,
         hours=_rule_hours(query),
@@ -346,16 +355,12 @@ def _rule_parts(query: str) -> _RuleParts:
 
 
 def _rule_menus(query: str, negated: str) -> tuple[Menu, ...]:
-    """메뉴·음식 낱말을 찾는다. "말고" 앞이나 "맵지 않은"이면 피하는 음식이다."""
-    avoid_spicy = _SPICY_AVOID.search(query)
-    menus = [
-        Menu(word, value, code, want=word not in negated)
-        for word, (value, code) in MENU_WORDS.items()
-        if word in query and not (avoid_spicy and code == "FOOD_SPICY")
-    ]
-    if avoid_spicy:
-        menus.append(Menu(avoid_spicy.group(), "매운 음식", "FOOD_SPICY", want=False))
-    return tuple(menus)
+    """메뉴 낱말을 찾는다. "말고" 앞이면 피하는 메뉴다."""
+    return tuple(
+        Menu(word, value, want=word not in negated)
+        for word, value in MENU_WORDS.items()
+        if word in query
+    )
 
 
 def _rule_locations(query: str) -> tuple[Location, ...]:
@@ -447,13 +452,16 @@ def _merged(before: tuple, after: tuple) -> tuple:
 
 
 def _kept_codes(
-    previous: Conditions, query: str, codes: list[str], menus: tuple[Menu, ...]
+    previous: Conditions,
+    query: str,
+    codes: list[str],
+    avoid_foods: tuple[str, ...] | list[str],
 ) -> list[str]:
-    """후속에서 남길 이전 코드. 이번 요청이 "말고"로 뺐거나, 반대 극을 바라거나, 피하는
+    """후속에서 남길 이전 코드. 이번 요청이 "말고"로 뺐거나, 반대 극을 바라거나, 빼 달라는
     음식이 된 코드는 버린다. LLM이 업종을 바꾸며 이전 조건을 통째로 버리는 일을 막는다
     ("카페 말고 술집으로")."""
     negated = " ".join(_NEGATED_WIDE.findall(query))
-    avoided = {m.code for m in menus if not m.want}
+    avoided = set(avoid_foods)
     kept = []
     for code in _known_codes(list(previous.codes)):
         opposite = FEATURES[code].opposite if code in FEATURES else None

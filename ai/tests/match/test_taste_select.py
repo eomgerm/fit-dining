@@ -180,6 +180,13 @@ class TestSelectTastes:
         assert "FOOD_JAPANESE" not in codes(selected)
         assert "FOOD_SPICY" in codes(selected)
 
+    def test_menu_request_drops_cuisine(self) -> None:
+        """취향고르기_메뉴로거른요청이면_음식종류취향을빼고매운맛은남긴다"""
+        selected = select_tastes(FEATURES, [], menu_requested=True)
+
+        assert "FOOD_JAPANESE" not in codes(selected)
+        assert "FOOD_SPICY" in codes(selected)
+
     def test_spicy_request_drops_spicy(self) -> None:
         """취향고르기_요청에매운맛이있으면_매운맛취향을뺀다"""
         selected = select_tastes(FEATURES, ["FOOD_SPICY"])

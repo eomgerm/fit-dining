@@ -4,7 +4,8 @@
 ③ 카드 만들기 순서다. 뽑힌 장소가 없으면 점수를 내지 않고 결과 없음 이유를 만든다.
 LLM은 요청 해석에만 쓰고, 순서는 핏 점수로 정한다. 근처 검색도 같다(docs/comparison/spec.md
 3장). 후보를 거를 지역은 이번 요청에 말한 지역, 지도 영역, 이전 요청의 지역 순서로 정한다.
-영업시간과 가격은 안 맞는다고 확인된 곳만 거른다(docs/comparison/spec.md 4.2).
+영업시간과 가격은 안 맞는다고 확인된 곳만 거르고, 메뉴는 그 메뉴를 판다고 확인된 곳만
+남긴다(docs/comparison/spec.md 4.2).
 HTTP 요청·응답 모양과 폴백 코드로 바꾸는 일은 API(`server/search.py`)가 한다.
 """
 
@@ -28,6 +29,7 @@ from fit_ai.match.candidates import (
     PlaceStore,
     RegionArea,
     StationArea,
+    menu_key,
 )
 from fit_ai.match.cards import Card, build_card
 from fit_ai.match.conditions import CATEGORY_NAMES, STATION_NAMES
@@ -43,6 +45,7 @@ from fit_ai.match.interpretation.segments import (
     Hours,
     Location,
     LocationKind,
+    Menu,
     Price,
 )
 from fit_ai.match.scoring import baseline_for, scope_of, score_places
@@ -62,6 +65,23 @@ PRICE_MARGIN = 0.1
 
 NEXT_DAY_BEFORE = 6 * 60
 """이 시각 전의 마감 시각 요청은 다음 날 새벽으로 본다("새벽 2시까지"는 그날 26시)."""
+
+BROAD_MENUS = frozenset(
+    menu_key(word)
+    for word in (
+        *("커피", "음료", "음료수", "마실 것", "마실 거", "차"),
+        *("술", "주류", "맥주", "소주", "와인", "칵테일", "사케", "안주"),
+        *("디저트", "간식", "빵", "베이커리", "브런치"),
+        *("고기", "해산물", "면", "면 요리", "국물", "국물 요리"),
+        *("식사", "밥", "요리", "음식", "분식"),
+        *("한식", "일식", "중식", "양식", "아시안", "매운 음식"),
+    )
+)
+"""메뉴로 거르지 않는 넓은 말. 여러 메뉴를 묶어 부르는 말이라 메뉴판에 그 이름이 잘 오르지
+않는다. 원본 300곳에서 커피 메뉴가 있는 카페 60곳 중 메뉴 이름에 "커피"가 든 곳은 14곳,
+"선릉역 디저트 카페" 32곳 중 메뉴 이름에 "디저트"가 든 곳은 0곳이었다(2026-11-03). 넓은 말과
+메뉴를 잇는 사전은 보류했다. 그때까지 업종과 요청문 유사도로만 찾는다. 음식 종류는 메뉴가
+아니지만 LLM이 메뉴로 낼 때를 막으려고 넣는다."""
 
 _REGION = re.compile(r"[가-힣]+?(\d*)([동구])")
 """동이나 구 이름. "역삼1동"처럼 숫자가 붙은 행정동도 받는다. 그 밖의 동네·랜드마크
@@ -234,6 +254,14 @@ def empty_reason(
     where = "이 지역" if in_map_bounds else "·".join(map(_area_label, areas)) or None
     what = CATEGORY_NAMES.get(conditions.category_group or "", "가게")
     scope = f"{where} {what}" if where else what
+    menus = [m.value for m in conditions.menus if menu_terms((m,))]
+    if menus:
+        names = "·".join(menus)
+        both = " 모두" if len(menus) > 1 else ""
+        return EmptyReason(
+            f"{scope} 중 {names}{_object(names)}{both} 파는 곳이 없어요",
+            "메뉴를 바꾸거나 빼고 다시 찾아 보세요",
+        )
     facilities = conditions.facilities
     if len(facilities) == 1:
         phrase, name = FACILITY_PHRASES[facilities[0]]
@@ -292,6 +320,14 @@ def _topic(word: str) -> str:
     if not "가" <= last <= "힣":
         return "은(는)"
     return "은" if (ord(last) - ord("가")) % 28 else "는"
+
+
+def _object(word: str) -> str:
+    """목적 조사. 받침이 있으면 "을", 없으면 "를"이다. 한글이 아니면 "을(를)"이다."""
+    last = word[-1] if word else ""
+    if not "가" <= last <= "힣":
+        return "을(를)"
+    return "을" if (ord(last) - ord("가")) % 28 else "를"
 
 
 def _where(
@@ -456,6 +492,29 @@ def price_range(price: Price | None) -> tuple[int | None, int | None]:
     )
 
 
+def menu_terms(menus: Sequence[Menu]) -> tuple[tuple[str, ...], ...]:
+    """메뉴 조각을 메뉴 거르기의 찾을 말로 바꾼다.
+
+    원하는 메뉴마다 사용자 말, 표준 이름, 다른 표기를 `menu_key` 꼴로 바꿔 한 묶음으로
+    둔다. 묶음 중 하나라도 메뉴판에 있으면 그 메뉴를 판다고 본다. 사용자 말이나 표준 이름이
+    넓은 말(`BROAD_MENUS`)이면 거르지 않는다. 피하는 메뉴("오이 빼고")도 거르지 않는다.
+    그 메뉴가 메뉴판에 있어도 빼 달라는 뜻은 아니어서다.
+
+    Args:
+        menus: 메뉴 조각
+
+    Returns:
+        메뉴마다 찾을 말. 거를 메뉴가 없으면 빈 튜플이다.
+    """
+    terms = []
+    for menu in menus:
+        if not menu.want or {menu_key(menu.text), menu_key(menu.value)} & BROAD_MENUS:
+            continue
+        words = (menu_key(w) for w in (menu.text, menu.value, *menu.spellings))
+        terms.append(tuple(dict.fromkeys(w for w in words if w)))
+    return tuple(dict.fromkeys(words for words in terms if words))
+
+
 def _clock_minutes(clock: str | None) -> int | None:
     """시각("HH:MM")을 0시부터 센 분으로 바꾼다. 없거나 모양이 틀리면 None이다."""
     hour, _, minute = (clock or "").partition(":")
@@ -475,6 +534,7 @@ def _place_filter(conditions: Conditions, areas: tuple[Area, ...]) -> PlaceFilte
         hours=open_hours(conditions.hours),
         min_price=min_price,
         max_price=max_price,
+        menus=menu_terms(conditions.menus),
     )
 
 
@@ -489,7 +549,15 @@ def _score_cards(
     Raises:
         StoreError: 점수 기준을 만들 장소를 읽지 못했을 때
     """
-    tastes = select_tastes(taste.features, conditions.codes) if taste else ()
+    tastes = (
+        select_tastes(
+            taste.features,
+            conditions.codes,
+            menu_requested=bool(menu_terms(conditions.menus)),
+        )
+        if taste
+        else ()
+    )
     scored = score_places(
         candidates,
         conditions.codes,

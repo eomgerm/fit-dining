@@ -8,6 +8,8 @@ import re
 from dataclasses import replace
 
 from fit_ai.match.interpretation.request import (
+    FOOD_CODES,
+    FOOD_TYPES,
     Conditions,
     _assemble,
     _plain,
@@ -15,6 +17,7 @@ from fit_ai.match.interpretation.request import (
 )
 from fit_ai.match.interpretation.rules import (
     _NEGATION,
+    CODE_WORDS,
     VALUE_WORDS,
     _has,
     _kept_codes,
@@ -23,7 +26,6 @@ from fit_ai.match.interpretation.rules import (
 from fit_ai.match.interpretation.segments import (
     MAX_SEGMENTS,
     LocationKind,
-    Menu,
     PlaceName,
 )
 
@@ -40,6 +42,10 @@ def _checked(query: str, previous: Conditions | None, **llm) -> Conditions:
       정확하다.
     - 메뉴·특징: LLM이 놓친 것을 규칙 값으로 더한다. 이번 요청에 피하는 말이 없으면 이번
       요청의 메뉴는 원함으로 되돌린다.
+    - 음식 종류·매운맛: LLM이 놓친 코드를 규칙 값으로 더한다. 음식 종류나 나라를 말한
+      낱말이 없는데 LLM이 낸 음식 종류 코드는 뗀다. gpt-4o-mini는 지시해도 "초밥"에
+      일식을 붙였다(2026-11-03 평가). 이번 요청에 피하는 말이 없으면 새로 빼 달라고 한
+      음식은 원하는 코드로 되돌린다("매운 거 먹고 싶다").
     - 가성비: 싼 곳을 찾는데 가성비 낱말이 없으면 뗀다.
     - 업종: LLM이 비우면 규칙 값을 쓴다.
     - 후속의 코드: 이번 요청이 빼지 않은 이전 코드는 남긴다.
@@ -61,15 +67,26 @@ def _checked(query: str, previous: Conditions | None, **llm) -> Conditions:
     elif not locations:
         locations = parts.locations or (locations_of(previous) if previous else ())
 
-    menus = _with_rule_items(_with_rule_codes(llm["menus"], parts.menus), parts.menus)
+    menus = _with_rule_items(llm["menus"], parts.menus)
+    before_codes = previous.codes if previous is not None else ()
+    codes = [
+        c
+        for c in llm["codes"]
+        if isinstance(c, str)
+        and (c not in FOOD_TYPES or c in before_codes or _has(query, CODE_WORDS[c]))
+    ]
+    codes += [c for c in parts.codes if c in FOOD_CODES and c not in codes]
+    avoid_foods = [*llm["avoid_foods"], *parts.avoid_foods]
     if not _NEGATION.search(query):
         menus = tuple(
             replace(m, want=True) if _plain(m.text) in _plain(query) else m
             for m in menus
         )
-    codes = [c for c in llm["codes"] if isinstance(c, str)]
+        before = previous.avoid_foods if previous is not None else ()
+        codes += [c for c in avoid_foods if c not in before]
+        avoid_foods = [c for c in avoid_foods if c in before]
     if previous is not None:
-        codes = [*_kept_codes(previous, query, codes, menus), *codes]
+        codes = [*_kept_codes(previous, query, codes, avoid_foods), *codes]
     price = parts.price or llm["price"]
     if price is not None and price.cheap and not _has(query, VALUE_WORDS):
         had_value = previous is not None and "VALUE_FOR_MONEY" in previous.codes
@@ -93,21 +110,8 @@ def _checked(query: str, previous: Conditions | None, **llm) -> Conditions:
         place_name=_not_similar(llm["place_name"], query),
         features=_with_rule_items(llm["features"], parts.features),
         avoid_categories=(*llm["avoid_categories"], *parts.avoid_categories),
+        avoid_foods=tuple(avoid_foods),
     )
-
-
-def _with_rule_codes(llm: tuple[Menu, ...], rule: tuple[Menu, ...]) -> tuple[Menu, ...]:
-    """LLM이 음식 코드를 비운 메뉴에 이름이 같은 규칙 메뉴의 코드를 채운다("매운 음식")."""
-
-    def filled(menu: Menu) -> Menu:
-        if menu.code is not None:
-            return menu
-        twin = next(
-            (r for r in rule if r.code and _same_name(r.value, menu.value)), None
-        )
-        return replace(menu, code=twin.code) if twin else menu
-
-    return tuple(map(filled, llm))
 
 
 def _not_similar(name: PlaceName | None, query: str) -> PlaceName | None:

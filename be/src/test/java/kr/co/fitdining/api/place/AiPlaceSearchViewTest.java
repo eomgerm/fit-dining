@@ -17,7 +17,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 /**
  * AI가 읽는 뷰 {@code ai_place_search}의 모양(place-ai-search spec "AI가 읽는 뷰", AC-24)을 앱 계정으로 확인한다. 검색 2차
- * 컬럼(V17)도 본다.
+ * 컬럼(V17~V19)도 본다.
  */
 class AiPlaceSearchViewTest extends PostgresTestSupport {
 
@@ -71,7 +71,7 @@ class AiPlaceSearchViewTest extends PostgresTestSupport {
 				WHERE table_name = 'ai_place_search' ORDER BY ordinal_position""", String.class))
 				.containsExactly("place_id", "category_group", "station", "lat", "lng", "facilities", "profile",
 						"summary_vector", "name", "food_type", "dong", "district", "subways", "hours", "menus",
-						"pet_allowed", "parking_free", "corkage_allowed", "price", "analyzed_review_count");
+						"pet_allowed", "parking_free", "corkage_allowed", "price", "analyzed_review_count", "category");
 	}
 
 	@Test
@@ -141,13 +141,14 @@ class AiPlaceSearchViewTest extends PostgresTestSupport {
 		insertProfile(id);
 		jdbc.update("""
 				UPDATE places SET food_type = 'FOOD_WESTERN', dong = '역삼동', district = '강남구',
-				    pet_allowed = true, parking_free = false
+				    pet_allowed = true, parking_free = false, category = '카페,디저트'
 				WHERE place_id = ?""", id);
 
 		assertThat(jdbc.queryForMap("""
-				SELECT name, food_type, dong, district, pet_allowed, parking_free, corkage_allowed, price
+				SELECT name, category, food_type, dong, district, pet_allowed, parking_free, corkage_allowed, price
 				FROM ai_place_search WHERE place_id = ?""", id))
-				.containsEntry("name", "뷰 시험 카페").containsEntry("food_type", "FOOD_WESTERN")
+				.containsEntry("name", "뷰 시험 카페").containsEntry("category", "카페,디저트")
+				.containsEntry("food_type", "FOOD_WESTERN")
 				.containsEntry("dong", "역삼동").containsEntry("district", "강남구")
 				.containsEntry("pet_allowed", true).containsEntry("parking_free", false)
 				.containsEntry("corkage_allowed", null).containsEntry("price", null);

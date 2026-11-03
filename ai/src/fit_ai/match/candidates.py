@@ -6,6 +6,7 @@
 취향은 쓰지 않는다. 취향은 ② 점수에서만 쓴다(docs/comparison/spec.md 4.2).
 """
 
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Protocol
@@ -132,6 +133,10 @@ class PlaceFilter:
         min_price: 가게 가격(`price.store_price`) 하한(원). 가격을 모르는 장소는 남긴다.
             None이면 거르지 않는다.
         max_price: 가게 가격 상한(원). 하한과 같다.
+        menus: 요청한 메뉴. 메뉴마다 찾을 말(`menu_key`로 바꾼 사용자 말, 표준 이름, 다른
+            표기)이다. 모든 메뉴에 대해 그중 하나가 메뉴판의 메뉴 이름, 네이버 업종 이름,
+            가게 이름 중 하나에 들어 있는 장소만 남긴다. 메뉴판이 없는 장소도 업종 이름과
+            가게 이름으로 본다. 비어 있으면 메뉴로 거르지 않는다.
     """
 
     category_group: str | None = None
@@ -141,6 +146,26 @@ class PlaceFilter:
     hours: OpenHours | None = None
     min_price: int | None = None
     max_price: int | None = None
+    menus: tuple[tuple[str, ...], ...] = ()
+
+
+_NOT_KEY = re.compile(r"[^0-9a-z가-힣]")
+"""메뉴 맞추기에서 지우는 글자. 소문자로 바꾼 뒤 숫자, 영문, 한글 음절만 남긴다."""
+
+
+def menu_key(text: str) -> str:
+    """메뉴를 맞출 때 견주는 꼴. 띄어쓰기, 괄호, 기호를 지우고 영문은 소문자로 바꾼다.
+
+    "[대표] 등심 돈까스(200g)"는 "대표등심돈까스200g"이다. 저장소는 메뉴 이름, 업종 이름,
+    가게 이름을 이 꼴로 바꿔 찾을 말이 들어 있는지 본다(`pg_store.FIND_SQL`과 같다).
+
+    Args:
+        text: 메뉴 이름이나 찾을 말
+
+    Returns:
+        견주는 꼴. 남는 글자가 없으면 빈 문자열이다.
+    """
+    return _NOT_KEY.sub("", text.lower())
 
 
 @dataclass(frozen=True)

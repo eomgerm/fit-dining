@@ -169,7 +169,6 @@ def _check(case: dict, conditions: Conditions) -> dict:
 def _segments(conditions: Conditions) -> dict:
     """결과 파일에 남길 분류별 조각"""
     data = asdict(conditions)
-    data["avoid_menus"] = [m for m in data["menus"] if not m["want"]]
     return {key: data[key] for key in SEGMENT_CHECKS}
 
 
@@ -221,15 +220,6 @@ def _check_price(expected: dict | None, conditions: Conditions) -> bool:
     return all(getattr(got, k) == v for k, v in expected.items())
 
 
-def _check_avoid_menus(expected: list[str], conditions: Conditions) -> bool:
-    """피하는 메뉴가 기대한 것과 같은지 본다. 기대는 음식 코드나 표준 이름이다."""
-    avoided = [m for m in conditions.menus if not m.want]
-    found = all(
-        any(e == m.code or _same(e, m.value) for m in avoided) for e in expected
-    )
-    return found and len(avoided) <= len(expected)
-
-
 def _check_place_name(expected: str | None, conditions: Conditions) -> bool:
     got = conditions.place_name
     return _same(expected, got.value if got else None)
@@ -242,7 +232,7 @@ SEGMENT_CHECKS = {
     "price": _check_price,
     "place_name": _check_place_name,
     "features": _check_values("features"),
-    "avoid_menus": _check_avoid_menus,
+    "avoid_foods": lambda e, c: set(e) == set(c.avoid_foods),
     "avoid_categories": lambda e, c: set(e) == set(c.avoid_categories),
 }
 """분류별 조각 채점. 기대 답(`expect`)의 키와 같은 이름이다."""
