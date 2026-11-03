@@ -10,21 +10,26 @@ from dataclasses import asdict
 
 from fit_ai.match.conditions import CATEGORY_NAMES, STATION_NAMES
 from fit_ai.match.interpretation.checks import _checked
-from fit_ai.match.interpretation.codes import FOOD_CODES, GROUP_SIZE
+from fit_ai.match.interpretation.codes import (
+    FACILITY_CODES,
+    FEATURE_CODES,
+    FLAVOR_CODES,
+    FOOD_CODES,
+)
+from fit_ai.match.interpretation.merge import merge
 from fit_ai.match.interpretation.request import (
     CODE_PHRASES,
     MAX_WALK_MINUTES,
     Conditions,
-    _join,
-    _known_codes,
     _without_location,
-    locations_of,
 )
+from fit_ai.match.interpretation.rules import _kept_codes
 from fit_ai.match.interpretation.segments import (
     DAYS,
     MAX_SEGMENT_LENGTH,
     MAX_SEGMENTS,
     MAX_SPELLINGS,
+    Feature,
     FeatureText,
     Hours,
     Location,
@@ -33,6 +38,12 @@ from fit_ai.match.interpretation.segments import (
     PlaceName,
     Price,
 )
+
+REPEAT_SHARE = 0.7
+"""후속에서 LLM이 이전 벡터용 문장을 다시 썼다고 보는 낱말 비율"""
+
+MAX_PARTY_SIZE = 100
+"""인원 상한. 넘으면 인원이 없는 것으로 본다."""
 
 MAX_CHANGE_SUMMARY_LENGTH = 60
 """LLM이 쓴 바뀐 점 문구의 길이 상한. 넘으면 기본 문구를 쓴다."""
@@ -45,13 +56,14 @@ DEFAULT_CHANGE_SUMMARY = "요청하신 조건을 반영했어요"
 SYSTEM_PROMPT = f"""\
 너는 장소 검색 서비스의 요청 해석기다. 사용자의 검색 요청을 분류별로 나눠 조건으로 \
 바꾼다. 조각마다 사용자가 쓴 말은 text에 그대로 두고, 철자가 틀렸거나 줄여 쓴 말은 \
-고쳐서 value에 표준 이름으로 쓴다.
-- category_group: RESTAURANT(식당), CAFE(카페), BAR(술집) 중 하나. \
+고쳐서 value에 표준 이름으로 쓴다. 원하면 want는 true다. "말고", "빼고", "싫어", "않은", \
+"없는"처럼 피한다고 분명히 말했을 때만 false다.
+- categories: 업종 [{{"code", "want"}}]. code는 RESTAURANT(식당), CAFE(카페), BAR(술집). \
+원하는 업종은 하나까지다. "카페 말고"는 CAFE want false다. \
 음식 종류나 식사 메뉴(한식, 라멘, 파스타, 국물 요리 등)를 말하면 RESTAURANT다. \
 맛집, 밥집, 먹을 데처럼 식사하는 곳을 찾는 말도 RESTAURANT다. \
 술 마시는 곳(이자카야, 포차, 호프, 와인바, 칵테일바, 루프탑 바 등)과 술 메뉴(하이볼, \
-와인)는 BAR다. 커피, 음료, 디저트 메뉴(케이크, 빙수)는 CAFE다. 알 수 없으면 null.
-- avoid_categories: "카페 말고"처럼 빼 달라는 업종. 없으면 빈 목록이다.
+와인)는 BAR다. 커피, 음료, 디저트 메뉴(케이크, 빙수)는 CAFE다. 알 수 없으면 빈 목록이다.
 - locations: 지역 목록. 없으면 빈 목록이다. "강남역이나 역삼역"처럼 여럿이면 모두 \
 넣는다. [{{"text", "kind", "value", "walk_minutes", "exit"}}]. kind는 STATION(역. \
 "강남", "역삼"처럼 역 이름만 써도, "강남역 근처"처럼 근처를 붙여도 역이다), \
@@ -60,28 +72,29 @@ AREA(동네, 거리, 랜드마크. 신사동, 가로수길, 코엑스), HERE(근
 집 근처처럼 어딘지 알 수 없는 곳) 중 하나다. value는 STATION이면 "○○역", AREA면 \
 표준 이름, HERE와 UNKNOWN이면 null이다. walk_minutes는 "걸어서 5분"의 분, exit는 \
 "11번 출구"의 "11"이고 없으면 null이다.
-- codes: 아래 코드표에서 요청에 있는 조건을 빠짐없이 고른다. 없으면 빈 목록이다. \
-부정한 조건도 바라는 쪽 코드로 반드시 넣는다("시끄러운 곳 말고"는 QUIET, \
-"오래 기다리는 데 싫어"는 SHORT_WAIT). \
-인원은 1명이면 PURPOSE_SOLO, {GROUP_SIZE}명 이상이면 PURPOSE_GROUP으로 바꾼다. \
+- features: 장소 특징 [{{"text", "value", "code"}}]. code는 아래 특징 코드표에서 \
+고르고, 코드표에 없는 특징(콘센트, 반려견, 아이 동반, 룸 등)이면 null이다. \
+요청에 있는 특징을 빠짐없이 넣고 없는 특징은 넣지 않는다. \
+부정한 특징도 바라는 쪽 코드로 반드시 넣는다("시끄러운 곳 말고"는 QUIET, \
+"오래 기다리는 데 싫어"는 SHORT_WAIT). "모임", "회식"은 PURPOSE_GROUP이다. \
 "가성비"는 VALUE_FOR_MONEY다. "저렴한", "싼", "비싸지 않은"은 VALUE_FOR_MONEY가 \
-아니라 price다.
-- 음식 종류 코드(FOOD_KOREAN, FOOD_JAPANESE, FOOD_CHINESE, FOOD_WESTERN, FOOD_ASIAN)는 \
-한식, 일식, 중국집, 양식, 베트남 음식처럼 음식 종류를 직접 말했을 때만 codes에 넣는다. \
-메뉴 이름(라멘, 돈가스, 파스타)만으로 음식 종류 코드를 넣지 않는다. 매운 음식을 원하면 \
-FOOD_SPICY다.
-- codes에는 요청에 없는 조건을 넣지 않는다. "식당"이라는 말만으로 음식 종류 코드를, \
-"모임", "회식", 인원만으로 시설 GROUP을 넣지 않는다. GROUP은 단체석, 단체 예약처럼 \
-시설을 말할 때만 넣는다.
-- avoid_foods: "일식 말고", "매운 거 빼고"처럼 빼 달라는 음식 종류나 매운맛의 코드. \
-없으면 빈 목록이다.
-- menus: 먹고 마시는 메뉴(돈가스, 라멘, 하이볼, 케이크, 커피, 술, 디저트). 음식 종류(한식, \
-일식)와 매운맛은 menus가 아니라 codes다. 없으면 빈 목록이다. \
+아니라 price다. value는 표준 이름이다("충전"은 "콘센트", "강아지랑"은 "반려견").
+- facilities: 시설 코드 목록. PARKING(주차), WIFI(와이파이), GROUP(단체석, 단체 예약), \
+RESERVATION(예약). "모임", "회식", 인원만으로 GROUP을 넣지 않는다. 없으면 빈 목록이다.
+- party_size: 인원 수("5명"이면 5, "혼자"면 1). 없으면 null이다.
+- food_types: 음식 종류 [{{"code", "want"}}]. code는 FOOD_KOREAN(한식), FOOD_JAPANESE(일식), \
+FOOD_CHINESE(중식), FOOD_WESTERN(양식), FOOD_ASIAN(아시아 음식). 한식, 일식, 중국집, \
+양식, 베트남 음식처럼 음식 종류를 직접 말했을 때만 넣는다. 메뉴 이름(라멘, 돈가스, \
+파스타)만으로, "식당"이라는 말만으로 넣지 않는다. "일식 말고"는 FOOD_JAPANESE want \
+false다. 없으면 빈 목록이다.
+- flavors: 맛 [{{"code", "want"}}]. code는 SPICY(매운맛)다. 매운 음식을 원하면 want \
+true, "매운 거 빼고", "안 매운"은 false다. 없으면 빈 목록이다.
+- menus: 먹고 마시는 메뉴(돈가스, 라멘, 하이볼, 케이크, 커피, 술, 디저트). 음식 \
+종류(한식, 일식)와 매운맛은 menus가 아니라 food_types, flavors다. 없으면 빈 목록이다. \
 [{{"text", "value", "spellings", "want"}}]. value는 표준 이름이다("스시"는 "초밥", \
 "스파게티"는 "파스타"). spellings는 메뉴판에 흔히 쓰는 같은 메뉴의 다른 \
 표기다("돈가스"는 ["돈까스", "돈카츠"]). 다른 메뉴나 더 넓은 말은 넣지 않고, 없으면 \
-빈 목록이다. want는 원하면 true다. "말고", "빼고", "싫어", "않은"처럼 피한다고 분명히 \
-말했을 때만 false다.
+빈 목록이다.
 - hours: 영업시간. 없으면 빈 목록이다. [{{"text", "day", "open_until", "open_from", \
 "now"}}]. day는 요일(MON, TUE, WED, THU, FRI, SAT, SUN)이고 없으면 null이다. \
 open_until은 그 시각 이후까지 여는 곳이다("늦게까지"는 "23:00", "새벽까지"는 \
@@ -93,64 +106,69 @@ open_until은 그 시각 이후까지 여는 곳이다("늦게까지"는 "23:00"
 - place_name: 가게 이름이나 체인 이름. 없으면 null이다. {{"text", "value"}}. \
 value는 표준 이름이다("스벅"은 "스타벅스"). "○○ 같은 곳"처럼 비슷한 곳을 찾는 \
 말은 가게 이름이 아니다.
-- features: 코드표에 없는 장소 특징(콘센트, 반려견, 아이 동반, 룸 등). 없으면 빈 \
-목록이다. [{{"text", "value", "want"}}]. value는 표준 이름이다("충전"은 "콘센트", \
-"강아지랑"은 "반려견").
 - embedding_text: 요청을 긍정형 검색어로 쓴다. 비우거나 줄이지 않는다. \
 "찾고 있어요", "찾습니다" 같은 말은 붙이지 않는다. \
 역과 업종만 있는 짧은 요청도 그대로 쓴다. \
 부정 표현은 바라는 쪽으로 바꾸고, 리뷰에서 실제로 쓰는 말로 쓴다("시끄러운 곳 말고" \
 → "조용한 곳", "오래 기다리는 데 싫어" → "웨이팅 없이 바로 들어가는 곳", \
 "안 매운" → "담백한").
-- 이전 조건이 있으면 새 요청은 이전 조건에 더하거나 바꾸는 말이다. \
-둘을 합친 조건을 낸다. 새 요청에 없는 분류는 지역을 포함해 이전 값을 그대로 둔다. \
-"A 말고 B"는 A를 빼고 B를 넣는다. \
-text와 embedding_text에는 새 요청 내용을 반드시 넣는다. \
-text는 합친 요청을 한 문장으로, \
+- 이전 조건이 있으면 새 요청은 이전 조건에 더하거나 바꾸는 말이다. 이전 조건은 새 \
+요청의 뜻을 알아듣는 데만 쓰고, 출력에는 새 요청에서 말한 것만 넣는다. 이전 조건을 \
+다시 적지 않는다. 이전 조건과 합치는 일은 따로 한다. "A 말고 B"는 A를 want false로, \
+B를 want true로 낸다. embedding_text는 새 요청만 긍정형 검색어로 쓴다. \
 change_summary는 바뀐 점을 "~했어요"로 끝나는 짧은 한 문장으로 쓴다.
-- 이전 조건이 없으면 text와 change_summary는 null이다.
+- 이전 조건이 없으면 change_summary는 null이다.
 
-코드표:
-{chr(10).join(f"{code}: {phrase}" for code, phrase in CODE_PHRASES.items())}
+특징 코드표:
+{chr(10).join(f"{code}: {CODE_PHRASES[code]}" for code in FEATURE_CODES)}
 
 예시:
-- "선릉역 라멘집" → category_group "RESTAURANT", \
+- "선릉역 라멘집" → categories [{{"code": "RESTAURANT", "want": true}}], \
 locations [{{"text": "선릉역", "kind": "STATION", "value": "선릉역"}}], \
 menus [{{"text": "라멘", "value": "라멘", "spellings": [], "want": true}}], \
 embedding_text "선릉역 라멘집"
-- "북적이는 데 말고 공부할 카페" → category_group "CAFE", \
-codes ["QUIET", "PURPOSE_WORK"], embedding_text "조용하고 공부하기 좋은 카페"
-- "역삼 포차" → category_group "BAR", \
+- "북적이는 데 말고 공부할 카페" → categories [{{"code": "CAFE", "want": true}}], \
+features [{{"text": "북적이는 데 말고", "value": "조용한 곳", "code": "QUIET"}}, \
+{{"text": "공부할", "value": "공부하기 좋은 곳", "code": "PURPOSE_WORK"}}], \
+embedding_text "조용하고 공부하기 좋은 카페"
+- "역삼 포차" → categories [{{"code": "BAR", "want": true}}], \
 locations [{{"text": "역삼", "kind": "STATION", "value": "역삼역"}}], \
 embedding_text "역삼 포차"
-- "강남 5명 저녁 먹을 데" → category_group "RESTAURANT", \
+- "강남 5명 저녁 먹을 데" → categories [{{"code": "RESTAURANT", "want": true}}], \
 locations [{{"text": "강남", "kind": "STATION", "value": "강남역"}}], \
-codes ["PURPOSE_GROUP"], embedding_text "강남에서 5명이 저녁 먹기 좋은 곳"
+party_size 5, embedding_text "강남에서 5명이 저녁 먹기 좋은 곳"
 - "근처 주차 되는 곳" → locations [{{"text": "근처", "kind": "HERE"}}], \
-codes ["PARKING"], embedding_text "주차할 수 있는 곳"
+facilities ["PARKING"], embedding_text "주차할 수 있는 곳"
 - "논현동이나 신사역 걸어서 10분 3만원 이하 오마카세 밤 11시까지" → \
-category_group "RESTAURANT", locations [{{"text": "논현동", "kind": "AREA", \
-"value": "논현동"}}, {{"text": "신사역 걸어서 10분", "kind": "STATION", \
+categories [{{"code": "RESTAURANT", "want": true}}], locations [{{"text": "논현동", \
+"kind": "AREA", "value": "논현동"}}, {{"text": "신사역 걸어서 10분", "kind": "STATION", \
 "value": "신사역", "walk_minutes": 10}}], \
 menus [{{"text": "오마카세", "value": "오마카세", "spellings": [], "want": true}}], \
 hours [{{"text": "밤 11시까지", "open_until": "23:00"}}], \
 price {{"text": "3만원 이하", "max_won": 30000}}, embedding_text "3만원 이하 오마카세"
-- "투썸 신논현 3번 출구" → category_group "CAFE", \
+- "투썸 신논현 3번 출구" → categories [{{"code": "CAFE", "want": true}}], \
 locations [{{"text": "신논현 3번 출구", "kind": "STATION", "value": "신논현역", \
 "exit": "3"}}], place_name {{"text": "투썸", "value": "투썸플레이스"}}, \
 embedding_text "투썸플레이스"
-- "얼큰한 짬뽕집" → category_group "RESTAURANT", codes ["FOOD_SPICY"], \
+- "얼큰한 짬뽕집" → categories [{{"code": "RESTAURANT", "want": true}}], \
+flavors [{{"code": "SPICY", "want": true}}], \
 menus [{{"text": "짬뽕", "value": "짬뽕", "spellings": [], "want": true}}], \
 embedding_text "얼큰한 짬뽕집"
-- "애기랑 갈 만한 데 일요일 점심 매운 거 빼고" → category_group "RESTAURANT", \
-avoid_foods ["FOOD_SPICY"], hours [{{"text": "일요일", "day": "SUN"}}], \
-features [{{"text": "애기랑", "value": "아이 동반", "want": true}}], \
+- "애기랑 갈 만한 데 일요일 점심 매운 거 빼고" → \
+categories [{{"code": "RESTAURANT", "want": true}}], \
+flavors [{{"code": "SPICY", "want": false}}], hours [{{"text": "일요일", "day": "SUN"}}], \
+features [{{"text": "애기랑", "value": "아이 동반", "code": null}}], \
 embedding_text "아이와 가기 좋은 담백한 점심 식당"
+- 이전 조건이 "선릉역 넓은 술집"일 때 "술집 말고 브런치 카페" → \
+categories [{{"code": "CAFE", "want": true}}, {{"code": "BAR", "want": false}}], \
+menus [{{"text": "브런치", "value": "브런치", "spellings": [], "want": true}}], \
+embedding_text "브런치 카페", change_summary "술집 대신 브런치 카페로 바꿨어요"
 
 아래 형식의 JSON만 출력한다. 값이 없는 분류도 빼지 않는다.
-{{"text": null, "embedding_text": "<긍정형 검색어>", "category_group": null, \
-"avoid_categories": [], "locations": [], "codes": [], "avoid_foods": [], "menus": [], \
-"hours": [], "price": null, "place_name": null, "features": [], "change_summary": null}}"""
+{{"embedding_text": "<긍정형 검색어>", "categories": [], "locations": [], "features": [], \
+"facilities": [], "party_size": null, "food_types": [], "flavors": [], "menus": [], \
+"hours": [], "price": null, "place_name": null, "change_summary": null}}"""
+
 """요청 해석 시스템 지시. 예시 문장은 평가 질의(experiments/interpretation)와
 겹치지 않게 고른다."""
 
@@ -162,29 +180,12 @@ _CLOCK = re.compile(r"(?:[01]\d|2[0-3]):[0-5]\d")
 def _user_prompt(query: str, previous: Conditions | None) -> str:
     if previous is None:
         return f"요청: {query}"
-    # 이전 조건은 LLM이 낼 꼴과 같게 보여 준다. 1차 조건의 역을 지역으로 바꾸지 않으면
-    # LLM이 이전 역을 잇지 못한다(2026-11-02 평가, 후속 12번 중 10번). 후보 추출용 문장은
-    # LLM이 새로 쓰므로 보여 주지 않는다.
+    # 이전 조건은 LLM이 낼 꼴과 같게 보여 준다. 칸 이름이 다르면 LLM이 이전 역을 잇지
+    # 못했다(2026-11-02 평가, 후속 12번 중 10번). 후보 추출용 문장은 보여 주지 않는다.
     data = {
-        "text": previous.text,
-        # 이전 조건은 FE가 돌려보낸 값이라 모르는 코드로 프롬프트를 키울 수 있다.
-        "codes": list(_known_codes(list(previous.codes))),
-        "category_group": previous.category_group,
-        "locations": [asdict(loc) for loc in locations_of(previous)],
-        "menus": [asdict(m) for m in previous.menus],
-        "hours": [asdict(h) for h in previous.hours],
-        "price": None if previous.price is None else asdict(previous.price),
-        "place_name": None
-        if previous.place_name is None
-        else asdict(previous.place_name),
-        "features": [
-            {"text": f.text, "value": f.value, "want": True}
-            for f in previous.features
-            if f.code is None
-        ],
-        "avoid_categories": list(previous.avoid_categories),
-        "avoid_foods": list(previous.avoid_foods),
+        key: value for key, value in asdict(previous).items() if key != "embedding_text"
     }
+    # 이전 조건은 FE가 돌려보낸 값이지만 읽을 때 모르는 코드는 이미 걸렀다.
     return "\n".join(
         [f"이전 조건: {json.dumps(data, ensure_ascii=False)}", f"새 요청: {query}"]
     )
@@ -195,17 +196,17 @@ def _parse(
 ) -> tuple[Conditions, str | None]:
     """LLM 출력(JSON을 읽은 값)을 조건으로 바꾼다. 형식이 틀리면 실패다.
 
-    모르는 코드는 버리고, 모르는 업종·역은 거르지 않도록 None으로 본다. 분류별 조각은
-    꼴이 틀린 조각만 버린다. 그다음 LLM이 놓치거나 잘못 넣은 조각을 규칙 해석으로
-    바로잡는다(`_checked`). 메시지는 로그에 남으므로 출력 내용을 넣지 않는다.
+    출력은 이번 요청의 분류별 조각이다. 모르는 코드는 버리고, 분류별 조각은 꼴이 틀린
+    조각만 버린다. 2차 꼴(`codes`, `category_group`, `avoid_foods`)로 내도 읽는다. 그다음
+    LLM이 놓치거나 잘못 넣은 조각을 규칙 해석으로 바로잡고(`_checked`), 후속이면 이전
+    조건과 합친다(`merge.merge`). 메시지는 로그에 남으므로 출력 내용을 넣지 않는다.
     """
     if not isinstance(data, dict):
         raise TypeError("JSON 객체가 아니다")
     embedding_text = data.get("embedding_text")
     if not isinstance(embedding_text, str):
         raise TypeError("embedding_text가 문자열이 아니다")
-    codes = data.get("codes", [])
-    if not isinstance(codes, list):
+    if not isinstance(data.get("codes", []), list):
         raise TypeError("codes가 목록이 아니다")
     # 위치 말이 없을 때 null을 내는 일이 잦아서 근처 검색이 아닌 것으로 본다.
     nearby = data.get("nearby") or False
@@ -215,37 +216,43 @@ def _parse(
         data.get("station"), nearby, previous
     )
 
-    category_group = data.get("category_group")
-    if category_group not in CATEGORY_NAMES:
-        category_group = None
+    categories = [c for c in _choices(data.get("categories")) if c[0] in CATEGORY_NAMES]
+    category_group = next((code for code, want in categories if want), None)
+    if category_group is None and data.get("category_group") in CATEGORY_NAMES:
+        category_group = data["category_group"]
+    foods = [
+        (FLAVOR_CODES.get(code, code), want)
+        for code, want in (
+            *_choices(data.get("food_types")),
+            *_choices(data.get("flavors")),
+        )
+    ]
+    features = _items(data.get("features"), _feature)
+    codes = [
+        *(f.code for f in features if isinstance(f, Feature)),
+        *(c for c in _list(data.get("facilities")) if c in FACILITY_CODES),
+        *(code for code, want in foods if want and code in FOOD_CODES),
+        *(c for c in _list(data.get("codes")) if isinstance(c, str)),
+    ]
 
-    # 새 검색은 사용자가 쓴 요청문을 그대로 정렬에 넣는다.
-    text = query
     summary = None
     if previous is not None:
-        text = data.get("text")
-        if not _is_text(text):
-            raise ValueError("후속 조건인데 text가 없다")
         summary = data.get("change_summary")
         if not _is_text(summary) or len(summary) > MAX_CHANGE_SUMMARY_LENGTH:
             summary = DEFAULT_CHANGE_SUMMARY
-        # "넓은 곳이면 좋겠어"처럼 조건을 더하는 후속에서 LLM이 이전 문장을 그대로 낼
-        # 때가 있다. 그러면 새 요청이 정렬과 후보 추출에서 빠지므로 뒤에 붙인다(규칙
-        # 해석과 같다). 벡터용 문장은 위치 말만 다른 것도 같은 문장으로 본다.
-        if text.strip() == previous.text.strip():
-            text = _join(previous.text, query)
-        if _without_location(embedding_text, category_group) == _without_location(
-            previous.embedding_text, category_group
-        ):
-            embedding_text = _join(previous.embedding_text, query)
+        # 이번 요청만 쓰라고 해도 이전 문장을 다시 낼 때가 있다(2차 평가 후속 12번 중
+        # 2번, 2026-11-04 확인). 합칠 때 이전 문장 뒤에 붙으므로 이번 요청문으로 대신한다.
+        if _repeats(embedding_text, previous.embedding_text, category_group):
+            embedding_text = query
     # 짧은 요청에서 "..."처럼 글자 없는 문장을 내는 일이 있다(10-27 평가 216번 중
     # 12번). 그대로 인코딩하면 유사도가 무의미해져서 요청문으로 대신한다.
     if not any(ch.isalnum() for ch in embedding_text):
-        embedding_text = text
-    conditions = _checked(
+        embedding_text = query
+    party_size = data.get("party_size")
+    turn = _checked(
         query,
-        previous,
-        text=text,
+        previous is not None,
+        text=query,
         embedding_text=embedding_text,
         codes=codes,
         category_group=category_group,
@@ -254,13 +261,61 @@ def _parse(
         hours=_items(data.get("hours"), _hours),
         price=_price(data.get("price")),
         place_name=_place_name(data.get("place_name")),
-        features=_items(data.get("features"), _feature),
+        features=features,
         avoid_categories=tuple(
-            c for c in _list(data.get("avoid_categories")) if c in CATEGORY_NAMES
+            dict.fromkeys(
+                [code for code, want in categories if not want]
+                + [
+                    c
+                    for c in _list(data.get("avoid_categories"))
+                    if c in CATEGORY_NAMES
+                ]
+            )
         ),
-        avoid_foods=tuple(c for c in _list(data.get("avoid_foods")) if c in FOOD_CODES),
+        avoid_foods=tuple(
+            dict.fromkeys(
+                [code for code, want in foods if not want and code in FOOD_CODES]
+                + [c for c in _list(data.get("avoid_foods")) if c in FOOD_CODES]
+            )
+        ),
+        party_size=party_size
+        if _won(party_size) and party_size <= MAX_PARTY_SIZE
+        else None,
     )
-    return conditions, summary
+    if previous is None:
+        return turn, None
+    kept = set(_kept_codes(previous, query, list(turn.codes), turn.avoid_foods))
+    return merge(previous, turn, [c for c in previous.codes if c not in kept]), summary
+
+
+def _repeats(text: str, before: str, category_group: str | None) -> bool:
+    """이전 벡터용 문장을 다시 쓴 것인지. 위치 말을 지운 낱말의 `REPEAT_SHARE` 이상이 이전
+    문장에 있으면 다시 쓴 것으로 본다("4명이 회식하기 좋은 고깃집"과 "4명 회식하기 좋은
+    고깃집")."""
+    words = _without_location(text, category_group).split()
+    seen = _plain_words(_without_location(before, category_group))
+    if not words:
+        return False
+    shared = sum(any(w in s or s in w for s in seen) for w in map(_plain_word, words))
+    return shared / len(words) >= REPEAT_SHARE
+
+
+def _plain_words(text: str) -> list[str]:
+    return [_plain_word(w) for w in text.split()]
+
+
+def _plain_word(word: str) -> str:
+    """조사 하나를 떼어 낸 낱말. "4명이"와 "4명"을 같은 낱말로 본다."""
+    return re.sub(r"(?<=.)(?:이|가|을|를|은|는|에|에서|으로|로|도)$", "", word)
+
+
+def _choices(data: object) -> list[tuple[str, bool]]:
+    """코드 항목 목록(`[{"code", "want"}]`)을 읽는다. 꼴이 틀린 항목은 버린다."""
+    return [
+        (item["code"], item.get("want") is not False)
+        for item in _list(data)
+        if isinstance(item, dict) and isinstance(item.get("code"), str)
+    ]
 
 
 def _legacy_locations(
@@ -358,13 +413,16 @@ def _place_name(data: object) -> PlaceName | None:
     return PlaceName(text, _segment(data.get("value")) or text)
 
 
-def _feature(data: dict) -> FeatureText | None:
+def _feature(data: dict) -> Feature | FeatureText | None:
+    """LLM이 낸 특징을 읽는다. 특징 코드표의 코드가 있으면 코드 특징이고, 없으면 코드 없는
+    특징이다. 2차 꼴의 `want`가 거짓이면 피하는 특징이다."""
     text = _segment(data.get("text"))
     if text is None:
         return None
-    return FeatureText(
-        text, _segment(data.get("value")) or text, data.get("want") is not False
-    )
+    value = _segment(data.get("value")) or text
+    if data.get("code") in FEATURE_CODES:
+        return Feature(text, value, data["code"])
+    return FeatureText(text, value, data.get("want") is not False)
 
 
 def _items(data: object, read) -> tuple:

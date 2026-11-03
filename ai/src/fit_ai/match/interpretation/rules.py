@@ -9,7 +9,6 @@ from dataclasses import dataclass
 
 from fit_ai.features import FEATURES
 from fit_ai.match.conditions import CATEGORY_NAMES, STATION_NAMES
-from fit_ai.match.interpretation.codes import GROUP_SIZE
 from fit_ai.match.interpretation.merge import merge
 from fit_ai.match.interpretation.request import (
     STATION_CODES,
@@ -296,6 +295,7 @@ def interpret_by_rules(query: str, previous: Conditions | None = None) -> Condit
         features=parts.features,
         avoid_categories=parts.avoid_categories,
         avoid_foods=parts.avoid_foods,
+        party_size=parts.party_size,
     )
     if previous is None:
         return turn
@@ -318,6 +318,7 @@ class _RuleParts:
     """규칙으로 찾은 조각. 이번 요청문에서만 찾은 값이다."""
 
     codes: tuple[str, ...]
+    party_size: int | None
     category_group: str | None
     avoid_categories: tuple[str, ...]
     avoid_foods: tuple[str, ...]
@@ -383,11 +384,6 @@ def _rule_parts(query: str) -> _RuleParts:
         elif code not in avoid_foods:
             # "안 매운"의 "매운"은 원하는 매운맛이 아니다.
             codes.append(code)
-    for count in _PEOPLE.findall(query):
-        if int(count) == 1:
-            codes.append("PURPOSE_SOLO")
-        elif int(count) >= GROUP_SIZE:
-            codes.append("PURPOSE_GROUP")
     menus = _rule_menus(query, negated)
     # "카페 말고 술집으로"에서 카페를 고르지 않도록 빼 달라는 말은 지우고 찾는다. 부정한
     # 낱말 하나만 지워서 "역삼역 카페 말고"의 역과 "매운 건 싫어"의 음식 낱말(식당)은 남는다.
@@ -401,8 +397,10 @@ def _rule_parts(query: str) -> _RuleParts:
             and CATEGORY_WORDS[word] != category_group
         )
     )
+    people = _PEOPLE.search(query)
     return _RuleParts(
         codes=tuple(codes),
+        party_size=int(people.group(1)) if people and int(people.group(1)) else None,
         category_group=category_group,
         avoid_categories=avoid_categories,
         avoid_foods=tuple(dict.fromkeys(avoid_foods)),

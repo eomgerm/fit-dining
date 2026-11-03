@@ -2,7 +2,7 @@
 
 분류마다 규칙이 정해져 있다(docs/comparison/conditions-v3.md 4장). 업종·지역·가격·가게
 이름·인원은 이번 요청에 있으면 바꾸고, 음식 종류·맛·메뉴는 같은 값을 이번 것으로 덮고,
-특징·시설은 잇고, 시간은 같은 종류를 덮는다.
+특징·시설은 잇고, 시간은 같은 종류를 덮는다. 원하는 업종이 바뀌면 이전 메뉴는 버린다.
 """
 
 from collections.abc import Callable, Collection, Sequence
@@ -39,6 +39,11 @@ def merge(
     ] + list(turn.features)
     categories = _categories(previous.categories, turn.categories)
     category_group = next((c.code for c in categories if c.want), None)
+    # 메뉴는 업종에 딸린다. "초밥집"을 찾다 "술집으로"라고 하면 초밥은 버린다.
+    changed = category_group != previous.category_group and any(
+        c.want for c in turn.categories
+    )
+    menus = turn.menus if changed else previous.menus
     return Conditions(
         text=_join(previous.text, turn.text)[:MAX_TEXT_LENGTH],
         embedding_text=_without_location(
@@ -47,7 +52,7 @@ def merge(
         categories=categories,
         food_types=_override(previous.food_types, turn.food_types, _code),
         flavors=_override(previous.flavors, turn.flavors, _code),
-        menus=_override(previous.menus, turn.menus, lambda m: _plain(m.value)),
+        menus=_override(menus, turn.menus, lambda m: _plain(m.value)),
         features=tuple(_unique(features, lambda f: f.code or _plain(f.value)))[
             -MAX_SEGMENTS:
         ],

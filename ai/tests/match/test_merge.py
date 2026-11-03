@@ -125,3 +125,14 @@ def test_hours_by_kind() -> None:
         Hours("일요일", day="SUN"),
         Hours("밤 11시까지", open_until="23:00"),
     )
+
+
+def test_menus_dropped_when_category_changes() -> None:
+    """합치기_원하는업종이바뀌면_이전메뉴는버리고이번메뉴만남긴다"""
+    merged = merge(
+        PREVIOUS, turn(categories=(Choice("BAR"),), menus=(Menu("하이볼", "하이볼"),))
+    )
+
+    assert merged.menus == (Menu("하이볼", "하이볼"),)
+    # 같은 업종을 다시 말하면 메뉴는 잇는다.
+    assert merge(PREVIOUS, turn(categories=(Choice("CAFE"),))).menus == PREVIOUS.menus

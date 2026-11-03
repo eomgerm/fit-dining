@@ -7,12 +7,11 @@
 import re
 from dataclasses import replace
 
-from fit_ai.match.interpretation.codes import FOOD_CODES, FOOD_TYPES
+from fit_ai.match.interpretation.codes import FACILITY_CODES, FOOD_CODES, FOOD_TYPES
 from fit_ai.match.interpretation.request import (
     Conditions,
     _assemble,
     _plain,
-    locations_of,
 )
 from fit_ai.match.interpretation.rules import (
     _NEGATION,
@@ -21,40 +20,54 @@ from fit_ai.match.interpretation.rules import (
     CODE_WORDS,
     VALUE_WORDS,
     _has,
-    _kept_codes,
     _rule_parts,
 )
 from fit_ai.match.interpretation.segments import (
     MAX_SEGMENTS,
+    Feature,
     LocationKind,
     PlaceName,
 )
 
 
-def _checked(query: str, previous: Conditions | None, **llm) -> Conditions:
-    """LLM이 놓치거나 잘못 넣은 조각을 규칙 해석으로 바로잡는다.
+def _checked(query: str, follow_up: bool, **llm) -> Conditions:
+    """LLM이 놓치거나 잘못 넣은 이번 요청의 조각을 규칙 해석으로 바로잡는다.
 
-    LLM 해석은 분류가 늘자 근처, 후속의 이전 역, 메뉴를 놓치고 피함을 넓게 썼다
-    (2026-11-02 평가). 규칙으로 확실히 잡히는 것만 고친다.
+    LLM 해석은 분류가 늘자 근처, 메뉴, 시설을 놓치고 피함을 넓게 썼다(2026-11-02,
+    2026-11-04 평가). 규칙으로 확실히 잡히는 것만 고친다. 이전 조건과 합치는 일은 이 뒤에
+    한다(`merge.merge`).
 
-    - 지역: 이번 요청에 근처 말만 있으면 근처다. LLM이 지역을 비우면 규칙이 찾은 지역, 그것도
-      없으면 이전 지역을 잇는다.
-    - 시간·가격: 이번 요청에서 규칙이 찾았으면 규칙 값을 쓴다. 꼴이 정해진 말이라 규칙이
-      정확하다.
-    - 메뉴·특징: LLM이 놓친 것을 규칙 값으로 더한다. 이번 요청에 피하는 말이 없으면 이번
-      요청의 메뉴는 원함으로 되돌린다.
+    - 후속에서 이전 조건을 다시 적은 조각: 원문이 이번 요청에 없는 지역·메뉴·특징·시간은
+      버린다. 합칠 때 이전 조건에서 다시 온다.
+    - 지역: 이번 요청에 근처 말만 있으면 근처다. LLM이 지역을 비우면 규칙이 찾은 지역이다.
+      요청에 없는 근처 말로 낸 근처는 버린다.
+    - 시간·가격·인원: 규칙이 찾았으면 규칙 값을 쓴다. 꼴이 정해진 말이라 규칙이 정확하다.
+    - 메뉴·특징: LLM이 놓친 것을 규칙 값으로 더한다. 이번 요청에 피하는 말이 없으면
+      메뉴는 원함으로 되돌린다.
+    - 시설: LLM이 놓친 시설을 규칙 값으로 더한다. "주차되는"을 코드 없는 특징으로 냈다
+      (2026-11-04). 그 시설을 말한 코드 없는 특징은 뗀다.
     - 음식 종류·매운맛: LLM이 놓친 코드를 규칙 값으로 더한다. 음식 종류나 나라를 말한
       낱말이 없는데 LLM이 낸 음식 종류 코드는 뗀다. gpt-4o-mini는 지시해도 "초밥"에
-      일식을 붙였다(2026-11-03 평가). 이번 요청에 피하는 말이 없으면 새로 빼 달라고 한
-      음식은 원하는 코드로 되돌린다("매운 거 먹고 싶다").
+      일식을 붙였다(2026-11-03 평가). 이번 요청에 피하는 말이 없으면 빼 달라고 한 음식은
+      그 낱말이 요청에 있을 때 원함으로 되돌리고("매운 거 먹고 싶다") 없으면 버린다.
     - 가성비: 싼 곳을 찾는데 가성비 낱말이 없으면 뗀다.
     - 업종: LLM이 비우면 규칙 값을 쓴다.
     - 빼 달라는 업종: 음식이나 메뉴를 빼 달라는 요청이면 요청에 이름이 없는 업종은 LLM이
       냈어도 뗀다("일식 말고"에서 식당 전체를 빼지 않는다, 2026-11-03).
-    - 후속의 코드: 이번 요청이 빼지 않은 이전 코드는 남긴다.
     """
     parts = _rule_parts(query)
-    locations = llm["locations"]
+
+    def said(segments: tuple) -> tuple:
+        if not follow_up:
+            return segments
+        return tuple(s for s in segments if _plain(s.text) in _plain(query))
+
+    # "지금 열려 있는 카페"에 요청에 없는 "근처"를 지어 냈다(2026-11-04 평가).
+    locations = tuple(
+        loc
+        for loc in said(llm["locations"])
+        if loc.kind is not LocationKind.HERE or _plain(loc.text) in _plain(query)
+    )
     mentioned = [
         loc
         for loc in locations
@@ -68,44 +81,43 @@ def _checked(query: str, previous: Conditions | None, **llm) -> Conditions:
     elif rule_here and not mentioned:
         locations = (rule_here[0],)
     elif not locations:
-        locations = parts.locations or (locations_of(previous) if previous else ())
+        locations = parts.locations
 
-    menus = _with_rule_items(llm["menus"], parts.menus)
-    before_codes = previous.codes if previous is not None else ()
+    menus = _with_rule_items(said(llm["menus"]), parts.menus)
     codes = [
         c
         for c in llm["codes"]
-        if isinstance(c, str)
-        and (c not in FOOD_TYPES or c in before_codes or _has(query, CODE_WORDS[c]))
+        if isinstance(c, str) and (c not in FOOD_TYPES or _has(query, CODE_WORDS[c]))
     ]
-    codes += [c for c in parts.codes if c in FOOD_CODES and c not in codes]
+    codes += [
+        c
+        for c in parts.codes
+        if (c in FOOD_CODES or c in FACILITY_CODES) and c not in codes
+    ]
     avoid_foods = [*llm["avoid_foods"], *parts.avoid_foods]
     if not _NEGATION.search(query):
         menus = tuple(
             replace(m, want=True) if _plain(m.text) in _plain(query) else m
             for m in menus
         )
-        before = previous.avoid_foods if previous is not None else ()
-        codes += [c for c in avoid_foods if c not in before]
-        avoid_foods = [c for c in avoid_foods if c in before]
-    if previous is not None:
-        codes = [*_kept_codes(previous, query, codes, avoid_foods), *codes]
+        codes += [c for c in avoid_foods if _has(query, CODE_WORDS[c])]
+        avoid_foods = []
     price = parts.price or llm["price"]
     if price is not None and price.cheap and not _has(query, VALUE_WORDS):
-        had_value = previous is not None and "VALUE_FOR_MONEY" in previous.codes
-        codes = [c for c in codes if c != "VALUE_FOR_MONEY" or had_value]
-    hours = (
-        tuple(h for h in llm["hours"] if _plain(h.text) not in _plain(query))
-        + parts.hours
-        if parts.hours
-        else llm["hours"]
-    )
+        codes = [c for c in codes if c != "VALUE_FOR_MONEY"]
+    hours = parts.hours or said(llm["hours"])
     category_group = llm["category_group"] or parts.category_group
     avoid_categories = llm["avoid_categories"]
     if avoid_foods or any(not m.want for m in menus):
         avoid_categories = tuple(
             c for c in avoid_categories if _has(query, _category_names(c))
         )
+    facility_words = [w for c in codes if c in FACILITY_CODES for w in CODE_WORDS[c]]
+    features = tuple(
+        f
+        for f in said(_with_rule_items(llm["features"], parts.features))
+        if isinstance(f, Feature) or not _has(f.text + f.value, facility_words)
+    )
     return _assemble(
         text=llm["text"],
         embedding_text=llm["embedding_text"],
@@ -116,9 +128,10 @@ def _checked(query: str, previous: Conditions | None, **llm) -> Conditions:
         hours=hours,
         price=price,
         place_name=_not_similar(llm["place_name"], query),
-        features=_with_rule_items(llm["features"], parts.features),
+        features=features,
         avoid_categories=(*avoid_categories, *parts.avoid_categories),
         avoid_foods=tuple(avoid_foods),
+        party_size=parts.party_size or llm["party_size"],
     )
 
 

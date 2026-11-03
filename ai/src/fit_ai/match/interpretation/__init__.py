@@ -2,18 +2,21 @@
 
 공유 모듈 `fit_ai.gms`로 GMS를 한 번 부른다. 호출이 실패하거나 JSON이 아니면 공유 모듈이
 한 번 더 부른다. 그래도 실패하거나 출력이 형식에 맞지 않으면 다시 부르지 않고 낱말
-규칙으로 해석한다(인프라 설계 11.2). 후속 조건이면 이전 조건과 새 요청문을 합친다
-(검색 spec D-50). 정리는 docs/comparison/spec.md 4.1에 있다.
+규칙으로 해석한다(인프라 설계 11.2). LLM과 규칙 모두 이번 요청만 해석하고, 후속 조건이면
+이전 조건과 분류별 규칙으로 합친다(검색 spec D-50, docs/comparison/conditions-v3.md 4장).
+정리는 docs/comparison/spec.md 4.1에 있다.
 
 모듈은 하는 일별로 나눴다.
 
 - `segments`: 분류별 조각 타입
+- `codes`: 분류별 조건과 공유 코드표 잇기(점수용 코드)
 - `request`: 조건(`Conditions`)과 해석 결과, 여러 모듈이 같이 쓰는 값과 함수
+- `merge`: 이전 조건과 이번 요청 합치기
 - `rules`: 규칙 해석
 - `checks`: LLM 해석을 규칙으로 바로잡기(코드 확인)
 - `llm`: 프롬프트와 LLM 출력 읽기
 
-의존은 segments ← request ← rules ← checks ← llm ← 이 파일 한 방향이다. 밖에서는 이 파일이
+의존은 segments ← codes ← request ← merge ← rules ← checks ← llm ← 이 파일 한 방향이다. 밖에서는 이 파일이
 내보내는 이름(`__all__`)을 쓴다.
 """
 

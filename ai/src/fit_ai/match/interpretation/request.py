@@ -127,12 +127,14 @@ class Conditions:
         features: Sequence[FeatureText | Feature] = (),
         avoid_categories: Sequence[str] = (),
         avoid_foods: Sequence[str] = (),
+        party_size: int | None = None,
     ) -> "Conditions":
         """옛 꼴(코드 목록과 빼 달라는 업종·음식)의 값으로 조건을 만든다.
 
         2차 조건과 같은 인자를 받는다. 코드는 분류로 나누고(`codes.split_codes`), 1차 꼴의
-        역과 근처는 지역 조각으로 바꾼다. 특징 인자는 코드표에 없는 특징만 읽는다. 코드가
-        있는 특징은 `codes`가 정한다. 피하는 특징은 버린다.
+        역과 근처는 지역 조각으로 바꾼다. 코드가 있는 특징은 `codes`가 정하고, 특징 인자에
+        같은 코드의 `Feature`가 있으면 그 원문을 쓴다(없으면 코드표 문구). 피하는 특징은
+        버린다.
 
         Args:
             text: 해석한 요청문
@@ -149,11 +151,13 @@ class Conditions:
             features: 코드표에 없는 특징
             avoid_categories: 빼 달라는 업종
             avoid_foods: 빼 달라는 음식 종류·매운맛 코드
+            party_size: 인원
 
         Returns:
             조건
         """
         feature_codes, food_types, flavors, facilities = split_codes(codes, avoid_foods)
+        said = {f.code: f for f in features if isinstance(f, Feature) and f.code}
         if not locations and station in STATION_NAMES:
             name = STATION_NAMES[station]
             locations = (Location(name, LocationKind.STATION, name),)
@@ -174,7 +178,8 @@ class Conditions:
             flavors=flavors,
             menus=tuple(menus),
             features=tuple(
-                Feature(FEATURES[c].label, FEATURES[c].label, c) for c in feature_codes
+                said.get(c) or Feature(FEATURES[c].label, FEATURES[c].label, c)
+                for c in feature_codes
             )
             + tuple(
                 dict.fromkeys(
@@ -187,6 +192,7 @@ class Conditions:
                 )
             ),
             facilities=facilities,
+            party_size=party_size,
             locations=tuple(locations),
             hours=tuple(hours),
             price=price,
@@ -296,6 +302,7 @@ def _assemble(
     features: tuple[FeatureText | Feature, ...],
     avoid_categories: tuple[str, ...],
     avoid_foods: tuple[str, ...],
+    party_size: int | None = None,
 ) -> Conditions:
     """조각을 모아 조건을 만든다. LLM 해석과 규칙 해석이 같이 쓴다.
 
@@ -326,6 +333,7 @@ def _assemble(
         features=features,
         avoid_categories=avoid_categories,
         avoid_foods=avoid_foods,
+        party_size=party_size,
     )
 
 
