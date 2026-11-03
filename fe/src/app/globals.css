@@ -282,6 +282,17 @@
 @utility bottom-safe-* {
   bottom: max(--spacing(--value(number)), env(safe-area-inset-bottom));
 }
+/*
+ * 화면 전체 높이. 상태바 아래까지 그리는 경우 svh·100%·고정 요소의 기준 높이는 상태바만큼 짧고
+ * dvh는 문서 높이를 따라 바뀐다(iOS 27 홈 화면 앱 black-translucent 실측: 화면 852, svh 793, 상단 inset 59, dvh 793~844).
+ * 상단 inset을 더해 화면 끝까지 채운다. 상단 inset이 0이면(지금 설정, 브라우저, 안드로이드) svh와 같다
+ */
+@utility min-h-viewport {
+  min-height: calc(100svh + env(safe-area-inset-top));
+}
+@utility h-viewport {
+  height: calc(100svh + env(safe-area-inset-top));
+}
 /* 토스트 위치. BottomBar(pb-safe-4)가 인디케이터만큼 높아지면 같이 올라가 버튼과의 간격을 지킨다. 인디케이터가 없으면 96px */
 @utility bottom-toast {
   bottom: calc(--spacing(20) + max(--spacing(4), env(safe-area-inset-bottom)));

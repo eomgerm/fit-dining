@@ -67,7 +67,7 @@ export default function SignupPage() {
   const [index, setIndex] = useState(0);
   const [skip, setSkip] = useState(false);
   return (
-    <Screen bottom="md" bleedTop className="relative">
+    <Screen bottom="md" className="relative">
       <SocialError />
       <header className="absolute inset-x-0 top-safe-0 z-10 flex min-h-14 items-center justify-between px-2">
         <IconButton

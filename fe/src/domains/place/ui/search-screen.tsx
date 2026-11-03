@@ -14,6 +14,7 @@ import { BookmarkIcon } from "@/shared/ui/icon/icons/bookmark";
 import { MyLocationIcon } from "@/shared/ui/icon/icons/my-location";
 import { RefreshIcon } from "@/shared/ui/icon/icons/refresh";
 import { UserIcon } from "@/shared/ui/icon/icons/user";
+import { StatusBarColor } from "@/shared/ui/layout/status-bar-color";
 import { useToast } from "@/shared/ui/overlay/toast";
 
 import { placeQueries } from "../api/place-queries";
@@ -477,7 +478,9 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
   );
 
   return (
-    <main className="relative h-dvh overflow-hidden">
+    <main className="relative h-viewport overflow-hidden">
+      {/* 지도 화면의 상태바는 흰색으로 칠한다(블러 대신) */}
+      <StatusBarColor />
       <PlaceMap
         ref={mapRef}
         // 패널이 있으면 지도를 패널 위쪽에 맞춰 지도 중심과 핀이 가려지지 않게 한다(조금 겹친다)

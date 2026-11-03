@@ -72,7 +72,7 @@ export function PlaceDetailScreen({
   // 저장한 장소 화면에서 열었으면 핏 점수와 추천 이유를 보이지 않는다(D-12)
   const fromSaved = params.get("from") === SAVED_VIEW;
   return (
-    <Screen tone="surface-warm" bleedTop className="relative">
+    <Screen tone="surface-warm" className="relative">
       {id === undefined ? (
         <>
           <BackBar />
@@ -93,7 +93,7 @@ export function PlaceDetailScreen({
 // 사진이 없는 상태(찾을 수 없음, 불러오는 중, 오류)의 뒤로 버튼 줄
 function BackBar() {
   return (
-    <div className="box-content flex h-19 shrink-0 items-center px-4 pt-safe-0">
+    <div className="flex h-19 shrink-0 items-center px-4">
       <BackButton />
     </div>
   );
@@ -236,7 +236,7 @@ function PlaceDetailView({
             className="absolute top-72 left-1/2 -translate-x-1/2"
           />
         )}
-        <div className="absolute inset-x-4 top-safe-4 flex justify-between">
+        <div className="absolute inset-x-4 top-4 flex justify-between">
           <BackButton />
           <Fab label="공유" onClick={() => toast(NOT_READY_MESSAGE)}>
             <ShareIcon className="text-icon" />

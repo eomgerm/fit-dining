@@ -10342,12 +10342,9 @@
 }
 
 /* Remove the 28px status bar from both the band and artwork placement. */
-/* 홈 화면 앱에서 바탕을 상태바 아래까지 깔고(가입 첫 화면은 Screen bleedTop), 그림만 상태바 높이만큼 내린다 */
 .signup-motion {
   position: relative;
-  box-sizing: content-box;
   height: 352px;
-  padding-top: env(safe-area-inset-top);
   width: 100%;
   overflow: hidden;
   background: var(--color-primary-soft);
@@ -10356,7 +10353,6 @@
   position: absolute;
   left: 50%;
   top: -28px;
-  margin-top: env(safe-area-inset-top);
   width: 360px;
   height: 404px;
   margin-left: -180px;

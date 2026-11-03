@@ -178,11 +178,10 @@ export function OnboardingScreen({
   }
   if (step === 0)
     return (
-      // 영상은 상태바 아래까지 깔고 로고와 버튼만 시스템 영역 밖에 둔다
-      <Screen tone="secondary" bleedTop className="relative">
+      <Screen tone="secondary" className="relative">
         <IntroBackground />
         <div className="absolute inset-0 bg-linear-to-b from-photo-shade/50 via-transparent to-photo-shade" />
-        <h1 className="relative m-5 pt-safe-0">
+        <h1 className="relative m-5">
           <Image
             src="/brand/fitdining-white.svg"
             alt="핏다이닝"

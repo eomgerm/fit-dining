@@ -1,6 +1,7 @@
 import type { ReactNode, Ref } from "react";
 
 import { cn } from "@/shared/lib/cn";
+import { StatusBarColor } from "@/shared/ui/layout/status-bar-color";
 
 // 리뷰 작성·수정 화면의 바탕. 높이를 뷰포트에 맞추고 가운데(children)만 스크롤해 스크롤 막대가 움직이는 범위와 같다.
 // 아래 끝 여백은 footer(BottomBar)가 맡는다
@@ -25,10 +26,11 @@ export function ReviewFrame({
   return (
     <div
       className={cn(
-        "mx-auto flex h-dvh w-full max-w-110 flex-col",
+        "mx-auto flex h-viewport w-full max-w-110 flex-col",
         sunken ? "bg-surface-sunken" : "bg-surface",
       )}
     >
+      <StatusBarColor />
       <div className="shrink-0">
         {top}
         {pinned}
