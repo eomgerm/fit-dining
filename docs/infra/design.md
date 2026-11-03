@@ -849,7 +849,7 @@ AI API(`ai/server`, FastAPI)는 A의 컨테이너로 돈다. 임베딩 모델은
 
 **AI 팀·BE 팀의 전제**(구현 전에 필요하다)
 
-1. AI API가 임베딩을 Modal `POST /embed`(12.3절)로 부른다. 응답의 `model`이 저장된 벡터의 모델과 같은지 확인하고, 타임아웃과 재시도 1회, 연결 재사용을 둔다. `fit_ai.embedding.encode_queries`가 `EMBED_BASE_URL`이 있으면 Modal을 부른다. 시도마다 단계별 3초, 두 번 실패하면 검색이 503 `EMBEDDING_UNAVAILABLE`이다. 검색 예산(9초)은 보지 않아 해석이 늦은 때는 BE 타임아웃을 넘길 수 있다(그때도 BE는 키워드 검색으로 대체한다). `/healthz`는 `EMBED_*` 값만 보고 Modal을 부르지 않는다(구현: S15P31A302-134, 실제 Modal로는 미확인).
+1. AI API가 임베딩을 Modal `POST /embed`(12.3절)로 부른다. 응답의 `model`이 저장된 벡터의 모델과 같은지 확인하고, 타임아웃과 재시도 1회, 연결 재사용을 둔다. `fit_ai.embedding.encode_queries`가 `EMBED_BASE_URL`이 있으면 Modal을 부른다. 시도마다 단계별 3초이고, 시간 초과는 다시 부르지 않는다(콜드 스타트 중에 다시 부르면 Modal이 컨테이너를 하나 더 띄운다). 그 밖의 실패는 한 번 더 부르며, 실패하면 검색이 503 `EMBEDDING_UNAVAILABLE`이다. 검색 예산(9초)은 보지 않아 해석이 늦은 때는 BE 타임아웃을 넘길 수 있다(그때도 BE는 키워드 검색으로 대체한다). `/healthz`는 `EMBED_*` 값만 보고 Modal을 부르지 않는다(구현: S15P31A302-134, 실제 Modal로는 미확인).
 2. AI API 이미지가 torch를 끌어오지 않도록 로컬 인코더(`sentence-transformers`)를 선택 의존성으로 분리하고 `uvicorn`을 서버 의존성으로 옮긴다. Linux 기본 torch는 CUDA판이라 이미지가 수 GB가 된다(구현: `encoder` extra, `uv export --no-default-groups --group server`에 torch 없음).
 3. 장소 읽기가 개발 DB에만 있는 뷰가 아니라 BE 마이그레이션이 만든 뷰 `ai_place_search`를 읽는다(구현: BE V12가 `pg_store.py`가 읽는 컬럼으로 뷰를 만든다. 실제 DB로는 미확인).
 4. BE의 `AiTasteClient`가 해석(`/v1/taste/interpret`, 타임아웃 10초)과 프로필(`/v1/taste/profile`, 3초)을 이미 부른다(확인: develop). 검색(`POST /v1/search`) 호출과 서킷 브레이커, 동시성 상한, 폴백은 아직 없다(미구현).
@@ -897,7 +897,7 @@ AI 팀과 M1 전에 합의한다. AI API(FastAPI)는 A의 컨테이너(`ai-prod`
 
 1. Modal Environment(`fit-dev`, `fit-prod`)와 토큰을 분리한다(11.2절). Modal URL과 토큰은 AI API의 서버 env(`/etc/fit/ai-<env>.env`)에 둔다. 토큰은 코드와 repo에 두지 않는다. 엔드포인트는 모두 `requires_proxy_auth=True`로 보호하고 AI API가 `Modal-Key`·`Modal-Secret` 헤더로 호출한다(11.2절).
 2. 엔드포인트는 임베딩(12.3절), 리랭커, 요청 해석(LLM)이다. 요청·응답 스키마, 오류 코드, 최대 입력 길이와 배치 크기 상한을 AI 팀이 명세하고, 응답에 모델 버전을 싣는다.
-3. 콜드 스타트: 첫 호출 지연의 상한과 상시 가동할 컨테이너 수를 AI 팀이 비용 상한과 함께 정한다. BE 타임아웃은 이 값에 맞춘다(11.2절).
+3. 콜드 스타트: 첫 호출 지연의 상한과 상시 가동할 컨테이너 수를 AI 팀이 비용 상한과 함께 정한다. BE 타임아웃은 이 값에 맞춘다(11.2절). 현재 임베딩 앱은 상시 가동 0, 마지막 요청 뒤 10분(`scaledown_window=600`) 유지, 컨테이너 상한 2, 컨테이너당 동시 입력 4이고 기동 때 예열 인코딩을 한 번 한다(2026-11-03, fit-dev 요청 기준 콜드 스타트 16회에서 6회로 준다는 추정. 요청 간격이 10분 안이면 GPU가 계속 켜져 비용이 든다).
 4. 서버 쪽 방어도 둔다: 동시성 상한과 요청당 비용 상한. BE의 일일 호출 예산과 별개다.
 5. 로그는 JSON이고 비밀·개인정보를 마스킹한다. 요청 텍스트를 그대로 남기지 않는다.
 6. `ai/`의 테스트와 Modal 앱 배포(`modal deploy`)는 AI 팀이 맡는다. AI API 이미지의 빌드와 A 배포는 인프라 CI가 맡는다(6.3절, 11.4절).

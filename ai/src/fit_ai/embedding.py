@@ -24,9 +24,11 @@ QUERY_PREFIX = "query: "
 REMOTE_TIMEOUT_SECONDS = 3.0
 """Modal 한 번 부를 때 단계(연결·쓰기·읽기)마다 기다리는 시간. 따뜻한 질의 1건은 0.25~0.4초다.
 콜드 스타트(17~85초)는 기다리지 않고 실패로 본다. 그동안 BE는 키워드 검색으로 대체한다.
+시간 초과는 다시 부르지 않는다: 3초 뒤에도 같고, 다시 부르면 Modal이 부팅 중인 컨테이너를 두고 하나 더 띄운다.
 검색 예산(`match.search.SEARCH_BUDGET_SECONDS`)은 보지 않아서, 해석이 늦고 Modal도
-두 번 다 시간을 채우면 BE 타임아웃을 넘길 수 있다. 그때도 BE는 키워드 검색으로 대체한다."""
-_ATTEMPTS = 2  # 실패하면 한 번 더 부른다
+시간을 채우면 BE 타임아웃을 넘길 수 있다. 그때도 BE는 키워드 검색으로 대체한다."""
+# 시간 초과가 아닌 실패(연결 끊김, HTTP 오류, 응답 모양 오류)는 한 번 더 부른다
+_ATTEMPTS = 2
 # 네트워크·HTTP 오류(303 포함), 응답 모양 오류, 모델 불일치
 _FAILURES = (httpx.HTTPError, KeyError, TypeError, ValueError)
 
@@ -34,7 +36,7 @@ log = logging.getLogger(__name__)
 
 
 class EmbeddingUnavailable(RuntimeError):
-    """원격 임베딩을 두 번 시도해도 받지 못했다. 메시지에는 실패 종류만 있다."""
+    """원격 임베딩을 받지 못했다(시간 초과는 한 번, 그 밖의 실패는 두 번 시도했다). 메시지에는 실패 종류만 있다."""
 
 
 class _BadReply(ValueError):
@@ -114,6 +116,8 @@ def _remote_queries(texts: list[str]) -> list[list[float]]:
         except _FAILURES as e:  # 실패 종류만 남긴다. 메시지에 요청문이 섞일 수 있다
             kind = _failure_kind(e)
             log.warning("임베딩 호출 실패(%d/%d): %s", attempt, _ATTEMPTS, kind)
+            if isinstance(e, httpx.TimeoutException):
+                break
     raise EmbeddingUnavailable(kind)
 
 

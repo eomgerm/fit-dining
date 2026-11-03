@@ -99,10 +99,30 @@ def test_documents_stay_local_even_with_remote_set(modal, model):
 
 def test_remote_retries_once_then_succeeds(modal):
     seen, replies = modal
-    replies += [httpx.ConnectTimeout("느림"), embed_reply([[1.0]])]
+    replies += [httpx.ConnectError("끊김"), embed_reply([[1.0]])]
 
     assert embedding.encode_queries(["a"]) == [[1.0]]
     assert len(seen) == 2
+
+
+@pytest.mark.parametrize(
+    "timeout",
+    [
+        httpx.ConnectTimeout("느림"),
+        httpx.ReadTimeout("느림"),
+        httpx.WriteTimeout("느림"),
+        httpx.PoolTimeout("느림"),
+    ],
+    ids=lambda e: type(e).__name__,
+)
+def test_remote_timeout_is_not_retried(modal, timeout):
+    # 콜드 스타트 타임아웃은 3초 뒤에도 같다. 다시 부르면 Modal이 컨테이너를 하나 더 띄울 뿐이다
+    seen, replies = modal
+    replies += [timeout, embed_reply([[1.0]])]
+
+    with pytest.raises(embedding.EmbeddingUnavailable, match=type(timeout).__name__):
+        embedding.encode_queries(["a"])
+    assert len(seen) == 1
 
 
 @pytest.mark.parametrize(
@@ -111,12 +131,12 @@ def test_remote_retries_once_then_succeeds(modal):
         httpx.Response(401),
         httpx.Response(303, headers={"Location": "https://embed.example/result"}),
         httpx.Response(500),
-        httpx.ReadTimeout("느림"),
+        httpx.ConnectError("끊김"),
         httpx.Response(200, text="not json"),
         embed_reply([[1.0]], model="other-model@1"),
         embed_reply([[1.0], [2.0]]),
     ],
-    ids=["401", "303", "500", "timeout", "not-json", "other-model", "count"],
+    ids=["401", "303", "500", "connect-error", "not-json", "other-model", "count"],
 )
 def test_remote_two_failures_raise_unavailable(modal, bad):
     seen, replies = modal
