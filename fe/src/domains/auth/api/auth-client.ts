@@ -104,7 +104,32 @@ export type SignupRequest = {
   password: string;
   nickname: string;
   agreements: { ageOver14: boolean; terms: boolean; privacy: boolean };
+  // 이메일 인증 확인으로 받은 1회용 토큰. 메모리에만 두고 storage에 저장하지 않는다
+  verificationToken: string;
 };
+export type EmailVerificationRequested = {
+  expiresAt: string;
+  resendAvailableAt: string;
+};
+export type EmailVerificationConfirmed = {
+  verificationToken: string;
+  expiresAt: string;
+};
+// 가입 전 이메일 소유 확인. 쿠키를 다루지 않아 브라우저 잠금 없이 보낸다
+export async function requestEmailVerification(email: string) {
+  return send<EmailVerificationRequested>("/email-verifications", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: email.trim().toLowerCase() }),
+  });
+}
+export async function confirmEmailVerification(email: string, code: string) {
+  return send<EmailVerificationConfirmed>("/email-verifications/confirm", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: email.trim().toLowerCase(), code }),
+  });
+}
 export async function signup(body: SignupRequest) {
   return browserLock(async () => {
     const next = await send<AuthSession>("/signup", {

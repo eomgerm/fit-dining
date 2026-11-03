@@ -219,6 +219,7 @@ test("signup normalizes inputs, stores nickname and broadcasts under cookie lock
       password: "password1",
       nickname: "new",
       agreements: { ageOver14: true, terms: true, privacy: true },
+      verificationToken: "verified-token",
     });
     return json({ ...value(), nickname: "new" }, 201);
   });
@@ -229,6 +230,7 @@ test("signup normalizes inputs, stores nickname and broadcasts under cookie lock
       password: "password1",
       nickname: " new ",
       agreements: { ageOver14: true, terms: true, privacy: true },
+      verificationToken: "verified-token",
     });
     assert.equal(auth.getSession()?.nickname, "new");
     assert.deepEqual(env.messages, ["session-changed"]);
@@ -252,6 +254,7 @@ test("signup failure preserves current session and does not broadcast", async ()
         password: "password1",
         nickname: "new",
         agreements: { ageOver14: true, terms: true, privacy: true },
+        verificationToken: "verified-token",
       }),
       { status: 409 },
     );
@@ -295,6 +298,72 @@ test("social signup saves session and broadcasts the cookie change", async () =>
     });
     assert.equal(auth.getSession()?.accessToken, "social-at");
     assert.deepEqual(env.messages, ["session-changed"]);
+  } finally {
+    env.reset();
+  }
+});
+
+test("email verification request and confirm send normalized email without cookie lock", async () => {
+  const calls: { url: string; body: unknown }[] = [];
+  const env = environment(async (url, options) => {
+    calls.push({ url, body: JSON.parse(String(options.body)) });
+    return url.endsWith("/confirm")
+      ? json({
+          verificationToken: "token-1",
+          expiresAt: "2026-11-03T00:30:00Z",
+        })
+      : json(
+          {
+            expiresAt: "2026-11-03T00:10:00Z",
+            resendAvailableAt: "2026-11-03T00:01:00Z",
+          },
+          202,
+        );
+  }, false);
+  try {
+    const auth = await load();
+    assert.equal(
+      (await auth.requestEmailVerification(" New@Example.com ")).expiresAt,
+      "2026-11-03T00:10:00Z",
+    );
+    assert.equal(
+      (await auth.confirmEmailVerification("New@Example.com", "123456"))
+        .verificationToken,
+      "token-1",
+    );
+    assert.deepEqual(calls, [
+      {
+        url: "/api/auth/email-verifications",
+        body: { email: "new@example.com" },
+      },
+      {
+        url: "/api/auth/email-verifications/confirm",
+        body: { email: "new@example.com", code: "123456" },
+      },
+    ]);
+    assert.equal(auth.getSession(), null);
+    assert.deepEqual(env.messages, []);
+  } finally {
+    env.reset();
+  }
+});
+
+test("email verification failure keeps problem type", async () => {
+  const env = environment(async () =>
+    json(
+      { type: "urn:fitdining:auth:verification-code-mismatch", status: 400 },
+      400,
+    ),
+  );
+  try {
+    const auth = await load();
+    await assert.rejects(
+      auth.confirmEmailVerification("new@example.com", "000000"),
+      (error: unknown) =>
+        error instanceof auth.AuthError &&
+        error.status === 400 &&
+        error.problem?.type === "urn:fitdining:auth:verification-code-mismatch",
+    );
   } finally {
     env.reset();
   }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "@/shared/api/api-error";
-import { signupFailure } from "./signup-error";
+import { signupFailure, verificationFailure } from "./signup-error";
 
 describe("signup errors", () => {
   it.each(["email", "nickname"] as const)(
@@ -42,6 +42,66 @@ describe("signup errors", () => {
       signupFailure(new ApiError("http", "limited", { status: 429 })).message,
     ).toBe("잠시 후 다시 시도해주세요.");
     expect(signupFailure(new ApiError("network", "offline")).message).toBe(
+      "offline",
+    );
+  });
+});
+
+describe("email verification errors", () => {
+  it("returns to verification when signup token is missing or expired", () => {
+    const failure = signupFailure(
+      new ApiError("http", "bad input", {
+        status: 400,
+        problem: {
+          status: 400,
+          type: "urn:fitdining:auth:verification-required",
+        },
+      }),
+    );
+    expect(failure.resetVerification).toBe(true);
+    expect(failure.fields.email).toBe(
+      "이메일 인증이 만료됐어요. 다시 인증해 주세요.",
+    );
+    expect(failure.message).toBe("");
+  });
+  it.each([
+    ["email-taken", 409, "이미 가입한 이메일이에요. 로그인해 주세요."],
+    ["verification-code-mismatch", 400, "인증번호가 맞지 않아요."],
+    ["verification-expired", 400, "인증번호가 만료됐어요. 다시 받아 주세요."],
+    ["verification-attempts-exceeded", 429, "인증번호를 다시 받아 주세요."],
+    [
+      "mail-unavailable",
+      503,
+      "메일을 보내지 못했어요. 잠시 후 다시 시도해 주세요.",
+    ],
+  ])("maps %s by type", (type, status, text) =>
+    expect(
+      verificationFailure(
+        new ApiError("http", "failed", {
+          status,
+          problem: { status, type: `urn:fitdining:auth:${type}` },
+        }),
+      ),
+    ).toBe(text),
+  );
+  it("maps untyped rate limit, field errors and network failures", () => {
+    expect(
+      verificationFailure(new ApiError("http", "limited", { status: 429 })),
+    ).toBe("잠시 후 다시 시도해 주세요.");
+    expect(
+      verificationFailure(
+        new ApiError("http", "bad", {
+          status: 400,
+          problem: {
+            status: 400,
+            errors: [
+              { field: "code", reason: "인증번호 6자리를 입력해 주세요." },
+            ],
+          },
+        }),
+      ),
+    ).toBe("인증번호 6자리를 입력해 주세요.");
+    expect(verificationFailure(new ApiError("network", "offline"))).toBe(
       "offline",
     );
   });

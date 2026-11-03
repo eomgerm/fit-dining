@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { validateSignup } from "./signup";
+import {
+  formatRemaining,
+  validateSignup,
+  validateVerificationCode,
+  verificationSentMessage,
+} from "./signup";
 
 const valid = {
   email: " User@Example.com ",
@@ -80,4 +85,27 @@ it("accepts a trimmed 15-character nickname and rejects 16 code points", () => {
   expect(
     validateSignup({ ...valid, nickname: "😀".repeat(16) }).nickname,
   ).toBeTruthy();
+});
+
+describe("email verification model", () => {
+  it.each(["123456", "000000"])("accepts six digits %s", (code) =>
+    expect(validateVerificationCode(code)).toBeUndefined(),
+  );
+  it.each(["12345", "1234567", "12a456", " 123456", "１２３４５６"])(
+    "rejects %s",
+    (code) =>
+      expect(validateVerificationCode(code)).toBe(
+        "인증번호 6자리를 입력해 주세요.",
+      ),
+  );
+  it("formats remaining time without going below zero", () => {
+    expect(formatRemaining(600_000)).toBe("10:00");
+    expect(formatRemaining(59_001)).toBe("1:00");
+    expect(formatRemaining(9_000)).toBe("0:09");
+    expect(formatRemaining(-1)).toBe("0:00");
+  });
+  it("mentions the spam folder in the sent message", () =>
+    expect(verificationSentMessage("a@example.com")).toBe(
+      "a@example.com로 인증번호를 보냈어요. 메일이 안 보이면 스팸함도 확인해 주세요.",
+    ));
 });
