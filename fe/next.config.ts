@@ -35,6 +35,11 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      // 에이전트는 그대로 읽되, 밖에서 링크되어도 원문 파일이 검색 결과에 뜨지 않게 한다
+      {
+        source: "/llms.txt",
+        headers: [{ key: "X-Robots-Tag", value: "noindex" }],
+      },
     ];
   },
   async rewrites() {
