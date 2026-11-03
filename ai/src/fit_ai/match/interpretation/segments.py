@@ -35,7 +35,7 @@ class LocationKind(StrEnum):
     """지역 표현의 종류"""
 
     STATION = "STATION"
-    """역. 서비스 역이면 `Conditions.station`에 역 코드가 같이 들어간다."""
+    """역. 서비스 역이면 `Conditions.station`이 그 역 코드다."""
     AREA = "AREA"
     """동네, 거리, 랜드마크(역삼동, 가로수길, 코엑스)"""
     HERE = "HERE"

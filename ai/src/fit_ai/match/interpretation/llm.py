@@ -193,13 +193,16 @@ def _user_prompt(query: str, previous: Conditions | None) -> str:
 
 def _parse(
     data: object, query: str, previous: Conditions | None
-) -> tuple[Conditions, str | None]:
+) -> tuple[Conditions, Conditions, str | None]:
     """LLM 출력(JSON을 읽은 값)을 조건으로 바꾼다. 형식이 틀리면 실패다.
 
     출력은 이번 요청의 분류별 조각이다. 모르는 코드는 버리고, 분류별 조각은 꼴이 틀린
     조각만 버린다. 2차 꼴(`codes`, `category_group`, `avoid_foods`)로 내도 읽는다. 그다음
     LLM이 놓치거나 잘못 넣은 조각을 규칙 해석으로 바로잡고(`_checked`), 후속이면 이전
     조건과 합친다(`merge.merge`). 메시지는 로그에 남으므로 출력 내용을 넣지 않는다.
+
+    Returns:
+        (이번 요청만 해석한 조건, 합친 조건, 바뀐 점)
     """
     if not isinstance(data, dict):
         raise TypeError("JSON 객체가 아니다")
@@ -283,9 +286,10 @@ def _parse(
         else None,
     )
     if previous is None:
-        return turn, None
+        return turn, turn, None
     kept = set(_kept_codes(previous, query, list(turn.codes), turn.avoid_foods))
-    return merge(previous, turn, [c for c in previous.codes if c not in kept]), summary
+    merged = merge(previous, turn, [c for c in previous.codes if c not in kept])
+    return turn, merged, summary
 
 
 def _repeats(text: str, before: str, category_group: str | None) -> bool:

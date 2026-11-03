@@ -25,12 +25,19 @@ from fit_ai.match.candidates import (
 from fit_ai.match.cards import Source
 from fit_ai.match.conditions import Layer
 from fit_ai.match.interpretation import Conditions
-from fit_ai.match.interpretation.segments import Hours, Menu, Price
+from fit_ai.match.interpretation.segments import (
+    Hours,
+    Location,
+    LocationKind,
+    Menu,
+    Price,
+)
 from fit_ai.match.place import ConditionEvidence, Place, PlaceInfo
 from fit_ai.match.search import (
     EmbeddingError,
     SearchRequest,
     SearchResult,
+    _where,
     empty_reason,
     menu_terms,
     open_hours,
@@ -320,6 +327,33 @@ class TestFilter:
 
 class TestWhere:
     """거를 지역. 이번 요청에 말한 지역 > 지도 영역 > 이전 요청의 지역"""
+
+    @pytest.mark.parametrize(
+        ("turn_locations", "bounds", "areas"),
+        [
+            # 이번 요청에 지역이 없으면 이전 역보다 지도 영역이 앞선다. 이전 역 이름이
+            # 요청문에 섞여 있는지는 보지 않는다(이번 요청의 조건만 본다).
+            ((), BOUNDS, (BOUNDS,)),
+            ((), None, (GANGNAM,)),
+            ((Location("근처", LocationKind.HERE),), BOUNDS, (BOUNDS,)),
+            ((Location("회사 근처", LocationKind.UNKNOWN),), None, (GANGNAM,)),
+            (
+                (Location("역삼역", LocationKind.STATION, "역삼역"),),
+                BOUNDS,
+                (StationArea("역삼역", "YEOKSAM"),),
+            ),
+        ],
+    )
+    def test_turn_locations(
+        self,
+        turn_locations: tuple[Location, ...],
+        bounds: MapBounds | None,
+        areas: tuple,
+    ) -> None:
+        """지역_이번요청의조건에말한지역이있으면_그지역이고없으면지도영역다음이전지역이다"""
+        turn = Conditions("요청", "요청", locations=turn_locations)
+
+        assert _where(PREVIOUS, turn, bounds).areas == areas
 
     def test_said_location_beats_map_bounds(self, fake_gms: FakeGms) -> None:
         """지역_이번요청에역을말하면_지도영역이있어도역으로거른다"""

@@ -260,12 +260,14 @@ class Interpretation:
     """요청 해석 결과.
 
     Attributes:
-        conditions: 해석한 조건
+        conditions: 해석한 조건. 후속 조건이면 이전 조건과 합친 조건이다.
         change_summary: 후속 조건에서 바뀐 점. 새 검색이면 None이다.
         llm_error: 규칙으로 해석한 이유. LLM으로 해석했으면 None이다.
         llm_seconds: LLM 호출에 걸린 시간(초)
         gms_failed: GMS 호출 자체가 실패했는지(꺼짐 포함). 출력 검사에 걸린 것과
             다르다. 검색은 이때 정렬 LLM을 부르지 않는다.
+        turn: 이번 요청만 해석한 조건. 지역 고르기가 이번 요청에 말한 지역을 볼 때 쓴다.
+            None이면 `conditions`와 같다고 본다(새 검색).
     """
 
     conditions: Conditions
@@ -273,19 +275,7 @@ class Interpretation:
     llm_error: str | None = None
     llm_seconds: float | None = None
     gms_failed: bool = False
-
-
-def locations_of(conditions: Conditions) -> tuple[Location, ...]:
-    """조건의 지역을 꺼낸다. 1차 꼴의 역과 근처는 조건을 만들 때 지역 조각으로 바꿨다
-    (`Conditions.from_codes`).
-
-    Args:
-        conditions: 해석한 조건
-
-    Returns:
-        지역 조각. 지역이 없으면 빈 튜플이다.
-    """
-    return conditions.locations
+    turn: Conditions | None = None
 
 
 def _assemble(

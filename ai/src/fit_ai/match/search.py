@@ -4,6 +4,7 @@
 ③ 카드 만들기 순서다. 뽑힌 장소가 없으면 점수를 내지 않고 결과 없음 이유를 만든다.
 LLM은 요청 해석에만 쓰고, 순서는 핏 점수로 정한다. 근처 검색도 같다(docs/comparison/spec.md
 3장). 후보를 거를 지역은 이번 요청에 말한 지역, 지도 영역, 이전 요청의 지역 순서로 정한다.
+이번 요청에 말한 지역은 해석이 낸 이번 요청의 조건(`Interpretation.turn`)에서 꺼낸다.
 영업시간과 가격은 안 맞는다고 확인된 곳만 거르고, 메뉴는 그 메뉴를 판다고 확인된 곳만
 남긴다(docs/comparison/spec.md 4.2).
 HTTP 요청·응답 모양과 폴백 코드로 바꾸는 일은 API(`server/search.py`)가 한다.
@@ -37,7 +38,6 @@ from fit_ai.match.interpretation import (
     Conditions,
     Interpretation,
     interpret,
-    locations_of,
     station_code,
 )
 from fit_ai.match.interpretation.segments import (
@@ -202,7 +202,7 @@ def search(
     """
     interpretation = interpret(request.query, request.previous, timeout, client)
     conditions = interpretation.conditions
-    where = _where(conditions, request.previous, request.query, request.bounds)
+    where = _where(conditions, interpretation.turn, request.bounds)
     if where.unready and not where.areas:
         # 거를 수 있는 지역 없이 랜드마크만 말했으면 어디서 찾을지 몰라 찾지 않는다.
         reason = empty_reason(conditions, unready=where.unready)
@@ -332,33 +332,32 @@ def _object(word: str) -> str:
 
 def _where(
     conditions: Conditions,
-    previous: Conditions | None,
-    query: str,
+    turn: Conditions | None,
     bounds: MapBounds | None,
 ) -> _Where:
     """후보를 거를 곳을 정한다.
 
     이번 요청에 말한 지역, 지도 영역, 이전 요청의 지역 순서로 앞선다(2026-11-02 결정).
     "강남역 카페"를 찾고 지도를 옮겨 "이 지역에서 검색"을 누르면 지도 영역으로 찾고, 거기서
-    "선릉역으로"라고 하면 선릉역으로 찾는다. 해석은 이전 지역을 이어 붙이므로 이번 요청에
-    말했는지는 이전 지역에 없거나 원문이 요청문에 있는지로 본다. 어딘지 알 수 없는
-    곳("회사 근처")은 말하지 않은 것으로 본다.
+    "선릉역으로"라고 하면 선릉역으로 찾는다. 이번 요청에 말한 지역은 이번 요청만 해석한
+    조건(`turn`)에서 바로 꺼낸다. 어딘지 알 수 없는 곳("회사 근처")은 말하지 않은 것으로
+    본다.
+
+    Args:
+        conditions: 이전 조건과 합친 조건
+        turn: 이번 요청만 해석한 조건. None이면 `conditions`와 같다(새 검색).
+        bounds: 지도 영역
     """
-    locations = locations_of(conditions)
-    carried = (
-        {_location_key(loc) for loc in locations_of(previous)} if previous else set()
-    )
     said = [
         loc
-        for loc in locations
+        for loc in (turn or conditions).locations
         if loc.kind is not LocationKind.UNKNOWN
-        and (_location_key(loc) not in carried or _plain(loc.text) in _plain(query))
     ]
     if said:
         return _areas(said, bounds)
     if bounds is not None:
         return _Where((bounds,))
-    return _areas(locations, None)
+    return _areas(conditions.locations, None)
 
 
 def _areas(locations: Sequence[Location], bounds: MapBounds | None) -> _Where:
@@ -421,11 +420,6 @@ def _has_places(
         area = replace(area, walk_minutes=None, exit=None)
     found = store.find(PlaceFilter(areas=(area,)), query, 1)
     return bool(found.candidates or found.invalid)
-
-
-def _location_key(location: Location) -> tuple[LocationKind, str]:
-    """이전 지역과 같은지 견줄 때 쓰는 값. 종류와 표준 이름(없으면 원문)이다."""
-    return location.kind, _plain(location.value or location.text)
 
 
 def _plain(text: str) -> str:

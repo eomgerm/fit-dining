@@ -279,8 +279,24 @@ def interpret_by_rules(query: str, previous: Conditions | None = None) -> Condit
     Returns:
         해석한 조건
     """
+    turn = rule_turn(query)
+    if previous is None:
+        return turn
+    kept = set(_kept_codes(previous, query, list(turn.codes), turn.avoid_foods))
+    return merge(previous, turn, [c for c in previous.codes if c not in kept])
+
+
+def rule_turn(query: str) -> Conditions:
+    """이번 요청만 낱말 규칙으로 해석한다. 이전 조건과 합치지 않는다.
+
+    Args:
+        query: 사용자가 이번에 입력한 요청문
+
+    Returns:
+        이번 요청만 해석한 조건
+    """
     parts = _rule_parts(query)
-    turn = _assemble(
+    return _assemble(
         text=query,
         embedding_text=_without_location(
             _without_negated(query, parts.category_group), parts.category_group
@@ -297,10 +313,6 @@ def interpret_by_rules(query: str, previous: Conditions | None = None) -> Condit
         avoid_foods=parts.avoid_foods,
         party_size=parts.party_size,
     )
-    if previous is None:
-        return turn
-    kept = set(_kept_codes(previous, query, list(turn.codes), turn.avoid_foods))
-    return merge(previous, turn, [c for c in previous.codes if c not in kept])
 
 
 def _without_negated(query: str, category_group: str | None) -> str:

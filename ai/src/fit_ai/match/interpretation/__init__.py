@@ -40,10 +40,9 @@ from fit_ai.match.interpretation.request import (
     MAX_WALK_MINUTES,
     Conditions,
     Interpretation,
-    locations_of,
     station_code,
 )
-from fit_ai.match.interpretation.rules import interpret_by_rules
+from fit_ai.match.interpretation.rules import interpret_by_rules, rule_turn
 
 __all__ = [
     "CODE_PHRASES",
@@ -60,7 +59,6 @@ __all__ = [
     "Interpretation",
     "interpret",
     "interpret_by_rules",
-    "locations_of",
     "station_code",
 ]
 
@@ -104,10 +102,10 @@ def interpret(
             gms_failed=True,
         )
     try:
-        conditions, summary = _parse(data, query, previous)
+        turn, conditions, summary = _parse(data, query, previous)
     except (ValueError, TypeError) as e:
         return _by_rules(query, previous, str(e), seconds)
-    return Interpretation(conditions, summary, llm_seconds=seconds)
+    return Interpretation(conditions, summary, llm_seconds=seconds, turn=turn)
 
 
 def _by_rules(
@@ -123,4 +121,5 @@ def _by_rules(
         llm_error=error,
         llm_seconds=seconds,
         gms_failed=gms_failed,
+        turn=rule_turn(query),
     )
