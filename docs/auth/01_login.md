@@ -13,7 +13,8 @@
 - 세션 테이블은 없다. 가입·로그인마다 새 `family_id`를 만들고 API의 `sessionId`로 반환한다. 묶음 식별자와 만료는 RT 행에서 읽는다.
 - JWT에는 표준 클레임과 `token_type`만 담는다. 계정 정보는 응답 본문이나 내 정보 API로 제공한다.
 - DB에는 비밀번호 해시와 RT 식별자·메타데이터를 저장한다. 평문 비밀번호, JWT 원문, AT, 서명 키는 저장하지 않는다.
-- 소셜 로그인·가입은 아래 소셜 로그인 절을 따른다. 이메일 인증, 비밀번호 찾기, 다른 기기 관리 UI는 구현되어 있지 않다.
+- 소셜 로그인·가입은 아래 소셜 로그인 절을 따른다. 비밀번호 찾기, 다른 기기 관리 UI는 구현되어 있지 않다.
+- 이메일 가입은 메일로 받은 6자리 인증번호로 소유를 확인한 뒤에만 계정을 만든다(2026-11-03, 아래 이메일 가입 인증 절). 이전에는 인증하지 않았고, 그때 가입한 계정은 그대로 둔다.
 
 ## 2. 화면과 사용자 흐름
 
@@ -368,7 +369,7 @@ BE 테스트는 Docker 데몬이 필요하며 외부 DB는 불필요하다. `be/
 - 정리 작업은 기본 10분마다 테이블당 1,000행까지 처리한다. 유입량이 이를 넘을 경우 보관 데이터가 쌓일 수 있어 운영 처리량에 맞춘 설정 확인이 필요하다.
 - 약관 본문(2026-11-02 시행)은 법률 검토를 받지 않은 교육 과정용 문구다. 약관 버전을 바꿔도 기존 가입자는 이전 버전 동의 상태로 남으며, 재동의 흐름은 없다.
 - 가입 소개 캐러셀은 정적 그림이며 레퍼런스의 모션 그래픽은 없다.
-- 이메일 인증·비밀번호 찾기는 미구현이다. 소셜 로그인은 아래 2026-10-26 절에 정리되어 있다. 로그인 유지 방식 결정 배경은 [세션·소셜 로그인 검토](02_session-and-social-login-review.md)를 참고한다.
+- 비밀번호 찾기는 미구현이다. 이메일 가입 인증은 아래 2026-11-03 절, 소셜 로그인은 아래 2026-10-26 절에 정리되어 있다. 로그인 유지 방식 결정 배경은 [세션·소셜 로그인 검토](02_session-and-social-login-review.md)를 참고한다.
 
 ## 온보딩 가입 확장 (2026-10-26)
 
@@ -435,7 +436,7 @@ POST /api/auth/social/signup은 이메일 가입과 같은 선택 preferences �
 local은 APP_ENV가 없고 dev/prod/migrate 프로필도 없는 경우다. local에서만 Origin 검사를 생략하고 JWT_SECRET이 비면 고정 개발 서명 키를 쓴다.
 dev 서버는 실제 JWT_SECRET, Origin 검사, AUTH_DEV_KEY와 AUTH_DEMO_PASSWORD가 필수다.
 
-이메일·소셜 요청 제한과 시도 기록을 생략하고 BCrypt cost 4를 사용한다. 모르는 계정의 dummy hash를 만들거나 비교하지 않는다.
+이메일·소셜 요청 제한과 시도 기록을 생략하고(이메일 인증번호 발송 제한은 예외, 아래 이메일 가입 인증 정책 참고) BCrypt cost 4를 사용한다. 모르는 계정의 dummy hash를 만들거나 비교하지 않는다.
 AT는 12시간, 세션은 30일이다. 사용한 RT는 만료 전까지 같은 family로 재발급할 수 있고 재사용 보안 이벤트를 남기지 않는다. logout으로 폐기한 RT는 거부한다.
 간소 모드에서 받은 RT는 Strict로 바꿔도 만료(30일)까지 유효하다. 확인하려면 로그아웃 후 다시 로그인한다.
 데모 기본 계정은 `dev@fitdining.local`, 닉네임 `개발자`, local 기본 비밀번호는 `fitdining-dev1`이다. AUTH_DEMO_EMAIL/PASSWORD/NICKNAME으로 덮어쓴다.
@@ -446,3 +447,85 @@ AUTH_DEV_KEY를 X-Dev-Key 헤더에 전달한다(local에서 키 미설정 시 �
 발급한 AT를 `Authorization: Bearer <AT>`로 `/api/auth/me`와 보호 API에 사용한다.
 
 prod 동작 확인 시 dev에서 AUTH_SIMPLE_ENABLED=false로 재시작하여 21번째 시도 429, RT 재사용 시 family 폐기, 30분 AT 수명과 Origin 검사를 확인한다.
+
+## 이메일 가입 인증 (2026-11-03)
+
+이메일 가입 전에 그 주소의 소유를 확인한다(S15P31A302-157). 인증하지 않은 이메일로는 가입 API가 계정을 만들지 않는다.
+
+### 결정
+
+| # | 항목 | 결정 |
+|---|---|---|
+| D1 | 인증 방식 | 6자리 숫자 인증번호. 메일 앱과 브라우저를 오가도 가입 입력값이 남는다 |
+| D2 | 인증 시점 | 가입 전. 인증을 마친 이메일만 `signup`이 받으므로 미인증 계정이 생기지 않고, 보호 API는 계속 DB를 조회하지 않는다 |
+| D3 | 발송 수단 | Gmail SMTP(`smtp.gmail.com:587`, STARTTLS, 앱 비밀번호). `spring-boot-starter-mail`과 `VerificationMailer` 포트라 설정값만 바꾸면 다른 업체로 옮길 수 있다 |
+| D4 | 기존 이메일 가입자 | 인증 없이 그대로 둔다. `auth_users.email_verified_at`은 NULL이고 기능을 막지 않는다 |
+| D5 | 이미 가입한 이메일로 요청 | 409 `urn:fitdining:auth:email-taken`. 가입 API와 노출 수준이 같다 |
+| D6 | 로컬·dev | SMTP 값이 없으면 메일을 보내지 않고 인증번호를 BE 로그에 남긴다. prod는 로그 발송기로 기동하지 못한다 |
+| D7 | 발송 계정 | 팀 공용 Gmail 계정(2단계 인증 + 앱 비밀번호). 보내는 사람 이름은 "핏다이닝" |
+
+Spring Security One-Time Token Login은 이미 있는 사용자의 비밀번호 없는 로그인용이고 필터 체인을 새로 들여와야 해서 쓰지 않았다. Redis도 쓰지 않는다. 시도 제한이 이미 DB 기반이기 때문이다.
+
+### API
+
+| 메서드·경로 | 요청 | 성공 | 오류 |
+|---|---|---|---|
+| `POST /api/auth/email-verifications` | `{ "email" }` | 202 `{ "expiresAt", "resendAvailableAt" }` | 400 형식(`errors[].field=email`), 409 `email-taken`, 429(재발송 대기·발송 제한, `Retry-After`는 남은 초), 503 `urn:fitdining:auth:mail-unavailable` |
+| `POST /api/auth/email-verifications/confirm` | `{ "email", "code" }` | 200 `{ "verificationToken", "expiresAt" }` | 400 형식(`errors[].field=code`), 400 `urn:fitdining:auth:verification-code-mismatch`, 400 `urn:fitdining:auth:verification-expired`, 429 `urn:fitdining:auth:verification-attempts-exceeded` |
+| `POST /api/auth/signup` | 기존 본문 + `verificationToken` | 201(기존과 같음) | 토큰이 없거나 만료·사용됨·다른 이메일이면 400 `urn:fitdining:auth:verification-required`. 이메일·닉네임 중복(409)은 토큰 검사보다 먼저 판정한다 |
+
+- 두 인증 API도 `/api/auth/**` Origin 검사를 받는다. 시각은 ISO-8601 문자열이다.
+- 같은 이메일로 다시 요청하면 이전 인증번호는 바로 만료된다. 확인을 마친 인증 토큰은 그대로 쓸 수 있다.
+- 메일 발송이 실패하면 이번 발송 기록을 지워 바로 다시 요청할 수 있게 하고 503을 준다. 서버 로그에는 받는 주소가 섞이지 않게 예외 종류만 남긴다.
+
+### 정책
+
+| 항목 | 값 |
+|---|---|
+| 인증번호 | 6자리, `SecureRandom` |
+| 인증번호 유효 | 10분 |
+| 확인 시도 | 인증번호 1개당 5회. 5번째로 틀리면 429 `verification-attempts-exceeded`를 주고 이후 정답도 거절한다 |
+| 재발송 대기 | 같은 이메일 60초 |
+| 발송 제한 | 주소별 15분 10회(`auth_login_attempts.action=verify_send`), 이메일별 1시간 5회(`auth_email_verifications` 행 수) |
+| 확인 제한 | 주소별 15분 30회(`verify_confirm`) |
+| 인증 토큰 | 256비트 난수, 30분, 1회용 |
+
+발송 제한(재발송 대기, 주소별 15분 10회, 이메일별 1시간 5회)은 간소 모드(`AUTH_SIMPLE_ENABLED=true`)에서도 항상 적용한다. dev가 발송 계정의 하루 한도를 다 써서 prod 인증 메일이 막히는 일을 막기 위해서다(scope D9). 인증번호 1개당 5회 제한도 그대로다. 주소별 확인 제한(`verify_confirm`)만 로그인 시도 제한처럼 간소 모드에서 끈다.
+
+### 저장
+
+`V16__email_verification.sql`이 다음을 바꾼다.
+
+- `auth_email_verifications(id, email, code_hash, attempts, created_at, expires_at, verified_at, token_hash, token_expires_at, consumed_at)`. `(email, created_at)`·`created_at` 인덱스, `token_hash` 유일.
+- 인증번호는 `HMAC-SHA256(JWT 서명 키, email + 줄바꿈 + 번호)`, 인증 토큰은 `SHA-256`으로만 저장하고 원문은 저장하지 않는다. 비교는 상수 시간이다.
+- `auth_users.email_verified_at timestamptz`. 인증 가입과 서버 설정 데모 계정은 가입 시각으로 채우고, 기존 행과 소셜 가입은 NULL이다.
+- `auth_login_attempts.action` CHECK에 `verify_send`, `verify_confirm`을 더했다.
+- 가입 트랜잭션은 `consumed_at IS NULL AND token_expires_at > now` 조건부 UPDATE로 토큰을 먼저 사용 처리한다. 갱신 행이 1이 아니면 400으로 롤백하므로 같은 토큰의 동시 가입은 한 건만 통과한다. 계정 INSERT가 실패하면 토큰 사용도 함께 롤백된다.
+- `AuthCleanup`이 `auth.cleanup.verification-retention`(기본 1일, 1시간보다 짧으면 기동 거부)보다 오래된 발송 기록을 지운다.
+
+### 설정
+
+| 설정 | env | 설명 |
+|---|---|---|
+| `spring.mail.host`·`port`·`username`·`password` | `SPRING_MAIL_HOST`, `SPRING_MAIL_PORT`(기본 587), `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD` | 호스트가 비면 로그 발송기. 호스트가 있으면 나머지와 `AUTH_MAIL_FROM`이 모두 있어야 하고 `REPLACE_ME`면 기동 거부 |
+| `auth.mail.from` | `AUTH_MAIL_FROM` | 보내는 주소. 표시 이름은 `auth.mail.from-name`(기본 핏다이닝) |
+| `management.health.mail.enabled` | - | `false`. 메일 서버 장애가 앱 health를 흔들지 않게 한다 |
+
+서버 `/etc/fit/prod.env`·`/etc/fit/dev.env`의 실제 값과 발송 계정 준비는 사용자 작업이다. 배포 서버에서 `smtp.gmail.com:587` 아웃바운드가 열려 있는지 먼저 확인한다.
+
+### 화면
+
+`/signup/email`(2-02)에 인증 단계를 더했다. 인증 화면은 레퍼런스에 없어 `SignupEmail`의 도움말·오류 패턴과 `PasswordSent` 문구 톤에 맞췄고, 문구는 `fe/src/domains/auth/model/signup.ts`의 `signupMessages`에 모았다.
+
+- 이메일 칸 오른쪽 [인증번호 받기](형식이 맞을 때만 켜짐) → 인증번호 칸이 나타나고 이메일 칸 아래에 "{email}로 인증번호를 보냈어요. 메일이 안 보이면 스팸함도 확인해 주세요."를 보인다.
+- 인증번호 칸은 `inputMode=numeric`, `autocomplete=one-time-code`, 6자리이며 남은 시간(10:00부터)을 보인다. [다시 받기]는 60초 뒤 켜진다. 남은 시간은 표시용이고 만료 판정은 서버가 한다.
+- 성공하면 "인증했어요."를 보이고 이메일 칸을 읽기 전용으로 잠근다. [이메일 바꾸기]로 처음부터 다시 받는다. 인증번호를 보낸 뒤 이메일을 고쳐도 처음부터 다시다.
+- [다음]은 기존 조건에 더해 지금 이메일의 인증을 마쳤을 때만 켜진다. 인증 토큰은 메모리 state에만 두고 storage에 저장하지 않는다.
+- 가입이 `verification-required`로 실패하면 시트를 닫고 이메일 칸에 "이메일 인증이 만료됐어요. 다시 인증해 주세요."를 보이며 인증 단계로 되돌린다.
+- 인증번호 칸은 투명도만 200ms(움직임 줄이기 120ms)로 나타난다.
+
+### 남은 이슈
+
+- 실제 Gmail 발송, 배포 서버의 587 포트 접속, 360px 실제 브라우저 레이아웃은 확인하지 않았다(로그 발송기와 jsdom 시험만 했다).
+- Gmail 일반 계정은 하루 약 500명 수신 한도가 있다. 넘으면 하루 동안 발송이 막히며 503으로 알린다.
+- 비밀번호 찾기 메일은 같은 `VerificationMailer` 포트를 재사용할 수 있게만 만들었다.
