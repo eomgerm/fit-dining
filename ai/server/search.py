@@ -32,7 +32,6 @@ from fit_ai.match.interpretation.segments import (
 )
 from fit_ai.match.search import (
     EmbeddingError,
-    Fallback,
     SearchRequest,
     SearchResult,
     search,
@@ -158,7 +157,7 @@ def _search(deps: Dependencies, body: SearchBody) -> JSONResponse:
     conditions = interpretation.conditions
     fallbacks = _fallbacks(body, previous, taste_invalid, result)
     ranked_by = _ranked_by(result)
-    used_llm = interpretation.llm_error is None or ranked_by == "LLM"
+    used_llm = interpretation.llm_error is None
     reason = result.empty_reason
     response = SearchResponse(
         conditions=_conditions_body(conditions),
@@ -196,14 +195,7 @@ def _search(deps: Dependencies, body: SearchBody) -> JSONResponse:
         interpret_llm_seconds=interpretation.llm_seconds,
         embed_seconds=trace.embed_seconds,
         store_seconds=trace.store_seconds,
-        rank_llm_error=trace.rank_llm_error,
-        rank_llm_seconds=trace.rank_llm_seconds,
-        # 검사를 통과한 LLM 응답에는 후보 번호와 등급만 있다. 실패한 응답은 요청문을
-        # 되풀이했을 수 있어 길이만 남긴다(인프라 설계 12.2-5).
-        rank_llm_raw=trace.rank_llm_raw if ranked_by == "LLM" else None,
-        rank_llm_raw_length=(
-            len(trace.rank_llm_raw) if trace.rank_llm_raw is not None else None
-        ),
+        score_seconds=trace.score_seconds,
     )
     return JSONResponse(response.model_dump(by_alias=True, exclude_none=True))
 
@@ -220,16 +212,16 @@ def _fallbacks(
         "INTERPRET_LLM_FAILED": result.interpretation.llm_error is not None,
         "TASTE_INVALID": taste_invalid,
         "PROFILE_INVALID": bool(result.invalid_place_ids),
-        "RANK_LLM_FAILED": result.trace.fallback is Fallback.LLM_FAILED,
     }
     return [code for code, yes in happened.items() if yes]
 
 
 def _ranked_by(result: SearchResult) -> str | None:
-    """정렬 방법. 뽑힌 장소가 없어 정렬하지 않았으면 None이다."""
-    if result.empty_reason is not None:
+    """순서를 정한 방법. 핏 점수가 있으면 `SCORE`, 판정할 요청 조각도 취향도 없어 점수가
+    없으면 유사도 순서(`SIMILARITY`)다. 뽑힌 장소가 없으면 None이다."""
+    if not result.cards:
         return None
-    return "LLM" if result.trace.fallback is None else "SIMILARITY"
+    return "SIMILARITY" if result.cards[0].score is None else "SCORE"
 
 
 def _read_previous(data: dict[str, Any]) -> Conditions | None:
@@ -348,7 +340,7 @@ def _stored_chip(chip: GuestChipBody) -> dict[str, Any]:
     """비회원 칩을 회원 행의 칩 모양으로 바꾼다.
 
     벡터는 회원 행처럼 코드 없는 좋아함 칩에만 남긴다(저장 설계 V6). 다른 칩의 벡터를
-    남기면 시설이나 싫어하는 문장이 정렬에 들어간다.
+    남기면 시설이나 싫어하는 문장이 취향 문장으로 쓰인다.
     """
     keep = chip.code is None and chip.polarity == "LIKE"
     return {

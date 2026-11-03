@@ -55,6 +55,7 @@ class JsonPlaceStore:
             raise ValueError("place_id가 정수가 아닌 장소가 있다")
         self._rows: list[dict[str, Any]] = rows
         self._vectors = [_comparable_vector(row) for row in rows]
+        self._places = tuple(p for p in map(_place, rows) if p is not None)
 
     def find(self, place_filter: PlaceFilter, query: Sequence[float], k: int) -> Found:
         """조건에 맞는 장소 중 요청문과 가까운 k곳을 뽑는다.
@@ -81,19 +82,20 @@ class JsonPlaceStore:
         invalid: list[int] = []
         # PgPlaceStore처럼 k곳을 자른 뒤에 프로필을 읽는다.
         for similarity, row in scored[:k]:
-            try:
-                info = PlaceInfo(
-                    row["place_id"],
-                    row["category_group"],
-                    row["station"],
-                    read_facilities(row.get("facilities")),
-                )
-                place = Place.from_dict(row["profile"], info)
-            except (ValueError, KeyError, TypeError, AttributeError):
+            place = _place(row)
+            if place is None:
                 invalid.append(row["place_id"])
                 continue
             candidates.append(Candidate(place, similarity))
         return Found(tuple(candidates), tuple(invalid))
+
+    def places(self) -> tuple[Place, ...]:
+        """점수 기준을 만들 장소 전체. 시작할 때 읽어 둔 것이다.
+
+        Returns:
+            장소. 프로필을 읽지 못한 장소는 뺀다.
+        """
+        return self._places
 
     def vector_counts(self) -> VectorCounts:
         """비교할 수 있는 장소와 검색에서 빠지는 장소를 센다.
@@ -104,6 +106,22 @@ class JsonPlaceStore:
         """
         comparable = sum(vector is not None for vector in self._vectors)
         return VectorCounts(comparable, len(self._vectors) - comparable)
+
+
+def _place(row: dict[str, Any]) -> Place | None:
+    """장소 한 행을 장소로 읽는다. `PgPlaceStore`와 같은 값을 읽고, 못 읽으면 None이다."""
+    try:
+        info = PlaceInfo(
+            row["place_id"],
+            row["category_group"],
+            row["station"],
+            read_facilities(row.get("facilities")),
+            row.get("food_type"),
+            row.get("analyzed_review_count"),
+        )
+        return Place.from_dict(row["profile"], info)
+    except (ValueError, KeyError, TypeError, AttributeError):
+        return None
 
 
 def _comparable_vector(row: dict[str, Any]) -> list[float] | None:

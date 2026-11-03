@@ -210,7 +210,7 @@ class ConditionsBody(Body):
     응답을 돌려보낸 `previousConditions`에는 없으므로 모두 기본값이 있다.
 
     Attributes:
-        text: 정렬 LLM에 넣을 요청문. 후속 조건이면 이전 요청과 합친 문장이다.
+        text: 해석한 요청문. 후속 조건이면 이전 요청과 합친 문장이다.
         embedding_text: 후보 추출에 쓸 문장. 부정 표현을 긍정형으로 바꿨고 위치 말은 뺐다.
         codes: 원하는 조건 코드. 취향 코드표 코드와 시설 코드다.
         category_group: 업종. 요청에 없으면 null이다.
@@ -291,7 +291,7 @@ class CardBody(Body):
 
     Attributes:
         place_id: 장소 id
-        score: 핏 점수. 0~100 정수다.
+        score: 핏 점수. 0~100 정수다. 판정할 요청 조각도 취향도 없으면 빠진다.
         labels: 장소 특징 2개
         reasons: 추천 이유
         score_items: 핏 점수를 이루는 항목
@@ -299,7 +299,7 @@ class CardBody(Body):
     """
 
     place_id: int
-    score: int
+    score: int | None = None
     labels: list[str]
     reasons: list[ReasonBody]
     score_items: list[ScoreItemBody]
@@ -320,7 +320,6 @@ class EmptyReasonBody(Body):
 
 Fallback = Literal[
     "INTERPRET_LLM_FAILED",
-    "RANK_LLM_FAILED",
     "PREVIOUS_INVALID",
     "TASTE_INVALID",
     "PROFILE_INVALID",
@@ -339,7 +338,8 @@ class SearchResponse(Body):
         items: 카드 목록. 핏 점수 내림차순이다. 결과가 없으면 비어 있다.
         empty_reason: 결과가 없을 때의 원인과 제안. 결과가 있으면 빠진다.
         interpreted_by: 해석한 방법. `LLM`이나 `RULE`이다.
-        ranked_by: 순서를 정한 방법. `LLM`이나 `SIMILARITY`다. 결과가 없으면 빠진다.
+        ranked_by: 순서를 정한 방법. 핏 점수(`SCORE`)이고, 점수가 없으면 유사도
+            순서(`SIMILARITY`)다. 결과가 없으면 빠진다.
         fallbacks: 사용자 모르게 대신 처리한 이유
         models: 이번 결과를 낸 모델 버전
     """
@@ -350,6 +350,6 @@ class SearchResponse(Body):
     items: list[CardBody]
     empty_reason: EmptyReasonBody | None = None
     interpreted_by: Literal["LLM", "RULE"]
-    ranked_by: Literal["LLM", "SIMILARITY"] | None = None
+    ranked_by: Literal["SCORE", "SIMILARITY"] | None = None
     fallbacks: list[Fallback]
     models: ModelsBody

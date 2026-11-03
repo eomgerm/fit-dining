@@ -85,6 +85,31 @@ CONDITIONS: dict[str, Condition] = {
 """조건 id로 찾는 조건 목록. 공유 코드표 순서, 그다음 시설이다. 순서는 특징 라벨을
 고를 때 동점을 가르는 데 쓴다."""
 
+EXTRA_LABELS = {
+    "FOOD_KOREAN": "한식이에요",
+    "FOOD_JAPANESE": "일식이에요",
+    "FOOD_CHINESE": "중식이에요",
+    "FOOD_WESTERN": "양식이에요",
+    "FOOD_ASIAN": "아시아 음식이에요",
+    "FOOD_SPICY": "매콤해요",
+    "UNIQUE_CONCEPT": "컨셉이 독특해요",
+    "FAST_SERVING": "음식이 빨리 나와요",
+    "GOOD_MUSIC": "음악이 좋아요",
+}
+"""코드표의 확장 코드(온보딩에 없는 코드)의 카드 문구. 카드 조건 목록에는 없지만 요청과
+취향에 나오면 점수를 내고 근거 항목에 보인다. 코드표에 확장 코드가 늘면 여기도 더해야
+한다(없으면 불러올 때 KeyError로 드러난다)."""
+
+SCORE_LABELS: dict[str, str] = {
+    **{code: condition.label for code, condition in CONDITIONS.items()},
+    **{
+        code: EXTRA_LABELS[code]
+        for code, feature in FEATURES.items()
+        if not feature.onboarding
+    },
+}
+"""점수를 내는 코드와 근거 항목 문구. 카드 조건과 코드표의 확장 코드다."""
+
 CATEGORY_NAMES = {"RESTAURANT": "식당", "CAFE": "카페", "BAR": "술집"}
 """업종 코드의 화면 이름. BE `CategoryGroup`과 같다."""
 

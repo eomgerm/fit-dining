@@ -25,6 +25,7 @@ from fit_ai.match.candidates import (
 pgserver = pytest.importorskip("pgserver")
 psycopg = pytest.importorskip("psycopg")
 
+from fit_ai.match import pg_store as pg_module
 from fit_ai.match.pg_store import PgPlaceStore, PgTasteStore
 
 QUERY = (1.0, 0.0)
@@ -123,6 +124,9 @@ HOURS_PRICE_CASES = [
     (PlaceFilter(min_price=18000, max_price=32999), [4, 3]),
 ]
 
+# 장소별 (음식 종류, 분석 리뷰 수). test_json_store.py와 같다. 3번은 리뷰 수를 모른다.
+REVIEWS = {1: ("FOOD_WESTERN", 120), 2: (None, 80), 3: (None, None), 4: (None, 100)}
+
 YEOKSAM_CAFE = PlaceFilter(
     category_group="CAFE", areas=(StationArea("역삼역", "YEOKSAM"),)
 )
@@ -199,6 +203,7 @@ def database(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
             CREATE TABLE ai_place_search (
               place_id bigint, category_group text, station text,
               dong text, district text, subways jsonb, hours jsonb, price integer,
+              food_type text, analyzed_review_count integer,
               lat double precision, lng double precision, facilities jsonb,
               profile jsonb, summary_vector vector(2)
             )"""
@@ -206,9 +211,10 @@ def database(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
         for place_id, category, station, *coords, facilities, data, vector in ROWS:
             dong, district, subways = AREAS.get(place_id, (None, None, []))
             hours, price = HOURS.get(place_id, ([], None))
+            food_type, review_count = REVIEWS.get(place_id, (None, 50))
             conn.execute(
                 "INSERT INTO ai_place_search "
-                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::vector)",
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::vector)",
                 (
                     place_id,
                     category,
@@ -218,6 +224,8 @@ def database(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
                     json.dumps(subways, ensure_ascii=False),
                     json.dumps(hours),
                     price,
+                    food_type,
+                    review_count,
                     *coords,
                     json.dumps(facilities),
                     json.dumps(data, ensure_ascii=False),
@@ -260,6 +268,39 @@ def test_order_by_similarity(store: PgPlaceStore) -> None:
     assert [c.place.place_id for c in found.candidates] == [1, 4, 2, 3]
     assert found.candidates[0].similarity == pytest.approx(1.0)
     assert found.candidates[-1].similarity == pytest.approx(0.6)
+
+
+def test_food_type_and_review_count(store: PgPlaceStore) -> None:
+    """저장소_후보마다_음식종류와분석리뷰수를읽고모르면None이다"""
+    found = store.find(PlaceFilter(), QUERY, 10)
+
+    assert {
+        c.place.place_id: (c.place.info.food_type, c.place.info.review_count)
+        for c in found.candidates
+    } == REVIEWS
+
+
+def test_places_all_readable(store: PgPlaceStore) -> None:
+    """저장소_장소전체는_거르지않고벡터상태와상관없이읽을수있는곳을모두준다"""
+    places = store.places()
+
+    # 7번은 프로필 형식이 달라 빠진다. 5·6·8번은 벡터 때문에 검색에서만 빠진다.
+    assert sorted(p.place_id for p in places) == [1, 2, 3, 4, 5, 6, 8]
+    assert {p.place_id: p.info.review_count for p in places}[1] == 120
+
+
+def test_places_reused_until_ttl(
+    database: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """저장소_장소전체는_정해둔시간안에는다시읽지않고같은것을준다"""
+    pg_store = PgPlaceStore(database)
+    try:
+        first = pg_store.places()
+        assert pg_store.places() is first
+        monkeypatch.setattr(pg_module, "PLACES_TTL_SECONDS", -1.0)
+        assert pg_store.places() is not first
+    finally:
+        pg_store.close()
 
 
 def test_limit_k(store: PgPlaceStore) -> None:

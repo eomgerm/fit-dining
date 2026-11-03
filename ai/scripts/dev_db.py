@@ -88,7 +88,8 @@ CREATE TABLE place_profile (
   place_id bigint PRIMARY KEY REFERENCES place (id),
   profile jsonb NOT NULL,
   summary_vector vector(1024),
-  price integer
+  price integer,
+  analyzed_review_count integer NOT NULL
 );
 CREATE VIEW ai_place_search AS
 SELECT p.id AS place_id, p.category_group, p.station, p.lat, p.lng, p.facilities,
@@ -108,7 +109,8 @@ SELECT p.id AS place_id, p.category_group, p.station, p.lat, p.lng, p.facilities
                   'name', m.name, 'category', m.category, 'price', m.price,
                   'representative', m.representative) ORDER BY m.sort_order)
          FROM place_menu m WHERE m.place_id = p.id), '[]') AS menus,
-       p.pet_allowed, p.parking_free, p.corkage_allowed, pp.price
+       p.pet_allowed, p.parking_free, p.corkage_allowed, pp.price,
+       pp.analyzed_review_count
 FROM place p JOIN place_profile pp ON pp.place_id = p.id;
 DROP TABLE IF EXISTS user_preferences;
 CREATE TABLE user_preferences (
@@ -120,11 +122,15 @@ CREATE TABLE user_preferences (
   features jsonb NOT NULL DEFAULT '[]'
 );
 """
-"""개발 DB 스키마. 뷰는 BE 마이그레이션 V12·V17의 `ai_place_search`와 같은 컬럼이다. 가까운
+"""개발 DB 스키마. 뷰는 BE 마이그레이션 V12·V17·V18의 `ai_place_search`와 같은 컬럼이다. 가까운
 역(`place_subway`), 영업시간(`place_hour`), 메뉴(`place_menu`)는 BE `place_subways`,
 `place_hours`, `place_menus`(V7)처럼 따로 두고 뷰에서 모은다. 가게 가격(`place_profile.price`)은
 장소 분석 적재가 프로필 쪽에 넣는다고 가정한 자리다. `user_preferences`는 BE 마이그레이션 V2·V6의 컬럼 중 AI가 읽는 것과 온보딩 원본만
 둔다(docs/specs/profile-storage/spec.md)."""
+
+MOCK_REVIEW_COUNT = 100
+"""Mock 장소의 분석 리뷰 수(예시 값). 지어낸 조건별 리뷰 수가 최대 수십 건이라 그보다 넉넉히
+둔다. 실제 장소는 장소 분석이 읽은 리뷰 수(`place_profiles.analyzed_review_count`)다."""
 
 SAMPLE_TASTES = REPO / "ai/samples/taste/profiles.json"
 """회원 취향 예시. 취향 분석의 샘플 사용자 7명이고 회원 id는 파일의 키("1"~"7")다."""
@@ -299,6 +305,8 @@ def _row(place: dict, summary: str, vector: list[float]) -> dict:
         ),
         "lat": info["lat"],
         "lng": info["lng"],
+        # Mock의 조건별 리뷰 수는 지어낸 값이라, 그 수가 나올 만한 분석 리뷰 수도 정해 둔다.
+        "analyzed_review_count": MOCK_REVIEW_COUNT,
         # Mock은 있는 시설만 적는다. 예시라서 적히지 않은 시설은 없음으로 둔다.
         "facilities": {code: code in present for code in FACILITY_CODES.values()},
         "profile": {
@@ -378,12 +386,13 @@ def _insert(conn: psycopg.Connection, row: dict) -> None:
         )
     vector = row["profile"]["summary"]["vector"]
     conn.execute(
-        "INSERT INTO place_profile VALUES (%s, %s, %s::vector, %s)",
+        "INSERT INTO place_profile VALUES (%s, %s, %s::vector, %s, %s)",
         (
             row["place_id"],
             json.dumps(row["profile"], ensure_ascii=False),
             "[" + ",".join(repr(value) for value in vector) + "]",
             row["price"],
+            row["analyzed_review_count"],
         ),
     )
 

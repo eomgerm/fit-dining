@@ -114,6 +114,9 @@ HOURS = {
 }
 
 # (거르기 조건, 뽑히는 장소). 안 맞는다고 확인된 곳만 빼고 모르면 남긴다.
+# 장소별 (음식 종류, 분석 리뷰 수). test_pg_store.py와 같다. 3번은 리뷰 수를 모른다.
+REVIEWS = {1: ("FOOD_WESTERN", 120), 2: (None, 80), 3: (None, None), 4: (None, 100)}
+
 HOURS_PRICE_CASES = [
     # 요일이 없으면 하루라도 그 시각까지 열 수 있으면 남는다.
     (PlaceFilter(hours=OpenHours(until=26 * 60)), [4, 2, 3]),
@@ -171,6 +174,13 @@ def write(path: Path, rows: list) -> Path:
         dict(zip(keys, head, strict=True))
         | dict(zip(area_keys, AREAS.get(head[0], (None, None, [])), strict=True))
         | dict(zip(("hours", "price"), HOURS.get(head[0], ([], None)), strict=True))
+        | dict(
+            zip(
+                ("food_type", "analyzed_review_count"),
+                REVIEWS.get(head[0], (None, 50)),
+                strict=True,
+            )
+        )
         | {"profile": p}
         for *head, p in rows
     ]
@@ -211,6 +221,23 @@ class TestFind:
         assert [c.place.place_id for c in found.candidates] == [1, 4, 2, 3]
         assert found.candidates[0].similarity == pytest.approx(1.0)
         assert found.candidates[-1].similarity == pytest.approx(0.6)
+
+    def test_food_type_and_review_count(self, store: JsonPlaceStore) -> None:
+        """저장소_후보마다_음식종류와분석리뷰수를읽고모르면None이다"""
+        found = store.find(PlaceFilter(), QUERY, 10)
+
+        assert {
+            c.place.place_id: (c.place.info.food_type, c.place.info.review_count)
+            for c in found.candidates
+        } == REVIEWS
+
+    def test_places_all_readable(self, store: JsonPlaceStore) -> None:
+        """저장소_장소전체는_거르지않고벡터상태와상관없이읽을수있는곳을모두준다"""
+        places = store.places()
+
+        # 7번은 프로필 형식이 달라 빠진다. 5·6·8번은 벡터 때문에 검색에서만 빠진다.
+        assert sorted(p.place_id for p in places) == [1, 2, 3, 4, 5, 6, 8]
+        assert store.places() is places
 
     def test_limit_k(self, store: JsonPlaceStore) -> None:
         """저장소_k가작으면_가까운k곳만뽑는다"""

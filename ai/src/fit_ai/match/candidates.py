@@ -2,8 +2,8 @@
 
 거르기와 유사도 계산은 장소 저장소가 한다. 여기에는 저장소가 지켜야 할 모양만 둔다.
 구현은 `pg_store.py`(Postgres)와, 실제 장소 DB가 생기기 전에 쓰는 `json_store.py`(JSON
-파일)다.
-취향은 쓰지 않는다. 취향은 ② 정렬에서만 쓴다(docs/comparison/spec.md 4.2).
+파일)다. 저장소는 ② 점수의 기준을 만들 장소 전체도 읽어 준다.
+취향은 쓰지 않는다. 취향은 ② 점수에서만 쓴다(docs/comparison/spec.md 4.2).
 """
 
 from collections.abc import Sequence
@@ -12,11 +12,16 @@ from typing import Protocol
 
 from fit_ai.match.place import Place
 
+CANDIDATE_K = 100
+"""점수를 매길 후보 수. 거른 장소를 유사도 순서로 이만큼 뽑아 모두 점수를 매긴다. 조건은
+맞는데 요약이 덜 비슷한 곳이 점수를 받기 전에 잘리지 않게 넉넉히 둔다. 지금 데이터(300곳)는
+거르고 나면 대개 이보다 적다."""
+
 GENERAL_K = 20
-"""일반 검색에서 LLM 정렬에 넘길 후보 수"""
+"""일반 검색에서 돌려줄 카드 수. 점수순으로 자른다."""
 
 NEARBY_K = 100
-"""근처 검색에서 돌려줄 후보 수. 폰이 현재 위치로 다시 거른다."""
+"""근처 검색에서 돌려줄 카드 수. 폰이 현재 위치로 다시 거른다."""
 
 
 @dataclass(frozen=True)
@@ -26,7 +31,7 @@ class Candidate:
     Attributes:
         place: 장소
         similarity: 요청문과 장소 요약의 코사인 유사도. 값은 쓰지 않고 순서만 쓴다.
-            후보를 자를 때와 같은 등급 안에서 순서를 가를 때다.
+            후보를 자를 때와 점수가 같은 후보의 순서를 가를 때다.
     """
 
     place: Place
@@ -183,6 +188,20 @@ class PlaceStore(Protocol):
 
         Returns:
             뽑은 후보
+
+        Raises:
+            StoreError: 저장소를 읽지 못했을 때
+        """
+        ...
+
+    def places(self) -> tuple[Place, ...]:
+        """② 점수의 기준을 만들 장소 전체. 거르지 않고 벡터 상태도 보지 않는다.
+
+        업종 범위 안 장소들과 견줘 조건 점수를 내는 데 쓴다(`scoring.Baseline`). 장소
+        데이터는 적재 때만 바뀌므로 구현은 잠시 저장해 두고 다시 써도 된다.
+
+        Returns:
+            장소. 프로필을 읽지 못한 장소는 뺀다.
 
         Raises:
             StoreError: 저장소를 읽지 못했을 때

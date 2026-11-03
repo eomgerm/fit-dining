@@ -3,17 +3,19 @@
 
 장소는 거르기와 유사도 계산(pgvector `<=>`, 코사인 거리)을 SQL 한 번으로 한다. 장소가
 300곳 남짓이라 인덱스 없이 전부 계산해도 빠르고 결과가 정확하다. 장소 뷰는 BE
-마이그레이션 V12(`ai_place_search`)가 `places`와 `place_profiles`로 만들고 V17이 검색 2차
-컬럼을 뒤에 더한다. AI는 그 컬럼 중 `place_id`, `category_group`, `station`, `dong`,
+마이그레이션 V12(`ai_place_search`)가 `places`와 `place_profiles`로 만들고 V17·V18이 검색
+2차 컬럼을 뒤에 더한다. AI는 그 컬럼 중 `place_id`, `category_group`, `station`, `dong`,
 `district`, `subways`(`place_subways`를 모은 `[{station, exit, walk_minutes}]`), `hours`
 (`place_hours`를 모은 `[{day, open, close, closed, breaks}]`), `price`(가게 가격), `lat`, `lng`,
-`facilities`, `profile`, `summary_vector`에 의존한다. `price`는 장소 분석 적재가 채우기
+`facilities`, `food_type`, `analyzed_review_count`, `profile`, `summary_vector`에 의존한다. `price`는 장소 분석 적재가 채우기
 전까지 모두 NULL(모름)이다(docs/comparison/spec.md 4.2). 로컬 개발 DB(`scripts/dev_db.py`)는
 같은 컬럼의 뷰를 만든다. 취향 표 `user_preferences`의 `features`, `tastes`는 저장 설계
 (docs/specs/profile-storage/spec.md, BE 마이그레이션 V2·V6)를 따른다.
 """
 
 import json
+import threading
+import time
 from collections.abc import Sequence
 from typing import Any
 
@@ -38,7 +40,7 @@ from fit_ai.match.place import Place, PlaceInfo, read_facilities
 from fit_ai.match.taste_select import TasteProfile
 
 FIND_SQL = """
-SELECT place_id, category_group, station, facilities,
+SELECT place_id, category_group, station, facilities, food_type, analyzed_review_count,
        profile #- '{summary,vector}' AS profile,
        1 - (summary_vector <=> %(query)s::vector) AS similarity
 FROM ai_place_search AS p
@@ -116,6 +118,17 @@ LIMIT %(k)s
 JSON(`_hours_json`)으로 받아, 요청한 요일 중 쉬거나 시각이 못 미친다고 확인되지 않은 날이
 하루라도 있으면 남긴다(`candidates.OpenHours`). 가격과 영업시간을 모르는 장소는 남긴다."""
 
+PLACES_SQL = """
+SELECT place_id, category_group, station, facilities, food_type, analyzed_review_count,
+       profile #- '{summary,vector}' AS profile
+FROM ai_place_search
+"""
+"""점수 기준을 만들 장소 전체. 요약 벡터는 가져오지 않는다."""
+
+PLACES_TTL_SECONDS = 300.0
+"""장소 전체를 다시 읽기 전에 저장해 두는 시간(초). 장소 데이터는 적재 때만 바뀌어서, 검색마다
+읽지 않고 잠시 다시 쓴다."""
+
 COUNT_SQL = """
 SELECT count(*) FILTER (WHERE comparable), count(*) FILTER (WHERE NOT comparable)
 FROM (
@@ -152,6 +165,9 @@ class PgPlaceStore:
                 컨테이너 수로 나눠 정한다.
         """
         self._pool = _open_pool(dsn, pool_size)
+        self._places: tuple[Place, ...] = ()
+        self._places_read_at: float | None = None
+        self._places_lock = threading.Lock()
 
     def find(self, place_filter: PlaceFilter, query: Sequence[float], k: int) -> Found:
         """조건에 맞는 장소 중 요청문과 가까운 k곳을 뽑는다.
@@ -185,17 +201,33 @@ class PgPlaceStore:
         )
         candidates: list[Candidate] = []
         invalid: list[int] = []
-        for place_id, category_group, station, facilities, profile, similarity in rows:
-            try:
-                info = PlaceInfo(
-                    place_id, category_group, station, read_facilities(facilities)
-                )
-                place = Place.from_dict(profile, info)
-            except (ValueError, KeyError, TypeError, AttributeError):
-                invalid.append(place_id)
+        for *row, similarity in rows:
+            place = _place(row)
+            if place is None:
+                invalid.append(row[0])
                 continue
             candidates.append(Candidate(place, float(similarity)))
         return Found(tuple(candidates), tuple(invalid))
+
+    def places(self) -> tuple[Place, ...]:
+        """점수 기준을 만들 장소 전체. 읽은 뒤 `PLACES_TTL_SECONDS` 동안 다시 쓴다.
+
+        Returns:
+            장소. 프로필을 읽지 못한 장소는 뺀다.
+
+        Raises:
+            StoreError: 저장소를 읽지 못했을 때
+        """
+        with self._places_lock:
+            now = time.monotonic()
+            if (
+                self._places_read_at is None
+                or now - self._places_read_at > PLACES_TTL_SECONDS
+            ):
+                rows = self._fetch(PLACES_SQL, {})
+                self._places = tuple(p for p in map(_place, rows) if p is not None)
+                self._places_read_at = now
+            return self._places
 
     def vector_counts(self) -> VectorCounts:
         """비교할 수 있는 장소와 검색에서 빠지는 장소를 센다.
@@ -284,6 +316,25 @@ def _fetch(
     except (psycopg.Error, PoolTimeout) as e:
         # 메시지에 접속 주소나 값이 섞일 수 있어 종류만 남긴다.
         raise StoreError(f"{name} 저장소를 읽지 못했다: {type(e).__name__}") from e
+
+
+def _place(row: Sequence[Any]) -> Place | None:
+    """뷰 한 행(`PLACES_SQL`의 컬럼 순서)을 장소로 읽는다. 프로필을 읽지 못하면 None이다."""
+    place_id, category_group, station, facilities, food_type, review_count, profile = (
+        row
+    )
+    try:
+        info = PlaceInfo(
+            place_id,
+            category_group,
+            station,
+            read_facilities(facilities),
+            food_type,
+            review_count,
+        )
+        return Place.from_dict(profile, info)
+    except (ValueError, KeyError, TypeError, AttributeError):
+        return None
 
 
 def _area_json(area: Area) -> dict[str, Any]:

@@ -1,19 +1,17 @@
 """요청 해석부터 카드 만들기까지 잇는 검색 한 번을 확인한다.
 
-거르기 조건 만들기(지역 우선순위 포함), 일반 검색, 근처 검색, LLM 실패, 후보 없음,
-인코딩·저장소 실패와 결과 없음 문구를 본다. 공유 모듈 `fit_ai.embedding`, `fit_ai.gms`는 가짜로 바꿔 끼우고
-장소 저장소도 가짜다. LLM에 넣는 후보는 섞지 않는다.
+거르기 조건 만들기(지역 우선순위 포함), 점수 순서(취향, 점수 없음, 근처 검색), 후보 없음,
+인코딩·저장소 실패와 결과 없음 문구를 본다. 공유 모듈 `fit_ai.embedding`, `fit_ai.gms`는 가짜로
+바꿔 끼우고 장소 저장소도 가짜다. 점수 기준은 가짜 저장소의 장소 전체(기본은 후보 세 곳)로
+만든다.
 """
 
-import json
-import random
 from collections.abc import Callable, Sequence
 
 import pytest
 
 from fit_ai import embedding, gms
 from fit_ai.match import interpretation
-from fit_ai.match import search as search_module
 from fit_ai.match.candidates import (
     Candidate,
     Found,
@@ -31,7 +29,6 @@ from fit_ai.match.interpretation.segments import Hours, Price
 from fit_ai.match.place import ConditionEvidence, Place, PlaceInfo
 from fit_ai.match.search import (
     EmbeddingError,
-    Fallback,
     SearchRequest,
     SearchResult,
     empty_reason,
@@ -54,18 +51,24 @@ INTERPRETED = {
 }
 
 
-def make_candidate(place_id: int, similarity: float) -> Candidate:
-    """조용함 근거가 충분한 강남역 카페 후보"""
+def make_candidate(place_id: int, similarity: float, quiet: int) -> Candidate:
+    """리뷰 100건 중 `quiet`건이 조용하다고 한 강남역 카페 후보"""
     place = Place(
         place_id=place_id,
-        info=PlaceInfo(place_id, "CAFE", "GANGNAM", {}),
+        info=PlaceInfo(place_id, "CAFE", "GANGNAM", {}, review_count=100),
         summary=f"설명 {place_id}",
-        conditions={"QUIET": ConditionEvidence(pos=5)},
+        conditions={"QUIET": ConditionEvidence(pos=quiet)},
     )
     return Candidate(place, similarity)
 
 
-CANDIDATES = (make_candidate(1, 1.0), make_candidate(2, 0.8), make_candidate(3, 0.6))
+CANDIDATES = (
+    make_candidate(1, 1.0, quiet=2),
+    make_candidate(2, 0.8, quiet=10),
+    make_candidate(3, 0.6, quiet=5),
+)
+"""유사도는 1번이 가장 높고, 조용하다는 리뷰는 2번 > 3번 > 1번이다. 세 곳을 견준 조용함 조건
+점수는 0.80, 0.45, 0.19다(점수 모듈이 계산한 값)."""
 
 TASTE = TasteProfile(
     user_id="u1",
@@ -80,17 +83,11 @@ TASTE = TasteProfile(
 FakeGms = Callable[[Callable[[list[dict]], object]], list[list[dict]]]
 
 
-class NoShuffle(random.Random):
-    """후보를 섞지 않는다. LLM 입력 번호가 유사도 순서와 같다."""
-
-    def shuffle(self, x: list) -> None:
-        pass
-
-
 class FakeStore:
     """정해 둔 후보를 돌려주고 받은 거르기 조건, 요청문 벡터, k를 남긴다.
 
-    `matches`가 거짓인 거르기 조건에는 아무 곳도 돌려주지 않는다.
+    `matches`가 거짓인 거르기 조건에는 아무 곳도 돌려주지 않는다. 점수 기준을 만들 장소
+    전체는 후보의 장소다. `places_fail`이면 장소 전체를 읽지 못한다.
     """
 
     def __init__(
@@ -99,12 +96,19 @@ class FakeStore:
         invalid: tuple[int, ...] = (),
         fail: bool = False,
         matches: Callable[[PlaceFilter], bool] = lambda place_filter: True,
+        places_fail: bool = False,
     ) -> None:
         self.candidates = tuple(candidates)
         self.invalid = invalid
         self.fail = fail
         self.matches = matches
+        self.places_fail = places_fail
         self.calls: list[tuple[PlaceFilter, Sequence[float], int]] = []
+
+    def places(self) -> tuple[Place, ...]:
+        if self.places_fail:
+            raise StoreError("장소 저장소를 읽지 못했다: OperationalError")
+        return tuple(c.place for c in self.candidates)
 
     def find(self, place_filter: PlaceFilter, query: Sequence[float], k: int) -> Found:
         if self.fail:
@@ -131,29 +135,19 @@ def encoder(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
     return seen
 
 
-def ranking(*pairs: tuple[int, str]) -> dict:
-    """정렬 LLM 출력. (후보 번호, 등급) 순서다."""
-    return {"ranking": [{"id": number, "fit": fit} for number, fit in pairs]}
-
-
-def answers(
-    rank: object = None, **interpreted: object
-) -> Callable[[list[dict]], object]:
-    """가짜 GMS 답. 해석에는 정해 둔 조건으로, 정렬에는 `rank`로 답한다.
-
-    `rank`가 None이면 정렬 호출은 실패한다.
-    """
+def answers(**interpreted: object) -> Callable[[list[dict]], object]:
+    """가짜 GMS 답. 해석에는 정해 둔 조건으로 답하고, 그 밖의 호출에는 None(실패)이다."""
 
     def answer(messages: list[dict]) -> object:
         if messages[0]["content"] == interpretation.SYSTEM_PROMPT:
             return {**INTERPRETED, **interpreted}
-        return rank
+        return None
 
     return answer
 
 
-def rank_calls(calls: list[list[dict]]) -> int:
-    """GMS 호출 중 정렬 호출 수"""
+def other_calls(calls: list[list[dict]]) -> int:
+    """GMS 호출 중 해석이 아닌 호출 수. 정렬 LLM이 빠져 늘 0이어야 한다."""
     return sum(m[0]["content"] != interpretation.SYSTEM_PROMPT for m in calls)
 
 
@@ -161,11 +155,10 @@ def run(store: FakeStore | None = None, **request: object) -> SearchResult:
     return search(
         SearchRequest(QUERY, **request),  # type: ignore[arg-type]
         store or FakeStore(),
-        NoShuffle(),
     )
 
 
-def scores(result: SearchResult) -> list[tuple[int, int]]:
+def scores(result: SearchResult) -> list[tuple[int, int | None]]:
     return [(card.place_id, card.score) for card in result.cards]
 
 
@@ -192,8 +185,8 @@ class TestFilter:
     """거르기 조건과 요청문 벡터"""
 
     def test_from_conditions(self, fake_gms: FakeGms, encoder: list) -> None:
-        """거르기_해석한업종역시설로_벡터용문장벡터와함께20곳을뽑는다"""
-        fake_gms(answers(ranking((1, "딱 맞음")), codes=["QUIET", "PARKING"]))
+        """거르기_해석한업종역시설로_벡터용문장벡터와함께점수를매길100곳을뽑는다"""
+        fake_gms(answers(codes=["QUIET", "PARKING"]))
         store = FakeStore()
 
         run(store)
@@ -206,7 +199,7 @@ class TestFilter:
                     category_group="CAFE", areas=(GANGNAM,), facilities=("PARKING",)
                 ),
                 [1.0, 0.0],
-                20,
+                100,
             )
         ]
 
@@ -214,14 +207,13 @@ class TestFilter:
         """거르기_빼달라는업종이있으면_그업종을뺀다"""
         fake_gms(
             answers(
-                ranking((1, "딱 맞음")),
                 category_group=None,
                 avoid_categories=["BAR"],
             )
         )
         store = FakeStore()
 
-        search(SearchRequest("강남역 조용한 곳 술집 말고"), store, NoShuffle())
+        search(SearchRequest("강남역 조용한 곳 술집 말고"), store)
 
         place_filter, _, _ = store.calls[0]
         assert place_filter.excluded_categories == ("BAR",)
@@ -230,7 +222,6 @@ class TestFilter:
         """거르기_시간과가격이있으면_영업시간조건하나와여유폭을둔가격범위로거른다"""
         fake_gms(
             answers(
-                ranking((1, "딱 맞음")),
                 hours=[
                     {"text": "일요일", "day": "SUN"},
                     {"text": "새벽까지", "open_until": "02:00"},
@@ -240,7 +231,7 @@ class TestFilter:
         )
         store = FakeStore()
 
-        search(SearchRequest("일요일 새벽까지 2만원 이하 술집"), store, NoShuffle())
+        search(SearchRequest("일요일 새벽까지 2만원 이하 술집"), store)
 
         place_filter, _, _ = store.calls[0]
         assert place_filter.hours == OpenHours(("SUN",), until=26 * 60)
@@ -289,7 +280,7 @@ class TestWhere:
 
     def test_said_location_beats_map_bounds(self, fake_gms: FakeGms) -> None:
         """지역_이번요청에역을말하면_지도영역이있어도역으로거른다"""
-        fake_gms(answers(ranking((1, "딱 맞음"))))
+        fake_gms(answers())
         store = FakeStore()
 
         run(store, bounds=BOUNDS)
@@ -299,35 +290,33 @@ class TestWhere:
     def test_map_bounds_beat_previous_location(self, fake_gms: FakeGms) -> None:
         """지역_이번요청에지역이없고지도영역이있으면_이전역대신지도영역으로거른다"""
         # 해석은 이전 역을 이어 붙인다.
-        fake_gms(answers(ranking((1, "딱 맞음"))))
+        fake_gms(answers())
         store = FakeStore()
 
         search(
             SearchRequest("주차되는 데로", previous=PREVIOUS, bounds=BOUNDS),
             store,
-            NoShuffle(),
         )
 
         assert areas_of(store) == (BOUNDS,)
 
     def test_previous_location_without_bounds(self, fake_gms: FakeGms) -> None:
         """지역_이번요청에지역도지도영역도없으면_이전역으로거른다"""
-        fake_gms(answers(ranking((1, "딱 맞음"))))
+        fake_gms(answers())
         store = FakeStore()
 
-        search(SearchRequest("주차되는 데로", previous=PREVIOUS), store, NoShuffle())
+        search(SearchRequest("주차되는 데로", previous=PREVIOUS), store)
 
         assert areas_of(store) == (GANGNAM,)
 
     def test_new_location_in_follow_up(self, fake_gms: FakeGms) -> None:
         """지역_후속조건에서다른역을말하면_지도영역보다그역이앞선다"""
-        fake_gms(answers(ranking((1, "딱 맞음")), station="YEOKSAM"))
+        fake_gms(answers(station="YEOKSAM"))
         store = FakeStore()
 
         search(
             SearchRequest("역삼역으로 바꿔줘", previous=PREVIOUS, bounds=BOUNDS),
             store,
-            NoShuffle(),
         )
 
         assert areas_of(store) == (StationArea("역삼역", "YEOKSAM"),)
@@ -337,7 +326,7 @@ class TestWhere:
         fake_gms(answers(nearby=True, station=None))
         store = FakeStore()
 
-        search(SearchRequest("근처 조용한 카페", bounds=BOUNDS), store, NoShuffle())
+        search(SearchRequest("근처 조용한 카페", bounds=BOUNDS), store)
 
         assert (areas_of(store), store.calls[0][2]) == ((BOUNDS,), 100)
 
@@ -347,11 +336,11 @@ class TestWhere:
             location("강남역 11번 출구", "STATION", "강남역", exit="11"),
             location("신논현역 걸어서 5분", "STATION", "신논현역", walk_minutes=5),
         ]
-        fake_gms(answers(ranking((1, "딱 맞음")), station=None, locations=locations))
+        fake_gms(answers(station=None, locations=locations))
         store = FakeStore()
 
         query = "강남역 11번 출구나 신논현역 걸어서 5분 카페"
-        search(SearchRequest(query), store, NoShuffle())
+        search(SearchRequest(query), store)
 
         assert areas_of(store) == (
             StationArea("강남역", "GANGNAM", exit="11"),
@@ -371,10 +360,10 @@ class TestWhere:
     def test_region(self, fake_gms: FakeGms, value: str, expected: object) -> None:
         """지역_동이나구면_행정구역으로거르고서비스역이름이면_역으로거른다"""
         locations = [location(value, "AREA", value)]
-        fake_gms(answers(ranking((1, "딱 맞음")), station=None, locations=locations))
+        fake_gms(answers(station=None, locations=locations))
         store = FakeStore()
 
-        search(SearchRequest(f"{value} 조용한 카페"), store, NoShuffle())
+        search(SearchRequest(f"{value} 조용한 카페"), store)
 
         assert areas_of(store) == (expected,)
 
@@ -384,9 +373,9 @@ class TestWhere:
         calls = fake_gms(answers(station=None, locations=locations))
         store = FakeStore()
 
-        result = search(SearchRequest("코엑스 조용한 카페"), store, NoShuffle())
+        result = search(SearchRequest("코엑스 조용한 카페"), store)
 
-        assert (store.calls, encoder, rank_calls(calls)) == ([], [], 0)
+        assert (store.calls, encoder, other_calls(calls)) == ([], [], 0)
         assert result.cards == ()
         assert result.empty_reason is not None
         assert result.empty_reason.cause == "코엑스는 아직 준비 중인 지역이에요"
@@ -397,10 +386,10 @@ class TestWhere:
             location("코엑스", "AREA", "코엑스"),
             location("선릉역", "STATION", "선릉역"),
         ]
-        fake_gms(answers(ranking((1, "딱 맞음")), station=None, locations=locations))
+        fake_gms(answers(station=None, locations=locations))
         store = FakeStore()
 
-        result = search(SearchRequest("코엑스나 선릉역 카페"), store, NoShuffle())
+        result = search(SearchRequest("코엑스나 선릉역 카페"), store)
 
         assert areas_of(store) == (StationArea("선릉역", "SEOLLEUNG"),)
         assert len(result.cards) == 3
@@ -411,11 +400,11 @@ class TestWhere:
         fake_gms(answers(station=None, locations=locations))
         store = FakeStore(candidates=())
 
-        result = search(SearchRequest("홍대 조용한 카페"), store, NoShuffle())
+        result = search(SearchRequest("홍대 조용한 카페"), store)
 
         # 처음 뽑기와, 도보 거리·업종 없이 그 역에 장소가 있는지 본 것
         assert [(f.areas, f.category_group, k) for f, _, k in store.calls] == [
-            ((StationArea("홍대입구역"),), "CAFE", 20),
+            ((StationArea("홍대입구역"),), "CAFE", 100),
             ((StationArea("홍대입구역"),), None, 1),
         ]
         assert result.empty_reason is not None
@@ -425,143 +414,122 @@ class TestWhere:
         )
 
 
-class TestRanking:
-    """정렬과 카드"""
+class TestScoring:
+    """핏 점수와 순서"""
 
-    def test_general_search_uses_llm(self, fake_gms: FakeGms) -> None:
-        """검색_일반검색이면_코드등급과LLM순서로카드를만들고원본을남긴다"""
-        rank = ranking((3, "딱 맞음"), (1, "대체로"), (2, "일부"))
-        fake_gms(answers(rank))
+    def test_orders_by_score(self, fake_gms: FakeGms) -> None:
+        """검색_일반검색이면_GMS는해석에만쓰고조건점수로순서와핏점수를정한다"""
+        calls = fake_gms(answers())
 
-        result = run(taste=TASTE)
+        result = run()
 
-        # 세 곳 모두 조용함이 확인이라 등급은 모두 딱 맞음이고, LLM이 낸 등급은 쓰지 않는다.
-        assert scores(result) == [(3, 100), (1, 95), (2, 90)]
+        # 유사도는 1번이 가장 높지만 조용하다는 리뷰가 많은 순서(2, 3, 1)로 놓인다.
+        assert scores(result) == [(2, 80), (3, 45), (1, 19)]
+        assert other_calls(calls) == 0
         assert result.interpretation.llm_error is None
         assert result.empty_reason is None
         assert result.trace.candidates == 3
-        assert result.trace.fallback is None
-        # 로그용 출력에는 읽어 낸 후보 번호만 남는다.
-        assert json.loads(result.trace.rank_llm_raw) == {
-            "ranking": [{"id": 3}, {"id": 1}, {"id": 2}]
-        }
-        assert result.trace.rank_llm_seconds is not None
 
-    def test_cards_use_selected_liked_tastes(self, fake_gms: FakeGms) -> None:
-        """검색_요청에소음조건이있으면_카드취향항목에서소음취향을빼고좋아함만남긴다"""
-        fake_gms(answers(ranking((1, "딱 맞음"), (2, "딱 맞음"), (3, "딱 맞음"))))
+    def test_liked_taste_in_score_and_card(self, fake_gms: FakeGms) -> None:
+        """검색_요청에소음조건이있으면_소음취향은빼고남은좋아함취향을점수와카드항목에넣는다"""
+        fake_gms(answers())
 
         result = run(taste=TASTE)
 
+        # 작업 근거는 세 곳 모두 없어 가운데(0.5)다. 핏 = 0.7 × 요청 + 0.3 × 0.5
+        assert scores(result) == [(2, 71), (3, 47), (1, 29)]
         items = [(i.condition_id, i.source) for i in result.cards[0].score_items]
         assert items == [
             ("QUIET", Source.REQUEST),
             ("PURPOSE_WORK", Source.PREFERENCE),
         ]
 
-    def test_nearby_skips_llm(self, fake_gms: FakeGms) -> None:
-        """검색_근처검색이면_역으로거르지않고100곳을뽑아LLM없이코드등급과유사도로정렬한다"""
+    def test_disliked_taste_lowers_score_not_card(self, fake_gms: FakeGms) -> None:
+        """검색_조건없는요청에서조용한곳을싫어하면_조용한곳일수록낮고카드항목에는없다"""
+        fake_gms(answers(codes=[]))
+        taste = TasteProfile(
+            "u1", (TasteFeature("QUIET", Layer.AXIS, False, 1),), free_texts=()
+        )
+
+        result = run(taste=taste)
+
+        assert scores(result) == [(1, 81), (3, 55), (2, 20)]
+        assert all(card.score_items == () for card in result.cards)
+
+    def test_nothing_to_judge_no_score(self, fake_gms: FakeGms) -> None:
+        """검색_판정할요청조각도취향도없으면_점수없이유사도순서다"""
+        fake_gms(answers(codes=[]))
+
+        result = run()
+
+        assert scores(result) == [(1, None), (2, None), (3, None)]
+
+    def test_nearby_scores_the_same_way(self, fake_gms: FakeGms) -> None:
+        """검색_근처검색이면_역으로거르지않고100곳을뽑아같은점수로정렬한다"""
         calls = fake_gms(answers(nearby=True, station=None))
         store = FakeStore()
 
         # 요청문에 역이 있으면 역이 근처보다 앞서므로 근처 말만 있는 요청문을 쓴다.
-        result = search(SearchRequest("근처 조용한 카페"), store, NoShuffle())
+        result = search(SearchRequest("근처 조용한 카페"), store)
 
         place_filter, _, k = store.calls[0]
         assert (place_filter.areas, k) == ((), 100)
-        assert rank_calls(calls) == 0
-        assert scores(result) == [(1, 100), (2, 95), (3, 90)]
-        assert result.trace.fallback is Fallback.NEARBY
+        assert other_calls(calls) == 0
+        assert scores(result) == [(2, 80), (3, 45), (1, 19)]
 
-    def test_llm_picks_some(self, fake_gms: FakeGms) -> None:
-        """검색_LLM이일부만고르면_고른후보뒤에나머지를유사도순서로붙인다"""
-        fake_gms(answers(ranking((2, "딱 맞음"))))
+    def test_general_returns_top_20_by_score(self, fake_gms: FakeGms) -> None:
+        """검색_일반검색이면_뽑은후보모두에점수를매기고점수순으로20곳을준다"""
+        fake_gms(answers())
+        # 유사도가 낮은 곳일수록 조용하다는 리뷰가 많다.
+        many = [make_candidate(i, 1 - i / 100, quiet=i) for i in range(1, 26)]
 
-        result = run()
+        result = run(FakeStore(many))
 
-        assert scores(result) == [(2, 100), (1, 95), (3, 90)]
-        assert result.trace.fallback is None
+        assert [card.place_id for card in result.cards] == list(range(25, 5, -1))
 
-    def test_bad_llm_output_falls_back(self, fake_gms: FakeGms) -> None:
-        """검색_정렬LLM출력이형식에맞지않으면_다시부르지않고유사도순서로넘어가고이유와원본을남긴다"""
-        calls = fake_gms(answers({"ranking": [{"id": 9}]}))
-
-        result = run()
-
-        assert rank_calls(calls) == 1
-        assert [card.place_id for card in result.cards] == [1, 2, 3]
-        assert result.trace.fallback is Fallback.LLM_FAILED
-        assert result.trace.rank_llm_error is not None
-        assert json.loads(result.trace.rank_llm_raw) == {"ranking": [{"id": 9}]}
-
-    def test_llm_call_failure_falls_back(self, fake_gms: FakeGms) -> None:
-        """검색_정렬LLM호출이실패하면_유사도순서로넘어가고원본은없다"""
-        fake_gms(answers(None))
-
-        result = run()
-
-        assert [card.place_id for card in result.cards] == [1, 2, 3]
-        assert result.trace.fallback is Fallback.LLM_FAILED
-        assert result.trace.rank_llm_raw is None
-
-
-class TestBudget:
-    """검색 시간 예산"""
-
-    def test_gms_failure_skips_rank_llm(self, fake_gms: FakeGms) -> None:
-        """예산_해석에서GMS호출이실패하면_정렬LLM을부르지않고유사도로정렬한다"""
+    def test_interpret_failure_still_scores(self, fake_gms: FakeGms) -> None:
+        """검색_해석에서GMS호출이실패해도_규칙해석으로조건점수를내고정렬한다"""
         calls = fake_gms(lambda messages: None)
 
         result = run()
 
         assert result.interpretation.gms_failed is True
-        assert rank_calls(calls) == 0
-        assert result.trace.fallback is Fallback.LLM_FAILED
-        assert "해석에서 GMS" in result.trace.rank_llm_error
-        assert len(result.cards) == 3
+        assert other_calls(calls) == 0
+        assert [card.place_id for card in result.cards] == [2, 3, 1]
 
-    def test_no_time_left_skips_rank_llm(
-        self, fake_gms: FakeGms, monkeypatch: pytest.MonkeyPatch
+    def test_timeout_and_client_for_interpretation(
+        self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """예산_남은시간이정렬한번에모자라면_정렬LLM을부르지않는다"""
-        calls = fake_gms(answers(ranking((1, "딱 맞음"))))
-        monkeypatch.setattr(search_module, "SEARCH_BUDGET_SECONDS", 0.0)
-
-        result = run()
-
-        assert rank_calls(calls) == 0
-        assert result.trace.fallback is Fallback.LLM_FAILED
-        assert "예산" in result.trace.rank_llm_error
-
-    def test_rank_wait_and_shared_client(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """예산_정렬LLM은남은예산의절반까지만기다리고_해석과정렬이같은클라이언트를쓴다"""
-        seen: list[tuple[bool, float, object]] = []
-        answer = answers(ranking((1, "딱 맞음")))
+        """검색_GMS는해석에서한번만_받은대기시간과클라이언트로부른다"""
+        seen: list[tuple[float, object]] = []
+        answer = answers()
 
         def call_json(
             messages, parse, *, response_format=None, timeout=10.0, client=None
         ):
-            is_interpret = messages[0]["content"] == interpretation.SYSTEM_PROMPT
-            seen.append((is_interpret, timeout, client))
+            seen.append((timeout, client))
             return parse(answer(messages))
 
         monkeypatch.setattr(gms, "call_json", call_json)
         client = object()
 
-        search(SearchRequest(QUERY), FakeStore(), NoShuffle(), 5.0, client)  # type: ignore[arg-type]
+        search(SearchRequest(QUERY), FakeStore(), 5.0, client)  # type: ignore[arg-type]
 
-        [(first, interpret_wait, c1), (second, rank_wait, c2)] = seen
-        assert (first, second) == (True, False)
-        assert interpret_wait == 5.0
-        assert 4.0 < rank_wait <= search_module.SEARCH_BUDGET_SECONDS / 2
-        assert c1 is client and c2 is client
+        assert seen == [(5.0, client)]
+
+    def test_places_failure(self, fake_gms: FakeGms) -> None:
+        """검색_점수기준을만들장소를읽지못하면_StoreError를그대로낸다"""
+        fake_gms(answers())
+
+        with pytest.raises(StoreError):
+            run(FakeStore(places_fail=True))
 
 
 class TestEmptyAndFailures:
     """결과 없음과 실패"""
 
     def test_no_candidates(self, fake_gms: FakeGms) -> None:
-        """검색_뽑힌장소가없으면_정렬LLM을부르지않고결과없음이유를준다"""
+        """검색_뽑힌장소가없으면_점수를내지않고결과없음이유를준다"""
         calls = fake_gms(answers(codes=["PARKING"]))
 
         # 강남역에 장소는 있지만 주차 조건에 맞는 곳이 없다.
@@ -570,14 +538,13 @@ class TestEmptyAndFailures:
         )
 
         assert result.cards == ()
-        assert rank_calls(calls) == 0
-        assert result.trace.fallback is None
+        assert other_calls(calls) == 0
         assert result.empty_reason is not None
         assert result.empty_reason.cause == "강남역 카페 중 주차할 수 있는 곳이 없어요"
 
     def test_invalid_profiles_reported(self, fake_gms: FakeGms) -> None:
         """검색_저장소가읽지못한프로필이있으면_그id를결과에담는다"""
-        fake_gms(answers(ranking((1, "딱 맞음"))))
+        fake_gms(answers())
 
         result = run(FakeStore(invalid=(7,)))
 

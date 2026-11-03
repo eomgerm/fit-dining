@@ -71,7 +71,18 @@ class AiPlaceSearchViewTest extends PostgresTestSupport {
 				WHERE table_name = 'ai_place_search' ORDER BY ordinal_position""", String.class))
 				.containsExactly("place_id", "category_group", "station", "lat", "lng", "facilities", "profile",
 						"summary_vector", "name", "food_type", "dong", "district", "subways", "hours", "menus",
-						"pet_allowed", "parking_free", "corkage_allowed", "price");
+						"pet_allowed", "parking_free", "corkage_allowed", "price", "analyzed_review_count");
+	}
+
+	@Test
+	@DisplayName("AI뷰_분석리뷰수는_장소프로필값그대로다")
+	void view_analyzedReviewCount_readsProfileValue() {
+		long id = insertPlace();
+		insertProfile(id);
+
+		assertThat(jdbc.queryForObject(
+				"SELECT analyzed_review_count FROM ai_place_search WHERE place_id = ?", Integer.class, id))
+				.isEqualTo(10);
 	}
 
 	@Test

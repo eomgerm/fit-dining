@@ -65,12 +65,17 @@ class PlaceInfo:
         station: 역(`GANGNAM`, `YEOKSAM`, `SEOLLEUNG`)
         facilities: 시설 코드별 유무. True는 있음, False는 없음이다.
             None이나 빠진 코드는 모름이다.
+        food_type: 음식 종류 코드(`FOOD_JAPANESE` 등). 모르면 None이다.
+        review_count: 장소 분석이 읽은 리뷰 수(`analyzed_review_count`). 리뷰 근거의
+            언급 비율을 낼 때 분모로 쓴다. 모르면 None이다.
     """
 
     place_id: int
     category_group: str
     station: str
     facilities: dict[str, bool | None]
+    food_type: str | None = None
+    review_count: int | None = None
 
 
 @dataclass(frozen=True)

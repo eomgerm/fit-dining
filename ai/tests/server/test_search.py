@@ -10,6 +10,7 @@ test_app.py에서 본다.
 import json
 import logging
 from collections.abc import Sequence
+from dataclasses import replace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -35,7 +36,6 @@ from fit_ai.match.interpretation.segments import (
 from fit_ai.match.search import (
     EmbeddingError,
     EmptyReason,
-    Fallback,
     SearchRequest,
     SearchResult,
     SearchTrace,
@@ -161,21 +161,15 @@ def make_result(
     conditions: Conditions = CONDITIONS,
     change_summary: str | None = None,
     interpret_error: str | None = None,
-    fallback: Fallback | None = None,
     empty: EmptyReason | None = None,
     invalid: tuple[int, ...] = (),
 ) -> SearchResult:
-    """검색 결과. 기본은 LLM으로 해석하고 정렬해 카드 한 장이 나온 결과다."""
-    failed = fallback is Fallback.LLM_FAILED
-    ranked_by_llm = bool(cards) and fallback is None
+    """검색 결과. 기본은 LLM으로 해석하고 점수로 정렬해 카드 한 장이 나온 결과다."""
     trace = SearchTrace(
         embed_seconds=0.1,
         store_seconds=0.01,
         candidates=len(cards),
-        fallback=fallback,
-        rank_llm_error="후보 밖 번호다: 9" if failed else None,
-        rank_llm_raw='{"ranking": [{"id": 1}]}' if ranked_by_llm else None,
-        rank_llm_seconds=1.0 if failed or ranked_by_llm else None,
+        score_seconds=0.02 if cards else 0.0,
     )
     return SearchResult(
         interpretation=Interpretation(conditions, change_summary, interpret_error, 1.0),
@@ -272,7 +266,7 @@ class TestSearch:
         assert data["conditions"] == {**CONDITIONS_BODY, **EMPTY_SEGMENTS_BODY}
         assert data["nearby"] is False
         assert data["interpretedBy"] == "LLM"
-        assert data["rankedBy"] == "LLM"
+        assert data["rankedBy"] == "SCORE"
         assert data["fallbacks"] == []
         assert data["models"] == MODELS
         card = data["items"][0]
@@ -388,41 +382,38 @@ class TestSearch:
         assert data["fallbacks"] == ["PREVIOUS_INVALID"]
 
     def test_llm_down(self, searched: FakeSearch) -> None:
-        """검색_해석과정렬LLM이모두실패하면_규칙과유사도로표시하고LLM모델을빼고답한다"""
+        """검색_해석LLM이실패하면_규칙으로표시하고LLM모델을빼고답한다"""
         searched.outcome = make_result(
-            interpret_error="GMS가 꺼져 있거나 호출이 실패했다",
-            fallback=Fallback.LLM_FAILED,
+            interpret_error="GMS가 꺼져 있거나 호출이 실패했다"
         )
 
         data = post(client())
 
         assert data["interpretedBy"] == "RULE"
-        assert data["rankedBy"] == "SIMILARITY"
-        assert data["fallbacks"] == ["INTERPRET_LLM_FAILED", "RANK_LLM_FAILED"]
+        assert data["rankedBy"] == "SCORE"
+        assert data["fallbacks"] == ["INTERPRET_LLM_FAILED"]
         assert data["models"] == {"embedding": MODELS["embedding"]}
 
-    def test_rank_llm_failure_only(self, searched: FakeSearch) -> None:
-        """검색_정렬LLM만실패하면_RANK_LLM_FAILED만담고LLM모델은남긴다"""
-        searched.outcome = make_result(fallback=Fallback.LLM_FAILED)
+    def test_no_score(self, searched: FakeSearch) -> None:
+        """검색_판정할요청조각도취향도없어점수가없으면_점수를빼고유사도로정렬했다고표시한다"""
+        searched.outcome = make_result(cards=(replace(CARD, score=None),))
 
         data = post(client())
 
-        assert data["interpretedBy"] == "LLM"
         assert data["rankedBy"] == "SIMILARITY"
-        assert data["fallbacks"] == ["RANK_LLM_FAILED"]
-        assert data["models"]["llm"] == "gpt-4o-mini"
+        assert "score" not in data["items"][0]
+        assert data["fallbacks"] == []
 
     def test_nearby(self, searched: FakeSearch) -> None:
-        """검색_근처검색이면_유사도로정렬했다고표시하지만폴백은아니다"""
+        """검색_근처검색이면_같은점수로정렬하고폴백은아니다"""
         searched.outcome = make_result(
-            conditions=Conditions("근처 카페", "근처 카페", (), "CAFE", nearby=True),
-            fallback=Fallback.NEARBY,
+            conditions=Conditions("근처 카페", "근처 카페", (), "CAFE", nearby=True)
         )
 
         data = post(client())
 
         assert data["nearby"] is True
-        assert data["rankedBy"] == "SIMILARITY"
+        assert data["rankedBy"] == "SCORE"
         assert data["fallbacks"] == []
 
     @pytest.mark.parametrize(
@@ -708,7 +699,7 @@ def test_logs_are_json_without_query(caplog: pytest.LogCaptureFixture) -> None:
     events = [json.loads(r.getMessage()) for r in caplog.records if r.name == "server"]
     assert [event["event"] for event in events] == ["search"]
     assert events[0]["codes"] == ["QUIET"]
-    assert events[0]["ranked_by"] == "LLM"
+    assert events[0]["ranked_by"] == "SCORE"
     assert events[0]["candidates"] == 1
-    assert events[0]["rank_llm_raw"] == '{"ranking": [{"id": 1}]}'
+    assert events[0]["score_seconds"] == 0.02
     assert QUERY_TEXT not in caplog.text
