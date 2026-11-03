@@ -35,8 +35,8 @@ export default function Home() {
           <h1 className="text-headline-md">핏다이닝</h1>
           <p className="mt-3">{siteDescription}</p>
           <p className="mt-3">
-            강남역·역삼역·선릉역 주변 식당과 카페를 핏 점수, 추천 이유, 근거
-            리뷰와 함께 보여 줍니다. 핏다이닝을 쓰려면 자바스크립트를 켜 주세요.
+            식당과 카페를 핏 점수, 추천 이유, 근거 리뷰와 함께 보여 줍니다.
+            핏다이닝을 쓰려면 자바스크립트를 켜 주세요.
           </p>
           <p className="mt-3 flex gap-4">
             <Link href="/terms">서비스 이용약관</Link>
