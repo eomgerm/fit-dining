@@ -19,6 +19,9 @@ public class SearchThreadService {
 
 	static final int PAGE_SIZE = 20;
 
+	/** 회원마다 남기는 thread 수. 넘으면 마지막 요청 시각이 오래된 것부터 지운다(D-19) */
+	static final int MAX_THREADS = 20;
+
 	private final SearchThreadRepository threads;
 	private final AuthUserRepository users;
 
@@ -31,14 +34,21 @@ public class SearchThreadService {
 
 	/**
 	 * 형식을 확인한 turn 하나를 thread에 더한다. 같은 id가 이미 있으면 비교, thread 규칙, 기준 turn 확인, 저장 순서로
-	 * 판단하고(spec "turn 추가 규칙"의 3~6), 모두 thread를 잠근 한 트랜잭션에서 일어난다.
+	 * 판단하고(spec "turn 추가 규칙"의 3~6), 모두 회원 행과 thread를 잠근 한 트랜잭션에서 일어난다. thread를 새로 만들었으면
+	 * 상한을 넘는 오래된 thread를 지운다(D-19).
 	 *
+	 * @throws AuthFailure 그사이 탈퇴했을 때(D-13)
 	 * @throws TurnConflictException 같은 id가 다른 내용으로 이미 있을 때. 아무것도 바꾸지 않는다
 	 * @throws InvalidSearchThreadException thread 규칙을 어길 때
 	 * @throws BaseTurnMissingException 기준 turn이 같은 thread에 아직 없을 때
 	 */
 	@Transactional
 	public void addTurn(String userId, String threadId, TurnFormat.Turn turn) {
+		// 탈퇴와 순서를 정해 탈퇴한 회원의 기록이 남지 않게 하고, 같은 회원의 저장끼리 상한 정리가 엇갈리지 않게 한다
+		if (!threads.lockActiveUser(userId)) {
+			throw new AuthFailure("로그인이 필요합니다.");
+		}
+		boolean created = false;
 		Optional<Integer> turnCount = threads.lockThread(userId, threadId);
 		if (turnCount.isEmpty()) {
 			// 없는 thread에는 같은 id의 turn도 없으므로 첫 turn 규칙부터 본다
@@ -46,8 +56,8 @@ public class SearchThreadService {
 				throw new InvalidSearchThreadException("first turn");
 			}
 			// 다른 요청이 동시에 만들었으면 그 요청이 끝난 뒤 그 thread를 잠근다
-			turnCount = threads.createThread(userId, threadId, turn.query(), turn.at())
-					? Optional.of(0) : threads.lockThread(userId, threadId);
+			created = threads.createThread(userId, threadId, turn.query(), turn.at());
+			turnCount = created ? Optional.of(0) : threads.lockThread(userId, threadId);
 			if (turnCount.isEmpty()) {
 				throw new IllegalStateException("search thread vanished while locking");
 			}
@@ -67,6 +77,10 @@ public class SearchThreadService {
 			throw new BaseTurnMissingException();
 		}
 		threads.appendTurn(userId, threadId, turn, turnCount.get() + 1);
+		if (created) {
+			// 기기 시각이 틀려 방금 만든 thread가 가장 오래돼도 지우지 않는다
+			threads.trim(userId, threadId, MAX_THREADS - 1);
+		}
 	}
 
 	/**
@@ -91,6 +105,7 @@ public class SearchThreadService {
 		threads.deleteThread(userId, threadId);
 	}
 
+	/** 최근 검색의 전체 삭제(D-18)와 탈퇴 처리(D-13)가 쓴다. 탈퇴는 회원 행을 잠근 트랜잭션 안에서 부른다 */
 	@Transactional
 	public void deleteAll(String userId) {
 		threads.deleteAll(userId);

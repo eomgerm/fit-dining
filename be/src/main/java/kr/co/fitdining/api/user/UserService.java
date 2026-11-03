@@ -4,6 +4,7 @@ import java.time.Clock;
 import kr.co.fitdining.api.auth.repository.AuthUserRepository;
 import kr.co.fitdining.api.auth.repository.AuthRefreshTokenRepository;
 import kr.co.fitdining.api.auth.ports.AuthUseCases.Identity;
+import kr.co.fitdining.api.searchthread.SearchThreadService;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +20,7 @@ public class UserService {
     private final AuthRefreshTokenRepository tokens;
     private final Clock clock;
     private final kr.co.fitdining.api.auth.repository.AuthSocialAccountRepository socialAccounts;
+    private final SearchThreadService searchThreads;
     public record Profile(String userId, String nickname, String loginMethod) {}
     @Transactional(readOnly = true)
     public Profile profile(String userId, Identity identity) {
@@ -50,6 +52,8 @@ public class UserService {
             user.withdraw(now);
             socialAccounts.deleteByUserId(userId);
             preferences.deleteById(userId);
+            // Search history holds copies of the query, taste tags and map area (search-thread D-13)
+            searchThreads.deleteAll(userId);
             tokens.revokeUser(userId, now);
         });
     }

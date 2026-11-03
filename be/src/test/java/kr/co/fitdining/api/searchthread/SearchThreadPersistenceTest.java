@@ -8,6 +8,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -185,6 +186,12 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 	private int count(String table) {
 		return jdbc.queryForObject("select count(*) from " + table + " where user_id like ?", Integer.class,
 				USER_PREFIX + "%");
+	}
+
+	/** n번 사용자의 행 수 */
+	private int countOf(int n, String table) {
+		return jdbc.queryForObject("select count(*) from " + table + " where user_id = ?", Integer.class,
+				USER_PREFIX + n);
 	}
 
 	@Nested
@@ -542,6 +549,107 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 			long lastAt = AT + 100 - ids.indexOf(stored.getLast());
 			assertThat(list(token, null).get("items").get(0).get("lastAt").longValue()).isEqualTo(lastAt);
 		}
+
+		@Test
+		@DisplayName("동시_탈퇴와저장이함께와도_저장은204나401로끝나고탈퇴한회원의기록은남지않는다")
+		void withdraw_concurrentSaves_leaveNoRecords() {
+			String token = signIn(0);
+			List<CompletableFuture<HttpResponse<String>>> saves = IntStream.range(0, 8).mapToObj(i -> {
+				String id = turnId();
+				return client.sendAsync(request("PUT", BASE + "/" + threadId() + "/turns/" + id, token,
+						newTurn(id, AT + i, "카페")), HttpResponse.BodyHandlers.ofString());
+			}).toList();
+
+			CompletableFuture.runAsync(() -> withdraw(0)).join();
+
+			assertThat(saves.stream().map(CompletableFuture::join).map(HttpResponse::statusCode))
+					.allMatch(status -> status == 204 || status == 401);
+			assertThat(countOf(0, "search_threads")).isZero();
+			assertThat(countOf(0, "search_thread_turns")).isZero();
+		}
+	}
+
+	@Nested
+	@DisplayName("상한")
+	class Limit {
+
+		/** at이 하나씩 늦어지는 thread를 count개 만들고 만든 순서대로 id를 돌려준다 */
+		private List<String> fill(String token, int count) throws Exception {
+			List<String> threads = new ArrayList<>();
+			for (int i = 0; i < count; i++) {
+				String thread = threadId();
+				String id = turnId();
+				assertThat(put(token, thread, id, newTurn(id, AT + i, "질문 " + i)).statusCode()).isEqualTo(204);
+				threads.add(thread);
+			}
+			return threads;
+		}
+
+		@Test
+		@DisplayName("상한_새thread로상한을넘으면_마지막요청시각이가장오래된thread를turn까지지우고남의기록은남긴다")
+		void put_newThreadOverLimit_removesOldest() throws Exception {
+			String token = signIn(0);
+			String theirs = signIn(1);
+			String other = turnId();
+			put(theirs, threadId(), other, newTurn(other, AT - 1, "남의 질문"));
+
+			List<String> threads = fill(token, SearchThreadService.MAX_THREADS + 1);
+
+			assertThat(send("GET", BASE + "/" + threads.getFirst(), token, null).statusCode()).isEqualTo(404);
+			JsonNode items = list(token, null).get("items");
+			assertThat(items).hasSize(SearchThreadService.MAX_THREADS);
+			assertThat(items.get(0).get("id").asString()).isEqualTo(threads.getLast());
+			assertThat(countOf(0, "search_thread_turns")).isEqualTo(SearchThreadService.MAX_THREADS);
+			assertThat(countOf(1, "search_threads")).isEqualTo(1);
+		}
+
+		@Test
+		@DisplayName("상한_있는thread에이어쓰면_개수가늘지않아지우지않는다")
+		void put_followUpAtLimit_keepsAll() throws Exception {
+			String token = signIn(0);
+			List<String> threads = fill(token, SearchThreadService.MAX_THREADS);
+			String oldest = threads.getFirst();
+			String base = turnIds(getThread(token, oldest)).getFirst();
+			String next = turnId();
+
+			HttpResponse<String> response = put(token, oldest, next, turn(next, "followUp", base, AT + 100, "조건"));
+
+			assertThat(response.statusCode()).isEqualTo(204);
+			assertThat(countOf(0, "search_threads")).isEqualTo(SearchThreadService.MAX_THREADS);
+			assertThat(list(token, null).get("items").get(0).get("id").asString()).isEqualTo(oldest);
+		}
+
+		@Test
+		@DisplayName("상한_방금만든thread의at이가장오래돼도_그thread는남기고다른가장오래된thread를지운다")
+		void put_newThreadWithPastAt_keepsIt() throws Exception {
+			String token = signIn(0);
+			List<String> threads = fill(token, SearchThreadService.MAX_THREADS);
+			String past = threadId();
+			String id = turnId();
+
+			HttpResponse<String> response = put(token, past, id, newTurn(id, AT - 1_000, "과거 시각"));
+
+			assertThat(response.statusCode()).isEqualTo(204);
+			assertThat(getThread(token, past).get("turns")).hasSize(1);
+			assertThat(send("GET", BASE + "/" + threads.getFirst(), token, null).statusCode()).isEqualTo(404);
+			assertThat(countOf(0, "search_threads")).isEqualTo(SearchThreadService.MAX_THREADS);
+		}
+
+		@Test
+		@DisplayName("상한_새thread를동시에여럿만들어도_500없이상한만큼남는다")
+		void put_concurrentNewThreads_endsAtLimit() throws Exception {
+			String token = signIn(0);
+			fill(token, SearchThreadService.MAX_THREADS - 1);
+
+			List<CompletableFuture<HttpResponse<String>>> futures = IntStream.range(0, 6).mapToObj(i -> {
+				String id = turnId();
+				return client.sendAsync(request("PUT", BASE + "/" + threadId() + "/turns/" + id, token,
+						newTurn(id, AT + 100 + i, "동시 " + i)), HttpResponse.BodyHandlers.ofString());
+			}).toList();
+
+			assertThat(futures.stream().map(CompletableFuture::join).map(HttpResponse::statusCode)).containsOnly(204);
+			assertThat(countOf(0, "search_threads")).isEqualTo(SearchThreadService.MAX_THREADS);
+		}
 	}
 
 	@Nested
@@ -569,11 +677,13 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 		@DisplayName("목록_같은시각묶음이페이지경계를넘어도_thread_id역순으로빠짐과겹침없이이어진다")
 		void list_tiesAcrossPageBoundary_continuesWithoutGapOrDuplicate() throws Exception {
 			String token = signIn(0);
-			// 다섯 개만 시각이 다르고 나머지는 같은 시각이라 같은 시각 묶음이 페이지 경계를 넘는다
+			// 다섯 개만 시각이 다르고 나머지는 같은 시각이라 같은 시각 묶음이 페이지 경계를 넘는다.
+			// 상한(D-19)보다 많아야 하므로 상한 전에 쌓인 기록처럼 DB에 직접 넣는다. 목록은 turn을 읽지 않는다
 			List<String> threads = IntStream.range(0, 21).mapToObj(i -> threadId()).toList();
 			for (int i = 0; i < threads.size(); i++) {
-				String id = turnId();
-				put(token, threads.get(i), id, newTurn(id, i < 5 ? AT + 1000 + i : AT, "질문 " + i));
+				jdbc.update("insert into search_threads (user_id, thread_id, title, last_requested_at, turn_count)"
+						+ " values (?, ?, ?, ?, 0)", USER_PREFIX + 0, threads.get(i), "질문 " + i,
+						Timestamp.from(Instant.ofEpochMilli(i < 5 ? AT + 1000 + i : AT)));
 			}
 			List<String> expected = new ArrayList<>();
 			for (int i = 4; i >= 0; i--) {
@@ -845,21 +955,29 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 			};
 
 			assertThat(response.statusCode()).isEqualTo(401);
-			assertThat(count("search_thread_turns")).isEqualTo(1);
+			// 탈퇴 때 지워졌고, 그 뒤 요청은 아무것도 쓰지 않는다(D-13)
+			assertThat(count("search_thread_turns")).isZero();
 		}
 
 		@Test
-		@DisplayName("탈퇴_soft_delete면_그회원의thread와turn이DB에남는다")
-		void withdraw_softDelete_recordsRemain() throws Exception {
-			String token = signIn(0);
+		@DisplayName("탈퇴_그회원의thread와turn을모두지우고_다른회원의기록은남긴다")
+		void withdraw_deletesOwnRecordsOnly() throws Exception {
+			String mine = signIn(0);
+			String theirs = signIn(1);
 			String thread = threadId();
-			String id = turnId();
-			put(token, thread, id, newTurn(id, AT, "카페"));
+			String first = turnId();
+			String second = turnId();
+			put(mine, thread, first, newTurn(first, AT, "카페"));
+			put(mine, thread, second, turn(second, "followUp", first, AT + 1, "조건"));
+			String other = turnId();
+			put(theirs, threadId(), other, newTurn(other, AT, "남의 질문"));
 
 			withdraw(0);
 
-			assertThat(count("search_threads")).isEqualTo(1);
-			assertThat(count("search_thread_turns")).isEqualTo(1);
+			assertThat(users.findById(USER_PREFIX + 0).orElseThrow().getDeletedAt()).isNotNull();
+			assertThat(countOf(0, "search_threads")).isZero();
+			assertThat(countOf(0, "search_thread_turns")).isZero();
+			assertThat(countOf(1, "search_thread_turns")).isEqualTo(1);
 		}
 
 		@Test

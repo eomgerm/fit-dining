@@ -22,6 +22,11 @@ class SearchThreadRepository {
 	/** 밀리초 정수를 {@code timestamptz}로. PostgreSQL 15부터 interval 입력은 int64로 계산한다 */
 	private static final String AT = "(TIMESTAMPTZ 'epoch' + CAST(:at || ' milliseconds' AS interval))";
 
+	/** 탈퇴(회원 행 잠금)와 같은 회원의 다른 저장이 끝날 때까지 기다렸다가 탈퇴하지 않은 회원인지 본다 */
+	private static final String LOCK_ACTIVE_USER = """
+			SELECT id FROM auth_users WHERE id = :userId AND deleted_at IS NULL
+			FOR NO KEY UPDATE""";
+
 	private static final String LOCK_THREAD = """
 			SELECT turn_count FROM search_threads
 			WHERE user_id = :userId AND thread_id = :threadId
@@ -84,7 +89,21 @@ class SearchThreadRepository {
 	private static final String DELETE_ALL = """
 			DELETE FROM search_threads WHERE user_id = :userId""";
 
+	/** 남길 thread 말고, 목록 순서로 앞의 :keep개를 뺀 나머지를 지운다 */
+	private static final String TRIM = """
+			DELETE FROM search_threads
+			WHERE user_id = :userId AND thread_id <> :threadId
+			  AND thread_id NOT IN (SELECT thread_id FROM search_threads
+			                        WHERE user_id = :userId AND thread_id <> :threadId
+			                        ORDER BY last_requested_at DESC, thread_id DESC
+			                        LIMIT :keep)""";
+
 	private final NamedParameterJdbcTemplate jdbc;
+
+	/** @return 회원 행을 잠갔으면 true, 없거나 탈퇴했으면 false */
+	boolean lockActiveUser(String userId) {
+		return !jdbc.queryForList(LOCK_ACTIVE_USER, Map.of("userId", userId), String.class).isEmpty();
+	}
 
 	/** thread 행을 잠그고 지금까지의 turn 수를 돌려준다. 없으면 비어 있다 */
 	Optional<Integer> lockThread(String userId, String threadId) {
@@ -153,6 +172,16 @@ class SearchThreadRepository {
 
 	void deleteAll(String userId) {
 		jdbc.update(DELETE_ALL, Map.of("userId", userId));
+	}
+
+	/**
+	 * @param threadId 지우지 않을 thread(방금 만든 것)
+	 * @param keep 그 밖에 남길 thread 수
+	 */
+	void trim(String userId, String threadId, int keep) {
+		Map<String, Object> params = key(userId, threadId);
+		params.put("keep", keep);
+		jdbc.update(TRIM, params);
 	}
 
 	private static Map<String, Object> key(String userId, String threadId) {
