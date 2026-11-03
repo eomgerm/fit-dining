@@ -74,7 +74,7 @@ LLM이 실패하면 해석은 낱말 규칙으로 한다. 점수는 LLM을 쓰�
 
 ### 4.1 요청 해석 (`match/interpretation/`)
 
-요청문과, 후속 조건이면 이전 조건(FE가 돌려보낸 `conditions`)을 받아 조건을 낸다. 조건은 BE와 FE에 불투명한 객체다. 코드는 하는 일별로 나눴다. `segments`(조각 타입), `request`(조건과 같이 쓰는 함수), `rules`(규칙 해석), `checks`(코드 확인), `llm`(프롬프트와 출력 읽기)이고, 밖에서는 `fit_ai.match.interpretation`이 내보내는 이름만 쓴다.
+요청문과, 후속 조건이면 이전 조건(FE가 돌려보낸 `conditions`)을 받아 조건을 낸다. 조건 모양은 2026-11-04부터 분류별 3차 모양으로 바꾸는 중이다([conditions-v3.md](conditions-v3.md)). 응답의 `conditions`는 이미 3차 모양이고, 아래 표는 해석이 내는 값의 뜻이다. 표의 `codes`, `categoryGroup`, `avoidCategories`, `avoidFoods`는 3차 조건에서 분류별 칸과 항목의 `want`로 나뉜다. 조건은 BE와 FE에 불투명한 객체다. 코드는 하는 일별로 나눴다. `segments`(조각 타입), `request`(조건과 같이 쓰는 함수), `rules`(규칙 해석), `checks`(코드 확인), `llm`(프롬프트와 출력 읽기)이고, 밖에서는 `fit_ai.match.interpretation`이 내보내는 이름만 쓴다.
 
 | 조건 | 내용 |
 | --- | --- |

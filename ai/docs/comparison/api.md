@@ -1,6 +1,6 @@
 # AI 검색 API 명세
 
-Status: 초안 v0.8 · Jira: S15P31A302-41, S15P31A302-136, S15P31A302-158 · 작성일: 2026-10-23 · 고친 날: 2026-11-03
+Status: 초안 v0.9 · Jira: S15P31A302-41, S15P31A302-136, S15P31A302-158 · 작성일: 2026-10-23 · 고친 날: 2026-11-04
 
 BE는 검색 첫 페이지마다 AI를 한 번 부른다. AI는 요청을 해석하고 DB에서 후보를 뽑아 핏 점수로 정렬한 뒤 카드의 AI 필드를 돌려준다. v0.7부터 정렬에 LLM을 쓰지 않는다. BE는 카드에 장소 정보와 영업 상태를 붙여 FE에 준다.
 
@@ -53,15 +53,17 @@ JSON 이름은 camelCase다. 요청에 모르는 속성이 있으면 400이고(�
 
 `conditions`에는 해석 결과만 있다. 후속 검색 때도 `userId`(또는 `tasteProfile`)와 `mapBounds`는 다시 보내야 한다. BE의 `preferences`와 `cursor`는 null이라도 넣으면 400이므로 AI 요청용 DTO를 따로 둔다.
 
-v0.6부터 `conditions`에 분류별 조각(`locations`, `menus`, `hours`, `price`, `placeName`, `features`, `avoidCategories`, v0.8의 `avoidFoods`)이 붙는다. 뜻은 [spec.md](spec.md) 4.1절에 있다. null인 조각은 빠지고 빈 목록은 그대로 온다. BE와 FE는 지금처럼 해석하지 않고 돌려보내면 되고, 조각이 없는 v0.5 이전 `conditions`도 그대로 읽는다. 아래 예시는 v0.5 필드만 적었다.
+v0.6부터 `conditions`에 분류별 조각(`locations`, `menus`, `hours`, `price`, `placeName`, `features`, `avoidCategories`, v0.8의 `avoidFoods`)이 붙는다. 뜻은 [spec.md](spec.md) 4.1절에 있다. null인 조각은 빠지고 빈 목록은 그대로 온다. BE와 FE는 지금처럼 해석하지 않고 돌려보내면 되고, 조각이 없는 v0.5 이전 `conditions`도 그대로 읽는다. 이 문서의 예시는 v0.9 모양이고 빈 목록은 줄였다.
 
 ```json
-"conditions": {"text": "션릉역이나 역삼역 걸어서 5분 3만원 이하 초밥 매운 거 말고", "embeddingText": "3만원 이하 초밥", "codes": [], "categoryGroup": "RESTAURANT", "station": "SEOLLEUNG", "nearby": false, "locations": [{"text": "션릉역", "kind": "STATION", "value": "선릉역"}, {"text": "역삼역 걸어서 5분", "kind": "STATION", "value": "역삼역", "walkMinutes": 5}], "menus": [{"text": "초밥", "value": "초밥", "spellings": ["스시"], "want": true}], "hours": [], "price": {"text": "3만원 이하", "maxWon": 30000, "cheap": false}, "features": [], "avoidCategories": [], "avoidFoods": ["FOOD_SPICY"]}
+"conditions": {"version": 3, "text": "션릉역이나 역삼역 걸어서 5분 3만원 이하 초밥 매운 거 말고", "embeddingText": "3만원 이하 초밥", "categories": [{"code": "RESTAURANT", "want": true}], "flavors": [{"code": "SPICY", "want": false}], "menus": [{"text": "초밥", "value": "초밥", "spellings": ["스시"], "want": true}], "locations": [{"text": "션릉역", "kind": "STATION", "value": "선릉역"}, {"text": "역삼역 걸어서 5분", "kind": "STATION", "value": "역삼역", "walkMinutes": 5}], "price": {"text": "3만원 이하", "maxWon": 30000, "cheap": false}}
 ```
 
 AI는 `previousConditions`의 모르는 필드를 거부한다. 그래서 v0.6을 배포한 뒤 v0.5로 되돌리면, 조각이 붙은 `conditions`로 하는 후속 검색은 새 검색으로 바뀐다(`PREVIOUS_INVALID`).
 
 v0.8부터 메뉴(`menus`)와 음식 종류·매운맛(`codes`, `avoidFoods`)을 나눈다. 메뉴 조각에는 음식 코드(`code`)가 없고 다른 표기(`spellings`)가 붙는다. 빼 달라는 음식은 `avoidFoods`다. 메뉴만 말한 요청("초밥")에는 음식 종류 코드가 붙지 않는다. v0.7 이전 응답의 `menus[].code`는 모르는 필드라, 배포 전후에 걸친 후속 검색은 새 검색으로 바뀐다(`PREVIOUS_INVALID`). BE와 FE는 바꿀 것이 없다.
+
+v0.9부터 `conditions`는 3차 모양(`version: 3`)이다. 업종·음식 종류·맛·메뉴는 항목마다 원함과 피함(`want`)을 두고, 특징·시설·인원은 칸을 나눈다(`categories`, `foodTypes`, `flavors`, `menus`, `features`, `facilities`, `partySize`). `codes`, `categoryGroup`, `station`, `nearby`, `avoidCategories`, `avoidFoods`는 없어진다. 모양은 [conditions-v3.md](conditions-v3.md) 3장에 있다. AI는 `version`이 없는 v0.8 이전 `conditions`도 계속 읽으므로 BE가 검색 대화에 저장해 둔 조건으로 하는 후속 검색도 이어진다. 응답 최상위 `nearby`는 그대로다. v0.9를 배포한 뒤 v0.8로 되돌리면 3차 `conditions`로 하는 후속 검색은 새 검색으로 바뀐다(`PREVIOUS_INVALID`). BE와 FE는 바꿀 것이 없다.
 
 ### 응답
 
@@ -69,7 +71,7 @@ BE Mock 장소(`samples/place/mock.json`)와 실제 인코더·GMS로 받은 응
 
 ```json
 {
-  "conditions": {"text": "역삼역 조용하게 대화하기 좋은 식당", "embeddingText": "조용하고 대화하기 좋은 식당", "codes": ["QUIET", "PURPOSE_TALK"], "categoryGroup": "RESTAURANT", "station": "YEOKSAM", "nearby": false},
+  "conditions": {"version": 3, "text": "역삼역 조용하게 대화하기 좋은 식당", "embeddingText": "조용하고 대화하기 좋은 식당", "categories": [{"code": "RESTAURANT", "want": true}], "features": [{"text": "조용하고 차분한 곳", "value": "조용하고 차분한 곳", "code": "QUIET"}, {"text": "대화", "value": "대화", "code": "PURPOSE_TALK"}], "locations": [{"text": "역삼역", "kind": "STATION", "value": "역삼역"}]},
   "nearby": false,
   "items": [
     {
@@ -127,13 +129,13 @@ BE는 검색마다 `modal_llm_calls_total`과 `modal_embedding_calls_total`을 �
 ```json
 {
   "query": "넓은 곳이면 좋겠어",
-  "previousConditions": {"text": "역삼역 조용하게 대화하기 좋은 식당", "embeddingText": "조용하게 대화하기 좋은 식당", "codes": ["QUIET", "PURPOSE_TALK"], "categoryGroup": "RESTAURANT", "station": "YEOKSAM", "nearby": false}
+  "previousConditions": {"version": 3, "text": "역삼역 조용하게 대화하기 좋은 식당", "embeddingText": "조용하게 대화하기 좋은 식당", "categories": [{"code": "RESTAURANT", "want": true}], "features": [{"text": "조용하고 차분한 곳", "value": "조용하고 차분한 곳", "code": "QUIET"}, {"text": "대화", "value": "대화", "code": "PURPOSE_TALK"}], "locations": [{"text": "역삼역", "kind": "STATION", "value": "역삼역"}]}
 }
 ```
 
 ```json
 {
-  "conditions": {"text": "역삼역 조용하게 대화하기 좋은 식당 넓은 곳이면 좋겠어", "embeddingText": "조용하게 대화하기 좋은 넓은 곳", "codes": ["QUIET", "PURPOSE_TALK", "SPACIOUS_SEATING"], "categoryGroup": "RESTAURANT", "station": "YEOKSAM", "nearby": false},
+  "conditions": {"version": 3, "text": "역삼역 조용하게 대화하기 좋은 식당 넓은 곳이면 좋겠어", "embeddingText": "조용하게 대화하기 좋은 넓은 곳", "categories": [{"code": "RESTAURANT", "want": true}], "features": [{"text": "조용하고 차분한 곳", "value": "조용하고 차분한 곳", "code": "QUIET"}, {"text": "대화", "value": "대화", "code": "PURPOSE_TALK"}, {"text": "자리가 넉넉한 곳", "value": "자리가 넉넉한 곳", "code": "SPACIOUS_SEATING"}], "locations": [{"text": "역삼역", "kind": "STATION", "value": "역삼역"}]},
   "nearby": false,
   "changeSummary": "넓은 곳이면 좋겠다고 했어요.",
   "items": [
@@ -162,7 +164,7 @@ BE는 검색마다 `modal_llm_calls_total`과 `modal_embedding_calls_total`을 �
 
 ```json
 {
-  "conditions": {"text": "선릉역 주차되는 카페", "embeddingText": "주차할 수 있는 카페", "codes": ["PARKING"], "categoryGroup": "CAFE", "station": "SEOLLEUNG", "nearby": false},
+  "conditions": {"version": 3, "text": "선릉역 주차되는 카페", "embeddingText": "주차할 수 있는 카페", "categories": [{"code": "CAFE", "want": true}], "facilities": ["PARKING"], "locations": [{"text": "선릉역", "kind": "STATION", "value": "선릉역"}]},
   "nearby": false,
   "items": [],
   "emptyReason": {"cause": "선릉역 카페 중 주차할 수 있는 곳이 없어요", "suggestion": "주차 조건을 빼고 다시 찾아 보세요"},
@@ -182,7 +184,7 @@ BE는 검색마다 `modal_llm_calls_total`과 `modal_embedding_calls_total`을 �
 
 ```json
 {
-  "conditions": {"text": "근처 카페", "embeddingText": "카페", "codes": [], "categoryGroup": "CAFE", "nearby": true},
+  "conditions": {"version": 3, "text": "근처 카페", "embeddingText": "카페", "categories": [{"code": "CAFE", "want": true}], "locations": [{"text": "근처", "kind": "HERE"}]},
   "nearby": true,
   "items": [{"placeId": 7, "labels": ["작업하기 좋아요", "조용해요"], "reasons": [], "scoreItems": []}],
   "interpretedBy": "LLM",
@@ -205,7 +207,7 @@ BE는 검색마다 `modal_llm_calls_total`과 `modal_embedding_calls_total`을 �
 해석은 낱말 규칙으로 한다. 점수는 LLM을 쓰지 않아 그대로다. `models.llm`이 빠진다.
 
 ```json
-{"conditions": {"text": "역삼역 조용한 술집", "codes": ["QUIET"], "categoryGroup": "BAR", "station": "YEOKSAM", "nearby": false}, "items": [{"placeId": 12, "score": 81}, {"placeId": 24, "score": 69}], "interpretedBy": "RULE", "rankedBy": "SCORE", "fallbacks": ["INTERPRET_LLM_FAILED"], "models": {"embedding": "dragonkue/snowflake-arctic-embed-l-v2.0-ko@55ec6e9358a56d56af759bc8372e970caf8c305f"}}
+{"conditions": {"version": 3, "text": "역삼역 조용한 술집", "categories": [{"code": "BAR", "want": true}], "features": [{"text": "조용하고 차분한 곳", "value": "조용하고 차분한 곳", "code": "QUIET"}], "locations": [{"text": "역삼역", "kind": "STATION", "value": "역삼역"}]}, "items": [{"placeId": 12, "score": 81}, {"placeId": 24, "score": 69}], "interpretedBy": "RULE", "rankedBy": "SCORE", "fallbacks": ["INTERPRET_LLM_FAILED"], "models": {"embedding": "dragonkue/snowflake-arctic-embed-l-v2.0-ko@55ec6e9358a56d56af759bc8372e970caf8c305f"}}
 ```
 
 ## 3. `GET /healthz`
