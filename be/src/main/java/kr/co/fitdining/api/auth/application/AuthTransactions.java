@@ -30,6 +30,7 @@ public class AuthTransactions {
     private final AuthRefreshTokenRepository refreshTokens;
     private final AuthSecurityEventRepository events;
     private final AuthUserRepository users;
+    private final kr.co.fitdining.api.auth.repository.AuthEmailVerificationRepository verifications;
     private final kr.co.fitdining.api.user.UserPreferencesRepository preferences;
     private final TokenCodec codec;
     private final Clock clock;
@@ -37,18 +38,21 @@ public class AuthTransactions {
     @org.springframework.beans.factory.annotation.Value("${auth.terms-version}")
     private String termsVersion;
 
-    /** Saves the account and initial RT atomically, after transaction-free hashing. */
+    /**
+     * Consumes the email verification token, then saves the account and initial RT atomically,
+     * after transaction-free hashing. A concurrent request with the same token updates zero rows and rolls back.
+     * @param verificationTokenHash hash checked by {@link EmailVerifications#requireToken}
+     */
     @Transactional
-    public Issued signup(String email, String nickname, String hash, kr.co.fitdining.api.user.Preferences answers) {
-        return signup(email, nickname, hash, answers, java.util.List.of());
-    }
-
-    @Transactional
-    public Issued signup(String email, String nickname, String hash, kr.co.fitdining.api.user.Preferences answers,
-            java.util.List<kr.co.fitdining.api.user.TasteFeature> features) {
-        AuthUser user = users.saveAndFlush(new AuthUser(UUID.randomUUID().toString(), email, nickname,
-                hash, clock.instant(), termsVersion));
-        if (answers != null) preferences.saveAndFlush(new kr.co.fitdining.api.user.UserPreferences(user.getId(), answers, clock.instant(), features));
+    public Issued signup(String email, String nickname, String hash, String verificationTokenHash,
+            kr.co.fitdining.api.user.Preferences answers, java.util.List<kr.co.fitdining.api.user.TasteFeature> features) {
+        Instant now = clock.instant();
+        if (verifications.consume(verificationTokenHash, email, now) != 1)
+            throw kr.co.fitdining.api.auth.domain.EmailVerificationFailure.required();
+        AuthUser created = new AuthUser(UUID.randomUUID().toString(), email, nickname, hash, now, termsVersion);
+        created.markEmailVerified(now);
+        AuthUser user = users.saveAndFlush(created);
+        if (answers != null) preferences.saveAndFlush(new kr.co.fitdining.api.user.UserPreferences(user.getId(), answers, now, features));
         return login(user);
     }
 
@@ -119,7 +123,10 @@ public class AuthTransactions {
     @Transactional
     public void seedUser(String email, String nickname, String passwordHash) {
         if (users.findByEmail(email).isEmpty()) {
-            users.saveAndFlush(new AuthUser(UUID.randomUUID().toString(), email, nickname, passwordHash, clock.instant(), termsVersion));
+            // The demo account is created from server configuration without a verification code.
+            AuthUser demo = new AuthUser(UUID.randomUUID().toString(), email, nickname, passwordHash, clock.instant(), termsVersion);
+            demo.markEmailVerified(clock.instant());
+            users.saveAndFlush(demo);
         }
     }
 

@@ -54,6 +54,11 @@
 | `JWT_SECRET` | app | O | 비밀. 서명 방식은 BE 팀이 정한다 |
 | `AUTH_FRONTEND_ORIGIN` | app | O | 인증 API(`/api/auth/**`)의 POST가 우리 화면에서 온 것인지 가르는 기준 출처(CSRF 방어). 브라우저가 붙이는 `Origin` 헤더와 정확히 같아야 하므로 경로와 끝 `/` 없이 `https://호스트`만 쓴다. prod는 `https://<PROD_HOST>`, dev는 `https://<DEV_HOST>`이고 둘 다 443이라 포트를 붙이지 않는다. 환경마다 달라 기본값이 없고, 값이 형식에 맞지 않으면 BE가 기동을 거부한다(BE 계약 #8). 로컬 개발은 이 계약 밖이고 `be/.env`에서 `http://localhost:3000`을 쓴다 |
 | `AUTH_COOKIE_SECURE` | app | O | RT 쿠키의 `Secure` 속성 여부(`true` 또는 `false`). dev와 prod 서버는 Caddy 뒤 HTTPS라 둘 다 `true`다. 로컬(`http://localhost`)만 `false`다. 기본값이 없고 `true`·`false`가 아닌 값은 BE가 기동을 거부한다(BE 계약 #8, 쿠키는 #21) |
+| `SPRING_MAIL_HOST` | app | X | 이메일 가입 인증번호를 보내는 SMTP 호스트. Gmail은 `smtp.gmail.com`. **prod는 필수**이고 없으면 BE가 기동을 거부한다. dev·local은 키를 넣지 않으면 메일을 보내지 않고 인증번호를 BE 로그에 남긴다(로그 발송기). 값을 넣으면 아래 `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD`, `AUTH_MAIL_FROM`도 모두 있어야 하고, 하나라도 비었거나 `REPLACE_ME`면 BE가 기동을 거부한다 |
+| `SPRING_MAIL_PORT` | app | X | SMTP 포트. 기본 `587`(STARTTLS 필수) |
+| `SPRING_MAIL_USERNAME` | app | X | SMTP 로그인 계정. Gmail은 발송용 팀 공용 계정 주소 |
+| `SPRING_MAIL_PASSWORD` | app | X | SMTP 비밀번호. Gmail은 2단계 인증을 켠 계정의 앱 비밀번호. 비밀 |
+| `AUTH_MAIL_FROM` | app | X | 인증 메일의 보내는 주소. 보내는 사람 표시 이름은 `핏다이닝`이다. Gmail은 `SPRING_MAIL_USERNAME`과 같은 주소를 쓴다 |
 | `AUTH_SIMPLE_ENABLED` | app | X | 인증 간소 모드 스위치. 기본 `false`, local·dev에서만 허용하며 prod는 `true`이면 기동을 거부한다 |
 | `AUTH_DEV_KEY` | app | X | 개발 토큰 발급 키. 비밀. 간소 모드 dev 서버에서 32자 이상 필수이며 local은 선택이고 길이 제한이 없다. prod는 값이 있으면 기동을 거부한다 |
 | `AUTH_DEMO_EMAIL` | app | X | 데모 계정 이메일. 간소 모드에서는 비어 있으면 `dev@fitdining.local`이다. 간소 모드가 아니면 `AUTH_DEMO_PASSWORD`, `AUTH_DEMO_NICKNAME`과 셋 다 함께 줄 때만 쓴다(아래 규칙). 쓰지 않을 때는 키를 넣지 않는다(빈 값으로 두지 않는다) |

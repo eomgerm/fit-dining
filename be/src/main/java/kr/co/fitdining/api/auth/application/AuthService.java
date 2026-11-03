@@ -24,6 +24,7 @@ public class AuthService implements AuthUseCases {
     private final TokenCodec codec;
     private final String authDummyHash;
     private final AuthPolicy policy;
+    private final EmailVerifications verifications;
 
     @Override
     public Issued login(String email, String password, String address) {
@@ -72,20 +73,22 @@ public class AuthService implements AuthUseCases {
     }
 
     @Override
-    public Issued signup(String email, String password, String nickname, String address) {
-        return signup(email, password, nickname, address, null);
+    public Issued signup(String email, String password, String nickname, String verificationToken, String address) {
+        return signup(email, password, nickname, verificationToken, address, null);
     }
 
     @Override
-    public Issued signup(String email, String password, String nickname, String address, kr.co.fitdining.api.user.Preferences preferences) {
+    public Issued signup(String email, String password, String nickname, String verificationToken, String address,
+            kr.co.fitdining.api.user.Preferences preferences) {
         if (!transactions.recordAttempt(address, "signup")) throw new AuthFailure("잠시 후 다시 시도해주세요.", 429);
         String normalized = normalizeEmail(email);
         String name = kr.co.fitdining.api.auth.domain.AuthText.strip(nickname);
         if (users.findByEmail(normalized).isPresent()) throw new kr.co.fitdining.api.auth.domain.SignupConflict("email");
         if (users.existsByNickname(name)) throw new kr.co.fitdining.api.auth.domain.SignupConflict("nickname");
+        String tokenHash = verifications.requireToken(normalized, verificationToken);
         String hash = passwords.hash(password);
         var features = tasteProfiles.compute(preferences);
-        try { return transactions.signup(normalized, name, hash, preferences, features); }
+        try { return transactions.signup(normalized, name, hash, tokenHash, preferences, features); }
         catch (org.springframework.dao.DataIntegrityViolationException conflict) {
             if (users.findByEmail(normalized).isPresent()) throw new kr.co.fitdining.api.auth.domain.SignupConflict("email");
             if (users.existsByNickname(name)) throw new kr.co.fitdining.api.auth.domain.SignupConflict("nickname");

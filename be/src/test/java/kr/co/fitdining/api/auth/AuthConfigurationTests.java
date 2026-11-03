@@ -58,4 +58,34 @@ class AuthConfigurationTests {
         values.put("AUTH_DEMO_PASSWORD", "password123"); values.put("AUTH_DEMO_NICKNAME", "demo");
         runner(values).run(context -> assertThat(context).hasNotFailed());
     }
+    @Test @DisplayName("설정_prod와 SMTP 호스트 없음_로그 발송기 거부로 기동 실패")
+    void startup_prodWithoutSmtp_failsInsteadOfLoggingMailer() {
+        var values=valid(); values.put("APP_ENV", "prod");
+        runner(values).run(context -> assertThat(context).hasFailed());
+    }
+    @Test @DisplayName("설정_로컬과 SMTP 호스트 없음_로그 발송기 사용")
+    void startup_localWithoutSmtp_usesLoggingMailer() {
+        runner(valid()).run(context -> assertThat(context.getBean(kr.co.fitdining.api.auth.ports.VerificationMailer.class))
+                .isInstanceOf(kr.co.fitdining.api.auth.infrastructure.LoggingVerificationMailer.class));
+    }
+    @Test @DisplayName("설정_SMTP 호스트만 지정_기동 거부")
+    void startup_partialSmtpSettings_fails() {
+        var values=valid(); values.put("spring.mail.host", "smtp.example.com");
+        runner(values).run(context -> assertThat(context).hasFailed());
+    }
+    @Test @DisplayName("설정_SMTP 값이 REPLACE_ME_기동 거부")
+    void startup_placeholderSmtpSettings_fails() {
+        var values=valid(); values.put("spring.mail.host", "smtp.example.com"); values.put("spring.mail.username", "sender@example.com");
+        values.put("spring.mail.password", "REPLACE_ME"); values.put("auth.mail.from", "sender@example.com");
+        runner(values).run(context -> assertThat(context).hasFailed());
+    }
+    @Test @DisplayName("설정_SMTP 값 모두 지정_SMTP 발송기 사용")
+    void startup_completeSmtpSettings_usesSmtpMailer() {
+        var values=valid(); values.put("APP_ENV", "prod"); values.put("spring.mail.host", "smtp.example.com");
+        values.put("spring.mail.username", "sender@example.com"); values.put("spring.mail.password", "app-password");
+        values.put("auth.mail.from", "sender@example.com");
+        runner(values).withBean(org.springframework.mail.javamail.JavaMailSender.class, org.springframework.mail.javamail.JavaMailSenderImpl::new)
+                .run(context -> assertThat(context.getBean(kr.co.fitdining.api.auth.ports.VerificationMailer.class))
+                        .isInstanceOf(kr.co.fitdining.api.auth.infrastructure.SmtpVerificationMailer.class));
+    }
 }

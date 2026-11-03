@@ -30,13 +30,14 @@ public class AuthExceptionHandler {
     public ResponseEntity<ProblemDetail> auth(AuthFailure failure, HttpServletRequest request, HttpServletResponse response) {
         if (request.getRequestURI().endsWith("/refresh") && failure.status() == 401)
             AuthController.clearCookie(response, Boolean.parseBoolean(environment.getRequiredProperty("auth.cookie-secure")));
-        if (failure.status() == 429) response.setHeader("Retry-After", "900");
+        if (failure.status() == 429) response.setHeader("Retry-After", Long.toString(failure.retryAfterSeconds()));
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatusCode.valueOf(failure.status()),
                 switch (failure.status()) {
                     case 400 -> "입력 형식을 확인해주세요.";
                     case 403 -> "허용되지 않은 요청 출처입니다.";
                     case 409 -> "이미 사용 중인 계정 정보입니다.";
                     case 429 -> "잠시 후 다시 시도해주세요.";
+                    case 503 -> "메일을 보내지 못했습니다. 잠시 후 다시 시도해주세요.";
                     default -> "인증을 확인해주세요.";
                 });
         if (failure.type() != null) problem.setType(failure.type());

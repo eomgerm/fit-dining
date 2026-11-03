@@ -35,6 +35,11 @@ public class AuthUser {
     private Instant createdAt;
 
     private Instant deletedAt;
+    /** 가입 때 소유를 확인한 시각. 이메일 인증 도입 전 가입자와 소셜 가입자는 null이다(D4). */
+    private Instant emailVerifiedAt;
+
+    /** 이메일 소유 확인 시각을 기록한다. @param now 확인 시각 */
+    public void markEmailVerified(Instant now) { if (emailVerifiedAt == null) emailVerifiedAt = now; }
 
     /** Marks withdrawal once; retained identity fields follow the account retention policy. */
     public void withdraw(Instant now) { if (deletedAt == null) deletedAt = now; }

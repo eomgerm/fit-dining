@@ -41,7 +41,8 @@ class SocialApplicationTests extends PostgresTestSupport {
     void signup_duplicateNickname_retriesAfterRollback() {
         String taken = "충돌" + UUID.randomUUID().toString().substring(0, 8);
         String available = "신규" + UUID.randomUUID().toString().substring(0, 8);
-        auth.signup(UUID.randomUUID() + "@example.com", "password123", taken, "nickname-retry");
+        String email = UUID.randomUUID() + "@example.com";
+        auth.signup(email, "password123", taken, verifiedToken(email), "nickname-retry");
         Mockito.doReturn(taken).when(nicknames).next(0);
         Mockito.doReturn(available).when(nicknames).next(1);
         var issued = accounts.signup("google", UUID.randomUUID().toString());
@@ -95,7 +96,7 @@ class SocialApplicationTests extends PostgresTestSupport {
     @Test
     @DisplayName("별도계정_같은 제공자 식별자와 이메일 문자열_이메일 계정에 연결 안 함")
     void signup_emailShapedIdentity_remainsIndependent() {
-        var email = auth.signup("independent@example.com", "password123", "이메일독립", "independent-address");
+        var email = auth.signup("independent@example.com", "password123", "이메일독립", verifiedToken("independent@example.com"), "independent-address");
         var social = accounts.signup("google", "independent@example.com");
         assertNotEquals(email.identity().userId(), social.identity().userId());
         assertNull(auth.me(social.identity().userId()).email());

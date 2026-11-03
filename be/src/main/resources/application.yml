@@ -27,6 +27,20 @@ spring:
     default-property-inclusion: non_null
     deserialization:
       fail-on-unknown-properties: true
+  mail:
+    # 비우면 메일을 보내지 않고 인증번호를 로그에 남긴다(로컬·dev 전용, prod는 기동 거부). Gmail은 smtp.gmail.com:587 + 앱 비밀번호
+    host: ${SPRING_MAIL_HOST:}
+    port: ${SPRING_MAIL_PORT:587}
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
+    default-encoding: UTF-8
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+      mail.smtp.starttls.required: true
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 5000
+      mail.smtp.writetimeout: 5000
   lifecycle:
     # compose의 stop_grace_period(40s)보다 짧아야 처리 중인 요청을 마치고 내려간다(BE 계약 #4).
     timeout-per-shutdown-phase: 30s
@@ -39,6 +53,10 @@ management:
     web:
       exposure:
         include: health,prometheus
+  health:
+    mail:
+      # 메일 서버 장애가 앱 health를 흔들지 않게 한다. 발송 실패는 요청마다 503으로 알린다.
+      enabled: false
   endpoint:
     health:
       probes:
@@ -84,11 +102,16 @@ auth:
   jwt-secret: ${JWT_SECRET:}
   frontend-origin: ${AUTH_FRONTEND_ORIGIN}
   cookie-secure: ${AUTH_COOKIE_SECURE}
+  mail:
+    from: ${AUTH_MAIL_FROM:}
+    from-name: 핏다이닝
   cleanup:
     interval: PT10M
     token-retention: P7D
     event-retention: P90D
     attempt-retention: PT15M
+    # 이메일별 1시간 발송 제한을 세려면 1시간보다 길어야 한다
+    verification-retention: P1D
     batch-size: 1000
 
 fitdining:

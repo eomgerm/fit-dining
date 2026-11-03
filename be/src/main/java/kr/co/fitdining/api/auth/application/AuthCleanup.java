@@ -3,6 +3,7 @@ package kr.co.fitdining.api.auth.application;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import kr.co.fitdining.api.auth.repository.AuthEmailVerificationRepository;
 import kr.co.fitdining.api.auth.repository.AuthLoginAttemptRepository;
 import kr.co.fitdining.api.auth.repository.AuthRefreshTokenRepository;
 import kr.co.fitdining.api.auth.repository.AuthSecurityEventRepository;
@@ -21,33 +22,43 @@ public class AuthCleanup {
     private final AuthSecurityEventRepository events;
     private final AuthLoginAttemptRepository attempts;
     private final TasteInputLogs tasteInputs;
+    private final AuthEmailVerificationRepository verifications;
     private final Clock clock;
     private final Duration tokenRetention;
     private final Duration eventRetention;
     private final Duration attemptRetention;
     private final Duration tasteInputRetention;
+    private final Duration verificationRetention;
     private final int batchSize;
 
     public AuthCleanup(AuthRefreshTokenRepository tokens, AuthSecurityEventRepository events,
-            AuthLoginAttemptRepository attempts, TasteInputLogs tasteInputs, Clock clock,
+            AuthLoginAttemptRepository attempts, TasteInputLogs tasteInputs,
+            AuthEmailVerificationRepository verifications, Clock clock,
             @Value("${auth.cleanup.token-retention:P7D}") Duration tokenRetention,
             @Value("${auth.cleanup.event-retention:P90D}") Duration eventRetention,
             @Value("${auth.cleanup.attempt-retention:PT15M}") Duration attemptRetention,
             @Value("${auth.cleanup.taste-input-retention:P90D}") Duration tasteInputRetention,
+            @Value("${auth.cleanup.verification-retention:P1D}") Duration verificationRetention,
             @Value("${auth.cleanup.batch-size:1000}") int batchSize) {
         if (batchSize < 1 || tokenRetention.isNegative() || eventRetention.isNegative() || attemptRetention.isNegative()
                 || tasteInputRetention.isNegative()) {
             throw new IllegalArgumentException("Cleanup policy must be nonnegative with a positive batch size");
         }
+        // 이메일별 1시간 발송 제한과 30분 인증 토큰을 세려면 그보다 오래 남겨야 한다.
+        if (verificationRetention.compareTo(EmailVerificationTransactions.EMAIL_WINDOW) < 0) {
+            throw new IllegalArgumentException("Verification retention must cover the per-email send window");
+        }
         this.tokens = tokens;
         this.events = events;
         this.attempts = attempts;
         this.tasteInputs = tasteInputs;
+        this.verifications = verifications;
         this.clock = clock;
         this.tokenRetention = tokenRetention;
         this.eventRetention = eventRetention;
         this.attemptRetention = attemptRetention;
         this.tasteInputRetention = tasteInputRetention;
+        this.verificationRetention = verificationRetention;
         this.batchSize = batchSize;
     }
 
@@ -61,5 +72,6 @@ public class AuthCleanup {
         events.deleteExpiredBatch(now.minus(eventRetention), batchSize);
         attempts.deleteExpiredBatch(now.minus(attemptRetention), batchSize);
         tasteInputs.deleteExpiredBatch(now.minus(tasteInputRetention), batchSize);
+        verifications.deleteExpiredBatch(now.minus(verificationRetention), batchSize);
     }
 }

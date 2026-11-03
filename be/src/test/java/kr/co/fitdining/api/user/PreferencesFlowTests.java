@@ -26,6 +26,7 @@ class PreferencesFlowTests extends PostgresTestSupport {
     final JdbcTemplate jdbc = new JdbcTemplate(appSource());
     String signupBody(String id, String preferences) {
         return "{\"email\":\"" + id + "@example.com\",\"password\":\"password123\",\"nickname\":\"" + id
+                + "\",\"verificationToken\":\"" + verifiedToken(id + "@example.com")
                 + "\",\"agreements\":{\"ageOver14\":true,\"terms\":true,\"privacy\":true}" + preferences + "}";
     }
     JdbcTemplate migrationJdbc() {
@@ -151,7 +152,8 @@ class PreferencesFlowTests extends PostgresTestSupport {
         var refresh = client.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/auth/refresh"))
                 .header("Origin", "http://localhost:3000").header("Cookie", rt).POST(HttpRequest.BodyPublishers.noBody()).build(), HttpResponse.BodyHandlers.ofString());
         assertEquals(401, refresh.statusCode());
-        var again = request("POST", "/api/auth/signup", body, null);
+        // 인증 토큰은 1회용이라 재가입에는 새로 인증한 토큰을 쓴다.
+        var again = request("POST", "/api/auth/signup", signupBody(name, ",\"preferences\":{\"mood\":\"QUIET\"}"), null);
         assertEquals(201, again.statusCode(), again.body());
         assertNotEquals(user, mapper.readTree(again.body()).get("userId").asString());
         assertEquals(409, request("POST", "/api/auth/signup", body, null).statusCode());

@@ -11,14 +11,17 @@ import kr.co.fitdining.api.auth.application.AuthService;
  * @param nickname trimmed public name
  * @param preferences optional onboarding answers; absent means no preference row
  * @param agreements all required agreements
+ * @param verificationToken one-time token from email verification; absence is rejected by the service
+ *        with the verification-required type so the client can return to the verification step
  */
 public record SignupRequest(
         @SignupValue(value = "email", message = "이메일 형식을 확인해 주세요.") String email,
         @SignupValue(value = "password", message = "영문과 숫자를 섞어 8자 이상") String password,
         @SignupValue(value = "nickname", message = "리뷰에 보이는 이름이에요. 2~15자") String nickname,
-        @NotNull(message = "필수 약관에 모두 동의해 주세요.") @Valid Agreements agreements, @Valid kr.co.fitdining.api.user.Preferences preferences) {
+        @NotNull(message = "필수 약관에 모두 동의해 주세요.") @Valid Agreements agreements, @Valid kr.co.fitdining.api.user.Preferences preferences,
+        String verificationToken) {
     public SignupRequest(String email, String password, String nickname, Agreements agreements) {
-        this(email, password, nickname, agreements, null);
+        this(email, password, nickname, agreements, null, null);
     }
     public SignupRequest {
         email = email == null ? null : AuthService.normalizeEmail(email);

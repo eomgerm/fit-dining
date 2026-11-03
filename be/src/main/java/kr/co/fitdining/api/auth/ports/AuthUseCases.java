@@ -32,15 +32,18 @@ public interface AuthUseCases {
      * @param email normalized email
      * @param password raw password
      * @param nickname public name
+     * @param verificationToken one-time token from email verification; absent or unusable values are rejected
      * @param clientAddress peer address
      * @return newly issued session
-     * @throws kr.co.fitdining.api.auth.domain.AuthFailure for duplicate accounts or rate limit
+     * @throws kr.co.fitdining.api.auth.domain.AuthFailure for duplicate accounts, missing verification or rate limit
      */
-    Issued signup(String email, String password, String nickname, String clientAddress);
-    /** @param email email @param password password @param nickname nickname @param clientAddress peer address
+    Issued signup(String email, String password, String nickname, String verificationToken, String clientAddress);
+    /** @param email email @param password password @param nickname nickname
+     * @param verificationToken one-time email verification token @param clientAddress peer address
      * @param preferences optional onboarding answers @return session
      * @throws kr.co.fitdining.api.auth.domain.AuthFailure if signup fails */
-    Issued signup(String email, String password, String nickname, String clientAddress, kr.co.fitdining.api.user.Preferences preferences);
+    Issued signup(String email, String password, String nickname, String verificationToken, String clientAddress,
+            kr.co.fitdining.api.user.Preferences preferences);
     /** @param nickname public name @param email account email */
     record Profile(String nickname, String email) {}
 

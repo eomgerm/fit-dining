@@ -76,7 +76,7 @@ class AuthHttpTests {
 
     @Test @DisplayName("가입_시도 제한_429와 Retry-After")
     void signup_rateLimited_returnsRetryAfter() throws Exception {
-        when(auth.signup(any(), any(), any(), any())).thenThrow(new AuthFailure("limited", 429));
+        when(auth.signup(any(), any(), any(), any(), any())).thenThrow(new AuthFailure("limited", 429));
         mvc.perform(post("/api/auth/signup").header("Origin", "http://localhost:3000")
                 .contentType("application/json").content("""
                     {"email":"new@example.com","password":"password1","nickname":"new",
@@ -173,7 +173,7 @@ class AuthHttpTests {
     void login_overMaximumPassword_preservesExistingFailure(String kind) throws Exception {
         // Use the real early validation branch; no service dependencies are used for invalid input.
         when(auth.login(any(), any(), any())).thenAnswer(invocation ->
-                new kr.co.fitdining.api.auth.application.AuthService(null, null, null, null, null, null, null)
+                new kr.co.fitdining.api.auth.application.AuthService(null, null, null, null, null, null, null, null)
                         .login(invocation.getArgument(0), invocation.getArgument(1), invocation.getArgument(2)));
         String password = kind.equals("ascii") ? "a1" + "a".repeat(71) : "abc1" + "\uac00".repeat(23);
         mvc.perform(post("/api/auth/login").header("Origin", "http://localhost:3000")

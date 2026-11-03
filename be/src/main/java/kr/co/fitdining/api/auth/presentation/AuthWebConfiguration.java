@@ -43,6 +43,7 @@ public class AuthWebConfiguration implements WebMvcConfigurer {
                 if (!(handler instanceof HandlerMethod method)
                         || !(AuthController.class.isAssignableFrom(method.getBeanType())
                         || SocialAuthController.class.isAssignableFrom(method.getBeanType())
+                        || EmailVerificationController.class.isAssignableFrom(method.getBeanType())
                         || DevAuthController.class.isAssignableFrom(method.getBeanType())
                         || UserController.class.isAssignableFrom(method.getBeanType())
                         || OnboardingController.class.isAssignableFrom(method.getBeanType())

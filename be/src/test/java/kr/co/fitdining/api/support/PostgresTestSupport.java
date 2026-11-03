@@ -52,6 +52,29 @@ public abstract class PostgresTestSupport {
         }
         Flyway.configure().dataSource(POSTGRES.getJdbcUrl(), "fit_migrator", "test-migrator").load().migrate();
     }
+    /**
+     * 인증번호 확인을 마친 상태의 발송 기록을 바로 넣고 가입에 쓸 인증 토큰 원문을 돌려준다.
+     * 인증번호 발송·확인 흐름 자체는 EmailVerificationTests가 검증한다.
+     * @param email 가입 이메일. 서비스와 같은 방식으로 정규화한다
+     * @param now 앱 Clock 기준 현재 시각. 토큰은 이 시각부터 30분 유효하다
+     * @return 인증 토큰 원문
+     */
+    protected static String verifiedToken(String email, java.time.Instant now) {
+        String token = java.util.UUID.randomUUID() + "-" + java.util.UUID.randomUUID();
+        var timestamp = java.sql.Timestamp.from(now);
+        new org.springframework.jdbc.core.JdbcTemplate(appSource()).update(
+                "insert into auth_email_verifications(email, code_hash, attempts, created_at, expires_at, verified_at, "
+                        + "token_hash, token_expires_at) values (?, 'test', 0, ?, ?, ?, ?, ?)",
+                kr.co.fitdining.api.auth.application.AuthService.normalizeEmail(email), timestamp,
+                java.sql.Timestamp.from(now.plusSeconds(600)), timestamp,
+                kr.co.fitdining.api.auth.application.EmailVerifications.tokenHash(token),
+                java.sql.Timestamp.from(now.plusSeconds(1800)));
+        return token;
+    }
+
+    /** @param email 가입 이메일 @return 지금 시각 기준으로 만든 인증 토큰 원문 */
+    protected static String verifiedToken(String email) { return verifiedToken(email, java.time.Instant.now()); }
+
     protected static DataSource appSource() {
         return new DriverManagerDataSource(POSTGRES.getJdbcUrl(), "fit_dev_app", "test-app");
     }

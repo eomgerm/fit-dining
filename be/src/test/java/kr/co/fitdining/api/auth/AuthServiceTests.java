@@ -67,11 +67,13 @@ class AuthServiceTests extends PostgresTestSupport {
         passwords.entered = null;
         passwords.release = null;
         jdbc = new JdbcTemplate(appSource());
-        for (String table : List.of("taste_input_logs", "auth_refresh_tokens", "auth_security_events", "auth_login_attempts", "auth_social_accounts", "auth_users")) {
+        for (String table : List.of("taste_input_logs", "auth_refresh_tokens", "auth_security_events", "auth_login_attempts", "auth_social_accounts", "auth_users", "auth_email_verifications")) {
             jdbc.update("delete from " + table);
         }
         users.saveAndFlush(new AuthUser("user-1", "demo@example.com", "demo", passwords.hash("example-test-password1"), clock.instant(), "2026-10-23"));
     }
+
+    String token(String email) { return verifiedToken(email, clock.instant()); }
 
     AuthUseCases.Issued login() { return auth.login("demo@example.com", "example-test-password1", "ip"); }
     void unauthorized(org.junit.jupiter.api.function.Executable work) {
@@ -131,7 +133,7 @@ class AuthServiceTests extends PostgresTestSupport {
 
     @Test @DisplayName("가입_이메일 정규화와 약관 저장_즉시 로그인과 갱신 허용")
     void signup_normalizedAccount_persistsAgreementsAndIssuesSession() {
-        var issued = auth.signup(" New@Example.COM ", "password1", " 새이름 ", "signup-ip");
+        var issued = auth.signup(" New@Example.COM ", "password1", " 새이름 ", token("new@example.com"), "signup-ip");
         var user = users.findByEmail("new@example.com").orElseThrow();
         assertEquals("새이름", user.getNickname());
         assertEquals(clock.instant(), user.getAgeConfirmedAt());
@@ -147,10 +149,10 @@ class AuthServiceTests extends PostgresTestSupport {
 
     @Test @DisplayName("가입_이메일과 닉네임 중복_타입별 409 반환")
     void signup_duplicateFields_returnsDistinctConflictTypes() {
-        var email = assertThrows(AuthFailure.class, () -> auth.signup(" DEMO@EXAMPLE.COM ", "password1", "new", "ip"));
+        var email = assertThrows(AuthFailure.class, () -> auth.signup(" DEMO@EXAMPLE.COM ", "password1", "new", null, "ip"));
         assertEquals(409, email.status());
         assertEquals("urn:fitdining:auth:email-taken", email.type().toString());
-        var nickname = assertThrows(AuthFailure.class, () -> auth.signup("new@example.com", "password1", " DEMO ", "ip"));
+        var nickname = assertThrows(AuthFailure.class, () -> auth.signup("new@example.com", "password1", " DEMO ", null, "ip"));
         assertEquals(409, nickname.status());
         assertEquals("urn:fitdining:auth:nickname-taken", nickname.type().toString());
     }
@@ -159,7 +161,7 @@ class AuthServiceTests extends PostgresTestSupport {
     @org.junit.jupiter.params.provider.CsvSource({"pairσ,pairς", "pairK,pairk"})
     @DisplayName("닉네임_유니코드 대소문자_사전 검사와 DB 유니크 판정 일치")
     void signup_unicodeNickname_matchesDatabaseUniqueConstraint(String first, String second) {
-        auth.signup("first@example.com", "password1", first, "first-ip");
+        auth.signup("first@example.com", "password1", first, token("first@example.com"), "first-ip");
         boolean same = jdbc.queryForObject("select lower(?) = lower(?)", Boolean.class, first, second);
         assertEquals(same, users.existsByNickname(second));
         Runnable insert = () -> jdbc.update("insert into auth_users(id,email,nickname,password_hash,created_at,"
@@ -168,13 +170,13 @@ class AuthServiceTests extends PostgresTestSupport {
                 + "terms_agreed_at,privacy_agreed_at,terms_version from auth_users where email='first@example.com'", second);
         if (same) {
             assertThrows(org.springframework.dao.DataIntegrityViolationException.class, insert::run);
-            var failure = assertThrows(AuthFailure.class, () -> auth.signup("second@example.com", "password1", second, "second-ip"));
+            var failure = assertThrows(AuthFailure.class, () -> auth.signup("second@example.com", "password1", second, token("second@example.com"), "second-ip"));
             assertEquals(409, failure.status());
             assertEquals("urn:fitdining:auth:nickname-taken", failure.type().toString());
         } else {
             assertDoesNotThrow(insert::run);
             jdbc.update("delete from auth_users where id='probe'");
-            assertNotNull(auth.signup("second@example.com", "password1", second, "second-ip"));
+            assertNotNull(auth.signup("second@example.com", "password1", second, token("second@example.com"), "second-ip"));
         }
     }
 
@@ -197,7 +199,7 @@ class AuthServiceTests extends PostgresTestSupport {
     }
 
     private int signupStatus(String email, String nickname) {
-        try { auth.signup(email, "password1", nickname, email); return 201; }
+        try { auth.signup(email, "password1", nickname, token(email), email); return 201; }
         catch (AuthFailure failure) {
             assertEquals("urn:fitdining:auth:nickname-taken", failure.type().toString());
             return failure.status();
@@ -206,7 +208,7 @@ class AuthServiceTests extends PostgresTestSupport {
 
     @Test @DisplayName("가입과 로그인_유니코드 바깥 공백_같은 계정으로 정규화")
     void signup_unicodeWhitespace_normalizesAccountAndLogin() {
-        auth.signup("\u00a0\u3000 NEW@Example.com\u3000\u00a0", "password1", "\u00a0\u3000 새이름\u3000\u00a0", "unicode-ip");
+        auth.signup("\u00a0\u3000 NEW@Example.com\u3000\u00a0", "password1", "\u00a0\u3000 새이름\u3000\u00a0", token("new@example.com"), "unicode-ip");
         assertEquals("새이름", users.findByEmail("new@example.com").orElseThrow().getNickname());
         assertEquals("새이름", auth.login("\u00a0NEW@example.com\u3000", "password1", "unicode-login").identity().nickname());
     }
@@ -219,7 +221,9 @@ class AuthServiceTests extends PostgresTestSupport {
         passwords.hashRelease = new CountDownLatch(1);
         try (var executor = Executors.newFixedThreadPool(2)) {
             Callable<Integer> work = () -> {
-                try { auth.signup("race@example.com", "password1", "race", "race-ip"); return 201; }
+                // 서로 다른 토큰으로 같은 이메일을 동시에 가입해 계정 유니크 경합을 만든다.
+                String verification = token("race@example.com");
+                try { auth.signup("race@example.com", "password1", "race", verification, "race-ip"); return 201; }
                 catch (AuthFailure failure) { return failure.status(); }
             };
             var a = executor.submit(work);
@@ -238,12 +242,12 @@ class AuthServiceTests extends PostgresTestSupport {
     @Test @DisplayName("가입_시도 제한_로그인 제한과 독립적으로 429")
     void signup_attemptLimit_isIndependentOfLogin() {
         for (int i = 0; i < 20; i++) assertEquals(409, assertThrows(AuthFailure.class,
-                () -> auth.signup("demo@example.com", "password1", "new", "ip")).status());
+                () -> auth.signup("demo@example.com", "password1", "new", null, "ip")).status());
         assertEquals(429, assertThrows(AuthFailure.class,
-                () -> auth.signup("new@example.com", "password1", "new", "ip")).status());
+                () -> auth.signup("new@example.com", "password1", "new", null, "ip")).status());
         assertNotNull(login());
         clock.advance(900);
-        assertNotNull(auth.signup("new@example.com", "password1", "new", "ip"));
+        assertNotNull(auth.signup("new@example.com", "password1", "new", token("new@example.com"), "ip"));
     }
 
     @Test @DisplayName("JWT_최소 페이로드_AT와 RT에 허용된 키만 포함")

@@ -59,8 +59,9 @@ public class AuthController {
     public ResponseEntity<TokenResponse> signup(@Valid @RequestBody SignupRequest body,
             HttpServletRequest request, HttpServletResponse response) {
         Issued result = body.preferences() == null
-                ? auth.signup(body.email(), body.password(), body.nickname(), request.getRemoteAddr())
-                : auth.signup(body.email(), body.password(), body.nickname(), request.getRemoteAddr(), body.preferences());
+                ? auth.signup(body.email(), body.password(), body.nickname(), body.verificationToken(), request.getRemoteAddr())
+                : auth.signup(body.email(), body.password(), body.nickname(), body.verificationToken(), request.getRemoteAddr(),
+                        body.preferences());
         return ResponseEntity.status(201).body(issued(result, response));
     }
     @PostMapping("/refresh")

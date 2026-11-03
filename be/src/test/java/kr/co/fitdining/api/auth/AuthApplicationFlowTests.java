@@ -20,8 +20,8 @@ class AuthApplicationFlowTests extends PostgresTestSupport {
     void signup_validAndDuplicateAccount_returnsSessionAndConflict() throws Exception {
         String body = """
                 {"email":" Signup@Example.com ","password":"password123","nickname":"가입테스트",
-                 "agreements":{"ageOver14":true,"terms":true,"privacy":true}}
-                """;
+                 "verificationToken":"%s","agreements":{"ageOver14":true,"terms":true,"privacy":true}}
+                """.formatted(verifiedToken("signup@example.com"));
         var signup = request("POST", "/signup", body, "http://localhost:3000", null, null);
         assertEquals(201, signup.statusCode(), signup.body());
         var session = mapper.readTree(signup.body());

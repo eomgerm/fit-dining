@@ -9,7 +9,10 @@ import kr.co.fitdining.api.auth.ports.AuthUseCases;
 import kr.co.fitdining.api.auth.ports.PasswordHasher;
 import kr.co.fitdining.api.auth.ports.TokenCodec;
 import kr.co.fitdining.api.auth.presentation.AuthWebConfiguration;
+import kr.co.fitdining.api.auth.ports.VerificationMailer;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -55,6 +58,33 @@ public class AuthConfiguration {
     }
     @Bean TokenCodec tokenCodec(AuthSettings settings, Clock clock) {
         return new NimbusTokenCodec(settings.signingKey(), clock);
+    }
+    /**
+     * SMTP 호스트가 있으면 SMTP, 없으면 로그 발송기를 쓴다(D6).
+     * 로그 발송기는 인증번호를 로그에 남기므로 prod에서는 기동을 거부한다.
+     */
+    @Bean VerificationMailer verificationMailer(Environment environment, ObjectProvider<JavaMailSender> senders) {
+        String host = environment.getProperty("spring.mail.host", "").trim();
+        if (host.isEmpty()) {
+            if (isProd(environment))
+                throw new IllegalStateException("SPRING_MAIL_HOST is required in prod; the logging verification mailer is not allowed");
+            log.warn("Logging verification mailer is enabled; verification codes are written to the log");
+            return new LoggingVerificationMailer();
+        }
+        String from = environment.getProperty("auth.mail.from", "").trim();
+        for (String key : new String[]{"spring.mail.host", "spring.mail.username", "spring.mail.password", "auth.mail.from"}) {
+            String value = environment.getProperty(key, "");
+            if (value.isBlank() || value.trim().equals("REPLACE_ME"))
+                throw new IllegalArgumentException("SMTP mail settings must all be set together: " + key);
+        }
+        if (!kr.co.fitdining.api.auth.presentation.SignupValue.Validator.valid("email", from.toLowerCase(java.util.Locale.ROOT)))
+            throw new IllegalArgumentException("AUTH_MAIL_FROM must be an email address");
+        JavaMailSender sender = senders.getIfAvailable();
+        if (sender == null) throw new IllegalStateException("JavaMailSender is not configured although SPRING_MAIL_HOST is set");
+        return new SmtpVerificationMailer(sender, from, environment.getProperty("auth.mail.from-name", "핏다이닝"));
+    }
+    static boolean isProd(Environment environment) {
+        return "prod".equals(environment.getProperty("APP_ENV")) || environment.matchesProfiles("prod");
     }
     @Bean ApplicationRunner seedDemoUser(AuthSettings settings, PasswordHasher passwords, AuthTransactions transactions) {
         return args -> {
