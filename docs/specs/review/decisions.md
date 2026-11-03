@@ -317,3 +317,17 @@ Glossary: none · ADRs: none
 - Decision: BE는 본문(D-6)과 신고 설명(D-11)이 공백뿐인지를 JS `String.prototype.trim()`이 지우는 문자(탭, 줄바꿈, U+000B, U+000C, U+00A0, U+1680, U+2000~U+200A, U+2028, U+2029, U+202F, U+205F, U+3000, U+FEFF와 스페이스)로 판단한다(`ReviewText.isBlank`). FE는 그대로 `trim()`을 쓴다. 지금까지 BE는 Java `isBlank()`를 써서 U+00A0, U+2007, U+202F, U+FEFF는 FE만, U+001C~U+001F는 BE만 공백으로 봤다.
 - Rejected: FE를 Java 기준에 맞추기 → 화면 쪽 판단(등록 버튼, 나가기 확인, 바뀐 것 비교)이 여러 곳이라 고칠 곳이 많다. 그대로 두기 → 화면에서 본문이 있다고 본 입력이 본문 없음으로 저장될 수 있다.
 - Anchors: `be/src/main/java/kr/co/fitdining/api/review/ReviewText.java#ReviewText.isBlank` (new) · `be/src/main/java/kr/co/fitdining/api/review/ReviewService.java#ReviewService.normalize` (modify) · `be/src/main/java/kr/co/fitdining/api/review/dto/ReviewReportRequest.java#ReviewReportRequest.detailAllowed` (modify)
+
+## D-53 방문 확인이 3초를 넘으면 7-E02와 같은 구성의 대기 창을 띄운다
+- Status: settled
+- Decision: "방문 평가 남기기"를 누른 뒤 확인하는 동안 버튼에 스피너를 보인다(로그인·북마크 버튼과 같은 모양). 위치를 3초 넘게 기다리면 대기 창("방문을 확인하고 있어요")을 띄운다. 대기 창은 7-E02와 같은 창이고, 설명과 왼쪽 "그냥 쓰기"는 7-E02와 같으며 오른쪽은 누를 수 없는 "확인 중"(스피너)이다. 결과가 나오면 창을 닫지 않고 내용만 7-E02로 바꾸고, 근처면 창을 닫고 작성 화면으로 간다. 닫히는 동안에는 마지막 내용을 그대로 보인다. 7-E02의 "다시 확인"은 창을 닫지 않고 바로 대기 창으로 바꾼다. 대기 창의 "그냥 쓰기"와 창 닫기(Esc)는 확인을 멈추고 늦게 온 위치 결과를 버린다. 위치 설정(D-43)은 바꾸지 않는다.
+- Figma에 이 상태가 없어 사용성 피드백("방문 확인 중에서 멈춘 것 같다")으로 정했다(2026-11-03).
+- Rejected: 버튼 스피너만 → 10~20초 기다림을 멈출 수 없다. 대기 창 왼쪽 "취소"·오른쪽 "그냥 쓰기" → 7-E02로 바뀔 때 "그냥 쓰기"의 자리와 모양이 바뀐다. "취소" 버튼이나 왼쪽 위 X → 공용 다이얼로그(`DialogFrame`)에 자리가 없어 공용 UI를 고쳐야 하고 7-E02에도 없다. 작성 화면 데이터를 받는 동안에도 대기 창 → 로그인 전이거나 오늘 쓴 장소면 "그냥 쓰기"가 맞지 않는다.
+- Anchors: `fe/src/domains/review/ui/review-entry-button.tsx#ReviewEntryButton` (modify)
+
+## D-54 사진 크게 보기의 배경은 반투명하게 깐다
+- Status: settled
+- Decision: 리뷰 사진 크게 보기(D-9)는 불투명한 창 배경 대신 `Dialog.Backdrop`에 `surface-inverse`의 80%를 깔고 창은 투명하게 둬, 뒤의 장소 상세가 비쳐 보이게 한다. 흰 닫기 아이콘은 흰 화면 위에서도 대비가 약 6.5:1이다. 공용 토큰은 바꾸지 않는다. 왼쪽 위의 제목 "사진"은 화면에서 지우고 화면 낭독기가 읽는 창 이름으로만 남긴다(사용자 지시).
+- Figma에 이 화면이 없어 사용성 피드백으로 정했다(2026-11-03).
+- Rejected: 공용 `scrim`(gray-900 50%) → 흰 화면 위에서 흰 글자 대비가 약 3.2:1로 4.5:1에 못 미친다. 새 공용 토큰 → 공용 디자인 시스템을 바꾸게 된다.
+- Anchors: `fe/src/domains/review/ui/review-photo-viewer.tsx#ReviewPhotoStrip` (modify)
