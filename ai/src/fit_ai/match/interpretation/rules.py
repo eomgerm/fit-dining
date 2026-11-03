@@ -66,6 +66,12 @@ CATEGORY_WORDS = {
 카페, 술 메뉴는 술집이다."""
 
 
+CATEGORY_NAME_WORDS = ("카페", "술집", "식당", "밥집", "음식점")
+"""빼 달라는 업종으로 보는 낱말. 업종 이름만이다. "일식 말고", "포차 말고"는 음식 종류나 가게
+종류를 빼 달라는 말이라 업종 전체를 빼지 않는다. 음식 낱말로 빼면 "강남역 일식 말고"에서
+식당이 모두 빠졌다(2026-11-03)."""
+
+
 NEARBY_WORDS = ("근처", "주변", "가까운")
 """규칙 해석에서 근처 검색을 찾는 낱말. 역 이름과 함께 있으면 근처 검색이 아니다."""
 
@@ -336,9 +342,10 @@ def _rule_parts(query: str) -> _RuleParts:
     category_group = _first(CATEGORY_WORDS, wanted)
     avoid_categories = tuple(
         dict.fromkeys(
-            code
-            for word, code in CATEGORY_WORDS.items()
-            if word in " ".join(_NEGATED.findall(query)) and code != category_group
+            CATEGORY_WORDS[word]
+            for word in CATEGORY_NAME_WORDS
+            if word in " ".join(_NEGATED.findall(query))
+            and CATEGORY_WORDS[word] != category_group
         )
     )
     return _RuleParts(

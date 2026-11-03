@@ -17,6 +17,8 @@ from fit_ai.match.interpretation.request import (
 )
 from fit_ai.match.interpretation.rules import (
     _NEGATION,
+    CATEGORY_NAME_WORDS,
+    CATEGORY_WORDS,
     CODE_WORDS,
     VALUE_WORDS,
     _has,
@@ -48,6 +50,8 @@ def _checked(query: str, previous: Conditions | None, **llm) -> Conditions:
       음식은 원하는 코드로 되돌린다("매운 거 먹고 싶다").
     - 가성비: 싼 곳을 찾는데 가성비 낱말이 없으면 뗀다.
     - 업종: LLM이 비우면 규칙 값을 쓴다.
+    - 빼 달라는 업종: 음식이나 메뉴를 빼 달라는 요청이면 요청에 이름이 없는 업종은 LLM이
+      냈어도 뗀다("일식 말고"에서 식당 전체를 빼지 않는다, 2026-11-03).
     - 후속의 코드: 이번 요청이 빼지 않은 이전 코드는 남긴다.
     """
     parts = _rule_parts(query)
@@ -98,6 +102,11 @@ def _checked(query: str, previous: Conditions | None, **llm) -> Conditions:
         else llm["hours"]
     )
     category_group = llm["category_group"] or parts.category_group
+    avoid_categories = llm["avoid_categories"]
+    if avoid_foods or any(not m.want for m in menus):
+        avoid_categories = tuple(
+            c for c in avoid_categories if _has(query, _category_names(c))
+        )
     return _assemble(
         text=llm["text"],
         embedding_text=llm["embedding_text"],
@@ -109,9 +118,14 @@ def _checked(query: str, previous: Conditions | None, **llm) -> Conditions:
         price=price,
         place_name=_not_similar(llm["place_name"], query),
         features=_with_rule_items(llm["features"], parts.features),
-        avoid_categories=(*llm["avoid_categories"], *parts.avoid_categories),
+        avoid_categories=(*avoid_categories, *parts.avoid_categories),
         avoid_foods=tuple(avoid_foods),
     )
+
+
+def _category_names(category: str) -> tuple[str, ...]:
+    """업종 이름 낱말("식당", "밥집", "음식점" 등)"""
+    return tuple(w for w in CATEGORY_NAME_WORDS if CATEGORY_WORDS[w] == category)
 
 
 def _not_similar(name: PlaceName | None, query: str) -> PlaceName | None:

@@ -741,6 +741,41 @@ class TestChecks:
 
         assert interpret("매운 거 먹고 싶다").conditions.category_group == "RESTAURANT"
 
+    @pytest.mark.parametrize(
+        ("query", "llm", "avoid"),
+        [
+            (
+                "강남역 일식 말고",
+                {"avoid_categories": ["RESTAURANT"], "avoid_foods": ["FOOD_JAPANESE"]},
+                (),
+            ),
+            (
+                "파스타 싫어",
+                {
+                    "avoid_categories": ["RESTAURANT"],
+                    "menus": [{"text": "파스타", "value": "파스타", "want": False}],
+                },
+                (),
+            ),
+            (
+                "카페 싫고 매운 것도 싫어",
+                {
+                    "category_group": "RESTAURANT",
+                    "avoid_categories": ["CAFE"],
+                    "avoid_foods": ["FOOD_SPICY"],
+                },
+                ("CAFE",),
+            ),
+        ],
+    )
+    def test_food_avoid_keeps_category(
+        self, fake_gms: FakeGms, query: str, llm: dict, avoid: tuple[str, ...]
+    ) -> None:
+        """코드확인_음식을빼는데요청에없는업종까지빼면_그업종은뗀다"""
+        fake_gms(lambda messages: empty_answer(**llm))
+
+        assert interpret(query).conditions.avoid_categories == avoid
+
     def test_follow_up_keeps_previous_codes(self, fake_gms: FakeGms) -> None:
         """코드확인_후속에서업종을바꾸며이전코드를버리면_빼지않은코드는남긴다"""
         fake_gms(
@@ -900,6 +935,9 @@ class TestRuleSegments:
         [
             ("카페 말고 다른 데", None, ("CAFE",)),
             ("카페 말고 술집으로", "BAR", ("CAFE",)),
+            # 음식 종류나 가게 종류를 빼는 말은 업종 전체를 빼지 않는다.
+            ("강남역 일식 말고", None, ()),
+            ("이자카야 말고 카페", "CAFE", ()),
         ],
     )
     def test_avoid_categories(
