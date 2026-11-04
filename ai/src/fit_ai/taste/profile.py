@@ -10,6 +10,7 @@ from fit_ai.features import FEATURES
 
 SCHEMA = "taste-profile/v0"
 MAX_WEIGHT = 3  # 검증 전 초기값(PRD OQ-11)
+FLIP_PLACES = 3  # 소음 축 방향을 바꾸는 반대 평가 장소 수(PRD FR-14)
 NOISE = ("QUIET", "LIVELY")
 _ORDER = {code: i for i, code in enumerate(FEATURES)}
 
@@ -50,6 +51,11 @@ def onboarding_rows(
     ]
 
 
+def _noise_sign(r: Row) -> int:
+    """소음 축 근거를 QUIET 쪽 부호로 바꾼다."""
+    return r["direction"] if r["code"] == "QUIET" else -r["direction"]
+
+
 def _feature_key(code: str) -> str:
     return "NOISE" if code in NOISE else code
 
@@ -81,8 +87,8 @@ def compute_features(rows: list[Row]) -> list[dict]:
 
     net: dict[str, int] = defaultdict(int)  # 소음 축은 QUIET 쪽 부호로 한 번에 센다
     for r in coded:
-        if r["code"] == "LIVELY":
-            net["QUIET"] -= r["direction"]
+        if r["code"] in NOISE:
+            net["QUIET"] += _noise_sign(r)
         else:
             net[r["code"]] += r["direction"]
 
@@ -96,8 +102,16 @@ def compute_features(rows: list[Row]) -> list[dict]:
         ),
         None,
     )
-    # 온보딩 극이 있으면 그 극으로 고정하고, 없으면 근거 합의 부호를 따른다
+    # 온보딩 극이 있으면 그 극을 지키고, 없으면 근거 합의 부호를 따른다
     sign = {"QUIET": 1, "LIVELY": -1}.get(pole, 1 if noise > 0 else -1)
+    # 반대 평가가 서로 다른 장소 3곳 이상이고 과반이면 근거 쪽으로 바꾼다(PRD FR-14)
+    against = {
+        r["place_id"]
+        for r in coded
+        if r["source"] == "review" and r["code"] in NOISE and _noise_sign(r) == -sign
+    }
+    if len(against) >= FLIP_PLACES and noise * sign < 0:
+        sign = -sign
     if (strength := noise * sign) > 0:
         liked, disliked = NOISE if sign > 0 else NOISE[::-1]
         weight = min(strength, MAX_WEIGHT)

@@ -1,9 +1,10 @@
-"""취향 프로필 계산 API. BE가 온보딩 취향을 저장할 때 한 번 부르고 `features`와 칩 벡터를 저장한다.
+"""취향 프로필 계산·갱신 API. BE가 부르고 돌려받은 `features`를 저장한다.
 
-계산은 `fit_ai.taste.profile`이 하고, 여기서는 BE 저장 형식(`Preferences`)을 장부 행으로
-바꾼다. 코드 없는 LIKE 칩은 문장을 질의로 인코딩해 `vectors`로 돌려준다(S15P31A302-166).
-임베딩이 실패해도 `features`는 돌려준다. 명세는 docs/specs/taste-profile/spec.md 6단계
-"프로필 계산 API"에 있다.
+`/v1/taste/profile`은 온보딩 취향을 저장할 때 한 번 부르고, 코드 없는 LIKE 칩은 문장을 질의로
+인코딩해 `vectors`로 돌려준다(S15P31A302-166). 임베딩이 실패해도 `features`는 돌려준다.
+`/v1/taste/refresh`는 04:00 배치가 리뷰 근거를 더해 부르고 `features`만 돌려준다.
+계산은 `fit_ai.taste.profile`이 하고, 여기서는 BE 저장 형식(`Preferences`)과 리뷰 근거를
+장부 행으로 바꾼다. 명세는 docs/specs/taste-profile/spec.md 6단계에 있다.
 """
 
 import math
@@ -11,7 +12,7 @@ from datetime import UTC, datetime
 from typing import Literal
 
 from fastapi import APIRouter
-from pydantic import Field
+from pydantic import AwareDatetime, Field
 
 from fit_ai import embedding
 from fit_ai.features import FEATURES
@@ -55,6 +56,23 @@ class ProfileBody(Body):
     tastes: list[TasteChip] = Field(default_factory=list, max_length=MAX_CHIPS)
 
 
+class ReviewEvidence(Body):
+    """리뷰 이유 태그 하나. `code`는 사용자 쪽 코드로 바꿔서 받는다(리뷰 D-36).
+
+    같은 장소 최신 1건을 시각으로 고르므로 `created_at`은 시간대가 있어야 한다.
+    """
+
+    place_id: int
+    review_id: int
+    category: str
+    code: Literal[tuple(FEATURES)]
+    created_at: AwareDatetime
+
+
+class RefreshBody(ProfileBody):
+    reviews: list[ReviewEvidence] = Field(default_factory=list)
+
+
 class FeatureBody(Body):
     code: str
     layer: str
@@ -62,11 +80,14 @@ class FeatureBody(Body):
     weight: int
 
 
-class ProfileResponse(Body):
+class RefreshResponse(Body):
+    features: list[FeatureBody]
+
+
+class ProfileResponse(RefreshResponse):
     """`vectors`는 요청 `tastes`와 같은 순서다. 코드 없는 LIKE 칩만 벡터가 있고, 나머지와
     임베딩에 실패한 칩은 null이다."""
 
-    features: list[FeatureBody]
     vectors: list[list[float] | None]
 
 
@@ -76,7 +97,7 @@ VECTOR_SIZE = 1024  # `tastes[].vector` 차원. BE `AiTasteClient`도 같은 값
 EMBED_TIMEOUT_SECONDS = 1.0
 
 
-def to_rows(body: ProfileBody) -> list[Row]:
+def to_rows(body: ProfileBody, reviews: list[ReviewEvidence] = ()) -> list[Row]:
     """회원 id 없이 계산한다. 행은 돌려주지 않고 BE도 저장하지 않는다."""
     now = datetime.now(UTC).isoformat()
     codes = [MOODS[body.mood]] if body.mood else []
@@ -93,6 +114,20 @@ def to_rows(body: ProfileBody) -> list[Row]:
         )
         for c in body.tastes
         if c.code
+    ]
+    # 리뷰 이유 태그는 항상 +1이다(spec 2단계 기록 규칙)
+    rows += [
+        Row(
+            user_id=None,
+            code=r.code,
+            direction=1,
+            source="review",
+            place_id=str(r.place_id),
+            review_id=str(r.review_id),
+            category=r.category,
+            created_at=r.created_at.isoformat(),
+        )
+        for r in reviews
     ]
     return rows
 
@@ -138,5 +173,11 @@ def router(deps: Dependencies) -> APIRouter:
             vectors=sum(v is not None for v in vectors),
         )
         return ProfileResponse(features=features, vectors=vectors)
+
+    @r.post("/v1/taste/refresh", response_model=RefreshResponse)
+    def refresh(body: RefreshBody):
+        features = compute_features(to_rows(body, body.reviews))
+        log("taste_refresh", reviews=len(body.reviews), features=len(features))
+        return RefreshResponse(features=features)
 
     return r

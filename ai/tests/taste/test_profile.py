@@ -67,6 +67,41 @@ def test_opposite_reviews_lower_strength_without_flipping_onboarding_pole():
     assert compute_features(rows) == []
 
 
+def test_opposite_reviews_at_3_places_and_majority_flip_onboarding_pole():
+    # 조용 1 − 활기 3 = −2. 반대 평가가 3곳이고 과반이라 활기로 바꾼다(PRD FR-14)
+    rows = onboarding_rows("u1", ["QUIET"], T0) + [review("LIVELY", p) for p in "abc"]
+    assert compute_features(rows) == [feat("QUIET", False, 2), feat("LIVELY", True, 2)]
+
+
+def test_opposite_reviews_at_one_place_do_not_flip():
+    days = [f"2026-10-2{d}T10:00:00+09:00" for d in range(3)]
+    rows = onboarding_rows("u1", ["QUIET"], T0) + [
+        review("LIVELY", "a", d) for d in days
+    ]
+    assert compute_features(rows) == []
+
+
+def test_opposite_reviews_at_3_places_without_majority_do_not_flip():
+    # 조용 4(온보딩, 직접 입력, 리뷰 2곳) 대 활기 3곳. 과반이 아니라 방향을 지킨다
+    rows = (
+        onboarding_rows("u1", ["QUIET"], T0)
+        + [free_text("QUIET")]
+        + [review("QUIET", p) for p in "ab"]
+        + [review("LIVELY", p) for p in "cde"]
+    )
+    assert compute_features(rows) == [feat("QUIET", True, 1), feat("LIVELY", False, 1)]
+
+
+def test_opposite_free_text_does_not_count_as_opposite_place():
+    # 반대 평가는 서로 다른 장소의 리뷰만 센다. 직접 입력은 장소가 아니다
+    rows = (
+        onboarding_rows("u1", ["QUIET"], T0)
+        + [free_text("LIVELY")]
+        + [review("LIVELY", p) for p in "ab"]
+    )
+    assert compute_features(rows) == []
+
+
 def test_free_text_opposite_pole_cancels_onboarding_pole():
     rows = onboarding_rows("u1", ["QUIET"], T0) + [free_text("LIVELY")]
     assert compute_features(rows) == []

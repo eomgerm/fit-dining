@@ -42,7 +42,7 @@ def chip(polarity, label, code):
 
 
 # 샘플 사용자 1~6(spec 6단계)의 온보딩을 BE 저장 형식으로 옮긴 요청.
-# 7번은 리뷰 근거라 온보딩 계산 범위 밖이다.
+# 7번은 리뷰 근거라 갱신 API 테스트에서 따로 만든다.
 REQUESTS = {
     "1": {"mood": "QUIET", "purposes": ["WORK_STUDY"]},
     "2": {"priorities": ["VALUE"], "purposes": ["CONVERSATION"]},
@@ -62,11 +62,65 @@ REQUESTS = {
 }
 
 
+@pytest.mark.parametrize("path", ["/v1/taste/profile", "/v1/taste/refresh"])
 @pytest.mark.parametrize("no", REQUESTS)
-def test_features_match_sample_profile(no):
-    resp = client().post("/v1/taste/profile", json=REQUESTS[no])
+def test_features_match_sample_profile(no, path):
+    resp = client().post(path, json=REQUESTS[no])
     assert resp.status_code == 200
     assert resp.json()["features"] == SAMPLES[no]["features"]
+
+
+def review(code, place, day, category="카페"):
+    """배치가 보내는 리뷰 근거. `code`는 사용자 쪽 코드다."""
+    return {
+        "placeId": place,
+        "reviewId": place * 100 + day,
+        "category": category,
+        "code": code,
+        "createdAt": f"2026-10-{day}T12:00:00+09:00",
+    }
+
+
+def test_refresh_sample_7_matches_sample_profile():
+    # 1번 + 카페 4곳 "조용해서 좋았어요"(1번 카페는 두 번) + "대기가 길었어요" 1건
+    body = REQUESTS["1"] | {
+        "reviews": [review("QUIET", p, 23) for p in (1, 2, 3, 4)]
+        + [review("QUIET", 1, 24), review("SHORT_WAIT", 5, 24)]
+    }
+    resp = client().post("/v1/taste/refresh", json=body)
+    assert resp.status_code == 200
+    assert resp.json() == {"features": SAMPLES["7"]["features"]}
+
+
+def test_refresh_flips_noise_pole_after_3_opposite_places():
+    body = {"mood": "QUIET", "reviews": [review("LIVELY", p, 23) for p in (1, 2, 3)]}
+    resp = client().post("/v1/taste/refresh", json=body)
+    assert [(f["code"], f["like"]) for f in resp.json()["features"]] == [
+        ("QUIET", False),
+        ("LIVELY", True),
+    ]
+
+
+@pytest.mark.parametrize(
+    "evidence",
+    [
+        review("QUIET", 1, 23) | {"createdAt": "2026-10-23T12:00:00"},  # 시간대 없음
+        review("NOPE", 1, 23),
+        review("QUIET", 1, 23) | {"direction": 1},
+        {k: v for k, v in review("QUIET", 1, 23).items() if k != "placeId"},
+    ],
+)
+def test_refresh_rejects_invalid_review(evidence):
+    resp = client().post("/v1/taste/refresh", json={"reviews": [evidence]})
+    assert resp.status_code == 400
+    assert resp.json()["code"] == "INVALID_REQUEST"
+
+
+def test_profile_does_not_take_reviews():
+    resp = client().post(
+        "/v1/taste/profile", json={"reviews": [review("QUIET", 1, 23)]}
+    )
+    assert resp.status_code == 400
 
 
 def test_every_be_tag_is_accepted():
