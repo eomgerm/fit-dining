@@ -48,7 +48,6 @@ export function endSession() {
   update(null);
   channel?.postMessage("session-changed");
 }
-export const getServerSession = () => null;
 
 async function browserLock<T>(work: () => Promise<T>) {
   connectChannel();
@@ -185,29 +184,6 @@ export function refresh(): Promise<AuthSession> {
 }
 export async function restore() {
   return session ?? refresh();
-}
-export async function authenticated<T>(
-  path: "/me" | "/protected",
-  retry = true,
-): Promise<T> {
-  const current = await restore();
-  try {
-    return await send<T>(path, {
-      headers: { Authorization: `Bearer ${current.accessToken}` },
-    });
-  } catch (error) {
-    if (
-      retry &&
-      error instanceof AuthError &&
-      error.status === 401 &&
-      error.problem?.type === ACCESS_TOKEN_EXPIRED_TYPE
-    ) {
-      if (session?.accessToken === current.accessToken) await refresh();
-      return authenticated<T>(path, false);
-    }
-    if (error instanceof AuthError && error.status === 401) update(null);
-    throw error;
-  }
 }
 export async function logout() {
   return browserLock(async () => {

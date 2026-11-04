@@ -29,9 +29,8 @@
 | 가입 입력 오류 | `SignupEmailError` (2-E02) | 가입 실패 시 시트를 닫고 해당 입력칸 아래에 오류를 표시한다. 이메일 중복이면 로그인 링크도 표시한다. 일반 실패·시도 제한은 안내 문구로 표시한다. |
 | `/login` | `Login` (3-01), `LoginError` (3-E01) | 이메일·비밀번호 입력, 비밀번호 표시 전환, 로그인 오류 안내. “이메일로 가입하기”는 `/signup`으로 이동한다. 비밀번호 찾기는 준비 중 안내, 소셜 버튼으로 로그인을 시작한다. |
 | `/my` | `MyInfo` | 본인 프로필·로그인 방식 표시. 로그아웃 성공 시 `/` 이동. “로그아웃”은 확인 모달(“로그아웃할까요?”, [취소]·[로그아웃]) 뒤 로그아웃하며 401도 성공으로 본다. 실패하면 모달을 닫고 토스트. “이용약관”, “개인정보처리방침”은 `/terms`, `/privacy`로 이동한다. “탈퇴하기”는 `MyInfoWithdraw` 확인 모달(“탈퇴할까요?” / “저장한 장소와 남긴 리뷰가 모두 지워지고 되돌릴 수 없어요.”, [취소]·[탈퇴]) 뒤 `DELETE /api/v1/users/{userId}`를 호출한다. 성공하면 이 탭과 다른 탭의 세션을 비우고 `/` 이동 + “탈퇴했어요” 토스트, 401이면 `/login`, 그 밖 실패는 모달을 닫고 토스트. 처리 중에는 두 버튼이 비활성이고 모달이 닫히지 않는다. |
-| `/auth-demo` | 인증 확인용 화면 | 닉네임, 묶음 식별자, AT·묶음 만료 시각을 표시한다. 인증 API 호출, 수동 갱신, 현재 묶음 로그아웃을 제공한다. 토큰 원문은 표시하지 않는다. |
 
-가입 흐름은 `/signup` → `/signup/email` → 약관 시트 → 자동 로그인 → `/`다. `/login`의 로그인 성공 또는 기존 로그인 복구 성공은 `/`로 이동한다. `/auth-demo`는 복구와 `/me` 확인에 실패하여 401을 받으면 `/login`으로 이동하며, 로그아웃 성공 뒤에도 `/login`으로 이동한다.
+가입 흐름은 `/signup` → `/signup/email` → 약관 시트 → 자동 로그인 → `/`다. `/login`의 로그인 성공 또는 기존 로그인 복구 성공은 `/`로 이동한다.
 
 서비스 로그아웃 진입은 지도 화면의 “내 정보” → `/my`다. 세션 복구 실패·401 또는 다른 탭 세션이 비면 `/login`으로 이동한다.
 
@@ -269,7 +268,7 @@ BE 패키지 기준 경로는 `be/src/main/java/kr/co/fitdining/api/auth/`다.
 | `infrastructure` | BCrypt, Nimbus JWT, 웹 전용 설정·데모 계정 시드 |
 | `presentation` | REST DTO·검증, RT 쿠키, Origin·AT 인터셉터, ProblemDetail 변환 |
 
-FE의 `fe/src/domains/auth/api/auth-client.ts`가 인증 요청·메모리 세션·탭 동기화를, `api/signup-error.ts`가 가입 오류 해석을, `model/signup.ts`가 순수 입력 규칙을 담당한다. 화면은 `fe/src/app/signup/page.tsx`, `signup/email/page.tsx`, `login/page.tsx`, `auth-demo/page.tsx`에 있다. 입력 오류는 공통 `TextField`, 약관은 `BottomSheet`·`Checkbox`, 안내는 `AlertDialog`·`Toast` 등을 사용한다.
+FE의 `fe/src/domains/auth/api/auth-client.ts`가 인증 요청·메모리 세션·탭 동기화를, `api/signup-error.ts`가 가입 오류 해석을, `model/signup.ts`가 순수 입력 규칙을 담당한다. 화면은 `fe/src/app/signup/page.tsx`, `signup/email/page.tsx`, `login/page.tsx`에 있다. 입력 오류는 공통 `TextField`, 약관은 `BottomSheet`·`Checkbox`, 안내는 `AlertDialog`·`Toast` 등을 사용한다.
 
 ## 9. 브라우저 보안과 동시성
 

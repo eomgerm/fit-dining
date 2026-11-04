@@ -100,56 +100,22 @@ test("endSession clears the session and notifies other tabs", async () => {
   }
 });
 
-test("simultaneous expired API requests share one refresh and retry once", async () => {
+// 만료된 AT로 동시에 나간 요청들(withAccessToken)이 갱신을 한 번만 부르게 한다
+test("simultaneous refreshes share one refresh request", async () => {
   let refreshes = 0;
-  const env = environment(async (url, options) => {
-    if (url.endsWith("/login")) return json(value());
+  const env = environment(async (url) => {
     if (url.endsWith("/refresh")) {
       refreshes++;
       return json(value("at-2"));
     }
-    if (options.headers.Authorization === "Bearer at-1")
-      return json(
-        {
-          type: "urn:fitdining:auth:access-token-expired",
-          status: 401,
-          detail: "expired",
-        },
-        401,
-      );
-    return json({ message: "ok" });
+    return json(value());
   });
   try {
     const auth = await load();
-    await auth.login("demo", "password");
-    const results = await Promise.all([
-      auth.authenticated("/protected"),
-      auth.authenticated("/me"),
-    ]);
+    const [first, second] = await Promise.all([auth.refresh(), auth.refresh()]);
     assert.equal(refreshes, 1);
-    assert.deepEqual(results, [{ message: "ok" }, { message: "ok" }]);
+    assert.equal(first, second);
     assert.equal(auth.getSession()?.accessToken, "at-2");
-    assert.equal(auth.getSession()?.userId, "user-1");
-  } finally {
-    env.reset();
-  }
-});
-
-test("revoked sessions never automatically refresh and discard the access token", async () => {
-  let refreshes = 0;
-  const env = environment(async (url) => {
-    if (url.endsWith("/login")) return json(value());
-    if (url.endsWith("/refresh")) refreshes++;
-    return json({ status: 401, detail: "revoked" }, 401);
-  });
-  try {
-    const auth = await load();
-    await auth.login("demo", "password");
-    await assert.rejects(auth.authenticated("/me"), {
-      status: 401,
-    });
-    assert.equal(refreshes, 0);
-    assert.equal(auth.getSession(), null);
   } finally {
     env.reset();
   }
