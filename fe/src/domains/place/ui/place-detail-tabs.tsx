@@ -44,7 +44,7 @@ import {
 import {
   evidenceText,
   facilityIconGroup,
-  missingEvidenceNotes,
+  // missingEvidenceNotes, // 근거 부족 안내를 잠시 숨긴다(D-105)
   OPEN_STATUS_LABELS,
   type FacilityIconGroup,
 } from "../model/place-labels";
@@ -88,11 +88,12 @@ export function HomeTab({
   const [weekOpen, setWeekOpen] = useState(false);
   const today = todayHours(detail.hours, now);
   const reasons = card?.reasons ?? [];
-  const notes = card ? missingEvidenceNotes(card.scoreItems) : [];
+  // 근거 부족 안내는 잠시 숨긴다. 좋은 이유만 보인다(D-105)
+  // const notes = card ? missingEvidenceNotes(card.scoreItems) : [];
 
   return (
     <div className="flex flex-col">
-      {(reasons.length > 0 || notes.length > 0 || card?.caution) && (
+      {(reasons.length > 0 || card?.caution) && (
         <Section>
           {reasons.length > 0 && (
             <SectionHeader title="AI 추천 이유" className="mb-3" />
@@ -132,9 +133,11 @@ export function HomeTab({
                 ))}
               </ul>
             )}
+            {/* 근거 부족 안내(D-105로 잠시 숨김)
             {notes.map((note) => (
               <Note key={note}>{note}</Note>
             ))}
+            */}
             {card?.caution && <Note tone="warn">{card.caution}</Note>}
           </div>
         </Section>

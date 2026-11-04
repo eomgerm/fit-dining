@@ -229,10 +229,10 @@ describe("PlaceDetailScreen", () => {
       screen.getByText("조용히 대화하기 좋다는 리뷰가 많아요"),
     ).toBeTruthy();
     expect(screen.getByText("주말 오후에는 대기가 길어요")).toBeTruthy();
-    // 점수에 넣지 못한 항목의 근거 부족 안내
+    // 점수에 넣지 못한 항목의 근거 부족 안내는 숨긴다(D-105)
     expect(
-      screen.getByText("이 장소는 ‘가성비’ 취향을 확인할 근거가 부족해요"),
-    ).toBeTruthy();
+      screen.queryByText("이 장소는 ‘가성비’ 취향을 확인할 근거가 부족해요"),
+    ).toBeNull();
 
     fireEvent.click(
       screen.getByRole("button", { name: "핏 점수 84, 설명 보기" }),
