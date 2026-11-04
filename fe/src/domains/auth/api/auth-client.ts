@@ -1,5 +1,6 @@
 "use client";
 
+import { clearSignedIn, markSignedIn } from "../model/signed-in-cookie";
 import type { SignupPreferences } from "../model/signup";
 
 export type AuthSession = {
@@ -46,6 +47,7 @@ export function clearSession() {
 export function endSession() {
   connectChannel();
   update(null);
+  clearSignedIn();
   channel?.postMessage("session-changed");
 }
 
@@ -59,7 +61,11 @@ async function browserLock<T>(work: () => Promise<T>) {
     );
   return navigator.locks.request("fitdining-auth-cookie", work);
 }
-async function send<T>(path: string, options: RequestInit = {}): Promise<T> {
+// 응답 본문과 응답의 Date(서버 시각, ms. 없으면 NaN)를 돌려준다
+async function exchange<T>(
+  path: string,
+  options: RequestInit = {},
+): Promise<{ body: T; serverNow: number }> {
   let response: Response;
   try {
     response = await fetch(`/api/auth${path}`, {
@@ -70,7 +76,8 @@ async function send<T>(path: string, options: RequestInit = {}): Promise<T> {
   } catch {
     throw new AuthError("network", "서버에 연결할 수 없습니다.");
   }
-  if (response.status === 204) return undefined as T;
+  const serverNow = Date.parse(response.headers.get("Date") ?? "");
+  if (response.status === 204) return { body: undefined as T, serverNow };
   const body = await response.json().catch(() => null);
   if (!response.ok) {
     const problem = body as ProblemDetail | null;
@@ -83,16 +90,28 @@ async function send<T>(path: string, options: RequestInit = {}): Promise<T> {
       },
     );
   }
-  return body as T;
+  return { body: body as T, serverNow };
+}
+async function send<T>(path: string, options: RequestInit = {}): Promise<T> {
+  return (await exchange<T>(path, options)).body;
+}
+// 세션을 받아 메모리에 두고 로그인 표시를 남긴다. 표시 수명은 기기 시계가 아니라 서버 시각으로 잰다
+async function startSession(path: string, options: RequestInit) {
+  const { body: next, serverNow } = await exchange<AuthSession>(path, options);
+  update(next);
+  markSignedIn(
+    next.sessionExpiresAt,
+    Number.isNaN(serverNow) ? undefined : serverNow,
+  );
+  return next;
 }
 export async function login(email: string, password: string) {
   return browserLock(async () => {
-    const next = await send<AuthSession>("/login", {
+    const next = await startSession("/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
     });
-    update(next);
     channel?.postMessage("session-changed");
     return next;
   });
@@ -131,7 +150,7 @@ export async function confirmEmailVerification(email: string, code: string) {
 }
 export async function signup(body: SignupRequest) {
   return browserLock(async () => {
-    const next = await send<AuthSession>("/signup", {
+    const next = await startSession("/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -140,7 +159,6 @@ export async function signup(body: SignupRequest) {
         nickname: body.nickname.trim(),
       }),
     });
-    update(next);
     channel?.postMessage("session-changed");
     return next;
   });
@@ -149,7 +167,7 @@ export async function socialSignup(
   body: Pick<SignupRequest, "agreements" | "preferences">,
 ) {
   return browserLock(async () => {
-    const next = await send<AuthSession>("/social/signup", {
+    const next = await startSession("/social/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -157,7 +175,6 @@ export async function socialSignup(
         ...(body.preferences ? { preferences: body.preferences } : {}),
       }),
     });
-    update(next);
     channel?.postMessage("session-changed");
     return next;
   });
@@ -166,12 +183,12 @@ export function refresh(): Promise<AuthSession> {
   if (!pendingRefresh) {
     pendingRefresh = browserLock(async () => {
       try {
-        const next = await send<AuthSession>("/refresh", { method: "POST" });
-        update(next);
+        const next = await startSession("/refresh", { method: "POST" });
         return next;
       } catch (error) {
         if (error instanceof AuthError && error.status === 401) {
           update(null);
+          clearSignedIn();
           channel?.postMessage("session-changed");
         }
         throw error;
@@ -192,10 +209,12 @@ export async function logout() {
         method: "POST",
       });
       update(null);
+      clearSignedIn();
       channel?.postMessage("session-changed");
     } catch (error) {
       if (error instanceof AuthError && error.status === 401) {
         update(null);
+        clearSignedIn();
         channel?.postMessage("session-changed");
       }
       throw error;

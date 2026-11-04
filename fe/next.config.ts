@@ -42,17 +42,36 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  // 홈(/)은 온보딩을 정적으로 그린다. 로그인·비회원 표시 쿠키가 있으면 같은 주소로 검색 홈(/home)을 준다.
+  // 두 화면 모두 미리 렌더링되어 로그인 복구를 기다리지 않는다. 검색 홈은 ?view=saved를 읽느라 브라우저가 그린다
+  // (docs/onboarding/01_onboarding.md FE 흐름).
+  // Next 인증 가이드의 optimistic 검사를 쿠키 조건 rewrite로 한다. 인증은 지금처럼 BE가 Bearer AT로 한다.
+  // proxy.ts는 Next가 그 번들에 테스트용 localhost 주소를 넣어 배포 검사(check_fe_bundle.py)에 걸린다.
+  // 쿠키 이름은 @/ 별칭을 못 써서 글자로 적고 src/app/home/entry-rewrite.test.ts가 앱의 이름과 맞춰 본다
+  async redirects() {
+    return [{ source: "/home", destination: "/", permanent: false }];
+  },
   async rewrites() {
-    if (process.env.NODE_ENV !== "development") return [];
+    const home = ["fd_signed_in", "fd_guest"].map((key) => ({
+      source: "/",
+      has: [{ type: "cookie" as const, key, value: "1" }],
+      destination: "/home",
+    }));
+    if (process.env.NODE_ENV !== "development")
+      return { beforeFiles: home, afterFiles: [], fallback: [] };
     const backend = process.env.BE_INTERNAL_URL ?? "http://localhost:8080";
     const photos = process.env.LOCAL_PHOTO_S3_URL ?? "http://127.0.0.1:13900";
-    return [
-      { source: "/api/:path*", destination: `${backend}/api/:path*` },
-      {
-        source: "/fit-dev-photos/:path*",
-        destination: `${photos}/fit-dev-photos/:path*`,
-      },
-    ];
+    return {
+      beforeFiles: home,
+      afterFiles: [
+        { source: "/api/:path*", destination: `${backend}/api/:path*` },
+        {
+          source: "/fit-dev-photos/:path*",
+          destination: `${photos}/fit-dev-photos/:path*`,
+        },
+      ],
+      fallback: [],
+    };
   },
   turbopack: {
     rules: {

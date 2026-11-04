@@ -1,7 +1,13 @@
+import { hasFlagCookie, setFlagCookie } from "@/shared/lib/flag-cookie";
 import { moods, priorities, purposes, type OnboardingAnswers } from "./answers";
 
 export const ANSWERS_KEY = "fd.onboarding.answers.v1";
+// 예전 비회원 표시(localStorage). migrateLegacyGuest가 쿠키로 옮긴다
 export const GUEST_KEY = "fd.guest.v1";
+// 비회원 표시. 홈(/)이 첫 HTML부터 검색 홈을 고르도록 서버(next.config의 / rewrite)가 읽는다
+export const GUEST_COOKIE = "fd_guest";
+// 브라우저가 허용하는 쿠키 수명 상한(400일)
+const GUEST_MAX_AGE_SECONDS = 400 * 24 * 60 * 60;
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -84,16 +90,24 @@ export function readAnswers(): OnboardingAnswers | undefined {
   clearAnswers();
 }
 export function startAsGuest() {
-  try {
-    localStorage.setItem(GUEST_KEY, "1");
-  } catch {
-    /* Continue without persistence. */
-  }
+  setFlagCookie(GUEST_COOKIE, GUEST_MAX_AGE_SECONDS);
 }
 export function isGuest() {
+  return hasFlagCookie(GUEST_COOKIE);
+}
+// localStorage에 옛 표시가 있으면 쿠키로 옮기고 true를 돌려준다. 쿠키를 쓰지 못하면 옛 표시를 남긴다
+export function migrateLegacyGuest() {
   try {
-    return localStorage.getItem(GUEST_KEY) === "1";
+    if (localStorage.getItem(GUEST_KEY) !== "1") return false;
   } catch {
     return false;
   }
+  startAsGuest();
+  if (!isGuest()) return false;
+  try {
+    localStorage.removeItem(GUEST_KEY);
+  } catch {
+    /* 쿠키로 옮겼으니 남아도 다시 옮길 뿐이다 */
+  }
+  return true;
 }

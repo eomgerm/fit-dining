@@ -1,15 +1,10 @@
-import type { Metadata } from "next";
 import Link from "next/link";
-import { Suspense } from "react";
 
-import { HomeEntry } from "./home-entry";
-import { siteDescription } from "./site";
+import { OnboardingEntry } from "./onboarding-entry";
+import { homeMetadata, siteDescription } from "./site";
 
-// ?view=saved도 같은 홈으로 모은다
-export const metadata: Metadata = {
-  title: { absolute: "핏다이닝 | 취향 맞춤 식당·카페 추천" },
-  alternates: { canonical: "/" },
-};
+// 홈(/)의 기본 화면인 온보딩. 로그인·비회원 표시 쿠키가 있으면 next.config가 검색 홈(app/home)으로 rewrite한다
+export const metadata = homeMetadata;
 
 // Google 사이트 이름의 가장 강한 신호다. 홈에만 둔다(Search Central "Site names")
 const websiteJsonLd = JSON.stringify({
@@ -20,7 +15,6 @@ const websiteJsonLd = JSON.stringify({
   url: "https://fitdining.co.kr/",
 });
 
-// 메인은 ?view=saved를 useSearchParams로 읽는다. 미리 렌더링할 때 그 아래를 브라우저에서 그리도록 Suspense로 감싼다
 export default function Home() {
   return (
     <>
@@ -28,7 +22,7 @@ export default function Home() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: websiteJsonLd }}
       />
-      {/* 홈은 브라우저에서만 그려 서버 HTML이 비어 있다. JS를 실행하지 않는 크롤러(AI 검색 봇 등)와
+      {/* 온보딩 첫 화면은 버튼과 영상뿐이다. JS를 실행하지 않는 크롤러(AI 검색 봇 등)와
           JS를 끈 사용자가 읽을 소개다 */}
       <noscript>
         <main className="mx-auto w-full max-w-110 p-6 text-ink">
@@ -44,9 +38,7 @@ export default function Home() {
           </p>
         </main>
       </noscript>
-      <Suspense>
-        <HomeEntry />
-      </Suspense>
+      <OnboardingEntry />
     </>
   );
 }

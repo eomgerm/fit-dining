@@ -71,9 +71,13 @@ export default function MyPage() {
     try {
       await logout();
       router.replace("/");
+      // 표시 쿠키가 바뀌었으니 브라우저에 남은 홈(/) 화면을 버린다(next.config의 / rewrite)
+      router.refresh();
     } catch (cause: unknown) {
-      if (isApiError(cause) && cause.status === 401) router.replace("/");
-      else {
+      if (isApiError(cause) && cause.status === 401) {
+        router.replace("/");
+        router.refresh();
+      } else {
         loggingOut.current = false;
         setBusy(false);
         setDialog(null);
@@ -89,6 +93,7 @@ export default function MyPage() {
     try {
       await withdraw();
       router.replace("/");
+      router.refresh();
       toast("탈퇴했어요");
     } catch (cause: unknown) {
       if (isApiError(cause) && cause.status === 401) router.replace("/login");

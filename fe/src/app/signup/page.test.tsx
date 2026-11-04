@@ -12,7 +12,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ToastProvider } from "@/shared/ui/overlay/toast";
 import {
   ANSWERS_KEY,
-  GUEST_KEY,
+  GUEST_COOKIE,
+  isGuest,
   readAnswers,
   writeAnswers,
 } from "@/domains/onboarding/model/storage";
@@ -23,8 +24,15 @@ vi.mock("@/shared/ui/display/carousel", () => ({
     <section>{children}</section>
   ),
 }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }));
-beforeEach(() => localStorage.clear());
+const refresh = vi.hoisted(() => vi.fn());
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: vi.fn(), refresh }),
+}));
+beforeEach(() => {
+  localStorage.clear();
+  refresh.mockClear();
+  document.cookie = `${GUEST_COOKIE}=; Path=/; Max-Age=0`;
+});
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -135,7 +143,9 @@ it("가입 없이 시작하면 답변을 유지하고 비회원 표시를 저장
   fireEvent.click(link);
   expect(readAnswers()).toEqual(answers);
   expect(localStorage.getItem(ANSWERS_KEY)).not.toBeNull();
-  expect(localStorage.getItem(GUEST_KEY)).toBe("1");
+  expect(isGuest()).toBe(true);
+  // 표시 쿠키가 바뀌었으니 브라우저에 남은 홈 화면을 버린다
+  expect(refresh).toHaveBeenCalledTimes(1);
 });
 
 it("처음 화면 링크와 가입 제목을 표시한다", () => {

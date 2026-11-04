@@ -14,7 +14,7 @@ import { ApiError } from "@/shared/api/api-error";
 import MyPage from "./page";
 
 const mocks = vi.hoisted(() => ({
-  router: { replace: vi.fn(), back: vi.fn(), push: vi.fn() },
+  router: { replace: vi.fn(), back: vi.fn(), push: vi.fn(), refresh: vi.fn() },
   profile: vi.fn(),
   logout: vi.fn(),
   withdraw: vi.fn(),
@@ -132,6 +132,7 @@ it("logs out to home without a login redirect and disables the buttons", async (
   expect(screen.getByRole("alertdialog")).toBeTruthy();
   await act(async () => finish());
   expect(mocks.router.replace).toHaveBeenCalledWith("/");
+  expect(mocks.router.refresh).toHaveBeenCalledTimes(1);
   expect(mocks.router.replace).not.toHaveBeenCalledWith("/login");
   // 이동이 끝나기 전까지 모달은 막힌 채로 남고, 다시 눌러도 요청하지 않는다
   expect(confirm.getAttribute("aria-disabled")).toBe("true");
@@ -228,6 +229,7 @@ it("withdraws to home with a toast, disabling the buttons while pending", async 
   expect(screen.getByRole("alertdialog")).toBeTruthy();
   await act(async () => finish());
   expect(mocks.router.replace).toHaveBeenCalledWith("/");
+  expect(mocks.router.refresh).toHaveBeenCalledTimes(1);
   expect(mocks.router.replace).not.toHaveBeenCalledWith("/login");
   expect(mocks.toast).toHaveBeenCalledWith("탈퇴했어요");
   // 이동이 끝나기 전까지 모달은 막힌 채로 남고, 다시 눌러도 요청하지 않는다

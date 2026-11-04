@@ -34,6 +34,8 @@ export default function SocialSignupPage() {
       });
       clearAnswers();
       router.replace("/location");
+      // 표시 쿠키가 바뀌었으니 브라우저에 남은 홈(/) 화면을 버린다(next.config의 / rewrite)
+      router.refresh();
     } catch (failure) {
       if (failure instanceof AuthError && failure.status === 401) {
         router.replace("/signup?error=social");

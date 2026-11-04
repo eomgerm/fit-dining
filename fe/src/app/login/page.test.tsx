@@ -11,7 +11,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ToastProvider } from "@/shared/ui/overlay/toast";
 import LoginPage from "./page";
 const mocks = vi.hoisted(() => ({
-  router: { replace: vi.fn() },
+  router: { replace: vi.fn(), refresh: vi.fn() },
   restore: vi.fn(),
   login: vi.fn(),
 }));
@@ -137,6 +137,8 @@ it("이미 로그인했다면 홈으로 이동한다", async () => {
     </ToastProvider>,
   );
   await waitFor(() => expect(mocks.router.replace).toHaveBeenCalledWith("/"));
+  // 표시 쿠키가 바뀌었으니 브라우저에 남은 홈 화면을 버린다
+  expect(mocks.router.refresh).toHaveBeenCalledTimes(1);
 });
 it("로그인 성공 후 홈으로 이동한다", async () => {
   mocks.restore.mockRejectedValueOnce(new Error("unauthenticated"));
@@ -159,6 +161,8 @@ it("로그인 성공 후 홈으로 이동한다", async () => {
   });
   fireEvent.submit(screen.getByLabelText("이메일").closest("form")!);
   await waitFor(() => expect(mocks.router.replace).toHaveBeenCalledWith("/"));
+  // 표시 쿠키가 바뀌었으니 브라우저에 남은 홈 화면을 버린다
+  expect(mocks.router.refresh).toHaveBeenCalledTimes(1);
 });
 
 it("sets input maximum lengths", async () => {

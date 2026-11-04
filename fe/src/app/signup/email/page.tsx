@@ -192,6 +192,8 @@ export default function SignupEmailPage() {
       clearAnswers();
       setFields({ email: "", password: "", confirmation: "", nickname: "" });
       router.replace("/location");
+      // 표시 쿠키가 바뀌었으니 브라우저에 남은 홈(/) 화면을 버린다(next.config의 / rewrite)
+      router.refresh();
     } catch (error) {
       const failure = signupFailure(error);
       // 인증 토큰이 만료·무효거나 이미 가입한 이메일이면 이메일을 다시 인증해야 한다

@@ -17,65 +17,95 @@ import {
 } from "vitest";
 import { InstallBanner } from "@/domains/install/ui/install-banner";
 import { Activity } from "react";
-import { HomeEntry } from "./home-entry";
-import { rememberLoginReturn } from "./login-return";
+import { OnboardingEntry } from "./onboarding-entry";
 import { introSeen, markIntroSeen } from "@/domains/install/model/storage";
 import {
+  clearSignedIn,
+  markSignedIn,
+} from "@/domains/auth/model/signed-in-cookie";
+import {
   ANSWERS_KEY,
+  GUEST_COOKIE,
   GUEST_KEY,
   readAnswers,
+  startAsGuest,
 } from "@/domains/onboarding/model/storage";
 const mocks = vi.hoisted(() => ({
   restore: vi.fn(),
   push: vi.fn(),
   replace: vi.fn(),
+  refresh: vi.fn(),
 }));
-const router = { push: mocks.push, replace: mocks.replace };
+const router = {
+  push: mocks.push,
+  replace: mocks.replace,
+  refresh: mocks.refresh,
+};
 vi.mock("next/navigation", () => ({
   useRouter: () => router,
   usePathname: () => "/",
 }));
 vi.mock("@/domains/auth/api/auth-client", () => ({ restore: mocks.restore }));
-vi.mock("@/domains/place/ui/search-screen", () => ({
-  SearchScreen: () => <div>검색 홈</div>,
-}));
-// 북마크 인증은 use-bookmark-access 테스트가 아니라 장소 화면 테스트에서 본다
-vi.mock("./use-bookmark-access", () => ({ useBookmarkAccess: () => ({}) }));
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
   sessionStorage.clear();
+  clearSignedIn();
+  document.cookie = `${GUEST_COOKIE}=; Path=/; Max-Age=0`;
   window.history.replaceState(null, "", "/");
 });
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
 });
-it("로그인 복구 전에는 빈 바탕, 복구 후 홈을 보여준다", async () => {
-  let resolve!: () => void;
-  mocks.restore.mockImplementation(
-    () =>
-      new Promise<void>((done) => {
-        resolve = done;
-      }),
-  );
-  render(<HomeEntry />);
-  expect(screen.queryByText("검색 홈")).toBeNull();
-  expect(screen.queryByRole("button", { name: "시작하기" })).toBeNull();
-  await act(async () => resolve());
-  expect(screen.getByText("검색 홈")).toBeTruthy();
+// /는 표시 쿠키가 없을 때 서버가 고른 온보딩이다. 로그인 복구를 기다리지 않는다
+it("로그인 복구를 기다리지 않고 최초화면을 그린다", () => {
+  mocks.restore.mockImplementation(() => new Promise(() => {}));
+  render(<OnboardingEntry />);
+  expect(screen.getByRole("button", { name: "시작하기" })).toBeTruthy();
 });
-it("비회원 표시가 있으면 복구 실패에도 홈을 보여준다", async () => {
-  localStorage.setItem(GUEST_KEY, "1");
-  mocks.restore.mockRejectedValue(new Error("unauthenticated"));
-  render(<HomeEntry />);
-  expect(await screen.findByText("검색 홈")).toBeTruthy();
+describe("표시 쿠키가 없던 로그인 사용자·옛 비회원은 검색 홈을 다시 받는다", () => {
+  it("로그인이 복구되어 표시가 생기면 다시 받는다", async () => {
+    mocks.restore.mockImplementation(async () => {
+      markSignedIn(Date.now() / 1000 + 60);
+    });
+    render(<OnboardingEntry />);
+    await vi.waitFor(() => expect(mocks.refresh).toHaveBeenCalledTimes(1));
+  });
+  // 쿠키를 막은 브라우저에서 다시 받기가 되풀이되지 않게 한다
+  it("복구되어도 표시가 없으면 다시 받지 않는다", async () => {
+    mocks.restore.mockResolvedValue({});
+    render(<OnboardingEntry />);
+    await act(async () => {});
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+  it("복구에 실패하면 온보딩에 머문다", async () => {
+    mocks.restore.mockRejectedValue(new Error("unauthenticated"));
+    render(<OnboardingEntry />);
+    await act(async () => {});
+    expect(mocks.refresh).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "시작하기" })).toBeTruthy();
+  });
+  it("localStorage의 옛 비회원 표시는 쿠키로 옮기고 다시 받는다", () => {
+    localStorage.setItem(GUEST_KEY, "1");
+    mocks.restore.mockRejectedValue(new Error("unauthenticated"));
+    render(<OnboardingEntry />);
+    expect(mocks.refresh).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem(GUEST_KEY)).toBeNull();
+  });
+  // 비회원 시작 뒤 브라우저에 남은 이전 온보딩 화면으로 왔을 때
+  it("비회원 표시가 이미 있으면 다시 받는다", () => {
+    startAsGuest();
+    mocks.restore.mockRejectedValue(new Error("unauthenticated"));
+    render(<OnboardingEntry />);
+    expect(mocks.refresh).toHaveBeenCalledTimes(1);
+  });
 });
 it("처음 방문은 온보딩 답변을 저장하고 가입으로 이동한다", async () => {
   // 홈 화면 추가 안내는 아래 "홈 화면 추가 안내(1-01a)"에서 본다
   markIntroSeen();
   mocks.restore.mockRejectedValue(new Error("unauthenticated"));
-  render(<HomeEntry />);
+  render(<OnboardingEntry />);
   fireEvent.click(await screen.findByRole("button", { name: "시작하기" }));
   fireEvent.click(screen.getByRole("radio", { name: "조용하고 차분한 곳" }));
   fireEvent.click(screen.getByRole("button", { name: "건너뛰기" }));
@@ -87,114 +117,12 @@ it("처음 방문은 온보딩 답변을 저장하고 가입으로 이동한다"
     tastes: [],
   });
 });
-it("복구 3초 상한 이후 늦은 응답은 화면을 바꾸지 않는다", async () => {
-  vi.useFakeTimers();
-  let resolve!: () => void;
-  mocks.restore.mockImplementation(
-    () =>
-      new Promise<void>((done) => {
-        resolve = done;
-      }),
-  );
-  render(<HomeEntry />);
-  await act(async () => vi.advanceTimersByTimeAsync(2999));
-  expect(screen.queryByRole("button", { name: "시작하기" })).toBeNull();
-  await act(async () => vi.advanceTimersByTimeAsync(1));
-  expect(screen.getByRole("button", { name: "시작하기" })).toBeTruthy();
-  await act(async () => resolve());
-  expect(screen.queryByText("검색 홈")).toBeNull();
-});
-
-describe("북마크 로그인 뒤 복귀", () => {
-  const RETURN_KEY = "fitdining:login-return";
-
-  it("로그인된 상태로 쿼리 없는 홈에 오면 남은 상세 주소로 한 번 replace하고 지운다", async () => {
-    mocks.restore.mockResolvedValue({});
-    rememberLoginReturn("/places/3?from=saved");
-    render(<HomeEntry />);
-
-    await vi.waitFor(() =>
-      expect(mocks.replace).toHaveBeenCalledWith("/places/3?from=saved"),
-    );
-    expect(mocks.replace).toHaveBeenCalledTimes(1);
-    expect(sessionStorage.getItem(RETURN_KEY)).toBeNull();
-    // 다른 화면으로 가므로 홈을 그리지 않는다
-    expect(screen.queryByText("검색 홈")).toBeNull();
-  });
-
-  it("저장한 장소 화면 주소면 replace하고 메인을 그린다", async () => {
-    mocks.restore.mockResolvedValue({});
-    rememberLoginReturn("/?view=saved&category=CAFE");
-    render(<HomeEntry />);
-
-    expect(await screen.findByText("검색 홈")).toBeTruthy();
-    expect(mocks.replace).toHaveBeenCalledWith("/?view=saved&category=CAFE");
-  });
-
-  it("로그인 없이 홈에 오면 주소를 버린다", async () => {
-    localStorage.setItem(GUEST_KEY, "1");
-    mocks.restore.mockRejectedValue(new Error("unauthenticated"));
-    rememberLoginReturn("/places/3");
-    render(<HomeEntry />);
-
-    expect(await screen.findByText("검색 홈")).toBeTruthy();
-    expect(mocks.replace).not.toHaveBeenCalled();
-    expect(sessionStorage.getItem(RETURN_KEY)).toBeNull();
-  });
-
-  it("남긴 지 10분이 지났으면 따르지 않는다", async () => {
-    mocks.restore.mockResolvedValue({});
-    rememberLoginReturn("/places/3", Date.now() - 10 * 60 * 1000 - 1);
-    render(<HomeEntry />);
-
-    expect(await screen.findByText("검색 홈")).toBeTruthy();
-    expect(mocks.replace).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    "//evil.example/x",
-    "/\\evil.example/x",
-    "https://evil.example/x",
-    "place?id=3",
-  ])("다른 출처로 해석되는 %s는 따르지 않는다", async (path) => {
-    mocks.restore.mockResolvedValue({});
-    rememberLoginReturn(path);
-    render(<HomeEntry />);
-
-    expect(await screen.findByText("검색 홈")).toBeTruthy();
-    expect(mocks.replace).not.toHaveBeenCalled();
-    expect(sessionStorage.getItem(RETURN_KEY)).toBeNull();
-  });
-
-  it("쿼리가 있는 홈에 오면 남은 주소를 읽지 않는다", async () => {
-    window.history.replaceState(null, "", "/?view=saved");
-    mocks.restore.mockResolvedValue({});
-    rememberLoginReturn("/places/3");
-    render(<HomeEntry />);
-
-    expect(await screen.findByText("검색 홈")).toBeTruthy();
-    expect(mocks.replace).not.toHaveBeenCalled();
-    expect(sessionStorage.getItem(RETURN_KEY)).not.toBeNull();
-  });
-
-  it("로그인 복원이 3초 안에 끝나지 않으면 주소를 버린다", async () => {
-    vi.useFakeTimers();
-    mocks.restore.mockImplementation(() => new Promise(() => {}));
-    rememberLoginReturn("/places/3");
-    render(<HomeEntry />);
-
-    await act(async () => vi.advanceTimersByTimeAsync(3000));
-
-    expect(mocks.replace).not.toHaveBeenCalled();
-    expect(sessionStorage.getItem(RETURN_KEY)).toBeNull();
-  });
-});
 
 it("선택 없이 건너뛰면 답변을 저장하지 않고 가입으로 이동한다", async () => {
   // 홈 화면 추가 안내는 아래 "홈 화면 추가 안내(1-01a)"에서 본다
   markIntroSeen();
   mocks.restore.mockRejectedValue(new Error("unauthenticated"));
-  render(<HomeEntry />);
+  render(<OnboardingEntry />);
   fireEvent.click(await screen.findByRole("button", { name: "시작하기" }));
   fireEvent.click(screen.getByRole("button", { name: "건너뛰기" }));
   expect(mocks.push).toHaveBeenCalledWith("/signup");
@@ -206,7 +134,7 @@ describe("홈 화면 추가 안내(1-01a)", () => {
   const dialog = () => screen.queryByRole("alertdialog");
   async function intro() {
     mocks.restore.mockRejectedValue(new Error("unauthenticated"));
-    render(<HomeEntry />);
+    render(<OnboardingEntry />);
     return screen.findByRole("button", { name: "시작하기" });
   }
 
@@ -261,7 +189,7 @@ describe("홈 화면 추가 안내(1-01a)", () => {
 
 it("안내가 떠 있는 동안에는 아직 본 것으로 기록하지 않는다(배너가 모달 뒤에 뜨지 않게)", async () => {
   mocks.restore.mockRejectedValue(new Error("unauthenticated"));
-  render(<HomeEntry />);
+  render(<OnboardingEntry />);
   fireEvent.click(await screen.findByRole("button", { name: "시작하기" }));
   await screen.findByRole("alertdialog");
   expect(introSeen()).toBe(false);
@@ -269,7 +197,7 @@ it("안내가 떠 있는 동안에는 아직 본 것으로 기록하지 않는�
   expect(introSeen()).toBe(true);
 });
 
-describe("홈 화면 추가 배너(4-01b)는 첫 화면부터 보인다", () => {
+describe("홈 화면 추가 배너(4-01b)", () => {
   const banner = () =>
     screen.queryByRole("complementary", { name: "홈 화면 추가 안내" });
 
@@ -278,7 +206,7 @@ describe("홈 화면 추가 배너(4-01b)는 첫 화면부터 보인다", () => 
     mocks.restore.mockRejectedValue(new Error("unauthenticated"));
     render(
       <>
-        <HomeEntry />
+        <OnboardingEntry />
         <InstallBanner />
       </>,
     );
@@ -288,26 +216,12 @@ describe("홈 화면 추가 배너(4-01b)는 첫 화면부터 보인다", () => 
     ).toBeTruthy();
     expect(banner()).toBeNull();
   });
-
-  it("첫 화면(4-01)에서는 띄운다", async () => {
-    markIntroSeen();
-    localStorage.setItem(GUEST_KEY, "1");
-    mocks.restore.mockRejectedValue(new Error("unauthenticated"));
-    render(
-      <>
-        <HomeEntry />
-        <InstallBanner />
-      </>,
-    );
-    expect(await screen.findByText("검색 홈")).toBeTruthy();
-    expect(banner()).not.toBeNull();
-  });
 });
 
 describe("홈 화면 추가 안내가 끝나면 누른 버튼이 하던 곳으로 간다", () => {
   async function intro() {
     mocks.restore.mockRejectedValue(new Error("unauthenticated"));
-    render(<HomeEntry />);
+    render(<OnboardingEntry />);
     return screen.findByRole("button", { name: "시작하기" });
   }
 
@@ -339,7 +253,7 @@ describe("홈 화면 추가 안내가 끝나면 누른 버튼이 하던 곳으�
     // 가이드에서 [이전]으로 돌아오면 홈이 새로 그려진다
     cleanup();
     mocks.restore.mockRejectedValue(new Error("unauthenticated"));
-    render(<HomeEntry />);
+    render(<OnboardingEntry />);
     expect(
       await screen.findByRole("radio", { name: "조용하고 차분한 곳" }),
     ).toBeTruthy();
@@ -351,7 +265,7 @@ describe("홈 화면 추가 안내가 끝나면 누른 버튼이 하던 곳으�
     // Cache Components는 떠난 화면을 hidden Activity로 남겨 두었다가 돌아오면 상태째 다시 보여 준다
     const view = render(
       <Activity mode="visible">
-        <HomeEntry />
+        <OnboardingEntry />
       </Activity>,
     );
     fireEvent.click(await screen.findByRole("button", { name: "시작하기" }));
@@ -359,12 +273,12 @@ describe("홈 화면 추가 안내가 끝나면 누른 버튼이 하던 곳으�
     fireEvent.click(screen.getByRole("button", { name: "홈 화면에 추가하기" }));
     view.rerender(
       <Activity mode="hidden">
-        <HomeEntry />
+        <OnboardingEntry />
       </Activity>,
     );
     view.rerender(
       <Activity mode="visible">
-        <HomeEntry />
+        <OnboardingEntry />
       </Activity>,
     );
     // 다시 보이는 첫 그림부터 온보딩이어야 한다. 최초화면(어두운 영상)이 한 번 그려지면 깜빡여 보인다
@@ -383,7 +297,7 @@ describe("홈 화면 추가 안내가 끝나면 누른 버튼이 하던 곳으�
     fireEvent.click(screen.getByRole("button", { name: "홈 화면에 추가하기" }));
     cleanup();
     mocks.restore.mockRejectedValue(new Error("unauthenticated"));
-    render(<HomeEntry />);
+    render(<OnboardingEntry />);
     await vi.waitFor(() =>
       expect(mocks.replace).toHaveBeenCalledWith("/login"),
     );

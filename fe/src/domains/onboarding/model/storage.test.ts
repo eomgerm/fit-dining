@@ -4,7 +4,9 @@ import {
   ANSWERS_KEY,
   GUEST_KEY,
   clearAnswers,
+  GUEST_COOKIE,
   isGuest,
+  migrateLegacyGuest,
   readAnswers,
   startAsGuest,
   writeAnswers,
@@ -18,6 +20,7 @@ const answers: OnboardingAnswers = {
 };
 beforeEach(() => {
   localStorage.clear();
+  document.cookie = `${GUEST_COOKIE}=; Path=/; Max-Age=0`;
 });
 afterEach(() => vi.restoreAllMocks());
 const emptyAnswers: OnboardingAnswers = {
@@ -71,13 +74,30 @@ it.each([
   expect(readAnswers()).toBeUndefined();
   expect(localStorage.getItem(ANSWERS_KEY)).toBeNull();
 });
-it("비회원은 답변을 유지하고 표시를 남긴다", () => {
+// 서버(next.config의 / rewrite)가 읽도록 비회원 표시는 쿠키에 둔다
+it("비회원은 답변을 유지하고 쿠키에 표시를 남긴다", () => {
   writeAnswers(answers);
   startAsGuest();
   expect(readAnswers()).toEqual(answers);
   expect(isGuest()).toBe(true);
+  expect(document.cookie).toContain(`${GUEST_COOKIE}=1`);
+  expect(localStorage.getItem(GUEST_KEY)).toBeNull();
+});
+it("localStorage에 남은 옛 비회원 표시를 한 번 쿠키로 옮긴다", () => {
+  localStorage.setItem(GUEST_KEY, "1");
+
+  expect(migrateLegacyGuest()).toBe(true);
+  expect(isGuest()).toBe(true);
+  expect(localStorage.getItem(GUEST_KEY)).toBeNull();
+  expect(migrateLegacyGuest()).toBe(false);
+});
+// 쿠키를 막은 브라우저에서 옛 표시를 잃지 않는다
+it("쿠키를 쓰지 못하면 옛 비회원 표시를 지우지 않는다", () => {
+  localStorage.setItem(GUEST_KEY, "1");
+  vi.spyOn(document, "cookie", "set").mockImplementation(() => {});
+
+  expect(migrateLegacyGuest()).toBe(false);
   expect(localStorage.getItem(GUEST_KEY)).toBe("1");
-  expect(localStorage.length).toBe(2);
 });
 it("저장소 예외가 흐름을 막지 않는다", () => {
   for (const method of ["getItem", "setItem", "removeItem"] as const)
@@ -90,7 +110,9 @@ it("저장소 예외가 흐름을 막지 않는다", () => {
     startAsGuest();
   }).not.toThrow();
   expect(readAnswers()).toBeUndefined();
-  expect(isGuest()).toBe(false);
+  expect(migrateLegacyGuest()).toBe(false);
+  // 비회원 표시는 쿠키라 저장소가 막혀도 남는다
+  expect(isGuest()).toBe(true);
 });
 
 it.each(["FOOD_SPICY", null, undefined])("칩 코드를 보존한다: %s", (code) => {

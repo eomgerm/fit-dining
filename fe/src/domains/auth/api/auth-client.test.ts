@@ -1,6 +1,13 @@
 import { test, vi } from "vitest";
 import assert from "node:assert/strict";
 
+// 로그인 표시 쿠키(next.config의 / rewrite가 읽는다). 이 파일은 node 환경이라 document가 없다
+const cookie = vi.hoisted(() => ({
+  markSignedIn: vi.fn(),
+  clearSignedIn: vi.fn(),
+}));
+vi.mock("../model/signed-in-cookie", () => cookie);
+
 const load = () => {
   vi.resetModules();
   return import("./auth-client");
@@ -330,6 +337,100 @@ test("email verification failure keeps problem type", async () => {
         error.status === 400 &&
         error.problem?.type === "urn:fitdining:auth:verification-code-mismatch",
     );
+  } finally {
+    env.reset();
+  }
+});
+
+// 홈(/)이 첫 HTML부터 맞는 화면을 고르도록 세션이 생기거나 끝날 때 로그인 표시를 맞춘다
+// 표시 수명은 기기 시계가 아니라 응답의 Date(서버 시각)로 잰다. 시계가 하루 넘게 빠른 기기에서도 표시가 남게
+test("session start marks signed in until the session expires by server time", async () => {
+  const serverNow = Date.parse("Wed, 04 Nov 2026 01:00:00 GMT");
+  const expires = serverNow / 1000 + 86400;
+  const env = environment(
+    async () =>
+      new Response(JSON.stringify({ ...value(), sessionExpiresAt: expires }), {
+        headers: {
+          "Content-Type": "application/json",
+          Date: new Date(serverNow).toUTCString(),
+        },
+      }),
+  );
+  try {
+    const auth = await load();
+    for (const start of [
+      () => auth.login("demo", "password"),
+      () =>
+        auth.signup({
+          email: "a@b.c",
+          password: "password123",
+          nickname: "demo",
+          agreements: { ageOver14: true, terms: true, privacy: true },
+          verificationToken: "token",
+        }),
+      () =>
+        auth.socialSignup({
+          agreements: { ageOver14: true, terms: true, privacy: true },
+        }),
+      () => auth.refresh(),
+    ]) {
+      cookie.markSignedIn.mockClear();
+      await start();
+      assert.deepEqual(cookie.markSignedIn.mock.calls, [[expires, serverNow]]);
+    }
+    assert.equal(cookie.clearSignedIn.mock.calls.length, 0);
+  } finally {
+    env.reset();
+  }
+});
+
+test("session end clears the signed-in mark", async () => {
+  const env = environment(async (url) =>
+    url.endsWith("/refresh")
+      ? json({ status: 401, detail: "expired" }, 401)
+      : new Response(null, { status: 204 }),
+  );
+  try {
+    const auth = await load();
+    for (const end of [
+      () => auth.refresh().catch(() => {}),
+      () => auth.logout(),
+      async () => auth.endSession(),
+    ]) {
+      cookie.clearSignedIn.mockClear();
+      await end();
+      assert.equal(cookie.clearSignedIn.mock.calls.length, 1);
+    }
+  } finally {
+    env.reset();
+  }
+});
+
+test("unauthorized logout also clears the signed-in mark", async () => {
+  const env = environment(async () =>
+    json({ status: 401, detail: "expired" }, 401),
+  );
+  try {
+    const auth = await load();
+    cookie.clearSignedIn.mockClear();
+    await assert.rejects(auth.logout(), { status: 401 });
+    assert.equal(cookie.clearSignedIn.mock.calls.length, 1);
+  } finally {
+    env.reset();
+  }
+});
+
+// AT만 거절된 경우(clearSession)와 연결 실패는 세션이 끝난 게 아니다. RT로 다시 갱신할 수 있다
+test("expired access token or network failure keeps the signed-in mark", async () => {
+  const env = environment(async () => {
+    throw new TypeError("offline");
+  });
+  try {
+    const auth = await load();
+    cookie.clearSignedIn.mockClear();
+    auth.clearSession();
+    await assert.rejects(auth.refresh(), { kind: "network" });
+    assert.equal(cookie.clearSignedIn.mock.calls.length, 0);
   } finally {
     env.reset();
   }

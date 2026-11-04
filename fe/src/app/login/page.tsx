@@ -28,7 +28,9 @@ export default function LoginPage() {
     let active = true;
     restore()
       .then(() => {
-        if (active) router.replace("/");
+        if (!active) return;
+        router.replace("/");
+        router.refresh();
       })
       .catch((error: unknown) => {
         if (active && (!(error instanceof AuthError) || error.status !== 401))
@@ -58,6 +60,8 @@ export default function LoginPage() {
       form.reset();
       setPassword("");
       router.replace("/");
+      // 표시 쿠키가 바뀌었으니 브라우저에 남은 홈(/) 화면을 버린다(next.config의 / rewrite)
+      router.refresh();
     } catch (error) {
       const credentialsInvalid =
         error instanceof AuthError && error.status === 401;

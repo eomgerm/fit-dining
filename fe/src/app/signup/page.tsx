@@ -4,6 +4,7 @@ import { startAsGuest } from "@/domains/onboarding/model/storage";
 import { TermsModal } from "@/domains/auth/ui/terms-modal";
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button } from "@/shared/ui/button/button";
 import { IconButton } from "@/shared/ui/button/icon-button";
 import { TextButton } from "@/shared/ui/button/text-button";
@@ -64,6 +65,7 @@ const slides = [
   },
 ];
 export default function SignupPage() {
+  const router = useRouter();
   const [index, setIndex] = useState(0);
   const [skip, setSkip] = useState(false);
   return (
@@ -146,7 +148,11 @@ export default function SignupPage() {
                 variant="outline"
                 size="md"
                 className="min-w-0 grow-131 basis-0"
-                onClick={startAsGuest}
+                onClick={() => {
+                  startAsGuest();
+                  // 표시 쿠키가 바뀌었으니 브라우저에 남은 홈(/) 화면을 버린다(next.config의 / rewrite)
+                  router.refresh();
+                }}
                 role="link"
                 nativeButton={false}
                 render={<Link href="/location" />}

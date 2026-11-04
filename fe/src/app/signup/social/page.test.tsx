@@ -15,9 +15,13 @@ import {
   writeAnswers,
 } from "@/domains/onboarding/model/storage";
 import SocialSignupPage from "./page";
-const mocks = vi.hoisted(() => ({ signup: vi.fn(), replace: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  signup: vi.fn(),
+  replace: vi.fn(),
+  refresh: vi.fn(),
+}));
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace: mocks.replace }),
+  useRouter: () => ({ replace: mocks.replace, refresh: mocks.refresh }),
 }));
 vi.mock("@/domains/auth/api/auth-client", () => ({
   socialSignup: mocks.signup,
@@ -87,6 +91,7 @@ it("requires agreements and navigates to location guidance on success", async ()
   ).toBe(true);
   await submit();
   await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/location"));
+  expect(mocks.refresh).toHaveBeenCalledTimes(1);
   expect(mocks.signup).toHaveBeenCalledWith({
     agreements: { ageOver14: true, terms: true, privacy: true },
   });

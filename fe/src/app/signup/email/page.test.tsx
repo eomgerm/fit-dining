@@ -19,11 +19,12 @@ import SignupEmailPage from "./page";
 const mocks = vi.hoisted(() => ({
   signup: vi.fn(),
   replace: vi.fn(),
+  refresh: vi.fn(),
   requestEmailVerification: vi.fn(),
   confirmEmailVerification: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace: mocks.replace }),
+  useRouter: () => ({ replace: mocks.replace, refresh: mocks.refresh }),
 }));
 vi.mock("@/domains/auth/api/auth-client", () => ({
   signup: mocks.signup,
@@ -129,6 +130,7 @@ it("requires all agreements, submits once, and navigates to location guidance", 
   });
   complete();
   await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/location"));
+  expect(mocks.refresh).toHaveBeenCalledTimes(1);
 });
 it("closes the sheet and shows duplicate email beside its field", async () => {
   mocks.signup.mockRejectedValue(
