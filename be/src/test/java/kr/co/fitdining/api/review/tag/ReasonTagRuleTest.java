@@ -70,6 +70,15 @@ class ReasonTagRuleTest {
 		assertThatThrownBy(() -> validate("QUIET_GOOD", "QUIET_GOOD")).isInstanceOf(InvalidReasonTagsException.class);
 	}
 
+	@ParameterizedTest
+	@org.junit.jupiter.params.provider.CsvSource({
+			"QUIET, BAD, LIVELY", "LIVELY, BAD, QUIET", "QUIET, GOOD, QUIET", "LIVELY, GOOD, LIVELY",
+			"SHORT_WAIT, BAD, SHORT_WAIT", "COZY, GOOD, COZY"})
+	@DisplayName("사용자쪽코드_소음축아쉬웠어요만_반대극이다")
+	void userFeatureCode_onlyNoiseBadFlips(String feature, Sentiment sentiment, String expected) {
+		assertThat(ReasonTagRule.userFeatureCode(feature, sentiment)).isEqualTo(expected);
+	}
+
 	@Test
 	@DisplayName("그룹_소음축은한그룹이고_나머지는특징코드다")
 	void group_noiseAxisSharedOthersByFeature() {

@@ -5,6 +5,7 @@ import jakarta.validation.Validator;
 import jakarta.validation.constraints.*;
 import java.net.http.HttpClient;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.IntStream;
@@ -66,8 +67,7 @@ public class AiTasteClient {
      */
     public TasteProfileService.Profile profile(Preferences preferences) {
         // Preferences contains only the four fields accepted by the AI contract.
-        var response = checked(profile.post().uri("/v1/taste/profile").contentType(MediaType.APPLICATION_JSON)
-                .body(preferences).retrieve().body(ProfileResponse.class));
+        var response = post("/v1/taste/profile", preferences);
         var chips = preferences.tastes();
         var vectors = response.vectors();
         if (vectors != null && (vectors.size() != chips.size()
@@ -75,9 +75,23 @@ public class AiTasteClient {
             throw new IllegalStateException("Invalid AI response");
         var tastes = IntStream.range(0, chips.size()).mapToObj(i -> StoredTasteChip.of(chips.get(i),
                 vectors != null && StoredTasteChip.needsVector(chips.get(i)) ? vectors.get(i) : null)).toList();
-        var features = response.features().stream()
+        return new TasteProfileService.Profile(features(response), tastes);
+    }
+
+    /** 04:00 batch: stored answers plus current review evidence; only features are recomputed. */
+    public List<TasteFeature> refresh(Preferences preferences, List<ReviewEvidence> reviews) {
+        return features(post("/v1/taste/refresh", new RefreshRequest(preferences.mood(), preferences.priorities(),
+                preferences.purposes(), preferences.tastes(), reviews)));
+    }
+
+    private ProfileResponse post(String uri, Object body) {
+        return checked(profile.post().uri(uri).contentType(MediaType.APPLICATION_JSON)
+                .body(body).retrieve().body(ProfileResponse.class));
+    }
+
+    private static List<TasteFeature> features(ProfileResponse response) {
+        return response.features().stream()
                 .map(f -> new TasteFeature(f.code(), f.layer(), f.like(), f.weight())).toList();
-        return new TasteProfileService.Profile(features, tastes);
     }
 
     private <T> T checked(T response) {
@@ -85,6 +99,14 @@ public class AiTasteClient {
             throw new IllegalStateException("Invalid AI response");
         return response;
     }
+
+    /**
+     * One review reason tag (taste-profile spec, refresh API).
+     * @param category 식당, 카페 or 술집 @param code user-side feature code @param createdAt review creation time
+     */
+    public record ReviewEvidence(long placeId, long reviewId, String category, String code, Instant createdAt) {}
+    private record RefreshRequest(Preferences.Mood mood, List<Preferences.Priority> priorities,
+            List<Preferences.Purpose> purposes, List<TasteChip> tastes, List<ReviewEvidence> reviews) {}
 
     public record InterpretResponse(@NotNull @Size(max = 10) List<@NotNull @Valid TasteChip> tastes,
             String model) {}

@@ -73,6 +73,28 @@ class AiTasteAnalyzerTests {
         assertEquals(1, profile.features().getFirst().weight());
         assertNull(profile.tastes().getFirst().vector());
     }
+    @Test void refresh_sendsPreferencesAndReviewEvidence() {
+        server.expect(requestTo("http://ai.test/v1/taste/refresh")).andExpect(method(HttpMethod.POST))
+                .andExpect(content().json("""
+                {"mood":"QUIET","priorities":["VALUE"],"purposes":[],"tastes":[],
+                "reviews":[{"placeId":1,"reviewId":10,"category":"카페","code":"QUIET",
+                "createdAt":"2026-10-23T03:00:00Z"}]}
+                """, true)).andRespond(withSuccess("""
+                {"features":[{"code":"QUIET","layer":"axis","like":true,"weight":2}]}
+                """, MediaType.APPLICATION_JSON));
+        var features = client.refresh(
+                new Preferences(Preferences.Mood.QUIET, List.of(Preferences.Priority.VALUE), null, null),
+                List.of(new AiTasteClient.ReviewEvidence(1, 10, "카페", "QUIET",
+                        java.time.Instant.parse("2026-10-23T03:00:00Z"))));
+        assertEquals(List.of(new kr.co.fitdining.api.user.TasteFeature("QUIET", "axis", true, 2)), features);
+    }
+    @Test void refresh_invalidResponse_throws() {
+        server.expect(anything()).andRespond(withSuccess("""
+                {"features":[{"code":"QUIET","layer":"axis","like":true,"weight":4}]}
+                """, MediaType.APPLICATION_JSON));
+        assertThrows(RuntimeException.class,
+                () -> client.refresh(new Preferences(null, null, null, null), List.of()));
+    }
     @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
     void configuredClient_sendsOnlyNonblankProxyHeaders(boolean credentials) throws Exception {

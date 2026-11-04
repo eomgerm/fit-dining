@@ -24,6 +24,17 @@ public final class ReasonTagRule {
 	}
 
 	/**
+	 * 취향 갱신에 보내는 사용자 쪽 코드(D-36). {@code featureCode}는 장소에서 실제로 그랬던 쪽이라
+	 * "너무 시끄러웠어요"(LIVELY·BAD)를 쓴 사용자는 조용한 곳을 원한다. 소음 축 아쉬웠어요만 반대 극이다.
+	 */
+	public static String userFeatureCode(String featureCode, ReasonTag.Sentiment sentiment) {
+		if (sentiment != ReasonTag.Sentiment.BAD || !NOISE_AXIS.contains(featureCode)) {
+			return featureCode;
+		}
+		return featureCode.equals("QUIET") ? "LIVELY" : "QUIET";
+	}
+
+	/**
 	 * @param codes 고른 태그 코드
 	 * @param exposed 장소 업종에 노출되는 태그
 	 * @throws InvalidReasonTagsException 좋았어요가 없거나, 노출되지 않은 태그가 있거나, 같은 그룹을 둘 이상 골랐을 때
