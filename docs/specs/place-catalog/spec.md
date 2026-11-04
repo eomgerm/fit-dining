@@ -39,7 +39,7 @@ data/naver-places/.venv/Scripts/python data/naver-places/<적재 스크립트> -
 data/naver-places/.venv/Scripts/python data/naver-places/<mock 생성 스크립트>              # 확인용 장소는 스크립트에 들어 있다
 data/naver-places/.venv/Scripts/python data/naver-places/<mock 생성 스크립트> --include 1689752307   # 더 넣고 싶은 장소
 
-# 4) PLACE_MOCK_ENABLED=true 로 앱을 띄우고 대응표의 id로 /place?id=<id> 를 연다
+# 4) PLACE_MOCK_ENABLED=true 로 앱을 띄우고 대응표의 id로 /places/<id> 를 연다
 ```
 
 적재가 장소 하나를 넣는 모습(D-15 당시 장소 단위 한 트랜잭션. D-25 이후에는 전체가 한 트랜잭션이다):
@@ -370,7 +370,7 @@ enum Facility 삭제. PlaceSummary, PlaceCard, 검색·자동완성 응답은 �
 - FE 단위·화면 테스트(example), AC-16~AC-18: `opening-hours.test.ts`에서 `hoursText`, `hoursNotes`, `todayNotice`를 고정 시각으로 확인하고, `place-detail-screen.test.tsx`에서 상세 화면을 그려 정보 탭 줄 순서와 숨김, 시설 칩의 묶음별 아이콘과 기본 아이콘, 메뉴 탭 묶음·칩·가격 원문·빈 상태를 확인한다. 잡는 것: 문구와 순서, 빈 값 숨김, 아이콘 선택. 놓치는 것: 시각적 모양. Prior art: `fe/src/domains/place/model/opening-hours.test.ts`, `fe/src/domains/place/ui/place-detail-screen.test.tsx`.
 - 기존 테스트 전체(example), AC-9: `./gradlew test`(Docker 필요), CI `be:test`, FE 테스트 실행.
 - 로컬 적재 확인(manual), AC-14(DB 쪽), AC-15, AC-19, AC-20: 로컬 DB에 마이그레이션 후 적재 스크립트를 두 번 실행하고, `PGHOSTADDR`를 다른 주소로 두고도 `--host 127.0.0.1`로 로컬에 들어가는지 보고, 출력된 행 수와 `SELECT naver_place_id, place_id FROM places`를 두 번 비교한다. `--host`를 원격 주소로 주어 접속하지 않고 끝나는지 본다. 일회용 확인 스크립트로 모든 장소의 메뉴·사진·지하철 수, `phone`, `booking_url`, 메뉴 순서를 CSV에서 규칙대로 만든 값과 비교한다. `PGSERVICE`를 설정하거나 `--dbname`에 접속 문자열을 넣어도 로컬 밖으로 접속하지 않는지 본다. SQL로 슬로우커피 금요일, 폴 바셋 7일이 정보 없음인지, 농민백암순대 수요일이 `11:10`–`15:30`인지, 스타벅스 강남서초초교점이 매장 시간표인지, 죽은 링크가 없는지 본다. 두 스크립트의 소스에서 AC-15의 파일 이름을 여는 곳이 없는지 보고, AC-15의 20자 이상 문자열과 작성자 해시 전부를 8개 테이블의 텍스트 값 전체와 대조하는 일회용 확인 스크립트로 0건임을 본다. 적재 스크립트는 저장소 밖이라 자동 테스트를 두지 않는다(D-15).
-- mock과 대응표 확인(manual), AC-13, AC-14(mock 쪽), AC-15(mock 쪽), AC-16~AC-18(눈으로), AC-21: 대응표의 각 행을 `places.json`과 대조하고 역별 장소 수를 센다. 대응표에 적힌 확인용 장소를 `/place?id=<id>`로 열어 정보 탭 줄, 시설 아이콘, 메뉴 탭(64px 사진, 두 줄 말줄임, 칩), 영업시간 문구와 홈 탭의 구조가 그대로인지 눈으로 본다(AC-16~AC-18). 확인용 장소 몇 곳의 `phone`, `bookingUrl`, `closedDayNote`, 메뉴 순서를 CSV와 대조한다. AC-15의 20자 이상 문자열과 작성자 해시 전부를 `places.json`과 대조해 0건임을 본다. 없는 `naver_place_id`를 `--include`로 주거나 40곳을 넘게 주어 아무 파일도 바뀌지 않는지 보고, 같은 인자로 두 번 만들어 결과가 같은지 본다.
+- mock과 대응표 확인(manual), AC-13, AC-14(mock 쪽), AC-15(mock 쪽), AC-16~AC-18(눈으로), AC-21: 대응표의 각 행을 `places.json`과 대조하고 역별 장소 수를 센다. 대응표에 적힌 확인용 장소를 `/places/<id>`로 열어 정보 탭 줄, 시설 아이콘, 메뉴 탭(64px 사진, 두 줄 말줄임, 칩), 영업시간 문구와 홈 탭의 구조가 그대로인지 눈으로 본다(AC-16~AC-18). 확인용 장소 몇 곳의 `phone`, `bookingUrl`, `closedDayNote`, 메뉴 순서를 CSV와 대조한다. AC-15의 20자 이상 문자열과 작성자 해시 전부를 `places.json`과 대조해 0건임을 본다. 없는 `naver_place_id`를 `--include`로 주거나 40곳을 넘게 주어 아무 파일도 바뀌지 않는지 보고, 같은 인자로 두 번 만들어 결과가 같은지 본다.
 - 문서 검토(manual), AC-9(고친 기존 테스트가 Existing code 범위 안인지), AC-22와 Constraints: diff로 place-search spec 수정 범위, 새 마이그레이션이 파일 하나이고 `CREATE TABLE`과 `CREATE INDEX`만 쓰는지, `infra/`와 `docs/infra/`가 바뀌지 않았는지, `data/naver-places/`가 커밋되지 않았는지 확인한다.
 - CI `lint:migrations`(example, 기존), Constraints: 기존 마이그레이션 수정과 버전 중복·역순을 막는다.
 

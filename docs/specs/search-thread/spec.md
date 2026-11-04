@@ -184,7 +184,7 @@ type Turn = {
 FE의 저장 위치와 화면 비우기는 세션 키로 정한다(D-6).
 
 - 세션 키는 회원이면 `(userId, sessionId)`, 비회원이면 "세션 없음", 아직 확인되지 않았으면 "모름"이다.
-- 세션이 없으면 복원을 한 번 시도한다. 서버가 401로 세션 없음을 확인해 줬을 때만 "세션 없음"이 되고, 그 뒤로는 `getSession()`이 세션을 돌려줄 때까지 다시 복원하지 않는다(`subscribe` 알림마다 복원하지 않는다). 복원이 시간 초과나 네트워크 오류로 끝나면 "모름"이고 다음 저장 때 다시 시도한다(`fe/src/app/place/with-optional-access-token.ts`는 시간 초과를 비로그인으로 보므로 그대로 쓰지 않는다).
+- 세션이 없으면 복원을 한 번 시도한다. 서버가 401로 세션 없음을 확인해 줬을 때만 "세션 없음"이 되고, 그 뒤로는 `getSession()`이 세션을 돌려줄 때까지 다시 복원하지 않는다(`subscribe` 알림마다 복원하지 않는다). 복원이 시간 초과나 네트워크 오류로 끝나면 "모름"이고 다음 저장 때 다시 시도한다(`fe/src/app/places/[id]/with-optional-access-token.ts`는 시간 초과를 비로그인으로 보므로 그대로 쓰지 않는다).
 - 저장 위치는 검색을 시작할 때의 세션 키로 정한다. 회원이면 서버, 세션 없음이면 기기, 모름이면 저장하지 않는다.
 - 세션 키가 바뀌는 것은 확인된 값(회원 또는 세션 없음)에서 다른 확인된 값으로 바뀔 때다: 로그아웃, 다른 계정 로그인, 같은 사용자의 새 세션, 비회원의 로그인, 인증의 최종 상실. "모름"이 확인된 값이 되는 것과 같은 세션의 액세스 토큰 갱신은 해당하지 않는다. 그래서 확인 중에 시작한 검색은 화면에 남고 저장만 되지 않는다. `subscribe` 알림을 받을 때 `getSession()` 값을 비교해 판단한다.
 - 인증의 최종 상실: 기록 API가 만료가 아닌 401을 주거나(탈퇴 포함) 갱신하고도 401이면 이 탭의 세션을 지운다(`clearSession`). 서버 로그아웃이나 다른 탭 알림은 하지 않는다.
@@ -197,7 +197,7 @@ FE의 저장 위치와 화면 비우기는 세션 키로 정한다(D-6).
 - 기록 API의 인증은 리뷰처럼 컨트롤러가 `AuthUseCases.authenticate`를 직접 부르고, 사용자는 토큰에서만 얻는다. 경로에 사용자 id를 두지 않는다. 판단 순서 때문에 본문은 인증 뒤에 파싱하므로, 리뷰와 달리 `@RequestBody` DTO 바인딩을 쓰지 않는다. 리뷰의 예외 처리기는 리뷰 컨트롤러에만 걸리므로 기록 API 전용 예외 처리기를 둔다 (D-3, D-4)
 - FE에서 화면은 `fe/src/domains/place/ui/thread-storage.ts`로만 thread를 읽고 쓴다. 이 모듈이 비회원 기기 저장과 회원 서버 저장 중 하나를 고르고, 세션별 캐시와 재전송을 맡는다. 이 spec이 place-search spec 53의 "이 모듈만 바꾼다"를 대체하며, place-search 문서는 고치지 않는다 (D-9)
 - thread 모양, `appendTurn`, 형식 검사, 정렬, 시각 문구는 `fe/src/domains/place/model/search-threads.ts`의 순수 함수로 남는다. 목록용 요약 타입과 순수 helper는 더할 수 있다. `model`에는 인증, 네트워크, 재전송을 두지 않는다 (D-9)
-- place 도메인은 auth 도메인을 import하지 않는다. 인증(액세스 토큰, 같은 계정 확인, 세션 변경, 인증 상실)은 app 계층에서 이어 준다(`fe/src/app/place/place-detail-with-reviews.tsx`가 선례) (D-6, D-9)
+- place 도메인은 auth 도메인을 import하지 않는다. 인증(액세스 토큰, 같은 계정 확인, 세션 변경, 인증 상실)은 app 계층에서 이어 준다(`fe/src/app/places/[id]/place-detail-with-reviews.tsx`가 선례) (D-6, D-9)
 - FE는 목록을 그리려고 가짜 turn을 만들거나 모든 thread를 미리 받지 않고, 서버 thread를 기기 시각으로 다시 정렬하지 않는다 (D-9)
 - 새 화면은 만들지 않는다. 로딩과 실패 상태는 기존 최근 검색 시트 안에 두고, 모양은 와이어프레임의 예외 상태와 기존 컴포넌트를 따른다 (D-9)
 - Flyway 마이그레이션 번호는 미리 잡지 않고 MR merge 직전에 develop의 최신 번호 +1로 정한다(지금 develop 최신은 V7) (D-15)
@@ -238,7 +238,7 @@ FE의 저장 위치와 화면 비우기는 세션 키로 정한다(D-6).
   - 형식: 400(id 형식, 경로와 본문 id 불일치, 최상위 모르는 필드, `kind`, `null` `baseId`, 소수·음수·범위 밖 `at`, 빈 질문과 NBSP·전각 공백만 있는 질문, 201자 질문, 음수·소수 `totalCount`, `cursor`·`nextCursor` 키, 값과 키의 `\u0000`, 짝이 없는 서로게이트), 그리고 400·409와 동시 첫 생성의 키 충돌 때 앱 로그에 본문 없음.
   - 응답: 성공 응답 모양, 핸들러가 만드는 오류 응답까지 `no-store`, 탈퇴하면 그 회원의 기록만 지워짐과 탈퇴·저장 동시 요청 뒤 기록 없음, 회원 행 삭제 때 함께 삭제. 회원 행 삭제 테스트는 CASCADE가 없는 다른 FK(`auth_refresh_tokens`, `reviews`)에 걸리지 않게 토큰과 리뷰가 없는 사용자로 하거나 그 행을 먼저 지운다.
   - 잡지 못하는 것: edge의 413(`infra/edge/test/test-edge.sh`가 맡는다). Prior art: `be/src/test/java/kr/co/fitdining/api/review/ReviewPersistenceTest.java`(`PostgresTestSupport`, `Withdrawal`).
-- **FE 저장소 모듈** (example), AC-3, AC-9, AC-18, AC-21, AC-22, AC-23: jsdom Vitest에서 `thread-storage`와 app 계층의 인증 연결을 실제로 돌리고, 기록 API 응답과 `auth-client`(세션, 복원, 갱신, `subscribe`)는 가짜로 둔다(`with-optional-access-token.test.ts`처럼 `auth-client`를 모듈째 mock한다). 같은 id 재전송, thread 안 순서대로 하나씩, 정해진 횟수, 409 `conflict` 뒤 계속, 다른 4xx 뒤 그 thread 멈춤(다른 thread는 계속), 고아 turn 없음, 처음 토큰과 갱신 결과가 다른 계정이면 보내지 않음, 세션 키가 바뀌면 대기분 버림, 대기분을 기기 저장소에 쓰지 않음, 회원 thread를 기기에 쓰지 않음, 세션 키 "모름"(복원 시간 초과, 네트워크 오류)이면 어디에도 저장하지 않고 확인된 뒤에도 화면은 비우지 않음, 세션 없음이 확인된 뒤 `subscribe` 알림이 와도 다시 복원하지 않음, 만료가 아닌 401이면 이 탭의 세션만 지움, 페이지 종료 신호 뒤 대기분을 보내지 않음, 비회원은 기록 API 미호출과 자동 삭제 없음, 옛 키 삭제, 저장소 예외·깨진 값·가득 찬 경우. 잡지 못하는 것: 실제 서버의 동시성. Prior art: `fe/src/app/place/with-optional-access-token.test.ts`, `fe/src/domains/place/ui/search-screen.test.tsx`.
+- **FE 저장소 모듈** (example), AC-3, AC-9, AC-18, AC-21, AC-22, AC-23: jsdom Vitest에서 `thread-storage`와 app 계층의 인증 연결을 실제로 돌리고, 기록 API 응답과 `auth-client`(세션, 복원, 갱신, `subscribe`)는 가짜로 둔다(`with-optional-access-token.test.ts`처럼 `auth-client`를 모듈째 mock한다). 같은 id 재전송, thread 안 순서대로 하나씩, 정해진 횟수, 409 `conflict` 뒤 계속, 다른 4xx 뒤 그 thread 멈춤(다른 thread는 계속), 고아 turn 없음, 처음 토큰과 갱신 결과가 다른 계정이면 보내지 않음, 세션 키가 바뀌면 대기분 버림, 대기분을 기기 저장소에 쓰지 않음, 회원 thread를 기기에 쓰지 않음, 세션 키 "모름"(복원 시간 초과, 네트워크 오류)이면 어디에도 저장하지 않고 확인된 뒤에도 화면은 비우지 않음, 세션 없음이 확인된 뒤 `subscribe` 알림이 와도 다시 복원하지 않음, 만료가 아닌 401이면 이 탭의 세션만 지움, 페이지 종료 신호 뒤 대기분을 보내지 않음, 비회원은 기록 API 미호출과 자동 삭제 없음, 옛 키 삭제, 저장소 예외·깨진 값·가득 찬 경우. 잡지 못하는 것: 실제 서버의 동시성. Prior art: `fe/src/app/places/[id]/with-optional-access-token.test.ts`, `fe/src/domains/place/ui/search-screen.test.tsx`.
 - **FE 검색 화면** (example), AC-3, AC-5, AC-7, AC-8, AC-19, AC-20, AC-21, AC-23, AC-24 (46번 상세 카드는 기존 `place-detail-screen.test.tsx`로): jsdom에서 실제 store와 쿼리 캐시로 `SearchScreen`을 돌린다. 세션 전환 사례는 `providers.tsx`의 비우기 연결까지 함께 그린다.
   - 세션: 로그아웃, 다른 계정, 같은 사용자 새 세션, 비회원 로그인, 최종 401 때 비우기. 검색 화면이 없을 때 바뀌어도 장소 상세 화면(`use-stored-card`)에 이전 카드가 보이지 않음. 늦은 검색·다음 페이지·thread 읽기·저장 응답 버리기. 비회원 때 시작한 검색이 로그인 뒤 끝나면 화면에도 기록에도 남지 않음. 토큰 갱신 때 화면 유지.
   - 저장 대상: 다음 페이지, "근처 맛집", 실패하거나 버린 검색은 저장 호출 없음. 저장 실패 때 검색 유지와 실패 알림 없음.

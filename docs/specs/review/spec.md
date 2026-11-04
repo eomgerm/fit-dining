@@ -15,7 +15,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 2. Walking Skeleton은 방문일이 없고 작성일을 보인다. 1차 후속의 방문일은 KST 날짜이고 범위는 `오늘 - 1개월` 이상 `오늘` 이하이며 서버가 `Clock`으로 계산한다(D-4).
 3. 이유 태그는 1차 후속에서 붙는다. 태그는 공용 특징 코드를 참조한다(D-16). 태그 목록, 문구, 업종별 노출은 아직 확정되지 않아 임시 시드로 진행하고, 확정되면 시드만 바꾼다(D-5).
 4. 오류 응답, 입력 검증, 알 수 없는 속성 거부, null 필드 생략, 로그 규칙은 팀 BE 컨벤션(`be/docs/convention.md`)을 따른다. 오류는 리뷰 기능의 예외 처리 클래스가 ProblemDetail로 바꾸고, 형식 검증은 Bean Validation으로 한다(D-20).
-5. FE는 데이터를 브라우저에서 공통 API 클라이언트(`@/shared/api`)와 TanStack Query로 가져오고 서버 전용 기능을 쓰지 않는다. 상대 경로 `/api/v1/...`를 부르고, 로컬 `next dev`에서는 개발 서버 프록시가 BE로 넘긴다(D-31, 검색 D-58). 화면은 공통 UI 컴포넌트(`@/shared/ui`)와 디자인 토큰으로 그린다(D-31).
+5. FE는 데이터를 브라우저에서 공통 API 클라이언트(`@/shared/api`)와 TanStack Query로 가져온다. 작성·수정 페이지는 서버에서 주소의 id만 검사해 잘못되면 `notFound()`를 부른다(검색 D-106). 상대 경로 `/api/v1/...`를 부르고, 로컬 `next dev`에서는 개발 서버 프록시가 BE로 넘긴다(D-31, 검색 D-58). 화면은 공통 UI 컴포넌트(`@/shared/ui`)와 디자인 토큰으로 그린다(D-31).
 6. 장소 ID는 검색 spec과 같은 정수다. Walking Skeleton은 장소 존재를 확인하지 않는다. 1차 후속부터 장소의 존재 여부와 이름·업종·역은 장소 기능의 조회 인터페이스로 확인한다(D-21, D-22). `reviews.place_id`는 `places`를 FK로 가리킨다(D-49).
 7. 취향·장소 분석·검색 색인은 1차 후속부터 리뷰의 상태 시각과 `updated_at`으로 변경을 가져간다. 서버 안의 일괄 처리는 리뷰 테이블을 직접 조회할 수 있고, Modal에서 도는 AI가 읽는 경로는 AI·인프라 담당과 정한다(D-34). Walking Skeleton의 리뷰는 익명이고 이유 태그가 없어 취향 보정에 쓰이지 않는다(D-27).
 8. 위치 확인은 기기에서만 계산하며 BE API가 없다(D-12).
@@ -26,14 +26,14 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 Walking Skeleton
 
 1. **리뷰 목록**: 장소 상세의 홈 탭은 "리뷰 12 >" 아래 최신 3건을 보이고, 이 머리글을 누르면 리뷰 탭이 열린다(6-01). 리뷰 탭은 `GET /api/v1/places/{placeId}/reviews`로 첫 페이지와 `totalCount`를 받아 작성일과 본문을 최신순으로 그리고, 목록 끝이 보이면 다음 페이지를 커서로 받는다(D-24, D-32).
-2. **작성**: 장소 상세 하단 막대의 "방문 평가 남기기"를 누르면 로그인 없이 작성 화면(`/place/review?id=`)이 열린다. 본문을 입력하고(비워도 된다) "등록하기"를 누르면 `POST /api/v1/places/{placeId}/reviews`가 한 번 나가고, 성공하면 "리뷰가 등록됐어요" 토스트와 함께 들어오기 전의 장소 상세로 돌아가 새 리뷰가 리뷰 탭 맨 위와 홈 미리보기 첫 줄에 보인다(D-6, D-32).
+2. **작성**: 장소 상세 하단 막대의 "방문 평가 남기기"를 누르면 로그인 없이 작성 화면(`/places/<placeId>/review`)이 열린다. 본문을 입력하고(비워도 된다) "등록하기"를 누르면 `POST /api/v1/places/{placeId}/reviews`가 한 번 나가고, 성공하면 "리뷰가 등록됐어요" 토스트와 함께 들어오기 전의 장소 상세로 돌아가 새 리뷰가 리뷰 탭 맨 위와 홈 미리보기 첫 줄에 보인다(D-6, D-32).
 
 1차 후속
 
-3. **작성 흐름**: 같은 작성 화면(`/place/review?id=`)이 Figma 2단계 흐름으로 바뀐다. 비회원이 "방문 평가 남기기"를 누르면 로그인 안내(6-E05)가 뜨고 "로그인"을 고르면 로그인 화면으로 가고, 로그인하면 그 장소 상세로 돌아온다(D-47, D-48). 작성 진입 때 `GET /api/v1/places/{placeId}/review-form`으로 작성 화면 데이터를 먼저 받고, 오늘 쓴 장소가 아니면 위치를 확인한다. 오늘 이미 리뷰를 썼으면 7-E01 모달, 근처 확인에 실패하면 7-E02 모달이 장소 상세 위에 뜬다(D-43). 작성은 Figma 2단계 흐름이다. 1/2단계에서 방문일과 좋았던 점(1개 이상), 아쉬웠던 점(선택)을 고르고, 2/2단계에서 재방문 의사, 본문, 사진, 1인당 금액을 입력한다. 같은 방문일로 이미 썼으면 409를 받아 방문일을 바꾸라고 안내한다(D-28, D-5, D-31, D-12).
+3. **작성 흐름**: 같은 작성 화면(`/places/<placeId>/review`)이 Figma 2단계 흐름으로 바뀐다. 비회원이 "방문 평가 남기기"를 누르면 로그인 안내(6-E05)가 뜨고 "로그인"을 고르면 로그인 화면으로 가고, 로그인하면 그 장소 상세로 돌아온다(D-47, D-48). 작성 진입 때 `GET /api/v1/places/{placeId}/review-form`으로 작성 화면 데이터를 먼저 받고, 오늘 쓴 장소가 아니면 위치를 확인한다. 오늘 이미 리뷰를 썼으면 7-E01 모달, 근처 확인에 실패하면 7-E02 모달이 장소 상세 위에 뜬다(D-43). 작성은 Figma 2단계 흐름이다. 1/2단계에서 방문일과 좋았던 점(1개 이상), 아쉬웠던 점(선택)을 고르고, 2/2단계에서 재방문 의사, 본문, 사진, 1인당 금액을 입력한다. 같은 방문일로 이미 썼으면 409를 받아 방문일을 바꾸라고 안내한다(D-28, D-5, D-31, D-12).
 4. **목록**: 리뷰 탭(6-03)에서 작성일 대신 방문일이 보이고 닉네임, 재방문 의사, 태그, 사진이 더해진다. 본인 리뷰는 닉네임 옆에 "내 리뷰" 태그가 붙고(6-06), 탈퇴한 회원의 리뷰는 "탈퇴한 회원"으로 보인다. 본인 리뷰에는 수정·삭제, 남의 리뷰에는 신고 메뉴가 뜬다(D-24, D-42).
 5. **사진**: 사진을 고르면 앱이 1,600px 사진과 썸네일 두 벌을 JPEG로 다시 만들어(EXIF 제거, 용량이 넘으면 품질과 크기를 낮춰 맞춘다) `POST /api/v1/review-photos/upload-urls`로 받은 주소에 바로 올린다. 등록·수정 요청에는 업로드 id(남길 사진은 사진 id)만 담고, BE는 확정할 때 새 사진 id를 매긴다. 목록은 썸네일 줄을 보이고 누르면 1,600px 사진을 넘겨 본다. 리뷰를 지우면 사진도 지운다(D-9, D-45).
-6. **수정·삭제**: 내 리뷰의 ⋯ 메뉴(6-06)에서 "수정하기"를 누르면 수정 화면(`/place/review/edit?id=<placeId>&review=<reviewId>`, 6-07)이 열린다. `GET /api/v1/reviews/{reviewId}`로 본문을 받아 고치고 `PATCH`로 보내면 "리뷰를 수정했어요" 토스트와 함께 장소 상세로 돌아간다. 본인 리뷰는 본문과 사진만 고칠 수 있다. "삭제하기"는 확인(6-08) 뒤 `DELETE`를 보내고, 목록을 다시 받아 리뷰가 빠지면 "리뷰를 삭제했어요" 토스트(6-09)가 뜬다. 같은 방문일로 다시 쓸 수 있다(D-28, D-6, D-44).
+6. **수정·삭제**: 내 리뷰의 ⋯ 메뉴(6-06)에서 "수정하기"를 누르면 수정 화면(`/places/<placeId>/reviews/<reviewId>/edit`, 6-07)이 열린다. `GET /api/v1/reviews/{reviewId}`로 본문을 받아 고치고 `PATCH`로 보내면 "리뷰를 수정했어요" 토스트와 함께 장소 상세로 돌아간다. 본인 리뷰는 본문과 사진만 고칠 수 있다. "삭제하기"는 확인(6-08) 뒤 `DELETE`를 보내고, 목록을 다시 받아 리뷰가 빠지면 "리뷰를 삭제했어요" 토스트(6-09)가 뜬다. 같은 방문일로 다시 쓸 수 있다(D-28, D-6, D-44).
 7. **신고와 운영**: 회원은 남의 리뷰 ⋯ 메뉴의 "신고하기"(6-10)에서 사유를 골라 신고하고(6-11) 토스트를 본다(6-12, 6-E06). 로그인하지 않았으면 ⋯에 "신고하기"만 있고, 누르면 로그인 안내(6-E05)가 뜨며 "로그인"을 고르면 로그인 화면으로 가고, 로그인하면 그 장소 상세로 돌아온다. 운영자는 관리자 API로 숨김, 분석 제외, 작성 차단과 각 해제를 하고 처리 기록이 남는다(D-11, D-46, D-47, D-48).
 
 ## Acceptance criteria
@@ -89,12 +89,12 @@ Walking Skeleton
 | `be/src/main/resources/application.yml#review` (`review.mock.enabled`), `be/.env.example` (리뷰 Mock 스위치. 다른 기능 파일과 함께 지웠다) | delete | WS | D-27, D-35 |
 | `be/src/main/java/kr/co/fitdining/api/review/ReviewService.java#ReviewService.list` (작성자와 태그를 페이지 단위로 읽는다) | modify | 1차 | D-42 |
 | `be/src/main/java/kr/co/fitdining/api/review/store/ReviewRepository.java#ReviewRepository.findTags` | new | 1차 | D-42 |
-| `fe/src/app/place/review/page.tsx#ReviewWritePage` (2단계 흐름 `ReviewForm`을 그린다) | new | WS | D-31, D-41 |
+| `fe/src/app/places/[id]/review/page.tsx#ReviewWritePage` (2단계 흐름 `ReviewForm`을 그린다) | new | WS | D-31, D-41 |
 | `fe/src/domains/auth/api/with-access-token.ts#withAccessToken` (등록 요청에 AT를 붙이고 만료면 한 번 갱신. S15P31A302-104가 인증 도메인으로 옮겼다) | new | 1차 | D-35 |
-| `fe/src/app/place/with-optional-access-token.ts#withOptionalAccessToken` (목록 요청에 세션이 있을 때만 AT를 붙인다) | new | 1차 | D-42 |
+| `fe/src/app/places/[id]/with-optional-access-token.ts#withOptionalAccessToken` (목록 요청에 세션이 있을 때만 AT를 붙인다) | new | 1차 | D-42 |
 | `fe/src/domains/review/ui/review-list-view.tsx#ReviewListView` (6-03 항목) | modify | 1차 | D-24, D-42 |
 | `fe/src/domains/place/ui/place-detail-screen.tsx#PlaceDetailSlots` (검색 담당의 상세 화면에 리뷰 탭과 세 자리의 렌더 함수 props를 연다) | modify | WS | D-32 |
-| `fe/src/app/place/place-detail-with-reviews.tsx#PlaceDetailWithReviews` (세 자리를 리뷰 컴포넌트로 채운다. `app/place/page.tsx`가 그린다. 로그인 안내의 "로그인"은 돌아올 주소를 남긴다) | new | WS | D-32, D-48 |
+| `fe/src/app/places/[id]/place-detail-with-reviews.tsx#PlaceDetailWithReviews` (세 자리를 리뷰 컴포넌트로 채운다. `app/places/[id]/page.tsx`가 그린다. 로그인 안내의 "로그인"은 돌아올 주소를 남긴다) | new | WS | D-32, D-48 |
 | `fe/src/domains/review/ui/review-section.tsx#ReviewSection` (리뷰 탭 목록, `onShowAll`을 주면 홈 탭 미리보기) | new | WS | D-24, D-32 |
 | `fe/src/domains/review/api/review-api.ts#createReview` | new | WS | D-31 |
 | `fe/src/domains/review/model/review.ts#reviewWriteHref` | new | WS | D-31 |
@@ -115,7 +115,7 @@ Walking Skeleton
 | `be/src/main/java/kr/co/fitdining/api/review/dto/ReviewDetailResponse.java#ReviewDetailResponse`, `ReviewUpdateRequest.java#ReviewUpdateRequest` | new | 1차 | D-44 |
 | `fe/src/domains/review/ui/review-section.tsx#ReviewSection` (내 리뷰 ⋯ 메뉴, 삭제 확인 6-08과 토스트 6-09) | modify | 1차 | D-44 |
 | `fe/src/domains/review/ui/review-edit-form.tsx#ReviewEditForm` (수정 화면 6-07, 6-E07) | new | 1차 | D-44 |
-| `fe/src/app/place/review/edit/review-edit-screen.tsx#ReviewEditScreen`, `fe/src/app/place/review/review-screen.ts#useSignedIn` (작성·수정 화면의 세션 확인, 돌아올 주소 남기기, 나가기) | new | 1차 | D-44, D-48 |
+| `fe/src/app/places/[id]/reviews/[reviewId]/edit/review-edit-screen.tsx#ReviewEditScreen`, `fe/src/app/places/[id]/review-screen.ts#useSignedIn` (작성·수정 화면의 세션 확인, 돌아올 주소 남기기, 나가기) | new | 1차 | D-44, D-48 |
 | `be/src/main/java/kr/co/fitdining/api/review/ReviewService.java#ReviewService.report`, `review/report/ReviewReport.java`, `be/src/main/resources/db/migration/V8__create_review_reports.sql` | new | 1차 | D-11, D-46 |
 | `fe/src/domains/review/ui/review-report-sheet.tsx#ReviewReportSheet` (6-11), `review-section.tsx#ReviewSection` (로그인 확인 뒤 로그인 안내 6-E05 또는 시트), `report-failure.ts#reportFailure` (6-E06) | new | 1차 | D-46, D-47 |
 | `fe/src/domains/review/ui/review-list-view.tsx#ReviewMenu` (내 리뷰는 수정·삭제, 남의 리뷰와 비로그인은 신고) | modify | 1차 | D-46 |
@@ -130,7 +130,7 @@ Walking Skeleton
 | `fe/src/domains/review/ui/review-photo-viewer.tsx#ReviewPhotoStrip` (목록 썸네일과 크게 보기) | new | 1차 | D-45, D-54 |
 | `fe/next.config.ts#rewrites` (`/fit-dev-photos/*`), `fe/src/app/photos/[env]/confirmed/[name]/route.ts#GET` (로컬 사진 읽기) | new | 1차 | D-45 |
 
-BE는 팀이 정한 루트 패키지 `kr.co.fitdining.api`(검색 D-32) 아래 `review`에 두고, DTO는 `review.dto`에 둔다(D-23). 모듈 경계 규칙이 정해지면 그에 맞춘다. FE는 master의 공통 구조(`app → domains → shared`)를 따라 리뷰 코드를 `src/domains/review`에 둔다. 장소 상세는 검색 담당이 만들고(`src/domains/place`), 리뷰 담당이 상세 화면에 리뷰 자리 세 곳(`slots`)을 렌더 함수 props로 열어 `src/app/place/place-detail-with-reviews.tsx`에서 `ReviewSection`(리뷰 탭, `onShowAll`을 주면 홈 탭 미리보기)과 `ReviewEntryButton`(하단 버튼, 위치 확인 뒤 `reviewWriteHref`로 간다)으로 채운다. 도메인끼리는 import하지 않기 때문이다. 작성 화면(`src/app/place/review`)은 리뷰 담당이 만든다(D-32).
+BE는 팀이 정한 루트 패키지 `kr.co.fitdining.api`(검색 D-32) 아래 `review`에 두고, DTO는 `review.dto`에 둔다(D-23). 모듈 경계 규칙이 정해지면 그에 맞춘다. FE는 master의 공통 구조(`app → domains → shared`)를 따라 리뷰 코드를 `src/domains/review`에 둔다. 장소 상세는 검색 담당이 만들고(`src/domains/place`), 리뷰 담당이 상세 화면에 리뷰 자리 세 곳(`slots`)을 렌더 함수 props로 열어 `src/app/places/[id]/place-detail-with-reviews.tsx`에서 `ReviewSection`(리뷰 탭, `onShowAll`을 주면 홈 탭 미리보기)과 `ReviewEntryButton`(하단 버튼, 위치 확인 뒤 `reviewWriteHref`로 간다)으로 채운다. 도메인끼리는 import하지 않기 때문이다. 작성 화면(`src/app/places/[id]/review`)은 리뷰 담당이 만든다(D-32).
 
 ## Interfaces
 
