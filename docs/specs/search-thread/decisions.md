@@ -103,7 +103,7 @@ Jira: S15P31A302-116 "검색 기록(thread) 서버 저장". 2026-10-29 grill 두
   - **언제 비우나:** 세션 키가 바뀌는 그 자리에서 app 계층이 바로 비운다. 장소 상세 화면도 최신 카드를 직접 읽으므로 검색 화면이 떠 있지 않아도 비워야 한다. 그래서 비우기는 모든 페이지를 감싸는 app 계층(쿼리 클라이언트를 가진 `fe/src/app/providers.tsx`)에 두고, 검색 화면 상태(`searchStore`)에는 비우는 기능을 더한다. 검색 화면이 뜰 때 세션 키를 다시 비교하는 것은 보조다.
   - **늦은 응답:** 바뀌기 전에 시작한 검색, 다음 페이지, thread 읽기, 저장은 끝나도 새 상태를 바꾸지 못하고 저장되지도 않는다. 비회원일 때 시작한 검색의 응답이 로그인 뒤에 오면 화면에도 기록에도 남기지 않는다. 요청을 취소하는 것만으로 끝내지 않고, 응답이 끝날 때 다시 확인한다.
 - Rejected: 로그아웃 때 세션만 지우기(지금, `fe/src/domains/auth/api/auth-client.ts`) → 같은 기기의 다음 사람이 이전 사람의 결과를 본다.
-- Reuse: `fe/src/domains/auth/api/auth-client.ts#subscribe` (reuse) — 세션 변경 감지, app 계층에서 place에 이어 준다 · `fe/src/app/home-entry.tsx#HomeEntry` (modify) — 검색 화면에 인증을 이어 준다 · `fe/src/app/providers.tsx#Providers` (modify) — 세션이 바뀌면 어느 페이지에서든 쿼리 캐시와 검색 화면 상태를 비운다 · `fe/src/domains/place/model/search-store.ts#createSearchStore` (modify) — 검색 화면 상태를 처음으로 되돌리는 기능
+- Reuse: `fe/src/domains/auth/api/auth-client.ts#subscribe` (reuse) — 세션 변경 감지, app 계층에서 place에 이어 준다 · `fe/src/app/home/home-screen.tsx#HomeScreen` (modify) — 검색 화면에 인증을 이어 준다 · `fe/src/app/providers.tsx#Providers` (modify) — 세션이 바뀌면 어느 페이지에서든 쿼리 캐시와 검색 화면 상태를 비운다 · `fe/src/domains/place/model/search-store.ts#createSearchStore` (modify) — 검색 화면 상태를 처음으로 되돌리는 기능
 
 ## D-7 순서와 표시
 - Status: settled

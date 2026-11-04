@@ -212,7 +212,7 @@ FE의 저장 위치와 화면 비우기는 세션 키로 정한다(D-6).
 | `be/src/main/java/kr/co/fitdining/api/auth/presentation/AuthWebConfiguration.java#AuthWebConfiguration` | modify | 기록 API의 모든 응답에도 `Cache-Control: no-store`가 붙게 한다(다른 방법으로 붙여도 된다) | D-3 |
 | `fe/src/domains/auth/api/auth-client.ts#subscribe` | reuse | `getSession()`의 세션 키 변화로 세션 전환을 알아챈다 | D-6 |
 | `fe/src/domains/auth/api/with-access-token.ts#withAccessToken` | reuse | 회원 기록 요청에 토큰을 붙이고 만료 때 한 번 갱신한다. 같은 계정 확인은 하지 않으므로 app 계층이 시작할 때의 세션 키와 비교한다 | D-5, D-9 |
-| `fe/src/app/home-entry.tsx#HomeEntry` | modify | 검색 화면에 인증(토큰, 같은 계정 확인, 인증 상실)을 이어 준다 | D-6 |
+| `fe/src/app/home/home-screen.tsx#HomeScreen` | modify | 검색 화면에 인증(토큰, 같은 계정 확인, 인증 상실)을 이어 준다 | D-6 |
 | `fe/src/app/providers.tsx#Providers` | modify | 세션 키가 바뀌면 어느 페이지에서든 쿼리 캐시 전체와 검색 화면 상태, 재전송 대기분을 바로 비운다 | D-6 |
 | `fe/src/domains/place/model/search-store.ts#createSearchStore` | modify | 검색 화면 상태를 처음으로 되돌리는 기능을 더한다(현재 위치는 남긴다) | D-6 |
 | `fe/src/domains/place/ui/thread-storage.ts#saveThread` | modify | 저장소 선택(비회원 기기, 회원 서버), turn 추가, 세션별 캐시, 재전송을 이 모듈 안으로 옮긴다. 비회원 기기 저장은 새 키를 쓰고 옛 키를 지운다 | D-5, D-8, D-9 |

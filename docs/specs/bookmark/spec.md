@@ -154,7 +154,7 @@ CREATE TABLE bookmarks (
 | `fe/src/domains/place/ui/place-detail-screen.tsx#PlaceDetailScreen` | modify | 하단 막대 북마크 버튼의 "준비 중" 토스트를 저장·해제와 로그인 안내로 바꾸고, `from=saved`면 핏 점수와 추천 이유를 숨긴다. 공유 버튼은 그대로 | D-5, D-7, D-10, D-12 |
 | `fe/src/app/places/[id]/place-detail-with-reviews.tsx#PlaceDetailWithReviews` | modify | 장소 상세에 북마크의 인증 호출과 세션 상태를 이어 준다(app 계층) | D-5 |
 | `fe/src/domains/place/ui/search-screen.tsx#SearchScreen` | modify | "저장한 장소" 버튼의 "준비 중" 토스트를 저장한 장소 화면과 로그인 안내로 바꾸고, 메인에 `/?view=saved` 상태를 더한다 | D-7, D-12 |
-| `fe/src/app/home-entry.tsx#HomeEntry` | modify | 메인에 북마크의 인증 호출과 세션 상태를 이어 주고, 홈 도착 때 sessionStorage에 남은 주소로 한 번 보낸다. 온보딩 게이트는 그대로 | D-8, D-12 |
+| `fe/src/app/home/home-screen.tsx#HomeScreen` | modify | 메인에 북마크의 인증 호출과 세션 상태를 이어 주고, 홈 도착 때 sessionStorage에 남은 주소로 한 번 보낸다. 온보딩 게이트는 그대로 | D-8, D-12 |
 | `fe/src/app/my/page.tsx#MyPage` | modify | "저장한 장소" 메뉴의 토스트만 `/?view=saved` 열기로 바꾼다 | D-9 |
 | `be/src/main/java/kr/co/fitdining/api/bookmark/BookmarkService.java#save` | modify | 저장 중 장소 FK 위반을 `PlaceNotFoundException`(404)으로 바꾼다. 그 밖의 동작은 그대로 | D-1 |
 | `be/src/test/java/kr/co/fitdining/api/bookmark/BookmarkPersistenceTest.java#BookmarkPersistenceTest` | modify | 장소 FK가 요구하는 시험 장소 행을 넣는다. 확인하는 성질은 줄이지 않는다 | D-16 |
@@ -170,7 +170,7 @@ CREATE TABLE bookmarks (
 - FE 저장한 장소 화면 (example, jsdom), AC-17, AC-19, AC-20, AC-21, AC-22, AC-23, AC-24, AC-25, AC-26, AC-28: 메인 화면을 그리고 목록 API, 세션, 주소를 대역으로 두어 버튼이 `/?view=saved`로 가는지와 그 주소·`category`로 직접 들어온 경우, 비로그인 메인 버튼과 비로그인 직접 진입의 안내 창 문구와 목록 미요청, 숨긴 검색창·버튼, 핀·카드에 저장 장소만 있는지, 검색 결과가 늦게 와도 화면 유지와 메인 선택 불변, [뒤로]의 앱 안·밖 진입별 행선지와 검색 기록 미기록, 진입마다 다시 받기와 로딩, 카드 내용과 빠지는 값, 카드가 `from=saved`로 상세를 여는지, 업종 탭 거르기·개수·조사·주소 반영, 0개와 [추천 받으러 가기], 서버·시간 초과·연결 실패와 다시 시도, 목록 401, 다시 그렸을 때 탭·패널 유지와 해제 반영을 본다. 기존 "준비 중이에요" 단언 테스트는 새 동작으로 바꾼다. 놓치는 것: 지도 핀의 실제 모양, 라우트를 실제로 오가는 [뒤로]. Prior art: `fe/src/domains/place/ui/search-screen.test.tsx`.
 - FE 목록에서 해제 (example, jsdom), AC-32: 같은 `saved-places.test.tsx`에서 ⋯ 메뉴의 [해제]가 확인 창 없이 `DELETE`를 보내고 목록을 다시 받지 않은 채 카드와 개수를 줄이는지, 마지막 장소면 빈 상태, 실패면 카드 유지와 토스트, 401이면 세션 종료와 로그인 안내를 본다.
 - 목록에서 해제 로컬 확인 (manual, 2026-11-03), AC-32: local DB 모드, 375px에서 저장한 장소 2곳 중 식당의 ⋯ → [해제]를 누르면 확인 창 없이 `DELETE`가 204이고, 목록을 다시 받지 않은 채 카드가 빠지고 개수가 2→1이며 "저장을 해제했어요" 토스트가 떴다. [식당] 탭은 "저장한 식당이 없어요", 그 장소 상세는 빈 "저장" 버튼이었다. 남은 카페도 해제하면 빈 상태 화면이 보였다. 실패 토스트와 401은 FE 테스트로만 확인했다.
-- FE 내 정보와 로그인 뒤 복귀 (example, jsdom), AC-18, AC-27: 내 정보 메뉴가 `/?view=saved`로 가는지, 홈 도착 때 로그인된 상태면 남은 주소로 한 번만 `replace`하고 지우는지, 로그인 없이 왔거나 10분이 지났거나 다른 출처 경로(`//…`, `/\…`, `https://…`)면 따르지 않는지, 온보딩 게이트가 그대로인지 본다. 기존 내 정보의 "준비 중이에요" 단언 테스트는 새 동작으로 바꾼다. Prior art: `fe/src/app/my/page.test.tsx`, `fe/src/app/onboarding.test.tsx`(HomeEntry).
+- FE 내 정보와 로그인 뒤 복귀 (example, jsdom), AC-18, AC-27: 내 정보 메뉴가 `/?view=saved`로 가는지, 홈 도착 때 로그인된 상태면 남은 주소로 한 번만 `replace`하고 지우는지, 로그인 없이 왔거나 10분이 지났거나 다른 출처 경로(`//…`, `/\…`, `https://…`)면 따르지 않는지, 온보딩 게이트가 그대로인지 본다. 기존 내 정보의 "준비 중이에요" 단언 테스트는 새 동작으로 바꾼다. Prior art: `fe/src/app/my/page.test.tsx`, `fe/src/app/home/home-screen.test.tsx`(HomeScreen).
 - 수동 (manual), AC-28, AC-29: 두 계정으로 local에서 저장·해제·계정 전환·로그인 복귀(이메일, D-11)·브라우저 [뒤로]를 직접 하고, 화면을 와이어프레임과 비교하며, 공유 버튼과 내 정보 버튼이 그대로인지 본다.
 
 ## Out of scope

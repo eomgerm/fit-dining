@@ -404,6 +404,7 @@ V2에서 `auth_users.deleted_at` 및 활성 이메일·닉네임 부분 유일 �
 | `fitdining_oauth` | provider, state, verifier, from을 서명한 `oauth_state` JWT | HttpOnly, Secure=`AUTH_COOKIE_SECURE`, SameSite=Lax, Path=/api/auth/oauth | 10분, 콜백 즉시 삭제 |
 | `fitdining_social` | provider, providerUserId를 서명한 `social_signup` JWT | HttpOnly, Secure=`AUTH_COOKIE_SECURE`, SameSite=Strict, Path=/api/auth/social | 10분, 가입 성공 시 삭제 |
 | `fitdining_rt` | 기존 refresh JWT | 기존 속성 유지 | 기존 절대 만료 24시간 |
+| `fd_signed_in` | 값 `1`. FE가 심는 로그인 표시로 홈(`/`)의 화면 선택에만 쓴다. 인증에는 쓰지 않는다(docs/onboarding/01_onboarding.md FE 흐름) | JS가 심음, Secure=https일 때, SameSite=Lax, Path=/ | 세션 만료까지. 소셜 버튼을 누를 때는 10분 |
 
 `V3__social_login.sql`은 `auth_users.email/password_hash`를 함께 NULL일 수 있게 하고 한쪽만 NULL인 경우는 CHECK로 거부한다. `auth_social_accounts`의 복합 PK는 `(provider, provider_user_id)`, `user_id`는 UNIQUE FK다. 기존 닉네임·이메일 제약은 유지한다. 웹에서 마이그레이션하지 않으며 배포 시 `migrate` 프로필을 먼저 실행한다.
 
