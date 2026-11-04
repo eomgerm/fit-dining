@@ -89,12 +89,31 @@ def test_remote_query_sends_raw_text_with_modal_headers(modal):
     assert request.headers["Modal-Secret"] == "secret"
 
 
+@pytest.mark.parametrize("given, expected", [({}, 3.0), ({"timeout": 1.0}, 1.0)])
+def test_remote_query_timeout(modal, given, expected):
+    seen, replies = modal
+    replies.append(embed_reply([[1.0]]))
+
+    embedding.encode_queries(["a"], **given)
+
+    assert seen[0].extensions["timeout"]["read"] == expected
+
+
 def test_documents_stay_local_even_with_remote_set(modal, model):
     # 문서 배치를 Modal로 보내면 비용이 든다(design 12.3절). 로컬 모델만 쓴다
     seen, _ = modal
     embedding.encode_documents(["조용한 곳"])
     assert model.seen == ["조용한 곳"]
     assert seen == []
+
+
+def test_remote_without_retry_fails_on_first_error(modal):
+    seen, replies = modal
+    replies += [httpx.ConnectError("끊김"), embed_reply([[1.0]])]
+
+    with pytest.raises(embedding.EmbeddingUnavailable):
+        embedding.encode_queries(["a"], attempts=1)
+    assert len(seen) == 1
 
 
 def test_remote_retries_once_then_succeeds(modal):

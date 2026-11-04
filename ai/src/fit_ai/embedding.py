@@ -92,7 +92,9 @@ def _failure_kind(e: Exception) -> str:
     return type(e).__name__
 
 
-def _remote_queries(texts: list[str]) -> list[list[float]]:
+def _remote_queries(
+    texts: list[str], timeout: float, attempts: int
+) -> list[list[float]]:
     url = os.environ["EMBED_BASE_URL"].rstrip("/") + "/embed"
     headers = {
         "Modal-Key": os.environ.get("EMBED_KEY", ""),
@@ -100,11 +102,9 @@ def _remote_queries(texts: list[str]) -> list[list[float]]:
     }
     body = {"texts": texts, "kind": "query"}
     kind = ""
-    for attempt in range(1, _ATTEMPTS + 1):
+    for attempt in range(1, attempts + 1):
         try:
-            resp = _client().post(
-                url, json=body, headers=headers, timeout=REMOTE_TIMEOUT_SECONDS
-            )
+            resp = _client().post(url, json=body, headers=headers, timeout=timeout)
             resp.raise_for_status()
             data = resp.json()
             if data["model"] != MODEL_VERSION:
@@ -115,22 +115,27 @@ def _remote_queries(texts: list[str]) -> list[list[float]]:
             return vectors
         except _FAILURES as e:  # 실패 종류만 남긴다. 메시지에 요청문이 섞일 수 있다
             kind = _failure_kind(e)
-            log.warning("임베딩 호출 실패(%d/%d): %s", attempt, _ATTEMPTS, kind)
+            log.warning("임베딩 호출 실패(%d/%d): %s", attempt, attempts, kind)
             if isinstance(e, httpx.TimeoutException):
                 break
     raise EmbeddingUnavailable(kind)
 
 
-def encode_queries(texts: list[str]) -> list[list[float]]:
+def encode_queries(
+    texts: list[str],
+    timeout: float = REMOTE_TIMEOUT_SECONDS,
+    attempts: int = _ATTEMPTS,
+) -> list[list[float]]:
     """검색하는 쪽 문장(요청문, 취향 문구). 앞에 `query: `를 붙인다.
 
     `EMBED_BASE_URL`이 있으면 Modal을 부르고 접두사는 Modal 쪽이 붙인다. 원격 호출이
-    두 번 실패하면 `EmbeddingUnavailable`을 낸다.
+    두 번 실패하면 `EmbeddingUnavailable`을 낸다. `timeout`은 원격 호출 한 번의 단계별 대기 시간,
+    `attempts`는 시간 초과가 아닌 실패에서 부르는 최대 횟수다.
     """
     if not texts:
         return []
     if os.environ.get("EMBED_BASE_URL"):
-        return _remote_queries(texts)
+        return _remote_queries(texts, timeout, attempts)
     return encode_queries_locally(texts)
 
 

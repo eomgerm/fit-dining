@@ -7,8 +7,10 @@ import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.IntStream;
 import kr.co.fitdining.api.user.Preferences;
 import kr.co.fitdining.api.user.Preferences.TasteChip;
+import kr.co.fitdining.api.user.StoredTasteChip;
 import kr.co.fitdining.api.user.TasteFeature;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
@@ -57,25 +59,25 @@ public class AiTasteClient {
         return checked(response);
     }
 
-    public List<TasteFeature> profile(Preferences preferences) {
-        // Preferences contains only the four fields accepted by the AI contract.
-        var response = profile.post().uri("/v1/taste/profile").contentType(MediaType.APPLICATION_JSON)
-                .body(preferences).retrieve().body(ProfileResponse.class);
-        return checked(response).features().stream()
-                .map(f -> new TasteFeature(f.code(), f.layer(), f.like(), f.weight())).toList();
-    }
-
     /**
-     * Query embeddings for chip labels, same order as {@code texts}. Uses the profile timeout.
-     * @throws IllegalStateException when the count or a dimension does not match
+     * Features and chip vectors. {@code vectors} follows the chip order; it is kept only on chips that need one.
+     * An AI without the field yields no vectors.
+     * @throws IllegalStateException when the response breaks the contract
      */
-    public List<float[]> vectors(List<String> texts) {
-        var response = checked(profile.post().uri("/v1/taste/vectors").contentType(MediaType.APPLICATION_JSON)
-                .body(Map.of("texts", texts)).retrieve().body(VectorsResponse.class));
-        if (response.vectors().size() != texts.size()
-                || response.vectors().stream().anyMatch(vector -> vector.length != VECTOR_DIMENSION))
+    public TasteProfileService.Profile profile(Preferences preferences) {
+        // Preferences contains only the four fields accepted by the AI contract.
+        var response = checked(profile.post().uri("/v1/taste/profile").contentType(MediaType.APPLICATION_JSON)
+                .body(preferences).retrieve().body(ProfileResponse.class));
+        var chips = preferences.tastes();
+        var vectors = response.vectors();
+        if (vectors != null && (vectors.size() != chips.size()
+                || vectors.stream().anyMatch(vector -> vector != null && vector.length != VECTOR_DIMENSION)))
             throw new IllegalStateException("Invalid AI response");
-        return response.vectors();
+        var tastes = IntStream.range(0, chips.size()).mapToObj(i -> StoredTasteChip.of(chips.get(i),
+                vectors != null && StoredTasteChip.needsVector(chips.get(i)) ? vectors.get(i) : null)).toList();
+        var features = response.features().stream()
+                .map(f -> new TasteFeature(f.code(), f.layer(), f.like(), f.weight())).toList();
+        return new TasteProfileService.Profile(features, tastes);
     }
 
     private <T> T checked(T response) {
@@ -89,6 +91,5 @@ public class AiTasteClient {
     public record Feature(@NotBlank @Pattern(regexp = "^[A-Z][A-Z0-9_]{0,63}$") String code,
             @NotNull @Pattern(regexp = "axis|importance|purpose|food") String layer, @NotNull Boolean like,
             @NotNull @Min(1) @Max(3) Integer weight) {}
-    public record VectorsResponse(@NotNull List<float @NotNull []> vectors) {}
-    public record ProfileResponse(@NotNull List<@NotNull @Valid Feature> features) {}
+    public record ProfileResponse(@NotNull List<@NotNull @Valid Feature> features, List<float[]> vectors) {}
 }

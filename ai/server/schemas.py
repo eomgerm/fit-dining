@@ -23,7 +23,13 @@ from fit_ai.match.interpretation.segments import (
 )
 from fit_ai.match.taste_select import MAX_FREE_TEXT_LENGTH
 from server.common import Body
-from server.taste_profile import PRIORITIES, PURPOSES, ProfileBody, TasteChip
+from server.taste_profile import (
+    PRIORITIES,
+    PURPOSES,
+    VECTOR_SIZE,
+    ProfileBody,
+    TasteChip,
+)
 
 MAX_QUERY_LENGTH = 200
 """요청문 길이 상한. BE 검색 요청과 같다(검색 spec 3번, 인프라 BE 계약 #18)."""
@@ -34,7 +40,6 @@ MAX_USER_ID_LENGTH = 64
 MAX_GUEST_CHIPS = 20
 """비회원 칩 수 상한. 코드가 붙은 칩도 센다(요청당 비용 상한). FE는 10개까지 저장한다."""
 
-VECTOR_SIZE = 1024
 """칩 벡터 길이. 임베딩 모델(arctic-ko)의 벡터 길이이고 DB `vector(1024)`와 같다."""
 
 

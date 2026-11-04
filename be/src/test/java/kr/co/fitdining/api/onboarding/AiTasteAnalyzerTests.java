@@ -65,12 +65,13 @@ class AiTasteAnalyzerTests {
                 {"mood":"QUIET","priorities":[],"purposes":[],
                 "tastes":[{"polarity":"LIKE","label":"quiet","code":"QUIET"}]}
                 """, true)).andRespond(withSuccess("""
-                {"features":[{"code":"QUIET","layer":"axis","like":true,"weight":1}]}
+                {"features":[{"code":"QUIET","layer":"axis","like":true,"weight":1}],"vectors":[null]}
                 """, MediaType.APPLICATION_JSON));
-        var features = client.profile(new Preferences(Preferences.Mood.QUIET, null, null,
+        var profile = client.profile(new Preferences(Preferences.Mood.QUIET, null, null,
                 List.of(new Preferences.TasteChip(Preferences.Polarity.LIKE, "quiet", "QUIET"))));
-        assertEquals("QUIET", features.getFirst().code());
-        assertEquals(1, features.getFirst().weight());
+        assertEquals("QUIET", profile.features().getFirst().code());
+        assertEquals(1, profile.features().getFirst().weight());
+        assertNull(profile.tastes().getFirst().vector());
     }
     @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
@@ -111,30 +112,45 @@ class AiTasteAnalyzerTests {
             assertInstanceOf(java.net.http.HttpTimeoutException.class, failure.getCause());
         } finally { http.stop(0); }
     }
-    static String vectors(int count, int dim) {
-        String vector = "[" + String.join(",", java.util.Collections.nCopies(dim, "0.5")) + "]";
-        return "{\"model\":\"m\",\"vectors\":[" + String.join(",", java.util.Collections.nCopies(count, vector)) + "]}";
+    final Preferences chips = new Preferences(null, null, null, List.of(
+            new Preferences.TasteChip(Preferences.Polarity.LIKE, "soup", null),
+            new Preferences.TasteChip(Preferences.Polarity.LIKE, "quiet", "QUIET"),
+            new Preferences.TasteChip(Preferences.Polarity.DISLIKE, "spicy", null)));
+    static String vector(int dim) {
+        return "[" + String.join(",", java.util.Collections.nCopies(dim, "0.5")) + "]";
     }
-    @Test void vectors_sendsTextsAndReturnsVectorsInOrder() {
-        server.expect(requestTo("http://ai.test/v1/taste/vectors")).andExpect(method(HttpMethod.POST))
-                .andExpect(content().json("{\"texts\":[\"soup\",\"window\"]}", true))
-                .andRespond(withSuccess(vectors(2, 1024), MediaType.APPLICATION_JSON));
-        var result = client.vectors(List.of("soup", "window"));
-        assertEquals(2, result.size());
-        assertEquals(1024, result.getFirst().length);
-        assertEquals(0.5f, result.getFirst()[0]);
+    static String profileWithVectors(String vectors) {
+        return "{\"features\":[]" + (vectors == null ? "" : ",\"vectors\":" + vectors) + "}";
+    }
+    @Test @DisplayName("프로필_코드 없는 좋아함 칩_벡터가 칩 순서대로 붙음")
+    void profile_vectorsFollowChipOrder() {
+        server.expect(anything()).andRespond(withSuccess(
+                profileWithVectors("[" + vector(1024) + ",null,null]"), MediaType.APPLICATION_JSON));
+        var tastes = client.profile(chips).tastes();
+        assertEquals(chips.tastes(), tastes.stream().map(kr.co.fitdining.api.user.StoredTasteChip::chip).toList());
+        assertEquals(1024, tastes.get(0).vector().length);
+        assertEquals(0.5f, tastes.get(0).vector()[0]);
+        assertNull(tastes.get(1).vector());
+        assertNull(tastes.get(2).vector());
+    }
+    @DisplayName("프로필_벡터 필드 없음이나 null_벡터 없이 features만 받음")
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.NullSource
+    @org.junit.jupiter.params.provider.ValueSource(strings = "null")
+    void profile_withoutVectors_keepsFeatures(String vectors) {
+        server.expect(anything()).andRespond(withSuccess(profileWithVectors(vectors), MediaType.APPLICATION_JSON));
+        assertTrue(client.profile(chips).tastes().stream().allMatch(chip -> chip.vector() == null));
+    }
+    @Test @DisplayName("프로필_벡터가 필요 없는 칩에 벡터_저장하지 않음")
+    void profile_vectorOnChipThatNeedsNone_isIgnored() {
+        server.expect(anything()).andRespond(withSuccess(
+                profileWithVectors("[null," + vector(1024) + "," + vector(1024) + "]"), MediaType.APPLICATION_JSON));
+        assertTrue(client.profile(chips).tastes().stream().allMatch(chip -> chip.vector() == null));
     }
     @org.junit.jupiter.params.ParameterizedTest
-    @org.junit.jupiter.params.provider.CsvSource({"1,1024", "2,1023", "2,0"})
-    void vectors_wrongCountOrDimension_throws(int count, int dim) {
-        server.expect(anything()).andRespond(withSuccess(vectors(count, dim), MediaType.APPLICATION_JSON));
-        assertThrows(IllegalStateException.class, () -> client.vectors(List.of("soup", "window")));
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"[]", "[null,null]", "[null,null,null,null]", "[[0.5],null,null]"})
+    void profile_wrongVectorCountOrDimension_throws(String vectors) {
+        server.expect(anything()).andRespond(withSuccess(profileWithVectors(vectors), MediaType.APPLICATION_JSON));
+        assertThrows(IllegalStateException.class, () -> client.profile(chips));
     }
-    @org.junit.jupiter.params.ParameterizedTest
-    @org.junit.jupiter.params.provider.ValueSource(strings = {"{}", "null", "{\"vectors\":[null,null]}"})
-    void vectors_malformed_throws(String body) {
-        server.expect(anything()).andRespond(withSuccess(body, MediaType.APPLICATION_JSON));
-        assertThrows(RuntimeException.class, () -> client.vectors(List.of("soup", "window")));
-    }
-
 }

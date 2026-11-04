@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.UUID;
 import kr.co.fitdining.api.auth.application.*;
 import kr.co.fitdining.api.onboarding.AiTasteClient;
+import kr.co.fitdining.api.onboarding.TasteProfileService;
 import kr.co.fitdining.api.support.PostgresTestSupport;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,17 +27,15 @@ class TasteProfileSignupTests extends PostgresTestSupport {
                     new Preferences.TasteChip(Preferences.Polarity.LIKE, "soup", null)));
     final float[] vector = new float[1024];
     final List<TasteFeature> features = List.of(new TasteFeature("QUIET", "axis", true, 1));
+    final TasteProfileService.Profile profile = new TasteProfileService.Profile(features, List.of(
+            StoredTasteChip.of(answers.tastes().get(0), null), StoredTasteChip.of(answers.tastes().get(1), vector)));
 
     @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
     void signup_callsOnceOutsideTransaction_andPersistsFeatures(boolean socialSignup) {
         when(ai.profile(answers)).thenAnswer(call -> {
             assertFalse(TransactionSynchronizationManager.isActualTransactionActive());
-            return features;
-        });
-        when(ai.vectors(List.of("soup"))).thenAnswer(call -> {
-            assertFalse(TransactionSynchronizationManager.isActualTransactionActive());
-            return List.of(vector);
+            return profile;
         });
         String user = signup(socialSignup);
         verify(ai).profile(answers);
@@ -53,7 +52,6 @@ class TasteProfileSignupTests extends PostgresTestSupport {
     @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
     void signup_aiFailureStillCreatesAccountWithEmptyFeatures(boolean socialSignup) {
         when(ai.profile(answers)).thenThrow(new IllegalStateException("unavailable"));
-        when(ai.vectors(List.of("soup"))).thenThrow(new IllegalStateException("unavailable"));
         String user = signup(socialSignup);
         verify(ai).profile(answers);
         assertEquals(List.of(), preferences.findById(user).orElseThrow().getFeatures());

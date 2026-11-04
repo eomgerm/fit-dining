@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from fit_ai import embedding
 from server.app import create_app
 from server.common import Dependencies
 
@@ -14,8 +15,26 @@ SAMPLES = json.loads(
 )
 
 
-def client() -> TestClient:
-    return TestClient(create_app(Dependencies()), raise_server_exceptions=False)
+VECTOR = [0.5] * 1024
+
+
+def client(**deps: object) -> TestClient:
+    return TestClient(
+        create_app(Dependencies(**deps)),  # type: ignore[arg-type]
+        raise_server_exceptions=False,
+    )
+
+
+@pytest.fixture
+def encoded(monkeypatch: pytest.MonkeyPatch) -> list[tuple[list[str], float, int]]:
+    calls: list[tuple[list[str], float, int]] = []
+
+    def fake(texts: list[str], timeout: float, attempts: int) -> list[list[float]]:
+        calls.append((texts, timeout, attempts))
+        return [VECTOR for _ in texts]
+
+    monkeypatch.setattr(embedding, "encode_queries", fake)
+    return calls
 
 
 def chip(polarity, label, code):
@@ -47,7 +66,7 @@ REQUESTS = {
 def test_features_match_sample_profile(no):
     resp = client().post("/v1/taste/profile", json=REQUESTS[no])
     assert resp.status_code == 200
-    assert resp.json() == {"features": SAMPLES[no]["features"]}
+    assert resp.json()["features"] == SAMPLES[no]["features"]
 
 
 def test_every_be_tag_is_accepted():
@@ -89,14 +108,14 @@ def test_chip_without_code_key_is_accepted():
     # BE는 null 속성을 직렬화하지 않아(jackson non_null) 코드 없는 칩에 code 키가 없다
     body = {"purposes": ["SOLO"], "tastes": [{"polarity": "LIKE", "label": "국물"}]}
     resp = client().post("/v1/taste/profile", json=body)
-    assert resp.json() == {"features": SAMPLES["4"]["features"]}
+    assert resp.json() == {"features": SAMPLES["4"]["features"], "vectors": [None]}
 
 
 def test_tag_and_chip_on_opposite_poles_cancel():
     # 온보딩 조용 + 직접 입력 "활기찬 곳 좋아요"는 소음 취향이 없다(spec 3단계 계산 예)
     body = {"mood": "QUIET", "tastes": [chip("LIKE", "활기찬 곳", "LIVELY")]}
     resp = client().post("/v1/taste/profile", json=body)
-    assert resp.json() == {"features": []}
+    assert resp.json() == {"features": [], "vectors": [None]}
 
 
 @pytest.mark.parametrize(
@@ -105,9 +124,79 @@ def test_tag_and_chip_on_opposite_poles_cancel():
         {"priorities": ["SPACIOUS_SEATING"]},  # 코드표 이름이 아니라 BE 이름을 받는다
         {"tastes": [chip("LIKE", "없는 코드", "NOPE")]},
         {"tastes": [chip("LIKE", "조용", "QUIET") | {"vector": [0.1]}]},
+        {"tastes": [chip("LIKE", "가", None)] * 11},
+        {"tastes": [chip("LIKE", "", None)]},
+        {"tastes": [chip("LIKE", "가" * 21, None)]},
     ],
+    ids=["be-name", "code", "vector", "11", "empty", "21"],
 )
 def test_invalid_request(body):
     resp = client().post("/v1/taste/profile", json=body)
     assert resp.status_code == 400
     assert resp.json()["code"] == "INVALID_REQUEST"
+
+
+CHIPS = {
+    "tastes": [
+        chip("LIKE", "국물", None),
+        chip("LIKE", "조용", "QUIET"),
+        chip("DISLIKE", "매운", None),
+        chip("LIKE", "창가", None),
+    ]
+}
+
+
+def test_uncoded_like_chips_get_vectors_in_chip_order(encoded):
+    resp = client(embedding_ready=True).post("/v1/taste/profile", json=CHIPS)
+    assert resp.status_code == 200
+    assert resp.json()["vectors"] == [VECTOR, None, None, VECTOR]
+    [(texts, timeout, attempts)] = encoded
+    assert texts == ["국물", "창가"]
+    # BE 프로필 타임아웃(3초) 안에 features를 돌려준다: 연결·읽기 단계를 합쳐도 3초 미만
+    assert attempts == 1 and timeout * 2 < 3
+
+
+def test_no_embedding_call_without_uncoded_like_chip(encoded):
+    body = {"tastes": [chip("LIKE", "조용", "QUIET"), chip("DISLIKE", "매운", None)]}
+    resp = client(embedding_ready=True).post("/v1/taste/profile", json=body)
+    assert resp.json()["vectors"] == [None, None]
+    assert encoded == []
+
+
+def test_embedding_not_ready_keeps_features(encoded):
+    resp = client().post("/v1/taste/profile", json=CHIPS | {"mood": "QUIET"})
+    assert resp.status_code == 200
+    assert resp.json()["features"] != []
+    assert resp.json()["vectors"] == [None] * 4
+    assert encoded == []
+
+
+def test_embedding_failure_keeps_features_without_text(monkeypatch, caplog):
+    def fail(texts: list[str], timeout: float, attempts: int) -> list[list[float]]:
+        raise embedding.EmbeddingUnavailable("timeout")
+
+    monkeypatch.setattr(embedding, "encode_queries", fail)
+    caplog.set_level("INFO", logger="server")
+    body = {"mood": "QUIET", "tastes": [chip("LIKE", "비밀 취향", None)]}
+    resp = client(embedding_ready=True).post("/v1/taste/profile", json=body)
+    assert resp.status_code == 200
+    assert resp.json()["features"] != []
+    assert resp.json()["vectors"] == [None]
+    assert "embedding_failed" in caplog.text
+    assert "비밀 취향" not in caplog.text
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [[0.5] * 1023, [float("nan")] * 1024, ["0.5"] * 1024],
+    ids=["dim", "nan", "str"],
+)
+def test_bad_vector_keeps_features(monkeypatch, bad):
+    monkeypatch.setattr(
+        embedding, "encode_queries", lambda texts, timeout, attempts: [bad]
+    )
+    body = {"mood": "QUIET", "tastes": [chip("LIKE", "국물", None)]}
+    resp = client(embedding_ready=True).post("/v1/taste/profile", json=body)
+    assert resp.status_code == 200
+    assert resp.json()["features"] != []
+    assert resp.json()["vectors"] == [None]

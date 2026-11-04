@@ -1,16 +1,21 @@
-"""취향 프로필 계산 API. BE가 온보딩 취향을 저장할 때 한 번 부르고 `features`를 저장한다.
+"""취향 프로필 계산 API. BE가 온보딩 취향을 저장할 때 한 번 부르고 `features`와 칩 벡터를 저장한다.
 
 계산은 `fit_ai.taste.profile`이 하고, 여기서는 BE 저장 형식(`Preferences`)을 장부 행으로
-바꾼다. 명세는 docs/specs/taste-profile/spec.md 6단계 "프로필 계산 API"에 있다.
+바꾼다. 코드 없는 LIKE 칩은 문장을 질의로 인코딩해 `vectors`로 돌려준다(S15P31A302-166).
+임베딩이 실패해도 `features`는 돌려준다. 명세는 docs/specs/taste-profile/spec.md 6단계
+"프로필 계산 API"에 있다.
 """
 
+import math
 from datetime import UTC, datetime
 from typing import Literal
 
 from fastapi import APIRouter
 from pydantic import Field
 
+from fit_ai import embedding
 from fit_ai.features import FEATURES
+from fit_ai.taste.direct_input import MAX_CHIPS, MAX_LABEL
 from fit_ai.taste.profile import Row, compute_features, onboarding_rows
 from server.common import Body, Dependencies, log
 
@@ -39,7 +44,7 @@ class TasteChip(Body):
     """해석 API가 준 칩. 계산에는 코드가 있는 칩만 쓴다."""
 
     polarity: Literal["LIKE", "DISLIKE"]
-    label: str
+    label: str = Field(min_length=1, max_length=MAX_LABEL)
     code: Literal[tuple(FEATURES)] | None = None  # BE는 null 속성을 빼고 보낸다
 
 
@@ -47,7 +52,7 @@ class ProfileBody(Body):
     mood: Literal[tuple(MOODS)] | None = None
     priorities: list[Literal[tuple(PRIORITIES)]] = Field(default_factory=list)
     purposes: list[Literal[tuple(PURPOSES)]] = Field(default_factory=list)
-    tastes: list[TasteChip] = Field(default_factory=list)
+    tastes: list[TasteChip] = Field(default_factory=list, max_length=MAX_CHIPS)
 
 
 class FeatureBody(Body):
@@ -58,7 +63,17 @@ class FeatureBody(Body):
 
 
 class ProfileResponse(Body):
+    """`vectors`는 요청 `tastes`와 같은 순서다. 코드 없는 LIKE 칩만 벡터가 있고, 나머지와
+    임베딩에 실패한 칩은 null이다."""
+
     features: list[FeatureBody]
+    vectors: list[list[float] | None]
+
+
+VECTOR_SIZE = 1024  # `tastes[].vector` 차원. BE `AiTasteClient`도 같은 값을 검사한다
+# 임베딩이 콜드 스타트(17~85초)에 걸려도 BE 프로필 타임아웃(3초) 안에 features를 돌려주려고
+# 단계(연결·읽기)마다 1초만 기다리고 다시 부르지 않는다. 최악 2초쯤이다
+EMBED_TIMEOUT_SECONDS = 1.0
 
 
 def to_rows(body: ProfileBody) -> list[Row]:
@@ -82,13 +97,46 @@ def to_rows(body: ProfileBody) -> list[Row]:
     return rows
 
 
-def router(_: Dependencies) -> APIRouter:
+def _valid(vector: list[float]) -> bool:
+    return len(vector) == VECTOR_SIZE and all(
+        isinstance(x, float | int) and math.isfinite(x) for x in vector
+    )
+
+
+def chip_vectors(chips: list[TasteChip], ready: bool) -> list[list[float] | None]:
+    vectors: list[list[float] | None] = [None] * len(chips)
+    wanted = [i for i, c in enumerate(chips) if c.code is None and c.polarity == "LIKE"]
+    if not wanted or not ready:
+        return vectors
+    try:
+        encoded = embedding.encode_queries(
+            [chips[i].label for i in wanted],
+            timeout=EMBED_TIMEOUT_SECONDS,
+            attempts=1,
+        )
+    except embedding.EmbeddingUnavailable as e:
+        log("embedding_failed", error=str(e))  # 메시지는 실패 종류뿐이다
+        return vectors
+    if not all(_valid(v) for v in encoded):
+        log("embedding_failed", error="벡터 모양이 다르다")
+        return vectors
+    for i, v in zip(wanted, encoded, strict=True):
+        vectors[i] = v
+    return vectors
+
+
+def router(deps: Dependencies) -> APIRouter:
     r = APIRouter()
 
     @r.post("/v1/taste/profile", response_model=ProfileResponse)
     def profile(body: ProfileBody):
         features = compute_features(to_rows(body))
-        log("taste_profile", features=len(features))
-        return ProfileResponse(features=features)
+        vectors = chip_vectors(body.tastes, deps.embedding_ready)
+        log(
+            "taste_profile",
+            features=len(features),
+            vectors=sum(v is not None for v in vectors),
+        )
+        return ProfileResponse(features=features, vectors=vectors)
 
     return r
