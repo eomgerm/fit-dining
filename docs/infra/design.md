@@ -852,7 +852,7 @@ AI API(`ai/server`, FastAPI)는 A의 컨테이너로 돈다. 임베딩 모델은
 1. AI API가 임베딩을 Modal `POST /embed`(12.3절)로 부른다. 응답의 `model`이 저장된 벡터의 모델과 같은지 확인하고, 타임아웃과 재시도 1회, 연결 재사용을 둔다. `fit_ai.embedding.encode_queries`가 `EMBED_BASE_URL`이 있으면 Modal을 부른다. 시도마다 단계별 3초이고, 시간 초과는 다시 부르지 않는다(콜드 스타트 중에 다시 부르면 Modal이 컨테이너를 하나 더 띄운다). 그 밖의 실패는 한 번 더 부르며, 실패하면 검색이 503 `EMBEDDING_UNAVAILABLE`이다. 검색 예산(9초)은 보지 않아 해석이 늦은 때는 BE 타임아웃을 넘길 수 있다(그때도 BE는 키워드 검색으로 대체한다). `/healthz`는 `EMBED_*` 값만 보고 Modal을 부르지 않는다(구현: S15P31A302-134, 실제 Modal로는 미확인).
 2. AI API 이미지가 torch를 끌어오지 않도록 로컬 인코더(`sentence-transformers`)를 선택 의존성으로 분리하고 `uvicorn`을 서버 의존성으로 옮긴다. Linux 기본 torch는 CUDA판이라 이미지가 수 GB가 된다(구현: `encoder` extra, `uv export --no-default-groups --group server`에 torch 없음).
 3. 장소 읽기가 개발 DB에만 있는 뷰가 아니라 BE 마이그레이션이 만든 뷰 `ai_place_search`를 읽는다(구현: BE V12가 `pg_store.py`가 읽는 컬럼으로 뷰를 만든다. 실제 DB로는 미확인).
-4. BE의 `AiTasteClient`가 해석(`/v1/taste/interpret`, 타임아웃 10초)과 프로필(`/v1/taste/profile`, 3초)을 이미 부른다(확인: develop). 가입 때 칩 벡터(`/v1/taste/vectors`, 3초)도 부르고 AI API가 Modal `/embed`로 넘긴다(S15P31A302-166). 검색(`POST /v1/search`) 호출과 서킷 브레이커, 동시성 상한, 폴백은 아직 없다(미구현).
+4. BE의 `AiTasteClient`가 해석(`/v1/taste/interpret`, 타임아웃 10초)과 프로필(`/v1/taste/profile`, 3초)을 이미 부른다(확인: develop). 프로필 응답에는 코드 없는 칩의 벡터도 있고, AI API가 Modal `/embed`를 단계별 1초, 재시도 없이 불러 만든다. 실패하면 벡터만 빠진다(S15P31A302-166). 검색(`POST /v1/search`) 호출과 서킷 브레이커, 동시성 상한, 폴백은 아직 없다(미구현).
 
 **택하지 않은 방식**
 

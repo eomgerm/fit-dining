@@ -70,7 +70,7 @@
 | `AUTH_KAKAO_CLIENT_SECRET` | app | X | 카카오 클라이언트 시크릿. 비밀. 카카오 콘솔의 클라이언트 시크릿은 ON으로 둔다 |
 | `AUTH_NAVER_CLIENT_ID` | app | X | 네이버 로그인의 Client ID. `AUTH_NAVER_CLIENT_SECRET`과 한 쌍이다. 콜백 `https://<호스트>/api/auth/oauth/naver/callback`을 등록한다 |
 | `AUTH_NAVER_CLIENT_SECRET` | app | X | 네이버 Client Secret. 비밀 |
-| `MODAL_BASE_URL` | app | O | BE가 AI API(`/v1/taste/interpret`, `/v1/taste/profile`, `/v1/taste/vectors`, 검색)를 부르는 기준 URL이다(키 이름은 Modal 시절 그대로다). A에서 도는 AI API는 `http://ai-dev:8000`, `http://ai-prod:8000`이다(design.md 11.4절). Modal 임베딩 주소가 아니다(그것은 `ai` 그룹의 `EMBED_BASE_URL`) |
+| `MODAL_BASE_URL` | app | O | BE가 AI API(`/v1/taste/interpret`, `/v1/taste/profile`, 검색)를 부르는 기준 URL이다(키 이름은 Modal 시절 그대로다). A에서 도는 AI API는 `http://ai-dev:8000`, `http://ai-prod:8000`이다(design.md 11.4절). Modal 임베딩 주소가 아니다(그것은 `ai` 그룹의 `EMBED_BASE_URL`) |
 | `MODAL_KEY` | app | X | `Modal-Key` 헤더 값. AI API가 Modal에 있을 때만 쓴다. A의 AI API는 내부 호출이라 비운다. 비밀 |
 | `MODAL_SECRET` | app | X | `Modal-Secret` 헤더 값. AI API가 Modal에 있을 때만 쓴다. A의 AI API는 내부 호출이라 비운다. 비밀 |
 | `TASTE_ANALYZER` | app | X | 온보딩 해석 구현. 기본 `mock`, AI 연결 시 `ai` |

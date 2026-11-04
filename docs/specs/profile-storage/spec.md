@@ -100,7 +100,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 
 | 테이블 | 첫 생성 | 04:00 배치 |
 |---|---|---|
-| `user_preferences` | 온보딩 저장 때 원본과 39 결과(`tastes[].code`, `tastes[].vector`, `features`). `vector`는 AI `/v1/taste/vectors`(taste-profile spec "칩 벡터 API")로 받는다. 39 호출은 따로 실패할 수 있고, 실패하면 `features`는 `[]`, `vector`는 `null`로 두고 원본은 저장한다. 빈 `vector`는 `ai/scripts/backfill_taste_vectors.py`가 만든 SQL로 채운다 | 원본과 앱 리뷰로 `features`를 다시 계산한다. 비어 있는 `features`와 `vector`를 채운다. 원본은 바꾸지 않는다 |
+| `user_preferences` | 온보딩 저장 때 원본과 39 결과(`tastes[].code`, `tastes[].vector`, `features`). `features`와 `vector`는 AI `/v1/taste/profile` 한 번으로 받는다(taste-profile spec "프로필 계산 API"). 호출이 실패하면 `features`는 `[]`, `vector`는 `null`로 두고 원본은 저장한다. 임베딩만 실패하면 `features`는 저장하고 `vector`만 `null`이다. 빈 `vector`는 `ai/scripts/backfill_taste_vectors.py`가 만든 SQL로 채운다 | 원본과 앱 리뷰로 `features`를 다시 계산한다. 비어 있는 `features`와 `vector`를 채운다. 원본은 바꾸지 않는다 |
 | `places` | 정제한 수집 데이터로 적재. 재수집 때 `naver_place_id`로 찾아 고친다 | 바꾸지 않는다 |
 | `place_profiles` | 릴리즈 전 네이버 리뷰로 분석해 적재 | 앱 리뷰 추가·삭제만큼 `like_count`, `dislike_count`, `analyzed_review_count`를 더하고 뺀 뒤, 업종 그룹 평균과 `is_label`을 전체 장소에 대해 다시 계산하고 다시 정렬한다 |
 | `place_personas` | 릴리즈 전 네이버 리뷰로 만든 페르소나 중 근거 3개 이상만 적재 | 앱 리뷰 추가·삭제에 따라 `review_ids`와 문장을 갱신한다(방식은 Open questions) |
