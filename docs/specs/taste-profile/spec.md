@@ -429,7 +429,7 @@ BE가 해석을 마칠 때마다 `taste_input_logs`에 한 줄을 남긴다(V15)
 
 ### 프로필 계산 API
 
-BE가 온보딩 취향을 저장할 때 AI API(`ai/server/taste_profile.py`)를 한 번 불러 `features`를 받고, `user_preferences.features`에 저장한다. 3단계 계산만 하고 GMS와 임베딩은 쓰지 않는다. 코드 없는 칩의 벡터는 이 API를 거치지 않고 BE가 Modal에서 받아 `tastes[].vector`에 저장한다.
+BE가 온보딩 취향을 저장할 때 AI API(`ai/server/taste_profile.py`)를 한 번 불러 `features`를 받고, `user_preferences.features`에 저장한다. 3단계 계산만 하고 GMS와 임베딩은 쓰지 않는다. 코드 없는 칩의 벡터는 아래 칩 벡터 API로 따로 받는다.
 
 `POST /v1/taste/profile`
 
@@ -461,6 +461,19 @@ BE 태그 이름은 코드표와 달라서(profile-storage 문제 8) 이 API에�
 | 500 | `INTERNAL_ERROR` | 그 밖의 오류 |
 
 오류 응답은 BE ProblemDetail 모양(`application/problem+json`)이다. 요청 내용은 응답과 로그에 넣지 않고, 로그에는 특징 개수만 남긴다. 샘플 사용자 1~6번의 요청이 `profiles.json`과 같은 `features`를 내는지 `ai/tests/server/test_taste_profile.py`가 확인한다. 7번은 리뷰 근거라 배치 몫이다.
+
+### 칩 벡터 API
+
+BE가 가입 때 코드 없는 `LIKE` 칩의 `label`을 한 번에 보내 벡터를 받고 `user_preferences.tastes[].vector`에 저장한다(`ai/server/taste_vectors.py`). 프로필 계산 API와 따로 둬서 임베딩이 실패해도 `features`는 저장된다. 인코딩은 `fit_ai.embedding.encode_queries`(질의, `query: `)이고 서버에서는 Modal `/embed`를 부른다. BE는 Modal 키를 갖지 않는다.
+
+`POST /v1/taste/vectors` `{"texts": ["담백한 국물 요리를 먹을 수"]}` → `200` `{"model": "<이름>@<리비전>", "vectors": [[...1024개]]}`. `vectors`는 `texts`와 같은 순서다.
+
+| 오류 | `code` | 경우 |
+|---|---|---|
+| 400 | `INVALID_REQUEST` | `texts`가 0개나 10개 초과, 공백뿐이거나 20자 초과인 문장. 칩 상한으로 막아 범용 임베딩 통로가 되지 않게 한다 |
+| 503 | `EMBEDDING_UNAVAILABLE` | `EMBED_*` 설정이 없거나 Modal 호출이 실패 |
+
+BE는 프로필 계산과 같은 스위치(`TASTE_PROFILE_ENABLED`)와 타임아웃(3초)을 쓰고, 실패하면 `vector`를 `null`로 두고 가입을 계속한다. 콜드 스타트(17~85초)에 걸리면 실패하므로 빈 벡터는 `ai/scripts/backfill_taste_vectors.py`로 채운다.
 
 ### 샘플 사용자
 
