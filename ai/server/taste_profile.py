@@ -8,6 +8,7 @@
 """
 
 import math
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Literal
 
@@ -97,7 +98,7 @@ VECTOR_SIZE = 1024  # `tastes[].vector` 차원. BE `AiTasteClient`도 같은 값
 EMBED_TIMEOUT_SECONDS = 1.0
 
 
-def to_rows(body: ProfileBody, reviews: list[ReviewEvidence] = ()) -> list[Row]:
+def to_rows(body: ProfileBody, reviews: Sequence[ReviewEvidence] = ()) -> list[Row]:
     """회원 id 없이 계산한다. 행은 돌려주지 않고 BE도 저장하지 않는다."""
     now = datetime.now(UTC).isoformat()
     codes = [MOODS[body.mood]] if body.mood else []
