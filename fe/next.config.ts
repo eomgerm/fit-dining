@@ -43,7 +43,7 @@ const nextConfig: NextConfig = {
     ];
   },
   // 홈(/)은 온보딩을 정적으로 그린다. 로그인·비회원 표시 쿠키가 있으면 같은 주소로 검색 홈(/home)을 준다.
-  // 두 화면 모두 미리 렌더링되어 로그인 복구를 기다리지 않는다. 검색 홈은 ?view=saved를 읽느라 브라우저가 그린다
+  // 두 화면 모두 미리 렌더링되어 로그인 복구를 기다리지 않는다. 검색 홈은 ?view=saved를 읽느라 브라우저가 그리고 첫 HTML은 골격이다
   // (docs/onboarding/01_onboarding.md FE 흐름).
   // Next 인증 가이드의 optimistic 검사를 쿠키 조건 rewrite로 한다. 인증은 지금처럼 BE가 Bearer AT로 한다.
   // proxy.ts는 Next가 그 번들에 테스트용 localhost 주소를 넣어 배포 검사(check_fe_bundle.py)에 걸린다.
