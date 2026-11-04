@@ -27,11 +27,11 @@ public class SocialAccounts {
     }
 
     public Issued signup(String provider, String subject, kr.co.fitdining.api.user.Preferences preferences) {
-        var features = tasteProfiles.compute(preferences);
+        var profile = tasteProfiles.compute(preferences);
         for (int attempt = 0; attempt < 10; attempt++) {
             String nickname = nicknames.next(attempt);
             try {
-                return transactions.signup(provider, subject, nickname, preferences, features);
+                return transactions.signup(provider, subject, nickname, preferences, profile);
             } catch (SignupConflict conflict) {
                 if (!"nickname".equals(conflict.field())) throw conflict;
             } catch (DataIntegrityViolationException conflict) {

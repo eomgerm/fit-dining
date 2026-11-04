@@ -87,8 +87,8 @@ public class AuthService implements AuthUseCases {
         if (users.existsByNickname(name)) throw new kr.co.fitdining.api.auth.domain.SignupConflict("nickname");
         String tokenHash = verifications.requireToken(normalized, verificationToken);
         String hash = passwords.hash(password);
-        var features = tasteProfiles.compute(preferences);
-        try { return transactions.signup(normalized, name, hash, tokenHash, preferences, features); }
+        var profile = tasteProfiles.compute(preferences);
+        try { return transactions.signup(normalized, name, hash, tokenHash, preferences, profile); }
         catch (org.springframework.dao.DataIntegrityViolationException conflict) {
             if (users.findByEmail(normalized).isPresent()) throw new kr.co.fitdining.api.auth.domain.SignupConflict("email");
             if (users.existsByNickname(name)) throw new kr.co.fitdining.api.auth.domain.SignupConflict("nickname");

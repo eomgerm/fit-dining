@@ -45,14 +45,14 @@ public class AuthTransactions {
      */
     @Transactional
     public Issued signup(String email, String nickname, String hash, String verificationTokenHash,
-            kr.co.fitdining.api.user.Preferences answers, java.util.List<kr.co.fitdining.api.user.TasteFeature> features) {
+            kr.co.fitdining.api.user.Preferences answers, kr.co.fitdining.api.onboarding.TasteProfileService.Profile profile) {
         Instant now = clock.instant();
         if (verifications.consume(verificationTokenHash, email, now) != 1)
             throw kr.co.fitdining.api.auth.domain.EmailVerificationFailure.required();
         AuthUser created = new AuthUser(UUID.randomUUID().toString(), email, nickname, hash, now, termsVersion);
         created.markEmailVerified(now);
         AuthUser user = users.saveAndFlush(created);
-        if (answers != null) preferences.saveAndFlush(new kr.co.fitdining.api.user.UserPreferences(user.getId(), answers, now, features));
+        if (answers != null) preferences.saveAndFlush(new kr.co.fitdining.api.user.UserPreferences(user.getId(), answers, now, profile.features(), profile.tastes()));
         return login(user);
     }
 

@@ -39,22 +39,22 @@ class SocialNicknamesTests {
         when(names.next(0)).thenReturn("first");
         when(names.next(1)).thenReturn("second");
         when(names.next(2)).thenReturn("third");
-        when(tx.signup("google", "id", "first", null, java.util.List.of())).thenThrow(new SignupConflict("nickname"));
-        when(tx.signup("google", "id", "second", null, java.util.List.of())).thenThrow(new DataIntegrityViolationException("race"));
+        when(tx.signup("google", "id", "first", null, null)).thenThrow(new SignupConflict("nickname"));
+        when(tx.signup("google", "id", "second", null, null)).thenThrow(new DataIntegrityViolationException("race"));
         when(users.existsByNickname("second")).thenReturn(true);
         accounts.signup("google", "id");
-        verify(tx).signup("google", "id", "third", null, java.util.List.of());
+        verify(tx).signup("google", "id", "third", null, null);
     }
 
     @Test void exhaustedRetries_areGeneralError() {
         var tx = mock(SocialAccountTransactions.class);
         var names = mock(SocialNicknames.class);
         when(names.next(anyInt())).thenReturn("name");
-        when(tx.signup(anyString(), anyString(), anyString(), isNull(), anyList())).thenThrow(new SignupConflict("nickname"));
+        when(tx.signup(anyString(), anyString(), anyString(), isNull(), isNull())).thenThrow(new SignupConflict("nickname"));
         var accounts = new SocialAccounts(tx, mock(kr.co.fitdining.api.onboarding.TasteProfileService.class), mock(AuthUserRepository.class), names);
         assertThrows(IllegalStateException.class, () -> accounts.signup("google", "id"));
         verify(names).next(9);
-        verify(tx, times(10)).signup("google", "id", "name", null, java.util.List.of());
+        verify(tx, times(10)).signup("google", "id", "name", null, null);
     }
 
     @Test void unrelatedConflicts_areNotRetried() {
@@ -62,7 +62,7 @@ class SocialNicknamesTests {
         var names = mock(SocialNicknames.class);
         when(names.next(0)).thenReturn("name");
         var accounts = new SocialAccounts(tx, mock(kr.co.fitdining.api.onboarding.TasteProfileService.class), mock(AuthUserRepository.class), names);
-        when(tx.signup("google", "id", "name", null, java.util.List.of())).thenThrow(new DataIntegrityViolationException("other"));
+        when(tx.signup("google", "id", "name", null, null)).thenThrow(new DataIntegrityViolationException("other"));
         assertThrows(DataIntegrityViolationException.class, () -> accounts.signup("google", "id"));
         verify(names, never()).next(1);
     }
@@ -71,7 +71,8 @@ class SocialNicknamesTests {
         var names = mock(SocialNicknames.class);
         var profiles = mock(kr.co.fitdining.api.onboarding.TasteProfileService.class);
         var answers = new kr.co.fitdining.api.user.Preferences(null, null, null, null);
-        var features = java.util.List.of(new kr.co.fitdining.api.user.TasteFeature("QUIET", "axis", true, 1));
+        var features = new kr.co.fitdining.api.onboarding.TasteProfileService.Profile(
+                java.util.List.of(new kr.co.fitdining.api.user.TasteFeature("QUIET", "axis", true, 1)), java.util.List.of());
         when(profiles.compute(answers)).thenReturn(features);
         when(names.next(0)).thenReturn("first");
         when(names.next(1)).thenReturn("second");

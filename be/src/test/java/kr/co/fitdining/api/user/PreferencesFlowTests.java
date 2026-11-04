@@ -84,8 +84,10 @@ class PreferencesFlowTests extends PostgresTestSupport {
         String user = session.get("userId").asString(), token = session.get("accessToken").asString();
         var claims = mapper.readTree(new String(Base64.getUrlDecoder().decode(token.split("\\.")[1]), StandardCharsets.UTF_8));
         assertEquals(user, claims.get("sub").asString());
+        jdbc.update("update user_preferences set tastes = jsonb_set(tastes, '{0,vector}', '[0.5]') where user_id=?", user);
         var read = request("GET", "/api/v1/users/" + user + "/preferences", null, token);
         assertEquals(200, read.statusCode(), read.body());
+        assertFalse(mapper.readTree(read.body()).get("tastes").get(0).has("vector"), read.body());
         assertEquals(1, mapper.readTree(read.body()).get("priorities").size());
         assertEquals("국물", mapper.readTree(read.body()).get("tastes").get(0).get("label").asString());
         assertEquals("FOOD_SPICY", mapper.readTree(read.body()).get("tastes").get(0).get("code").asString());

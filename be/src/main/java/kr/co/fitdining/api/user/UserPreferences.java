@@ -15,19 +15,18 @@ public class UserPreferences {
     private String mood;
     @JdbcTypeCode(SqlTypes.ARRAY) @Column(columnDefinition = "text[]") private String[] priorities;
     @JdbcTypeCode(SqlTypes.ARRAY) @Column(columnDefinition = "text[]") private String[] purposes;
-    @JdbcTypeCode(SqlTypes.JSON) @Column(columnDefinition = "jsonb") private List<Preferences.TasteChip> tastes;
+    @JdbcTypeCode(SqlTypes.JSON) @Column(columnDefinition = "jsonb") private List<StoredTasteChip> tastes;
     @JdbcTypeCode(SqlTypes.JSON) @Column(columnDefinition = "jsonb") private List<TasteFeature> features;
     private Instant createdAt;
     private Instant updatedAt;
-    public UserPreferences(String userId, Preferences value, Instant now) {
-        this(userId, value, now, List.of());
-    }
-    public UserPreferences(String userId, Preferences value, Instant now, List<TasteFeature> features) {
+    /** @param tastes stored chips built from {@code value.tastes()}, with vectors where computed */
+    public UserPreferences(String userId, Preferences value, Instant now, List<TasteFeature> features,
+            List<StoredTasteChip> tastes) {
         this.features = List.copyOf(features);
         this.userId = userId;
         mood = value.mood() == null ? null : value.mood().name();
         priorities = value.priorities().stream().map(Enum::name).toArray(String[]::new);
         purposes = value.purposes().stream().map(Enum::name).toArray(String[]::new);
-        tastes = value.tastes(); createdAt = now; updatedAt = now;
+        this.tastes = List.copyOf(tastes); createdAt = now; updatedAt = now;
     }
 }

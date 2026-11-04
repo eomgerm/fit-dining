@@ -32,7 +32,8 @@ public class UserController {
     public PreferencesResponse preferences(@PathVariable String userId,
             @RequestAttribute("auth.identity") Identity identity) {
         UserPreferences value = service.preferences(userId, identity);
-        return new PreferencesResponse(value.getMood(), value.getPriorities(), value.getPurposes(), value.getTastes(), value.getUpdatedAt());
+        return new PreferencesResponse(value.getMood(), value.getPriorities(), value.getPurposes(),
+                value.getTastes().stream().map(StoredTasteChip::chip).toList(), value.getUpdatedAt());
     }
     /** @param mood optional atmosphere @param priorities criteria @param purposes purposes @param tastes tastes @param updatedAt last change */
     public record PreferencesResponse(String mood, String[] priorities, String[] purposes, List<Preferences.TasteChip> tastes, Instant updatedAt) {}

@@ -19,6 +19,8 @@ import org.springframework.web.client.RestClient;
 /** AI boundary. Never log payloads or exception messages containing response bodies. */
 @Component
 public class AiTasteClient {
+    /** {@code user_preferences.tastes[].vector} dimension (profile-storage spec). */
+    static final int VECTOR_DIMENSION = 1024;
     private final RestClient interpret;
     private final RestClient profile;
     private final Validator validator;
@@ -63,6 +65,19 @@ public class AiTasteClient {
                 .map(f -> new TasteFeature(f.code(), f.layer(), f.like(), f.weight())).toList();
     }
 
+    /**
+     * Query embeddings for chip labels, same order as {@code texts}. Uses the profile timeout.
+     * @throws IllegalStateException when the count or a dimension does not match
+     */
+    public List<float[]> vectors(List<String> texts) {
+        var response = checked(profile.post().uri("/v1/taste/vectors").contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("texts", texts)).retrieve().body(VectorsResponse.class));
+        if (response.vectors().size() != texts.size()
+                || response.vectors().stream().anyMatch(vector -> vector.length != VECTOR_DIMENSION))
+            throw new IllegalStateException("Invalid AI response");
+        return response.vectors();
+    }
+
     private <T> T checked(T response) {
         if (response == null || !validator.validate(response).isEmpty())
             throw new IllegalStateException("Invalid AI response");
@@ -74,5 +89,6 @@ public class AiTasteClient {
     public record Feature(@NotBlank @Pattern(regexp = "^[A-Z][A-Z0-9_]{0,63}$") String code,
             @NotNull @Pattern(regexp = "axis|importance|purpose|food") String layer, @NotNull Boolean like,
             @NotNull @Min(1) @Max(3) Integer weight) {}
+    public record VectorsResponse(@NotNull List<float @NotNull []> vectors) {}
     public record ProfileResponse(@NotNull List<@NotNull @Valid Feature> features) {}
 }

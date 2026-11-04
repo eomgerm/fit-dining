@@ -111,5 +111,30 @@ class AiTasteAnalyzerTests {
             assertInstanceOf(java.net.http.HttpTimeoutException.class, failure.getCause());
         } finally { http.stop(0); }
     }
+    static String vectors(int count, int dim) {
+        String vector = "[" + String.join(",", java.util.Collections.nCopies(dim, "0.5")) + "]";
+        return "{\"model\":\"m\",\"vectors\":[" + String.join(",", java.util.Collections.nCopies(count, vector)) + "]}";
+    }
+    @Test void vectors_sendsTextsAndReturnsVectorsInOrder() {
+        server.expect(requestTo("http://ai.test/v1/taste/vectors")).andExpect(method(HttpMethod.POST))
+                .andExpect(content().json("{\"texts\":[\"soup\",\"window\"]}", true))
+                .andRespond(withSuccess(vectors(2, 1024), MediaType.APPLICATION_JSON));
+        var result = client.vectors(List.of("soup", "window"));
+        assertEquals(2, result.size());
+        assertEquals(1024, result.getFirst().length);
+        assertEquals(0.5f, result.getFirst()[0]);
+    }
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({"1,1024", "2,1023", "2,0"})
+    void vectors_wrongCountOrDimension_throws(int count, int dim) {
+        server.expect(anything()).andRespond(withSuccess(vectors(count, dim), MediaType.APPLICATION_JSON));
+        assertThrows(IllegalStateException.class, () -> client.vectors(List.of("soup", "window")));
+    }
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"{}", "null", "{\"vectors\":[null,null]}"})
+    void vectors_malformed_throws(String body) {
+        server.expect(anything()).andRespond(withSuccess(body, MediaType.APPLICATION_JSON));
+        assertThrows(RuntimeException.class, () -> client.vectors(List.of("soup", "window")));
+    }
 
 }
