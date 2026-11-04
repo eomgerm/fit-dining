@@ -107,6 +107,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 
 - 삭제된 앱 리뷰는 soft delete라 원문(`reviews.description`)이 남는다. 배치가 다시 읽어 그 몫을 뺀다. 리뷰별 추출 결과는 저장하지 않는다(D-6).
 - 리뷰를 쓰자마자 반영되는 경로는 없다. 다음 04:00 배치에 반영된다(D-9).
+- `user_preferences`의 04:00 갱신은 `TasteRefreshBatch`가 한다. 대상, 실패 처리, 잠금은 D-15에 있다. 비어 있는 `tastes[].vector`를 채우는 일은 아직 하지 않는다.
 
 ## Implementation anchors
 
@@ -131,7 +132,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 ## Out of scope
 
 - 갱신 알고리즘: 앱 리뷰를 취향(티켓 20)과 장소 특징·페르소나(담당 미정)에 반영하는 계산
-- 04:00 배치 구현, 39·40 결과를 DB에 쓰는 적재 코드, 첫 적재 실행
+- 04:00 배치 구현(취향 `features` 갱신은 S15P31A302-165, D-15), 39·40 결과를 DB에 쓰는 적재 코드, 첫 적재 실행
 - 장소 사진·영업시간·메뉴 테이블(장소 수집 담당), 검색·점수 쿼리(41)
 - `reviews.place_id`의 FK(D-13)
 - 취향 수정 기능(PRD에 없음)
@@ -142,7 +143,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 
 1. **리뷰와 `places`가 연결되지 않는다.** `reviews.place_id`에는 FK가 없다(V4는 `CHECK (place_id > 0)`뿐). 리뷰 등록은 장소 존재를 Mock 검색 엔진(`places.json`, ID 1부터)으로 확인하고(`ReviewService.create`), V6 직후 `places`는 비어 있다. 첫 적재가 서비스 ID를 새로 매기면 Mock ID로 쓴 dev 리뷰는 엉뚱한 장소나 없는 장소를 가리킨다. FK를 더할 때 이 리뷰들 때문에 마이그레이션이 실패할 수 있다. 리뷰·장소 담당이 첫 적재와 함께 정한다(D-13). Mock ID를 그대로 살리려고 `OVERRIDING SYSTEM VALUE`로 넣으면 identity 시퀀스를 최댓값 뒤로 맞춰야 한다. 아니면 이후 자동 채번이 PK 중복으로 실패한다.
 2. **`tastes` 원소에 키가 늘면 기존 코드가 읽지 못할 수 있다.** `UserPreferences`는 `tastes`를 `List<Preferences.TasteChip>`(`polarity`, `label`)으로 읽고, 앱 설정은 `spring.jackson.deserialization.fail-on-unknown-properties: true`다. 배치가 `code`, `vector`를 쓰면 엔티티 읽기와 `GET /api/v1/users/{userId}/preferences`가 실패하거나 응답에 `vector`가 섞일 수 있다. V6은 기존 데이터를 바꾸지 않아 지금은 문제가 없다. 배치 구현 전에 -58 담당과 정한다. → 해결(S15P31A302-166): 엔티티는 `tastes`를 DB용 `StoredTasteChip`(`polarity`, `label`, `code`, `vector`)으로 읽고, `GET /preferences`는 API용 `TasteChip`으로 바꿔 `vector`를 내보내지 않는다. `code`가 없으면 키를 빼지 않고 `null`로 쓴다.
-3. **`user_preferences.updated_at`의 뜻이 넓어진다.** 배치가 `features`를 갱신할 때도 바뀐다. `GET /preferences` 응답의 `updatedAt`이 사용자 동작 없이 바뀐다. -58 담당과 정한다.
+3. ~~**`user_preferences.updated_at`의 뜻이 넓어진다.**~~ 취향 갱신 배치는 `updated_at`을 바꾸지 않기로 했다(D-15).
 4. **`vector` 확장이 없는 DB에서는 V6이 실패한다.** 서버와 로컬은 인프라 스크립트가 만들고, 테스트는 `PostgresTestSupport`가 만든다. 다른 경로로 DB를 만들면 확장을 먼저 만들어야 한다.
 5. **상세 화면의 사진·영업시간·메뉴를 둘 곳이 없다.** `PlaceDetailResponse`의 `photos`, `hours`, `menus`는 장소당 여러 행이라 별도 테이블이 필요하다. 그전까지 상세 화면은 Mock 데이터를 쓴다. 장소 수집 담당이 정한다.
 6. **칩에 코드가 없다.** 해석 API(`POST /api/v1/onboarding/taste-analysis`, -59)는 `TasteChip(polarity, label)`만 돌려준다. `tastes[].code`를 채우려면 해석 결과의 `code`가 칩과 함께 저장 요청까지 와야 한다. -59·-58 담당과 정한다.
