@@ -6,7 +6,7 @@ Disallow: /my
 Disallow: /login
 Disallow: /signup
 Disallow: /location
-Disallow: /place/review
+Disallow: /places/*/review
 Disallow: /auth-demo
 
 Sitemap: https://fitdining.co.kr/sitemap.xml

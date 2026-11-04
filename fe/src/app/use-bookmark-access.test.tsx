@@ -118,13 +118,13 @@ describe("로그인 상태", () => {
     const { result } = renderAccess();
 
     result.current.endSession();
-    result.current.login("/place?id=3");
+    result.current.login("/places/3");
 
     expect(auth.clearSession).toHaveBeenCalled();
     expect(push).toHaveBeenCalledWith("/login");
     expect(
       JSON.parse(sessionStorage.getItem("fitdining:login-return") ?? "{}").path,
-    ).toBe("/place?id=3");
+    ).toBe("/places/3");
   });
 });
 

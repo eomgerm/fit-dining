@@ -615,7 +615,7 @@ describe("SearchScreen", () => {
         expect(push).not.toHaveBeenCalled();
 
         fireEvent.click(second);
-        expect(push).toHaveBeenCalledWith("/place?id=2");
+        expect(push).toHaveBeenCalledWith("/places/2");
       });
 
       it("점수가 없는 카드는 핏 점수 없이 기준 지점(역삼역)에서 가까운 순으로 보인다", async () => {
@@ -940,7 +940,7 @@ describe("SearchScreen", () => {
     expect(push).not.toHaveBeenCalled();
 
     fireEvent.click(second);
-    expect(push).toHaveBeenCalledWith("/place?id=2");
+    expect(push).toHaveBeenCalledWith("/places/2");
   });
 
   describe("근처 검색", () => {
@@ -1325,7 +1325,7 @@ describe("SearchScreen", () => {
       expect(stores.current.getSnapshot().latestCards.has(1)).toBe(true);
 
       fireEvent.click(within(list).getByRole("button", { pressed: true }));
-      expect(push).toHaveBeenCalledWith("/place?id=1");
+      expect(push).toHaveBeenCalledWith("/places/1");
     });
 
     it("결과를 보는 동안에는 주변 카드가 없고 '새 검색'을 누르면 다시 보인다", async () => {

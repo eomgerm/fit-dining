@@ -14,7 +14,7 @@ export type RequestOptions = {
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 
-// 브라우저에서 같은 출처의 /api로 BE를 호출한다(design.md 12.5 #2).
+// 브라우저에서 같은 출처의 /api로 BE를 호출한다. Next 서버에서는 BE_INTERNAL_URL로 부른다(design.md 12.5 #2).
 // 호출자가 취소하면 AbortError를 그대로 던지고, 나머지 실패는 ApiError로 던진다.
 export async function request<T>(
   path: string,
@@ -80,7 +80,15 @@ function buildUrl(path: string, query?: Record<string, QueryValue>) {
     if (value !== undefined) params.append(key, String(value));
   }
   const search = params.toString();
-  return `/api${path}${search ? `?${search}` : ""}`;
+  return `${serverOrigin()}/api${path}${search ? `?${search}` : ""}`;
+}
+
+// Next 서버에서의 호출(서버 컴포넌트)은 Caddy 내부 리스너로 BE를 부른다(design.md 12.5 #2).
+// NEXT_RUNTIME은 Next 서버에서만 있다. 기본 주소는 두지 않는다(번들에 로컬 주소 금지, check_fe_bundle.py).
+// 값이 없으면 서버의 상대 경로 요청이 network 오류로 끝나고 화면은 브라우저가 다시 받는다
+function serverOrigin() {
+  if (typeof window !== "undefined" || !process.env.NEXT_RUNTIME) return "";
+  return process.env.BE_INTERNAL_URL ?? "";
 }
 
 // 204처럼 본문이 비어 있으면 undefined

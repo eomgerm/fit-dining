@@ -110,11 +110,11 @@ describe("북마크 로그인 뒤 복귀", () => {
 
   it("로그인된 상태로 쿼리 없는 홈에 오면 남은 상세 주소로 한 번 replace하고 지운다", async () => {
     mocks.restore.mockResolvedValue({});
-    rememberLoginReturn("/place?id=3&from=saved");
+    rememberLoginReturn("/places/3?from=saved");
     render(<HomeEntry />);
 
     await vi.waitFor(() =>
-      expect(mocks.replace).toHaveBeenCalledWith("/place?id=3&from=saved"),
+      expect(mocks.replace).toHaveBeenCalledWith("/places/3?from=saved"),
     );
     expect(mocks.replace).toHaveBeenCalledTimes(1);
     expect(sessionStorage.getItem(RETURN_KEY)).toBeNull();
@@ -134,7 +134,7 @@ describe("북마크 로그인 뒤 복귀", () => {
   it("로그인 없이 홈에 오면 주소를 버린다", async () => {
     localStorage.setItem(GUEST_KEY, "1");
     mocks.restore.mockRejectedValue(new Error("unauthenticated"));
-    rememberLoginReturn("/place?id=3");
+    rememberLoginReturn("/places/3");
     render(<HomeEntry />);
 
     expect(await screen.findByText("검색 홈")).toBeTruthy();
@@ -144,7 +144,7 @@ describe("북마크 로그인 뒤 복귀", () => {
 
   it("남긴 지 10분이 지났으면 따르지 않는다", async () => {
     mocks.restore.mockResolvedValue({});
-    rememberLoginReturn("/place?id=3", Date.now() - 10 * 60 * 1000 - 1);
+    rememberLoginReturn("/places/3", Date.now() - 10 * 60 * 1000 - 1);
     render(<HomeEntry />);
 
     expect(await screen.findByText("검색 홈")).toBeTruthy();
@@ -169,7 +169,7 @@ describe("북마크 로그인 뒤 복귀", () => {
   it("쿼리가 있는 홈에 오면 남은 주소를 읽지 않는다", async () => {
     window.history.replaceState(null, "", "/?view=saved");
     mocks.restore.mockResolvedValue({});
-    rememberLoginReturn("/place?id=3");
+    rememberLoginReturn("/places/3");
     render(<HomeEntry />);
 
     expect(await screen.findByText("검색 홈")).toBeTruthy();
@@ -180,7 +180,7 @@ describe("북마크 로그인 뒤 복귀", () => {
   it("로그인 복원이 3초 안에 끝나지 않으면 주소를 버린다", async () => {
     vi.useFakeTimers();
     mocks.restore.mockImplementation(() => new Promise(() => {}));
-    rememberLoginReturn("/place?id=3");
+    rememberLoginReturn("/places/3");
     render(<HomeEntry />);
 
     await act(async () => vi.advanceTimersByTimeAsync(3000));

@@ -43,7 +43,7 @@ describe("ReviewListView", () => {
   it("작성 버튼은 그리지 않는다. 장소 상세 하단 막대가 맡는다", () => {
     const html = render({ totalCount: 2, items });
     expect(html).not.toContain("방문 평가 남기기");
-    expect(html).not.toContain("/place/review");
+    expect(html).not.toContain('/review"');
   });
 
   it("불러오는 중에는 자리 표시만 보이고 개수는 없다", () => {

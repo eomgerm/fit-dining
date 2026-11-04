@@ -18,6 +18,7 @@ function json(body: unknown, init?: ResponseInit) {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
 
@@ -34,6 +35,19 @@ describe("request", () => {
       "/api/v1/places?q=%EC%B9%B4%ED%8E%98&page=2&open=true",
     );
     expect(fetchMock.mock.calls[0][1]?.method).toBe("GET");
+  });
+
+  // 서버 컴포넌트에는 같은 출처가 없어 상대 경로를 쓸 수 없다(design.md 12.5 #2)
+  it("Next 서버에서는 BE_INTERNAL_URL 아래의 /api로 보낸다", async () => {
+    vi.stubEnv("NEXT_RUNTIME", "nodejs");
+    vi.stubEnv("BE_INTERNAL_URL", "http://caddy:8081");
+    const fetchMock = stubFetch(json({ id: "p1" }));
+
+    await request("/v1/places/1");
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "http://caddy:8081/api/v1/places/1",
+    );
   });
 
   it("body를 JSON 문자열로 보내고 Content-Type을 붙인다", async () => {

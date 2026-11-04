@@ -162,14 +162,12 @@ export const PREVIEW_SIZE = 3;
 
 // 작성 화면 주소. 장소 상세의 "방문 평가 남기기"가 이 주소로 연결한다(D-31)
 export function reviewWriteHref(placeId: number) {
-  return `/place/review?id=${placeId}`;
+  return `/places/${placeId}/review`;
 }
 
-// 수정 화면 주소. 내 리뷰 ⋯ 메뉴의 "수정하기"가 연다(D-44).
-// id는 장소 상세·작성 화면처럼 장소 id다. Next가 숨겨 둔 장소 상세도 지금 주소의 id를 읽어,
-// 다른 값이면 다른 장소를 불러오고 보던 탭을 잃는다
+// 수정 화면 주소. 내 리뷰 ⋯ 메뉴의 "수정하기"가 연다(D-44)
 export function reviewEditHref(placeId: number, reviewId: number) {
-  return `/place/review/edit?id=${placeId}&review=${reviewId}`;
+  return `/places/${placeId}/reviews/${reviewId}/edit`;
 }
 
 // 공백뿐인 본문은 본문 없음으로 저장되므로(D-6) 그 둘은 바뀐 것으로 보지 않는다

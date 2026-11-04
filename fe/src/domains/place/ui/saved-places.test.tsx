@@ -507,7 +507,7 @@ describe("목록 받기", () => {
     expect(within(card).queryByText("세 번째 태그")).toBeNull();
 
     fireEvent.click(card);
-    expect(router.push).toHaveBeenCalledWith("/place?id=3&from=saved");
+    expect(router.push).toHaveBeenCalledWith("/places/3?from=saved");
   });
 
   it("영업 상태 UNKNOWN, 위치 없음, 주소 없음, 태그 없음이면 그 값과 구분자를 뺀다", async () => {

@@ -87,7 +87,7 @@ describe("홈 화면 추가 배너", () => {
     },
   );
 
-  it.each(["/place", "/place/review", "/my"])(
+  it.each(["/places/1", "/places/1/review", "/my"])(
     "4-01 뒤 흐름(%s)에서는 띄운다",
     (pathname) => {
       markIntroSeen();

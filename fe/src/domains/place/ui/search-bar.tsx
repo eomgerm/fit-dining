@@ -14,6 +14,7 @@ import { PinIcon } from "@/shared/ui/icon/icons/pin";
 import { SearchIcon } from "@/shared/ui/icon/icons/search";
 import { SparkleIcon } from "@/shared/ui/icon/icons/sparkle";
 
+import { placeDetailHref } from "../model/bookmark";
 import { highlightParts } from "../model/highlight";
 import type { PlaceSuggestion } from "../model/place-types";
 import { QUERY_MAX_LENGTH } from "../model/search-request";
@@ -63,7 +64,7 @@ export function SearchBar({
 
   function pick(suggestion: PlaceSuggestion) {
     if (suggestion.type === "PLACE") {
-      router.push(`/place?id=${suggestion.place.id}`);
+      router.push(placeDetailHref(suggestion.place.id));
     } else {
       submit();
     }

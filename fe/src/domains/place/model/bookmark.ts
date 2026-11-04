@@ -71,5 +71,5 @@ export function emptyCategoryText(category: CategoryGroup) {
 
 // 장소 상세 주소. 저장한 장소 화면에서 열면 from=saved가 붙어 핏 점수와 추천 이유를 숨긴다(D-12)
 export function placeDetailHref(placeId: number, fromSaved = false) {
-  return `/place?id=${placeId}${fromSaved ? `&from=${SAVED_VIEW}` : ""}`;
+  return `/places/${placeId}${fromSaved ? `?from=${SAVED_VIEW}` : ""}`;
 }

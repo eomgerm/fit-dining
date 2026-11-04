@@ -29,10 +29,10 @@ import type { PlaceCard, PlaceDetail } from "../model/place-types";
 import { createSearchStore, type SearchStore } from "../model/search-store";
 import { PlaceDetailScreen } from "./place-detail-screen";
 
-const params = vi.hoisted(() => ({ value: "id=1" }));
+// 저장한 장소 화면에서 열었는지(주소의 from=saved). 페이지가 읽어 넘긴다
+let fromSaved = false;
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ back: vi.fn(), push: vi.fn() }),
-  useSearchParams: () => new URLSearchParams(params.value),
 }));
 vi.mock("@/shared/lib/runtime-config", () => ({
   loadRuntimeConfig: async () => undefined,
@@ -111,7 +111,7 @@ function deferred() {
 }
 
 beforeEach(() => {
-  params.value = "id=1";
+  fromSaved = false;
   stores.current = createSearchStore();
   replies = {};
   calls = [];
@@ -172,7 +172,9 @@ function Harness({ initial }: { initial: BookmarkSession }) {
     },
     login: harness.login,
   };
-  return <PlaceDetailScreen bookmarks={access} />;
+  return (
+    <PlaceDetailScreen placeId={1} fromSaved={fromSaved} bookmarks={access} />
+  );
 }
 
 let queryClient: QueryClient;
@@ -477,21 +479,24 @@ describe("비로그인과 세션 종료", () => {
   });
 
   it.each([
-    ["id=1", "/place?id=1"],
-    ["id=1&from=saved", "/place?id=1&from=saved"],
-  ])("?%s에서 [로그인]을 고르면 %s로 돌아오게 남긴다", async (query, path) => {
-    params.value = query;
-    await renderDetail({ status: "guest" });
+    [false, "/places/1"],
+    [true, "/places/1?from=saved"],
+  ])(
+    "fromSaved=%s에서 [로그인]을 고르면 %s로 돌아오게 남긴다",
+    async (saved, path) => {
+      fromSaved = saved;
+      await renderDetail({ status: "guest" });
 
-    fireEvent.click(await button("저장"));
-    fireEvent.click(
-      within(await screen.findByRole("alertdialog")).getByRole("button", {
-        name: "로그인",
-      }),
-    );
+      fireEvent.click(await button("저장"));
+      fireEvent.click(
+        within(await screen.findByRole("alertdialog")).getByRole("button", {
+          name: "로그인",
+        }),
+      );
 
-    expect(harness.login).toHaveBeenCalledWith(path);
-  });
+      expect(harness.login).toHaveBeenCalledWith(path);
+    },
+  );
 
   it("누른 저장이 401로 끝나면 실패 토스트 없이 세션을 지우고 로그인 안내를 띄운다", async () => {
     reply("GET", ok({ bookmarked: false }));
@@ -531,7 +536,7 @@ describe("비로그인과 세션 종료", () => {
 describe("저장한 장소에서 연 상세", () => {
   it("from=saved면 같은 세션에 검색 카드가 있어도 핏 점수와 추천 이유를 보이지 않는다", async () => {
     stores.current.recordCards([card]);
-    params.value = "id=1&from=saved";
+    fromSaved = true;
     reply("GET", ok({ bookmarked: true }));
     await renderDetail();
 

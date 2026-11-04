@@ -374,7 +374,7 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
   // 처음 누르면 지도를 그 핀으로 옮기고 선택한다. 선택된 카드를 다시 누르면 상세로 간다
   function handleCardPress({ place }: PlaceCard) {
     if (place.id === selectedPlaceId) {
-      router.push(`/place?id=${place.id}`);
+      router.push(placeDetailHref(place.id));
       return;
     }
     mapRef.current?.panTo(place);
@@ -667,7 +667,7 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
                   origin={nearby.origin}
                   originLabel={nearby.originLabel}
                   onSelect={handleNearbySelect}
-                  onOpen={({ place }) => router.push(`/place?id=${place.id}`)}
+                  onOpen={({ place }) => router.push(placeDetailHref(place.id))}
                 />
               </>
             )}

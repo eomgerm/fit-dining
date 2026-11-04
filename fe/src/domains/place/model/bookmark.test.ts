@@ -29,7 +29,7 @@ describe("bookmark 모델", () => {
   it("저장한 장소 화면과 상세 주소", () => {
     expect(savedPlacesHref()).toBe("/?view=saved");
     expect(savedPlacesHref("BAR")).toBe("/?view=saved&category=BAR");
-    expect(placeDetailHref(3)).toBe("/place?id=3");
-    expect(placeDetailHref(3, true)).toBe("/place?id=3&from=saved");
+    expect(placeDetailHref(3)).toBe("/places/3");
+    expect(placeDetailHref(3, true)).toBe("/places/3?from=saved");
   });
 });

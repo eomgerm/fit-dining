@@ -14,6 +14,7 @@ import { createQueryClient } from "@/shared/api/query-client";
 import type { RuntimeConfig } from "@/shared/lib/runtime-config";
 import { ToastProvider } from "@/shared/ui/overlay/toast";
 
+import { placeQueries } from "../api/place-queries";
 import type { BookmarkAccess } from "../model/bookmark";
 import type { Menu, PlaceCard, PlaceDetail } from "../model/place-types";
 import { createSearchStore, type SearchStore } from "../model/search-store";
@@ -31,11 +32,9 @@ const guest: BookmarkAccess = {
   login: () => {},
 };
 
-const params = vi.hoisted(() => ({ id: "1" as string | null }));
+let placeId = 1;
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ back: vi.fn(), push: vi.fn() }),
-  useSearchParams: () =>
-    new URLSearchParams(params.id ? { id: params.id } : {}),
 }));
 
 // 정보 탭 위치 지도가 지도 키를 읽는다. 기본은 키가 없어 지도 자리가 접힌다
@@ -149,7 +148,7 @@ function setDetail(overrides: Partial<PlaceDetail>) {
 let fetchMock: ReturnType<typeof vi.fn<typeof fetch>>;
 
 beforeEach(() => {
-  params.id = "1";
+  placeId = 1;
   served = detail;
   stores.current = createSearchStore();
   config.load.mockClear();
@@ -166,11 +165,19 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function renderDetail(slots?: PlaceDetailSlots) {
+function renderDetail(
+  slots?: PlaceDetailSlots,
+  queryClient = createQueryClient(),
+) {
   return render(
-    <QueryClientProvider client={createQueryClient()}>
+    <QueryClientProvider client={queryClient}>
       <ToastProvider>
-        <PlaceDetailScreen slots={slots} bookmarks={guest} />
+        <PlaceDetailScreen
+          placeId={placeId}
+          fromSaved={false}
+          slots={slots}
+          bookmarks={guest}
+        />
       </ToastProvider>
     </QueryClientProvider>,
   );
@@ -703,22 +710,45 @@ describe("PlaceDetailScreen", () => {
     expect(screen.getByText("서울 강남구 테헤란로 1")).toBeTruthy();
   });
 
-  it.each(["0", "abc", "9007199254740992", null])(
-    "?id=%s면 요청하지 않고 '장소를 찾을 수 없어요'를 보여 준다",
-    async (id) => {
-      params.id = id;
-      renderDetail();
-
-      expect(await screen.findByText("장소를 찾을 수 없어요")).toBeTruthy();
-      expect(fetchMock).not.toHaveBeenCalled();
-    },
-  );
-
+  // 서버가 BE를 읽지 못해 비워 둔 뒤 브라우저가 받은 404다. 서버가 404를 받았으면 페이지가 not-found를 그린다
   it("모르는 장소면 '장소를 찾을 수 없어요'를 보여 준다", async () => {
-    params.id = "999";
+    placeId = 999;
     renderDetail();
 
     expect(await screen.findByText("장소를 찾을 수 없어요")).toBeTruthy();
+  });
+
+  // 서버가 방금 그려 넣은 상세를 브라우저가 곧바로 다시 받지 않는다
+  it("서버가 넣은 장소 정보가 새것이면 열 때 다시 받지 않는다", async () => {
+    const queryClient = createQueryClient();
+    queryClient.setQueryData(placeQueries.detail(1).queryKey, detail);
+    renderDetail(undefined, queryClient);
+
+    expect(screen.getByRole("heading", { name: "카페 온담" })).toBeTruthy();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      "/api/v1/places/1",
+      expect.anything(),
+    );
+  });
+
+  // 오래된 상세를 다시 받다가 실패해도 보이던 내용을 지우지 않는다
+  it("이미 받은 장소 정보가 있으면 다시 받기에 실패해도 장소를 계속 보인다", async () => {
+    fetchMock.mockResolvedValue(
+      Response.json({ status: 400 }, { status: 400 }),
+    );
+    const queryClient = createQueryClient();
+    queryClient.setQueryData(placeQueries.detail(1).queryKey, detail, {
+      updatedAt: Date.now() - 10 * 60 * 1000,
+    });
+    renderDetail(undefined, queryClient);
+
+    await waitFor(() =>
+      expect(
+        queryClient.getQueryState(placeQueries.detail(1).queryKey)?.status,
+      ).toBe("error"),
+    );
+    expect(screen.getByRole("heading", { name: "카페 온담" })).toBeTruthy();
   });
 
   // 400은 재시도하지 않아 곧바로 실패한다

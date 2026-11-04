@@ -68,5 +68,7 @@ export const placeQueries = {
     queryOptions({
       queryKey: ["places", "detail", id],
       queryFn: ({ signal }) => getPlace(id, signal),
+      // 서버가 페이지에 넣어 보낸 상세를 열자마자 다시 받지 않는다. 장소 정보는 자주 바뀌지 않는다
+      staleTime: 60_000,
     }),
 };

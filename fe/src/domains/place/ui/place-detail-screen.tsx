@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 
 import { isApiError } from "@/shared/api/api-error";
@@ -21,13 +21,8 @@ import { useToast } from "@/shared/ui/overlay/toast";
 import { Tooltip } from "@/shared/ui/overlay/tooltip";
 
 import { placeQueries } from "../api/place-queries";
-import {
-  placeDetailHref,
-  SAVED_VIEW,
-  type BookmarkAccess,
-} from "../model/bookmark";
+import { placeDetailHref, type BookmarkAccess } from "../model/bookmark";
 import { todayNotice } from "../model/opening-hours";
-import { parsePlaceId } from "../model/place-id";
 import type { PlaceCard, PlaceDetail } from "../model/place-types";
 import { BookmarkButton } from "./bookmark-button";
 import { LoadFailed } from "./load-failed";
@@ -58,34 +53,28 @@ export type PlaceDetailSlots = {
   bottomAction?: (placeId: number) => ReactNode;
 };
 
-// 장소 상세(6-01, 6-02, 6-04, 6-05, 와이어프레임 Detail·DetailMenu·DetailInfo·DetailSaved). ?id가 올바른 정수일 때만 요청한다.
+// 장소 상세(6-01, 6-02, 6-04, 6-05, 와이어프레임 Detail·DetailMenu·DetailInfo·DetailSaved). 주소의 id는 페이지가 검사해 넘긴다.
+// fromSaved는 저장한 장소 화면에서 열었는지다. 그러면 핏 점수와 추천 이유를 보이지 않는다(D-12).
 // bookmarks는 저장 버튼의 인증이다. 인증 도메인을 쓰는 app이 넘긴다
 export function PlaceDetailScreen({
+  placeId,
+  fromSaved,
   slots,
   bookmarks,
 }: {
+  placeId: number;
+  fromSaved: boolean;
   slots?: PlaceDetailSlots;
   bookmarks: BookmarkAccess;
 }) {
-  const params = useSearchParams();
-  const id = parsePlaceId(params.get("id"));
-  // 저장한 장소 화면에서 열었으면 핏 점수와 추천 이유를 보이지 않는다(D-12)
-  const fromSaved = params.get("from") === SAVED_VIEW;
   return (
     <Screen tone="surface-warm" className="relative">
-      {id === undefined ? (
-        <>
-          <BackBar />
-          <NotFound />
-        </>
-      ) : (
-        <PlaceDetailContent
-          id={id}
-          slots={slots}
-          bookmarks={bookmarks}
-          fromSaved={fromSaved}
-        />
-      )}
+      <PlaceDetailContent
+        id={placeId}
+        slots={slots}
+        bookmarks={bookmarks}
+        fromSaved={fromSaved}
+      />
     </Screen>
   );
 }
@@ -146,7 +135,8 @@ function PlaceDetailContent({
       </>
     );
   }
-  if (query.isError) {
+  // 서버가 그려 넣었거나 전에 받은 상세가 있으면 다시 받기가 실패해도 그대로 보인다
+  if (query.isError && query.data === undefined) {
     const notFound = isApiError(query.error) && query.error.status === 404;
     if (notFound) {
       return (

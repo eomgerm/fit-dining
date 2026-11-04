@@ -56,14 +56,14 @@ describe("parsePlaceId", () => {
 });
 
 describe("reviewWriteHref", () => {
-  it("장소 상세 주소 규칙을 따른다", () => {
-    expect(reviewWriteHref(7)).toBe("/place/review?id=7");
+  it("장소 상세 주소 아래에 둔다", () => {
+    expect(reviewWriteHref(7)).toBe("/places/7/review");
   });
 });
 
 describe("reviewEditHref", () => {
-  it("id는 장소 id로 두고 리뷰 id는 review로 싣는다", () => {
-    expect(reviewEditHref(3, 12)).toBe("/place/review/edit?id=3&review=12");
+  it("장소 주소 아래에 리뷰 id를 둔다", () => {
+    expect(reviewEditHref(3, 12)).toBe("/places/3/reviews/12/edit");
   });
 });
 

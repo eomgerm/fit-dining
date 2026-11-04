@@ -4,13 +4,9 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { restore } from "@/domains/auth/api/auth-client";
+import { placeDetailHref } from "@/domains/place/model/bookmark";
 
 import { rememberLoginReturn } from "../../login-return";
-
-// 장소 상세 주소. 상세 탭은 화면 상태라 주소에 싣지 않는다(D-32)
-function placeDetailHref(placeId: number) {
-  return `/place?id=${placeId}`;
-}
 
 // 리뷰는 로그인한 사용자만 쓰고 고친다. 들어올 때 세션을 확인하고, 없으면 로그인 화면으로 바꿔치기해
 // 로그인 화면의 "뒤로"가 이 화면이 아니라 장소 상세로 가게 한다. 로그인한 뒤 이 화면으로 돌아오게 주소를 남긴다(D-48)
