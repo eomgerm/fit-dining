@@ -42,6 +42,9 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	// 이메일 가입 인증번호 발송(SMTP). 호스트가 없으면 로그 발송기를 쓴다
 	implementation 'org.springframework.boot:spring-boot-starter-mail'
+	// 04:00 배치가 Blue/Green 두 색에서 한 번만 돌게 잠근다(인프라 BE 계약 #19)
+	implementation 'net.javacrumbs.shedlock:shedlock-spring:7.10.1'
+	implementation 'net.javacrumbs.shedlock:shedlock-provider-jdbc-template:7.10.1'
 	runtimeOnly 'org.flywaydb:flyway-database-postgresql'
 	compileOnly 'org.projectlombok:lombok'
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'

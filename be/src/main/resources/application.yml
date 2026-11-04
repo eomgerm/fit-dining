@@ -115,6 +115,9 @@ auth:
     batch-size: 1000
 
 fitdining:
+  batch:
+    # 04:00 취향 갱신. dev는 기본으로 끈다(인프라 BE 계약 #19, Modal 비용 이중 발생 방지)
+    enabled: ${BATCH_ENABLED:false}
   onboarding:
     taste-analyzer: ${TASTE_ANALYZER:mock}
     timeout-ms: 10000
