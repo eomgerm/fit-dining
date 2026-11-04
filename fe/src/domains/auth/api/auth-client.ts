@@ -185,7 +185,7 @@ export async function socialSignup(
 }
 export function refresh(): Promise<AuthSession> {
   if (!pendingRefresh) {
-    // 다른 탭이 잠금을 쥐어 기다리는 사이 누른 소셜 버튼의 표시도 남도록 잠금 전에 센다
+    // 다른 탭이 잠금을 쥐어 기다리는 사이 누른 소셜 버튼의 표시도 남도록 잠금 전에 읽는다
     const marksAtSend = signedInMarks();
     pendingRefresh = browserLock(async () => {
       try {

@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 const cookie = vi.hoisted(() => ({
   markSignedIn: vi.fn(),
   clearSignedIn: vi.fn(),
-  signedInMarks: vi.fn(() => 0),
+  signedInMarks: vi.fn(() => ""),
 }));
 vi.mock("../model/signed-in-cookie", () => cookie);
 
@@ -415,9 +415,9 @@ test("refresh 401 clears only the mark that existed when it was sent", async () 
   try {
     const auth = await load();
     cookie.clearSignedIn.mockClear();
-    cookie.signedInMarks.mockReturnValueOnce(7);
+    cookie.signedInMarks.mockReturnValueOnce("mark-7");
     await assert.rejects(auth.refresh(), { status: 401 });
-    assert.deepEqual(cookie.clearSignedIn.mock.calls, [[7]]);
+    assert.deepEqual(cookie.clearSignedIn.mock.calls, [["mark-7"]]);
   } finally {
     env.reset();
   }

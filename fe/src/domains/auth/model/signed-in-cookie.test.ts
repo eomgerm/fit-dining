@@ -9,6 +9,7 @@ import {
 
 afterEach(() => {
   clearSignedIn();
+  localStorage.clear();
   vi.restoreAllMocks();
 });
 
@@ -52,4 +53,29 @@ it("since 뒤에 새로 심지 않았으면 지운다", () => {
 
   clearSignedIn(since);
   expect(isMarkedSignedIn()).toBe(false);
+});
+
+// 탭마다 모듈이 따로 뜬다. 쿠키와 localStorage만 같이 쓴다
+it("다른 탭이 since 뒤에 새로 심은 표시도 지우지 않는다", async () => {
+  const since = signedInMarks();
+  vi.resetModules();
+  const otherTab = await import("./signed-in-cookie");
+  otherTab.markSignedIn(Date.now() / 1000 + 600);
+
+  clearSignedIn(since);
+  expect(isMarkedSignedIn()).toBe(true);
+});
+
+it("저장소를 못 써도 같은 탭에서 새로 심은 표시는 지우지 않는다", () => {
+  vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+    throw new Error("blocked");
+  });
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+    throw new Error("blocked");
+  });
+  const since = signedInMarks();
+  markSignedIn(Date.now() / 1000 + 600);
+
+  clearSignedIn(since);
+  expect(isMarkedSignedIn()).toBe(true);
 });
