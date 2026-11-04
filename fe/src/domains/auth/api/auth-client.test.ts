@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 const cookie = vi.hoisted(() => ({
   markSignedIn: vi.fn(),
   clearSignedIn: vi.fn(),
+  signedInMarks: vi.fn(() => 0),
 }));
 vi.mock("../model/signed-in-cookie", () => cookie);
 
@@ -401,6 +402,22 @@ test("session end clears the signed-in mark", async () => {
       await end();
       assert.equal(cookie.clearSignedIn.mock.calls.length, 1);
     }
+  } finally {
+    env.reset();
+  }
+});
+
+// 기다리는 사이 새로 심은 표시(소셜 버튼)는 남도록 요청을 보낼 때의 표시 횟수를 넘긴다
+test("refresh 401 clears only the mark that existed when it was sent", async () => {
+  const env = environment(async () =>
+    json({ status: 401, detail: "expired" }, 401),
+  );
+  try {
+    const auth = await load();
+    cookie.clearSignedIn.mockClear();
+    cookie.signedInMarks.mockReturnValueOnce(7);
+    await assert.rejects(auth.refresh(), { status: 401 });
+    assert.deepEqual(cookie.clearSignedIn.mock.calls, [[7]]);
   } finally {
     env.reset();
   }

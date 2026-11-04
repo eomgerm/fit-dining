@@ -4,6 +4,7 @@ import {
   clearSignedIn,
   isMarkedSignedIn,
   markSignedIn,
+  signedInMarks,
 } from "./signed-in-cookie";
 
 afterEach(() => {
@@ -33,5 +34,22 @@ it("clearSignedIn은 표시를 지운다", () => {
   expect(isMarkedSignedIn()).toBe(true);
 
   clearSignedIn();
+  expect(isMarkedSignedIn()).toBe(false);
+});
+
+// 갱신 응답을 기다리는 사이 소셜 버튼이 새로 심은 표시를 늦게 온 401이 지우지 않는다
+it("since 뒤에 새로 심은 표시는 지우지 않는다", () => {
+  const since = signedInMarks();
+  markSignedIn(Date.now() / 1000 + 600);
+
+  clearSignedIn(since);
+  expect(isMarkedSignedIn()).toBe(true);
+});
+
+it("since 뒤에 새로 심지 않았으면 지운다", () => {
+  markSignedIn(Date.now() / 1000 + 600);
+  const since = signedInMarks();
+
+  clearSignedIn(since);
   expect(isMarkedSignedIn()).toBe(false);
 });

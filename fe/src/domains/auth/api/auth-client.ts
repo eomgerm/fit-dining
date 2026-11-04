@@ -1,6 +1,10 @@
 "use client";
 
-import { clearSignedIn, markSignedIn } from "../model/signed-in-cookie";
+import {
+  clearSignedIn,
+  markSignedIn,
+  signedInMarks,
+} from "../model/signed-in-cookie";
 import type { SignupPreferences } from "../model/signup";
 
 export type AuthSession = {
@@ -181,6 +185,8 @@ export async function socialSignup(
 }
 export function refresh(): Promise<AuthSession> {
   if (!pendingRefresh) {
+    // 다른 탭이 잠금을 쥐어 기다리는 사이 누른 소셜 버튼의 표시도 남도록 잠금 전에 센다
+    const marksAtSend = signedInMarks();
     pendingRefresh = browserLock(async () => {
       try {
         const next = await startSession("/refresh", { method: "POST" });
@@ -188,7 +194,7 @@ export function refresh(): Promise<AuthSession> {
       } catch (error) {
         if (error instanceof AuthError && error.status === 401) {
           update(null);
-          clearSignedIn();
+          clearSignedIn(marksAtSend);
           channel?.postMessage("session-changed");
         }
         throw error;

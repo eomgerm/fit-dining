@@ -9,6 +9,12 @@ import {
   within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import {
+  GUEST_KEY,
+  isGuest,
+  migrateLegacyGuest,
+  startAsGuest,
+} from "@/domains/onboarding/model/storage";
 import { savedViewState } from "@/domains/place/ui/saved-view-state";
 import { ApiError } from "@/shared/api/api-error";
 import MyPage from "./page";
@@ -40,6 +46,8 @@ vi.mock("@/domains/auth/api/auth-client", () => ({
 }));
 beforeEach(() => {
   vi.clearAllMocks();
+  localStorage.clear();
+  document.cookie = "fd_guest=; Path=/; Max-Age=0";
   mocks.session = { userId: "u1" };
   mocks.profile.mockResolvedValue({
     userId: "u1",
@@ -238,6 +246,29 @@ it("withdraws to home with a toast, disabling the buttons while pending", async 
   fireEvent.keyDown(dialog, { key: "Escape" });
   expect(screen.getByRole("alertdialog")).toBeTruthy();
   expect(mocks.withdraw).toHaveBeenCalledTimes(1);
+});
+// 비회원으로 쓰다 가입한 사람도 탈퇴하면 처음 온 사람처럼 홈(/)에서 온보딩을 본다
+it("withdrawing also ends guest mode so home shows onboarding", async () => {
+  startAsGuest();
+  localStorage.setItem(GUEST_KEY, "1");
+  render(<MyPage />);
+  const dialog = await openDialog("탈퇴하기");
+  fireEvent.click(within(dialog).getByRole("button", { name: "탈퇴" }));
+  await waitFor(() => expect(mocks.router.replace).toHaveBeenCalledWith("/"));
+  expect(isGuest()).toBe(false);
+  // 옛 비회원 값이 남아 있으면 홈이 다시 비회원으로 옮긴다
+  expect(migrateLegacyGuest()).toBe(false);
+});
+it("keeps guest mode when withdrawing fails", async () => {
+  startAsGuest();
+  mocks.withdraw.mockRejectedValue(
+    new ApiError("http", "server", { status: 503 }),
+  );
+  render(<MyPage />);
+  const dialog = await openDialog("탈퇴하기");
+  fireEvent.click(within(dialog).getByRole("button", { name: "탈퇴" }));
+  await waitFor(() => expect(mocks.toast).toHaveBeenCalled());
+  expect(isGuest()).toBe(true);
 });
 it("sends withdraw 401 to login", async () => {
   mocks.withdraw.mockImplementation(async () => {

@@ -95,6 +95,15 @@ export function startAsGuest() {
 export function isGuest() {
   return hasFlagCookie(GUEST_COOKIE);
 }
+// 탈퇴하면 처음 온 사람처럼 홈(/)이 온보딩을 준다. 옛 표시도 지워 다시 옮겨지지 않게 한다
+export function endGuest() {
+  setFlagCookie(GUEST_COOKIE, 0);
+  try {
+    localStorage.removeItem(GUEST_KEY);
+  } catch {
+    /* 저장소를 못 쓰면 옛 표시도 읽지 못한다 */
+  }
+}
 // localStorage에 옛 표시가 있으면 쿠키로 옮기고 true를 돌려준다. 쿠키를 쓰지 못하면 옛 표시를 남긴다
 export function migrateLegacyGuest() {
   try {

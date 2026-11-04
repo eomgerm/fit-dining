@@ -7,6 +7,7 @@ import {
   withdraw,
   type UserProfile,
 } from "@/domains/auth/api/user-profile";
+import { endGuest } from "@/domains/onboarding/model/storage";
 import { savedPlacesHref } from "@/domains/place/model/bookmark";
 import { savedViewState } from "@/domains/place/ui/saved-view-state";
 import { isApiError } from "@/shared/api/api-error";
@@ -92,6 +93,7 @@ export default function MyPage() {
     setBusy(true);
     try {
       await withdraw();
+      endGuest();
       router.replace("/");
       router.refresh();
       toast("탈퇴했어요");
