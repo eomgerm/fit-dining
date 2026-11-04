@@ -2,6 +2,7 @@ package kr.co.fitdining.api.onboarding;
 
 import java.sql.Array;
 import java.sql.SQLException;
+import java.time.OffsetDateTime;
 import java.util.*;
 import kr.co.fitdining.api.onboarding.AiTasteClient.ReviewEvidence;
 import kr.co.fitdining.api.review.tag.ReasonTag.Sentiment;
@@ -40,22 +41,27 @@ public class TasteRefreshBatch {
     }
 
     /**
-     * Targets: active users with any review row (deleted ones too, so removals are reflected) or empty features.
+     * Targets: active users who wrote or deleted a review since their last refresh, or whose features are still
+     * empty from a failed onboarding call. A target's whole live history is sent; the AI keeps no state.
      * updated_at is left alone; it tracks the user's own answers (GET /preferences).
      */
     // lockAtLeastFor keeps the other Blue/Green color from rerunning after an early finish.
     @Scheduled(cron = "0 0 4 * * *", zone = "Asia/Seoul")
     @SchedulerLock(name = "taste-refresh", lockAtLeastFor = "PT30M", lockAtMostFor = "PT3H")
     public void run() {
-        // ponytail: all targets and evidence in memory, one AI call per user; page by user_id when users reach ~10^5.
+        // Taken before reading, so a review written mid-run is picked up next time. The margin covers a review whose
+        // transaction began earlier but committed after the read, and app clocks a little behind the DB.
+        OffsetDateTime started = jdbc.sql("select now() - interval '5 minutes'").query(OffsetDateTime.class).single();
         Map<String, Preferences> targets = targets();
-        Map<String, List<ReviewEvidence>> evidence = evidence();
         int failed = 0;
         for (var target : targets.entrySet()) {
             try {
-                var features = client.refresh(target.getValue(), evidence.getOrDefault(target.getKey(), List.of()));
-                jdbc.sql("update user_preferences set features = cast(:features as jsonb) where user_id = :id")
-                        .param("features", json.writeValueAsString(features)).param("id", target.getKey()).update();
+                var features = client.refresh(target.getValue(), evidence(target.getKey()));
+                jdbc.sql("""
+                        update user_preferences set features = cast(:features as jsonb), features_refreshed_at = :started
+                        where user_id = :id""")
+                        .param("features", json.writeValueAsString(features)).param("started", started)
+                        .param("id", target.getKey()).update();
             } catch (RuntimeException failure) {
                 failed++;
                 // Payloads and messages may contain answers, so only the type is logged.
@@ -67,11 +73,15 @@ public class TasteRefreshBatch {
 
     private Map<String, Preferences> targets() {
         Map<String, Preferences> targets = new LinkedHashMap<>();
+        // ponytail: the exists scans every preferences row's reviews unindexed; index reviews(user_id) if this slows.
         jdbc.sql("""
                 select p.user_id, p.mood, p.priorities, p.purposes, p.tastes::text as tastes
                 from user_preferences p join auth_users u on u.id = p.user_id
                 where u.deleted_at is null
-                  and (p.features = '[]'::jsonb or exists (select 1 from reviews r where r.user_id = p.user_id))
+                  and (p.features = '[]'::jsonb and p.features_refreshed_at is null
+                       or exists (select 1 from reviews r where r.user_id = p.user_id
+                                  and greatest(r.created_at, r.deleted_at)
+                                      > coalesce(p.features_refreshed_at, '-infinity')))
                 order by p.user_id""").query(rs -> {
             try {
                 String mood = rs.getString("mood");
@@ -88,24 +98,22 @@ public class TasteRefreshBatch {
         return targets;
     }
 
-    private Map<String, List<ReviewEvidence>> evidence() {
-        Map<String, List<ReviewEvidence>> byUser = new HashMap<>();
-        // Reviews excluded from analysis must drop out too (taste-profile spec 2); add the filter when -56 adds the column.
-        jdbc.sql("""
-                select r.user_id, r.place_id, r.review_id, r.created_at, p.category_group, t.feature_code, t.sentiment
+    private List<ReviewEvidence> evidence(String userId) {
+        // Reviews excluded from analysis must drop out too (taste-profile spec 2). When -56 adds the column, filter
+        // here and count the exclusion time in the targets query like deleted_at.
+        return jdbc.sql("""
+                select r.place_id, r.review_id, r.created_at, p.category_group, t.feature_code, t.sentiment
                 from reviews r
                 join review_reason_tags rt on rt.review_id = r.review_id
                 join reason_tags t on t.code = rt.code
                 join places p on p.place_id = r.place_id
-                where r.deleted_at is null
-                order by r.created_at, r.review_id, t.sort_order""").query(rs -> {
-            byUser.computeIfAbsent(rs.getString("user_id"), id -> new ArrayList<>()).add(new ReviewEvidence(
-                    rs.getLong("place_id"), rs.getLong("review_id"), CATEGORIES.get(rs.getString("category_group")),
-                    ReasonTagRule.userFeatureCode(rs.getString("feature_code"),
-                            Sentiment.valueOf(rs.getString("sentiment"))),
-                    rs.getTimestamp("created_at").toInstant()));
-        });
-        return byUser;
+                where r.user_id = :id and r.deleted_at is null
+                order by r.created_at, r.review_id, t.sort_order""").param("id", userId).query((rs, row) ->
+                new ReviewEvidence(rs.getLong("place_id"), rs.getLong("review_id"),
+                        CATEGORIES.get(rs.getString("category_group")),
+                        ReasonTagRule.userFeatureCode(rs.getString("feature_code"),
+                                Sentiment.valueOf(rs.getString("sentiment"))),
+                        rs.getTimestamp("created_at").toInstant())).list();
     }
 
     private static List<String> names(Array array) throws SQLException {
