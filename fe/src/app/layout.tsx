@@ -4,7 +4,7 @@ import { InstallBanner } from "@/domains/install/ui/install-banner";
 import "./globals.css";
 import { Providers } from "./providers";
 import { RegisterServiceWorker } from "./register-sw";
-import { siteDescription } from "./site";
+import { siteDescription, siteOpenGraph, siteUrl } from "./site";
 
 // ponytail: 가변 폰트 전체(2MB)를 한 번에 받는다. 첫 로딩이 문제되면 Pretendard dynamic subset으로 바꾼다
 const pretendard = localFont({
@@ -14,17 +14,14 @@ const pretendard = localFont({
   variable: "--font-pretendard",
 });
 
-// dev와 prod가 같은 이미지라 환경변수 대신 prod 주소로 고정한다. dev는 엣지 게이트가 크롤러를 막는다
 // canonical은 여기 두지 않는다. 두면 자기 값을 안 정한 모든 페이지가 홈을 가리킨다
 export const metadata: Metadata = {
-  metadataBase: new URL("https://fitdining.co.kr"),
+  metadataBase: new URL(siteUrl),
   title: { default: "핏다이닝", template: "%s | 핏다이닝" },
   description: siteDescription,
   // 공유 이미지(og:image, twitter:image)는 opengraph-image.png 파일 규칙이 붙인다
   openGraph: {
-    type: "website",
-    siteName: "핏다이닝",
-    locale: "ko_KR",
+    ...siteOpenGraph,
     title: "핏다이닝",
     description: siteDescription,
   },

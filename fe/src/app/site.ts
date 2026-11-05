@@ -1,5 +1,15 @@
 import type { Metadata } from "next";
 
+// dev와 prod가 같은 이미지라 환경변수 대신 prod 주소로 고정한다. dev는 엣지 게이트가 크롤러를 막는다
+export const siteUrl = "https://fitdining.co.kr";
+
+// 페이지가 openGraph를 정하면 레이아웃의 openGraph를 통째로 바꾸므로(얕은 병합) 공통 값을 함께 펼친다
+export const siteOpenGraph = {
+  type: "website",
+  siteName: "핏다이닝",
+  locale: "ko_KR",
+} as const;
+
 // 검색 결과·링크 미리보기 설명과 홈의 noscript 소개가 같은 문구를 쓴다
 export const siteDescription =
   "원하는 조건을 자연스럽게 검색해보세요. 내 취향에 딱 맞는 장소를 추천해드려요.";

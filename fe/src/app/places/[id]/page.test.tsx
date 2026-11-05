@@ -1,11 +1,25 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import PlaceDetailPage from "./page";
+import PlaceDetailPage, { generateMetadata } from "./page";
 import ReviewWritePage from "./review/page";
 import ReviewEditPage from "./reviews/[reviewId]/edit/page";
 
 // notFound()가 던지는 오류. 가장 가까운 not-found.tsx가 그려진다
 const NOT_FOUND = { digest: "NEXT_HTTP_ERROR_FALLBACK;404" };
+
+// 메타데이터·구조화 데이터가 읽는 항목만 채운 상세
+const DETAIL = {
+  place: {
+    id: 5,
+    name: "카페 온담",
+    categoryGroup: "CAFE",
+    lat: 37.5,
+    lng: 127,
+  },
+  address: "서울 강남구 테헤란로 5",
+  photos: [],
+  hours: [],
+};
 
 const fetchMock = vi.fn<typeof fetch>();
 const noQuery = Promise.resolve({});
@@ -19,9 +33,14 @@ function serve(status: number) {
   vi.stubGlobal("fetch", fetchMock);
   fetchMock.mockImplementation(async () =>
     status === 200
-      ? Response.json({ place: { id: 5, name: "카페 온담" } })
+      ? Response.json(DETAIL)
       : Response.json({ status }, { status }),
   );
+}
+
+// 구조화 데이터 script 다음이 화면이다
+function screenOf(page: Awaited<ReturnType<typeof PlaceDetailPage>>) {
+  return [page.props.children].flat().at(-1);
 }
 
 function place(id: string, query: Record<string, string> = {}) {
@@ -76,7 +95,59 @@ describe("장소 상세 페이지", () => {
 
     const page = await place("5", { from: "saved" });
 
-    expect(page.props.children.props).toEqual({ placeId: 5, fromSaved: true });
+    expect(screenOf(page).props).toEqual({ placeId: 5, fromSaved: true });
+  });
+
+  it("받은 장소를 schema.org 구조화 데이터로 싣는다", async () => {
+    serve(200);
+
+    const page = await place("5");
+
+    const [jsonLd] = [page.props.children].flat();
+    expect(jsonLd.props.type).toBe("application/ld+json");
+    expect(
+      JSON.parse(jsonLd.props.dangerouslySetInnerHTML.__html),
+    ).toMatchObject({
+      name: "카페 온담",
+      url: "https://fitdining.co.kr/places/5",
+    });
+  });
+
+  it("BE가 실패하면 구조화 데이터를 싣지 않는다", async () => {
+    serve(503);
+
+    const page = await place("5");
+
+    expect([page.props.children].flat().filter(Boolean)).toHaveLength(1);
+  });
+});
+
+describe("장소 상세 메타데이터", () => {
+  function metadata(id: string) {
+    return generateMetadata({
+      params: Promise.resolve({ id }),
+      searchParams: noQuery,
+    });
+  }
+
+  it("제목은 장소명이고 canonical은 상세 주소다", async () => {
+    serve(200);
+
+    expect(await metadata("5")).toMatchObject({
+      title: "카페 온담",
+      alternates: { canonical: "/places/5" },
+    });
+  });
+
+  // 없는 장소는 페이지의 notFound()가 noindex를 붙인다
+  it.each([
+    ["잘못된 id", "abc", 200],
+    ["없는 장소", "5", 404],
+    ["BE 실패", "5", 503],
+  ])("%s면 레이아웃 메타데이터를 그대로 둔다", async (_, id, status) => {
+    serve(status);
+
+    expect(await metadata(id)).toEqual({});
   });
 });
 

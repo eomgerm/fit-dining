@@ -62,3 +62,8 @@ export async function searchPlaces(
 export function getPlace(id: number, signal?: AbortSignal) {
   return request<PlaceDetail>(`/v1/places/${id}`, { signal });
 }
+
+// 열 수 있는 모든 장소 id(장소 sitemap)
+export function getPlaceIds() {
+  return request<number[]>("/v1/places/ids");
+}

@@ -10,3 +10,4 @@ Disallow: /places/*/review
 Disallow: /auth-demo
 
 Sitemap: https://fitdining.co.kr/sitemap.xml
+Sitemap: https://fitdining.co.kr/places/sitemap.xml
