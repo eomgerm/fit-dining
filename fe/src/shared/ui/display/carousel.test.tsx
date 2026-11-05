@@ -1,5 +1,11 @@
 // @vitest-environment jsdom
-import { act, cleanup, render } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen as view,
+} from "@testing-library/react";
 import { Activity } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Carousel } from "./carousel";
@@ -10,6 +16,8 @@ const mocks = vi.hoisted(() => ({
   destroy: vi.fn(),
   selectedScrollSnap: vi.fn(),
   scrollTo: vi.fn(),
+  scrollPrev: vi.fn(),
+  scrollNext: vi.fn(),
   internalEngine: vi.fn(),
   duration: vi.fn(),
   useDuration: vi.fn(),
@@ -77,6 +85,32 @@ describe("Carousel 스와이프 정착 시간", () => {
   });
 });
 
+describe("Carousel 바깥에서 칸 바꾸기", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it.each([
+    [false, false],
+    [true, true],
+  ])("움직임 줄이기 %s이면 jump %s로 넘어간다", (reduce, jump) => {
+    vi.stubGlobal("matchMedia", () => ({ matches: reduce }));
+    const view = render(
+      <Carousel label="사진" index={0}>
+        <span>1</span>
+        <span>2</span>
+        <span>3</span>
+      </Carousel>,
+    );
+    view.rerender(
+      <Carousel label="사진" index={2}>
+        <span>1</span>
+        <span>2</span>
+        <span>3</span>
+      </Carousel>,
+    );
+    expect(mocks.scrollTo).toHaveBeenCalledWith(2, jump);
+  });
+});
+
 describe("Carousel 다시 만들기 (place-search D-102)", () => {
   function screen(mode: "visible" | "hidden", index?: number) {
     return (
@@ -123,5 +157,22 @@ describe("Carousel 다시 만들기 (place-search D-102)", () => {
       expect.objectContaining({ startIndex: 2 }),
     );
     expect(mocks.scrollTo).not.toHaveBeenCalled();
+  });
+});
+
+describe("Carousel 키보드로 넘기기", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it.each([
+    [false, false],
+    [true, true],
+  ])("움직임 줄이기 %s이면 ←/→를 jump %s로 넘긴다", (reduce, jump) => {
+    vi.stubGlobal("matchMedia", () => ({ matches: reduce }));
+    render(<Carousel label="사진">사진</Carousel>);
+    const carousel = view.getByRole("region", { name: "사진" });
+    fireEvent.keyDown(carousel, { key: "ArrowRight" });
+    fireEvent.keyDown(carousel, { key: "ArrowLeft" });
+    expect(mocks.scrollNext).toHaveBeenCalledWith(jump);
+    expect(mocks.scrollPrev).toHaveBeenCalledWith(jump);
   });
 });

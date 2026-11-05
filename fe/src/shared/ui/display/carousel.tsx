@@ -15,6 +15,7 @@ import {
 } from "react";
 
 import { cn } from "@/shared/lib/cn";
+import { prefersReducedMotion } from "@/shared/lib/reduced-motion";
 
 type CarouselProps = {
   // 화면 낭독기용 이름(예: "장소 사진")
@@ -91,13 +92,16 @@ export function Carousel({
   useEffect(() => {
     const api = apiRef.current;
     if (api && index !== undefined && index !== api.selectedScrollSnap()) {
-      api.scrollTo(index);
+      // 움직임 줄이기에서는 미끄러지지 않고 그 칸으로 바로 바꾼다
+      api.scrollTo(index, prefersReducedMotion());
     }
   }, [index]);
 
   function handleKeyDown(event: KeyboardEvent) {
-    if (event.key === "ArrowLeft") apiRef.current?.scrollPrev();
-    if (event.key === "ArrowRight") apiRef.current?.scrollNext();
+    if (event.key === "ArrowLeft")
+      apiRef.current?.scrollPrev(prefersReducedMotion());
+    if (event.key === "ArrowRight")
+      apiRef.current?.scrollNext(prefersReducedMotion());
   }
 
   return (

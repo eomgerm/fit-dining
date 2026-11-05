@@ -8,6 +8,7 @@ import {
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
+import { prefersReducedMotion } from "@/shared/lib/reduced-motion";
 import { Button } from "@/shared/ui/button/button";
 import { Fab } from "@/shared/ui/button/fab";
 import { BookmarkIcon } from "@/shared/ui/icon/icons/bookmark";
@@ -390,9 +391,10 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
   // 결과 목록은 그 카드로 스크롤하고, 주변 카드 목록은 선택이 바뀌면 그 카드로 넘어간다
   function handlePinClick(placeId: number) {
     searchStore.select(placeId);
-    document
-      .getElementById(placeCardElementId(placeId))
-      ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    document.getElementById(placeCardElementId(placeId))?.scrollIntoView({
+      block: "nearest",
+      behavior: prefersReducedMotion() ? "auto" : "smooth",
+    });
   }
 
   // 메인 "저장한 장소" 버튼. 비로그인 사용자에게는 로그인 안내를 띄운다(D-7)
@@ -422,9 +424,10 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
 
   function handleSavedPinClick(placeId: number) {
     setSavedSelectedId(placeId);
-    document
-      .getElementById(savedCardElementId(placeId))
-      ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    document.getElementById(savedCardElementId(placeId))?.scrollIntoView({
+      block: "nearest",
+      behavior: prefersReducedMotion() ? "auto" : "smooth",
+    });
   }
 
   // "추천 받으러 가기". 보던 검색 결과를 닫고 메인 기본 화면(주변 추천)으로 간다. 최근 검색 기록은 남는다

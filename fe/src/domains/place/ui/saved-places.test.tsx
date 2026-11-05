@@ -371,56 +371,71 @@ describe("저장한 장소 화면 들어가기", () => {
     expect(await screen.findByText("검색 결과 장소")).toBeTruthy();
   });
 
-  it("핀을 누르면 그 카드를 가리키되 메인 화면의 선택은 바꾸지 않는다", async () => {
-    config.value = { env: "dev", naverMapClientId: "key" };
-    const clicks = new Map<unknown, () => void>();
-    const markerOf = new Map<unknown, number>();
-    vi.stubGlobal("naver", {
-      maps: {
-        Map: class {
-          getBounds = () => ({});
-          panTo() {}
-          setSize() {}
-          destroy() {}
-        },
-        LatLng: class {},
-        Size: class {},
-        Point: class {},
-        Marker: class {
-          constructor() {
-            markerOf.set(this, markerOf.size);
-          }
-          setMap() {}
-          setIcon() {}
-          setZIndex() {}
-        },
-        Event: {
-          addListener: (
-            target: unknown,
-            name: string,
-            listener: () => void,
-          ) => {
-            if (name === "click") clicks.set(target, listener);
-            return {};
+  it.each([
+    [false, "smooth"],
+    [true, "auto"],
+  ])(
+    "핀을 누르면 그 카드를 가리키되 메인 화면의 선택은 바꾸지 않는다(움직임 줄이기 %s → %s 스크롤)",
+    async (reduce, behavior) => {
+      vi.stubGlobal("matchMedia", () => ({
+        matches: reduce,
+        addEventListener() {},
+        removeEventListener() {},
+      }));
+      config.value = { env: "dev", naverMapClientId: "key" };
+      const clicks = new Map<unknown, () => void>();
+      const markerOf = new Map<unknown, number>();
+      vi.stubGlobal("naver", {
+        maps: {
+          Map: class {
+            getBounds = () => ({});
+            panTo() {}
+            setSize() {}
+            destroy() {}
           },
-          removeListener() {},
+          LatLng: class {},
+          Size: class {},
+          Point: class {},
+          Marker: class {
+            constructor() {
+              markerOf.set(this, markerOf.size);
+            }
+            setMap() {}
+            setIcon() {}
+            setZIndex() {}
+          },
+          Event: {
+            addListener: (
+              target: unknown,
+              name: string,
+              listener: () => void,
+            ) => {
+              if (name === "click") clicks.set(target, listener);
+              return {};
+            },
+            removeListener() {},
+          },
         },
-      },
-    });
-    Element.prototype.scrollIntoView = vi.fn();
-    stores.current.select(42);
-    listReplies.push(list([item(3), item(5)]));
-    renderScreen("/?view=saved");
-    await savedList();
-    await waitFor(() => expect(clicks.size).toBe(2));
+      });
+      Element.prototype.scrollIntoView = vi.fn();
+      stores.current.select(42);
+      listReplies.push(list([item(3), item(5)]));
+      renderScreen("/?view=saved");
+      await savedList();
+      await waitFor(() => expect(clicks.size).toBe(2));
 
-    act(() => [...clicks.values()][1]());
+      act(() => [...clicks.values()][1]());
 
-    expect(document.getElementById("saved-card-5")?.className).toContain(
-      "bg-primary-soft",
-    );
-    expect(stores.current.getSnapshot().selectedPlaceId).toBe(42);
-  });
+      expect(document.getElementById("saved-card-5")?.className).toContain(
+        "bg-primary-soft",
+      );
+      expect(stores.current.getSnapshot().selectedPlaceId).toBe(42);
+      expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({
+        block: "nearest",
+        behavior,
+      });
+    },
+  );
 });
 
 describe("[뒤로]", () => {
