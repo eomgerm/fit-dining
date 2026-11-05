@@ -51,7 +51,11 @@ def main() -> None:
     parser.add_argument("--label", default=str(date.today()), help="결과 파일 이름")
     parser.add_argument("--model", help="해석 모델. 없으면 해석의 모델(`MODEL`)을 쓴다")
     parser.add_argument(
-        "--effort", help="해석 모델의 추론 강도. 없으면 `REASONING_EFFORT`"
+        "--effort", help="새 검색의 추론 강도. 없으면 `REASONING_EFFORT`"
+    )
+    parser.add_argument(
+        "--follow-up-effort",
+        help="후속의 추론 강도. 없으면 `FOLLOW_UP_REASONING_EFFORT`",
     )
     args = parser.parse_args()
     # 해석은 자기 모델로 부른다(`interpretation.MODEL`). 실험에서만 바꿔 끼운다.
@@ -59,6 +63,8 @@ def main() -> None:
         interpretation.MODEL = args.model
     if args.effort:
         interpretation.REASONING_EFFORT = args.effort
+    if args.follow_up_effort:
+        interpretation.FOLLOW_UP_REASONING_EFFORT = args.follow_up_effort
     cases = json.loads((HERE / "cases.json").read_text(encoding="utf-8"))["cases"]
     timeout = float(os.environ.get("GMS_TIMEOUT_SECONDS", "5.0"))
     gms.call_json = _record(gms.call_json)

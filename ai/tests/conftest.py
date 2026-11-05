@@ -31,6 +31,7 @@ def fake_gms(monkeypatch: pytest.MonkeyPatch) -> Callable[[Answer], list[list[di
             model=gms.MODEL,
             temperature=0,
             reasoning_effort=None,
+            retry_on_timeout=True,
         ):
             for _ in range(2):
                 calls.append(messages)

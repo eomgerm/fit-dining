@@ -2,8 +2,9 @@
 
 공유 모듈 `fit_ai.gms`로 GMS를 한 번 부른다. 모델은 공유 모듈의 기본 모델이 아니라 `MODEL`이다. 호출이 실패하거나 JSON이 아니면 공유 모듈이
 한 번 더 부른다. 그래도 실패하거나 출력이 형식에 맞지 않으면 다시 부르지 않고 낱말
-규칙으로 해석한다(인프라 설계 11.2). LLM과 규칙 모두 이번 요청만 해석하고, 후속 조건이면
-이전 조건과 분류별 규칙으로 합친다(검색 spec D-50, docs/comparison/conditions-v3.md 4장).
+규칙으로 해석한다(인프라 설계 11.2). 후속 조건이면 LLM은 이전 조건에 새 요청을
+반영한 조건 전체를 내고(2026-11-05), 규칙 해석은 이번 요청만 해석해 이전 조건과 분류별 규칙으로
+합친다(검색 spec D-50, docs/comparison/conditions-v3.md 4장).
 정리는 docs/comparison/spec.md 4.1에 있다.
 
 모듈은 하는 일별로 나눴다.
@@ -48,13 +49,26 @@ MODEL = "gpt-6-luna"
 새 질의 21개를 4번씩: 평가 317/320, 새 질의 84/84. gpt-4o-mini는 규칙 없이 평가 125/160)."""
 
 REASONING_EFFORT = "none"
-"""해석 모델의 추론 강도. 추론하지 않으면 응답 중앙값 1.7초로 gpt-4o-mini(1.55초)와 비슷하고
+"""새 검색의 추론 강도. 추론하지 않으면 응답 중앙값 1.7초로 gpt-4o-mini(1.55초)와 비슷하고
 정확도는 추론 `low`(2.4초)와 비슷했다(2026-11-05). 이 모델은 temperature 0을 받지 않아
 temperature는 보내지 않는다."""
+
+FOLLOW_UP_REASONING_EFFORT = "low"
+"""후속의 추론 강도. 후속은 이전 조건에 새 요청을 반영해야 해서 맥락 판단이 많다. 후속 시험
+(단일 30개, 연쇄 5개 21턴, 4번씩)에서 `none`은 단일 114/120·연쇄 턴 77/84였고 음식 종류를
+바꿀 때 이전 메뉴를 남겼다. `low`는 모두 맞았고 응답 중앙값이 2.1초에서 2.9초가 됐다
+(2026-11-05)."""
+
+FOLLOW_UP_TIMEOUT_SECONDS = 7.0
+"""후속에서 GMS 한 번을 기다리는 최소 시간(초). 추론 `low`는 최대 5.01초가 나와 새 검색의
+대기 시간(기본 5초)보다 길게 둔다. 시간 초과면 다시 부르지 않고 규칙으로 해석한다. 다시
+부르면 BE가 AI를 기다리는 12초(place-ai-search spec)를 넘는다."""
 
 __all__ = [
     "CODE_PHRASES",
     "DEFAULT_CHANGE_SUMMARY",
+    "FOLLOW_UP_REASONING_EFFORT",
+    "FOLLOW_UP_TIMEOUT_SECONDS",
     "FOOD_CODES",
     "FOOD_TYPES",
     "GROUP_SIZE",
@@ -84,12 +98,14 @@ def interpret(
     Args:
         query: 사용자가 이번에 입력한 요청문
         previous: 후속 조건이면 기준 요청의 조건. 새 검색이면 None이다.
-        timeout: GMS 한 번 부를 때 기다리는 시간(초)
+        timeout: GMS 한 번 부를 때 기다리는 시간(초). 후속이면
+            `FOLLOW_UP_TIMEOUT_SECONDS`보다 짧지 않게 기다리고 시간 초과면 다시 부르지 않는다.
         client: GMS 연결을 다시 쓰는 HTTP 클라이언트. 없으면 부를 때마다 만든다.
 
     Returns:
         해석 결과
     """
+    follow_up = previous is not None
     start = time.perf_counter()
     data = gms.call_json(
         [
@@ -99,11 +115,12 @@ def interpret(
         ],
         # 출력 검사는 받은 뒤 한 번만 한다. 공유 모듈에 넘기면 검사에 걸릴 때도 다시 부른다.
         lambda data: data,
-        timeout=timeout,
+        timeout=max(timeout, FOLLOW_UP_TIMEOUT_SECONDS) if follow_up else timeout,
         client=client,
         model=MODEL,
         temperature=None,
-        reasoning_effort=REASONING_EFFORT,
+        reasoning_effort=FOLLOW_UP_REASONING_EFFORT if follow_up else REASONING_EFFORT,
+        retry_on_timeout=not follow_up,
     )
     seconds = time.perf_counter() - start
     if data is None:

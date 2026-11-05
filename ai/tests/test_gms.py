@@ -118,6 +118,20 @@ def test_sends_given_model_without_temperature():
     assert body["reasoning_effort"] == "none"
 
 
+def test_timeout_not_retried_when_asked():
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        raise httpx.ReadTimeout("느림", request=request)
+
+    seen: list[httpx.Request] = []
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    assert (
+        gms.call_json(MESSAGES, lambda d: d, client=client, retry_on_timeout=False)
+        is None
+    )
+    assert len(seen) == 1
+
+
 def test_sends_given_response_format():
     fmt = {"type": "json_schema", "json_schema": {"name": "x", "strict": True}}
     client, seen = client_with(completion('{"ok": 1}'))

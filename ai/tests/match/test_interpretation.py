@@ -8,6 +8,7 @@ from collections.abc import Callable
 
 import pytest
 
+from fit_ai import gms
 from fit_ai.match.interpretation import (
     DEFAULT_CHANGE_SUMMARY,
     MAX_TEXT_LENGTH,
@@ -16,7 +17,6 @@ from fit_ai.match.interpretation import (
     interpret,
     interpret_by_rules,
 )
-from fit_ai.match.interpretation.llm import _repeats
 from fit_ai.match.interpretation.segments import (
     Choice,
     Feature,
@@ -161,28 +161,12 @@ class TestLlm:
     def test_empty_embedding_text_in_follow_up_uses_text(
         self, fake_gms: FakeGms
     ) -> None:
-        """LLM해석_후속에서벡터용문장에글자가없으면_이번요청문으로대신해이전문장에붙인다"""
+        """LLM해석_후속에서벡터용문장에글자가없으면_이번요청문으로대신한다"""
         fake_gms(lambda messages: answer(embedding_text="..."))
 
         result = interpret("더 조용하게", PREVIOUS)
 
-        assert result.conditions.embedding_text == "모임하기 좋은 술집 더 조용하게"
-
-    def test_follow_up_unchanged_text_gets_query(self, fake_gms: FakeGms) -> None:
-        """LLM해석_후속인데이전조건을다시적어도_합친문장에는이번요청만붙는다"""
-        fake_gms(
-            lambda messages: answer(
-                text=PREVIOUS.text,
-                embedding_text=PREVIOUS.embedding_text,
-                codes=["PURPOSE_GROUP", "SPACIOUS_SEATING"],
-            )
-        )
-
-        conditions = interpret("넓은 곳이면 좋겠어", PREVIOUS).conditions
-
-        assert conditions.text == "역삼역 모임하기 좋은 술집 넓은 곳이면 좋겠어"
-        assert conditions.embedding_text == "모임하기 좋은 술집 넓은 곳이면 좋겠어"
-        assert conditions.codes == ("PURPOSE_GROUP", "SPACIOUS_SEATING")
+        assert result.conditions.embedding_text == "더 조용하게"
 
     def test_location_removed_from_embedding_text(self, fake_gms: FakeGms) -> None:
         """LLM해석_벡터용문장에역이름이있으면_지우고역은조건에만남긴다"""
@@ -196,25 +180,6 @@ class TestLlm:
 
         assert conditions.embedding_text == "넓고 조용한 카페"
         assert conditions.station == "GANGNAM"
-
-    def test_follow_up_repeat_with_location_gets_query(self, fake_gms: FakeGms) -> None:
-        """LLM해석_후속에서이전벡터용문장에역만붙여내면_같은문장으로보고새요청을붙인다"""
-        previous = Conditions.from_codes(
-            "역삼역 모임하기 좋은 술집", "모임하기 좋은 술집", ("PURPOSE_GROUP",), "BAR"
-        )
-        fake_gms(
-            lambda messages: answer(
-                text="역삼역 모임하기 좋은 넓은 술집",
-                embedding_text="역삼역 모임하기 좋은 술집",
-                codes=["PURPOSE_GROUP", "SPACIOUS_SEATING"],
-                category_group="BAR",
-                station="YEOKSAM",
-            )
-        )
-
-        conditions = interpret("넓은 곳이면 좋겠어", previous).conditions
-
-        assert conditions.embedding_text == "모임하기 좋은 술집 넓은 곳이면 좋겠어"
 
     def test_follow_up_to_nearby_drops_station(self, fake_gms: FakeGms) -> None:
         """LLM해석_역검색뒤근처로바꿨는데이전역을남기면_역을버리고근처검색으로본다"""
@@ -293,14 +258,14 @@ class TestLlm:
         assert result.change_summary == DEFAULT_CHANGE_SUMMARY
 
     def test_follow_up_without_text_uses_llm(self, fake_gms: FakeGms) -> None:
-        """LLM해석_후속인데합친text가없어도_LLM결과를이전조건과합친다"""
+        """LLM해석_후속인데합친text가없어도_LLM이낸조건전체를쓰고요청문은이어붙인다"""
         fake_gms(lambda messages: answer())
 
         result = interpret("더 조용하게", PREVIOUS)
 
         assert result.llm_error is None
         assert result.conditions.text == "역삼역 모임하기 좋은 술집 더 조용하게"
-        assert result.conditions.codes == ("PURPOSE_GROUP", "QUIET")
+        assert result.conditions.codes == ("QUIET",)
         assert result.change_summary == DEFAULT_CHANGE_SUMMARY
 
 
@@ -649,83 +614,207 @@ class TestTurn:
         )
 
 
-@pytest.mark.parametrize(
-    ("text", "before", "repeats"),
-    [
-        (
-            "4명 회식하기 좋은 고깃집 예약 가능한 곳",
-            "4명이 회식하기 좋은 고깃집 예약 가능한 곳",
-            True,
-        ),
-        ("역삼역 모임하기 좋은 술집", "모임하기 좋은 술집", True),
-        ("넓은 곳", "모임하기 좋은 술집", False),
-        ("조용하고 넓은 술집", "조용한 술집", False),
-    ],
-)
-def test_repeats(text: str, before: str, repeats: bool) -> None:
-    """후속벡터문장_이전문장의낱말을대부분다시쓰면_다시쓴것이다"""
-    assert _repeats(text, before, "BAR") is repeats
+class TestLlmFollowUp:
+    """LLM 해석의 후속. LLM이 이전 조건에 새 요청을 반영한 조건 전체를 내고 코드는 합치지 않는다."""
 
-
-class TestFollowUp:
-    """후속 조건 합치기. 이번 요청이 뺀 이전 코드 고르기(`rules._kept_codes`)를 포함한다."""
-
-    def test_follow_up_keeps_previous_food_type(self, fake_gms: FakeGms) -> None:
-        """후속합치기_이번요청에음식종류가없으면_이전조건의음식종류코드를남긴다"""
+    def test_full_state_used_as_is(self, fake_gms: FakeGms) -> None:
+        """LLM후속_LLM이낸조건전체를_합친조건으로쓰고요청문만이전요청뒤에붙인다"""
         fake_gms(
-            lambda messages: empty_answer(
-                text="역삼역 일식 늦게까지", codes=["FOOD_JAPANESE"]
+            lambda messages: answer(
+                embedding_text="모임하기 좋은 넓은 술집",
+                codes=["PURPOSE_GROUP", "SPACIOUS_SEATING"],
+                category_group="BAR",
+                station="YEOKSAM",
+                location_said=False,
             )
         )
+
+        result = interpret("넓은 곳이면 좋겠어", PREVIOUS)
+
+        conditions = result.conditions
+        assert conditions.text == "역삼역 모임하기 좋은 술집 넓은 곳이면 좋겠어"
+        assert conditions.embedding_text == "모임하기 좋은 넓은 술집"
+        assert conditions.codes == ("PURPOSE_GROUP", "SPACIOUS_SEATING")
+        assert conditions.station == "YEOKSAM"
+        # 이번 요청에 지역을 말하지 않았으니 지역 고르기에는 지역이 없다.
+        assert result.turn is not None and result.turn.locations == ()
+
+    def test_released_condition_not_restored(self, fake_gms: FakeGms) -> None:
+        """LLM후속_LLM이이전조건을뺐으면_코드가되살리지않는다"""
+        previous = Conditions.from_codes(
+            "강남역 주차되는 카페 2만원 이하",
+            "주차 가능한 카페",
+            ("PARKING",),
+            "CAFE",
+            "GANGNAM",
+            price=Price("2만원 이하", max_won=20000),
+        )
+        fake_gms(
+            lambda messages: answer(
+                embedding_text="주차 가능한 카페",
+                codes=["PARKING"],
+                location_said=False,
+            )
+        )
+
+        conditions = interpret("가격은 상관없어", previous).conditions
+
+        assert conditions.price is None
+        assert conditions.codes == ("PARKING",)
+
+    def test_follow_up_call(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """LLM후속_후속이면_추론low로7초를기다리고시간초과면다시부르지않는다"""
+        seen: list[dict] = []
+
+        def call_json(messages, parse, **kwargs):
+            seen.append(kwargs)
+            return parse(answer(category_group="BAR", station="YEOKSAM"))
+
+        monkeypatch.setattr(gms, "call_json", call_json)
+
+        interpret("조용한 데로", PREVIOUS, timeout=5.0)
+        interpret("조용한 술집", timeout=5.0)
+
+        follow_up, new = seen
+        assert (follow_up["timeout"], follow_up["reasoning_effort"]) == (7.0, "low")
+        assert follow_up["retry_on_timeout"] is False
+        assert (new["timeout"], new["reasoning_effort"]) == (5.0, "none")
+        assert new["retry_on_timeout"] is True
+
+    def test_unlisted_slot_restored(self, fake_gms: FakeGms) -> None:
+        """LLM후속_바꾼칸목록에없는칸을LLM이빠뜨리면_이전값으로되살린다"""
+        previous = Conditions.from_codes(
+            "강남역 주차되는 카페 2만원 이하",
+            "주차 가능한 카페",
+            ("PARKING",),
+            "CAFE",
+            "GANGNAM",
+            price=Price("2만원 이하", max_won=20000),
+        )
+        # 조용함을 더하며 가격을 빠뜨렸지만 바꾼 칸은 특징뿐이라고 했다.
+        fake_gms(
+            lambda messages: answer(
+                embedding_text="조용하고 주차 가능한 카페",
+                codes=["PARKING", "QUIET"],
+                location_said=False,
+                changed=["features"],
+            )
+        )
+
+        conditions = interpret("조용한 데로", previous).conditions
+
+        assert conditions.price == Price("2만원 이하", max_won=20000)
+        assert conditions.codes == ("QUIET", "PARKING")
+
+    def test_listed_slot_released(self, fake_gms: FakeGms) -> None:
+        """LLM후속_바꾼칸목록에있는칸은_LLM값으로바꾸고풀었으면뺀다"""
+        previous = Conditions.from_codes(
+            "강남역 주차되는 카페 2만원 이하",
+            "주차 가능한 카페",
+            ("PARKING",),
+            "CAFE",
+            "GANGNAM",
+            price=Price("2만원 이하", max_won=20000),
+        )
+        fake_gms(
+            lambda messages: answer(
+                embedding_text="주차 가능한 카페",
+                codes=["PARKING"],
+                location_said=False,
+                changed=["price"],
+            )
+        )
+
+        conditions = interpret("가격은 상관없어", previous).conditions
+
+        assert conditions.price is None
+        assert conditions.codes == ("PARKING",)
+
+    def test_empty_changed_keeps_previous(self, fake_gms: FakeGms) -> None:
+        """LLM후속_바꾼칸이없다고하면_이전조건을그대로쓴다"""
+        fake_gms(
+            lambda messages: answer(
+                embedding_text="모임하기 좋은 술집", codes=[], changed=[]
+            )
+        )
+
+        conditions = interpret("다른 데도 보여줘", PREVIOUS).conditions
+
+        assert conditions.codes == PREVIOUS.codes
+        assert conditions.categories == PREVIOUS.categories
+        assert conditions.locations == PREVIOUS.locations
+
+    def test_said_location_kept_in_turn(self, fake_gms: FakeGms) -> None:
+        """LLM후속_이번요청에지역을말했으면_이번요청의조건에지역을남긴다"""
+        fake_gms(
+            lambda messages: answer(
+                category_group="BAR", station="YEOKSAM", location_said=True
+            )
+        )
+
+        result = interpret("역삼역 그대로 두고 조용한 데로", PREVIOUS)
+
+        assert result.turn is not None
+        assert result.turn.locations == result.conditions.locations
+        assert result.turn.station == "YEOKSAM"
+
+    @pytest.mark.parametrize(
+        ("station", "said"), [("YEOKSAM", False), ("GANGNAM", True)]
+    )
+    def test_location_said_missing(
+        self, fake_gms: FakeGms, station: str, said: bool
+    ) -> None:
+        """LLM후속_지역을말했는지표시가없으면_이전지역과다를때말한것으로본다"""
+        fake_gms(lambda messages: answer(category_group="BAR", station=station))
+
+        result = interpret("조용한 데로", PREVIOUS)
+
+        assert result.turn is not None
+        assert bool(result.turn.locations) is said
+
+
+class TestRuleFollowUp:
+    """규칙 해석의 후속 합치기(LLM이 실패했을 때). 이번 요청이 뺀 이전 코드 고르기
+    (`rules._kept_codes`)를 포함한다."""
+
+    def test_follow_up_keeps_previous_food_type(self) -> None:
+        """규칙후속_이번요청에음식종류가없으면_이전조건의음식종류코드를남긴다"""
         previous = Conditions.from_codes(
             "역삼역 일식", "일식", ("FOOD_JAPANESE",), "RESTAURANT"
         )
 
-        conditions = interpret("늦게까지 하는 데", previous).conditions
+        conditions = interpret_by_rules("늦게까지 하는 데", previous)
 
         assert conditions.codes == ("FOOD_JAPANESE",)
 
-    def test_follow_up_inherits_location(self, fake_gms: FakeGms) -> None:
-        """후속합치기_LLM이이번요청의지역을비우면_이전지역을잇는다"""
-        fake_gms(lambda messages: empty_answer(text="역삼역 모임하기 좋은 술집 주차"))
-
-        conditions = interpret("주차도 되면 좋겠어", PREVIOUS).conditions
+    def test_follow_up_inherits_location(self) -> None:
+        """규칙후속_이번요청에지역이없으면_이전지역을잇는다"""
+        conditions = interpret_by_rules("주차도 되면 좋겠어", PREVIOUS)
 
         assert conditions.locations == (
             Location("역삼역", LocationKind.STATION, "역삼역"),
         )
         assert conditions.station == "YEOKSAM"
 
-    def test_follow_up_keeps_previous_codes(self, fake_gms: FakeGms) -> None:
-        """후속합치기_업종을바꾸면_빼지않은이전코드는남긴다"""
-        fake_gms(
-            lambda messages: empty_answer(
-                text="역삼역 조용한 술집",
-                category_group="BAR",
-                avoid_categories=["CAFE"],
-                codes=[],
-            )
-        )
+    def test_follow_up_keeps_previous_codes(self) -> None:
+        """규칙후속_업종을바꾸면_빼지않은이전코드는남긴다"""
         previous = Conditions.from_codes(
             "역삼역 조용한 카페", "조용한 카페", ("QUIET",), "CAFE", "YEOKSAM"
         )
 
-        conditions = interpret("카페 말고 술집으로", previous).conditions
+        conditions = interpret_by_rules("카페 말고 술집으로", previous)
 
         assert conditions.codes == ("QUIET",)
         assert conditions.category_group == "BAR"
         assert conditions.avoid_categories == ("CAFE",)
 
-    def test_follow_up_drops_negated_code(self, fake_gms: FakeGms) -> None:
-        """후속합치기_이번요청이말고로뺀이전코드는_남기지않는다"""
-        fake_gms(
-            lambda messages: empty_answer(text="역삼역 활기찬 카페", codes=["LIVELY"])
-        )
+    def test_follow_up_drops_negated_code(self) -> None:
+        """규칙후속_이번요청이말고로뺀이전코드는_남기지않는다"""
         previous = Conditions.from_codes(
             "역삼역 조용한 카페", "조용한 카페", ("QUIET",), "CAFE", "YEOKSAM"
         )
 
-        conditions = interpret("조용한 거 말고 활기찬 곳으로", previous).conditions
+        conditions = interpret_by_rules("조용한 거 말고 활기찬 곳으로", previous)
 
         assert conditions.codes == ("LIVELY",)
 

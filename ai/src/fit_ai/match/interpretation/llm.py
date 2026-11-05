@@ -7,7 +7,7 @@
 
 import json
 import re
-from dataclasses import asdict
+from dataclasses import asdict, replace
 
 from fit_ai.match.conditions import CATEGORY_NAMES, STATION_NAMES
 from fit_ai.match.interpretation.codes import (
@@ -16,15 +16,13 @@ from fit_ai.match.interpretation.codes import (
     FLAVOR_CODES,
     FOOD_CODES,
 )
-from fit_ai.match.interpretation.merge import merge
 from fit_ai.match.interpretation.request import (
     CODE_PHRASES,
     MAX_WALK_MINUTES,
     Conditions,
     _assemble,
-    _without_location,
+    _join,
 )
-from fit_ai.match.interpretation.rules import _kept_codes
 from fit_ai.match.interpretation.segments import (
     DAYS,
     MAX_SEGMENT_LENGTH,
@@ -40,8 +38,20 @@ from fit_ai.match.interpretation.segments import (
     Price,
 )
 
-REPEAT_SHARE = 0.7
-"""후속에서 LLM이 이전 벡터용 문장을 다시 썼다고 보는 낱말 비율"""
+SLOTS = (
+    "categories",
+    "locations",
+    "features",
+    "facilities",
+    "party_size",
+    "food_types",
+    "flavors",
+    "menus",
+    "hours",
+    "price",
+    "place_name",
+)
+"""후속에서 LLM이 바꾼 칸으로 적을 수 있는 이름. 출력 칸 이름이자 `Conditions` 속성 이름이다."""
 
 MAX_PARTY_SIZE = 100
 """인원 상한. 넘으면 인원이 없는 것으로 본다."""
@@ -58,7 +68,8 @@ SYSTEM_PROMPT = f"""\
 너는 장소 검색 서비스의 요청 해석기다. 사용자의 검색 요청을 아래 칸으로 나눠 JSON으로 낸다.
 
 공통 규칙
-- 요청에서 말한 것만 넣는다. 말하지 않은 지역, 코드, 메뉴, 시간을 짐작해 넣지 않는다.
+- 요청에서 말한 것만 넣는다. 말하지 않은 지역, 코드, 메뉴, 시간을 짐작해 넣지 않는다. 이전 \
+조건이 있으면 아래 "이전 조건이 있을 때"를 따른다.
 - 조각의 text에는 요청문에 나온 말을 고치지 않고 그대로 옮긴다. 철자가 틀렸거나 줄여 쓴 \
 말은 value에 바로잡은 표준 이름으로 쓴다("건대잎구역"은 text "건대잎구역", value "건대입구역").
 - want는 원하면 true다. "말고", "빼고", "싫어", "않은", "없는", "대신"처럼 피한다고 분명히 \
@@ -107,7 +118,8 @@ RESERVATION(예약). 그 시설을 직접 말했을 때만 넣는다. "모임", 
 - food_types: 음식 종류 [{{"code", "want"}}]. code는 FOOD_KOREAN(한식), FOOD_JAPANESE(일식), \
 FOOD_CHINESE(중식), FOOD_WESTERN(양식), FOOD_ASIAN(아시아 음식). "한식", "중국집", \
 "베트남 음식"처럼 음식 종류나 나라를 직접 말했을 때만 넣는다. 메뉴 이름(돈가스, 마라탕, \
-버거)이나 "식당"이라는 말만으로 넣지 않는다. "양식 말고"는 FOOD_WESTERN want false다. \
+버거)이나 "식당"이라는 말만으로 넣지 않는다. 메뉴가 어느 음식 종류인지 알아도 사용자가 음식 \
+종류를 말하지 않았으면 넣지 않는다. "양식 말고"는 FOOD_WESTERN want false다. \
 없으면 빈 목록이다.
 - flavors: 맛 [{{"code", "want"}}]. code는 SPICY(매운맛)다. 매운 음식을 원하면 true, \
 "안 매운", "맵지 않은", "매운 건 빼고"는 false다. 없으면 빈 목록이다.
@@ -136,13 +148,28 @@ max_won 10000, "2만원대"는 min_won 20000과 max_won 29999다. 싼 곳을 찾
 "안 매운"은 "담백한"). 비우지 않고 "찾고 있어요" 같은 말은 붙이지 않는다.
 - change_summary: 이전 조건이 있을 때만 바뀐 점을 "~했어요"로 끝나는 짧은 한 문장으로 \
 쓴다. 이전 조건이 없으면 null이다.
+- location_said: 이전 조건이 있을 때만 쓴다. 새 요청에서 지역(역, 동네, 근처 등)을 말했으면 \
+true다. 이전 지역과 같은 곳을 다시 말해도 true다. 이전 조건이 없으면 null이다.
+- changed: 이전 조건이 있을 때만 쓴다(아래 "이전 조건이 있을 때"). 이전 조건이 없으면 null이다.
 
 이전 조건이 있을 때
-- 새 요청은 이전 검색을 고치는 말이다. 이전 조건은 새 요청의 뜻("그거 말고", "술집으로")을 \
-알아듣는 데만 쓴다.
-- 출력에는 새 요청에서 말한 것만 넣는다. 이전 조건의 지역, 특징, 메뉴를 다시 적지 않는다. \
-이전 조건과 합치는 일은 따로 한다.
-- embedding_text는 새 요청만 긍정형 검색어로 쓴다.
+- 새 요청은 이전 검색을 고치는 말이다. 이전 조건에 새 요청을 반영한 지금의 조건 전체를 낸다.
+  - 새 요청이 건드리지 않은 이전 조건은 그대로 옮긴다. 옮긴 조각의 text도 이전 그대로 둔다.
+  - 새 요청이 바꾼 것은 바꾸고 더한 것은 더한다. 새 요청이 뺀 이전 조건은 지운다. 뺀 특징의 \
+반대쪽 코드를 넣을 때는 이전의 그 특징을 지운다(이전에 QUIET였는데 "차분한 데 말고"면 QUIET를 \
+지우고 LIVELY만 둔다). QUIET와 LIVELY처럼 반대되는 특징은 함께 두지 않는다.
+  - 풀어 달라고 한 조건은 뺀다("예산은 신경 안 써"면 price를 null로, "와이파이는 없어도 돼"면 \
+WIFI를, "중식도 괜찮아"면 중식의 피함을 뺀다).
+  - 바뀐 조건과 맞지 않게 된 조건은 뺀다. 음식 종류를 바꾸면 그 음식 종류에 딸린 이전 메뉴도 \
+빼고(라멘을 찾다가 "양식으로"면 라멘을 뺀다), 업종을 바꾸면 그 업종에 딸린 음식 종류와 메뉴도 \
+뺀다(중식당을 찾다가 "술집으로"면 중식을 뺀다). 맞는 조건은 남긴다("식당 말고 카페로"여도 \
+조용함은 남긴다).
+- embedding_text는 지금 조건 전체를 담은 긍정형 검색어로 새로 쓴다. 바뀌거나 뺀 조건의 말은 \
+넣지 않는다.
+- changed는 새 요청 때문에 값이 달라진 칸의 이름 목록이다. 더하거나 바꾸거나 뺀 칸과, 딸려서 \
+정리한 칸을 모두 넣는다(음식 종류를 바꾸며 이전 메뉴를 뺐으면 food_types와 menus를 둘 다 \
+넣는다). 칸 이름은 categories, locations, features, facilities, party_size, food_types, flavors, \
+menus, hours, price, place_name이다. 목록에 없는 칸은 이전 조건 값을 그대로 쓴다.
 
 특징 코드표:
 {chr(10).join(f"{code}: {CODE_PHRASES[code]}" for code in FEATURE_CODES)}
@@ -182,13 +209,22 @@ flavors [{{"code": "SPICY", "want": false}}], menus [{{"text": "떡볶이", "val
 "spellings": [], "want": true}}], embedding_text "순한 떡볶이"
 - 이전 조건이 "을지로 조용한 술집"일 때 "술집 말고 빙수 맛집으로" → \
 categories [{{"code": "CAFE", "want": true}}, {{"code": "BAR", "want": false}}], \
+locations [{{"text": "을지로", "kind": "AREA", "value": "을지로"}}], \
+features [{{"text": "조용한", "value": "조용한 곳", "code": "QUIET"}}], \
 menus [{{"text": "빙수", "value": "빙수", "spellings": [], "want": true}}], \
-embedding_text "빙수 맛집", change_summary "술집 대신 빙수 카페로 바꿨어요"
+embedding_text "조용한 빙수 카페", location_said false, changed ["categories", "menus"], \
+change_summary "술집 대신 빙수 카페로 바꿨어요"
+- 이전 조건이 "망원역 2만원 이하 주차되는 곱창집"일 때 "예산은 신경 안 써" → \
+categories [{{"code": "RESTAURANT", "want": true}}], \
+locations [{{"text": "망원역", "kind": "STATION", "value": "망원역"}}], facilities ["PARKING"], \
+menus [{{"text": "곱창", "value": "곱창", "spellings": [], "want": true}}], price null, \
+embedding_text "주차되는 곱창집", location_said false, changed ["price"], \
+change_summary "가격 조건을 뺐어요"
 
 아래 형식의 JSON만 출력한다. 값이 없는 칸도 빼지 않는다.
 {{"embedding_text": "<긍정형 검색어>", "categories": [], "locations": [], "features": [], \
 "facilities": [], "party_size": null, "food_types": [], "flavors": [], "menus": [], \
-"hours": [], "price": null, "place_name": null, "change_summary": null}}"""
+"hours": [], "price": null, "place_name": null, "change_summary": null, "location_said": null, "changed": null}}"""
 
 """요청 해석 시스템 지시. 예시 문장은 평가 질의(experiments/interpretation)와
 겹치지 않게 고른다."""
@@ -201,8 +237,9 @@ _CLOCK = re.compile(r"(?:[01]\d|2[0-3]):[0-5]\d")
 def _user_prompt(query: str, previous: Conditions | None) -> str:
     if previous is None:
         return f"요청: {query}"
-    # 이전 조건은 LLM이 낼 꼴과 같게 보여 준다. 칸 이름이 다르면 LLM이 이전 역을 잇지
-    # 못했다(2026-11-02 평가, 후속 12번 중 10번). 후보 추출용 문장은 보여 주지 않는다.
+    # 이전 조건은 LLM이 낼 꼴과 같게 보여 준다. LLM은 여기에 새 요청을 반영해 조건 전체를
+    # 다시 낸다. 칸 이름이 다르면 LLM이 이전 역을 잇지 못했다(2026-11-02 평가, 후속 12번 중
+    # 10번). 후보 추출용 문장은 보여 주지 않는다. LLM이 지금 조건으로 새로 쓴다.
     data = {
         key: value for key, value in asdict(previous).items() if key != "embedding_text"
     }
@@ -217,14 +254,17 @@ def _parse(
 ) -> tuple[Conditions, Conditions, str | None]:
     """LLM 출력(JSON을 읽은 값)을 조건으로 바꾼다. 형식이 틀리면 실패다.
 
-    출력은 이번 요청의 분류별 조각이다. 모르는 코드는 버리고, 분류별 조각은 꼴이 틀린
-    조각만 버린다. 2차 꼴(`codes`, `category_group`, `avoid_foods`)로 내도 읽는다. 읽은
-    조각은 규칙으로 고치지 않고 그대로 조건으로 모은다(규칙 보정은 2026-11-05에 뺐다).
-    후속이면 이전 조건과 합친다(`merge.merge`). 메시지는 로그에
-    남으므로 출력 내용을 넣지 않는다.
+    출력은 분류별 조각이다. 새 검색이면 이번 요청의 조각이고, 후속이면 이전 조건에 새
+    요청을 반영한 조건 전체다(2026-11-05. 전에는 이번 요청만 내고 코드가 합쳤는데, 조건을
+    풀거나 딸린 조건을 정리하는 맥락을 다루지 못했다). 모르는 코드는 버리고, 분류별 조각은
+    꼴이 틀린 조각만 버린다. 2차 꼴(`codes`, `category_group`, `avoid_foods`)로 내도 읽는다.
+    읽은 조각은 규칙으로 고치지 않고 그대로 조건으로 모은다(규칙 보정은 2026-11-05에 뺐다).
+    메시지는 로그에 남으므로 출력 내용을 넣지 않는다.
 
     Returns:
-        (이번 요청만 해석한 조건, 합친 조건, 바뀐 점)
+        (이번 요청의 조건, 합친 조건, 바뀐 점). 새 검색이면 둘이 같다. 후속이면 이번 요청의
+        조건은 합친 조건에서 이번 요청에 지역을 말하지 않았을 때 지역을 비운 것이다(지역
+        고르기가 이번 요청의 지역을 볼 때 쓴다).
     """
     if not isinstance(data, dict):
         raise TypeError("JSON 객체가 아니다")
@@ -265,17 +305,13 @@ def _parse(
         summary = data.get("change_summary")
         if not _is_text(summary) or len(summary) > MAX_CHANGE_SUMMARY_LENGTH:
             summary = DEFAULT_CHANGE_SUMMARY
-        # 이번 요청만 쓰라고 해도 이전 문장을 다시 낼 때가 있다(2차 평가 후속 12번 중
-        # 2번, 2026-11-04 확인). 합칠 때 이전 문장 뒤에 붙으므로 이번 요청문으로 대신한다.
-        if _repeats(embedding_text, previous.embedding_text, category_group):
-            embedding_text = query
     # 짧은 요청에서 "..."처럼 글자 없는 문장을 내는 일이 있다(10-27 평가 216번 중
     # 12번). 그대로 인코딩하면 유사도가 무의미해져서 요청문으로 대신한다.
     if not any(ch.isalnum() for ch in embedding_text):
         embedding_text = query
     party_size = data.get("party_size")
-    turn = _assemble(
-        text=query,
+    conditions = _assemble(
+        text=query if previous is None else _join(previous.text, query),
         embedding_text=embedding_text,
         codes=codes,
         category_group=category_group,
@@ -306,31 +342,30 @@ def _parse(
         else None,
     )
     if previous is None:
-        return turn, turn, None
-    kept = set(_kept_codes(previous, query, list(turn.codes), turn.avoid_foods))
-    merged = merge(previous, turn, [c for c in previous.codes if c not in kept])
-    return turn, merged, summary
+        return conditions, conditions, None
+    # 후속이면 LLM이 이전 조건에 새 요청을 반영한 조건 전체를 낸다. 지역 고르기는 이번
+    # 요청에 말한 지역만 앞세우므로, 지역을 말하지 않았으면 이번 요청의 조건에서 지역을
+    # 비운다. LLM이 표시를 빠뜨리면 이전 지역과 다를 때 말한 것으로 본다.
+    changed = _changed(data.get("changed"))
+    if changed is not None:
+        # LLM이 건드리지 않았다고 한 칸은 이전 값을 쓴다. 조건 전체를 다시 쓰다 이전 조건을
+        # 빠뜨리는 일을 막는다(2026-11-05, 후속 112번 중 1번 가격을 빠뜨렸다).
+        conditions = replace(
+            conditions,
+            **{slot: getattr(previous, slot) for slot in SLOTS if slot not in changed},
+        )
+    said = data.get("location_said")
+    if not isinstance(said, bool):
+        said = conditions.locations != previous.locations
+    turn = conditions if said else replace(conditions, locations=())
+    return turn, conditions, summary
 
 
-def _repeats(text: str, before: str, category_group: str | None) -> bool:
-    """이전 벡터용 문장을 다시 쓴 것인지. 위치 말을 지운 낱말의 `REPEAT_SHARE` 이상이 이전
-    문장에 있으면 다시 쓴 것으로 본다("4명이 회식하기 좋은 고깃집"과 "4명 회식하기 좋은
-    고깃집")."""
-    words = _without_location(text, category_group).split()
-    seen = _plain_words(_without_location(before, category_group))
-    if not words:
-        return False
-    shared = sum(any(w in s or s in w for s in seen) for w in map(_plain_word, words))
-    return shared / len(words) >= REPEAT_SHARE
-
-
-def _plain_words(text: str) -> list[str]:
-    return [_plain_word(w) for w in text.split()]
-
-
-def _plain_word(word: str) -> str:
-    """조사 하나를 떼어 낸 낱말. "4명이"와 "4명"을 같은 낱말로 본다."""
-    return re.sub(r"(?<=.)(?:이|가|을|를|은|는|에|에서|으로|로|도)$", "", word)
+def _changed(data: object) -> frozenset[str] | None:
+    """LLM이 낸 바꾼 칸 목록을 읽는다. 목록이 아니면 None이다(조건 전체를 그대로 쓴다)."""
+    if not isinstance(data, list):
+        return None
+    return frozenset(slot for slot in data if slot in SLOTS)
 
 
 def _choices(data: object) -> list[tuple[str, bool]]:

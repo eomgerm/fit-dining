@@ -62,6 +62,7 @@ def call_json[T](
     model: str = MODEL,
     temperature: float | None = 0,
     reasoning_effort: str | None = None,
+    retry_on_timeout: bool = True,
 ) -> T | None:
     """응답 JSON을 `parse`로 검사해 돌려준다. 꺼져 있거나 두 번 실패하면 None.
 
@@ -70,6 +71,8 @@ def call_json[T](
     `response_format`을 주지 않으면 JSON 모드(스키마 보장 없음)로 부른다. `model`을 주지
     않으면 `MODEL`로 부른다. `temperature`가 None이면 보내지 않는다(기본값만 받는 모델이
     있다). `reasoning_effort`는 추론 모델의 추론 강도이고 None이면 보내지 않는다.
+    `retry_on_timeout`이 거짓이면 시간 초과일 때 다시 부르지 않는다(기다린 만큼 다시 기다리면
+    부른 쪽의 시간 예산을 넘을 때).
     """
     if not _enabled():
         return None
@@ -96,4 +99,6 @@ def call_json[T](
                 log.warning(
                     "GMS 호출 실패(%d/%d): %s", attempt, _ATTEMPTS, _failure_kind(e)
                 )
+                if not retry_on_timeout and isinstance(e, httpx.TimeoutException):
+                    break
     return None

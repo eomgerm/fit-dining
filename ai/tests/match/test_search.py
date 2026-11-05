@@ -591,6 +591,7 @@ class TestScoring:
             model=gms.MODEL,
             temperature=0,
             reasoning_effort=None,
+            retry_on_timeout=True,
         ):
             seen.append((timeout, client, model, temperature, reasoning_effort))
             return parse(answer(messages))
