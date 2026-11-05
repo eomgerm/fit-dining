@@ -17,6 +17,7 @@ import kr.co.fitdining.api.user.TasteFeature;
 import org.junit.jupiter.api.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.json.JsonMapper;
 
 class TasteRefreshBatchTests extends PostgresTestSupport {
@@ -27,7 +28,9 @@ class TasteRefreshBatchTests extends PostgresTestSupport {
     static final List<TasteFeature> NEW = List.of(new TasteFeature("QUIET", "axis", true, 2));
     JdbcTemplate jdbc = new JdbcTemplate(appSource());
     AiTasteClient client = mock(AiTasteClient.class);
-    TasteRefreshBatch batch = new TasteRefreshBatch(JdbcClient.create(appSource()), client, JsonMapper.builder().build());
+    /** Same as the app's spring.jackson.deserialization.fail-on-unknown-properties. */
+    TasteRefreshBatch batch = new TasteRefreshBatch(JdbcClient.create(appSource()), client,
+            JsonMapper.builder().enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).build());
     /** Each user gets a distinct priority so the fake AI can tell whose request it is. */
     Map<Priority, List<ReviewEvidence>> sent = new HashMap<>();
     Map<Priority, Preferences> asked = new HashMap<>();
@@ -67,7 +70,8 @@ class TasteRefreshBatchTests extends PostgresTestSupport {
         user("a", Priority.VALUE, OLD);
         jdbc.update("update user_preferences set purposes = '{WORK_STUDY}', tastes = ?::jsonb where user_id = ?",
                 "[{\"polarity\": \"DISLIKE\", \"label\": \"매운맛\", \"code\": \"FOOD_SPICY\"}, "
-                        + "{\"polarity\": \"LIKE\", \"label\": \"국물\"}]", PREFIX + "a");
+                        + "{\"polarity\": \"LIKE\", \"label\": \"국물\", \"code\": null, \"vector\": [0.1, 0.2]}]",
+                PREFIX + "a");
         long cafe = review("a", 900001, "2026-10-23T03:00:00Z", "QUIET_GOOD", "SHORT_WAIT_BAD");
         long noisy = review("a", 900002, "2026-10-24T03:00:00Z", "LIVELY_BAD");
         long deleted = review("a", 900001, "2026-10-25T03:00:00Z", "LIVELY_GOOD");

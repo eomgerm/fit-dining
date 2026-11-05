@@ -8,7 +8,7 @@ import kr.co.fitdining.api.onboarding.AiTasteClient.ReviewEvidence;
 import kr.co.fitdining.api.review.tag.ReasonTag.Sentiment;
 import kr.co.fitdining.api.review.tag.ReasonTagRule;
 import kr.co.fitdining.api.user.Preferences;
-import kr.co.fitdining.api.user.Preferences.TasteChip;
+import kr.co.fitdining.api.user.StoredTasteChip;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -89,7 +89,8 @@ public class TasteRefreshBatch {
                         mood == null ? null : Preferences.Mood.valueOf(mood),
                         names(rs.getArray("priorities")).stream().map(Preferences.Priority::valueOf).toList(),
                         names(rs.getArray("purposes")).stream().map(Preferences.Purpose::valueOf).toList(),
-                        json.readValue(rs.getString("tastes"), new TypeReference<List<TasteChip>>() {})));
+                        json.readValue(rs.getString("tastes"), new TypeReference<List<StoredTasteChip>>() {})
+                                .stream().map(StoredTasteChip::chip).toList()));
             } catch (RuntimeException unreadable) {
                 // One bad row must not stop everyone else; the row keeps its features.
                 log.warn("taste_refresh_user_unreadable kind={}", unreadable.getClass().getSimpleName());
