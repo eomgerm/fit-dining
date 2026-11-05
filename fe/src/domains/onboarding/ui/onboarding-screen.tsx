@@ -306,7 +306,7 @@ export function OnboardingScreen({
                     )?.focus();
                   }}
                   className={cn(
-                    "relative flex items-center gap-4 rounded-lg border border-line-strong p-5 text-left transition-colors duration-200 motion-safe:active:scale-98",
+                    "relative flex items-center gap-4 rounded-lg border border-line-strong p-5 text-left transition duration-200 motion-safe:active:scale-98 motion-reduce:duration-120",
                     answers.mood === mood.id &&
                       "border-primary bg-primary-soft",
                   )}
