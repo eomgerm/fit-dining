@@ -19,7 +19,9 @@ export function ReviewPhotoStrip({
   // 어느 리뷰의 사진인지(예: "밤산책의 10월 12일 방문 리뷰")
   label: string;
 }) {
-  const [opened, setOpened] = useState<number | null>(null);
+  const [open, setOpen] = useState(false);
+  // 닫아도 비우지 않는다. 닫히는 페이드 동안 보던 사진이 창과 함께 사라진다
+  const [opened, setOpened] = useState(0);
   return (
     <>
       <ul aria-label={`${label} 사진`} className="flex gap-1.5 overflow-x-auto">
@@ -30,7 +32,10 @@ export function ReviewPhotoStrip({
           >
             <button
               type="button"
-              onClick={() => setOpened(index)}
+              onClick={() => {
+                setOpened(index);
+                setOpen(true);
+              }}
               aria-label={`사진 ${index + 1}/${photos.length} 크게 보기`}
               className="size-full"
             >
@@ -45,12 +50,7 @@ export function ReviewPhotoStrip({
           </li>
         ))}
       </ul>
-      <Dialog.Root
-        open={opened !== null}
-        onOpenChange={(open) => {
-          if (!open) setOpened(null);
-        }}
-      >
+      <Dialog.Root open={open} onOpenChange={setOpen}>
         <Dialog.Portal>
           {/* 뒤의 장소 상세가 비치도록 반투명하게 깐다. 흰 닫기 아이콘의 대비를 지키는 값이다(D-54) */}
           <Dialog.Backdrop className="fixed inset-0 bg-surface-inverse/80 transition-opacity duration-200 data-ending-style:opacity-0 data-starting-style:opacity-0 motion-reduce:duration-120" />
@@ -66,29 +66,27 @@ export function ReviewPhotoStrip({
                 }
               />
             </div>
-            {opened !== null && (
-              <Carousel
-                label={`${label} 사진`}
-                index={opened}
-                slideClassName="basis-full"
-                className="my-auto"
-              >
-                {photos.map((photo, index) => (
-                  <div
-                    key={photo.photoId}
-                    className="relative aspect-square w-full"
-                  >
-                    <Image
-                      src={photo.url}
-                      alt={`사진 ${index + 1}/${photos.length}`}
-                      fill
-                      unoptimized
-                      className="object-contain"
-                    />
-                  </div>
-                ))}
-              </Carousel>
-            )}
+            <Carousel
+              label={`${label} 사진`}
+              index={opened}
+              slideClassName="basis-full"
+              className="my-auto"
+            >
+              {photos.map((photo, index) => (
+                <div
+                  key={photo.photoId}
+                  className="relative aspect-square w-full"
+                >
+                  <Image
+                    src={photo.url}
+                    alt={`사진 ${index + 1}/${photos.length}`}
+                    fill
+                    unoptimized
+                    className="object-contain"
+                  />
+                </div>
+              ))}
+            </Carousel>
           </Dialog.Popup>
         </Dialog.Portal>
       </Dialog.Root>
