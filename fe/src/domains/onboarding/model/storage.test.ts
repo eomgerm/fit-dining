@@ -7,6 +7,7 @@ import {
   GUEST_COOKIE,
   isGuest,
   migrateLegacyGuest,
+  renewGuest,
   readAnswers,
   startAsGuest,
   writeAnswers,
@@ -136,3 +137,22 @@ it.each([{ code: 42 }, { vector: [] }, { unknown: true }])(
     expect(readAnswers()).toBeUndefined();
   },
 );
+
+// Safari·iOS(WebKit)는 JS로 심은 쿠키를 7일까지만 둔다. 화면을 열 때마다 다시 심어 7일을 새로 센다
+it("비회원이면 표시를 같은 수명으로 다시 심는다", () => {
+  startAsGuest();
+  const set = vi.spyOn(document, "cookie", "set");
+  renewGuest();
+  expect(set).toHaveBeenCalledWith(
+    expect.stringContaining(
+      `fd_guest=1; Path=/; Max-Age=${400 * 24 * 60 * 60};`,
+    ),
+  );
+});
+
+it("비회원이 아니면 표시를 심지 않는다", () => {
+  const set = vi.spyOn(document, "cookie", "set");
+  renewGuest();
+  expect(set).not.toHaveBeenCalled();
+  expect(isGuest()).toBe(false);
+});

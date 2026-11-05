@@ -95,6 +95,10 @@ export function startAsGuest() {
 export function isGuest() {
   return hasFlagCookie(GUEST_COOKIE);
 }
+// Safari·iOS(WebKit)는 JS로 심은 쿠키를 7일까지만 둔다. 화면을 열 때마다 다시 심어 7일을 새로 센다
+export function renewGuest() {
+  if (isGuest()) startAsGuest();
+}
 // 탈퇴하면 처음 온 사람처럼 홈(/)이 온보딩을 준다. 옛 표시도 지워 다시 옮겨지지 않게 한다
 export function endGuest() {
   setFlagCookie(GUEST_COOKIE, 0);
