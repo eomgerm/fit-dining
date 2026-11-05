@@ -36,9 +36,6 @@ export function AiFallbackNote({ className }: { className?: string }) {
 // 추천하는 지역(5-E05)
 const SUPPORTED_AREAS = "강남역·역삼역·선릉역";
 
-// 손잡이를 이만큼 끌면 상태를 바꾼다
-const DRAG_THRESHOLD_PX = 30;
-
 // 제목과 안내는 화면 가장자리에서 20px, 카드 목록은 8px 바깥(12px)에 붙는다
 const LIST_CLASS = "-mx-2 flex flex-col gap-2.5";
 
@@ -106,9 +103,15 @@ export function ResultPanel({
   const historyOpen = state === "history";
 
   return (
-    <MapPanel state={state} label="추천 결과" edge={edge}>
-      <PanelHandle expanded={state !== "middle"} onChange={onStateChange} />
-
+    <MapPanel
+      state={state}
+      label="추천 결과"
+      edge={edge}
+      onStateChange={onStateChange}
+      footer={
+        <div className="border-t border-line px-3 pt-2 pb-safe-2">{footer}</div>
+      }
+    >
       {/* 머리글 버튼은 화면 왼쪽 8px, 오른쪽 12px에 붙는다 */}
       <div className="flex shrink-0 items-center justify-between px-4">
         <button
@@ -137,9 +140,11 @@ export function ResultPanel({
       </div>
 
       {historyOpen ? (
-        <div className="min-h-0 flex-1 overflow-y-auto pb-4">{history}</div>
+        <div className="min-h-0 flex-1 pb-panel-4 overflow-y-auto">
+          {history}
+        </div>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-5 pb-4">
+        <div className="flex min-h-0 flex-1 pb-panel-4 flex-col gap-3 overflow-y-auto px-5">
           {showingResults && firstPage?.changeSummary && (
             <p
               role="status"
@@ -176,41 +181,7 @@ export function ResultPanel({
           )}
         </div>
       )}
-
-      <div className="shrink-0 border-t border-line px-3 pt-2 pb-safe-2">
-        {footer}
-      </div>
     </MapPanel>
-  );
-}
-
-// 패널 위쪽 손잡이. 누르면 중간과 전체를 오가고, 위아래로 끌어도 바뀐다. 저장한 장소 패널도 쓴다
-export function PanelHandle({
-  expanded,
-  onChange,
-}: {
-  // 중간 높이가 아니다(전체, 요청 기록 펼침)
-  expanded: boolean;
-  onChange: (state: Exclude<PanelState, "history">) => void;
-}) {
-  const dragStartY = useRef<number | undefined>(undefined);
-  return (
-    <button
-      type="button"
-      aria-label={expanded ? "패널 줄이기" : "패널 펼치기"}
-      onClick={() => onChange(expanded ? "middle" : "full")}
-      onPointerDown={(event) => (dragStartY.current = event.clientY)}
-      onPointerUp={(event) => {
-        if (dragStartY.current === undefined) return;
-        const delta = event.clientY - dragStartY.current;
-        dragStartY.current = undefined;
-        if (delta < -DRAG_THRESHOLD_PX) onChange("full");
-        if (delta > DRAG_THRESHOLD_PX) onChange("middle");
-      }}
-      className="flex h-6 shrink-0 touch-none items-center justify-center"
-    >
-      <span className="h-1 w-9 rounded-full bg-line-strong" />
-    </button>
   );
 }
 

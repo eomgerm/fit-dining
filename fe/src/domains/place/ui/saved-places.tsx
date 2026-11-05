@@ -28,7 +28,6 @@ import { CATEGORY_LABELS, OPEN_STATUS_LABELS } from "../model/place-labels";
 import type { CategoryGroup, LatLng } from "../model/place-types";
 import { MapPanel } from "./map-panel";
 import { PlacePhoto, statusVariants } from "./place-parts";
-import { PanelHandle } from "./result-panel";
 import type { SavedPanelState } from "./saved-view-state";
 
 // 패널에 보일 것. failed는 서버 오류·시간 초과·401이 아닌 4xx, offline은 연결 실패다(D-14)
@@ -128,9 +127,12 @@ export function SavedPlacesView({
           <ChevronLeftIcon className="text-icon" />
         </Fab>
       )}
-      <MapPanel state={panel} label={TITLE} edge={edge}>
-        <PanelHandle expanded={full} onChange={onPanelChange} />
-
+      <MapPanel
+        state={panel}
+        label={TITLE}
+        edge={edge}
+        onStateChange={onPanelChange}
+      >
         <div className="flex shrink-0 items-center gap-1 px-4 pb-2">
           {full && (
             <IconButton label="뒤로" onClick={onBack} className="-ml-3">
@@ -176,7 +178,7 @@ export function SavedPlacesView({
           </div>
         )}
 
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-safe-4">
+        <div className="flex min-h-0 flex-1 pb-safe-panel-4 flex-col overflow-y-auto px-4">
           {content.kind === "loading" && <SavedSkeleton />}
           {content.kind === "failed" && (
             <EmptyState

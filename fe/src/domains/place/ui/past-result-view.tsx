@@ -62,20 +62,25 @@ export function PastResultView({
         현재 검색으로
       </button>
 
-      <MapPanel state="middle" label="과거 결과" edge={edge}>
-        <div
-          aria-hidden
-          className="flex h-6 shrink-0 items-center justify-center"
-        >
-          <span className="h-1 w-9 rounded-full bg-line-strong" />
-        </div>
+      <MapPanel
+        state="middle"
+        label="과거 결과"
+        edge={edge}
+        footer={
+          <div className="border-t border-line px-4 pt-3 pb-safe-4">
+            <Button onClick={onRepeat} className="w-full">
+              <RefreshIcon size="md" className="mr-1.5" />이 조건으로 다시 검색
+            </Button>
+          </div>
+        }
+      >
         <p className="flex shrink-0 items-center gap-1.5 px-4 pb-3 text-caption-md text-ink-muted">
           <ClockIcon size="sm" />
           <span className="truncate">
             {formatRecentAt(past.at, now)} 결과 · “{past.sentence}”
           </span>
         </p>
-        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-5 pb-4">
+        <div className="flex min-h-0 flex-1 pb-panel-4 flex-col gap-3 overflow-y-auto px-5">
           <PanelResults
             searching={false}
             firstPage={firstPage}
@@ -89,11 +94,6 @@ export function PastResultView({
             loadMoreFailed={false}
             onCardPress={onCardPress}
           />
-        </div>
-        <div className="shrink-0 border-t border-line px-4 pt-3 pb-safe-4">
-          <Button onClick={onRepeat} className="w-full">
-            <RefreshIcon size="md" className="mr-1.5" />이 조건으로 다시 검색
-          </Button>
         </div>
       </MapPanel>
     </>
