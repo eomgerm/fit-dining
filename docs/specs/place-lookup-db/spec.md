@@ -104,6 +104,7 @@ public interface PlaceCatalog {
     Optional<PlaceDetailResponse> findPlace(long id);          // 없으면 빈 값 → 404
     List<PlaceCard> nearbyCandidates();                        // 카탈로그 전체, place_id 오름차순, 점수 없는 카드
     List<PlaceSearchDocument> loadSearchDocuments();           // 키워드 검색 문서 전체
+    List<Long> placeIds();                                     // place_id 오름차순 전체(장소 sitemap, 검색 D-107)
 }
 
 public interface PlaceKeywordSearch {

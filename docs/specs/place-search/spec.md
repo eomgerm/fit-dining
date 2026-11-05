@@ -68,7 +68,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 ### FE 상태와 장소 상세
 
 43. 지금 보는 화면 상태는 메모리에 두고, 검색 thread만 기기에 저장한다(53번, D-27, D-91). 검색 응답(불러온 페이지와 커서)은 TanStack Query 캐시에 요청 기록 항목마다 무한 쿼리 하나로 둔다(`staleTime`, `gcTime` 무한). 첫 페이지는 성공했을 때만 기록에 넣도록 화면을 바꾸기 전에 받는다. `fe/src/domains/place/model/search-store.ts`(React 없는 모듈)에는 지금 thread의 id와 요청 기록(항목 id, 첫 페이지 요청 본문, 첫 페이지 `conditions`와 `totalCount`, 기록 줄의 업종, 시각, 기준 항목), 지금 보는 항목, 선택된 카드, 위치 결과, 지역 고정 상태, 장소 id별 가장 최근 카드, 열린 과거 결과 화면(57번)을 두고, `ui`의 훅이 `useSyncExternalStore`로 구독한다. 재로드하면 이 화면 상태는 사라지고 첫 화면에서 시작하며, 다시 연 thread의 첫 페이지는 저장한 응답을 캐시에 넣어 쓴다(D-27, D-50, D-52, D-67, D-91).
-44. 상세 주소는 `/places/<id>`이고 페이지(서버 컴포넌트)가 경로의 id를 읽는다. id가 정규식 `^[1-9][0-9]*$`에 맞고 `Number.isSafeInteger(Number(id))`일 때만 서버에서 상세를 요청하고(3초 제한), 아니면 `notFound()`로 "장소를 찾을 수 없어요" 화면(`places/[id]/not-found.tsx`)을 보여 준다. BE가 404면 같은 화면이고, 그 밖의 실패면 상세 없이 그려 브라우저가 다시 받는다. 받은 상세는 TanStack Query 캐시에 넣어 서버 HTML에 본문이 들어간다(D-38, D-64, D-106).
+44. 상세 주소는 `/places/<id>`이고 페이지(서버 컴포넌트)가 경로의 id를 읽는다. id가 정규식 `^[1-9][0-9]*$`에 맞고 `Number.isSafeInteger(Number(id))`일 때만 서버에서 상세를 요청하고(3초 제한), 아니면 `notFound()`로 "장소를 찾을 수 없어요" 화면(`places/[id]/not-found.tsx`)을 보여 준다. BE가 404면 같은 화면이고, 그 밖의 실패면 상세 없이 그려 브라우저가 다시 받는다. 받은 상세는 TanStack Query 캐시에 넣어 서버 HTML에 본문이 들어간다(D-38, D-64, D-106). 같은 상세로 장소별 제목·설명·canonical·공유 이미지와 schema.org 구조화 데이터를 싣고, `/places/sitemap.xml`이 열 수 있는 장소의 상세 주소를 모두 싣는다(D-107).
 45. 상세 화면(6-01, 모양은 58번)은 사진 슬라이드(없으면 자리표시), 업종 · 거리, 이름, 핏 점수와 ⓘ(카드에 `score`가 없으면 그리지 않는다), 영업 상태(상세 응답의 `openStatus`)와 오늘 안내("오늘"은 `Asia/Seoul` 기준. `OPEN`, `CLOSING_SOON`이면 "오늘 <close>까지"(마감 `00:00`은 "오늘 24:00까지", 자정을 넘으면 "내일 <close>까지", 지금이 어제 영업의 새벽 부분이면 "<close>까지", 다음 날로 이어지는 24시간이면 "24시간 영업"), `BREAK`이면 지금 들어가 있는 브레이크의 "<끝>에 다시 열어요", 개점 전이면 "<open>에 열어요", 휴무일이면 "오늘 휴무", 마감 뒤와 `UNKNOWN`이면 생략. 문구 규칙은 place-catalog AC-17), 상세 `tags`, 탭(홈, 메뉴, 정보)을 보여 준다. 리뷰는 장소 상세가 직접 그리지 않고, 렌더 함수 props `slots`로 받은 자리에 그린다. `reviewTab`이 있으면 탭은 홈, 메뉴, 리뷰, 정보 순서이고, `homeReviews`는 홈 탭 맨 아래(리뷰 탭으로 바꾸는 함수를 받음), `bottomAction`은 하단 막대(`BottomBar`)의 저장 버튼 옆에 그린다. 자리가 없으면 탭은 홈, 메뉴, 정보이고 하단 막대에는 저장 버튼만 있다. 자리는 `src/app/places/[id]/place-detail-with-reviews.tsx`가 리뷰 도메인으로 채운다(D-49, D-64, D-86, D-92).
 46. 핏 점수, ⓘ 시트(6-05), "AI 추천 이유", 주의점은 `search-store`의 카드에서 가져온다. 과거 결과 화면(57번)에서 들어왔으면 그 스냅샷의 카드를, 그 밖에는 지금 보는 요청에 그 장소의 카드가 있으면 그 카드를, 없으면 가장 최근에 받은 그 장소의 카드를 쓴다. 카드가 없으면(주소 직접 열기, 재로드) 이 영역들을 숨기고 장소 정보만 보여 준다. 카드가 있어도 `score`가 없으면 핏 점수와 ⓘ를 숨기고, 이유와 주의점은 값이 있을 때만 보인다(place-lookup-db D-12). ⓘ 시트는 `scoreItems`를 "요청 · <label>" 또는 "내 취향 · <label>"로 나열하고, `matched`이면 "앱 리뷰 <evidenceCount>개가 근거예요", 아니면 "확인할 근거가 부족해서 점수에 넣지 않았어요"를 보여 준다(D-64, D-27, D-90).
 47. 홈 탭은 추천 이유(제목, 출처 칩 "요청 · <label>"/"내 취향 · <label>", 인용과 출처), 주의점, 주소와 거리, 오늘 영업시간(펼치면 요일별), 전화, 웹사이트, "정보 더보기"(정보 탭으로 이동), 메뉴 미리보기(가로 목록, "메뉴 <개수>")를 보여 준다. 메뉴 탭은 메뉴를 원래 순서대로, 이어지는 같은 카테고리마다 머리글을 붙여(카테고리 없는 메뉴는 머리글 없이) 사진, 이름과 라벨·"대표" 칩, 설명, 가격 원문(없으면 생략)으로 보이고 "정보가 실제와 다를 수 있어요"를, 정보 탭은 요일별 영업시간(브레이크타임, 라스트오더, 정기휴무, 정보 없음, 24시간 영업), 주소와 거리, 위치 지도(59번), 연락처, 시설(네이버 이름 그대로), 그 아래 값이 있는 항목만 place-catalog spec의 "정보 탭 줄"(지하철, 찾아오는 길, 주차, 예약 등)을 보여 준다(D-49, D-64, D-92, D-93, place-catalog#D-18, D-96).
@@ -150,6 +150,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 - [x] AC-43: "내 위치"를 누르면 위치를 받아 지도가 그 위치로 이동을 마칠 때까지 아이콘이 파란색이고, 이동을 마치거나 위치를 얻지 못하면 원래 색으로 돌아온다. 파란색인 동안 다시 눌러도 위치를 다시 요청하지 않고, 지도가 움직이지 않거나 다른 화면으로 가는 경우에도 파란색이 남지 않는다. 열 때와 근처 응답 뒤의 위치 요청에는 색이 바뀌지 않는다. 모든 `getCurrentPosition` 호출의 옵션에 `maximumAge: 30000`이 있다. (D-100, D-101)
 - [x] AC-44: 첫 화면에서 카드를 넘겨 다른 카드를 고른 뒤 상세나 내 정보에 갔다가 앱 안에서 돌아오면, 카드 목록은 미끄러지지 않고 그 카드 자리에 있고 순위 배지와 핀도 그 장소이며, 지도는 떠나기 전 중심과 확대 정도이고 "이 지역에서 검색" 버튼은 보이지 않는다. 결과, 과거 결과, 저장한 장소 화면에서 다녀와도 지도는 떠나기 전 그대로다. 화면 폭 640px 미만에서 선택된 카드는 검색창과 같은 폭으로 가운데에, 640px 이상에서는 320px 폭으로 왼쪽 첫 자리에 놓인다. (D-102, D-103)
 - [x] AC-45: 지도를 크게 축소하거나 크게 확대한 상태에서 "내 위치"를 누르면 지도가 내 위치로 옮겨지며 확대 정도가 15가 되고, 이 움직임으로 "이 지역에서 검색" 버튼이 나타나지 않는다. 이미 내 위치이고 확대 정도가 15면 지도가 움직이지 않고 파란색이 바로 꺼진다. 화면을 열 때와 근처 응답 뒤, 카드나 핀 선택으로 지도를 옮길 때는 확대 정도가 바뀌지 않는다. (D-104)
+- [x] AC-46: JS를 실행하지 않고 `/places/<id>`를 받으면 `<title>`이 "<장소명> | 핏다이닝"이고 canonical이 `https://fitdining.co.kr/places/<id>`이며, 업종에 맞는 schema.org 타입의 JSON-LD가 있다. 사진이 있으면 `og:image`가 첫 사진이다. `/places/sitemap.xml`에 장소마다 상세 주소가 있고 robots.txt가 그 sitemap을 가리킨다. (D-107)
 
 ## Implementation anchors
 
@@ -208,13 +209,14 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 
 ## Interfaces
 
-엔드포인트(자동완성과 상세는 인증 없음, 검색은 로그인 선택(place-ai-search D-4), 오류는 Spring ProblemDetail):
+엔드포인트(자동완성, 상세, id 목록은 인증 없음, 검색은 로그인 선택(place-ai-search D-4), 오류는 Spring ProblemDetail):
 
 | 메서드와 경로 | 요청 | 응답 |
 |---|---|---|
 | `GET /api/v1/places/suggest` | 쿼리 `q` (1~200자) | `PlaceSuggestResponse[]` |
 | `POST /api/v1/places/search` | `PlaceSearchRequest` | `PlaceSearchResponse` |
 | `GET /api/v1/places/{id}` | 경로 `id` | `PlaceDetailResponse` |
+| `GET /api/v1/places/ids` | 없음 | 열 수 있는 장소 id 오름차순 `Long[]`(장소 sitemap, D-107) |
 
 요청 헤더 `X-Mock-Scenario: empty`는 Mock 구현만 읽는다.
 
@@ -230,6 +232,7 @@ public interface PlaceSearchEngine {
     List<PlaceSuggestResponse> suggest(String q);
     PlaceSearchResult search(PlaceSearchRequest request, String userId);
     Optional<PlaceDetailResponse> findPlace(long id);
+    List<Long> placeIds();                 // 열 수 있는 장소 id 오름차순(D-107)
 }
 ```
 
