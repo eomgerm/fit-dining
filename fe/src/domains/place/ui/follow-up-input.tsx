@@ -62,7 +62,7 @@ export function FollowUpInput({
         type="submit"
         aria-label="보내기"
         disabled={disabled || empty}
-        className="flex size-11 items-center justify-center rounded-md bg-primary text-on-primary transition active:bg-primary-pressed disabled:bg-primary-disabled"
+        className="flex size-11 items-center justify-center rounded-md bg-primary text-on-primary transition active:bg-primary-pressed disabled:bg-primary-disabled motion-safe:active:scale-94"
       >
         <ArrowUpIcon size="md" />
       </button>

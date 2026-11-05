@@ -135,7 +135,7 @@ export function SearchBar({
           aria-label="추천받기"
           disabled={disabled || empty}
           className={cn(
-            "flex size-11 items-center justify-center rounded-md bg-primary text-on-primary transition active:bg-primary-pressed disabled:bg-primary-disabled",
+            "flex size-11 items-center justify-center rounded-md bg-primary text-on-primary transition active:bg-primary-pressed disabled:bg-primary-disabled motion-safe:active:scale-94",
             disabled && "disabled:bg-line disabled:text-surface",
           )}
         >

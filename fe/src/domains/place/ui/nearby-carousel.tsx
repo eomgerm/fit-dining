@@ -97,7 +97,7 @@ function NearbyCard({
       onClick={onPress}
       // 선택은 카드 밖 2px 링이다(4-01)
       className={cn(
-        "flex w-full flex-col overflow-hidden rounded-lg bg-surface text-left shadow-2",
+        "flex w-full flex-col overflow-hidden rounded-lg bg-surface text-left shadow-2 transition-transform motion-safe:active:scale-98",
         selected && "outline-2 outline-offset-2 outline-primary",
       )}
     >

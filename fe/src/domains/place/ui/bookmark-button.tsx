@@ -209,7 +209,7 @@ function SaveButtonView({
       aria-pressed={pressable ? look === "saved" : undefined}
       disabled={disabled || look === "checking"}
       onClick={onClick}
-      className="flex size-13 shrink-0 items-center justify-center rounded-md border border-line-strong bg-surface transition active:bg-surface-sunken"
+      className="flex size-13 shrink-0 items-center justify-center rounded-md border border-line-strong bg-surface transition active:bg-surface-sunken motion-safe:active:scale-94"
     >
       {look === "checking" && (
         <span

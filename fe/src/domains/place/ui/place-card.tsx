@@ -39,7 +39,7 @@ export function PlaceCard({
         onClick={onPress}
         // 테두리는 안쪽 그림자라 선택돼도 내용이 움직이지 않는다
         className={cn(
-          "flex w-full scroll-my-4 flex-col gap-2.5 rounded-lg bg-surface p-3.5 text-left transition-shadow",
+          "flex w-full scroll-my-4 flex-col gap-2.5 rounded-lg bg-surface p-3.5 text-left transition motion-safe:active:scale-98",
           selected
             ? "inset-ring-2 inset-ring-primary"
             : "inset-ring inset-ring-line",
