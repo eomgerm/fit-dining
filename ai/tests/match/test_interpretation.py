@@ -621,175 +621,6 @@ class TestTurn:
         )
         assert conditions.codes == ("QUIET", "FOOD_KOREAN", "WIFI", "PURPOSE_GROUP")
 
-    def test_made_up_here_dropped(self, fake_gms: FakeGms) -> None:
-        """코드확인_요청에없는근처말로근처를내면_버린다"""
-        fake_gms(
-            lambda messages: turn_answer(locations=[{"text": "근처", "kind": "HERE"}])
-        )
-
-        conditions = interpret("지금 열려 있는 카페").conditions
-
-        assert (conditions.locations, conditions.nearby) == ((), False)
-
-    def test_rules_fill_missed_facility(self, fake_gms: FakeGms) -> None:
-        """코드확인_LLM이시설을코드없는특징으로내면_규칙이찾은시설로바꾼다"""
-        fake_gms(
-            lambda messages: turn_answer(
-                features=[{"text": "주차되는", "value": "주차", "code": None}]
-            )
-        )
-
-        conditions = interpret("주차되는 조용한 식당").conditions
-
-        assert conditions.facilities == ("PARKING",)
-        assert conditions.features == ()
-
-    @pytest.mark.parametrize(
-        ("query", "codes", "avoid_foods"),
-        [("매운 거 먹고 싶다", ("FOOD_SPICY",), ()), ("강남역 식당", (), ())],
-    )
-    def test_avoid_without_negation(
-        self,
-        fake_gms: FakeGms,
-        query: str,
-        codes: tuple[str, ...],
-        avoid_foods: tuple[str, ...],
-    ) -> None:
-        """코드확인_피하는말이없는데빼달라고하면_낱말이있으면원함이고없으면버린다"""
-        fake_gms(
-            lambda messages: turn_answer(flavors=[{"code": "SPICY", "want": False}])
-        )
-
-        conditions = interpret(query).conditions
-
-        assert (conditions.codes, conditions.avoid_foods) == (codes, avoid_foods)
-
-    def test_follow_up_echo_dropped(self, fake_gms: FakeGms) -> None:
-        """코드확인_후속에서이전조건을다시적으면_이번요청에없는조각은버리고합친다"""
-        previous = interpret_by_rules("역삼역 파스타 맛집 새벽까지")
-        fake_gms(
-            lambda messages: turn_answer(
-                # 이전 메뉴와 시간을 다시 적고 이전에 원한 파스타를 피함으로 바꿔 냈다.
-                menus=[{"text": "파스타", "value": "파스타", "want": False}],
-                hours=[{"text": "새벽까지", "open_until": "02:00"}],
-                features=[
-                    {"text": "넓은", "value": "넓은 곳", "code": "SPACIOUS_SEATING"}
-                ],
-            )
-        )
-
-        conditions = interpret("넓은 곳이면 좋겠어", previous).conditions
-
-        assert [(m.value, m.want) for m in conditions.menus] == [("파스타", True)]
-        assert [h.text for h in conditions.hours] == ["새벽까지"]
-        assert conditions.codes == ("SPACIOUS_SEATING",)
-        assert conditions.station == "YEOKSAM"
-        assert conditions.text == "역삼역 파스타 맛집 새벽까지 넓은 곳이면 좋겠어"
-
-
-@pytest.mark.parametrize(
-    ("text", "before", "repeats"),
-    [
-        (
-            "4명 회식하기 좋은 고깃집 예약 가능한 곳",
-            "4명이 회식하기 좋은 고깃집 예약 가능한 곳",
-            True,
-        ),
-        ("역삼역 모임하기 좋은 술집", "모임하기 좋은 술집", True),
-        ("넓은 곳", "모임하기 좋은 술집", False),
-        ("조용하고 넓은 술집", "조용한 술집", False),
-    ],
-)
-def test_repeats(text: str, before: str, repeats: bool) -> None:
-    """후속벡터문장_이전문장의낱말을대부분다시쓰면_다시쓴것이다"""
-    assert _repeats(text, before, "BAR") is repeats
-
-
-class TestChecks:
-    """LLM 해석을 규칙으로 바로잡기"""
-
-    @pytest.mark.parametrize(
-        ("query", "want"), [("매운 거 먹고 싶다", True), ("매운 거 말고 국물", False)]
-    )
-    def test_avoid_needs_negation(
-        self, fake_gms: FakeGms, query: str, want: bool
-    ) -> None:
-        """코드확인_피하는말이없으면_LLM이빼달라는음식으로둔코드를원하는코드로되돌린다"""
-        fake_gms(lambda messages: empty_answer(avoid_foods=["FOOD_SPICY"]))
-
-        conditions = interpret(query).conditions
-
-        assert ("FOOD_SPICY" in conditions.codes) is want
-        assert ("FOOD_SPICY" in conditions.avoid_foods) is not want
-
-    def test_here_from_rules(self, fake_gms: FakeGms) -> None:
-        """코드확인_LLM이근처를비우면_규칙이찾은근처를쓴다"""
-        fake_gms(lambda messages: empty_answer(category_group="CAFE"))
-
-        conditions = interpret("근처 카페").conditions
-
-        assert conditions.locations == (Location("근처", LocationKind.HERE),)
-        assert (conditions.station, conditions.nearby) == (None, True)
-
-    def test_station_beats_here(self, fake_gms: FakeGms) -> None:
-        """코드확인_LLM이근처만내도이번요청에역이있으면_역을기준으로찾는다"""
-        fake_gms(
-            lambda messages: empty_answer(
-                locations=[{"text": "근처", "kind": "HERE"}],
-                category_group="RESTAURANT",
-            )
-        )
-
-        conditions = interpret("선릉역 근처 밥집").conditions
-
-        assert (conditions.station, conditions.nearby) == ("SEOLLEUNG", False)
-
-    def test_rule_avoid_food_fills(self, fake_gms: FakeGms) -> None:
-        """코드확인_LLM이빼달라는음식을놓치면_규칙값으로더하고원하는코드에서뺀다"""
-        fake_gms(lambda messages: empty_answer(codes=["FOOD_SPICY"]))
-
-        conditions = interpret("매운 거 말고 담백한 국물 요리").conditions
-
-        assert conditions.avoid_foods == ("FOOD_SPICY",)
-        assert "FOOD_SPICY" not in conditions.codes
-
-    @pytest.mark.parametrize(
-        ("query", "codes"),
-        [
-            ("역삼역 초밥집", ()),
-            ("역삼역 일식집", ("FOOD_JAPANESE",)),
-            ("일본 가정식 먹을 곳", ("FOOD_JAPANESE",)),
-        ],
-    )
-    def test_food_type_needs_food_type_word(
-        self, fake_gms: FakeGms, query: str, codes: tuple[str, ...]
-    ) -> None:
-        """코드확인_음식종류나나라를말한낱말이없으면_LLM이메뉴로짐작한음식종류코드를뗀다"""
-        fake_gms(lambda messages: empty_answer(codes=["FOOD_JAPANESE"]))
-
-        assert interpret(query).conditions.codes == codes
-
-    def test_follow_up_keeps_previous_food_type(self, fake_gms: FakeGms) -> None:
-        """코드확인_후속에서이전조건의음식종류코드는_이번요청에낱말이없어도남긴다"""
-        fake_gms(
-            lambda messages: empty_answer(
-                text="역삼역 일식 늦게까지", codes=["FOOD_JAPANESE"]
-            )
-        )
-        previous = Conditions.from_codes(
-            "역삼역 일식", "일식", ("FOOD_JAPANESE",), "RESTAURANT"
-        )
-
-        conditions = interpret("늦게까지 하는 데", previous).conditions
-
-        assert conditions.codes == ("FOOD_JAPANESE",)
-
-    def test_rule_food_type_fills(self, fake_gms: FakeGms) -> None:
-        """코드확인_LLM이음식종류코드를놓치면_규칙이찾은음식종류를더한다"""
-        fake_gms(lambda messages: empty_answer(category_group="RESTAURANT"))
-
-        assert interpret("역삼역 일식집").conditions.codes == ("FOOD_JAPANESE",)
-
     def test_spellings(self, fake_gms: FakeGms) -> None:
         """LLM해석_메뉴의다른표기는_문자열만같은말없이세개까지읽는다"""
         fake_gms(
@@ -817,18 +648,45 @@ class TestChecks:
             Menu("돈까스", "돈가스", ("돈카츠", "카츠", "까스")),
         )
 
-    def test_similar_place_is_not_name(self, fake_gms: FakeGms) -> None:
-        """코드확인_○○같은곳이면_가게이름으로보지않는다"""
+
+@pytest.mark.parametrize(
+    ("text", "before", "repeats"),
+    [
+        (
+            "4명 회식하기 좋은 고깃집 예약 가능한 곳",
+            "4명이 회식하기 좋은 고깃집 예약 가능한 곳",
+            True,
+        ),
+        ("역삼역 모임하기 좋은 술집", "모임하기 좋은 술집", True),
+        ("넓은 곳", "모임하기 좋은 술집", False),
+        ("조용하고 넓은 술집", "조용한 술집", False),
+    ],
+)
+def test_repeats(text: str, before: str, repeats: bool) -> None:
+    """후속벡터문장_이전문장의낱말을대부분다시쓰면_다시쓴것이다"""
+    assert _repeats(text, before, "BAR") is repeats
+
+
+class TestFollowUp:
+    """후속 조건 합치기. 이번 요청이 뺀 이전 코드 고르기(`rules._kept_codes`)를 포함한다."""
+
+    def test_follow_up_keeps_previous_food_type(self, fake_gms: FakeGms) -> None:
+        """후속합치기_이번요청에음식종류가없으면_이전조건의음식종류코드를남긴다"""
         fake_gms(
             lambda messages: empty_answer(
-                place_name={"text": "바바인디아", "value": "바바인디아"}
+                text="역삼역 일식 늦게까지", codes=["FOOD_JAPANESE"]
             )
         )
+        previous = Conditions.from_codes(
+            "역삼역 일식", "일식", ("FOOD_JAPANESE",), "RESTAURANT"
+        )
 
-        assert interpret("바바인디아 같은 인도 음식점").conditions.place_name is None
+        conditions = interpret("늦게까지 하는 데", previous).conditions
+
+        assert conditions.codes == ("FOOD_JAPANESE",)
 
     def test_follow_up_inherits_location(self, fake_gms: FakeGms) -> None:
-        """코드확인_후속에서LLM이지역을비우면_이전지역을잇는다"""
+        """후속합치기_LLM이이번요청의지역을비우면_이전지역을잇는다"""
         fake_gms(lambda messages: empty_answer(text="역삼역 모임하기 좋은 술집 주차"))
 
         conditions = interpret("주차도 되면 좋겠어", PREVIOUS).conditions
@@ -838,100 +696,14 @@ class TestChecks:
         )
         assert conditions.station == "YEOKSAM"
 
-    def test_follow_up_here_replaces_carried_station(self, fake_gms: FakeGms) -> None:
-        """코드확인_이번요청이근처만말하면_LLM이남긴이전역을버린다"""
-        fake_gms(
-            lambda messages: empty_answer(
-                text="근처 모임하기 좋은 술집",
-                locations=[{"text": "역삼역", "kind": "STATION", "value": "역삼역"}],
-            )
-        )
-
-        conditions = interpret("근처로 찾아줘", PREVIOUS).conditions
-
-        assert (conditions.station, conditions.nearby) == (None, True)
-
-    def test_rules_fill_missed_menu(self, fake_gms: FakeGms) -> None:
-        """코드확인_LLM이메뉴를놓치면_규칙이찾은메뉴를더한다"""
-        fake_gms(lambda messages: empty_answer(category_group="BAR"))
-
-        assert interpret("와인 종류 많은 바").conditions.menus == (
-            Menu("와인", "와인"),
-        )
-
-    def test_rule_hours_preferred(self, fake_gms: FakeGms) -> None:
-        """코드확인_규칙이시간을찾으면_LLM의시간대신쓴다"""
-        fake_gms(
-            lambda messages: empty_answer(
-                hours=[{"text": "아침 7시 전에", "open_until": "07:00"}]
-            )
-        )
-
-        assert interpret("아침 7시 전에 여는 카페").conditions.hours == (
-            Hours("아침 7시 전에", open_from="07:00"),
-        )
-
-    @pytest.mark.parametrize(
-        ("query", "codes"),
-        [("저렴한 이자카야", ()), ("가성비 좋고 저렴한 술집", ("VALUE_FOR_MONEY",))],
-    )
-    def test_cheap_is_not_value_for_money(
-        self, fake_gms: FakeGms, query: str, codes: tuple[str, ...]
-    ) -> None:
-        """코드확인_싼곳을찾는데가성비낱말이없으면_가성비코드를뗀다"""
-        fake_gms(lambda messages: empty_answer(codes=["VALUE_FOR_MONEY"]))
-
-        conditions = interpret(query).conditions
-
-        assert conditions.codes == codes
-        assert conditions.price is not None and conditions.price.cheap
-
-    def test_category_from_rules(self, fake_gms: FakeGms) -> None:
-        """코드확인_LLM이업종을비우면_규칙이찾은업종을쓴다"""
-        fake_gms(lambda messages: empty_answer())
-
-        assert interpret("매운 거 먹고 싶다").conditions.category_group == "RESTAURANT"
-
-    @pytest.mark.parametrize(
-        ("query", "llm", "avoid"),
-        [
-            (
-                "강남역 일식 말고",
-                {"avoid_categories": ["RESTAURANT"], "avoid_foods": ["FOOD_JAPANESE"]},
-                (),
-            ),
-            (
-                "파스타 싫어",
-                {
-                    "avoid_categories": ["RESTAURANT"],
-                    "menus": [{"text": "파스타", "value": "파스타", "want": False}],
-                },
-                (),
-            ),
-            (
-                "카페 싫고 매운 것도 싫어",
-                {
-                    "category_group": "RESTAURANT",
-                    "avoid_categories": ["CAFE"],
-                    "avoid_foods": ["FOOD_SPICY"],
-                },
-                ("CAFE",),
-            ),
-        ],
-    )
-    def test_food_avoid_keeps_category(
-        self, fake_gms: FakeGms, query: str, llm: dict, avoid: tuple[str, ...]
-    ) -> None:
-        """코드확인_음식을빼는데요청에없는업종까지빼면_그업종은뗀다"""
-        fake_gms(lambda messages: empty_answer(**llm))
-
-        assert interpret(query).conditions.avoid_categories == avoid
-
     def test_follow_up_keeps_previous_codes(self, fake_gms: FakeGms) -> None:
-        """코드확인_후속에서업종을바꾸며이전코드를버리면_빼지않은코드는남긴다"""
+        """후속합치기_업종을바꾸면_빼지않은이전코드는남긴다"""
         fake_gms(
             lambda messages: empty_answer(
-                text="역삼역 조용한 술집", category_group="BAR", codes=[]
+                text="역삼역 조용한 술집",
+                category_group="BAR",
+                avoid_categories=["CAFE"],
+                codes=[],
             )
         )
         previous = Conditions.from_codes(
@@ -945,7 +717,7 @@ class TestChecks:
         assert conditions.avoid_categories == ("CAFE",)
 
     def test_follow_up_drops_negated_code(self, fake_gms: FakeGms) -> None:
-        """코드확인_후속에서말고로뺀이전코드는_남기지않는다"""
+        """후속합치기_이번요청이말고로뺀이전코드는_남기지않는다"""
         fake_gms(
             lambda messages: empty_answer(text="역삼역 활기찬 카페", codes=["LIVELY"])
         )

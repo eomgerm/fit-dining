@@ -178,7 +178,7 @@ CARD = Card(
 
 MODELS = {
     "embedding": f"{embedding.MODEL_ID}@{embedding.REVISION}",
-    "llm": "gpt-4o-mini",
+    "llm": "gpt-6-luna",
 }
 
 

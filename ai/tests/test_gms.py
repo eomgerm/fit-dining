@@ -97,8 +97,25 @@ def test_base_url_and_full_endpoint_reach_same_url(monkeypatch, base):
     body = json.loads(req.content)
     assert body["model"] == "gpt-4o-mini"
     assert body["temperature"] == 0
+    assert "reasoning_effort" not in body
     assert body["response_format"] == {"type": "json_object"}
     assert body["messages"] == MESSAGES
+
+
+def test_sends_given_model_without_temperature():
+    client, seen = client_with(completion('{"ok": 1}'))
+    gms.call_json(
+        MESSAGES,
+        lambda d: d,
+        client=client,
+        model="gpt-6-luna",
+        temperature=None,
+        reasoning_effort="none",
+    )
+    body = json.loads(seen[0].content)
+    assert body["model"] == "gpt-6-luna"
+    assert "temperature" not in body
+    assert body["reasoning_effort"] == "none"
 
 
 def test_sends_given_response_format():

@@ -1,6 +1,6 @@
 """요청 해석. 요청문을 장소 저장소가 장소를 거를 값과 정렬에 넘길 조건으로 바꾼다.
 
-공유 모듈 `fit_ai.gms`로 GMS를 한 번 부른다. 호출이 실패하거나 JSON이 아니면 공유 모듈이
+공유 모듈 `fit_ai.gms`로 GMS를 한 번 부른다. 모델은 공유 모듈의 기본 모델이 아니라 `MODEL`이다. 호출이 실패하거나 JSON이 아니면 공유 모듈이
 한 번 더 부른다. 그래도 실패하거나 출력이 형식에 맞지 않으면 다시 부르지 않고 낱말
 규칙으로 해석한다(인프라 설계 11.2). LLM과 규칙 모두 이번 요청만 해석하고, 후속 조건이면
 이전 조건과 분류별 규칙으로 합친다(검색 spec D-50, docs/comparison/conditions-v3.md 4장).
@@ -12,11 +12,10 @@
 - `codes`: 분류별 조건과 공유 코드표 잇기(점수용 코드)
 - `request`: 조건(`Conditions`)과 해석 결과, 여러 모듈이 같이 쓰는 값과 함수
 - `merge`: 이전 조건과 이번 요청 합치기
-- `rules`: 규칙 해석
-- `checks`: LLM 해석을 규칙으로 바로잡기(코드 확인)
+- `rules`: 규칙 해석(LLM이 실패했을 때)
 - `llm`: 프롬프트와 LLM 출력 읽기
 
-의존은 segments ← codes ← request ← merge ← rules ← checks ← llm ← 이 파일 한 방향이다. 밖에서는 이 파일이
+의존은 segments ← codes ← request ← merge ← rules ← llm ← 이 파일 한 방향이다. 밖에서는 이 파일이
 내보내는 이름(`__all__`)을 쓴다.
 """
 
@@ -44,6 +43,15 @@ from fit_ai.match.interpretation.request import (
 )
 from fit_ai.match.interpretation.rules import interpret_by_rules, rule_turn
 
+MODEL = "gpt-6-luna"
+"""해석 모델. gpt-4o-mini보다 지시를 잘 따라 규칙 보정 없이 해석한다(2026-11-05 평가 질의 80개와
+새 질의 21개를 4번씩: 평가 317/320, 새 질의 84/84. gpt-4o-mini는 규칙 없이 평가 125/160)."""
+
+REASONING_EFFORT = "none"
+"""해석 모델의 추론 강도. 추론하지 않으면 응답 중앙값 1.7초로 gpt-4o-mini(1.55초)와 비슷하고
+정확도는 추론 `low`(2.4초)와 비슷했다(2026-11-05). 이 모델은 temperature 0을 받지 않아
+temperature는 보내지 않는다."""
+
 __all__ = [
     "CODE_PHRASES",
     "DEFAULT_CHANGE_SUMMARY",
@@ -54,6 +62,8 @@ __all__ = [
     "MAX_CODES",
     "MAX_TEXT_LENGTH",
     "MAX_WALK_MINUTES",
+    "MODEL",
+    "REASONING_EFFORT",
     "SYSTEM_PROMPT",
     "Conditions",
     "Interpretation",
@@ -91,6 +101,9 @@ def interpret(
         lambda data: data,
         timeout=timeout,
         client=client,
+        model=MODEL,
+        temperature=None,
+        reasoning_effort=REASONING_EFFORT,
     )
     seconds = time.perf_counter() - start
     if data is None:

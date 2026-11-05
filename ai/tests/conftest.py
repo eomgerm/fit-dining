@@ -22,7 +22,15 @@ def fake_gms(monkeypatch: pytest.MonkeyPatch) -> Callable[[Answer], list[list[di
         calls: list[list[dict]] = []
 
         def call_json(
-            messages, parse, *, response_format=None, timeout=10.0, client=None
+            messages,
+            parse,
+            *,
+            response_format=None,
+            timeout=10.0,
+            client=None,
+            model=gms.MODEL,
+            temperature=0,
+            reasoning_effort=None,
         ):
             for _ in range(2):
                 calls.append(messages)

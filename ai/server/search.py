@@ -18,9 +18,10 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
-from fit_ai import embedding, gms
+from fit_ai import embedding
 from fit_ai.match.candidates import MapBounds, StoreError
 from fit_ai.match.cards import Card
+from fit_ai.match.interpretation import MODEL as INTERPRET_MODEL
 from fit_ai.match.interpretation import Conditions
 from fit_ai.match.interpretation.segments import (
     Choice,
@@ -178,7 +179,7 @@ def _search(deps: Dependencies, body: SearchBody) -> JSONResponse:
         fallbacks=fallbacks,
         models=ModelsBody(
             embedding=embedding.MODEL_VERSION,
-            llm=gms.MODEL if used_llm else None,
+            llm=INTERPRET_MODEL if used_llm else None,
         ),
     )
     log(

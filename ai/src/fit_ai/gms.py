@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 import httpx
 
 MODEL = "gpt-4o-mini"
+"""기본 모델. 요청 해석은 자기 모델을 넘긴다(`fit_ai.match.interpretation.MODEL`)."""
 _PATH = "/chat/completions"
 _ATTEMPTS = 2  # 호출 실패나 출력 검사 실패면 한 번 다시 요청한다
 # 네트워크·HTTP 오류, 응답 모양 오류. `parse`는 출력 검사 실패를 ValueError 등으로 알린다
@@ -58,24 +59,32 @@ def call_json[T](
     response_format: dict | None = None,
     timeout: float = 10.0,
     client: httpx.Client | None = None,
+    model: str = MODEL,
+    temperature: float | None = 0,
+    reasoning_effort: str | None = None,
 ) -> T | None:
     """응답 JSON을 `parse`로 검사해 돌려준다. 꺼져 있거나 두 번 실패하면 None.
 
     설정이 틀리면 None이 아니라 `check_config`의 ValueError가 난다.
 
-    `response_format`을 주지 않으면 JSON 모드(스키마 보장 없음)로 부른다.
+    `response_format`을 주지 않으면 JSON 모드(스키마 보장 없음)로 부른다. `model`을 주지
+    않으면 `MODEL`로 부른다. `temperature`가 None이면 보내지 않는다(기본값만 받는 모델이
+    있다). `reasoning_effort`는 추론 모델의 추론 강도이고 None이면 보내지 않는다.
     """
     if not _enabled():
         return None
     check_config()
     url = _endpoint(os.environ["GMS_BASE_URL"])
     headers = {"Authorization": f"Bearer {os.environ['GMS_API_KEY']}"}
-    body = {
-        "model": MODEL,
-        "temperature": 0,
+    body: dict = {
+        "model": model,
         "response_format": response_format or {"type": "json_object"},
         "messages": messages,
     }
+    if temperature is not None:
+        body["temperature"] = temperature
+    if reasoning_effort is not None:
+        body["reasoning_effort"] = reasoning_effort
     with nullcontext(client) if client else httpx.Client() as c:
         for attempt in range(1, _ATTEMPTS + 1):
             try:

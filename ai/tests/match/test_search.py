@@ -366,8 +366,8 @@ class TestWhere:
 
     def test_map_bounds_beat_previous_location(self, fake_gms: FakeGms) -> None:
         """지역_이번요청에지역이없고지도영역이있으면_이전역대신지도영역으로거른다"""
-        # 해석은 이전 역을 이어 붙인다.
-        fake_gms(answers())
+        # 해석은 이번 요청의 지역만 낸다. 이전 역을 다시 적으면 이번 요청의 지역으로 본다.
+        fake_gms(answers(station=None))
         store = FakeStore()
 
         search(
@@ -577,14 +577,22 @@ class TestScoring:
     def test_timeout_and_client_for_interpretation(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """검색_GMS는해석에서한번만_받은대기시간과클라이언트로부른다"""
-        seen: list[tuple[float, object]] = []
+        """검색_GMS는해석에서한번만_받은대기시간과클라이언트로해석모델을부른다"""
+        seen: list[tuple] = []
         answer = answers()
 
         def call_json(
-            messages, parse, *, response_format=None, timeout=10.0, client=None
+            messages,
+            parse,
+            *,
+            response_format=None,
+            timeout=10.0,
+            client=None,
+            model=gms.MODEL,
+            temperature=0,
+            reasoning_effort=None,
         ):
-            seen.append((timeout, client))
+            seen.append((timeout, client, model, temperature, reasoning_effort))
             return parse(answer(messages))
 
         monkeypatch.setattr(gms, "call_json", call_json)
@@ -592,7 +600,8 @@ class TestScoring:
 
         search(SearchRequest(QUERY), FakeStore(), 5.0, client)  # type: ignore[arg-type]
 
-        assert seen == [(5.0, client)]
+        # 해석 모델은 temperature 0을 받지 않아 보내지 않는다.
+        assert seen == [(5.0, client, "gpt-6-luna", None, "none")]
 
     def test_places_failure(self, fake_gms: FakeGms) -> None:
         """검색_점수기준을만들장소를읽지못하면_StoreError를그대로낸다"""

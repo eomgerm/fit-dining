@@ -17,6 +17,7 @@ from datetime import date
 from pathlib import Path
 
 from fit_ai import gms
+from fit_ai.match import interpretation
 from fit_ai.match.interpretation import (
     CODE_PHRASES,
     SYSTEM_PROMPT,
@@ -48,11 +49,16 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--runs", type=int, default=2, help="LLM 해석을 돌릴 횟수")
     parser.add_argument("--label", default=str(date.today()), help="결과 파일 이름")
-    parser.add_argument("--model", help="해석 모델. 없으면 공유 모듈의 모델을 쓴다")
+    parser.add_argument("--model", help="해석 모델. 없으면 해석의 모델(`MODEL`)을 쓴다")
+    parser.add_argument(
+        "--effort", help="해석 모델의 추론 강도. 없으면 `REASONING_EFFORT`"
+    )
     args = parser.parse_args()
+    # 해석은 자기 모델로 부른다(`interpretation.MODEL`). 실험에서만 바꿔 끼운다.
     if args.model:
-        # 공유 모듈은 모델 하나로 고정이라 실험에서만 바꿔 끼운다.
-        gms.MODEL = args.model
+        interpretation.MODEL = args.model
+    if args.effort:
+        interpretation.REASONING_EFFORT = args.effort
     cases = json.loads((HERE / "cases.json").read_text(encoding="utf-8"))["cases"]
     timeout = float(os.environ.get("GMS_TIMEOUT_SECONDS", "5.0"))
     gms.call_json = _record(gms.call_json)
