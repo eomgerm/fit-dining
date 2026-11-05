@@ -233,7 +233,8 @@
    * 움직임 줄이기(motion-reduce:)에서는 이동·확대를 빼고 투명도·색 변화만 120ms로 한다.
    */
   --ease-enter: cubic-bezier(0.16, 1, 0.3, 1); /* 들어올 때 */
-  --ease-exit: cubic-bezier(0.7, 0, 0.84, 0); /* 나갈 때 */
+  /* 나갈 때. 처음부터 움직여 닫기가 바로 반응한다(MD3 accelerate, 220ms 중 110ms에 37%) */
+  --ease-exit: cubic-bezier(0.3, 0, 1, 1);
   --ease-standard: cubic-bezier(0.2, 0, 0, 1); /* 제자리 변화 */
   --default-transition-duration: 120ms;
   --default-transition-timing-function: var(--ease-standard);
