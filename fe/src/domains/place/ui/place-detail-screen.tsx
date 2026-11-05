@@ -119,6 +119,8 @@ function PlaceDetailContent({
   fromSaved: boolean;
 }) {
   const query = useQuery(placeQueries.detail(id));
+  // 빈 자리를 보이고 나서 내용이 오면 투명도만 바꿔 나타낸다. 서버가 그려 넣은 상세는 바로 보인다
+  const [fadeIn] = useState(query.isPending);
   const storedCard = useStoredCard(id);
   const card = fromSaved ? undefined : storedCard;
 
@@ -159,7 +161,7 @@ function PlaceDetailContent({
       </div>
     );
   }
-  return (
+  const view = (
     <PlaceDetailView
       detail={query.data}
       card={card}
@@ -167,6 +169,13 @@ function PlaceDetailContent({
       bookmarks={bookmarks}
       returnTo={placeDetailHref(id, fromSaved)}
     />
+  );
+  if (!fadeIn) return view;
+  return (
+    // 200ms, 움직임 줄이기에서는 120ms. BottomBar가 바닥에 붙도록 남은 높이를 채운다
+    <div className="flex flex-1 flex-col transition-opacity duration-200 motion-reduce:duration-120 starting:opacity-0">
+      {view}
+    </div>
   );
 }
 

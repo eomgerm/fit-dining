@@ -29,54 +29,58 @@ export function PlaceCard({
 }: PlaceCardProps) {
   const { place, score, labels, caution, openStatus } = card;
   return (
-    <button
-      type="button"
-      id={placeCardElementId(place.id)}
-      aria-pressed={selected}
-      onClick={onPress}
-      // 테두리는 안쪽 그림자라 선택돼도 내용이 움직이지 않는다
-      className={cn(
-        "flex w-full scroll-my-4 flex-col gap-2.5 rounded-lg bg-surface p-3.5 text-left transition-shadow",
-        selected
-          ? "inset-ring-2 inset-ring-primary"
-          : "inset-ring inset-ring-line",
-      )}
-    >
-      <div className="flex w-full gap-3">
-        <PlacePhoto
-          src={place.thumbnailUrl}
-          className="size-19 shrink-0 rounded-md"
-        />
-        {/* 태그 줄은 핏 점수 아래까지 폭을 쓴다(5-04) */}
-        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-          <div className="flex items-start gap-2">
-            <div className="flex min-w-0 flex-1 flex-col">
-              <div className="flex items-center gap-1.5">
-                <RankBadge rank={rank} selected={selected} />
-                <span className="truncate text-title-md text-ink">
-                  {place.name}
-                </span>
+    // 빈 카드(PlaceCardSkeleton) 자리에 처음 그려질 때 투명도만 200ms로 나타난다. 움직임 줄이기에서는 120ms다.
+    // 선택 테두리(120ms)와 시간이 달라 감싸는 쪽에서 바꾼다
+    <div className="transition-opacity duration-200 motion-reduce:duration-120 starting:opacity-0">
+      <button
+        type="button"
+        id={placeCardElementId(place.id)}
+        aria-pressed={selected}
+        onClick={onPress}
+        // 테두리는 안쪽 그림자라 선택돼도 내용이 움직이지 않는다
+        className={cn(
+          "flex w-full scroll-my-4 flex-col gap-2.5 rounded-lg bg-surface p-3.5 text-left transition-shadow",
+          selected
+            ? "inset-ring-2 inset-ring-primary"
+            : "inset-ring inset-ring-line",
+        )}
+      >
+        <div className="flex w-full gap-3">
+          <PlacePhoto
+            src={place.thumbnailUrl}
+            className="size-19 shrink-0 rounded-md"
+          />
+          {/* 태그 줄은 핏 점수 아래까지 폭을 쓴다(5-04) */}
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <div className="flex items-start gap-2">
+              <div className="flex min-w-0 flex-1 flex-col">
+                <div className="flex items-center gap-1.5">
+                  <RankBadge rank={rank} selected={selected} />
+                  <span className="truncate text-title-md text-ink">
+                    {place.name}
+                  </span>
+                </div>
+                <PlaceMeta place={place} here={here} status={openStatus} />
               </div>
-              <PlaceMeta place={place} here={here} status={openStatus} />
+              {score !== undefined && <FitScore score={score} />}
             </div>
-            {score !== undefined && <FitScore score={score} />}
-          </div>
-          <div className="flex flex-wrap gap-1">
-            {labels.map((label, index) => (
-              <Tag key={label} variant={index === 0 ? "match" : "default"}>
-                {label}
-              </Tag>
-            ))}
+            <div className="flex flex-wrap gap-1">
+              {labels.map((label, index) => (
+                <Tag key={label} variant={index === 0 ? "match" : "default"}>
+                  {label}
+                </Tag>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
-      {caution && (
-        <p className="flex items-center gap-1.5 text-caption-md text-warning">
-          <WarningIcon size="sm" />
-          {caution}
-        </p>
-      )}
-    </button>
+        {caution && (
+          <p className="flex items-center gap-1.5 text-caption-md text-warning">
+            <WarningIcon size="sm" />
+            {caution}
+          </p>
+        )}
+      </button>
+    </div>
   );
 }
 
