@@ -35,7 +35,7 @@ import org.springframework.web.client.RestClient;
 class AiSearchClientBudgetTest {
 
 	static final Duration BUDGET = Duration.ofMillis(500);
-	/** 예산 500ms에 맞춰 줄인 재시도·자리 값: 최소 처리 시간 100ms, Retry-After 상한 300ms, 자리 기다림 200ms */
+	/** time-out 500ms에 맞춰 줄인 값. 최소 처리 시간 100ms, Retry-After 상한 300ms, permit 대기 200ms */
 	static final AiSearchClient.Timing TIMING = timing(BUDGET);
 	static final String SECRET = "비밀표식9c41";
 	static final String OK = "{\"items\":[],\"conditions\":{\"text\":\"" + SECRET + "\"}}";
@@ -245,7 +245,7 @@ class AiSearchClientBudgetTest {
 	}
 
 	@Test
-	@DisplayName("BUSY_RetryAfter가있으면_그만큼쉬고다시부른다")
+	@DisplayName("BUSY_RetryAfter가있으면_그만큼기다린뒤재요청한다")
 	void busy_retryAfter_waitsBeforeRetry() {
 		long[] at = new long[3];
 		handler = (exchange, call) -> {
@@ -268,7 +268,7 @@ class AiSearchClientBudgetTest {
 	@DisplayName("BUSY_쉰뒤남은예산이최소처리시간보다적으면_다시부르지않는다")
 	void busy_budgetGoneAfterWait_noRetry(CapturedOutput output) {
 		handler = (exchange, call) -> respondBusy(exchange, "1");
-		// 300ms를 쉬라고 하면 600ms를 쉬어 예산 500ms를 넘긴다. 시도 수는 클라이언트를 만든 수로 센다(기본 클라이언트는
+		// 300ms를 기다리라고 하면 600ms를 멈춰 time-out 500ms를 넘긴다. 시도 수는 클라이언트를 만든 수로 센다(기본 클라이언트는
 		// 연결 문제로 POST를 스스로 한 번 더 보낼 수 있어 서버 호출 수가 시도 수와 다를 수 있다).
 		AtomicInteger attempts = new AtomicInteger();
 		AiSearchClient client = new AiSearchClient(url(), "", "", TIMING, Clock.systemUTC(), timeout -> {
@@ -282,7 +282,7 @@ class AiSearchClientBudgetTest {
 	}
 
 	@Test
-	@DisplayName("상한_기다려도자리가나지않으면_부르지않고대체하고차단기는그대로다")
+	@DisplayName("상한_기다려도permit을못받으면_호출하지않고fallback하고차단기는그대로다")
 	void inFlight_limitReached_fallsBackWithoutCalling(CapturedOutput output) throws Exception {
 		CountDownLatch release = new CountDownLatch(1);
 		handler = (exchange, call) -> {
@@ -296,7 +296,7 @@ class AiSearchClientBudgetTest {
 
 			for (int i = 0; i < AiSearchClient.FAILURE_THRESHOLD; i++) {
 				long elapsed = timed(() -> assertThat(client.search(request(), null)).isEmpty());
-				// 자리 기다림 200ms만 기다린다
+				// permit 대기 200ms만 기다린다
 				assertThat(elapsed).isBetween(150L, 1000L);
 			}
 			assertThat(calls).hasValue(AiSearchClient.MAX_IN_FLIGHT);
@@ -315,8 +315,8 @@ class AiSearchClientBudgetTest {
 	}
 
 	@Test
-	@DisplayName("상한_기다리는동안자리가나면_AI를부른다")
-	void inFlight_slotFreedWhileWaiting_callsAi() throws Exception {
+	@DisplayName("상한_기다리는동안permit이반납되면_AI를호출한다")
+	void inFlight_permitReleasedWhileWaiting_callsAi() throws Exception {
 		CountDownLatch release = new CountDownLatch(1);
 		handler = (exchange, call) -> {
 			if (call <= AiSearchClient.MAX_IN_FLIGHT) {
@@ -349,14 +349,14 @@ class AiSearchClientBudgetTest {
 	}
 
 	@Test
-	@DisplayName("상한_자리기다림도_예산안이다")
-	void inFlight_slotWait_staysWithinBudget() throws Exception {
+	@DisplayName("상한_permit대기도_timeout안이다")
+	void inFlight_permitWait_staysWithinBudget() throws Exception {
 		CountDownLatch release = new CountDownLatch(1);
 		handler = (exchange, call) -> {
 			release.await();
 			respond(exchange, 200, OK);
 		};
-		// 자리 기다림 상한(5초)이 예산(1초)보다 길어도 예산 안에서 끝난다
+		// permit 대기 상한(5초)이 time-out(1초)보다 길어도 time-out 안에서 끝난다
 		AiSearchClient client = client(new AiSearchClient.Timing(Duration.ofSeconds(1), Duration.ofMillis(100),
 				Duration.ofMillis(300), Duration.ofSeconds(5)));
 		ExecutorService pool = Executors.newFixedThreadPool(AiSearchClient.MAX_IN_FLIGHT);
@@ -373,7 +373,7 @@ class AiSearchClientBudgetTest {
 	}
 
 	@Test
-	@DisplayName("상한_실패한검색도_자리를돌려준다")
+	@DisplayName("상한_실패한검색도_permit을반납한다")
 	void inFlight_failures_releaseSlots() {
 		// 차단기가 세지 않는 실패(4xx, 읽을 수 없는 응답)를 상한보다 많이 이어 보내도 모두 AI에 닿는다
 		handler = (exchange, call) -> respond(exchange, call % 2 == 0 ? 400 : 200, call % 2 == 0 ? BUSY : "{");

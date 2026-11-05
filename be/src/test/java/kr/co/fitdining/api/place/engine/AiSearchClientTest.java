@@ -64,12 +64,12 @@ class AiSearchClientTest {
 			{"conditions":{"text":"t"},"nearby":false,"items":[{"placeId":1,"score":80}],
 			 "interpretedBy":"LLM","rankedBy":"LLM","fallbacks":[],"models":{"llm":"m"}}""";
 
-	/** 예산 8초에 운영과 같은 재시도·자리 값. MockRestServiceServer는 시간이 흐르지 않아 예산이 줄지 않는다. */
+	/** time-out 8초에 운영과 같은 재요청·permit 대기 값. MockRestServiceServer는 시간이 흐르지 않아 남은 시간이 줄지 않는다. */
 	static final AiSearchClient.Timing TIMING = new AiSearchClient.Timing(Duration.ofSeconds(8),
-			AiSearchClient.MIN_RETRY_TIME, AiSearchClient.MAX_RETRY_AFTER, AiSearchClient.SLOT_WAIT);
+			AiSearchClient.MIN_RETRY_TIME, AiSearchClient.MAX_RETRY_AFTER, AiSearchClient.PERMIT_WAIT);
 
 	final MutableClock clock = new MutableClock(Instant.parse("2026-10-31T03:00:00Z"));
-	/** 실제로 쉬지 않고 쉬라고 한 시간만 남긴다 */
+	/** 실제로 thread를 멈추지 않고 요청받은 대기 시간만 남긴다 */
 	final List<Duration> slept = new ArrayList<>();
 	MockRestServiceServer server;
 	RestClient rest;
@@ -299,6 +299,31 @@ class AiSearchClientTest {
 		}
 
 		@ParameterizedTest
+		@ValueSource(strings = {"EMBEDDING_UNAVAILABLE", "PLACES_UNAVAILABLE", "INTERNAL_ERROR"})
+		@DisplayName("AI실패_5xx본문에code가있으면_상태코드와code를로그에남긴다")
+		void failure_serverErrorCode_loggedWithStatus(String code, CapturedOutput output) {
+			int status = code.equals("INTERNAL_ERROR") ? 500 : 503;
+			server.expect(requestTo(URL)).andRespond(withStatus(HttpStatusCode.valueOf(status))
+					.body("{\"code\":\"" + code + "\",\"detail\":\"" + SECRET + "\"}")
+					.contentType(MediaType.APPLICATION_PROBLEM_JSON));
+
+			assertThat(client().search(request("카페"), null)).isEmpty();
+			assertThat(output.getAll()).contains("WARN").contains("kind=SERVER_ERROR")
+					.contains("reason=" + status + ":" + code + ",").contains("elapsedMs=").doesNotContain(SECRET);
+		}
+
+		@ParameterizedTest
+		@ValueSource(strings = {"\"lower_case\"", "\"" + SECRET + "\"", "\"A B\"", "1", "null"})
+		@DisplayName("AI실패_code가대문자상수가아니면_상태코드만남긴다")
+		void failure_unexpectedCode_logsStatusOnly(String code, CapturedOutput output) {
+			server.expect(requestTo(URL)).andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE)
+					.body("{\"code\":" + code + "}").contentType(MediaType.APPLICATION_PROBLEM_JSON));
+
+			assertThat(client().search(request("카페"), null)).isEmpty();
+			assertThat(output.getAll()).contains("reason=503,").doesNotContain(SECRET).doesNotContain("lower_case");
+		}
+
+		@ParameterizedTest
 		@ValueSource(ints = {500, 502, 503, 504})
 		@DisplayName("AI실패_BUSY가아닌5xx는_다시부르지않고WARN이다")
 		void failure_serverError_noRetryAndWarn(int status, CapturedOutput output) {
@@ -390,7 +415,7 @@ class AiSearchClientTest {
 		}
 
 		@Test
-		@DisplayName("BUSY_한번오면_RetryAfter만큼쉬고다시불러성공한다")
+		@DisplayName("BUSY_한번오면_RetryAfter만큼기다린뒤재요청해성공한다")
 		void busy_once_waitsRetryAfterAndSucceeds() {
 			expectBusy("1");
 			server.expect(requestTo(URL)).andRespond(withSuccess(OK, MediaType.APPLICATION_JSON));
@@ -400,7 +425,7 @@ class AiSearchClientTest {
 		}
 
 		@Test
-		@DisplayName("BUSY_RetryAfter가상한보다길면_상한만큼만쉰다")
+		@DisplayName("BUSY_RetryAfter가상한보다크면_상한만큼만기다린다")
 		void busy_longRetryAfter_waitsAtMostTheCap() {
 			expectBusy("30");
 			server.expect(requestTo(URL)).andRespond(withSuccess(OK, MediaType.APPLICATION_JSON));
@@ -411,7 +436,7 @@ class AiSearchClientTest {
 
 		@ParameterizedTest
 		@ValueSource(strings = {"", "0", "-1", "1.5", "abc", "Wed, 21 Oct 2026 07:28:00 GMT"})
-		@DisplayName("BUSY_RetryAfter가초숫자가아니면_쉬지않고다시부른다")
+		@DisplayName("BUSY_RetryAfter가정수초가아니면_기다리지않고재요청한다")
 		void busy_unreadableRetryAfter_retriesWithoutWaiting(String retryAfter) {
 			expectBusy(retryAfter);
 			server.expect(requestTo(URL)).andRespond(withSuccess(OK, MediaType.APPLICATION_JSON));
@@ -421,7 +446,7 @@ class AiSearchClientTest {
 		}
 
 		@Test
-		@DisplayName("BUSY_RetryAfter가없으면_쉬지않고다시부른다")
+		@DisplayName("BUSY_RetryAfter가없으면_기다리지않고재요청한다")
 		void busy_noRetryAfter_retriesWithoutWaiting() {
 			expectBusy(null);
 			server.expect(requestTo(URL)).andRespond(withSuccess(OK, MediaType.APPLICATION_JSON));
@@ -431,21 +456,22 @@ class AiSearchClientTest {
 		}
 
 		@Test
-		@DisplayName("BUSY_쉰뒤남을예산이최소처리시간보다적으면_쉬지않고BUSY실패다")
+		@DisplayName("BUSY_대기뒤남을시간이최소처리시간보다적으면_기다리지않고BUSY실패다")
 		void busy_notEnoughBudgetAfterWait_failsWithoutWaiting(CapturedOutput output) {
-			// 예산 8초에서 1초를 쉬면 7초가 남아 최소 처리 시간 7.5초보다 적다
+			// time-out 8초에서 1초를 기다리면 7초가 남아 최소 처리 시간 7.5초보다 적다
 			AiSearchClient client = new AiSearchClient("http://ai.test", "", "", new AiSearchClient.Timing(
 					Duration.ofSeconds(8), Duration.ofMillis(7500), AiSearchClient.MAX_RETRY_AFTER,
-					AiSearchClient.SLOT_WAIT), clock, timeout -> rest, slept::add);
+					AiSearchClient.PERMIT_WAIT), clock, timeout -> rest, slept::add);
 			expectBusy("1");
 
 			assertThat(client.search(request("카페"), null)).isEmpty();
 			assertThat(slept).isEmpty();
-			assertThat(output.getAll()).contains("WARN").contains("kind=BUSY");
+			assertThat(output.getAll()).contains("WARN").contains("kind=BUSY")
+					.contains("reason=503:BUSY, retry skipped: leftMs=").contains("retryAfterMs=1000");
 		}
 
 		@Test
-		@DisplayName("BUSY_쉬는동안중단되면_다시부르지않고차단기에세지않는다")
+		@DisplayName("BUSY_대기중interrupt되면_재요청하지않고차단기에세지않는다")
 		void busy_interruptedWhileWaiting_failsWithoutCounting(CapturedOutput output) {
 			AiSearchClient client = new AiSearchClient("http://ai.test", "", "", TIMING, clock, timeout -> rest,
 					duration -> {
@@ -475,7 +501,8 @@ class AiSearchClientTest {
 					.body(BUSY).contentType(MediaType.APPLICATION_PROBLEM_JSON));
 
 			assertThat(client().search(request("카페"), null)).isEmpty();
-			assertThat(output.getAll()).contains("WARN").contains("kind=BUSY");
+			assertThat(output.getAll()).contains("WARN").contains("kind=BUSY").contains("reason=503:BUSY after retry")
+					.contains("elapsedMs=");
 		}
 
 		@Test
@@ -563,7 +590,7 @@ class AiSearchClientTest {
 
 			clock.advance(Duration.ofSeconds(1));
 			succeed();
-			assertThat(output.getAll()).contains("AI search circuit closed");
+			assertThat(output.getAll()).contains("AI search circuit closed: skippedWhileOpen=1");
 		}
 
 		@Test
