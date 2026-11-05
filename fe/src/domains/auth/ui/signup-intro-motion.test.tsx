@@ -26,6 +26,21 @@ it("clips the status-bar-adjusted band and preserves the reference stage transfo
   }
 });
 
+it("넘길 때 나가는 장의 그림을 처음 상태로 되돌리지 않고 그 자리에 멈춘다", () => {
+  const css = readFileSync(
+    resolve("src/domains/auth/ui/signup-intro-motion.css"),
+    "utf8",
+  );
+  // data-playing이 빠질 때 animation을 지우면 그림이 처음 상태로 튄다
+  expect(css).not.toMatch(/\[data-playing\] \.m\d-a/);
+  for (const slide of [1, 2, 3]) {
+    const paused = `.signup-motion:not([data-playing]) [class*="m${slide}-a"]`;
+    expect(css.slice(css.indexOf(paused)).split("}")[0]).toContain(
+      "animation-play-state: paused;",
+    );
+  }
+});
+
 afterEach(cleanup);
 it("hides artwork and transfers playback between slides", () => {
   const slides = (active: number) =>

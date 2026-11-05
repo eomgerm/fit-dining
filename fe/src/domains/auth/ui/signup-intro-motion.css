@@ -689,7 +689,7 @@
     opacity: 1;
   }
 }
-.signup-motion[data-playing] .m1-a1 {
+.signup-motion .m1-a1 {
   animation: m1-a1k 8s linear infinite both;
 }
 @keyframes m1-a3k {
@@ -772,7 +772,7 @@
     transform: scaleX(0);
   }
 }
-.signup-motion[data-playing] .m1-a3 {
+.signup-motion .m1-a3 {
   animation: m1-a3k 8s linear infinite both;
 }
 @keyframes m1-a5k {
@@ -828,7 +828,7 @@
     opacity: 1;
   }
 }
-.signup-motion[data-playing] .m1-a5 {
+.signup-motion .m1-a5 {
   animation: m1-a5k 8s linear infinite both;
 }
 @keyframes m1-a7k {
@@ -866,7 +866,7 @@
     transform: scale(1.3);
   }
 }
-.signup-motion[data-playing] .m1-a7 {
+.signup-motion .m1-a7 {
   animation: m1-a7k 8s linear infinite both;
 }
 @keyframes m1-a9k {
@@ -955,7 +955,7 @@
     opacity: 0;
   }
 }
-.signup-motion[data-playing] .m1-a9 {
+.signup-motion .m1-a9 {
   animation: m1-a9k 8s linear infinite both;
 }
 @keyframes m1-a11k {
@@ -1048,7 +1048,7 @@
     transform: scale(1);
   }
 }
-.signup-motion[data-playing] .m1-a11 {
+.signup-motion .m1-a11 {
   animation: m1-a11k 8s linear infinite both;
 }
 @keyframes m1-a13k {
@@ -1104,7 +1104,7 @@
     opacity: 0;
   }
 }
-.signup-motion[data-playing] .m1-a13 {
+.signup-motion .m1-a13 {
   animation: m1-a13k 8s linear infinite both;
 }
 @keyframes m1-a15k {
@@ -1169,7 +1169,7 @@
     transform: scale(1);
   }
 }
-.signup-motion[data-playing] .m1-a15 {
+.signup-motion .m1-a15 {
   animation: m1-a15k 8s linear infinite both;
 }
 @keyframes m1-a21k {
@@ -1231,7 +1231,7 @@
     opacity: 1;
   }
 }
-.signup-motion[data-playing] .m1-a21 {
+.signup-motion .m1-a21 {
   animation: m1-a21k 8s linear infinite both;
 }
 @keyframes m1-a22k {
@@ -1293,7 +1293,7 @@
     opacity: 0;
   }
 }
-.signup-motion[data-playing] .m1-a22 {
+.signup-motion .m1-a22 {
   animation: m1-a22k 8s linear infinite both;
 }
 @keyframes m1-a23k {
@@ -1340,7 +1340,7 @@
     opacity: 1;
   }
 }
-.signup-motion[data-playing] .m1-a23 {
+.signup-motion .m1-a23 {
   animation: m1-a23k 8s linear infinite both;
 }
 @keyframes m1-a24k {
@@ -1426,7 +1426,7 @@
     opacity: 0;
   }
 }
-.signup-motion[data-playing] .m1-a24 {
+.signup-motion .m1-a24 {
   animation: m1-a24k 8s linear infinite both;
 }
 @keyframes m1-a25k {
@@ -1507,7 +1507,7 @@
     transform: scale(1);
   }
 }
-.signup-motion[data-playing] .m1-a25 {
+.signup-motion .m1-a25 {
   animation: m1-a25k 8s linear infinite both;
 }
 @keyframes m1-a30k {
@@ -1604,7 +1604,7 @@
     transform: translateY(0px);
   }
 }
-.signup-motion[data-playing] .m1-a30 {
+.signup-motion .m1-a30 {
   animation: m1-a30k 8s linear infinite both;
 }
 @keyframes m1-a31k {
@@ -1745,7 +1745,7 @@
     transform: translateY(6px);
   }
 }
-.signup-motion[data-playing] .m1-a31 {
+.signup-motion .m1-a31 {
   animation: m1-a31k 8s linear infinite both;
 }
 @keyframes m1-a32k {
@@ -1842,7 +1842,7 @@
     transform: translateY(12px);
   }
 }
-.signup-motion[data-playing] .m1-a32 {
+.signup-motion .m1-a32 {
   animation: m1-a32k 8s linear infinite both;
 }
 @keyframes m1-a34k {
@@ -1907,7 +1907,7 @@
     transform: translateY(0px);
   }
 }
-.signup-motion[data-playing] .m1-a34 {
+.signup-motion .m1-a34 {
   animation: m1-a34k 8s linear infinite both;
 }
 @keyframes m1-a41k {
@@ -2072,7 +2072,7 @@
     box-shadow: rgba(31, 27, 25, 0.08) 0px 1px 2px;
   }
 }
-.signup-motion[data-playing] .m1-a41 {
+.signup-motion .m1-a41 {
   animation: m1-a41k 8s linear infinite both;
 }
 @keyframes m1-a48k {
@@ -2407,7 +2407,7 @@
     box-shadow: rgba(31, 27, 25, 0.08) 0px 1px 2px;
   }
 }
-.signup-motion[data-playing] .m1-a48 {
+.signup-motion .m1-a48 {
   animation: m1-a48k 8s linear infinite both;
 }
 @keyframes m1-a47t0k {
@@ -2430,7 +2430,7 @@
     opacity: 1;
   }
 }
-.signup-motion[data-playing] .m1-a47t0 {
+.signup-motion .m1-a47t0 {
   animation: m1-a47t0k 8s linear infinite both;
 }
 @keyframes m1-a47t1k {
@@ -2453,7 +2453,7 @@
     opacity: 0;
   }
 }
-.signup-motion[data-playing] .m1-a47t1 {
+.signup-motion .m1-a47t1 {
   animation: m1-a47t1k 8s linear infinite both;
 }
 @keyframes m1-a47t2k {
@@ -2476,7 +2476,7 @@
     opacity: 0;
   }
 }
-.signup-motion[data-playing] .m1-a47t2 {
+.signup-motion .m1-a47t2 {
   animation: m1-a47t2k 8s linear infinite both;
 }
 @keyframes m1-a54t0k {
@@ -2499,7 +2499,7 @@
     opacity: 1;
   }
 }
-.signup-motion[data-playing] .m1-a54t0 {
+.signup-motion .m1-a54t0 {
   animation: m1-a54t0k 8s linear infinite both;
 }
 @keyframes m1-a54t1k {
@@ -2522,7 +2522,7 @@
     opacity: 0;
   }
 }
-.signup-motion[data-playing] .m1-a54t1 {
+.signup-motion .m1-a54t1 {
   animation: m1-a54t1k 8s linear infinite both;
 }
 .m2-fd {
@@ -3456,7 +3456,7 @@
     transform: translateY(0px);
   }
 }
-.signup-motion[data-playing] .m2-a1 {
+.signup-motion .m2-a1 {
   animation: m2-a1k 9.75s linear infinite both;
 }
 @keyframes m2-a8k {
@@ -3485,7 +3485,7 @@
     transform: scale(1);
   }
 }
-.signup-motion[data-playing] .m2-a8 {
+.signup-motion .m2-a8 {
   animation: m2-a8k 9.75s linear infinite both;
 }
 @keyframes m2-a9k {
@@ -3511,7 +3511,7 @@
     transform: scale(1);
   }
 }
-.signup-motion[data-playing] .m2-a9 {
+.signup-motion .m2-a9 {
   animation: m2-a9k 9.75s linear infinite both;
 }
 @keyframes m2-a10k {
@@ -3540,7 +3540,7 @@
     transform: scale(1);
   }
 }
-.signup-motion[data-playing] .m2-a10 {
+.signup-motion .m2-a10 {
   animation: m2-a10k 9.75s linear infinite both;
 }
 @keyframes m2-a17k {
@@ -3665,7 +3665,7 @@
     transform: translateY(340px);
   }
 }
-.signup-motion[data-playing] .m2-a17 {
+.signup-motion .m2-a17 {
   animation: m2-a17k 9.75s linear infinite both;
 }
 @keyframes m2-a21k {
@@ -3709,7 +3709,7 @@
     opacity: 0;
   }
 }
-.signup-motion[data-playing] .m2-a21 {
+.signup-motion .m2-a21 {
   animation: m2-a21k 9.75s linear infinite both;
 }
 @keyframes m2-a27k {
@@ -3732,7 +3732,7 @@
     transform: translateX(260px);
   }
 }
-.signup-motion[data-playing] .m2-a27 {
+.signup-motion .m2-a27 {
   animation: m2-a27k 9.75s linear infinite both;
 }
 @keyframes m2-a30k {
@@ -3779,7 +3779,7 @@
     opacity: 1;
   }
 }
-.signup-motion[data-playing] .m2-a30 {
+.signup-motion .m2-a30 {
   animation: m2-a30k 9.75s linear infinite both;
 }
 @keyframes m2-a32k {
@@ -3824,7 +3824,7 @@
     transform: scale(1);
   }
 }
-.signup-motion[data-playing] .m2-a32 {
+.signup-motion .m2-a32 {
   animation: m2-a32k 9.75s linear infinite both;
 }
 @keyframes m2-a33k {
@@ -3865,7 +3865,7 @@
     transform: scale(1);
   }
 }
-.signup-motion[data-playing] .m2-a33 {
+.signup-motion .m2-a33 {
   animation: m2-a33k 9.75s linear infinite both;
 }
 @keyframes m2-a34k {
@@ -3910,7 +3910,7 @@
     transform: scale(1);
   }
 }
-.signup-motion[data-playing] .m2-a34 {
+.signup-motion .m2-a34 {
   animation: m2-a34k 9.75s linear infinite both;
 }
 @keyframes m2-a35k {
@@ -3979,7 +3979,7 @@
     transform: translateY(0px);
   }
 }
-.signup-motion[data-playing] .m2-a35 {
+.signup-motion .m2-a35 {
   animation: m2-a35k 9.75s linear infinite both;
 }
 @keyframes m2-a41k {
@@ -4072,7 +4072,7 @@
     opacity: 0;
   }
 }
-.signup-motion[data-playing] .m2-a41 {
+.signup-motion .m2-a41 {
   animation: m2-a41k 9.75s linear infinite both;
 }
 @keyframes m2-a42k {
@@ -4173,7 +4173,7 @@
     opacity: 0;
   }
 }
-.signup-motion[data-playing] .m2-a42 {
+.signup-motion .m2-a42 {
   animation: m2-a42k 9.75s linear infinite both;
 }
 @keyframes m2-a43k {
@@ -4266,7 +4266,7 @@
     opacity: 0;
   }
 }
-.signup-motion[data-playing] .m2-a43 {
+.signup-motion .m2-a43 {
   animation: m2-a43k 9.75s linear infinite both;
 }
 @keyframes m2-a45k {
@@ -4423,7 +4423,7 @@
     opacity: 0.05;
   }
 }
-.signup-motion[data-playing] .m2-a45 {
+.signup-motion .m2-a45 {
   animation: m2-a45k 9.75s linear infinite both;
 }
 @keyframes m2-a46k {
@@ -4548,7 +4548,7 @@
     opacity: 0;
   }
 }
-.signup-motion[data-playing] .m2-a46 {
+.signup-motion .m2-a46 {
   animation: m2-a46k 9.75s linear infinite both;
 }
 @keyframes m2-a48k {
@@ -4568,7 +4568,7 @@
     stroke-dashoffset: -143;
   }
 }
-.signup-motion[data-playing] .m2-a48 {
+.signup-motion .m2-a48 {
   animation: m2-a48k 9.75s linear infinite both;
 }
 @keyframes m2-a49k {
@@ -4688,7 +4688,7 @@
     opacity: 0;
   }
 }
-.signup-motion[data-playing] .m2-a49 {
+.signup-motion .m2-a49 {
   animation: m2-a49k 9.75s linear infinite both;
 }
 @keyframes m2-a50k {
@@ -4808,7 +4808,7 @@
     opacity: 0;
   }
 }
-.signup-motion[data-playing] .m2-a50 {
+.signup-motion .m2-a50 {
   animation: m2-a50k 9.75s linear infinite both;
 }
 @keyframes m2-a51k {
@@ -4933,7 +4933,7 @@
     opacity: 0;
   }
 }
-.signup-motion[data-playing] .m2-a51 {
+.signup-motion .m2-a51 {
   animation: m2-a51k 9.75s linear infinite both;
 }
 @keyframes m2-a52k {
@@ -5208,7 +5208,7 @@
     opacity: 0;
   }
 }
-.signup-motion[data-playing] .m2-a52 {
+.signup-motion .m2-a52 {
   animation: m2-a52k 9.75s linear infinite both;
 }
 @keyframes m2-a53k {
@@ -5468,7 +5468,7 @@
     opacity: 0;
   }
 }
-.signup-motion[data-playing] .m2-a53 {
+.signup-motion .m2-a53 {
   animation: m2-a53k 9.75s linear infinite both;
 }
 @keyframes m2-a54k {
@@ -5723,7 +5723,7 @@
     opacity: 0;
   }
 }
-.signup-motion[data-playing] .m2-a54 {
+.signup-motion .m2-a54 {
   animation: m2-a54k 9.75s linear infinite both;
 }
 @keyframes m2-a55k {
@@ -5978,7 +5978,7 @@
     opacity: 0;
   }
 }
-.signup-motion[data-playing] .m2-a55 {
+.signup-motion .m2-a55 {
   animation: m2-a55k 9.75s linear infinite both;
 }
 @keyframes m2-a56k {
@@ -6278,7 +6278,7 @@
     opacity: 0;
   }
 }
-.signup-motion[data-playing] .m2-a56 {
+.signup-motion .m2-a56 {
   animation: m2-a56k 9.75s linear infinite both;
 }
 @keyframes m2-a57k {
@@ -6568,7 +6568,7 @@
     opacity: 0;
   }
 }
-.signup-motion[data-playing] .m2-a57 {
+.signup-motion .m2-a57 {
   animation: m2-a57k 9.75s linear infinite both;
 }
 @keyframes m2-a58k {
@@ -6843,7 +6843,7 @@
     opacity: 0;
   }
 }
-.signup-motion[data-playing] .m2-a58 {
+.signup-motion .m2-a58 {
   animation: m2-a58k 9.75s linear infinite both;
 }
 @keyframes m2-a59k {
@@ -7118,7 +7118,7 @@
     opacity: 0;
   }
 }
-.signup-motion[data-playing] .m2-a59 {
+.signup-motion .m2-a59 {
   animation: m2-a59k 9.75s linear infinite both;
 }
 @keyframes m2-a60k {
@@ -7418,7 +7418,7 @@
     opacity: 0;
   }
 }
-.signup-motion[data-playing] .m2-a60 {
+.signup-motion .m2-a60 {
   animation: m2-a60k 9.75s linear infinite both;
 }
 @keyframes m2-a61k {
@@ -7713,7 +7713,7 @@
     opacity: 0;
   }
 }
-.signup-motion[data-playing] .m2-a61 {
+.signup-motion .m2-a61 {
   animation: m2-a61k 9.75s linear infinite both;
 }
 @keyframes m2-a62k {
@@ -7993,7 +7993,7 @@
     opacity: 0;
   }
 }
-.signup-motion[data-playing] .m2-a62 {
+.signup-motion .m2-a62 {
   animation: m2-a62k 9.75s linear infinite both;
 }
 @keyframes m2-a63k {
@@ -8268,7 +8268,7 @@
     opacity: 0;
   }
 }
-.signup-motion[data-playing] .m2-a63 {
+.signup-motion .m2-a63 {
   animation: m2-a63k 9.75s linear infinite both;
 }
 @keyframes m2-a64k {
@@ -8360,7 +8360,7 @@
     transform: translate(180px, 61px) scale(1) translate(-180px, -61px);
   }
 }
-.signup-motion[data-playing] .m2-a64 {
+.signup-motion .m2-a64 {
   animation: m2-a64k 9.75s linear infinite both;
 }
 @keyframes m2-a67k {
@@ -8524,7 +8524,7 @@
     clip-path: inset(95% 0px 0px);
   }
 }
-.signup-motion[data-playing] .m2-a67 {
+.signup-motion .m2-a67 {
   animation: m2-a67k 9.75s linear infinite both;
 }
 @keyframes m2-a68k {
@@ -8664,7 +8664,7 @@
     clip-path: inset(100% 0px 0px);
   }
 }
-.signup-motion[data-playing] .m2-a68 {
+.signup-motion .m2-a68 {
   animation: m2-a68k 9.75s linear infinite both;
 }
 @keyframes m2-a71k {
@@ -8869,7 +8869,7 @@
     opacity: 0;
   }
 }
-.signup-motion[data-playing] .m2-a71 {
+.signup-motion .m2-a71 {
   animation: m2-a71k 9.75s linear infinite both;
 }
 .m3-fd {
@@ -9452,7 +9452,7 @@
     transform: scale(1);
   }
 }
-.signup-motion[data-playing] .m3-a8 {
+.signup-motion .m3-a8 {
   animation: m3-a8k 4s linear infinite both;
 }
 @keyframes m3-a11k {
@@ -9502,7 +9502,7 @@
     opacity: 0;
   }
 }
-.signup-motion[data-playing] .m3-a11 {
+.signup-motion .m3-a11 {
   animation: m3-a11k 4s linear infinite both;
 }
 @keyframes m3-a25k {
@@ -9603,7 +9603,7 @@
     transform: translate(-50%, 0px);
   }
 }
-.signup-motion[data-playing] .m3-a25 {
+.signup-motion .m3-a25 {
   animation: m3-a25k 4s linear infinite both;
 }
 @keyframes m3-a28k {
@@ -9664,7 +9664,7 @@
     opacity: 0;
   }
 }
-.signup-motion[data-playing] .m3-a28 {
+.signup-motion .m3-a28 {
   animation: m3-a28k 4s linear infinite both;
 }
 @keyframes m3-a29k {
@@ -9725,7 +9725,7 @@
     opacity: 0;
   }
 }
-.signup-motion[data-playing] .m3-a29 {
+.signup-motion .m3-a29 {
   animation: m3-a29k 4s linear infinite both;
 }
 @keyframes m3-a30k {
@@ -9786,7 +9786,7 @@
     opacity: 0;
   }
 }
-.signup-motion[data-playing] .m3-a30 {
+.signup-motion .m3-a30 {
   animation: m3-a30k 4s linear infinite both;
 }
 @keyframes m3-a31k {
@@ -9847,7 +9847,7 @@
     opacity: 0;
   }
 }
-.signup-motion[data-playing] .m3-a31 {
+.signup-motion .m3-a31 {
   animation: m3-a31k 4s linear infinite both;
 }
 @keyframes m3-a32k {
@@ -9908,7 +9908,7 @@
     opacity: 0;
   }
 }
-.signup-motion[data-playing] .m3-a32 {
+.signup-motion .m3-a32 {
   animation: m3-a32k 4s linear infinite both;
 }
 @keyframes m3-a33k {
@@ -9969,7 +9969,7 @@
     opacity: 0;
   }
 }
-.signup-motion[data-playing] .m3-a33 {
+.signup-motion .m3-a33 {
   animation: m3-a33k 4s linear infinite both;
 }
 @keyframes m3-a34k {
@@ -10030,7 +10030,7 @@
     opacity: 0;
   }
 }
-.signup-motion[data-playing] .m3-a34 {
+.signup-motion .m3-a34 {
   animation: m3-a34k 4s linear infinite both;
 }
 @keyframes m3-a35k {
@@ -10091,7 +10091,7 @@
     opacity: 0;
   }
 }
-.signup-motion[data-playing] .m3-a35 {
+.signup-motion .m3-a35 {
   animation: m3-a35k 4s linear infinite both;
 }
 @keyframes m3-a36k {
@@ -10156,7 +10156,7 @@
     transform: scale(2.7);
   }
 }
-.signup-motion[data-playing] .m3-a36 {
+.signup-motion .m3-a36 {
   animation: m3-a36k 4s linear infinite both;
 }
 @keyframes m3-a37k {
@@ -10221,7 +10221,7 @@
     transform: scale(2.7);
   }
 }
-.signup-motion[data-playing] .m3-a37 {
+.signup-motion .m3-a37 {
   animation: m3-a37k 4s linear infinite both;
 }
 @keyframes m3-a38k {
@@ -10330,7 +10330,7 @@
     transform: scale(1);
   }
 }
-.signup-motion[data-playing] .m3-a38 {
+.signup-motion .m3-a38 {
   animation: m3-a38k 4s linear infinite both;
 }
 .m3-save-photo {
@@ -10369,10 +10369,16 @@
   transform-origin: 50% 0;
   transform: scale(0.94);
 }
+/* 보이지 않는 장은 애니메이션을 지우지 않고 멈춰 둔다. 지우면 넘기는 동안 나가는 장의 그림이 처음 상태로 튄다 */
+.signup-motion:not([data-playing]) [class*="m1-a"],
+.signup-motion:not([data-playing]) [class*="m2-a"],
+.signup-motion:not([data-playing]) [class*="m3-a"] {
+  animation-play-state: paused;
+}
 @media (prefers-reduced-motion: reduce) {
-  .signup-motion[data-playing] [class*="m1-a"],
-  .signup-motion[data-playing] [class*="m2-a"],
-  .signup-motion[data-playing] [class*="m3-a"] {
+  .signup-motion [class*="m1-a"],
+  .signup-motion [class*="m2-a"],
+  .signup-motion [class*="m3-a"] {
     animation: none;
   }
 }
