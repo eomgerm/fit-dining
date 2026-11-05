@@ -9,6 +9,8 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 
 이번 반복(Jira S15P31A302-133)은 BE와 FE를 함께 한다(D-1). DB 모드 엔진의 추천 검색이 AI 검색 API를 부르고, AI가 준 카드에 장소 정보와 영업 상태를 붙여 돌려준다. AI가 실패하면 오류 화면 대신 키워드나 카탈로그로 만든 대체 결과와 `X-Fallback` 헤더를 준다. 검색은 로그인을 선택으로 받아, 회원이면 회원 id를, 비회원이면 기기의 온보딩 답을 AI에 넘긴다. AI가 장소를 읽는 뷰를 BE 마이그레이션으로 만든다(D-15). FE는 검색 요청에 토큰이나 답을 싣고 대체 결과를 알린다(D-16). Mock 엔진은 바꾸지 않는다.
 
+다음 반복(Jira S15P31A302-168)은 BE가 AI를 기다리는 방식만 고친다. 그전에는 AI가 `503 BUSY`와 `Retry-After: 1`을 줘도 BE가 쉬지 않고 바로 다시 불러, AI 자리가 아직 차 있어 다시 `BUSY`를 받기 쉬웠다. 또 BE에서 AI를 기다리는 검색이 8개면 9번째는 앞 검색이 곧 끝나도 바로 키워드 결과를 받았다. 이번에는 `Retry-After`만큼 쉬고(남은 예산이 모자라면 쉬지 않고 대체), 자리가 없으면 예산 안에서 잠깐 기다린다(D-3, D-17).
+
 ## Assumptions
 
 1. local과 dev는 `PLACE_MOCK_ENABLED=true`라 계속 Mock 엔진이 응답한다. AI 연동은 서버에 장소 DB가 적재된 뒤 스위치를 끄면 보이고, 그 전까지는 가짜 AI 서버를 쓰는 테스트로 확인한다(D-1, D-13).
@@ -58,8 +60,8 @@ AI 결과를 카드로
 
 AI 실패와 대체
 
-- [x] AC-7: 아래 경우 모두 응답은 200, [대체 결과](#대체-결과) 모양이고 `X-Fallback: AI_UNAVAILABLE`이 붙는다. ① `fitdining.ai.base-url`이 비었거나 공백뿐(부르기 전에 판정) ② 연결 실패(이름 풀이 실패, 연결 거부·끊김, TLS 실패, 200 헤더 뒤 본문을 읽다 끊김 등 시간 초과가 아닌 I/O 오류) ③ 재시도까지 합쳐 12초 안에 응답이 없음 ④ 5xx(`BUSY` 제외) ⑤ `503 BUSY`가 재시도 뒤에도 옴 ⑥ 200이 아닌 그 밖의 상태(4xx, 3xx, 200 외 2xx) ⑦ 200이지만 [읽을 수 없는 응답](#ai-응답), 또는 AI 호출 중 난 I/O 오류가 아닌 그 밖의 예외(형식이 잘못된 주소 포함. 이 경우에도 기동은 실패하지 않는다) ⑧ 카드가 하나 이상인데 모든 `placeId`가 카탈로그에 없음 ⑨ 차단 중 ⑩ AI를 기다리는 검색이 상한만큼 있음(AC-28). ⑧에서 AI 응답에 `fallbacks`가 있어도 헤더 값은 `AI_UNAVAILABLE` 하나다. AC-15의 DB 오류 말고는 어느 경우에도 5xx를 주지 않는다. (D-3, D-6, D-7, D-11)
-- [x] AC-8: AI가 `503 BUSY`(상태 503이고 ProblemDetail `code`가 `BUSY`)를 주면 BE는 12초 예산 안에서 한 번만 다시 부른다. 다시 부르기 전에 기다릴지(`Retry-After: 1`)는 재량이지만, 기다림과 재시도 모두 예산 안이어야 한다. 재시도는 남은 예산을 제한 시간으로 하고, 그 안에 응답이 없으면 ③이다. 남은 예산이 없어 재시도하지 못하면 ⑤다. 재시도가 성공하면 AC-5대로 정상 응답한다. `BUSY`가 아닌 503과 다른 실패는 다시 부르지 않는다. (D-3)
+- [ ] AC-7: 아래 경우 모두 응답은 200, [대체 결과](#대체-결과) 모양이고 `X-Fallback: AI_UNAVAILABLE`이 붙는다. ① `fitdining.ai.base-url`이 비었거나 공백뿐(부르기 전에 판정) ② 연결 실패(이름 풀이 실패, 연결 거부·끊김, TLS 실패, 200 헤더 뒤 본문을 읽다 끊김 등 시간 초과가 아닌 I/O 오류) ③ 재시도까지 합쳐 12초 안에 응답이 없음 ④ 5xx(`BUSY` 제외) ⑤ `503 BUSY`가 재시도 뒤에도 옴 ⑥ 200이 아닌 그 밖의 상태(4xx, 3xx, 200 외 2xx) ⑦ 200이지만 [읽을 수 없는 응답](#ai-응답), 또는 AI 호출 중 난 I/O 오류가 아닌 그 밖의 예외(형식이 잘못된 주소 포함. 이 경우에도 기동은 실패하지 않는다) ⑧ 카드가 하나 이상인데 모든 `placeId`가 카탈로그에 없음 ⑨ 차단 중 ⑩ AI를 기다리는 검색이 상한만큼 있고 기다려도 자리가 나지 않음(AC-28). ⑧에서 AI 응답에 `fallbacks`가 있어도 헤더 값은 `AI_UNAVAILABLE` 하나다. AC-15의 DB 오류 말고는 어느 경우에도 5xx를 주지 않는다. (D-3, D-6, D-7, D-11)
+- [ ] AC-8: AI가 `503 BUSY`(상태 503이고 ProblemDetail `code`가 `BUSY`)를 주면 BE는 12초 예산 안에서 한 번만 다시 부른다. 다시 부르기 전에 `Retry-After`의 초만큼 쉰다. 값이 없거나 0 이상의 정수 초가 아니면(날짜 형식 포함) 쉬지 않고, 2초보다 길면 2초만 쉰다. 쉬기 전에 남은 예산이 "쉴 시간 + 최소 처리 시간 3.4초"보다 적으면 쉬지도 다시 부르지도 않고 ⑤다. 쉰 뒤 남은 예산을 다시 재서 3.4초보다 적어도 ⑤다. 쉬는 동안 스레드가 중단되면 다시 부르지 않고 대체하며, 차단기에 세지 않고 ERROR 로그를 남긴다. 재시도는 남은 예산을 제한 시간으로 하고, 그 안에 응답이 없으면 ③이다. 재시도가 성공하면 AC-5대로 정상 응답한다. `BUSY`가 아닌 503과 다른 실패는 다시 부르지 않는다. (D-3)
 - [x] AC-9: 홈 요청(`query`의 앞뒤 공백을 지운 값이 정확히 "근처 맛집"이고 `previousConditions`가 없거나 `{}`인 요청. `mapBounds`는 있어도 된다)의 대체 결과는 카탈로그 전체 카드이고 `nearby: true`다. (D-6)
 - [x] AC-10: 홈 요청이 아닌 요청의 대체 결과는 `query`의 키워드 검색 결과를 순위 순으로 카드로 만든 것이고 `nearby: false`다. 순서는 키워드 검색 히트 전체 → 히트의 좌표로 `mapBounds` 거르기 → 앞 20곳 → 카탈로그에서 id로 읽기이고, 카탈로그에서 읽히지 않는 장소는 빠진다(그래서 20곳보다 적을 수 있다). (D-6)
 - [x] AC-11: 대체 결과에서 `mapBounds`가 있으면 위도·경도가 그 영역 안(경계 포함)인 장소만 남는다. 네 값 중 빈 값은 그쪽을 제한하지 않는다. 홈 요청도 `mapBounds`가 있으면 영역 안만 남는다. (D-6)
@@ -68,7 +70,6 @@ AI 실패와 대체
 - [x] AC-14: `fitdining.ai.base-url`이 빈 값이거나 AI 서버가 닿지 않아도 BE는 정상으로 뜨고 readiness는 DB만 본다. (D-3)
 - [x] AC-15: 카탈로그 DB를 읽지 못하면(카드 조립이나 대체 중) 지금처럼 503 ProblemDetail이다. DB 장애는 AI 장애로 대체하지 않는다(엔진이 DB 오류나 키워드 검색의 503 예외를 삼켜 대체 결과로 바꾸지 않는다. 대체로 바꾸는 것은 AI 호출에서 난 실패뿐이다). (D-6)
 - [x] AC-16: 검색이 ①~⑦로 대체되면 요청마다 실패 종류(예외 클래스나 상태 코드)가 로그에 남는다. ⑥, ⑦, ① 주소 없음은 ERROR, ②~⑤는 WARN이다. ⑧은 AC-5의 빠진 id WARN 로그로 갈음한다. ⑨ 차단 중에 대체한 요청은 요청마다 남기지 않는다. ⑩은 요청마다 상한 값과 함께 WARN이다. 차단을 시작하거나 다시 시작할 때마다(AC-13) WARN을, 차단 중이거나 연속 실패 수가 3 이상일 때 성공해 차단이 풀리면 INFO를 남긴다. 읽을 수 있는 AI 응답을 받은 검색(⑧ 포함)마다 `interpretedBy`, `rankedBy`, `models`가 INFO 로그에 남는다. (D-3, D-5)
-- [x] AC-28: 한 BE 컨테이너에서 AI 응답을 기다리는 검색(재시도 포함)은 동시에 8개까지다. 8개가 이미 기다리는 중에 온 검색은 AI를 부르지 않고 기다리지도 않으며 바로 대체한다(AC-7 ⑩). 기다리던 검색이 끝나면(성공, 실패, 예외 모두) 자리가 돌아온다. 주소가 비었거나(①) 차단 중(⑨)인 검색은 자리를 쓰지 않는다. (D-17)
 
 취향과 인증
 
@@ -95,6 +96,10 @@ FE 검색 요청
 - [x] AC-25: FE의 추천 검색 요청(`POST /api/v1/places/search`, 홈 주변 카드와 다음 페이지 포함)은 15초가 지나야 시간 초과다. 그 밖의 FE API 요청은 기능이 따로 정하지 않으면 기본 10초다(취향 분석은 온보딩이 15초로 정했다). (D-3, D-16)
 - [x] AC-26: FE는 추천 검색 요청(홈 주변 카드, 첫 검색, 후속 검색, 다음 페이지)을 보낼 때마다 로그인 세션을 확인한다(검색 기록 저장과 같은 확인. 확인되지 않았으면 복원을 3초까지 기다린다). 확인된 회원이면 `Authorization: Bearer <그 세션의 AT>`를 싣고 `preferences`는 싣지 않으며, 만료로 401이 오면 토큰을 한 번 갱신해 다시 보낸다. 갱신하고도 실패하거나 보내는 사이 세션이 바뀌면 그 요청은 지금의 검색 실패와 같이 끝난다. 확인된 비회원이면 `Authorization` 없이, 기기에 저장된 온보딩 답이 있고 모든 칩의 `code`가 없거나 BE 규칙(`^[A-Z][A-Z0-9_]{0,63}$`)에 맞으면 그 값을 `preferences`로 싣고, 맞지 않으면 `preferences` 없이 보낸다. 확인하지 못했으면 둘 다 싣지 않는다. 검색 기록에 저장되는 요청(검색 thread의 turn)과 화면 상태의 요청에는 `preferences`가 들어가지 않는다(FE의 검색 요청 타입에 `preferences`가 없다). (D-4, D-16)
 - [x] AC-27: 첫 페이지 응답의 `X-Fallback` 값(쉼표로 나눈 원소)에 `AI_UNAVAILABLE`이 있고 응답 `items`가 하나 이상이면, 그 결과를 보여 줄 때 카드 목록 위(홈 주변 카드와 검색 결과 모두)에 안내 한 줄 "지금은 AI 추천을 쓸 수 없어 가게 이름·메뉴로 찾았어요"가 보인다. 응답 `items`가 없으면 안내 없이 지금 화면 그대로다. 헤더가 없거나 `AI_UNAVAILABLE`이 없으면 안내가 없다. 대체 여부는 응답 본문(검색 기록에 저장되는 첫 페이지) 밖에 두어, 검색 기록에서 연 결과에는 안내가 없다. 홈 주변 카드가 대체 결과였으면 홈 주변 카드를 다시 마운트할 때(첫 화면으로 돌아올 때) 새로 받고, 창 포커스나 네트워크 재연결로는 다시 받지 않는다. 대체가 아닌 홈 결과와 모든 검색 결과는 지금처럼 페이지가 열린 동안 다시 받지 않는다. (D-6, D-16)
+
+AI를 기다리는 검색 수
+
+- [ ] AC-28: 한 BE 컨테이너에서 AI 응답을 기다리는 검색(재시도와 그 앞의 쉼 포함)은 동시에 8개까지다. 8개가 이미 기다리는 중에 온 검색은 자리가 나기를 최대 2초, 남은 예산이 그보다 적으면 남은 예산만큼 기다린다. 기다리는 시간은 12초 예산에 든다. 그 사이 자리가 나면 바로 받아 AI를 부르고(기다린 순서대로 받는다), 끝내 나지 않으면 AI를 부르지 않고 대체한다(AC-7 ⑩). 자리를 받은 뒤 차단 중이면 AI를 부르지 않고 대체한다(⑨). 기다리던 검색이 끝나면(성공, 실패, 예외 모두) 자리가 돌아온다. 주소가 비었거나(①) 차단 중(⑨)인 검색은 자리를 쓰지 않는다. (D-17)
 
 ## Interfaces
 
@@ -165,13 +170,13 @@ BE가 읽는 속성만 적는다. 그 밖의 속성은 카드와 이유 안쪽�
 ### 호출 규칙 (D-3)
 
 - 주소: `fitdining.ai.base-url`. 검색 전용 주소 변수나 켜고 끄는 스위치는 없다. 비었거나 공백뿐이면 AI를 부르지 않고 대체한다(①). 예산·차단 임계값을 설정 키로 둘지 코드 상수로 둘지는 재량이다.
-- 시간 예산: 한 검색에서 AI를 기다리는 시간은 연결부터 응답 본문을 다 읽을 때까지, 재시도와 그 앞의 기다림까지 합쳐 12초다(시도마다 따로 12초가 아니다). 재시도(`503 BUSY` 한 번)는 남은 예산 안에서만 한다.
+- 시간 예산: 한 검색에서 AI를 기다리는 시간은 자리 기다림(AC-28)부터 연결, 응답 본문을 다 읽을 때까지, 재시도와 그 앞의 쉼까지 합쳐 12초다(시도마다 따로 12초가 아니다). 재시도(`503 BUSY` 한 번)는 남은 예산 안에서만 하고, 쉰 뒤에도 최소 처리 시간이 남을 때만 한다(AC-8).
 - 차단기: AC-13. 상태는 BE 메모리의 값 두 개(연속 실패 수, 차단이 끝나는 시각. D-3의 "다시 열 시각")이고 컨테이너마다 따로이며 재시작하면 처음부터 센다. 30초가 지난 뒤 동시에 온 요청이 함께 AI를 부를 수 있다. 동시 요청 사이의 엄밀한 순서는 보장하지 않는다(값 두 개를 원자적으로 다루면 된다).
-- 동시성 상한: AC-28. 값 8은 AI 컨테이너 하나가 받는 검색 수(`MAX_CONCURRENT_REQUESTS` 기본 8)와 같은 임시값이다(D-17). 상한 값을 설정 키로 둘지 코드 상수로 둘지는 재량이다.
+- 동시성 상한: AC-28. 값 8은 AI 컨테이너 하나가 받는 검색 수(`MAX_CONCURRENT_REQUESTS` 기본 8)와 같은 임시값이다(D-17). 상한 값과 자리 기다림 시간을 설정 키로 둘지 코드 상수로 둘지는 재량이다.
 - `Modal-Key`·`Modal-Secret`: 값이 공백뿐이면 빈 값으로 보고 싣지 않는다(온보딩 AI 클라이언트와 같다).
 - 로그: 실패 종류(예외 클래스나 상태 코드)만 남기고 본문과 예외 메시지는 남기지 않는다(AC-16, AC-20).
 
-임시값(D-3 Default): 12초는 AI의 검색 예산 9초(실제 최대 8.6초)가 들어가고 FE 검색 요청의 15초(AC-25)보다 짧은 값이다. 연속 3번, 30초는 임시값이다.
+임시값(D-3·D-17 Default): 12초는 AI의 검색 예산 9초(실제 최대 8.6초)가 들어가고 FE 검색 요청의 15초(AC-25)보다 짧은 값이다. 연속 3번, 30초는 임시값이다. 최소 처리 시간 3.4초(AI API 문서의 응답 시간 중앙값), `Retry-After` 상한 2초, 자리 기다림 2초도 임시값이고 BE가 AI 호출 시간을 잰 뒤 다시 정한다.
 
 ### 대체 결과
 
@@ -248,7 +253,7 @@ AC-25 ~ AC-27이 규칙이다(D-16). 요약하면 다음과 같다.
 | `be/src/main/java/kr/co/fitdining/api/place/catalog/OpenStatusCalculator.java#OpenStatusCalculator` | reuse | AI 카드와 대체 카드의 `openStatus` 계산 | D-5 |
 | `be/src/main/java/kr/co/fitdining/api/place/keyword/PlaceKeywordSearch.java#PlaceKeywordSearch` | reuse | 홈이 아닌 요청의 대체 결과를 얻는다. 매칭 규칙은 place-lookup-db spec 그대로다 | D-6 |
 | `be/src/main/java/kr/co/fitdining/api/place/engine/InvalidCursorException.java#InvalidCursorException` | reuse | `cursor`가 온 DB 모드 요청을 400으로 돌려준다 | D-10 |
-| `be/src/main/java/kr/co/fitdining/api/place/engine/AiSearchClient.java#AiSearchClient` | modify | 요청 본문에 `tasteProfile`(AC-3)을 더하고 시간 예산을 12초로 바꾼다. 차단기, 실패 분류, 로그 규칙은 그대로 둔다 | D-3, D-4 |
+| `be/src/main/java/kr/co/fitdining/api/place/engine/AiSearchClient.java#AiSearchClient` | modify | 요청 본문에 `tasteProfile`(AC-3)을 더하고 시간 예산을 12초로 바꾼다. `BUSY` 재시도 앞의 쉼(AC-8)과 자리 기다림(AC-28)을 더하고 예산을 자리 기다림부터 잰다. 차단기, 실패 분류, 로그 규칙은 그대로 둔다 | D-3, D-4, D-17 |
 | `fe/src/shared/api/client.ts#request` | modify | 요청별 `timeoutMs`를 쓴다. 검색이 응답 헤더를 읽을 수 있게 더하되, 기존 호출의 동작(오류 변환, 시간 초과, 기본 10초)은 그대로 둔다 | D-16 |
 | `fe/src/domains/place/api/place-api.ts#searchPlaces` | modify | 검색 요청에 헤더·`preferences`·15초를 싣고 `X-Fallback`을 읽는다. 자동완성과 상세는 그대로 둔다 | D-16 |
 | `fe/src/domains/place/api/place-queries.ts#placeQueries` | modify | 검색과 홈 주변 카드 쿼리가 세션에 맞는 요청을 보내고, 홈 대체 결과를 다시 받게 한다. 쿼리 키와 검색 결과의 캐시 규칙은 그대로 둔다 | D-16 |
@@ -260,8 +265,8 @@ AC-25 ~ AC-27이 규칙이다(D-16). 요약하면 다음과 같다.
 
 새 의존성 없이(D-14) 다음 이음매로 확인한다. 로그 검사(AC-20)는 검색 문장, 답변, `previousConditions`, AI 응답의 `conditions`·카드 문구(`reasons` 제목 등)와 깨진 응답 본문에 다른 로그에 나올 리 없는 고유 표식 문자열을 넣고 출력에서 찾는다(기존 `LOG_SECRET` 방식). `interpretedBy`·`rankedBy`·`models`에는 표식을 넣지 않는다.
 
-- AI 클라이언트 (example, `MockRestServiceServer`), AC-2, AC-6(값 파싱), AC-7 ①②④~⑦, AC-8, AC-13, AC-16, AC-20: 요청 본문의 속성 집합(모르는 속성 없음, `userId` 규칙, 빈 `previousConditions` 생략, `previousConditions` 안쪽 null 유지), Modal 헤더(공백뿐인 값 제외), 응답 변환(어느 깊이든 모르는 속성 무시, 빠진 목록은 빈 목록), 읽을 수 없는 응답의 종류(모르는 enum 값 포함), `BUSY` 판정과 한 번 재시도, 200 외 상태 분류, 공백뿐인 주소(①), 이름 풀이 실패·연결 끊김(②), 형식이 잘못된 주소와 그 밖의 예외(⑦), 목록 안 null 원소(⑦), 실패 종류와 로그 수준, 차단기(3번·30초·⑥⑦ 미집계·성공 시 해제·실패한 시험 호출 뒤 재차단·차단 중 끝난 실패의 끝 시각 연장·차단 중 끝난 성공의 해제·차단 시작/해제 로그, 시각은 주입한 `Clock`), 실패 로그에 본문 표식이 없음을 잡는다. 실제 네트워크와 Modal 프록시는 놓친다. Prior art: `be/src/test/java/kr/co/fitdining/api/onboarding/AiTasteAnalyzerTests.java`.
-- AI 클라이언트 시간 예산과 동시성 상한 (example, JDK 내장 `com.sun.net.httpserver.HttpServer`로 늦게 응답), AC-7 ③⑩, AC-8, AC-28: `MockRestServiceServer`는 요청 팩토리를 바꿔 실제 타임아웃이 돌지 않으므로 실제 HTTP 서버로 확인한다. 예산 값은 짧게 주입한다. 헤더 뒤 본문이 늦는 응답을 포함한 시간 초과, `BUSY` 뒤 재시도가 예산을 넘지 않음, 시간 초과 로그에 본문 표식이 없음, 상한만큼 기다리는 중에 온 검색이 AI를 부르지 않고 바로 대체되며 차단기를 바꾸지 않음, 실패한 검색도 자리를 돌려줌을 잡는다. Prior art: `AiTasteAnalyzerTests#configuredProfileTimeout_throwsTimeout`.
+- AI 클라이언트 (example, `MockRestServiceServer`), AC-2, AC-6(값 파싱), AC-7 ①②④~⑦, AC-8, AC-13, AC-16, AC-20: 요청 본문의 속성 집합(모르는 속성 없음, `userId` 규칙, 빈 `previousConditions` 생략, `previousConditions` 안쪽 null 유지), Modal 헤더(공백뿐인 값 제외), 응답 변환(어느 깊이든 모르는 속성 무시, 빠진 목록은 빈 목록), 읽을 수 없는 응답의 종류(모르는 enum 값 포함), `BUSY` 판정과 한 번 재시도, `Retry-After` 읽기(정수 초, 상한, 없거나 읽을 수 없는 값)와 쉬기 전 남은 예산 판정과 쉬는 중 중단(쉼은 주입한 함수로 기록만 한다), 200 외 상태 분류, 공백뿐인 주소(①), 이름 풀이 실패·연결 끊김(②), 형식이 잘못된 주소와 그 밖의 예외(⑦), 목록 안 null 원소(⑦), 실패 종류와 로그 수준, 차단기(3번·30초·⑥⑦ 미집계·성공 시 해제·실패한 시험 호출 뒤 재차단·차단 중 끝난 실패의 끝 시각 연장·차단 중 끝난 성공의 해제·차단 시작/해제 로그, 시각은 주입한 `Clock`), 실패 로그에 본문 표식이 없음을 잡는다. 실제 네트워크와 Modal 프록시는 놓친다. Prior art: `be/src/test/java/kr/co/fitdining/api/onboarding/AiTasteAnalyzerTests.java`.
+- AI 클라이언트 시간 예산과 동시성 상한 (example, JDK 내장 `com.sun.net.httpserver.HttpServer`로 늦게 응답), AC-7 ③⑩, AC-8, AC-28: `MockRestServiceServer`는 요청 팩토리를 바꿔 실제 타임아웃이 돌지 않으므로 실제 HTTP 서버로 확인한다. 예산 값은 짧게 주입한다. 헤더 뒤 본문이 늦는 응답을 포함한 시간 초과, `BUSY` 뒤 재시도가 예산을 넘지 않음, `Retry-After`만큼 실제로 쉰 뒤 다시 부름, 쉰 뒤 남은 예산이 모자라면 다시 부르지 않음, 시간 초과 로그에 본문 표식이 없음, 상한만큼 기다리는 중에 온 검색이 자리 기다림 시간만 기다리고 AI를 부르지 않고 대체되며 차단기를 바꾸지 않음, 기다리는 동안 자리가 나면 AI를 부름, 자리 기다림이 예산 안에서 끝남, 실패한 검색도 자리를 돌려줌을 잡는다. Prior art: `AiTasteAnalyzerTests#configuredProfileTimeout_throwsTimeout`.
 - DB 모드 엔진 (example, 가짜 AI 클라이언트 + 가짜 카탈로그·키워드 검색), AC-1, AC-4, AC-5, AC-7 ⑧⑨, AC-9 ~ AC-12, AC-15, AC-16(⑧⑨ 로그, 성공 시 `models` 로그), AC-20(엔진 로그), AC-21, AC-23: 요청마다 AI 호출("근처 맛집" 포함), `cursor`(빈 문자열 포함)면 AI를 부르지 않고 400 예외, 순서 유지, `conditions`·`nearby`·`changeSummary`·`emptyReason` 옮기기와 빠진 값의 기본값, 중복 id 제거, 없는 id 제외와 WARN 로그, 전부 없을 때 대체와 헤더 값, 홈 요청 판정(앞뒤 공백), 지도 영역 거르기(빈 값, 경계), 키워드 대체의 순서(거르기 → 20곳 → id 읽기)와 카탈로그에 없는 히트 제외, 대체 카드 모양과 `emptyReason` 문구, DB 예외와 키워드 검색의 503 예외를 삼키지 않음, AI 클라이언트의 예상 못 한 예외는 대체로 바꿈, 넘겨받은 회원 id만 `userId`가 됨, 자동완성·상세는 AI를 부르지 않음을 잡는다. HTTP 직렬화는 놓친다. Prior art: `be/src/test/java/kr/co/fitdining/api/place/engine/CatalogPlaceSearchEngineTest.java`, `be/src/test/java/kr/co/fitdining/api/place/keyword/FakePlaceCatalog.java`.
 - 컨트롤러 (example, `@WebMvcTest` + 가짜 엔진·`AuthUseCases`, `OutputCaptureExtension`), AC-3, AC-4, AC-6(헤더), AC-7(헤더), AC-15, AC-17, AC-18, AC-20, AC-21, AC-22: `X-Fallback` 헤더, 401과 만료 `type`, `Bearer` 아닌 헤더와 빈 헤더, 토큰 없는 비회원 처리, 판단 순서(본문 400 → 401 → `cursor` 400), `cursor: null`은 커서 없음, `preferences` 검증 400(회원 포함)과 옛 모양 400(Mock 포함), 본문 `userId` 400, DB 오류 503, 로그에 표식이 없음, Mock 모드 페이지 나눔·잘못된 커서 400·헤더 없음, 자동완성·상세가 잘못된 `Authorization`을 무시함을 잡는다. DB 모드의 `cursor` 400(AC-4)은 실제 DB 모드 엔진과 가짜 AI 클라이언트를 붙인 컨트롤러 예시(`PlaceControllerMockDisabledTest` 방식)로 HTTP 수준에서도 확인한다. Prior art: `be/src/test/java/kr/co/fitdining/api/place/PlaceControllerTest.java`, `be/src/test/java/kr/co/fitdining/api/place/PlaceControllerMockDisabledTest.java`, `be/src/test/java/kr/co/fitdining/api/review/ReviewControllerTest.java`.
 - 기동 (example, Spring Boot 기동, Postgres 테스트 컨테이너), AC-14, AC-19: 주소가 빈 값이거나 닿지 않는 주소로 웹 앱이 뜨고 readiness가 UP인지, `migrate` 프로필이 인증 환경 없이 뜨고 끝나는지를 잡는다. Prior art: `be/src/test/java/kr/co/fitdining/api/auth/AuthServiceTests.java#migrate_withoutAuthEnvironment_startsAndCloses`(이미 DB 모드 전체 컨텍스트를 띄워 AC-19를 지킨다), readiness는 `ManagementEndpointsTest`.
