@@ -7,7 +7,7 @@ export default function manifest(): MetadataRoute.Manifest {
     id: "/",
     name: "핏다이닝",
     short_name: "핏다이닝",
-    description: "오늘 끌리는 곳, 내 취향으로 찾기",
+    description: "내 취향에 맞춘 미식 여정",
     start_url: "/",
     display: "standalone",
     theme_color: "#ffffff",
