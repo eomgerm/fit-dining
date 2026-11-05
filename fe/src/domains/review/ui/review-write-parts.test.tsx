@@ -43,7 +43,7 @@ describe("ReasonTagGroups", () => {
     expect(count(html, 'aria-pressed="true"')).toBe(1);
     expect(count(html, 'data-disabled=""')).toBe(1);
     expect(html).toMatch(
-      /data-disabled=""[^<]*>(<svg.*?<\/svg>)?활기차서 좋았어요/,
+      /data-disabled=""[^<]*>(<span[^>]*><svg.*?<\/svg><\/span>)?활기차서 좋았어요/,
     );
   });
 });
