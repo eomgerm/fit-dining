@@ -1,6 +1,6 @@
 # AI 검색 API 명세
 
-Status: 초안 v0.9 · Jira: S15P31A302-41, S15P31A302-136, S15P31A302-158 · 작성일: 2026-10-23 · 고친 날: 2026-11-04
+Status: 초안 v0.9 · Jira: S15P31A302-41, S15P31A302-136, S15P31A302-158 · 작성일: 2026-10-23 · 고친 날: 2026-11-05
 
 BE는 검색 첫 페이지마다 AI를 한 번 부른다. AI는 요청을 해석하고 DB에서 후보를 뽑아 핏 점수로 정렬한 뒤 카드의 AI 필드를 돌려준다. v0.7부터 정렬에 LLM을 쓰지 않는다. BE는 카드에 장소 정보와 영업 상태를 붙여 FE에 준다.
 
@@ -85,7 +85,7 @@ BE Mock 장소(`samples/place/mock.json`)와 실제 인코더·GMS로 받은 응
   "interpretedBy": "LLM",
   "rankedBy": "SCORE",
   "fallbacks": [],
-  "models": {"embedding": "dragonkue/snowflake-arctic-embed-l-v2.0-ko@55ec6e9358a56d56af759bc8372e970caf8c305f", "llm": "gpt-4o-mini"}
+  "models": {"embedding": "dragonkue/snowflake-arctic-embed-l-v2.0-ko@55ec6e9358a56d56af759bc8372e970caf8c305f", "llm": "gpt-6-luna"}
 }
 ```
 
@@ -150,7 +150,7 @@ BE는 검색마다 `modal_llm_calls_total`과 `modal_embedding_calls_total`을 �
   "interpretedBy": "LLM",
   "rankedBy": "SCORE",
   "fallbacks": [],
-  "models": {"embedding": "dragonkue/snowflake-arctic-embed-l-v2.0-ko@55ec6e9358a56d56af759bc8372e970caf8c305f", "llm": "gpt-4o-mini"}
+  "models": {"embedding": "dragonkue/snowflake-arctic-embed-l-v2.0-ko@55ec6e9358a56d56af759bc8372e970caf8c305f", "llm": "gpt-6-luna"}
 }
 ```
 
@@ -170,7 +170,7 @@ BE는 검색마다 `modal_llm_calls_total`과 `modal_embedding_calls_total`을 �
   "emptyReason": {"cause": "선릉역 카페 중 주차할 수 있는 곳이 없어요", "suggestion": "주차 조건을 빼고 다시 찾아 보세요"},
   "interpretedBy": "LLM",
   "fallbacks": [],
-  "models": {"embedding": "dragonkue/snowflake-arctic-embed-l-v2.0-ko@55ec6e9358a56d56af759bc8372e970caf8c305f", "llm": "gpt-4o-mini"}
+  "models": {"embedding": "dragonkue/snowflake-arctic-embed-l-v2.0-ko@55ec6e9358a56d56af759bc8372e970caf8c305f", "llm": "gpt-6-luna"}
 }
 ```
 
@@ -190,7 +190,7 @@ BE는 검색마다 `modal_llm_calls_total`과 `modal_embedding_calls_total`을 �
   "interpretedBy": "LLM",
   "rankedBy": "SIMILARITY",
   "fallbacks": [],
-  "models": {"embedding": "dragonkue/snowflake-arctic-embed-l-v2.0-ko@55ec6e9358a56d56af759bc8372e970caf8c305f", "llm": "gpt-4o-mini"}
+  "models": {"embedding": "dragonkue/snowflake-arctic-embed-l-v2.0-ko@55ec6e9358a56d56af759bc8372e970caf8c305f", "llm": "gpt-6-luna"}
 }
 ```
 
@@ -241,6 +241,6 @@ LLM 실패와 읽지 못한 입력은 오류가 아니라 200과 `fallbacks`로 
 | BE 타임아웃(제안) | 12초 |
 | 동시 처리 상한 | 컨테이너마다 8개 |
 | 점수 구간 | 딱 맞음 85~100, 대체로 65~84, 일부 40~64, 안 맞음 0~39. 따질 조건이 없으면 모두 딱 맞음 |
-| 모델 | LLM `gpt-4o-mini`, 인코더 arctic-ko 리비전 `55ec6e9`. 40 장소 벡터도 같은 인코더로 만든다 |
+| 모델 | 해석 LLM `gpt-6-luna`(추론 강도 `none`, 2026-11-05. 전에는 `gpt-4o-mini`), 인코더 arctic-ko 리비전 `55ec6e9`. 40 장소 벡터도 같은 인코더로 만든다 |
 | 인증 | BE가 `Modal-Key`, `Modal-Secret` 헤더로 부른다(인프라 설계 11.2). 없거나 틀리면 Modal 프록시가 401을 낸다 |
 | 취향 전달 | 회원은 `userId`로 보내고 AI가 `user_preferences`(저장 설계 V6)를 읽는다. 비회원은 기기가 저장한 온보딩 답(칩 벡터 포함)을 `tasteProfile`로 보내고 AI가 `features`를 계산한다(10-30). FE 저장 검사는 아직 칩의 `vector`를 받지 않는다 |
