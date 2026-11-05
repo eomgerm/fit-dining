@@ -85,7 +85,7 @@
 | `EMBED_SECRET` | ai | O | Modal `Modal-Secret` 헤더 값. 비밀 |
 | `DB_POOL_SIZE` | ai | X | 컨테이너 하나가 장소를 읽으려고 여는 DB 접속 수(취향용 1개를 더 연다). role의 접속 상한 6을 넘지 않게 둔다. 기본 2 |
 | `MAX_CONCURRENT_REQUESTS` | ai | X | 컨테이너 하나가 동시에 처리하는 검색 수. 넘으면 503 `BUSY`다. 기본 8 |
-| `GMS_TIMEOUT_SECONDS` | ai | X | GMS를 한 번 부를 때 기다리는 시간(초). 기본 5 |
+| `GMS_TIMEOUT_SECONDS` | ai | X | GMS를 한 번 부를 때 기다리는 시간(초). 기본 5. 검색의 후속 요청 해석은 이 값과 7초 중 긴 쪽을 기다리고 시간 초과면 다시 부르지 않는다 |
 | `PLACES_FILE` | ai | X | `DATABASE_URL`이 비었을 때 장소를 읽을 파일(실제 DB가 없을 때의 임시 구현이고 이미지에 파일이 있어야 한다) |
 | `BATCH_ENABLED` | app | O | 새벽 배치. dev 기본값은 `false` |
 | `MODAL_TIMEOUT_MS` | app | X | 일반 호출 타임아웃 |
