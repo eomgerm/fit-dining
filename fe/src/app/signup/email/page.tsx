@@ -347,8 +347,8 @@ export default function SignupEmailPage() {
               input,
               <div
                 key="code"
-                // 처음 그릴 때 투명도만 200ms로 바꾼다. 움직임 줄이기에서는 120ms다
-                className="flex flex-col gap-1 transition-opacity duration-200 motion-reduce:duration-120 starting:opacity-0"
+                // 처음 그릴 때 4px 아래에서 올라오며 나타난다(200ms). 움직임 줄이기에서는 투명도만 120ms다
+                className="flex flex-col gap-1 transition duration-200 ease-enter motion-reduce:transition-opacity motion-reduce:duration-120 starting:translate-y-1 starting:opacity-0"
               >
                 <TextField
                   label="인증번호"
