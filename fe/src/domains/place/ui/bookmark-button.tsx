@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useEffectEvent, useState } from "react";
 
 import { isApiError } from "@/shared/api/api-error";
+import { cn } from "@/shared/lib/cn";
 import { BookmarkIcon } from "@/shared/ui/icon/icons/bookmark";
 import { BookmarkFilledIcon } from "@/shared/ui/icon/icons/bookmark-filled";
 import { RefreshIcon } from "@/shared/ui/icon/icons/refresh";
@@ -96,6 +97,8 @@ function UserBookmarkButton({
   });
   // 실패 뒤 저장 여부를 다시 확인하는 중. 결과가 올 때까지 버튼을 확정하지 않는다
   const [rechecking, setRechecking] = useState(false);
+  // 방금 눌러 저장에 성공했는지. 화면을 열 때나 다시 확인해 저장으로 보일 때는 아이콘이 커지지 않는다
+  const [justSaved, setJustSaved] = useState(false);
 
   // 화면을 열 때 저절로 나간 조회가 401이면 창 없이 비로그인 모양으로 둔다(AC-17)
   const sessionEnded = isSessionEnded(status.error);
@@ -122,6 +125,7 @@ function UserBookmarkButton({
   }
 
   async function toggle(save: boolean) {
+    setJustSaved(false);
     try {
       await write.mutateAsync(save);
     } catch (error) {
@@ -145,6 +149,7 @@ function UserBookmarkButton({
       return recheck(unclear);
     }
     if (!stillMine()) return;
+    setJustSaved(save);
     queryClient.setQueryData(bookmarkKeys.status(userId, placeId), {
       bookmarked: save,
     });
@@ -166,6 +171,7 @@ function UserBookmarkButton({
   return (
     <SaveButtonView
       look={look}
+      pop={justSaved}
       disabled={write.isPending}
       onClick={() => {
         if (look === "retry") void recheck(false);
@@ -185,10 +191,13 @@ const LABELS: Record<Look, string> = {
 // 와이어프레임의 정사각형 테두리 버튼. 공통 Button에 아이콘만 있는 크기가 없어 직접 그린다
 function SaveButtonView({
   look,
+  pop,
   disabled,
   onClick,
 }: {
   look: Look;
+  // 채운 북마크가 나타날 때 작게 커졌다 돌아온다. 움직임 줄이기에서는 투명도만 120ms로 바뀐다
+  pop?: boolean;
   disabled?: boolean;
   onClick: () => void;
 }) {
@@ -209,7 +218,17 @@ function SaveButtonView({
         />
       )}
       {look === "retry" && <RefreshIcon className="text-icon" />}
-      {look === "saved" && <BookmarkFilledIcon className="text-primary" />}
+      {look === "saved" && (
+        <span
+          className={cn(
+            "flex",
+            pop &&
+              "motion-safe:animate-bookmark-pop motion-reduce:transition-opacity motion-reduce:starting:opacity-0",
+          )}
+        >
+          <BookmarkFilledIcon className="text-primary" />
+        </span>
+      )}
       {look === "unsaved" && <BookmarkIcon className="text-icon" />}
     </button>
   );

@@ -248,6 +248,14 @@
       clip-path: inset(0);
     }
   }
+
+  /* 저장에 성공하면 채운 북마크가 10% 커졌다 돌아온다(200ms) */
+  --animate-bookmark-pop: bookmark-pop 200ms var(--ease-standard);
+  @keyframes bookmark-pop {
+    50% {
+      scale: 1.1;
+    }
+  }
 }
 
 @theme inline {

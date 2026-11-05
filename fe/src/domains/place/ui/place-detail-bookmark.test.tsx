@@ -283,6 +283,24 @@ describe("저장과 해제", () => {
     expect(bookmarkCalls("DELETE")[0].url).toBe("/api/v1/me/bookmarks/1");
   });
 
+  it("저장에 성공했을 때만 아이콘이 커졌다 돌아오고, 열 때 이미 저장돼 있으면 그대로다", async () => {
+    reply("GET", ok({ bookmarked: true }));
+    reply("PUT", noContent);
+    reply("DELETE", noContent);
+    await renderDetail();
+    const popping = async (name: string) =>
+      (await button(name)).innerHTML.includes("animate-bookmark-pop");
+
+    expect(await popping("저장 해제")).toBe(false);
+
+    fireEvent.click(await button("저장 해제"));
+    await screen.findByText("저장을 해제했어요");
+    fireEvent.click(await button("저장"));
+    await screen.findByText("저장했어요");
+
+    expect(await popping("저장 해제")).toBe(true);
+  });
+
   it("성공하면 같은 사용자의 저장 여부와 내 목록 캐시가 함께 맞춰진다", async () => {
     reply("GET", ok({ bookmarked: false }));
     reply("PUT", noContent);
