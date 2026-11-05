@@ -17,6 +17,7 @@ import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
 import java.util.Optional;
 import java.time.Instant;
@@ -63,7 +64,13 @@ class AiSearchClientTest {
 			{"conditions":{"text":"t"},"nearby":false,"items":[{"placeId":1,"score":80}],
 			 "interpretedBy":"LLM","rankedBy":"LLM","fallbacks":[],"models":{"llm":"m"}}""";
 
+	/** 예산 8초에 운영과 같은 재시도·자리 값. MockRestServiceServer는 시간이 흐르지 않아 예산이 줄지 않는다. */
+	static final AiSearchClient.Timing TIMING = new AiSearchClient.Timing(Duration.ofSeconds(8),
+			AiSearchClient.MIN_RETRY_TIME, AiSearchClient.MAX_RETRY_AFTER, AiSearchClient.SLOT_WAIT);
+
 	final MutableClock clock = new MutableClock(Instant.parse("2026-10-31T03:00:00Z"));
+	/** 실제로 쉬지 않고 쉬라고 한 시간만 남긴다 */
+	final List<Duration> slept = new ArrayList<>();
 	MockRestServiceServer server;
 	RestClient rest;
 
@@ -80,7 +87,7 @@ class AiSearchClientTest {
 	}
 
 	AiSearchClient client(String baseUrl, String key, String secret) {
-		return new AiSearchClient(baseUrl, key, secret, Duration.ofSeconds(8), clock, timeout -> rest);
+		return new AiSearchClient(baseUrl, key, secret, TIMING, clock, timeout -> rest, slept::add);
 	}
 
 	AiSearchClient client() {
@@ -351,10 +358,10 @@ class AiSearchClientTest {
 		@Test
 		@DisplayName("AI실패_그밖의예외는_ERROR로대체한다")
 		void failure_unexpectedException_logsError(CapturedOutput output) {
-			AiSearchClient failing = new AiSearchClient("http://ai.test", "", "", Duration.ofSeconds(8), clock,
+			AiSearchClient failing = new AiSearchClient("http://ai.test", "", "", TIMING, clock,
 					timeout -> {
 						throw new IllegalStateException(SECRET);
-					});
+					}, slept::add);
 
 			assertThat(failing.search(request("카페"), null)).isEmpty();
 			assertThat(output.getAll()).contains("ERROR").contains("IllegalStateException").doesNotContain(SECRET);
@@ -375,14 +382,90 @@ class AiSearchClientTest {
 	@DisplayName("BUSY 재시도")
 	class BusyRetry {
 
+		void expectBusy(String retryAfter) {
+			var response = withStatus(HttpStatus.SERVICE_UNAVAILABLE).body(BUSY)
+					.contentType(MediaType.APPLICATION_PROBLEM_JSON);
+			server.expect(requestTo(URL)).andRespond(retryAfter == null ? response : response.header("Retry-After",
+					retryAfter));
+		}
+
 		@Test
-		@DisplayName("BUSY_한번오면_다시불러성공한다")
-		void busy_once_retriesAndSucceeds() {
-			server.expect(requestTo(URL)).andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE).body(BUSY)
-					.contentType(MediaType.APPLICATION_PROBLEM_JSON).header("Retry-After", "1"));
+		@DisplayName("BUSY_한번오면_RetryAfter만큼쉬고다시불러성공한다")
+		void busy_once_waitsRetryAfterAndSucceeds() {
+			expectBusy("1");
 			server.expect(requestTo(URL)).andRespond(withSuccess(OK, MediaType.APPLICATION_JSON));
 
 			assertThat(client().search(request("카페"), null)).isPresent();
+			assertThat(slept).containsExactly(Duration.ofSeconds(1));
+		}
+
+		@Test
+		@DisplayName("BUSY_RetryAfter가상한보다길면_상한만큼만쉰다")
+		void busy_longRetryAfter_waitsAtMostTheCap() {
+			expectBusy("30");
+			server.expect(requestTo(URL)).andRespond(withSuccess(OK, MediaType.APPLICATION_JSON));
+
+			assertThat(client().search(request("카페"), null)).isPresent();
+			assertThat(slept).containsExactly(AiSearchClient.MAX_RETRY_AFTER);
+		}
+
+		@ParameterizedTest
+		@ValueSource(strings = {"", "0", "-1", "1.5", "abc", "Wed, 21 Oct 2026 07:28:00 GMT"})
+		@DisplayName("BUSY_RetryAfter가초숫자가아니면_쉬지않고다시부른다")
+		void busy_unreadableRetryAfter_retriesWithoutWaiting(String retryAfter) {
+			expectBusy(retryAfter);
+			server.expect(requestTo(URL)).andRespond(withSuccess(OK, MediaType.APPLICATION_JSON));
+
+			assertThat(client().search(request("카페"), null)).isPresent();
+			assertThat(slept).isEmpty();
+		}
+
+		@Test
+		@DisplayName("BUSY_RetryAfter가없으면_쉬지않고다시부른다")
+		void busy_noRetryAfter_retriesWithoutWaiting() {
+			expectBusy(null);
+			server.expect(requestTo(URL)).andRespond(withSuccess(OK, MediaType.APPLICATION_JSON));
+
+			assertThat(client().search(request("카페"), null)).isPresent();
+			assertThat(slept).isEmpty();
+		}
+
+		@Test
+		@DisplayName("BUSY_쉰뒤남을예산이최소처리시간보다적으면_쉬지않고BUSY실패다")
+		void busy_notEnoughBudgetAfterWait_failsWithoutWaiting(CapturedOutput output) {
+			// 예산 8초에서 1초를 쉬면 7초가 남아 최소 처리 시간 7.5초보다 적다
+			AiSearchClient client = new AiSearchClient("http://ai.test", "", "", new AiSearchClient.Timing(
+					Duration.ofSeconds(8), Duration.ofMillis(7500), AiSearchClient.MAX_RETRY_AFTER,
+					AiSearchClient.SLOT_WAIT), clock, timeout -> rest, slept::add);
+			expectBusy("1");
+
+			assertThat(client.search(request("카페"), null)).isEmpty();
+			assertThat(slept).isEmpty();
+			assertThat(output.getAll()).contains("WARN").contains("kind=BUSY");
+		}
+
+		@Test
+		@DisplayName("BUSY_쉬는동안중단되면_다시부르지않고차단기에세지않는다")
+		void busy_interruptedWhileWaiting_failsWithoutCounting(CapturedOutput output) {
+			AiSearchClient client = new AiSearchClient("http://ai.test", "", "", TIMING, clock, timeout -> rest,
+					duration -> {
+						throw new InterruptedException();
+					});
+			for (int i = 0; i < AiSearchClient.FAILURE_THRESHOLD; i++) {
+				expectBusy("1");
+			}
+			server.expect(requestTo(URL)).andRespond(withSuccess(OK, MediaType.APPLICATION_JSON));
+
+			try {
+				for (int i = 0; i < AiSearchClient.FAILURE_THRESHOLD; i++) {
+					assertThat(client.search(request("카페"), null)).isEmpty();
+					assertThat(Thread.interrupted()).isTrue();
+				}
+				assertThat(client.search(request("카페"), null)).isPresent();
+			} finally {
+				Thread.interrupted();
+			}
+			assertThat(output.getAll()).contains("ERROR").contains("kind=INTERRUPTED").doesNotContain("circuit opened");
 		}
 
 		@Test
@@ -418,14 +501,14 @@ class AiSearchClientTest {
 
 		final Deque<Reply> replies = new ArrayDeque<>();
 		int calls;
-		final AiSearchClient client = new AiSearchClient("http://ai.test", "", "", Duration.ofSeconds(8), clock,
+		final AiSearchClient client = new AiSearchClient("http://ai.test", "", "", TIMING, clock,
 				timeout -> RestClient.builder().requestFactory((uri, method) -> new MockClientHttpRequest(method, uri) {
 					@Override
 					protected ClientHttpResponse executeInternal() throws IOException {
 						calls++;
 						return replies.removeFirst().get();
 					}
-				}).build());
+				}).build(), slept::add);
 
 		@AfterEach
 		void allRepliesUsed() {

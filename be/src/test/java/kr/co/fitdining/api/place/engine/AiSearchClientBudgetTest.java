@@ -35,6 +35,8 @@ import org.springframework.web.client.RestClient;
 class AiSearchClientBudgetTest {
 
 	static final Duration BUDGET = Duration.ofMillis(500);
+	/** 예산 500ms에 맞춰 줄인 재시도·자리 값: 최소 처리 시간 100ms, Retry-After 상한 300ms, 자리 기다림 200ms */
+	static final AiSearchClient.Timing TIMING = timing(BUDGET);
 	static final String SECRET = "비밀표식9c41";
 	static final String OK = "{\"items\":[],\"conditions\":{\"text\":\"" + SECRET + "\"}}";
 	static final String BUSY = "{\"status\":503,\"code\":\"BUSY\"}";
@@ -70,9 +72,39 @@ class AiSearchClientBudgetTest {
 		http.stop(0);
 	}
 
+	static AiSearchClient.Timing timing(Duration budget) {
+		return new AiSearchClient.Timing(budget, Duration.ofMillis(100), Duration.ofMillis(300),
+				Duration.ofMillis(200));
+	}
+
+	String url() {
+		return "http://127.0.0.1:" + http.getAddress().getPort();
+	}
+
 	AiSearchClient client() {
-		return new AiSearchClient("http://127.0.0.1:" + http.getAddress().getPort(), "", "", BUDGET,
-				Clock.systemUTC());
+		return new AiSearchClient(url(), "", "", TIMING, Clock.systemUTC());
+	}
+
+	AiSearchClient client(AiSearchClient.Timing timing) {
+		return new AiSearchClient(url(), "", "", timing, Clock.systemUTC());
+	}
+
+	static void respondBusy(HttpExchange exchange, String retryAfter) throws IOException {
+		exchange.getResponseHeaders().set("Retry-After", retryAfter);
+		respond(exchange, 503, BUSY);
+	}
+
+	/** 상한만큼 검색을 AI 응답 대기 상태로 만든다. 서버는 {@code release}가 열릴 때까지 응답하지 않는다. */
+	List<Future<Boolean>> fill(AiSearchClient client, ExecutorService pool) throws InterruptedException {
+		List<Future<Boolean>> waiting = IntStream.range(0, AiSearchClient.MAX_IN_FLIGHT)
+				.mapToObj(i -> pool.submit(() -> client.search(request(), null).isPresent()))
+				.toList();
+		long deadline = System.nanoTime() + Duration.ofSeconds(5).toNanos();
+		while (calls.get() < AiSearchClient.MAX_IN_FLIGHT && System.nanoTime() < deadline) {
+			Thread.sleep(10);
+		}
+		assertThat(calls).hasValue(AiSearchClient.MAX_IN_FLIGHT);
+		return waiting;
 	}
 
 	static void respond(HttpExchange exchange, int status, String body) throws IOException {
@@ -154,8 +186,7 @@ class AiSearchClientBudgetTest {
 			exchange.getResponseBody().flush();
 			throw new IOException("cut");
 		};
-		AiSearchClient client = new AiSearchClient("http://127.0.0.1:" + http.getAddress().getPort(), "", "",
-				Duration.ofSeconds(5), Clock.systemUTC());
+		AiSearchClient client = client(timing(Duration.ofSeconds(5)));
 
 		long elapsed = timed(() -> assertThat(client.search(request(), null)).isEmpty());
 
@@ -193,11 +224,11 @@ class AiSearchClientBudgetTest {
 		};
 		RestClient unbounded = RestClient.create();
 		AtomicInteger attempts = new AtomicInteger();
-		AiSearchClient client = new AiSearchClient("http://127.0.0.1:" + http.getAddress().getPort(), "", "",
-				Duration.ofMillis(100), Clock.systemUTC(), timeout -> {
+		AiSearchClient client = new AiSearchClient(url(), "", "", timing(Duration.ofMillis(100)), Clock.systemUTC(),
+				timeout -> {
 					attempts.incrementAndGet();
 					return unbounded;
-				});
+				}, Thread::sleep);
 
 		assertThat(client.search(request(), null)).isEmpty();
 		assertThat(attempts).hasValue(1);
@@ -214,29 +245,59 @@ class AiSearchClientBudgetTest {
 	}
 
 	@Test
-	@DisplayName("상한_AI를기다리는검색이상한만큼있으면_부르지않고바로대체하고차단기는그대로다")
+	@DisplayName("BUSY_RetryAfter가있으면_그만큼쉬고다시부른다")
+	void busy_retryAfter_waitsBeforeRetry() {
+		long[] at = new long[3];
+		handler = (exchange, call) -> {
+			at[call] = System.nanoTime();
+			if (call == 1) {
+				respondBusy(exchange, "1");
+				return;
+			}
+			respond(exchange, 200, OK);
+		};
+
+		assertThat(client().search(request(), null)).isPresent();
+
+		// Retry-After 1초를 TIMING의 상한 300ms로 줄여 쉰다
+		assertThat(calls).hasValue(2);
+		assertThat(Duration.ofNanos(at[2] - at[1]).toMillis()).isGreaterThanOrEqualTo(250);
+	}
+
+	@Test
+	@DisplayName("BUSY_쉰뒤남은예산이최소처리시간보다적으면_다시부르지않는다")
+	void busy_budgetGoneAfterWait_noRetry(CapturedOutput output) {
+		handler = (exchange, call) -> respondBusy(exchange, "1");
+		// 300ms를 쉬라고 하면 600ms를 쉬어 예산 500ms를 넘긴다. 시도 수는 클라이언트를 만든 수로 센다(기본 클라이언트는
+		// 연결 문제로 POST를 스스로 한 번 더 보낼 수 있어 서버 호출 수가 시도 수와 다를 수 있다).
+		AtomicInteger attempts = new AtomicInteger();
+		AiSearchClient client = new AiSearchClient(url(), "", "", TIMING, Clock.systemUTC(), timeout -> {
+			attempts.incrementAndGet();
+			return RestClient.create();
+		}, duration -> Thread.sleep(duration.plusMillis(300)));
+
+		assertThat(client.search(request(), null)).isEmpty();
+		assertThat(attempts).hasValue(1);
+		assertThat(output.getAll()).contains("kind=BUSY");
+	}
+
+	@Test
+	@DisplayName("상한_기다려도자리가나지않으면_부르지않고대체하고차단기는그대로다")
 	void inFlight_limitReached_fallsBackWithoutCalling(CapturedOutput output) throws Exception {
 		CountDownLatch release = new CountDownLatch(1);
 		handler = (exchange, call) -> {
 			release.await();
 			respond(exchange, 200, OK);
 		};
-		AiSearchClient client = new AiSearchClient("http://127.0.0.1:" + http.getAddress().getPort(), "", "",
-				Duration.ofSeconds(10), Clock.systemUTC());
+		AiSearchClient client = client(timing(Duration.ofSeconds(10)));
 		ExecutorService pool = Executors.newFixedThreadPool(AiSearchClient.MAX_IN_FLIGHT);
 		try {
-			List<Future<Boolean>> waiting = IntStream.range(0, AiSearchClient.MAX_IN_FLIGHT)
-					.mapToObj(i -> pool.submit(() -> client.search(request(), null).isPresent()))
-					.toList();
-			long deadline = System.nanoTime() + Duration.ofSeconds(5).toNanos();
-			while (calls.get() < AiSearchClient.MAX_IN_FLIGHT && System.nanoTime() < deadline) {
-				Thread.sleep(10);
-			}
-			assertThat(calls).hasValue(AiSearchClient.MAX_IN_FLIGHT);
+			List<Future<Boolean>> waiting = fill(client, pool);
 
 			for (int i = 0; i < AiSearchClient.FAILURE_THRESHOLD; i++) {
 				long elapsed = timed(() -> assertThat(client.search(request(), null)).isEmpty());
-				assertThat(elapsed).isLessThan(500);
+				// 자리 기다림 200ms만 기다린다
+				assertThat(elapsed).isBetween(150L, 1000L);
 			}
 			assertThat(calls).hasValue(AiSearchClient.MAX_IN_FLIGHT);
 
@@ -251,6 +312,64 @@ class AiSearchClientBudgetTest {
 		assertThat(client.search(request(), null)).isPresent();
 		assertThat(output.getAll()).contains("WARN").contains("in-flight limit reached")
 				.doesNotContain("circuit opened").doesNotContain(SECRET);
+	}
+
+	@Test
+	@DisplayName("상한_기다리는동안자리가나면_AI를부른다")
+	void inFlight_slotFreedWhileWaiting_callsAi() throws Exception {
+		CountDownLatch release = new CountDownLatch(1);
+		handler = (exchange, call) -> {
+			if (call <= AiSearchClient.MAX_IN_FLIGHT) {
+				release.await();
+			}
+			respond(exchange, 200, OK);
+		};
+		AiSearchClient client = client(new AiSearchClient.Timing(Duration.ofSeconds(10), Duration.ofMillis(100),
+				Duration.ofMillis(300), Duration.ofSeconds(5)));
+		ExecutorService pool = Executors.newFixedThreadPool(AiSearchClient.MAX_IN_FLIGHT + 1);
+		try {
+			List<Future<Boolean>> waiting = fill(client, pool);
+			long start = System.nanoTime();
+			Future<Boolean> ninth = pool.submit(() -> client.search(request(), null).isPresent());
+			Thread.sleep(200);
+			assertThat(ninth).isNotDone();
+
+			release.countDown();
+
+			assertThat(ninth.get()).isTrue();
+			assertThat(Duration.ofNanos(System.nanoTime() - start).toMillis()).isLessThan(3000);
+			assertThat(calls).hasValue(AiSearchClient.MAX_IN_FLIGHT + 1);
+			for (Future<Boolean> search : waiting) {
+				assertThat(search.get()).isTrue();
+			}
+		} finally {
+			release.countDown();
+			pool.shutdownNow();
+		}
+	}
+
+	@Test
+	@DisplayName("상한_자리기다림도_예산안이다")
+	void inFlight_slotWait_staysWithinBudget() throws Exception {
+		CountDownLatch release = new CountDownLatch(1);
+		handler = (exchange, call) -> {
+			release.await();
+			respond(exchange, 200, OK);
+		};
+		// 자리 기다림 상한(5초)이 예산(1초)보다 길어도 예산 안에서 끝난다
+		AiSearchClient client = client(new AiSearchClient.Timing(Duration.ofSeconds(1), Duration.ofMillis(100),
+				Duration.ofMillis(300), Duration.ofSeconds(5)));
+		ExecutorService pool = Executors.newFixedThreadPool(AiSearchClient.MAX_IN_FLIGHT);
+		try {
+			fill(client, pool);
+
+			long elapsed = timed(() -> assertThat(client.search(request(), null)).isEmpty());
+
+			assertThat(elapsed).isLessThan(2000);
+		} finally {
+			release.countDown();
+			pool.shutdownNow();
+		}
 	}
 
 	@Test
