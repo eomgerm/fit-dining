@@ -1,7 +1,31 @@
 // BE place DTO(kr.co.fitdining.api.place.dto)의 TS 타입. ?는 BE가 null이면 생략하는 선택 필드다
 
 export type CategoryGroup = "RESTAURANT" | "CAFE" | "BAR";
-export type Station = "GANGNAM" | "YEOKSAM" | "SEOLLEUNG";
+// 장소에서 가장 가까운 역. BE PlaceSummary.Station과 코드와 순서가 같아야 한다
+// (ai/tests/match/test_station_contract.py가 견준다)
+export type Station =
+  | "GANGNAM"
+  | "YEOKSAM"
+  | "SEOLLEUNG"
+  | "YUSEONG_ONCHEON"
+  | "GUAM"
+  | "NOEUN"
+  | "BANSEOK"
+  | "DAEJEON_WORLDCUP_STADIUM"
+  | "JIJOK"
+  | "GAPCHEON"
+  | "HYEONCHUNGWON"
+  | "WOLPYEONG"
+  | "GUMI"
+  | "SAGOK"
+  | "JEONPO"
+  | "SEOMYEON"
+  | "GEUMNYEONSAN"
+  | "SASANG"
+  | "HADAN"
+  | "GWANGAN"
+  | "NAMPO"
+  | "DONGNAE";
 export type OpenStatus =
   "OPEN" | "CLOSING_SOON" | "BREAK" | "CLOSED" | "UNKNOWN";
 export type EvidenceSource = "REQUEST" | "PREFERENCE";
@@ -13,7 +37,8 @@ export type PlaceSummary = LatLng & {
   id: number;
   name: string;
   categoryGroup: CategoryGroup;
-  station: Station;
+  // 가까운 역이 없는 장소는 BE가 생략한다
+  station?: Station;
   thumbnailUrl?: string;
 };
 
