@@ -431,11 +431,18 @@ class TestWhere:
             ("역삼1동", RegionArea("역삼동", "YEOKSAM")),
             ("대치동", RegionArea("대치동")),
             ("강남구", RegionArea("강남구")),
+            ("구미시", RegionArea("구미시")),
+            ("칠곡군", RegionArea("칠곡군")),
+            ("선산읍", RegionArea("선산읍")),
+            ("도개면", RegionArea("도개면")),
             ("강남", GANGNAM),
+            # 시·군·읍·면으로 끝나도 서비스 역 이름이면 역이 먼저다
+            ("구미", StationArea("구미역", "GUMI")),
+            ("서면", StationArea("서면역", "SEOMYEON")),
         ],
     )
     def test_region(self, fake_gms: FakeGms, value: str, expected: object) -> None:
-        """지역_동이나구면_행정구역으로거르고서비스역이름이면_역으로거른다"""
+        """지역_동구시군읍면이면_행정구역으로거르고서비스역이름이면_역으로거른다"""
         locations = [location(value, "AREA", value)]
         fake_gms(answers(station=None, locations=locations))
         store = FakeStore()
@@ -489,6 +496,21 @@ class TestWhere:
         assert result.empty_reason.suggestion == (
             "강남역, 역삼역, 선릉역 근처에서 찾아 보세요"
         )
+
+    def test_city_without_places(self, fake_gms: FakeGms) -> None:
+        """지역_장소가하나도없는시면_준비중인지역이라고한다"""
+        locations = [location("서울시", "AREA", "서울시")]
+        fake_gms(answers(station=None, locations=locations))
+        store = FakeStore(candidates=())
+
+        result = search(SearchRequest("서울시 조용한 카페"), store)
+
+        assert [(f.areas, f.category_group, k) for f, _, k in store.calls] == [
+            ((RegionArea("서울시"),), "CAFE", 100),
+            ((RegionArea("서울시"),), None, 1),
+        ]
+        assert result.empty_reason is not None
+        assert result.empty_reason.cause == "서울시는 아직 준비 중인 지역이에요"
 
 
 class TestScoring:

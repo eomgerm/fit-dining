@@ -80,13 +80,14 @@ class StationArea:
 
 @dataclass(frozen=True)
 class RegionArea:
-    """동이나 구. 장소의 동(`places.dong`)이나 구(`places.district`)가 이 이름이면 든다.
+    """동·구·시·군·읍·면. 장소의 동(`places.dong`)이나 구(`places.district`)가 이 이름이면 든다.
+    구가 없는 시·군은 그 이름이 `district`에, 동이 없는 읍·면은 그 이름이 `dong`에 든다.
 
     동 정보가 없는 장소는 이름이 같은 서비스 역("역삼동"이면 역삼역)의 장소로 본다.
     1차와 같은 동작이다.
 
     Attributes:
-        name: 동이나 구 이름("역삼동", "강남구"). 법정동 이름이다.
+        name: 동·구·시·군·읍·면 이름("역삼동", "강남구", "구미시"). 동은 법정동 이름이다.
         code: 이름이 같은 서비스 역 코드. 없으면 None이다.
     """
 
