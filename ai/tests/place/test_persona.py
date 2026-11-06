@@ -198,3 +198,22 @@ def test_generate_numbers_personas_and_skips_places_without_reviews():
 
 def test_persona_text_joins_fields_with_periods():
     assert persona_text(persona()) == "회식 손님. 여럿이 오는 손님. 단체석이 넉넉하다."
+
+
+def test_generate_uses_luna_without_reasoning_or_temperature():
+    seen = {}
+
+    def call(messages, parse, **kw):
+        seen.update(kw)  # 응답이 없으면 generate는 빈 목록을 돌려준다
+
+    generate("요약", EVIDENCE, BODIES, call=call)
+    assert (seen["model"], seen["temperature"], seen["reasoning_effort"]) == (
+        "gpt-6-luna",
+        None,
+        "none",
+    )
+
+
+def test_prompt_keeps_data_handling_talk_off_the_screen():
+    messages, _ = build_messages("요약", EVIDENCE)
+    assert "판단한 과정은 쓰지 않는다" in messages[0]["content"]

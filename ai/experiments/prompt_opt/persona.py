@@ -75,7 +75,7 @@ EMBED_URL = os.environ.get("EMBED_URL")
 # 리뷰 두 개 이상에 나온 (코드, 방향)은 그 방향 페르소나가 다뤄야 한다
 COVER_MIN = 2
 
-REFLECTION_TEMPLATE = """너는 프롬프트 개선 담당이다. 아래 지시문을 받은 작은 모델(gpt-4o-mini)이
+REFLECTION_TEMPLATE = """너는 프롬프트 개선 담당이다. 아래 지시문을 받은 모델(gpt-6-luna, 추론 없음)이
 음식점·카페·술집의 리뷰 근거를 읽고 "이 장소를 좋아할(또는 아쉬워할) 손님" 페르소나를
 2~7개 만든다. 페르소나 문장은 추천 이유로 사용자 화면에 나간다.
 
@@ -252,7 +252,13 @@ def _call(system: str, row: dict) -> dict | None:
         return {"personas": kept, "dropped": dropped}
 
     return gms.call_json(
-        messages, parse, response_format=ps.RESPONSE_FORMAT, timeout=ps.TIMEOUT
+        messages,
+        parse,
+        response_format=ps.RESPONSE_FORMAT,
+        timeout=ps.TIMEOUT,
+        model=ps.MODEL,
+        temperature=None,
+        reasoning_effort=ps.REASONING_EFFORT,
     )
 
 

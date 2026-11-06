@@ -14,6 +14,16 @@ QUOTE_MIN = 5
 _QUOTED = re.compile(r"[\"'‘“「『](.+?)[\"'’”」』]")
 TIMEOUT = 60.0
 
+MODEL = "gpt-6-luna"
+"""생성 모델. 합성 test 20곳(slice마다 2곳)을 한 번씩: gpt-4o-mini는 rules 0.967·search 0.817,
+이 모델은 0.980·0.884였다. 판단 과정을 쓰지 말라는 지시 전에는 페르소나 93개 중 72개가
+리뷰 번호, 투표 건수, "확인된다" 같은 말을 썼고(리뷰 번호만 31개), 지시 뒤에는 84개 중
+0개였다(2026-11-06, ai/experiments/prompt_opt/README.md). 사람 블라인드 비교는 아직 하지 않았다."""
+
+REASONING_EFFORT = "none"
+"""추론 강도. 생성 시간 중앙값은 gpt-4o-mini 11.0초, 이 모델 8.0초였다. 이 모델은
+temperature 0을 받지 않아 temperature는 보내지 않는다."""
+
 _SOURCE = {
     "naver_keyword": "네이버 키워드",
     "naver_text": "네이버 리뷰",
@@ -35,6 +45,12 @@ _SYSTEM = f"""방문자 리뷰에서 뽑은 근거를 종합해 이 장소의 �
 - description: 3문장. 근거에서 찾은 방문 동기와 기준으로 어떤 손님인지 설명한다.
 - reason: 3문장. 근거의 구체적인 신호(메뉴, 방문 상황, 시간대, 공간 등)를 반드시 들고,
   그 점이 왜 이 손님에게 중요한지 설명한다.
+- name, description, reason은 추천 이유로 사용자 화면에 그대로 나간다. 장소와 손님을 직접
+  설명하고, 입력 자료를 보고 판단한 과정은 쓰지 않는다. 리뷰 번호(r1 등), 리뷰나 키워드 투표의
+  건수, "리뷰에서 확인된다", "근거가 있다", "언급됐다", "아쉬움으로 표시됐다", "~한 손님으로
+  묶었다" 같은 말을 쓰지 않는다.
+  예: "r3은 감자옹심이 국물이 진하다고 좋게 평가했다" 대신 "감자옹심이는 국물이 진하다".
+  "가성비 키워드 투표가 9건으로 가장 많다" 대신 "값에 비해 만족스럽다는 손님이 많다".
 - 근거에 나온 취향 특징은 빠짐없이 다룬다. "이 장소에서 두드러진 특징"을 먼저 다루되,
   가성비처럼 여러 장소에 있는 특징도 빼지 않는다. 같은 특징이라도 이 장소의 메뉴와
   상황을 들어 다른 장소와 구별되게 쓴다.
@@ -210,6 +226,9 @@ def generate(
         lambda resp: parse_personas(resp, ids, list(bodies.values())),
         response_format=RESPONSE_FORMAT,
         timeout=TIMEOUT,
+        model=MODEL,
+        temperature=None,
+        reasoning_effort=REASONING_EFFORT,
     )
     return [{"persona_id": f"p{i}", **p} for i, p in enumerate(result or [], 1)]
 
