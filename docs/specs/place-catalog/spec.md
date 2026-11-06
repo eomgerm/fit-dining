@@ -141,7 +141,7 @@ CREATE TABLE places (
     address            text,          -- 도로명
     jibun_address      text,
     full_address       text,          -- 층 등 상세 포함
-    district           text,          -- 구(주소에서 뽑음)
+    district           text,          -- 구(주소에서 뽑음. 구가 없는 시·군은 시·군 이름)
     dong               text,          -- 동(주소에서 뽑음)
     directions         text,          -- 찾아오는 길(업체 작성)
     description        text,          -- 업체 소개

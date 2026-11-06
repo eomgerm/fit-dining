@@ -72,6 +72,28 @@ def test_place_row_handles_a_missing_common_address():
     assert (row["district_name"], row["dong_name"]) == (None, None)
 
 
+@pytest.mark.parametrize(
+    ("common_address", "district", "dong"),
+    [
+        ("서울 강남구 역삼동", "강남구", "역삼동"),
+        ("부산 해운대구 우동", "해운대구", "우동"),
+        # 구가 있으면 시가 앞에 있어도 구가 이긴다(시 아래의 구)
+        ("경기 성남시 분당구 정자동", "분당구", "정자동"),
+        # 구가 없는 시는 시 이름이 district다(구미시)
+        ("경북 구미시 옥계동", "구미시", "옥계동"),
+        # 군도 같다
+        ("경북 칠곡군 왜관읍", "칠곡군", None),
+        # 읍·면은 dong이 아니다(범위 밖, 지금은 그대로 비운다)
+        ("경북 구미시 선산읍", "구미시", None),
+    ],
+)
+def test_place_row_district_is_the_gu_else_the_city_or_county(
+    common_address, district, dong
+):
+    row = from_crawl.place_row("1", {"categoryCodeList": []}, common_address, {}, [])
+    assert (row["district_name"], row["dong_name"]) == (district, dong)
+
+
 def test_place_row_fills_contact_links_and_photo_from_sibling_fields():
     # 실제 샘플(37792495)로 확인: 좌표는 base.coordinate(x=lng, y=lat), 전화는 virtualPhone(안심번호),
     # 길 안내는 base.road, 홈페이지는 homepages.repr(부가 링크는 place_links로 따로), 예약 링크는

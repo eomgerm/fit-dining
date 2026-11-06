@@ -135,11 +135,17 @@ def _resolve(state: dict, value):
 
 
 def _address_parts(common_address: str | None) -> tuple[str | None, str | None]:
-    """ "서울 강남구 역삼동" 같은 짧은 주소에서 구·동을 뽑는다."""
+    """ "서울 강남구 역삼동" 같은 짧은 주소에서 구·동을 뽑는다.
+
+    구가 없는 시·군(구미시, 칠곡군)은 그 시·군 이름이 district다. 구가 있으면 시가 앞에 있어도 구를 쓴다.
+    """
     if not common_address:
         return None, None
-    district = next((t for t in common_address.split() if t.endswith("구")), None)
-    dong = next((t for t in common_address.split() if t.endswith("동")), None)
+    tokens = common_address.split()
+    district = next((t for t in tokens if t.endswith("구")), None)
+    if district is None:
+        district = next((t for t in tokens if t.endswith(("시", "군"))), None)
+    dong = next((t for t in tokens if t.endswith("동")), None)
     return district, dong
 
 
