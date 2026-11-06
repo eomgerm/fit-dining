@@ -529,13 +529,14 @@ def menu_rows(place_id: str, place_menus: dict, items_by_id: dict[str, dict]):
 
 
 def photo_rows(place_id: str, top_photo_items: list[dict]) -> list[dict]:
-    """업체·메뉴판 사진만(D-4, D-7). 각 mediaSource마다 원본 순서로 1부터 센다."""
+    """업체·메뉴판 사진만(D-4, D-7). 각 mediaSource마다 원본 순서로 1부터 센다.
+    originalUrl이 없는 사진은 보여 줄 수 없고 place_photos.url이 NOT NULL이라 건너뛴다(번호는 이어 센다)."""
     rows = []
     seen: dict[str, int] = defaultdict(int)
     for item in top_photo_items:
         media = item.get("mediaSource")
         kind = _PHOTO_KIND_BY_SOURCE.get(media)
-        if kind is None:
+        if kind is None or not item.get("originalUrl"):
             continue
         seen[media] += 1
         rows.append(

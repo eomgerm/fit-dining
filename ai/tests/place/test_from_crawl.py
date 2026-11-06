@@ -836,6 +836,24 @@ def test_menu_rows_labels_and_images_are_separate_ordered_rows():
     ]
 
 
+def test_photo_rows_skip_a_photo_without_an_original_url_and_keep_counting():
+    # 하남산단 장소 19867625의 업체 사진 하나는 originalUrl이 없다. 주소 없는 사진은 보여 줄 수 없고,
+    # place_photos.url이 NOT NULL이라 그대로 두면 적재 SQL 전체가 취소된다. 건너뛰고 번호는 이어 센다
+    items = [
+        {"mediaSource": "business", "originalUrl": "b1"},
+        {"mediaSource": "business", "originalUrl": None},
+        {"mediaSource": "business", "originalUrl": ""},
+        {"mediaSource": "business", "originalUrl": "b3"},
+    ]
+
+    rows = from_crawl.photo_rows("1", items)
+
+    assert [(r["position"], r["original_url"]) for r in rows] == [
+        ("1", "b1"),
+        ("2", "b3"),
+    ]
+
+
 def test_photo_rows_keep_only_business_and_menu_board_with_per_source_positions():
     items = [
         {"mediaSource": "business", "originalUrl": "b1"},
