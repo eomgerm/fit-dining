@@ -142,7 +142,7 @@ CREATE TABLE places (
     jibun_address      text,
     full_address       text,          -- 층 등 상세 포함
     district           text,          -- 구(주소에서 뽑음. 구가 없는 시·군은 시·군 이름)
-    dong               text,          -- 동(주소에서 뽑음)
+    dong               text,          -- 동(주소에서 뽑음. 동이 없으면 읍, 읍도 없으면 면)
     directions         text,          -- 찾아오는 길(업체 작성)
     description        text,          -- 업체 소개
     phone              text,          -- 대표 전화(일반 번호가 없으면 안심번호)
