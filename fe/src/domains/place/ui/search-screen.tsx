@@ -6,7 +6,13 @@ import {
   type QueryKey,
 } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import {
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 
 import { prefersReducedMotion } from "@/shared/lib/reduced-motion";
 import { Button } from "@/shared/ui/button/button";
@@ -67,6 +73,7 @@ import { savedCardElementId, SavedPlacesView } from "./saved-places";
 import { savedViewState, type SavedPanelState } from "./saved-view-state";
 import { SearchBar } from "./search-bar";
 import { beginSave, saveTurn, type ThreadAuth } from "./thread-storage";
+import { keyboardLift, useKeyboardInset } from "./use-keyboard-inset";
 import { useNearbyPicks } from "./use-nearby-picks";
 import { useSavedPlaces } from "./use-saved-places";
 import { useHere, useSearchStore } from "./use-search-store";
@@ -124,6 +131,8 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
   const centeredOn = useRef<LatLng | undefined>(undefined);
   // "내 위치"를 눌러 위치를 찾고 지도를 옮기는 중. 버튼 아이콘이 파란색이다(D-100)
   const [locating, setLocating] = useState(false);
+  // 화면 키보드 높이. 바닥의 검색창·후속 입력창만 그만큼 올린다
+  const keyboardInset = useKeyboardInset();
 
   const saved = useSavedPlaces(bookmarks, savedView);
   const [savedPanel, setSavedPanel] = useState<SavedPanelState>(
@@ -498,7 +507,11 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
   );
 
   return (
-    <main className="relative h-viewport overflow-hidden">
+    <main
+      style={{ "--keyboard-inset": `${keyboardInset}px` } as CSSProperties}
+      data-keyboard-open={keyboardInset > 0 || undefined}
+      className="relative h-viewport overflow-hidden"
+    >
       {/* 지도 화면의 상태바는 흰색으로 칠한다(블러 대신) */}
       <StatusBarColor />
       <PlaceMap
@@ -674,7 +687,11 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
                 />
               </>
             )}
-            <div className="px-4">
+            <div
+              className="px-4"
+              // 검색창과 후보만 키보드 위로 올린다(SearchBar가 읽는다)
+              style={{ "--keyboard-lift": keyboardLift(4) } as CSSProperties}
+            >
               <SearchBar
                 onSearch={handleNewSearch}
                 onOpenRecent={() => setRecentOpen(true)}

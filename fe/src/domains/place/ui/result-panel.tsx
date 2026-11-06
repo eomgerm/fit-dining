@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useEffectEvent, useRef, type ReactNode } from "react";
+import {
+  useEffect,
+  useEffectEvent,
+  useRef,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 
 import { TextButton } from "@/shared/ui/button/text-button";
 import { EmptyState } from "@/shared/ui/display/empty-state";
@@ -23,6 +29,7 @@ import type {
 import { MapPanel, type PanelState } from "./map-panel";
 import { PlaceCard, PlaceCardSkeleton } from "./place-card";
 import { SearchSteps } from "./search-steps";
+import { keyboardLift } from "./use-keyboard-inset";
 
 // BE가 AI 대신 키워드로 찾은 결과에 카드가 있을 때 카드 위에 띄운다(place-ai-search AC-27)
 export function AiFallbackNote({ className }: { className?: string }) {
@@ -109,7 +116,13 @@ export function ResultPanel({
       edge={edge}
       onStateChange={onStateChange}
       footer={
-        <div className="border-t border-line px-3 pt-2 pb-safe-2">{footer}</div>
+        // 화면 키보드가 열리면 입력창만 키보드 위로 올라온다(FollowUpInput이 읽는다). 바닥 띠는 그대로다
+        <div
+          className="border-t border-line px-3 pt-2 pb-safe-2"
+          style={{ "--keyboard-lift": keyboardLift(2) } as CSSProperties}
+        >
+          {footer}
+        </div>
       }
     >
       {/* 머리글 버튼은 화면 왼쪽 8px, 오른쪽 12px에 붙는다 */}

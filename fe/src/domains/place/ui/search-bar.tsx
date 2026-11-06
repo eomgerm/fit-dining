@@ -20,6 +20,7 @@ import type { PlaceSuggestion } from "../model/place-types";
 import { QUERY_MAX_LENGTH } from "../model/search-request";
 import { actionFirst } from "../model/suggestions";
 import { PlaceMeta } from "./place-parts";
+import { KEYBOARD_MOVE, KEYBOARD_STYLE } from "./use-keyboard-inset";
 import { useHere } from "./use-search-store";
 import { useSuggest } from "./use-suggest";
 
@@ -84,12 +85,15 @@ export function SearchBar({
       )}
       <form
         role="search"
+        // 키보드가 열리면 검색창만 키보드 위로 올라온다. 뒤의 막(fixed)은 화면을 그대로 덮는다
+        style={KEYBOARD_STYLE}
         onSubmit={(event) => {
           event.preventDefault();
           submit();
         }}
         className={cn(
           "relative flex h-13 items-center gap-1 rounded-md bg-surface pr-1 pl-4 shadow-2",
+          KEYBOARD_MOVE,
           focused && "ring-2 ring-primary-strong",
           // 연결이 없을 때 꺼진 검색창(4-E02)
           disabled &&
@@ -145,8 +149,12 @@ export function SearchBar({
       {typing && suggestions.length > 0 && (
         <ul
           aria-label="검색 추천"
+          style={KEYBOARD_STYLE}
           // 화면 아래 검색창이라 후보는 검색창 바로 위에 띄운다
-          className="absolute inset-x-0 bottom-full mb-2 flex flex-col divide-y divide-line overflow-hidden rounded-lg bg-surface shadow-3"
+          className={cn(
+            "absolute inset-x-0 bottom-full mb-2 flex flex-col divide-y divide-line overflow-hidden rounded-lg bg-surface shadow-3",
+            KEYBOARD_MOVE,
+          )}
         >
           {suggestions.map((suggestion) => (
             <li

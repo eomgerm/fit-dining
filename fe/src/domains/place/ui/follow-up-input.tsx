@@ -8,6 +8,7 @@ import { ArrowUpIcon } from "@/shared/ui/icon/icons/arrow-up";
 import { HistoryIcon } from "@/shared/ui/icon/icons/history";
 
 import { QUERY_MAX_LENGTH } from "../model/search-request";
+import { KEYBOARD_MOVE, KEYBOARD_STYLE } from "./use-keyboard-inset";
 
 type FollowUpInputProps = {
   inputRef?: Ref<HTMLInputElement>;
@@ -36,9 +37,14 @@ export function FollowUpInput({
         onSubmit(input);
         setInput("");
       }}
+      // 키보드가 열리면 키보드 위로 올라온다(--keyboard-lift)
+      style={KEYBOARD_STYLE}
       // 검색 중에는 흐리게 막고 최근 검색 버튼을 숨긴다(와이어프레임 Loading)
       className={cn(
         "flex h-13 items-center gap-1 rounded-md border border-line-strong bg-surface pr-1 pl-4",
+        KEYBOARD_MOVE,
+        // 키보드 위에 떠 있는 동안은 목록 위로 떠 보이게 그림자를 둔다(홈 검색창과 같은 그림자)
+        "in-data-keyboard-open:shadow-2",
         disabled && "opacity-60",
       )}
     >
