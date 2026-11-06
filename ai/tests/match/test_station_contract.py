@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import get_args
 
 from fit_ai.match.conditions import SERVED_STATIONS, STATION_NAMES
+from fit_ai.place import from_crawl
 from server.schemas import Station as SchemaStation
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -71,6 +72,12 @@ def test_station_codes_are_the_same_in_every_layer() -> None:
 def test_station_names_are_be_short_names_plus_yeok() -> None:
     """역이름_AI의화면이름은BE의짧은이름에역을붙인것이다"""
     assert STATION_NAMES == {code: f"{short}역" for code, short in be_stations()}
+
+
+def test_naver_station_ids_cover_exactly_the_station_codes() -> None:
+    """역코드_네이버역ID표는_모든역코드를_빠짐없이_가리킨다"""
+    # 코드를 더하고 ID를 빠뜨리면 그 역이 가장 가까운 장소의 station이 조용히 NULL이 된다
+    assert set(from_crawl.STATION_CODE_BY_NAVER_ID.values()) == set(STATION_NAMES)
 
 
 def test_served_stations_are_known_station_codes() -> None:
