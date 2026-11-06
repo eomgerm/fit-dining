@@ -240,9 +240,14 @@ public interface PlaceSearchEngine {
 kr.co.fitdining.api.place.dto (D-64. 파일은 아래 들여쓰지 않은 7개이고, 들여쓴 줄은 바로 위 타입 안에 중첩한
   record와 enum이다. 필드 목록만. ?는 선택 필드로 없으면 JSON에서 생략.
   숫자와 boolean은 박싱 타입(Long, Integer, Double, Boolean))
-  PlaceSummary   : id(Long), name, categoryGroup, station, lat(Double), lng(Double), thumbnailUrl?
+  PlaceSummary   : id(Long), name, categoryGroup, station?, lat(Double), lng(Double), thumbnailUrl?
+                   (station은 장소에서 가장 가까운 역이고, 가까운 역이 없으면 생략한다. profile-storage#D-16)
     enum CategoryGroup : RESTAURANT | CAFE | BAR            (화면: 식당, 카페, 술집)
     enum Station       : GANGNAM | YEOKSAM | SEOLLEUNG
+                       | YUSEONG_ONCHEON | GUAM | NOEUN | BANSEOK | DAEJEON_WORLDCUP_STADIUM | JIJOK | GAPCHEON
+                         | HYEONCHUNGWON | WOLPYEONG                                   (대전)
+                       | GUMI | SAGOK                                                  (구미)
+                       | JEONPO | SEOMYEON | GEUMNYEONSAN | SASANG | HADAN | GWANGAN | NAMPO | DONGNAE  (부산)
   enum OpenStatus      : OPEN | CLOSING_SOON | BREAK | CLOSED | UNKNOWN
                          (화면: 영업 중, 곧 마감, 브레이크타임, 영업 종료, 표시 안 함)
   PlaceSuggestResponse : type, place?(PlaceSummary), matchedMenu?(String), label?(String)

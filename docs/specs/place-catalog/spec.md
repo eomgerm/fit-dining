@@ -120,7 +120,7 @@ FE 화면
 
 이 반복이 정한 스키마 전부다. 여기에 없는 열, 인덱스, 제약은 더하지 않는다.
 
-지금 상태: `places`는 V6(`V6__create_places_and_profiles.sql`, profile-storage)에 있고 profile-storage가 `food_type`(CHECK), `station`(NOT NULL, `GANGNAM`·`YEOKSAM`·`SEOLLEUNG` CHECK, 기본값 없음), `thumbnail_url`을 더했다. 나머지 7개 테이블은 V7(`V7__create_place_catalog.sql`)에 있다. `places`를 가리키는 테이블은 이 spec의 7개 말고도 `place_profiles`, `place_personas`(V6, ON DELETE CASCADE), `reviews`(V13, NO ACTION이라 리뷰가 있는 장소는 지울 수 없다)가 있다. `bookmarks.place_id`(V10)에는 아직 FK가 없다(bookmark#D-16).
+지금 상태: `places`는 V6(`V6__create_places_and_profiles.sql`, profile-storage)에 있고 profile-storage가 `food_type`(CHECK), `station`(처음에는 NOT NULL에 `GANGNAM`·`YEOKSAM`·`SEOLLEUNG` CHECK, 기본값 없음이었다. 지금은 V22가 NULL을 허용하고 대전·구미·부산의 역을 더해 22개 코드를 받는다, profile-storage#D-16), `thumbnail_url`을 더했다. 나머지 7개 테이블은 V7(`V7__create_place_catalog.sql`)에 있다. `places`를 가리키는 테이블은 이 spec의 7개 말고도 `place_profiles`, `place_personas`(V6, ON DELETE CASCADE), `reviews`(V13, NO ACTION이라 리뷰가 있는 장소는 지울 수 없다)가 있다. `bookmarks.place_id`(V10)에는 아직 FK가 없다(bookmark#D-16).
 
 당시 규칙: 테이블 안 열의 순서만 구현 재량이고, 인덱스 안 열의 순서는 적힌 대로다. PK 제약 자체에는 이름을 붙이지 않는다(D-2, D-13).
 
