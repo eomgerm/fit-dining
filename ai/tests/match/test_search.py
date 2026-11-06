@@ -421,7 +421,7 @@ class TestWhere:
 
         assert areas_of(store) == (
             StationArea("강남역", "GANGNAM", exit="11"),
-            StationArea("신논현역", walk_minutes=5),
+            StationArea("신논현역", "SINNONHYEON", walk_minutes=5),
         )
 
     @pytest.mark.parametrize(

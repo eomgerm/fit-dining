@@ -366,7 +366,7 @@ class TestSegments:
         [
             ([{"text": "근처", "kind": "HERE", "value": "강남역"}], None, True),
             (
-                [{"text": "신논현역", "kind": "STATION", "value": "신논현역"}],
+                [{"text": "홍대입구역", "kind": "STATION", "value": "홍대입구역"}],
                 None,
                 False,
             ),
@@ -375,7 +375,7 @@ class TestSegments:
             ([{"text": "강남역 근처", "kind": "STATION"}], "GANGNAM", False),
             (
                 [
-                    {"text": "신논현역", "kind": "STATION", "value": "신논현역"},
+                    {"text": "홍대입구역", "kind": "STATION", "value": "홍대입구역"},
                     {"text": "선릉역", "kind": "STATION", "value": "선릉역"},
                 ],
                 "SEOLLEUNG",
@@ -1294,6 +1294,36 @@ class TestRegionStations:
                 (Location("전포", LocationKind.STATION, "전포역"),),
                 "JEONPO",
             ),
+            (
+                "신논현역 근처 카페",
+                (Location("신논현역", LocationKind.STATION, "신논현역"),),
+                "SINNONHYEON",
+            ),
+            (
+                "논현 맛집",
+                (Location("논현", LocationKind.STATION, "논현역"),),
+                "NONHYEON",
+            ),
+            (
+                "선정릉역 술집",
+                (Location("선정릉역", LocationKind.STATION, "선정릉역"),),
+                "SEONJEONGNEUNG",
+            ),
+            (
+                "삼성중앙역 근처 식당",
+                (Location("삼성중앙역", LocationKind.STATION, "삼성중앙역"),),
+                "SAMSEONG_JUNGANG",
+            ),
+            (
+                "삼성역 카페",
+                (Location("삼성역", LocationKind.STATION, "삼성역"),),
+                "SAMSEONG",
+            ),
+            (
+                "교대역 근처 한식",
+                (Location("교대역", LocationKind.STATION, "교대역"),),
+                "GYODAE",
+            ),
         ],
     )
     def test_locations(
@@ -1313,10 +1343,13 @@ class TestRegionStations:
             "사상 최고로 맛있는 집",
             "하단 메뉴가 맛있는 집",
             "동래파전 맛집",
+            "삼성페이 되는 카페",
+            "삼성카드 할인 되는 식당",
+            "교대 근무 끝나고 가기 좋은 술집",
         ],
     )
     def test_everyday_words_are_not_stations(self, query: str) -> None:
-        """규칙해석_구미·서면·사상·하단·동래는_일상말이나메뉴이름이라_역이름으로만있을때역으로읽는다"""
+        """규칙해석_구미·서면·사상·하단·동래·삼성·교대는_일상말이나메뉴이름이라_역이름으로만있을때역으로읽는다"""
         conditions = interpret_by_rules(query)
 
         assert conditions.locations == ()
