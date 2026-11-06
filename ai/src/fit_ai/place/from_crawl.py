@@ -8,7 +8,9 @@
 full_address(행정구역 전체 이름 "서울특별시"+지번+층수 조합)는 raw JSON에서 출처를 확인 못 해 계속 None이다.
 station_code/station_name은 장소에서 가장 가까운 역이다(profile-storage D-16, D-17). subwayStations 중 걷는
 거리(walkingDistance)가 가장 짧은 역의 네이버 역 ID를 STATION_CODE_BY_NAVER_ID로 코드로 바꾼다(nearest_station).
-가장 가까운 역이 표에 없거나 지하철 항목이 없으면 NULL이다. place_subways 테이블(여러 역/노선)과는 다른 값이다.
+가장 가까운 역이 표에 없으면 NULL이다. 지하철 항목이 아예 없는 장소(네이버는 약 1km 안의 역만 알려 준다)는
+좌표로 직선거리 3km 안의 가장 가까운 역을 채우고(D-19), 3km 밖이면 NULL이다. place_subways 테이블(여러 역/노선)과는
+다른 값이다.
 
 실제 샘플(강남/역삼/선릉, 400~1500곳 단위 스캔)로 확인한 것과 확인 못 한 것:
 - 단일 영업시간표 장소는 이름이 ""/"기본" 등 제각각이어도 그 표가 DEFAULT다(확인됨).
@@ -162,6 +164,81 @@ def _yy_mm_dd(text: str | None) -> str | None:
     return f"20{yy}-{mm}-{dd}"
 
 
+# 네이버 역 ID -> (위도, 경도). STATION_CODE_BY_NAVER_ID와 같은 ID다. 수집한 장소의 subwayStations에 들어 있던 역 좌표다.
+# 지하철 항목이 없는 장소의 가장 가까운 역을 좌표로 찾는 데만 쓴다.
+STATION_LOCATION_BY_NAVER_ID = {
+    # 서울 강남권
+    222: (37.49795, 127.02762),
+    1910: (37.49637, 127.02836),
+    221: (37.50064, 127.03638),
+    220: (37.50458, 127.04928),
+    1515: (37.50528, 127.04861),
+    925: (37.50445, 127.02450),
+    1909: (37.50393, 127.02477),
+    732: (37.51114, 127.02136),
+    1908: (37.51040, 127.02167),
+    926: (37.50732, 127.03391),
+    1516: (37.49621, 127.05289),
+    928: (37.51295, 127.05293),
+    223: (37.49390, 127.01440),
+    340: (37.49303, 127.01382),
+    927: (37.51014, 127.04341),
+    1514: (37.51092, 127.04364),
+    219: (37.50887, 127.06319),
+    731: (37.51425, 127.03162),
+    924: (37.50438, 127.01507),
+    344: (37.49089, 127.05535),
+    1517: (37.49099, 127.05537),
+    929: (37.51425, 127.06023),
+    # 대전
+    30116: (36.35372, 127.34154),
+    30117: (36.35668, 127.33055),
+    30120: (36.37408, 127.31783),
+    30122: (36.39213, 127.31462),
+    30119: (36.36689, 127.31784),
+    30121: (36.38411, 127.31949),
+    30115: (36.35468, 127.35460),
+    30118: (36.35904, 127.32145),
+    30114: (36.35827, 127.36436),
+    # 구미
+    40810: (36.12826, 128.33108),
+    40811: (36.09845, 128.35652),
+    # 부산
+    70218: (35.15308, 129.06537),
+    70119: (35.15810, 129.05939),
+    70219: (35.15767, 129.05865),
+    70227: (35.16252, 128.98458),
+    70210: (35.14986, 129.11099),
+    70102: (35.10623, 128.96677),
+    70209: (35.15791, 129.11315),
+    70111: (35.09789, 129.03468),
+    70402: (35.20480, 129.07714),
+}
+
+# 지하철 항목이 없는 장소에 좌표로 역을 채울 때 직선거리 상한(km). 이보다 멀면 NULL이다(D-19).
+STATION_FILL_MAX_KM = 3.0
+
+
+def _km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    """두 좌표 사이의 직선거리(km). 가까운 거리에서 쓰는 근사값이다."""
+    dy = (lat1 - lat2) * 111.2
+    dx = (lng1 - lng2) * 111.2 * math.cos(math.radians((lat1 + lat2) / 2))
+    return math.hypot(dx, dy)
+
+
+def _station_by_distance(lat: float | None, lng: float | None) -> str | None:
+    """좌표에서 직선거리 STATION_FILL_MAX_KM 안의 가장 가까운 역 코드. 좌표가 없거나 그보다 멀면 None이다."""
+    if lat is None or lng is None:
+        return None
+    nearest_id = min(
+        STATION_LOCATION_BY_NAVER_ID,
+        key=lambda i: _km(lat, lng, *STATION_LOCATION_BY_NAVER_ID[i]),
+    )
+    if _km(lat, lng, *STATION_LOCATION_BY_NAVER_ID[nearest_id]) > STATION_FILL_MAX_KM:
+        return None
+    return STATION_CODE_BY_NAVER_ID[nearest_id]
+
+
 def _nearest_subway_station(subway_stations: list[dict] | None) -> dict | None:
     """걷는 거리가 가장 짧은 지하철역(풀린 station 딕셔너리). 거리가 같으면 네이버 목록 순서가 앞선 역이고,
     거리를 모르는 역은 뒤로 보낸다. 지하철 항목이 없으면 None이다."""
@@ -178,11 +255,18 @@ def _nearest_subway_station(subway_stations: list[dict] | None) -> dict | None:
 
 def nearest_station(
     subway_stations: list[dict] | None,
+    lat: float | None = None,
+    lng: float | None = None,
 ) -> tuple[str | None, str | None]:
-    """장소에서 가장 가까운 역의 (places.station 코드, 역 이름). 가장 가까운 역이 STATION_CODE_BY_NAVER_ID에
-    없거나 지하철 항목이 없으면 (None, None)이다. 코드 없는 역이면 두 번째로 가까운 역으로 넘어가지 않는다."""
+    """장소에서 가장 가까운 역의 (places.station 코드, 역 이름).
+
+    네이버가 알려 준 지하철 항목이 있으면 걷는 거리가 가장 짧은 역이다. 그 역이 STATION_CODE_BY_NAVER_ID에 없으면
+    (None, None)이고, 두 번째로 가까운 역으로 넘어가지 않는다. 지하철 항목이 아예 없으면 좌표로 직선거리 3km 안의
+    가장 가까운 역을 채운다. 이때 역 이름은 None이다(네이버가 알려 준 역이 아니라서 소개문에 "근처"라고 쓰지 않는다)."""
     station = _nearest_subway_station(subway_stations)
-    code = STATION_CODE_BY_NAVER_ID.get(station.get("id")) if station else None
+    if station is None:
+        return _station_by_distance(lat, lng), None
+    code = STATION_CODE_BY_NAVER_ID.get(station.get("id"))
     if code is None:
         return None, None
     return code, station.get("displayName") or f"{station.get('name')}역"
@@ -197,13 +281,13 @@ def place_row(
     subway_stations: list[dict] | None = None,
 ) -> dict:
     """places.csv 한 줄. full_address는 출처를 확인 못 해 None으로 남는다. station_code/station_name은
-    subway_stations(station이 풀린 subwayStations)에서 가장 가까운 역(nearest_station)이다."""
+    subway_stations(station이 풀린 subwayStations)에서 가장 가까운 역이고, 항목이 없으면 좌표로 채운다(nearest_station)."""
     group_code, group_name = category_group(base.get("categoryCodeList"))
     district, dong = _address_parts(common_address)
     coordinate = base.get("coordinate") or {}
     lat = float(coordinate["y"]) if coordinate.get("y") is not None else None
     lng = float(coordinate["x"]) if coordinate.get("x") is not None else None
-    station_code, station_name = nearest_station(subway_stations)
+    station_code, station_name = nearest_station(subway_stations, lat, lng)
     homepage = (pd.get("homepages") or {}).get("repr") or {}
     naver_booking = pd.get("naverBooking") or {}
     menu_updated_at = (pd.get("placeMenus") or {}).get("updatedAt")

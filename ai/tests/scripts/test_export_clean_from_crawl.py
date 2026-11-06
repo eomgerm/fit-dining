@@ -145,9 +145,10 @@ def test_stations_without_a_code_are_counted_in_the_report_and_left_null(tmp_pat
         None,
         None,
         "GANGNAM",
-        None,
+        # 1004는 지하철 항목이 아예 없다. 좌표(127.03, 37.5)에서 3km 안의 가장 가까운 역(강남역 0.31km)으로 채운다(D-19)
+        "GANGNAM",
     ]
-    # 1004는 지하철 항목이 아예 없어서 센 곳이 없다
+    # 1004는 지하철 항목이 아예 없어서 코드 없는 역으로 센 곳이 없다
     assert report["stations_without_code"] == {"판교역": 2}
 
 

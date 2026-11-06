@@ -194,12 +194,41 @@ def test_place_row_station_is_null_when_the_nearest_station_has_no_id():
     assert station_of([subway(None, 100, "강남")]) == (None, None)
 
 
-def test_place_row_station_is_null_without_subway_entries_even_with_a_coordinate():
-    # 예전에는 좌표로 강남·역삼·선릉 중 가장 가까운 역을 골랐다. 네이버가 가까운 역을 알려 주지 않는 장소는 NULL이다(D-16)
-    near_gangnam = {"coordinate": {"x": "127.0280", "y": "37.4985"}}
+GUMI_STATION = (36.12826, 128.33108)  # 구미역
 
-    assert station_of([], **near_gangnam) == (None, None)
-    assert station_of(None, **near_gangnam) == (None, None)
+
+def km_north_of_gumi_station(km):
+    lat = GUMI_STATION[0] + km / 111.2
+    return {"coordinate": {"x": str(GUMI_STATION[1]), "y": str(lat)}}
+
+
+def test_place_row_without_subway_entries_gets_the_nearest_station_within_3km():
+    # 네이버는 약 1km 안의 역만 알려 준다. 목록이 빈 장소도 좌표로 직선거리 3km 안의 가장 가까운 역을 채운다(D-19).
+    # station_name은 네이버가 알려 준 역일 때만 있어서 채운 경우는 None이다(소개문에 먼 역을 "근처"라고 쓰지 않으려고)
+    assert station_of([], **km_north_of_gumi_station(2.0)) == ("GUMI", None)
+    assert station_of(None, **km_north_of_gumi_station(2.9)) == ("GUMI", None)
+
+
+def test_place_row_without_subway_entries_stays_null_beyond_3km():
+    assert station_of([], **km_north_of_gumi_station(3.1)) == (None, None)
+
+
+def test_place_row_station_fill_picks_the_nearest_of_the_stations():
+    # 갑천역(1.5km)과 월평역(0.7km) 사이: 월평역이 가깝다
+    between = {"coordinate": {"x": "127.37134", "y": "36.35468"}}
+
+    assert station_of([], **between) == ("WOLPYEONG", None)
+
+
+def test_place_row_station_fill_needs_a_coordinate():
+    assert station_of([]) == (None, None)
+
+
+def test_place_row_station_is_not_filled_by_distance_when_subway_entries_exist():
+    # 가장 가까운 역이 코드 없는 역이면 NULL이다(D-18). 좌표로 다른 역을 찾아 채우지 않는다
+    assert station_of(
+        [subway(999999, 100, "판교")], **km_north_of_gumi_station(1.0)
+    ) == (None, None)
 
 
 def test_yy_mm_dd_handles_both_with_and_without_a_trailing_period():

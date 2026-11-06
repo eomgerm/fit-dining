@@ -80,6 +80,14 @@ def test_naver_station_ids_cover_exactly_the_station_codes() -> None:
     assert set(from_crawl.STATION_CODE_BY_NAVER_ID.values()) == set(STATION_NAMES)
 
 
+def test_naver_station_locations_cover_exactly_the_naver_station_ids() -> None:
+    """역코드_네이버역ID마다_좌표가_있다"""
+    # 지하철 항목이 없는 장소는 좌표로 가장 가까운 역을 채운다. 좌표가 빠진 ID는 그 역을 못 찾는다
+    assert set(from_crawl.STATION_LOCATION_BY_NAVER_ID) == set(
+        from_crawl.STATION_CODE_BY_NAVER_ID
+    )
+
+
 def test_served_stations_are_known_station_codes() -> None:
     """역코드_서비스중인역은모두BE에있는코드다"""
     assert SERVED_STATIONS
