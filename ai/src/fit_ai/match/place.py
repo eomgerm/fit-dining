@@ -62,7 +62,7 @@ class PlaceInfo:
     Attributes:
         place_id: 장소 id. BE DB의 장소 id다.
         category_group: 업종(`RESTAURANT`, `CAFE`, `BAR`)
-        station: 역(`GANGNAM`, `YEOKSAM`, `SEOLLEUNG`)
+        station: 가장 가까운 역 코드(`GANGNAM`, `YUSEONG_ONCHEON` 등). 가까운 역이 없으면 None이다.
         facilities: 시설 코드별 유무. True는 있음, False는 없음이다.
             None이나 빠진 코드는 모름이다.
         food_type: 음식 종류 코드(`FOOD_JAPANESE` 등). 모르면 None이다.
@@ -72,7 +72,7 @@ class PlaceInfo:
 
     place_id: int
     category_group: str
-    station: str
+    station: str | None
     facilities: dict[str, bool | None]
     food_type: str | None = None
     review_count: int | None = None

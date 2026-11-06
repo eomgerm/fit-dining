@@ -54,8 +54,26 @@ STATION_CODES = {
 """서비스 역 이름("강남역", "강남")으로 역 코드를 찾는 표"""
 
 
-STATION_WORDS = {"강남": "GANGNAM", "역삼": "YEOKSAM", "선릉": "SEOLLEUNG"}
-"""규칙 해석에서 역을 찾는 낱말"""
+_EVERYDAY_WORDS = frozenset({"구미", "서면", "사상", "하단", "동래"})
+"""역 이름이 일상말이나 메뉴 이름에도 쓰이는 낱말("구미가 당기는", "서면으로", "사상 최고",
+"하단 메뉴", "동래파전"). 규칙 해석은 이 낱말을 "구미역"처럼 역을 붙여 말했을 때만 역으로 읽는다."""
+
+STATION_WORDS = dict(
+    sorted(
+        (
+            (
+                name
+                if name.removesuffix("역") in _EVERYDAY_WORDS
+                else name.removesuffix("역"),
+                code,
+            )
+            for code, name in STATION_NAMES.items()
+        ),
+        # 정규식이 짧은 낱말에 먼저 걸리지 않게 긴 낱말부터 둔다
+        key=lambda item: -len(item[0]),
+    )
+)
+"""규칙 해석에서 역을 찾는 낱말과 역 코드. 서비스 역 이름에서 만든다(강남, 유성온천, 구미역 ...)."""
 
 
 _LOCATION = re.compile(

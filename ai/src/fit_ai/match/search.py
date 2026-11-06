@@ -33,7 +33,7 @@ from fit_ai.match.candidates import (
     menu_key,
 )
 from fit_ai.match.cards import Card, build_card
-from fit_ai.match.conditions import CATEGORY_NAMES, STATION_NAMES
+from fit_ai.match.conditions import CATEGORY_NAMES, SERVED_STATIONS, STATION_NAMES
 from fit_ai.match.interpretation import (
     Conditions,
     Interpretation,
@@ -246,9 +246,10 @@ def empty_reason(
     """
     if unready:
         names = "·".join(unready)
+        served = ", ".join(STATION_NAMES[code] for code in SERVED_STATIONS)
         return EmptyReason(
             f"{names}{_topic(names)} 아직 준비 중인 지역이에요",
-            f"{', '.join(STATION_NAMES.values())} 근처에서 찾아 보세요",
+            f"{served} 근처에서 찾아 보세요",
         )
     in_map_bounds = any(isinstance(area, MapBounds) for area in areas)
     where = "이 지역" if in_map_bounds else "·".join(map(_area_label, areas)) or None

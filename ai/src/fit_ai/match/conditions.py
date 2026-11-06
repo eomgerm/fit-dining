@@ -113,5 +113,35 @@ SCORE_LABELS: dict[str, str] = {
 CATEGORY_NAMES = {"RESTAURANT": "식당", "CAFE": "카페", "BAR": "술집"}
 """업종 코드의 화면 이름. BE `CategoryGroup`과 같다."""
 
-STATION_NAMES = {"GANGNAM": "강남역", "YEOKSAM": "역삼역", "SEOLLEUNG": "선릉역"}
-"""역 코드의 화면 이름. BE `Station`과 같다."""
+STATION_NAMES = {
+    "GANGNAM": "강남역",
+    "YEOKSAM": "역삼역",
+    "SEOLLEUNG": "선릉역",
+    # 대전
+    "YUSEONG_ONCHEON": "유성온천역",
+    "GUAM": "구암역",
+    "NOEUN": "노은역",
+    "BANSEOK": "반석역",
+    "DAEJEON_WORLDCUP_STADIUM": "월드컵경기장역",
+    "JIJOK": "지족역",
+    "GAPCHEON": "갑천역",
+    "HYEONCHUNGWON": "현충원역",
+    "WOLPYEONG": "월평역",
+    # 구미
+    "GUMI": "구미역",
+    "SAGOK": "사곡역",
+    # 부산
+    "JEONPO": "전포역",
+    "SEOMYEON": "서면역",
+    "GEUMNYEONSAN": "금련산역",
+    "SASANG": "사상역",
+    "HADAN": "하단역",
+    "GWANGAN": "광안역",
+    "NAMPO": "남포역",
+    "DONGNAE": "동래역",
+}
+"""역 코드의 화면 이름. BE `Station`과 같다(`tests/match/test_station_contract.py`가 견준다)."""
+
+SERVED_STATIONS = ("GANGNAM", "YEOKSAM", "SEOLLEUNG")
+"""장소 데이터가 적재돼 서비스하는 역. "준비 중인 지역" 안내가 이 역 근처를 제안한다.
+다른 지역의 장소를 적재하면 그 역을 여기에 더한다."""

@@ -53,8 +53,31 @@ MAX_PARTY_SIZE = 100
 CategoryGroup = Literal["RESTAURANT", "CAFE", "BAR"]
 """업종. BE `CategoryGroup`과 같다."""
 
-Station = Literal["GANGNAM", "YEOKSAM", "SEOLLEUNG"]
-"""역. BE `Station`과 같다."""
+Station = Literal[
+    "GANGNAM",
+    "YEOKSAM",
+    "SEOLLEUNG",
+    "YUSEONG_ONCHEON",
+    "GUAM",
+    "NOEUN",
+    "BANSEOK",
+    "DAEJEON_WORLDCUP_STADIUM",
+    "JIJOK",
+    "GAPCHEON",
+    "HYEONCHUNGWON",
+    "WOLPYEONG",
+    "GUMI",
+    "SAGOK",
+    "JEONPO",
+    "SEOMYEON",
+    "GEUMNYEONSAN",
+    "SASANG",
+    "HADAN",
+    "GWANGAN",
+    "NAMPO",
+    "DONGNAE",
+]
+"""역. BE `Station`과 같다(`tests/match/test_station_contract.py`가 견준다)."""
 
 
 class ModelsBody(Body):

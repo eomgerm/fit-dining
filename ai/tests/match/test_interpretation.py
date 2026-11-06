@@ -1256,3 +1256,68 @@ def test_prompt_lists_codes() -> None:
     assert "FOOD_KOREAN: " not in SYSTEM_PROMPT
     assert "PARKING(주차)" in SYSTEM_PROMPT
     assert "FOOD_KOREAN(한식)" in SYSTEM_PROMPT
+
+
+class TestRegionStations:
+    """대전·구미·부산의 역(규칙 해석)"""
+
+    @pytest.mark.parametrize(
+        ("query", "locations", "station"),
+        [
+            (
+                "유성온천역 근처 카페",
+                (Location("유성온천역", LocationKind.STATION, "유성온천역"),),
+                "YUSEONG_ONCHEON",
+            ),
+            (
+                "유성온천 맛집",
+                (Location("유성온천", LocationKind.STATION, "유성온천역"),),
+                "YUSEONG_ONCHEON",
+            ),
+            (
+                "월드컵경기장역 근처 술집",
+                (Location("월드컵경기장역", LocationKind.STATION, "월드컵경기장역"),),
+                "DAEJEON_WORLDCUP_STADIUM",
+            ),
+            (
+                "서면역 카페",
+                (Location("서면역", LocationKind.STATION, "서면역"),),
+                "SEOMYEON",
+            ),
+            (
+                "구미역 근처 식당",
+                (Location("구미역", LocationKind.STATION, "구미역"),),
+                "GUMI",
+            ),
+            (
+                "전포 카페",
+                (Location("전포", LocationKind.STATION, "전포역"),),
+                "JEONPO",
+            ),
+        ],
+    )
+    def test_locations(
+        self, query: str, locations: tuple[Location, ...], station: str
+    ) -> None:
+        """규칙해석_새지역의역이름이있으면_서비스역으로읽는다"""
+        conditions = interpret_by_rules(query)
+
+        assert conditions.locations == locations
+        assert (conditions.station, conditions.nearby) == (station, False)
+
+    @pytest.mark.parametrize(
+        "query",
+        [
+            "구미가 당기는 한식",
+            "서면으로 내야 하는 곳",
+            "사상 최고로 맛있는 집",
+            "하단 메뉴가 맛있는 집",
+            "동래파전 맛집",
+        ],
+    )
+    def test_everyday_words_are_not_stations(self, query: str) -> None:
+        """규칙해석_구미·서면·사상·하단·동래는_일상말이나메뉴이름이라_역이름으로만있을때역으로읽는다"""
+        conditions = interpret_by_rules(query)
+
+        assert conditions.locations == ()
+        assert conditions.station is None
