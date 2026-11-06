@@ -33,7 +33,12 @@ from fit_ai.match.candidates import (
     menu_key,
 )
 from fit_ai.match.cards import Card, build_card
-from fit_ai.match.conditions import CATEGORY_NAMES, SERVED_STATIONS, STATION_NAMES
+from fit_ai.match.conditions import (
+    CATEGORY_NAMES,
+    CITY_BY_STATION,
+    SERVED_STATIONS,
+    STATION_NAMES,
+)
 from fit_ai.match.interpretation import (
     Conditions,
     Interpretation,
@@ -366,7 +371,9 @@ def _areas(locations: Sequence[Location], bounds: MapBounds | None) -> _Where:
     """지역 조각을 거르기 지역으로 바꾼다.
 
     역은 역 지역, 동·구·시·군·읍·면은 행정 구역이다. 서비스 역 이름을 동네로 낸 것("강남",
-    "서면")은 시·군·읍·면·동·구로 끝나도 역으로 본다. 그 밖의 동네·랜드마크는 장소 데이터에 없어 거르지 못하는 지역으로 둔다(2026-11-02
+    "서면")은 시·군·읍·면·동·구로 끝나도 역으로 본다. 역 이름이 곧 시 이름인 시("구미")는
+    "역" 없이 말하고 도보 거리·출구 조건이 없으면 시 전체도 더한다(`CITY_BY_STATION`).
+    그 밖의 동네·랜드마크는 장소 데이터에 없어 거르지 못하는 지역으로 둔다(2026-11-02
     결정). 근처("여기")는 지도 영역이 있으면 지도 영역이고, 없으면 폰이 현재 위치로
     거르므로 넣지 않는다.
     """
@@ -382,6 +389,14 @@ def _areas(locations: Sequence[Location], bounds: MapBounds | None) -> _Where:
             code = station_code(loc) or _STATION_CODES.get(station)
             name = STATION_NAMES[code] if code else station
             areas.append(StationArea(name, code, loc.walk_minutes, loc.exit))
+            city = CITY_BY_STATION.get(code or "")
+            if (
+                city
+                and "역" not in _plain(loc.text)
+                and not (loc.walk_minutes or loc.exit)
+            ):
+                # "구미"라고만 하면 역 근처가 아니라 시 전체를 뜻한다. 역에서 재는 조건이 없을 때만 더한다.
+                areas.append(RegionArea(city))
         elif loc.kind is LocationKind.AREA and region:
             # 행정동("역삼1동")은 장소 데이터의 법정동("역삼동")으로 찾는다.
             name = name[: region.start(1)] + region.group(2)

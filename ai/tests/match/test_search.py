@@ -177,6 +177,8 @@ def areas_of(store: FakeStore) -> tuple:
 
 
 GANGNAM = StationArea("강남역", "GANGNAM")
+GUMI = StationArea("구미역", "GUMI")
+GUMI_CITY = RegionArea("구미시")
 BOUNDS = MapBounds(sw_lat=37.49, ne_lng=127.04)
 PREVIOUS = Conditions.from_codes(
     "강남역 조용한 카페", "조용한 카페", ("QUIET",), "CAFE", "GANGNAM"
@@ -437,7 +439,6 @@ class TestWhere:
             ("도개면", RegionArea("도개면")),
             ("강남", GANGNAM),
             # 시·군·읍·면으로 끝나도 서비스 역 이름이면 역이 먼저다
-            ("구미", StationArea("구미역", "GUMI")),
             ("서면", StationArea("서면역", "SEOMYEON")),
         ],
     )
@@ -450,6 +451,50 @@ class TestWhere:
         search(SearchRequest(f"{value} 조용한 카페"), store)
 
         assert areas_of(store) == (expected,)
+
+    @pytest.mark.parametrize(
+        ("locations", "expected"),
+        [
+            # 역이라고 하지 않으면 시 전체도 함께 본다. 역 근처만 보면 역이 없는 곳이 빠진다
+            ([location("구미", "AREA", "구미")], (GUMI, GUMI_CITY)),
+            # LLM이 역 이름으로 표준화해도 사용자가 쓴 말에 "역"이 없으면 같다
+            ([location("구미", "STATION", "구미역")], (GUMI, GUMI_CITY)),
+            # 역이라고 하면 역만 본다
+            ([location("구미역", "STATION", "구미역")], (GUMI,)),
+            ([location("구미역 근처", "STATION", "구미역")], (GUMI,)),
+            # 도보 거리나 출구를 말하면 역에서 재는 것이라 역만 본다
+            (
+                [location("구미", "STATION", "구미역", walk_minutes=5)],
+                (StationArea("구미역", "GUMI", 5),),
+            ),
+            (
+                [location("구미", "STATION", "구미역", exit="1")],
+                (StationArea("구미역", "GUMI", None, "1"),),
+            ),
+            # 시라고 하면 시만 본다
+            ([location("구미시", "AREA", "구미시")], (GUMI_CITY,)),
+            # 시와 이름이 같은 역이 아닌 역은 그대로다
+            ([location("강남", "AREA", "강남")], (GANGNAM,)),
+            # 구미와 구미시를 같이 말해도 지역은 하나씩이다
+            (
+                [
+                    location("구미", "AREA", "구미"),
+                    location("구미시", "AREA", "구미시"),
+                ],
+                (GUMI, GUMI_CITY),
+            ),
+        ],
+    )
+    def test_city_named_like_station(
+        self, fake_gms: FakeGms, locations: list[dict], expected: tuple
+    ) -> None:
+        """지역_시와이름이같은역을역이라고하지않으면_시전체도함께거른다"""
+        fake_gms(answers(station=None, locations=locations))
+        store = FakeStore()
+
+        search(SearchRequest(f"{locations[0]['text']} 조용한 카페"), store)
+
+        assert areas_of(store) == expected
 
     def test_landmark_only_not_searched(self, fake_gms: FakeGms, encoder: list) -> None:
         """지역_랜드마크만말하면_찾지않고준비중인지역이라고한다"""
