@@ -32,7 +32,7 @@ REFLECTION_MINIBATCH = 6
 
 # GEPA 기본 반성 지시는 "세부·도메인 정보를 빠짐없이 지시문에 넣어라"라서
 # 학습 문장을 외우고 프롬프트가 6~7배 길어졌다. 일반 규칙·길이 상한·복사 금지로 바꾼다
-REFLECTION_TEMPLATE = """너는 프롬프트 개선 담당이다. 아래 지시문을 받은 작은 모델(gpt-4o-mini)이
+REFLECTION_TEMPLATE = """너는 프롬프트 개선 담당이다. 아래 지시문을 받은 모델(gpt-6-luna, 추론 없음)이
 사용자가 쓴 음식점·카페·술집 취향 문장을 코드표 기준 JSON 항목으로 해석한다.
 
 현재 지시문:
@@ -103,6 +103,9 @@ def _call(system: str, text: str) -> dict | None:
         lambda resp: {"items": di.parse_items(resp, text), "raw": resp["items"]},
         response_format=di.RESPONSE_FORMAT,
         timeout=30.0,
+        model=di.MODEL,
+        temperature=None,
+        reasoning_effort=di.REASONING_EFFORT,
     )
 
 

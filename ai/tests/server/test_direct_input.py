@@ -55,7 +55,7 @@ def test_returns_chips_for_be(seen):
             {"polarity": "LIKE", "label": FEATURES["QUIET"].label, "code": "QUIET"},
             {"polarity": "LIKE", "label": "마라탕을 먹을 수 있는 곳", "code": None},
         ],
-        "model": gms.MODEL,
+        "model": "gpt-6-luna",
     }
 
 

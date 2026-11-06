@@ -11,6 +11,16 @@ MAX_LEN = 100  # 온보딩 직접 입력 상한(PRD FR-06)
 MAX_CHIPS = 10  # BE `Preferences.tastes` 상한
 MAX_LABEL = 20  # BE `TasteChip.label` 상한. Java처럼 UTF-16 단위로 센다
 
+MODEL = "gpt-6-luna"
+"""해석 모델. 합성 test 108개를 3번씩: gpt-4o-mini 평균 0.838~0.869·완전 일치 87~90개에서
+0.921~0.935·98~100개가 됐다. 주로 부정·불만 문장을 코드 없는 비선호로 흘리던 실수가 줄었다
+(2026-11-06, ai/experiments/prompt_opt/README.md)."""
+
+REASONING_EFFORT = "none"
+"""추론 강도. `none`은 p95 1.87초로 gpt-4o-mini(2.34초)보다 빨랐다. `low`·`medium`은 정확도가
+비슷하거나 조금 높지만 응답 324개 중 35·68개가 3초를 넘었다. 입력을 멈추면 바로 칩을 띄우는
+화면이라 `none`으로 둔다. 이 모델은 temperature 0을 받지 않아 temperature는 보내지 않는다."""
+
 # 프롬프트는 라벨 설명을 붙인 제로샷 지시(Gen-Z, arXiv 2311.07115)를 GEPA로 최적화한 것이다
 # (S15P31A302-107, ai/experiments/prompt_opt). 합성 test 108개 평균이 0.675에서 0.849가 됐다.
 # 예시 일부는 GEPA 학습 문장이다. 문구를 고치면 같은 test로 다시 재고 바꾼다.
@@ -332,6 +342,9 @@ def interpret(
         build_messages(text),
         lambda resp: parse_items(resp, text),
         response_format=RESPONSE_FORMAT,
+        model=MODEL,
+        temperature=None,
+        reasoning_effort=REASONING_EFFORT,
     )
     if items is None:
         return None

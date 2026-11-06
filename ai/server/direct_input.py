@@ -12,7 +12,7 @@ from fastapi import APIRouter
 from pydantic import StringConstraints
 
 from fit_ai import gms
-from fit_ai.taste.direct_input import MAX_LEN, interpret, to_chips
+from fit_ai.taste.direct_input import MAX_LEN, MODEL, interpret, to_chips
 from server.common import Body, Dependencies, log, problem
 
 
@@ -56,6 +56,6 @@ def router(deps: Dependencies) -> APIRouter:
             )
         chips = to_chips(rows)
         log("direct_input", chips=len(chips), seconds=seconds)
-        return InterpretResponse(tastes=chips, model=gms.MODEL)
+        return InterpretResponse(tastes=chips, model=MODEL)
 
     return r

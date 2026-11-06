@@ -51,6 +51,21 @@ def test_interpret_requests_strict_schema_limited_to_code_table():
     assert item_props["kind"]["enum"] == ["taste", "facility", "quality", "budget"]
 
 
+def test_interpret_uses_luna_without_reasoning_or_temperature():
+    seen = {}
+
+    def call(messages, parse, **kw):
+        seen.update(kw)
+        return parse({"items": []})
+
+    interpret("조용한 곳", "u1", T0, call=call)
+    assert (seen["model"], seen["temperature"], seen["reasoning_effort"]) == (
+        "gpt-6-luna",
+        None,
+        "none",
+    )
+
+
 @pytest.mark.parametrize(
     ("kind", "like", "kept"),
     [

@@ -108,7 +108,7 @@ flowchart LR
 
 | 항목 | 값 |
 |---|---|
-| 모델 | `gpt-4o-mini`, temperature 0, strict JSON 스키마 출력(`response_format: json_schema`). JSON 모드는 스키마를 보장하지 않아 쓰지 않는다. GMS가 그대로 전달하는 것을 확인했다 |
+| 모델 | `gpt-6-luna`, 추론 강도 `none`, strict JSON 스키마 출력(`response_format: json_schema`). 이 모델은 temperature 0을 받지 않아 temperature는 보내지 않는다. JSON 모드는 스키마를 보장하지 않아 쓰지 않는다. GMS가 그대로 전달하는 것을 확인했다. 2026-11-06에 `gpt-4o-mini`(temperature 0)에서 바꿨다. 근거는 `ai/experiments/prompt_opt/README.md` |
 | 접속 | 환경변수 `GMS_BASE_URL`, `GMS_API_KEY`, `GMS_ENABLED`(`docs/infra/contracts/env.md`의 이름 그대로). 주소는 기준 URL과 전체 엔드포인트를 모두 받는다 |
 | 실패 | 타임아웃이 있다. 호출 실패나 출력 검사 실패면 한 번 다시 요청한다. 그래도 실패하면 해석 실패다. 온보딩은 다시 시도하게 하고 원문을 프로필에 저장하지 않는다(직접 입력 기록에는 실패로 남는다) |
 | 킬스위치 | `GMS_ENABLED`가 `true`가 아니면 호출하지 않고 해석 실패로 본다 |
@@ -206,7 +206,7 @@ BE `TasteAnalyzer`가 직접 입력마다 AI API를 한 번 부른다(`ai/server
 ```json
 {"tastes": [{"polarity": "LIKE", "label": "조용하고 차분한 곳", "code": "QUIET"},
             {"polarity": "DISLIKE", "label": "매운 음식", "code": "FOOD_SPICY"}],
- "model": "gpt-4o-mini"}
+ "model": "gpt-6-luna"}
 ```
 
 | 응답 필드 | 뜻 |
