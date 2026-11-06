@@ -1,5 +1,6 @@
 import csv
 import importlib.util
+import re
 from pathlib import Path
 
 import pytest
@@ -384,6 +385,20 @@ def test_load_sql_upserts_places_then_replaces_their_children():
         in sql
     )
     assert "INSERT INTO place_seats" not in sql
+
+
+def test_load_sql_splits_a_big_table_into_bounded_inserts_in_the_original_order():
+    # 행마다 place_id를 찾는 서브쿼리가 붙어서, 한 INSERT에 수만 행을 넣으면 Postgres가 서브쿼리마다
+    # 계획을 세우느라 메모리를 수십 GB 쓴다(7,325곳의 place_menus 9만 5천 행으로 확인). 나눠 넣어도
+    # 순서 열이 없는 테이블은 PK 순서가 원본 순서여야 한다(D-9)
+    n = load_places.ROWS_PER_INSERT
+    seats = [{"naver_place_id": "1", "name": f"s{i}"} for i in range(2 * n + 1)]
+
+    sql = load_places.load_sql([{"naver_place_id": "1"}], {"place_seats": seats})
+
+    inserts = sql.split("INSERT INTO place_seats")[1:]
+    assert [i.count("SELECT place_id FROM places") for i in inserts] == [n, n, 1]
+    assert re.findall(r"'(s\d+)'", sql) == [f"s{i}" for i in range(2 * n + 1)]
 
 
 def test_profile_rows_keep_personas_with_three_reviews_and_drop_evidence():

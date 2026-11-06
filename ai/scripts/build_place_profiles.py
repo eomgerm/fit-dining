@@ -25,6 +25,8 @@ from fit_ai.place import clean, pipeline, profile
 
 DATA = Path(os.environ.get("FIT_AI_DATA_DIR") or Path.home() / "fit-ai-data")
 OUT = DATA / "place-profiles"
+# GMS를 장소마다 부르는 두 단계(본문 추출, 페르소나)의 동시 호출 수. pipeline의 기본값(4)은 다른 스크립트도 쓴다
+WORKERS = 16
 
 log = logging.getLogger(__name__)
 calls: list[bool] = []  # GMS 호출마다 성공 여부
@@ -102,7 +104,9 @@ def main() -> None:
     )
     new = {
         r["place"]["place_id"]: r
-        for r in pipeline.analyze_all(todo, call=counted, on_done=keep_analysis)
+        for r in pipeline.analyze_all(
+            todo, call=counted, workers=WORKERS, on_done=keep_analysis
+        )
     }
     results = []
     for p in places:
@@ -119,7 +123,7 @@ def main() -> None:
         results.append(r)
 
     profiles, _, _ = pipeline.build_profiles(
-        results, call=counted, on_personas=keep_personas
+        results, call=counted, workers=WORKERS, on_personas=keep_personas
     )
     write("profiles.json", profiles)
     done = {r["place"]["place_id"] for r in results}

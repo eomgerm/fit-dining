@@ -21,6 +21,9 @@ from fit_ai.place.clean import by_place, read
 from fit_ai.place.profile import MIN_EVIDENCE, SCHEMA
 from fit_ai.place.rules import food_type
 
+# 자식 테이블 INSERT 한 문장의 행 수 상한. 행마다 place_id 서브쿼리가 붙어서 한 문장이 크면 메모리가 폭발한다
+ROWS_PER_INSERT = 200
+
 
 def boolean(v: str | None) -> bool | None:
     return None if v is None else v == "true"
@@ -337,13 +340,14 @@ def load_sql(
         )
         if rows:
             cols = [c for c in rows[0] if c != "naver_place_id"]
-            values = ",\n".join(
-                f"({', '.join([place_id(r['naver_place_id'])] + [literal(r[c]) for c in cols])})"
-                for r in rows
-            )
-            sql.append(
-                f"INSERT INTO {table} (place_id, {', '.join(cols)}) VALUES\n{values};"
-            )
+            for start in range(0, len(rows), ROWS_PER_INSERT):
+                values = ",\n".join(
+                    f"({', '.join([place_id(r['naver_place_id'])] + [literal(r[c]) for c in cols])})"
+                    for r in rows[start : start + ROWS_PER_INSERT]
+                )
+                sql.append(
+                    f"INSERT INTO {table} (place_id, {', '.join(cols)}) VALUES\n{values};"
+                )
     sql.append("COMMIT;")
     return "\n".join(sql) + "\n"
 
