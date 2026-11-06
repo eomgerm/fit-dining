@@ -244,6 +244,8 @@ kr.co.fitdining.api.place.dto (D-64. 파일은 아래 들여쓰지 않은 7개�
                    (station은 장소에서 가장 가까운 역이고, 가까운 역이 없으면 생략한다. profile-storage#D-16)
     enum CategoryGroup : RESTAURANT | CAFE | BAR            (화면: 식당, 카페, 술집)
     enum Station       : GANGNAM | YEOKSAM | SEOLLEUNG
+                       | SINNONHYEON | NONHYEON | EONJU | HANTI | SAMSEONG_JUNGANG | GYODAE | SEONJEONGNEUNG
+                         | SAMSEONG | HAKDONG | SAPYEONG | DOGOK | BONGEUNSA          (서울 강남권)
                        | YUSEONG_ONCHEON | GUAM | NOEUN | BANSEOK | DAEJEON_WORLDCUP_STADIUM | JIJOK | GAPCHEON
                          | HYEONCHUNGWON | WOLPYEONG                                   (대전)
                        | GUMI | SAGOK                                                  (구미)

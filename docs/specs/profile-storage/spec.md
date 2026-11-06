@@ -56,7 +56,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 | `name` | text NOT NULL | 장소 이름 |
 | `category_group` | text NOT NULL, CHECK | `RESTAURANT` \| `CAFE` \| `BAR`(BE `PlaceSummary.CategoryGroup`). `is_label` 업종 그룹 평균의 단위 |
 | `food_type` | text, CHECK | `FOOD_KOREAN` \| `FOOD_CHINESE` \| `FOOD_JAPANESE` \| `FOOD_WESTERN` \| `FOOD_ASIAN` \| null(카페·술집·뷔페·처음 보는 코드). 네이버 업종 코드로 정한다(ai `rules.food_type`) |
-| `station` | text, CHECK(NULL 허용) | 장소에서 가장 가까운 역 코드 22개(BE `PlaceSummary.Station`): 서울 `GANGNAM` \| `YEOKSAM` \| `SEOLLEUNG`과 대전·구미·부산의 역(목록은 D-16). 가까운 역이 없으면 null(V22) |
+| `station` | text, CHECK(NULL 허용) | 장소에서 가장 가까운 역 코드 34개(BE `PlaceSummary.Station`): 서울 강남권 15개(`GANGNAM` \| `YEOKSAM` \| `SEOLLEUNG` 등)와 대전·구미·부산의 역(목록은 D-16, D-17). 가까운 역이 없으면 null(V22, V23) |
 | `thumbnail_url` | text | 대표 사진 |
 | `category`, `category_code`, `category_code_path` | text, text, text[] | 네이버 업종 이름과 코드 |
 | `lat`, `lng` | double precision NOT NULL, 범위 CHECK | 좌표 |
