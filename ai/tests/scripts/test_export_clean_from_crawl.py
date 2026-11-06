@@ -151,6 +151,18 @@ def test_stations_without_a_code_are_counted_in_the_report_and_left_null(tmp_pat
     assert report["stations_without_code"] == {"판교역": 2}
 
 
+def test_a_zip_file_next_to_the_snapshot_folder_is_not_taken_for_the_snapshot(tmp_path):
+    # 구미 수집 폴더에는 raw/naver-20261103(폴더)와 raw/naver-20261103.zip(압축 백업)이 같이 있었다.
+    # 이름순으로 마지막이 .zip이라 폴더가 아닌 파일을 골라 6,336곳이 전부 건너뛰어졌다
+    data, raw = make_crawl(tmp_path, ["1001"])
+    (raw.parent / f"{raw.name}.zip").write_bytes(b"backup")
+
+    report = export_clean_from_crawl.export(data, tmp_path / "clean", BBOX, 2026)
+
+    assert report["places_written"] == 1
+    assert report["skipped"] == []
+
+
 def test_a_broken_reviews_file_skips_the_place_and_reports_the_error(tmp_path):
     data, raw = make_crawl(tmp_path, ["1001"])
     broken = raw / "reviews" / "01" / "1001.json.gz"

@@ -185,7 +185,8 @@ def places_in_scope(
 
 
 def latest_raw_dir(data_dir: Path) -> Path:
-    candidates = sorted((data_dir / "raw").glob("naver-*"))
+    # 압축 백업(naver-20261103.zip)은 폴더가 아니라서 건너뛴다
+    candidates = sorted(p for p in (data_dir / "raw").glob("naver-*") if p.is_dir())
     if not candidates:
         raise SystemExit(f"{data_dir / 'raw'} 안에 naver-* 폴더가 없다")
     return candidates[-1]
