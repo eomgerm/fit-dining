@@ -1,3 +1,5 @@
+import pytest
+
 from fit_ai.place.profile import (
     build_profile,
     count,
@@ -143,6 +145,36 @@ def test_summary_text_uses_representative_menus_first_and_no_price():
         == "고수닭갈비. 식당, 닭갈비. 메뉴: 치즈닭갈비, 볶음밥. 시설: 단체 이용 가능, 무선 인터넷. 신논현역 근처."
     )
     assert "13900" not in text
+
+
+def test_summary_text_leaves_out_the_station_when_the_place_has_none():
+    # 가까운 역이 없는 장소는 지하철 항목도 없다(D-16). "None역 근처"가 소개문, 곧 임베딩 입력에 들어가면 안 된다
+    place = {
+        "name": "이름",
+        "group": "식당",
+        "category": "닭갈비",
+        "station": None,
+        "subwayStations": [],
+        "conveniences": [],
+        "menu": {"items": []},
+    }
+
+    assert summary_text(place) == "이름. 식당, 닭갈비."
+
+
+@pytest.mark.parametrize("station", ["강남", "강남역"])
+def test_summary_text_names_the_station_once_when_there_are_no_subway_entries(station):
+    place = {
+        "name": "이름",
+        "group": "식당",
+        "category": "닭갈비",
+        "station": station,
+        "subwayStations": [],
+        "conveniences": [],
+        "menu": {"items": []},
+    }
+
+    assert summary_text(place) == "이름. 식당, 닭갈비. 강남역 근처."
 
 
 def test_summary_text_strips_prices_written_in_menu_names_and_dedupes_before_cutting():

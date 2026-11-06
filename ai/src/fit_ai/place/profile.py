@@ -104,10 +104,17 @@ def summary_text(place: dict) -> str:
         parts.append("메뉴: " + ", ".join(menus))
     if place.get("conveniences"):
         parts.append("시설: " + ", ".join(place["conveniences"]))
-    # station은 수집 지역(강남·역삼·선릉)이다. 역 목록은 걷는 거리순이라 첫 역이 가장 가깝다
+    # 역 목록은 걷는 거리순이라 첫 역이 가장 가깝다. 목록이 비면 station(가장 가까운 역, 없으면 None)을 쓴다.
+    # 가까운 역이 없는 장소는 "근처"를 쓰지 않는다
     stations = place.get("subwayStations") or []
-    nearest = stations[0]["stationName"] if stations else f"{place['station']}역"
-    parts.append(f"{nearest} 근처")
+    if stations:
+        nearest = stations[0]["stationName"]
+    elif place.get("station"):
+        nearest = place["station"].removesuffix("역") + "역"
+    else:
+        nearest = None
+    if nearest:
+        parts.append(f"{nearest} 근처")
     return ". ".join(parts) + "."
 
 
