@@ -137,3 +137,12 @@ def test_search_ranks_own_phrases_above_distractors(monkeypatch):
     score, why = persona.search(bad, row)
     assert score < 0.5 and "가가" in why
     assert persona.search({"personas": []}, row) == (0.0, "좋아할 손님 페르소나가 없다")
+
+
+def test_every_place_builds_product_messages_with_standout_features():
+    import persona
+
+    for row in load():
+        user = persona._messages(row)[0][1]["content"]
+        if row["standout"]:
+            assert "두드러진 특징(같은 업종 평균보다 많이 언급됨): 없음" not in user

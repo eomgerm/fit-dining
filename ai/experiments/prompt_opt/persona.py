@@ -178,7 +178,7 @@ def _evidence(row: dict) -> tuple[list[Evidence], dict[str, str]]:
 
 
 def _features(row: dict) -> list[dict]:
-    return [{"code": c, "label": True} for c in row["standout"]]
+    return [{"code": c, "is_label": True} for c in row["standout"]]
 
 
 def _check(row: dict) -> None:
