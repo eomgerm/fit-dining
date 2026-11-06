@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 import httpx
 
 MODEL = "gpt-4o-mini"
-"""기본 모델. 요청 해석은 자기 모델을 넘긴다(`fit_ai.match.interpretation.MODEL`)."""
+"""기본 모델. 요청 해석·직접 입력 해석·리뷰 추출·장소 페르소나는 각 모듈의 `MODEL`을 넘긴다."""
 _PATH = "/chat/completions"
 _ATTEMPTS = 2  # 호출 실패나 출력 검사 실패면 한 번 다시 요청한다
 # 네트워크·HTTP 오류, 응답 모양 오류. `parse`는 출력 검사 실패를 ValueError 등으로 알린다
