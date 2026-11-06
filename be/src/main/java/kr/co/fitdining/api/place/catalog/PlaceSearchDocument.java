@@ -6,7 +6,6 @@ import java.util.Locale;
 import java.util.Map;
 import kr.co.fitdining.api.place.dto.PlaceSummary;
 import kr.co.fitdining.api.place.dto.PlaceSummary.CategoryGroup;
-import kr.co.fitdining.api.place.dto.PlaceSummary.Station;
 
 /**
  * 키워드 검색 문서. 장소 하나의 검색 대상 값이다. 나중에 OpenSearch 색인 문서로도 쓸 수 있도록 정규화 전의 값을 담는다.
@@ -22,11 +21,6 @@ public record PlaceSearchDocument(PlaceSummary place, List<String> menuNames, St
 			CategoryGroup.CAFE, "카페",
 			CategoryGroup.BAR, "술집");
 
-	private static final Map<Station, String> STATION_NAMES = Map.of(
-			Station.GANGNAM, "강남",
-			Station.YEOKSAM, "역삼",
-			Station.SEOLLEUNG, "선릉");
-
 	/** 업종 이름들: 그룹 한글명, 그룹 코드(소문자), 네이버 업종 이름(있을 때). */
 	public List<String> categoryNames() {
 		List<String> names = new ArrayList<>();
@@ -38,9 +32,12 @@ public record PlaceSearchDocument(PlaceSummary place, List<String> menuNames, St
 		return names;
 	}
 
-	/** 위치 이름들: 역 이름과 "역"을 붙인 형태. */
+	/** 위치 이름들: 역 이름과 "역"을 붙인 형태. 가까운 역이 없는 장소는 비어 있다. */
 	public List<String> locationNames() {
-		String name = STATION_NAMES.get(place.station());
+		if (place.station() == null) {
+			return List.of();
+		}
+		String name = place.station().shortName();
 		return List.of(name, name + "역");
 	}
 

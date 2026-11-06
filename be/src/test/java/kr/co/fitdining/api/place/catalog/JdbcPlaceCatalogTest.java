@@ -285,6 +285,41 @@ class JdbcPlaceCatalogTest extends PostgresTestSupport {
 	}
 
 	@Test
+	@DisplayName("장소상세_대전과구미와부산의역코드도_역enum으로읽는다")
+	void findPlace_regionStation_mapsToEnum() {
+		long daejeon = place("대전 카페", "CAFE", "YUSEONG_ONCHEON");
+		long gumi = place("구미 식당", "RESTAURANT", "GUMI");
+		long busan = place("부산 술집", "BAR", "SEOMYEON");
+
+		assertThat(catalog.findPlace(daejeon).orElseThrow().place().station()).isEqualTo(Station.YUSEONG_ONCHEON);
+		assertThat(catalog.findPlace(gumi).orElseThrow().place().station()).isEqualTo(Station.GUMI);
+		assertThat(catalog.findPlace(busan).orElseThrow().place().station()).isEqualTo(Station.SEOMYEON);
+	}
+
+	@Test
+	@DisplayName("장소상세_가까운역이없는장소도_역이null로읽힌다")
+	void findPlace_noStation_stationIsNull() {
+		long id = place("하남산단 식당", "RESTAURANT", null);
+
+		PlaceDetailResponse detail = catalog.findPlace(id).orElseThrow();
+
+		assertThat(detail.place().name()).isEqualTo("하남산단 식당");
+		assertThat(detail.place().station()).isNull();
+	}
+
+	@Test
+	@DisplayName("주변후보와id로카드읽기_가까운역이없는장소도_빠지지않는다")
+	void cards_noStation_stillRead() {
+		long withStation = place("가", "CAFE", "GANGNAM");
+		long noStation = place("나", "CAFE", null);
+
+		assertThat(catalog.nearbyCandidates()).extracting(card -> card.place().id())
+				.containsExactly(withStation, noStation);
+		assertThat(catalog.cards(List.of(noStation))).singleElement()
+				.satisfies(card -> assertThat(card.place().station()).isNull());
+	}
+
+	@Test
 	@DisplayName("장소id목록_모든장소를_id오름차순으로읽는다")
 	void placeIds_everyPlace_inIdOrder() {
 		long first = place("가", "CAFE", "GANGNAM");

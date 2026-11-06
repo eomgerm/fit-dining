@@ -36,4 +36,22 @@ class PlaceSearchDocumentTest {
 				.containsExactly("선릉", "선릉역");
 	}
 
+	@Test
+	@DisplayName("검색문서_가까운역이없는장소의위치이름은_비어있다")
+	void locationNames_noStation_isEmpty() {
+		assertThat(document(CategoryGroup.CAFE, null, null).locationNames()).isEmpty();
+	}
+
+	@Test
+	@DisplayName("검색문서_위치이름은_대전과구미와부산의역도같은꼴이다")
+	void locationNames_regionStations_nameAndNameWithYeok() {
+		assertThat(document(CategoryGroup.CAFE, Station.YUSEONG_ONCHEON, null).locationNames())
+				.containsExactly("유성온천", "유성온천역");
+		assertThat(document(CategoryGroup.CAFE, Station.DAEJEON_WORLDCUP_STADIUM, null).locationNames())
+				.containsExactly("월드컵경기장", "월드컵경기장역");
+		assertThat(document(CategoryGroup.CAFE, Station.GUMI, null).locationNames()).containsExactly("구미", "구미역");
+		assertThat(document(CategoryGroup.CAFE, Station.SEOMYEON, null).locationNames())
+				.containsExactly("서면", "서면역");
+	}
+
 }

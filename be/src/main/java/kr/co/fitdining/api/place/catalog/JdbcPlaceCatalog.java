@@ -276,8 +276,14 @@ public class JdbcPlaceCatalog implements PlaceCatalog {
 
 	private static PlaceSummary summary(ResultSet rs) throws SQLException {
 		return new PlaceSummary(rs.getLong("place_id"), rs.getString("name"),
-				CategoryGroup.valueOf(rs.getString("category_group")), Station.valueOf(rs.getString("station")),
+				CategoryGroup.valueOf(rs.getString("category_group")), station(rs),
 				rs.getDouble("lat"), rs.getDouble("lng"), blankToNull(rs.getString("thumbnail_url")));
+	}
+
+	/** 가까운 역이 없는 장소는 null이다(places.station이 NULL). */
+	private static Station station(ResultSet rs) throws SQLException {
+		String code = rs.getString("station");
+		return code == null ? null : Station.valueOf(code);
 	}
 
 	private static PlaceRow placeRow(ResultSet rs, int rowNum) throws SQLException {
