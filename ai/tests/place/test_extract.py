@@ -158,3 +158,18 @@ def test_extract_batches_reviews_and_counts_failed_ones():
     }
     assert failed == 1
     assert dropped == 2
+
+
+def test_extract_uses_luna_without_reasoning_or_temperature():
+    seen = {}
+
+    def call(messages, parse, **kw):
+        seen.update(kw)
+        return parse(answer([]))
+
+    extract([rv("r0", "넓어요")], call=call)
+    assert (seen["model"], seen["temperature"], seen["reasoning_effort"]) == (
+        "gpt-6-luna",
+        None,
+        "none",
+    )

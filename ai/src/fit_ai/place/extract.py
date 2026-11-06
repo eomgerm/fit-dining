@@ -13,6 +13,15 @@ DEDUPE_JACCARD = 0.8  # 글자 5개 조각이 80% 넘게 겹치면 같은 리뷰
 BATCH_SIZE = 10
 TIMEOUT = 60.0  # 리뷰 10개를 한 번에 보내서 39의 기본값(10초)보다 길게 둔다
 
+MODEL = "gpt-6-luna"
+"""추출 모델. 실제 리뷰 50개(5곳)를 한 번씩: gpt-4o-mini 대비 항목 63 → 108개, 검사에서 버려진
+항목 36 → 1개, 코드가 다른 리뷰 29개 중 21개에서 나았고 2개에서 못했다("조용해요"·"인테리어
+예뻐요"·뷰를 잡고, 리뷰에 없는 코드를 덜 붙였다)(2026-11-06, ai/experiments/prompt_opt/README.md)."""
+
+REASONING_EFFORT = "none"
+"""추론 강도. 묶음(10개)당 중앙값 12.6초 → 8.1초, 최대 18.4초 → 12.6초였다. 이 모델은
+temperature 0을 받지 않아 temperature는 보내지 않는다."""
+
 # 기술 설계 §3.2의 8칸과 칸마다 붙을 수 있는 코드
 SLOTS: dict[str, tuple[str, ...]] = {
     "메뉴 평가": (),
@@ -207,6 +216,9 @@ def extract(
             lambda resp, bodies=bodies: parse_batch(resp, bodies),
             response_format=response_format(len(bodies)),
             timeout=TIMEOUT,
+            model=MODEL,
+            temperature=None,
+            reasoning_effort=REASONING_EFFORT,
         )
         if result is None:  # 두 번 실패하면 그 묶음의 리뷰를 버린다(기술 설계 §3.6)
             failed += len(batch)
