@@ -101,9 +101,17 @@ Glossary: none · ADRs: none
 
 ## D-18 가까운 역은 네이버 역 ID 표로 코드를 정하고, 코드 없는 역이 가장 가까우면 NULL이다
 - Status: settled
-- Decision: Jira S15P31A302-181. 크롤링 원본을 정제 CSV로 바꿀 때(`from_crawl`) `places.station`은 `subwayStations` 중 걷는 거리(`walkingDistance`)가 가장 짧은 역이다. 거리가 같으면 네이버 목록 순서가 앞선 역이고, 거리를 모르는 역은 뒤로 보낸다. 그 역의 네이버 역 ID를 `STATION_CODE_BY_NAVER_ID` 표로 코드로 바꾼다. 가장 가까운 역이 표에 없으면 두 번째로 가까운 역으로 넘어가지 않고 NULL이다(그 역은 가장 가까운 역이 아니다). 지하철 항목이 없어도 NULL이다. 좌표로 강남, 역삼, 선릉 중 고르던 예전 방식은 없앴다.
+- Decision: Jira S15P31A302-181. 크롤링 원본을 정제 CSV로 바꿀 때(`from_crawl`) `places.station`은 `subwayStations` 중 걷는 거리(`walkingDistance`)가 가장 짧은 역이다. 거리가 같으면 네이버 목록 순서가 앞선 역이고, 거리를 모르는 역은 뒤로 보낸다. 그 역의 네이버 역 ID를 `STATION_CODE_BY_NAVER_ID` 표로 코드로 바꾼다. 가장 가까운 역이 표에 없으면 두 번째로 가까운 역으로 넘어가지 않고 NULL이다(그 역은 가장 가까운 역이 아니다). 지하철 항목이 아예 없는 장소는 D-19가 좌표로 채운다. 좌표로 강남, 역삼, 선릉 중 고르던 예전 방식은 없앴다.
   이름이 아니라 ID를 쓰는 이유는 호선마다 ID가 다른 같은 역(강남 222와 1910)을 코드 하나로 묶고, 이름이 같은 다른 지역의 역(서울과 대전의 월드컵경기장)을 가르기 위해서다. 코드 없는 가장 가까운 역은 export 보고서(`report.json`의 `stations_without_code`)에 역 이름별로 센다. 새 지역을 적재할 때 이 목록이 코드를 더할 역이고, 코드를 더하고 ID를 빠뜨리면 계약 테스트가 알려 준다.
-  실제 원본(2026-11-03 수집분)에 돌린 결과다. 서울 강남권 7,326곳 중 7,297곳이 코드를 얻고 28곳은 지하철 항목이 없어 NULL이다. 대전은 2,325/4,300, 구미는 901/6,336, 부산은 30/201, 하남산단은 0/3,636이 코드를 얻는다. 어느 지역에서도 "가장 가까운 역에 코드가 없어서" NULL이 된 곳은 없고, 쓰인 코드는 34개 전부다.
+  실제 원본(2026-11-03 수집분)에 돌린 결과다. 서울 강남권 7,326곳 중 7,297곳이 코드를 얻고 28곳은 지하철 항목이 없다. 대전은 2,325/4,300, 구미는 901/6,336, 부산은 30/201, 하남산단은 0/3,636이 지하철 항목으로 코드를 얻는다. 어느 지역에서도 "가장 가까운 역에 코드가 없어서" NULL이 된 곳은 없고, 쓰인 코드는 34개 전부다.
   가까운 역이 없는 장소의 소개문(임베딩 입력)에는 "근처"를 쓰지 않는다(`profile.summary_text`). 이미 적재한 장소의 `station`은 바꾸지 않는다(D-17).
 - Rejected: 역 이름으로 코드 찾기 → 동명 역과 호선별 ID를 가르지 못한다. 코드 없는 역이면 다음으로 가까운 역 쓰기 → 가장 가까운 역이 아닌 역이 들어간다. 서울만 좌표 방식 유지 → D-17로 서울의 가까운 역 15개가 모두 코드를 가져서 예외가 필요 없다.
 - Anchors: `ai/src/fit_ai/place/from_crawl.py#STATION_CODE_BY_NAVER_ID` · `ai/src/fit_ai/place/from_crawl.py#nearest_station` · `ai/scripts/export_clean_from_crawl.py` · `ai/src/fit_ai/place/profile.py#summary_text` · `ai/tests/match/test_station_contract.py`
+
+## D-19 지하철 항목이 없는 장소는 직선거리 3km 안의 가장 가까운 역으로 채운다
+- Status: settled
+- Decision: Jira S15P31A302-181. 네이버는 약 1km 안의 역만 알려 줘서, 새 지역에서 5가지 정보(대표 사진, 영업시간, 메뉴, 사진 목록, 리뷰 본문)를 모두 갖춘 7,098곳 중 5,350곳(75%)의 지하철 항목이 비었다. 그런 장소는 `STATION_LOCATION_BY_NAVER_ID`의 좌표로 직선거리 3km(`STATION_FILL_MAX_KM`) 안의 가장 가까운 역 코드를 `places.station`에 채우고, 3km 밖이면 NULL이다. 네이버가 지하철 항목을 준 장소는 D-18 그대로다(가장 가까운 역에 코드가 없으면 좌표로 채우지 않고 NULL). 채운 장소는 `station_name`이 None이라 소개문에 "근처"를 쓰지 않는다(먼 역을 근처라고 쓰지 않으려고). `place_subways`(네이버가 준 목록)는 바꾸지 않는다.
+  결과: 역이 있는 장소가 1,748곳에서 3,688곳(52%)으로 늘었다. 대전 2,194/2,541, 구미 1,464/2,614, 부산 30/121, 하남산단 0/1,822다. 하남산단은 어느 장소에도 지하철 정보가 없어 알려진 역이 하나도 없어서 채울 수 없다. 알려진 역은 수집한 장소의 지하철 목록에 한 번이라도 나온 34개 코드의 역뿐이라, 실제로는 목록에 없는 더 가까운 역이 있을 수 있다.
+  주의: `places.station`으로 거르는 "OO역 근처" 검색에는 채운 장소(최대 3km)가 섞인다.
+- Rejected: 거리 상관없이 전부 채우기 → 구미는 최대 12km, 부산은 중앙값 8km 떨어진 역이 들어가서 역 근처 검색이 부정확해진다. 하남산단 역(광주 지하철)을 새로 구해 코드 추가 → 별도 작업이라 이번에는 하지 않는다. 비워 두기 → 요청으로 채우기로 했다.
+- Anchors: `ai/src/fit_ai/place/from_crawl.py#STATION_LOCATION_BY_NAVER_ID` · `ai/src/fit_ai/place/from_crawl.py#STATION_FILL_MAX_KM` · `ai/src/fit_ai/place/from_crawl.py#nearest_station` · `ai/tests/match/test_station_contract.py`
