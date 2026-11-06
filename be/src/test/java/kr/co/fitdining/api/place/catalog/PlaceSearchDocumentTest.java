@@ -37,6 +37,17 @@ class PlaceSearchDocumentTest {
 	}
 
 	@Test
+	@DisplayName("검색문서_위치이름은_서울강남권의다른역도같은꼴이다")
+	void locationNames_seoulStations_nameAndNameWithYeok() {
+		assertThat(document(CategoryGroup.CAFE, Station.SINNONHYEON, null).locationNames())
+				.containsExactly("신논현", "신논현역");
+		assertThat(document(CategoryGroup.CAFE, Station.SAMSEONG_JUNGANG, null).locationNames())
+				.containsExactly("삼성중앙", "삼성중앙역");
+		assertThat(document(CategoryGroup.CAFE, Station.BONGEUNSA, null).locationNames())
+				.containsExactly("봉은사", "봉은사역");
+	}
+
+	@Test
 	@DisplayName("검색문서_가까운역이없는장소의위치이름은_비어있다")
 	void locationNames_noStation_isEmpty() {
 		assertThat(document(CategoryGroup.CAFE, null, null).locationNames()).isEmpty();

@@ -8,9 +8,11 @@ import java.util.List;
  */
 final class StationCodes {
 
-	/** 서울(수집 지역 역 3개), 대전, 구미, 부산 순서다. 서울의 나머지 역은 나중에 더한다. */
+	/** 서울(강남권 15개), 대전, 구미, 부산 순서다. 서울의 나머지 역은 나중에 더한다. */
 	static final List<String> ALL = List.of(
 			"GANGNAM", "YEOKSAM", "SEOLLEUNG",
+			"SINNONHYEON", "NONHYEON", "EONJU", "HANTI", "SAMSEONG_JUNGANG", "GYODAE", "SEONJEONGNEUNG",
+			"SAMSEONG", "HAKDONG", "SAPYEONG", "DOGOK", "BONGEUNSA",
 			"YUSEONG_ONCHEON", "GUAM", "NOEUN", "BANSEOK", "DAEJEON_WORLDCUP_STADIUM", "JIJOK", "GAPCHEON",
 			"HYEONCHUNGWON", "WOLPYEONG",
 			"GUMI", "SAGOK",

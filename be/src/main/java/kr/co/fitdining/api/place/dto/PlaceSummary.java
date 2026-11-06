@@ -39,6 +39,30 @@ public record PlaceSummary(
 		YEOKSAM("역삼"),
 		/** 선릉역 */
 		SEOLLEUNG("선릉"),
+		/** 신논현역(9호선, 신분당선) */
+		SINNONHYEON("신논현"),
+		/** 논현역(7호선, 신분당선) */
+		NONHYEON("논현"),
+		/** 언주역 */
+		EONJU("언주"),
+		/** 한티역 */
+		HANTI("한티"),
+		/** 삼성중앙역 */
+		SAMSEONG_JUNGANG("삼성중앙"),
+		/** 교대역(2호선, 3호선) */
+		GYODAE("교대"),
+		/** 선정릉역(9호선, 수인분당선) */
+		SEONJEONGNEUNG("선정릉"),
+		/** 삼성역 */
+		SAMSEONG("삼성"),
+		/** 학동역 */
+		HAKDONG("학동"),
+		/** 사평역 */
+		SAPYEONG("사평"),
+		/** 도곡역(3호선, 수인분당선) */
+		DOGOK("도곡"),
+		/** 봉은사역 */
+		BONGEUNSA("봉은사"),
 
 		/** 대전 유성온천역(1호선) */
 		YUSEONG_ONCHEON("유성온천"),

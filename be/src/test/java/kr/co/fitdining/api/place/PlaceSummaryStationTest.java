@@ -15,6 +15,10 @@ class PlaceSummaryStationTest {
 	/** 코드 → "역"을 뺀 한글 이름. 키워드 검색이 위치 이름("유성온천", "유성온천역")으로 쓴다. */
 	private static final Map<String, String> SHORT_NAMES = Map.ofEntries(
 			Map.entry("GANGNAM", "강남"), Map.entry("YEOKSAM", "역삼"), Map.entry("SEOLLEUNG", "선릉"),
+			Map.entry("SINNONHYEON", "신논현"), Map.entry("NONHYEON", "논현"), Map.entry("EONJU", "언주"),
+			Map.entry("HANTI", "한티"), Map.entry("SAMSEONG_JUNGANG", "삼성중앙"), Map.entry("GYODAE", "교대"),
+			Map.entry("SEONJEONGNEUNG", "선정릉"), Map.entry("SAMSEONG", "삼성"), Map.entry("HAKDONG", "학동"),
+			Map.entry("SAPYEONG", "사평"), Map.entry("DOGOK", "도곡"), Map.entry("BONGEUNSA", "봉은사"),
 			Map.entry("YUSEONG_ONCHEON", "유성온천"), Map.entry("GUAM", "구암"), Map.entry("NOEUN", "노은"),
 			Map.entry("BANSEOK", "반석"), Map.entry("DAEJEON_WORLDCUP_STADIUM", "월드컵경기장"),
 			Map.entry("JIJOK", "지족"), Map.entry("GAPCHEON", "갑천"), Map.entry("HYEONCHUNGWON", "현충원"),
