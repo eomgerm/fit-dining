@@ -531,7 +531,10 @@ function AddressRow({
 
   function copy() {
     const clipboard = navigator.clipboard as Clipboard | undefined;
-    (clipboard?.writeText(detail.address) ?? Promise.reject())
+    (
+      clipboard?.writeText(detail.address) ??
+      Promise.reject(new Error("clipboard unavailable"))
+    )
       .then(() => toast("주소를 복사했어요"))
       .catch(() => toast("주소를 복사하지 못했어요"));
   }

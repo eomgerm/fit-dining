@@ -67,7 +67,7 @@ function useEntryResults(
   // 근처 응답을 받았는데 아직 위치를 시도한 적이 없으면 위치를 요청한다
   const shouldLocate = nearby && location.status === "idle";
   const locate = useEffectEvent(() => {
-    locateDevice().then((here) => {
+    void locateDevice().then((here) => {
       if (!here) toast(LOCATION_FAILED_MESSAGE);
     });
   });

@@ -14,7 +14,7 @@ export function RegisterServiceWorker() {
         .catch((error) => console.error("서비스 워커 등록 실패", error));
     // 첫 로딩의 리소스 요청과 겹치지 않게 load 뒤에 등록한다
     if (document.readyState === "complete") {
-      register();
+      void register();
       return;
     }
     window.addEventListener("load", register, { once: true });

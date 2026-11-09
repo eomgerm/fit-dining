@@ -222,7 +222,7 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
 
   // 권한이 이미 허용이면 화면을 열 때 묻지 않고 위치를 받는다
   const locateOnOpen = useEffectEvent(() => {
-    locateIfGranted().then((result) => {
+    void locateIfGranted().then((result) => {
       if (result === "denied") toast(LOCATION_DENIED_MESSAGE);
       if (result === "failed") toast(LOCATION_FAILED_MESSAGE);
     });
