@@ -39,13 +39,15 @@
   "locations": [{"text": "션릉역", "kind": "STATION", "value": "선릉역"}],
   "hours": [],
   "price": {"text": "3만원 이하", "maxWon": 30000, "cheap": false},
-  "placeName": null
+  "placeName": null,
+  "mapBounds": null
 }
 ```
 
 - 업종은 원함이 하나까지다.
 - 특징의 `code`는 코드표의 성향 축·중요 기준·방문 목적 코드이고, 코드표에 없는 특징이면 null이다.
 - `station`, `nearby`는 칸에서 빼고 지역에서 계산한다. 검색 응답 최상위 `nearby`는 BE가 쓰므로 그대로 낸다.
+- `mapBounds`는 해석 결과가 아니라 "이 지역에서 검색"으로 고른 지도 영역이다. 다음 후속 요청이 지역을 말하지 않으면 이 영역에서 찾는다. 그 밖의 검색이면 빠진다(2026-11-09).
 
 점수용 코드(`codes.score_codes`)는 특징 코드, 원하는 음식 종류, 원하는 맛(`SPICY` → `FOOD_SPICY`), 시설, 인원(1명 `PURPOSE_SOLO`, 4명 이상 `PURPOSE_GROUP`) 순서다.
 
