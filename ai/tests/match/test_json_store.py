@@ -16,10 +16,12 @@ from fit_ai.match.candidates import (
     MapBounds,
     OpenHours,
     PlaceFilter,
+    RadiusArea,
     RegionArea,
     StationArea,
     StoreError,
     VectorCounts,
+    distance_m,
 )
 from fit_ai.match.json_store import JsonPlaceStore
 
@@ -170,6 +172,9 @@ YEOKSAM_CAFE = PlaceFilter(
 )
 """3번 장소만 뽑는 거르기 조건"""
 
+SOUTH_4 = distance_m(37.50, 127.02, 37.49, 127.02)
+"""1번 장소(37.50, 127.02)에서 4번 장소(37.49, 127.02)까지의 거리(m)"""
+
 # (거르기 조건, 뽑히는 장소). 유사도 순서는 1, 4, 2, 3번이다.
 AREA_CASES = [
     # 도보 거리가 없는 역은 수집 역이 같거나 가까운 역 목록에 있으면 든다.
@@ -198,6 +203,11 @@ AREA_CASES = [
     ),
     (PlaceFilter(areas=(MapBounds(ne_lat=37.495), StationArea("신논현역"))), [4, 2]),
     (PlaceFilter(excluded_categories=("BAR",)), [1, 2, 3]),
+    # 사용자 위치(1번 자리)에서 1km 안. 4번은 남쪽으로 약 1,112m라 빠진다.
+    (PlaceFilter(areas=(RadiusArea(37.50, 127.02),)), [1]),
+    # 반경 경계. 4번까지의 거리보다 0.5m 길면 들고 0.5m 짧으면 빠진다.
+    (PlaceFilter(areas=(RadiusArea(37.50, 127.02, SOUTH_4 + 0.5),)), [1, 4]),
+    (PlaceFilter(areas=(RadiusArea(37.50, 127.02, SOUTH_4 - 0.5),)), [1]),
 ]
 
 
@@ -295,6 +305,23 @@ class TestFind:
         place_filter = PlaceFilter(areas=(MapBounds(sw_lat=37.0),))
 
         assert find_ids(store, place_filter) == [4, 2, 3]
+
+    def test_distance_formula(self) -> None:
+        """거리_위도0점01도는약1112m이고북위37점5도에서경도0점01도는약882m다"""
+        # 경도 1도의 길이는 위도의 cos만큼 줄어든다(cos 37.5도 = 0.793).
+        assert distance_m(37.50, 127.02, 37.49, 127.02) == pytest.approx(
+            1111.95, abs=0.01
+        )
+        assert distance_m(37.50, 127.02, 37.50, 127.03) == pytest.approx(
+            882.17, abs=0.01
+        )
+
+    def test_radius_without_coordinates(self, tmp_path: Path) -> None:
+        """저장소_사용자위치반경이있는데좌표가없으면_SQL처럼반경밖으로본다"""
+        store = JsonPlaceStore(write(tmp_path / "p.json", changed(1, lat=None)))
+        place_filter = PlaceFilter(areas=(RadiusArea(37.50, 127.02),))
+
+        assert find_ids(store, place_filter) == []
 
     @pytest.mark.parametrize(("place_filter", "expected"), AREA_CASES)
     def test_areas(

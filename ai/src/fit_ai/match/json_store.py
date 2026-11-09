@@ -22,10 +22,12 @@ from fit_ai.match.candidates import (
     MapBounds,
     OpenHours,
     PlaceFilter,
+    RadiusArea,
     RegionArea,
     StationArea,
     StoreError,
     VectorCounts,
+    distance_m,
     menu_key,
 )
 from fit_ai.match.interpretation.segments import DAYS
@@ -196,6 +198,11 @@ def _in_area(row: dict[str, Any], area: Area) -> bool:
             )
         case MapBounds():
             return _inside(row.get("lat"), row.get("lng"), area)
+        case RadiusArea():
+            lat, lng = row.get("lat"), row.get("lng")
+            if not (_is_number(lat) and _is_number(lng)):
+                return False
+            return distance_m(area.lat, area.lng, lat, lng) <= area.radius_m
 
 
 def _subways(row: dict[str, Any]) -> list[dict[str, Any]]:

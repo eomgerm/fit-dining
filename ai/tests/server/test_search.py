@@ -39,6 +39,7 @@ from fit_ai.match.search import (
     SearchRequest,
     SearchResult,
     SearchTrace,
+    UserLocation,
 )
 from fit_ai.match.taste_select import FreeText, TasteFeature, TasteProfile
 from server import search as server_search
@@ -189,10 +190,9 @@ def make_result(
     interpret_error: str | None = None,
     empty: EmptyReason | None = None,
     invalid: tuple[int, ...] = (),
-    nearby: bool | None = None,
+    nationwide: bool = False,
 ) -> SearchResult:
-    """검색 결과. 기본은 LLM으로 해석하고 점수로 정렬해 카드 한 장이 나온 결과다.
-    근처 응답인지는 따로 주지 않으면 조건을 따른다."""
+    """검색 결과. 기본은 LLM으로 해석하고 점수로 정렬해 카드 한 장이 나온 결과다."""
     trace = SearchTrace(
         embed_seconds=0.1,
         store_seconds=0.01,
@@ -205,7 +205,7 @@ def make_result(
         empty_reason=empty,
         invalid_place_ids=invalid,
         trace=trace,
-        nearby=conditions.nearby if nearby is None else nearby,
+        nationwide=nationwide,
     )
 
 
@@ -293,7 +293,8 @@ class TestSearch:
         data = post(client())
 
         assert data["conditions"] == CONDITIONS_V3_BODY
-        assert data["nearby"] is False
+        assert data["nationwide"] is False
+        assert "nearby" not in data
         assert data["interpretedBy"] == "LLM"
         assert data["rankedBy"] == "SCORE"
         assert data["fallbacks"] == []
@@ -363,15 +364,40 @@ class TestSearch:
 
         assert searched.calls[0][0].bounds is None
 
-    def test_map_bounds_only_passed(self, searched: FakeSearch) -> None:
-        """검색_이지역에서검색이면_지도영역만쓰라는표시를검색요청에넘긴다"""
-        post(client(), mapBounds={"swLat": 37.49, "neLng": 127.04}, mapBoundsOnly=True)
+    def test_user_location_passed(self, searched: FakeSearch) -> None:
+        """검색_사용자위치가오면_위도경도를검색요청에넘긴다"""
+        post(client(), location={"lat": 36.3551, "lng": 127.2986})
 
-        request = searched.calls[0][0]
-        assert (request.bounds, request.bounds_only) == (
-            MapBounds(sw_lat=37.49, ne_lng=127.04),
-            True,
+        assert searched.calls[0][0].location == UserLocation(36.3551, 127.2986)
+
+    def test_user_location_not_kept(
+        self, searched: FakeSearch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """검색_사용자위치는_응답조건과로그에남기지않고왔는지만남긴다"""
+        caplog.set_level(logging.INFO, logger="server")
+
+        data = post(client(), location={"lat": 36.3551, "lng": 127.2986})
+
+        assert "36.3551" not in json.dumps(data)
+        assert "36.3551" not in caplog.text
+        events = [
+            json.loads(r.getMessage()) for r in caplog.records if r.name == "server"
+        ]
+        assert events[-1]["has_location"] is True
+
+    def test_map_bounds_only_is_rejected(self, searched: FakeSearch) -> None:
+        """검색_지도영역은이지역에서검색에만오므로_mapBoundsOnly는모르는속성으로거부한다"""
+        response = client().post(
+            "/v1/search",
+            json={
+                "query": QUERY_TEXT,
+                "mapBounds": {"swLat": 37.49},
+                "mapBoundsOnly": True,
+            },
         )
+
+        assert response.status_code == 400
+        assert searched.calls == []
 
     def test_previous_map_bounds_passed(self, searched: FakeSearch) -> None:
         """검색_이전조건에지도영역이있으면_이전요청의지도영역으로넘긴다"""
@@ -388,7 +414,7 @@ class TestSearch:
         kept = MapBounds(36.35, 127.37, 36.36, 127.39)
         searched.outcome = replace(make_result(), bounds=kept)
 
-        data = post(client(), mapBounds={"swLat": 36.35}, mapBoundsOnly=True)
+        data = post(client(), mapBounds={"swLat": 36.35})
         searched.outcome = make_result()
         plain = post(client())
 
@@ -502,26 +528,26 @@ class TestSearch:
         assert data["fallbacks"] == []
 
     def test_nearby(self, searched: FakeSearch) -> None:
-        """검색_근처검색이면_같은점수로정렬하고폴백은아니다"""
+        """검색_근처검색이면_같은점수로정렬하고폴백도전국검색도아니다"""
         searched.outcome = make_result(
             conditions=Conditions.from_codes(
                 "근처 카페", "근처 카페", (), "CAFE", nearby=True
             )
         )
 
-        data = post(client())
+        data = post(client(), location={"lat": 36.3551, "lng": 127.2986})
 
-        assert data["nearby"] is True
+        assert data["nationwide"] is False
         assert data["rankedBy"] == "SCORE"
         assert data["fallbacks"] == []
 
-    def test_nearby_without_area(self, searched: FakeSearch) -> None:
-        """검색_근처를말하지않았어도거를지역이없어근처응답이면_nearby가참이다"""
-        searched.outcome = make_result(nearby=True)
+    def test_nationwide(self, searched: FakeSearch) -> None:
+        """검색_거를지역이없어전국에서찾았으면_nationwide가참이다"""
+        searched.outcome = make_result(nationwide=True)
 
         data = post(client(), query="조용한 술집")
 
-        assert (CONDITIONS.nearby, data["nearby"]) == (False, True)
+        assert data["nationwide"] is True
 
     @pytest.mark.parametrize(
         "taste",
@@ -685,6 +711,12 @@ class TestErrors:
             {"query": QUERY_TEXT, "tasteProfile": "QUIET"},
             {"query": QUERY_TEXT, "mapBounds": {"swLat": "37.4"}},
             {"query": QUERY_TEXT, "mapBounds": {"swLat": True}},
+            # 사용자 위치는 위도·경도가 모두 있어야 하고 범위 안의 숫자여야 한다.
+            {"query": QUERY_TEXT, "location": {"lat": 36.35}},
+            {"query": QUERY_TEXT, "location": {"lat": "36.35", "lng": 127.29}},
+            {"query": QUERY_TEXT, "location": {"lat": 91, "lng": 127.29}},
+            {"query": QUERY_TEXT, "location": {"lat": 36.35, "lng": 181}},
+            {"query": QUERY_TEXT, "location": {"lat": 36.35, "lng": 127.29, "acc": 5}},
             {"query": QUERY_TEXT, "userId": ""},
             {"query": QUERY_TEXT, "userId": "u" * 65},
             {"query": QUERY_TEXT, "userId": 3},

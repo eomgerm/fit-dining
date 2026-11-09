@@ -1,6 +1,6 @@
 """요청 해석부터 카드 만들기까지 잇는 검색 한 번을 확인한다.
 
-거르기 조건 만들기(지역 우선순위 포함), 점수 순서(취향, 점수 없음, 근처 검색), 후보 없음,
+거르기 조건 만들기(지역 우선순위 포함), 점수 순서(취향, 점수 없음, 사용자 위치), 후보 없음,
 인코딩·저장소 실패와 결과 없음 문구를 본다. 공유 모듈 `fit_ai.embedding`, `fit_ai.gms`는 가짜로
 바꿔 끼우고 장소 저장소도 가짜다. 점수 기준은 가짜 저장소의 장소 전체(기본은 후보 세 곳)로
 만든다.
@@ -18,6 +18,7 @@ from fit_ai.match.candidates import (
     MapBounds,
     OpenHours,
     PlaceFilter,
+    RadiusArea,
     RegionArea,
     StationArea,
     StoreError,
@@ -37,6 +38,7 @@ from fit_ai.match.search import (
     EmbeddingError,
     SearchRequest,
     SearchResult,
+    UserLocation,
     _where,
     empty_reason,
     menu_terms,
@@ -177,6 +179,9 @@ def areas_of(store: FakeStore) -> tuple:
 
 
 GANGNAM = StationArea("강남역", "GANGNAM")
+HERE = UserLocation(37.5006, 127.0364)
+"""사용자 위치(역삼역)"""
+RADIUS = RadiusArea(37.5006, 127.0364)
 GUMI = StationArea("구미역", "GUMI")
 GUMI_CITY = RegionArea("구미시")
 BOUNDS = MapBounds(sw_lat=37.49, ne_lng=127.04)
@@ -328,21 +333,23 @@ class TestFilter:
 
 
 class TestWhere:
-    """거를 지역. "이 지역에서 검색"이면 지도 영역만 쓰고, 그 밖에는 이번 요청에 말한 지역 >
-    이전 요청의 지역 > 지도 영역이다. 없으면 모든 장소에서 찾아 근처 응답으로 낸다(2026-11-09)."""
+    """거를 지역. 지도 영역("이 지역에서 검색")이 오면 지도 영역만 쓰고, 그 밖에는 이번 요청에
+    말한 지역 > 이전 요청의 지역 > 사용자 위치 1km 안이다. 없으면 전국에서 찾는다(2026-11-09)."""
 
     @pytest.mark.parametrize(
-        ("turn_locations", "bounds", "areas"),
+        ("turn_locations", "location", "areas"),
         [
-            # 이번 요청에 지역이 없으면 지도 영역보다 이전 역이 앞선다. 이전 역 이름이
+            # 이번 요청에 지역이 없으면 사용자 위치보다 이전 역이 앞선다. 이전 역 이름이
             # 요청문에 섞여 있는지는 보지 않는다(이번 요청의 조건만 본다).
-            ((), BOUNDS, (GANGNAM,)),
+            ((), HERE, (GANGNAM,)),
             ((), None, (GANGNAM,)),
-            ((Location("근처", LocationKind.HERE),), BOUNDS, (BOUNDS,)),
+            # "근처"는 사용자 위치 반경이다. 위치가 없으면 말하지 않은 것으로 본다.
+            ((Location("근처", LocationKind.HERE),), HERE, (RADIUS,)),
+            ((Location("근처", LocationKind.HERE),), None, (GANGNAM,)),
             ((Location("회사 근처", LocationKind.UNKNOWN),), None, (GANGNAM,)),
             (
                 (Location("역삼역", LocationKind.STATION, "역삼역"),),
-                BOUNDS,
+                HERE,
                 (StationArea("역삼역", "YEOKSAM"),),
             ),
         ],
@@ -350,131 +357,133 @@ class TestWhere:
     def test_turn_locations(
         self,
         turn_locations: tuple[Location, ...],
-        bounds: MapBounds | None,
+        location: UserLocation | None,
         areas: tuple,
     ) -> None:
         """지역_이번요청의조건에말한지역이있으면_그지역이고없으면이전지역이다"""
         turn = Conditions("요청", "요청", locations=turn_locations)
 
-        assert (
-            _where(PREVIOUS, turn, SearchRequest("요청", bounds=bounds)).areas == areas
-        )
+        request = SearchRequest("요청", location=location)
+        assert _where(PREVIOUS, turn, request).areas == areas
 
-    def test_said_location_beats_map_bounds(self, fake_gms: FakeGms) -> None:
-        """지역_이번요청에역을말하면_지도영역이있어도역으로거른다"""
+    @pytest.mark.parametrize("previous", [None, PREVIOUS])
+    def test_bounds_beat_locations(
+        self, fake_gms: FakeGms, previous: Conditions | None
+    ) -> None:
+        """지역_지도영역이오면_요청문의역과이전역과사용자위치대신지도영역으로거르고조건에서역을뺀다"""
         fake_gms(answers())
         store = FakeStore()
 
-        run(store, bounds=BOUNDS)
+        result = search(
+            SearchRequest(QUERY, previous=previous, bounds=BOUNDS, location=HERE),
+            store,
+        )
 
-        assert areas_of(store) == (GANGNAM,)
+        assert areas_of(store) == (BOUNDS,)
+        conditions = result.interpretation.conditions
+        assert (conditions.locations, result.nationwide) == ((), False)
+        # 다음 후속 요청이 이전 요청의 지역으로 쓰도록 조건에 담는다.
+        assert result.bounds == BOUNDS
 
-    def test_previous_location_beats_bounds(self, fake_gms: FakeGms) -> None:
-        """지역_이번요청에지역이없으면_지도영역이있어도이전역으로거른다"""
+    def test_bounds_with_here(self, fake_gms: FakeGms) -> None:
+        """지역_근처를말해도지도영역이오면_지도영역으로거르고조건에서근처를뺀다"""
+        fake_gms(answers(nearby=True, station=None))
+        store = FakeStore()
+
+        result = search(
+            SearchRequest("근처 조용한 카페", bounds=BOUNDS, location=HERE), store
+        )
+
+        assert areas_of(store) == (BOUNDS,)
+        assert result.interpretation.conditions.nearby is False
+
+    def test_previous_location_beats_user_location(self, fake_gms: FakeGms) -> None:
+        """지역_이번요청에지역이없으면_사용자위치가있어도이전역으로거른다"""
         # 후속이면 해석은 이전 역을 합친 조건 전체를 내고, 이번 요청에 지역을 말했는지 따로 낸다.
         fake_gms(answers(location_said=False))
         store = FakeStore()
 
         search(
-            SearchRequest("주차되는 데로", previous=PREVIOUS, bounds=BOUNDS),
+            SearchRequest("주차되는 데로", previous=PREVIOUS, location=HERE),
             store,
         )
 
         assert areas_of(store) == (GANGNAM,)
 
-    def test_bounds_without_any_location(self, fake_gms: FakeGms) -> None:
-        """지역_새검색에지역이없으면_지도영역으로거른다"""
+    def test_user_location_without_any_area(self, fake_gms: FakeGms) -> None:
+        """지역_요청에도이전요청에도지역이없으면_사용자위치1km안으로거른다"""
         fake_gms(answers(station=None))
         store = FakeStore()
 
-        result = search(SearchRequest("조용한 카페", bounds=BOUNDS), store)
+        result = search(SearchRequest("조용한 카페", location=HERE), store)
 
-        assert (areas_of(store), result.bounds) == ((BOUNDS,), None)
+        assert areas_of(store) == (RadiusArea(37.5006, 127.0364, 1000),)
+        assert (result.bounds, result.nationwide) == (None, False)
 
-    def test_no_area_searches_everywhere_as_nearby(self, fake_gms: FakeGms) -> None:
-        """지역_요청에도이전요청에도지역이없고지도영역도없으면_모든장소에서100곳을뽑아근처응답으로낸다"""
+    def test_no_area_searches_nationwide(self, fake_gms: FakeGms) -> None:
+        """지역_지역도사용자위치도없으면_전국에서100곳을뽑고전국검색이라고한다"""
         fake_gms(answers(station=None))
         store = FakeStore()
 
         result = search(SearchRequest("조용한 카페"), store)
 
         place_filter, _, k = store.calls[0]
-        assert (place_filter.areas, k, result.nearby) == ((), 100, True)
+        assert (place_filter.areas, k, result.nationwide) == ((), 100, True)
 
     @pytest.mark.parametrize(
-        ("interpreted", "previous", "bounds", "areas"),
+        ("interpreted", "previous", "request_area", "areas"),
         [
             # 이번 요청에 역을 말했다
-            ({}, None, None, (GANGNAM,)),
+            ({}, None, {}, (GANGNAM,)),
             # 후속 요청에 지역이 없어 이전 역으로 거른다
-            ({"location_said": False}, PREVIOUS, None, (GANGNAM,)),
-            # 지역이 없어 지도 영역으로 거른다(위치를 얻지 못한 FE)
-            ({"station": None}, None, BOUNDS, (BOUNDS,)),
+            ({"location_said": False}, PREVIOUS, {}, (GANGNAM,)),
+            # 지역이 없어 사용자 위치로 거른다
+            ({"station": None}, None, {"location": HERE}, (RADIUS,)),
+            # 이 지역에서 검색
+            ({"station": None}, None, {"bounds": BOUNDS}, (BOUNDS,)),
         ],
     )
-    def test_area_is_not_nearby(
+    def test_area_is_not_nationwide(
         self,
         fake_gms: FakeGms,
         interpreted: dict,
         previous: Conditions | None,
-        bounds: MapBounds | None,
+        request_area: dict,
         areas: tuple,
     ) -> None:
-        """지역_말한역이나이전역이나지도영역으로거르면_근처응답이아니다"""
+        """지역_말한역이나이전역이나사용자위치나지도영역으로거르면_전국검색이아니다"""
         fake_gms(answers(**interpreted))
         store = FakeStore()
 
-        result = search(SearchRequest("카페", previous=previous, bounds=bounds), store)
+        result = search(SearchRequest("카페", previous=previous, **request_area), store)
 
-        assert (areas_of(store), result.nearby) == (areas, False)
+        assert (areas_of(store), result.nationwide) == (areas, False)
 
-    def test_previous_here_uses_bounds(self, fake_gms: FakeGms) -> None:
-        """지역_이전요청이근처였고이번요청에지역이없으면_지도영역으로거른다"""
+    @pytest.mark.parametrize(
+        ("location", "areas", "nationwide"),
+        [(HERE, (RADIUS,), False), (None, (), True)],
+    )
+    def test_previous_here(
+        self,
+        fake_gms: FakeGms,
+        location: UserLocation | None,
+        areas: tuple,
+        nationwide: bool,
+    ) -> None:
+        """지역_이전요청이근처였고이번요청에지역이없으면_사용자위치로거르고위치가없으면전국이다"""
         fake_gms(answers(station=None))
         store = FakeStore()
         previous = Conditions(
             "근처 카페", "카페", locations=(Location("근처", LocationKind.HERE),)
         )
 
-        search(SearchRequest("조용한 데로", previous=previous, bounds=BOUNDS), store)
-
-        assert areas_of(store) == (BOUNDS,)
-
-    @pytest.mark.parametrize("previous", [None, PREVIOUS])
-    def test_bounds_only_ignores_locations(
-        self, fake_gms: FakeGms, previous: Conditions | None
-    ) -> None:
-        """지역_이지역에서검색이면_요청문의역과이전역대신지도영역으로거르고조건에서역을뺀다"""
-        fake_gms(answers())
-        store = FakeStore()
-
         result = search(
-            SearchRequest(QUERY, previous=previous, bounds=BOUNDS, bounds_only=True),
-            store,
+            SearchRequest("조용한 데로", previous=previous, location=location), store
         )
 
-        assert areas_of(store) == (BOUNDS,)
-        conditions = result.interpretation.conditions
-        assert (conditions.locations, conditions.nearby, result.nearby) == (
-            (),
-            False,
-            False,
-        )
-        assert result.bounds == BOUNDS
+        assert (areas_of(store), result.nationwide) == (areas, nationwide)
 
-    def test_bounds_only_here_is_not_nearby(self, fake_gms: FakeGms) -> None:
-        """지역_근처를말해도이지역에서검색이면_근처응답이아니다"""
-        fake_gms(answers(nearby=True, station=None))
-        store = FakeStore()
-
-        result = search(
-            SearchRequest("근처 조용한 카페", bounds=BOUNDS, bounds_only=True), store
-        )
-
-        assert result.interpretation.conditions.nearby is False
-        assert result.nearby is False
-
-    def test_previous_bounds_beat_bounds(self, fake_gms: FakeGms) -> None:
+    def test_previous_bounds_beat_user_location(self, fake_gms: FakeGms) -> None:
         """지역_이전요청이이지역에서검색이고이번요청에지역이없으면_그지도영역으로거르고다시남긴다"""
         fake_gms(answers(station=None))
         store = FakeStore()
@@ -484,8 +493,8 @@ class TestWhere:
             SearchRequest(
                 "주차되는 데로",
                 previous=PREVIOUS,
-                bounds=BOUNDS,
                 previous_bounds=chosen,
+                location=HERE,
             ),
             store,
         )
@@ -508,8 +517,8 @@ class TestWhere:
         assert areas_of(store) == (StationArea("역삼역", "YEOKSAM"),)
         assert result.bounds is None
 
-    def test_previous_location_without_bounds(self, fake_gms: FakeGms) -> None:
-        """지역_이번요청에지역도지도영역도없으면_이전역으로거른다"""
+    def test_previous_location_without_user_location(self, fake_gms: FakeGms) -> None:
+        """지역_이번요청에지역도사용자위치도없으면_이전역으로거른다"""
         fake_gms(answers())
         store = FakeStore()
 
@@ -518,26 +527,50 @@ class TestWhere:
         assert areas_of(store) == (GANGNAM,)
 
     def test_new_location_in_follow_up(self, fake_gms: FakeGms) -> None:
-        """지역_후속조건에서다른역을말하면_지도영역보다그역이앞선다"""
+        """지역_후속조건에서다른역을말하면_사용자위치보다그역이앞선다"""
         fake_gms(answers(station="YEOKSAM"))
         store = FakeStore()
 
         search(
-            SearchRequest("역삼역으로 바꿔줘", previous=PREVIOUS, bounds=BOUNDS),
+            SearchRequest("역삼역으로 바꿔줘", previous=PREVIOUS, location=HERE),
             store,
         )
 
         assert areas_of(store) == (StationArea("역삼역", "YEOKSAM"),)
 
-    def test_here_uses_map_bounds(self, fake_gms: FakeGms) -> None:
-        """지역_근처를말하고지도영역이있으면_지도영역으로거르고근처응답이아니다"""
-        # 지도 영역은 FE가 위치를 얻지 못했을 때 보낸다. 근처 응답이면 FE가 다시 위치를 기다린다.
+    @pytest.mark.parametrize(
+        ("location", "areas", "nationwide"),
+        [(HERE, (RADIUS,), False), (None, (), True)],
+    )
+    def test_here(
+        self,
+        fake_gms: FakeGms,
+        location: UserLocation | None,
+        areas: tuple,
+        nationwide: bool,
+    ) -> None:
+        """지역_근처를말하면_사용자위치1km안으로거르고위치가없으면전국에서찾는다"""
         fake_gms(answers(nearby=True, station=None))
         store = FakeStore()
 
-        result = search(SearchRequest("근처 조용한 카페", bounds=BOUNDS), store)
+        result = search(SearchRequest("근처 조용한 카페", location=location), store)
 
-        assert (areas_of(store), result.nearby) == ((BOUNDS,), False)
+        assert (areas_of(store), result.nationwide) == (areas, nationwide)
+
+    def test_user_location_outside_service_area(self, fake_gms: FakeGms) -> None:
+        """지역_사용자위치1km안에장소가하나도없으면_준비중인지역이라고한다"""
+        fake_gms(answers(station=None))
+        store = FakeStore(candidates=())
+
+        result = search(SearchRequest("조용한 카페", location=HERE), store)
+
+        # 처음 뽑기와, 업종 없이 그 반경에 장소가 있는지 본 것
+        assert [(f.areas, f.category_group, k) for f, _, k in store.calls] == [
+            ((RADIUS,), "CAFE", 100),
+            ((RADIUS,), None, 1),
+        ]
+        assert result.empty_reason is not None
+        assert result.empty_reason.cause == "내 주변은 아직 준비 중인 지역이에요"
 
     def test_many_locations_with_walk_and_exit(self, fake_gms: FakeGms) -> None:
         """지역_역이여럿이고도보거리와출구가있으면_역마다그대로거른다"""
@@ -738,16 +771,16 @@ class TestScoring:
 
         assert scores(result) == [(1, None), (2, None), (3, None)]
 
-    def test_nearby_scores_the_same_way(self, fake_gms: FakeGms) -> None:
-        """검색_근처검색이면_역으로거르지않고100곳을뽑아같은점수로정렬한다"""
+    def test_user_location_scores_the_same_way(self, fake_gms: FakeGms) -> None:
+        """검색_사용자위치로찾으면_1km안에서100곳을뽑아같은점수로정렬한다"""
         calls = fake_gms(answers(nearby=True, station=None))
         store = FakeStore()
 
         # 요청문에 역이 있으면 역이 근처보다 앞서므로 근처 말만 있는 요청문을 쓴다.
-        result = search(SearchRequest("근처 조용한 카페"), store)
+        result = search(SearchRequest("근처 조용한 카페", location=HERE), store)
 
         place_filter, _, k = store.calls[0]
-        assert (place_filter.areas, k, result.nearby) == ((), 100, True)
+        assert (place_filter.areas, k) == ((RADIUS,), 100)
         assert other_calls(calls) == 0
         assert scores(result) == [(2, 80), (3, 45), (1, 19)]
 
@@ -889,11 +922,18 @@ class TestEmptyReason:
         assert reason.cause == "이 지역 카페 중 조건에 맞는 곳이 없어요"
         assert reason.suggestion == "지도를 옮기거나 넓혀서 다시 찾아 보세요"
 
-    def test_nearby_without_category(self) -> None:
-        """결과없음_근처검색에업종이없으면_역없이가게라고한다"""
+    @pytest.mark.parametrize(
+        ("areas", "cause"),
+        [
+            ((RADIUS,), "내 주변 가게 중 조건에 맞는 곳이 없어요"),
+            ((), "가게 중 조건에 맞는 곳이 없어요"),
+        ],
+    )
+    def test_nearby_without_category(self, areas: tuple, cause: str) -> None:
+        """결과없음_근처나전국검색에업종이없으면_역없이내주변이나가게라고한다"""
         conditions = Conditions.from_codes("t", "t", station="GANGNAM", nearby=True)
 
-        assert empty_reason(conditions).cause == "가게 중 조건에 맞는 곳이 없어요"
+        assert empty_reason(conditions, areas).cause == cause
 
     def test_walk_and_exit(self) -> None:
         """결과없음_역에도보거리나출구가있으면_그대로보여주고그조건을빼보라고한다"""

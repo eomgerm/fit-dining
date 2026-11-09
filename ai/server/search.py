@@ -37,6 +37,7 @@ from fit_ai.match.search import (
     EmbeddingError,
     SearchRequest,
     SearchResult,
+    UserLocation,
     search,
 )
 from fit_ai.match.taste_select import TasteProfile, TasteStore
@@ -148,9 +149,13 @@ def _search(deps: Dependencies, body: SearchBody) -> JSONResponse:
         body.query,
         previous,
         taste,
-        _bounds(body.map_bounds),
-        body.map_bounds_only,
-        previous_bounds,
+        bounds=_bounds(body.map_bounds),
+        previous_bounds=previous_bounds,
+        location=(
+            UserLocation(body.location.lat, body.location.lng)
+            if body.location
+            else None
+        ),
     )
     try:
         result = search(
@@ -173,7 +178,7 @@ def _search(deps: Dependencies, body: SearchBody) -> JSONResponse:
     reason = result.empty_reason
     response = SearchResponse(
         conditions=_conditions_body(conditions, result.bounds),
-        nearby=result.nearby,
+        nationwide=result.nationwide,
         change_summary=interpretation.change_summary,
         items=[_card_body(card) for card in result.cards],
         empty_reason=(
@@ -197,10 +202,11 @@ def _search(deps: Dependencies, body: SearchBody) -> JSONResponse:
         codes=list(conditions.codes),
         category_group=conditions.category_group,
         station=conditions.station,
-        nearby=result.nearby,
+        nationwide=result.nationwide,
         in_map_bounds=request.bounds is not None,
-        map_bounds_only=request.bounds_only,
         previous_map_bounds=previous_bounds is not None,
+        # 사용자 위치는 좌표를 남기지 않고 왔는지만 남긴다.
+        has_location=request.location is not None,
         candidates=trace.candidates,
         items=len(result.cards),
         ranked_by=ranked_by,

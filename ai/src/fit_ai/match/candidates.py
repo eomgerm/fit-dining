@@ -6,6 +6,7 @@
 취향은 쓰지 않는다. 취향은 ② 점수에서만 쓴다(docs/comparison/spec.md 4.2).
 """
 
+import math
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -19,10 +20,13 @@ CANDIDATE_K = 100
 거르고 나면 대개 이보다 적다."""
 
 GENERAL_K = 20
-"""일반 검색에서 돌려줄 카드 수. 점수순으로 자른다."""
+"""돌려줄 카드 수. 점수순으로 자른다. 사용자 위치로 찾을 때도 같다."""
 
-NEARBY_K = 100
-"""근처 검색에서 돌려줄 카드 수. 폰이 현재 위치로 다시 거른다."""
+NEARBY_RADIUS_M = 1000
+"""사용자 위치로 찾을 때의 반경(m). FE가 거리를 보여 주는 근처 반경과 같다(2026-11-09 결정)."""
+
+EARTH_RADIUS_M = 6_371_000
+"""지구 반지름(m). 거리 공식(`distance_m`)에 쓴다. FE의 거리 계산과 같은 값이다."""
 
 
 @dataclass(frozen=True)
@@ -95,8 +99,45 @@ class RegionArea:
     code: str | None = None
 
 
-Area = StationArea | RegionArea | MapBounds
-"""거르기 지역. 역, 동·구, 지도 영역이다."""
+@dataclass(frozen=True)
+class RadiusArea:
+    """사용자 위치에서 반경 안. 장소까지의 거리(`distance_m`)가 반경 이하면 든다.
+
+    사각형(위도·경도 범위)으로 거르면 모서리가 반경의 약 1.41배까지 들어오고, 경도 1도의
+    길이가 위도마다 달라(북위 36도에서 약 90km, 위도 1도는 약 111km) 원으로 잰다. 좌표가
+    없는 장소는 들지 않는다.
+
+    Attributes:
+        lat: 사용자 위치의 위도
+        lng: 사용자 위치의 경도
+        radius_m: 반경(m)
+    """
+
+    lat: float
+    lng: float
+    radius_m: float = NEARBY_RADIUS_M
+
+
+Area = StationArea | RegionArea | MapBounds | RadiusArea
+"""거르기 지역. 역, 동·구, 지도 영역, 사용자 위치 반경이다."""
+
+
+def distance_m(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    """두 좌표 사이의 거리(m). 지구를 공으로 보고 잰 표면 거리다(하버사인 공식).
+
+    `pg_store.FIND_SQL`의 반경 조건과 같은 식이다. FE도 거리를 보여 줄 때 같은 식과 반지름을
+    써서, 화면에 "980m"로 보이는 장소는 1km 반경 결과에도 든다.
+    """
+    d_lat = math.radians(lat2 - lat1)
+    d_lng = math.radians(lng2 - lng1)
+    h = (
+        math.sin(d_lat / 2) ** 2
+        + math.cos(math.radians(lat1))
+        * math.cos(math.radians(lat2))
+        * math.sin(d_lng / 2) ** 2
+    )
+    # 부동소수점 오차로 1을 조금 넘으면 asin이 실패하므로 막는다.
+    return 2 * EARTH_RADIUS_M * math.asin(min(1.0, math.sqrt(h)))
 
 
 @dataclass(frozen=True)
@@ -125,8 +166,8 @@ class PlaceFilter:
 
     Attributes:
         category_group: 업종. None이면 거르지 않는다.
-        areas: 지역. 여럿이면 그중 하나에 들면 된다. 비어 있으면 위치로 거르지 않는다.
-            근처 검색은 폰이 현재 위치로 거르므로 비어 있다.
+        areas: 지역. 여럿이면 그중 하나에 들면 된다. 비어 있으면 위치로 거르지 않는다
+            (전국에서 찾는다).
         facilities: 요청한 시설. 그 시설이 없다고 확인된 장소만 뺀다.
             모르는 장소는 남긴다.
         excluded_categories: 빼 달라는 업종("카페 말고")

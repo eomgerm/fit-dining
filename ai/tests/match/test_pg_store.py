@@ -16,10 +16,12 @@ from fit_ai.match.candidates import (
     MapBounds,
     OpenHours,
     PlaceFilter,
+    RadiusArea,
     RegionArea,
     StationArea,
     StoreError,
     VectorCounts,
+    distance_m,
 )
 
 pgserver = pytest.importorskip("pgserver")
@@ -166,6 +168,9 @@ YEOKSAM_CAFE = PlaceFilter(
 )
 """3번 장소만 뽑는 거르기 조건"""
 
+SOUTH_4 = distance_m(37.50, 127.02, 37.49, 127.02)
+"""1번 장소(37.50, 127.02)에서 4번 장소(37.49, 127.02)까지의 거리(m)"""
+
 # (거르기 조건, 뽑히는 장소). 유사도 순서는 1, 4, 2, 3번이다.
 AREA_CASES = [
     # 도보 거리가 없는 역은 수집 역이 같거나 가까운 역 목록에 있으면 든다.
@@ -194,6 +199,11 @@ AREA_CASES = [
     ),
     (PlaceFilter(areas=(MapBounds(ne_lat=37.495), StationArea("신논현역"))), [4, 2]),
     (PlaceFilter(excluded_categories=("BAR",)), [1, 2, 3]),
+    # 사용자 위치(1번 자리)에서 1km 안. 4번은 남쪽으로 약 1,112m라 빠진다.
+    (PlaceFilter(areas=(RadiusArea(37.50, 127.02),)), [1]),
+    # 반경 경계. 4번까지의 거리보다 0.5m 길면 들고 0.5m 짧으면 빠진다.
+    (PlaceFilter(areas=(RadiusArea(37.50, 127.02, SOUTH_4 + 0.5),)), [1, 4]),
+    (PlaceFilter(areas=(RadiusArea(37.50, 127.02, SOUTH_4 - 0.5),)), [1]),
 ]
 
 

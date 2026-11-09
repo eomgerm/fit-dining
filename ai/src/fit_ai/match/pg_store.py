@@ -32,6 +32,7 @@ from fit_ai.match.candidates import (
     MapBounds,
     OpenHours,
     PlaceFilter,
+    RadiusArea,
     RegionArea,
     StationArea,
     StoreError,
@@ -58,7 +59,8 @@ WHERE summary_vector IS NOT NULL
       SELECT 1
       FROM jsonb_to_recordset(%(areas)s::jsonb) AS area(
         kind text, name text, code text, walk_minutes int, exit text,
-        sw_lat float8, sw_lng float8, ne_lat float8, ne_lng float8)
+        sw_lat float8, sw_lng float8, ne_lat float8, ne_lng float8,
+        lat float8, lng float8, radius_m float8)
       WHERE CASE area.kind
         WHEN 'STATION' THEN
           (area.walk_minutes IS NULL AND area.exit IS NULL AND p.station = area.code)
@@ -72,11 +74,18 @@ WHERE summary_vector IS NOT NULL
         WHEN 'REGION' THEN
           p.dong = area.name OR p.district = area.name
           OR (p.dong IS NULL AND p.station = area.code)
-        ELSE
+        WHEN 'BOUNDS' THEN
           (area.sw_lat IS NULL OR p.lat >= area.sw_lat)
           AND (area.sw_lng IS NULL OR p.lng >= area.sw_lng)
           AND (area.ne_lat IS NULL OR p.lat <= area.ne_lat)
           AND (area.ne_lng IS NULL OR p.lng <= area.ne_lng)
+        WHEN 'RADIUS' THEN
+          2 * 6371000 * asin(least(1.0, sqrt(
+            power(sin(radians(p.lat - area.lat) / 2), 2)
+            + cos(radians(area.lat)) * cos(radians(p.lat))
+              * power(sin(radians(p.lng - area.lng) / 2), 2)
+          ))) <= area.radius_m
+        ELSE false
       END
     )
   )
@@ -131,8 +140,10 @@ LIMIT %(k)s
 """
 """거르기와 유사도 상위 k곳을 한 번에 뽑는다. 요약 벡터는 가져오지 않는다.
 
-지역은 JSON 목록(`_area_json`)으로 받아 그중 하나에 들면 남긴다. 역과 동에 드는 규칙은
-`candidates.StationArea`, `RegionArea`에 있다. 목록이 비면 위치로 거르지 않는다. 영업시간은
+지역은 JSON 목록(`_area_json`)으로 받아 그중 하나에 들면 남긴다. 지역 종류마다 드는 규칙은
+`candidates.StationArea`, `RegionArea`, `MapBounds`, `RadiusArea`에 있다. 반경은
+`candidates.distance_m`과 같은 식(하버사인 공식)으로 잰다. 종류를 모르는 지역에는 아무 장소도
+들지 않는다. 목록이 비면 위치로 거르지 않는다. 영업시간은
 JSON(`_hours_json`)으로 받아, 요청한 요일 중 쉬거나 시각이 못 미친다고 확인되지 않은 날이
 하루라도 있으면 남긴다(`candidates.OpenHours`). 가격과 영업시간을 모르는 장소는 남긴다.
 메뉴는 메뉴마다 찾을 말 목록(JSON)으로 받아, 모든 메뉴에 대해 그중 하나가 메뉴 이름, 업종
@@ -381,6 +392,13 @@ def _area_json(area: Area) -> dict[str, Any]:
                 "sw_lng": area.sw_lng,
                 "ne_lat": area.ne_lat,
                 "ne_lng": area.ne_lng,
+            }
+        case RadiusArea():
+            return {
+                "kind": "RADIUS",
+                "lat": area.lat,
+                "lng": area.lng,
+                "radius_m": area.radius_m,
             }
 
 
