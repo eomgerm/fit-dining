@@ -20,7 +20,7 @@ JSON 이름은 camelCase다. 요청에 모르는 속성이 있으면 400이고(�
 ```json
 {
   "query": "역삼역 조용하게 대화하기 좋은 식당",
-  "mapBounds": {"swLat": 37.49, "swLng": 127.02, "neLat": 37.51, "neLng": 127.05},
+  "location": {"lat": 37.5006, "lng": 127.0364},
   "userId": "0b6f3c1e-8a4d-4c2b-9f7e-2d5a1c9e4b10"
 }
 ```
@@ -29,8 +29,8 @@ JSON 이름은 camelCase다. 요청에 모르는 속성이 있으면 400이고(�
 | --- | --- | --- | --- |
 | `query` | O | 요청문. 1~200자, 공백만은 안 된다 | `query` |
 | `previousConditions` | | 후속 검색이면 직전 응답의 `conditions`. 읽지 못하면 새 검색으로 본다 | `previousConditions` |
-| `mapBounds` | | 지도 영역(숫자). FE가 "이 지역에서 검색"을 눌렀거나 위치를 얻지 못했을 때 온다. 요청문에도 이전 요청에도 지역이 없으면 이 영역으로 거른다(v0.10. 전에는 이전 요청의 지역보다 앞섰다). 빠진 값은 제한하지 않고 `{}`는 없는 것으로 본다 | `mapBounds` |
-| `mapBoundsOnly` | | "이 지역에서 검색"이면 `true`. 요청문과 이전 요청의 지역을 보지 않고 `mapBounds`로만 거르고, 그 영역을 응답 `conditions.mapBounds`에 남긴다(v0.10). BE·FE는 아직 보내지 않는다(S15P31A302-196에서 넘김) | `mapBoundsOnly` |
+| `mapBounds` | | 지도 영역(숫자). "이 지역에서 검색"을 눌렀을 때만 온다. 오면 요청문과 이전 요청의 지역을 보지 않고 이 영역으로만 거르고, 그 영역을 응답 `conditions.mapBounds`에 남긴다(v0.10. 전에는 위치를 얻지 못했을 때도 왔고 요청문의 지역이 앞섰다). 빠진 값은 제한하지 않고 `{}`는 없는 것으로 본다 | `mapBounds` |
+| `location` | | 사용자 위치 `{lat, lng}`(위도 -90~90, 경도 -180~180의 숫자). FE가 기기 위치를 얻었으면 요청마다 보낸다. 요청문에도 이전 요청에도 지역이 없거나 "근처"를 말했으면 이 위치에서 1km 안으로 거른다. AI는 응답 `conditions`와 로그에 남기지 않는다(v0.10) | 새로 추가(S15P31A302-196에서 넘김) |
 | `userId` | | 회원 id(1~64자). BE가 로그인으로 확인한 id만 보낸다. 있으면 AI가 회원 취향(`user_preferences`)을 직접 읽고 `tasteProfile`은 읽지 않는다. 취향이 저장돼 있지 않으면 취향 없이 정렬한다 | 로그인 사용자 |
 | `tasteProfile` | | 비회원 취향. 기기가 저장한 온보딩 답을 BE가 그대로 넘긴다(아래 예). 없으면 취향 없이 정렬한다. 모양이 틀리면 취향 없이 정렬하고 `TASTE_INVALID`를 담는다 | 없음(5장) |
 
@@ -52,7 +52,7 @@ JSON 이름은 camelCase다. 요청에 모르는 속성이 있으면 400이고(�
 - `vector`는 온보딩 담당이 코드 없는 좋아함 칩에 붙인다(길이 1024). 회원 행처럼 그 칩의 벡터만 쓰고 다른 칩에 붙은 벡터는 버린다. 벡터가 없는 칩은 보관만 하고 정렬에 쓰지 않는다.
 - 모양이 틀린 경우: 모르는 필드(`features` 포함), 목록에 없는 값, 칩 20개 초과, 문구 1~100자 밖, 벡터 길이가 1024가 아님
 
-`conditions`에는 해석 결과와, "이 지역에서 검색"이면 고른 지도 영역(`mapBounds`)만 있다. 후속 검색 때도 `userId`(또는 `tasteProfile`)와 `mapBounds`는 다시 보내야 한다. 요청문에도 이전 요청에도 지역이 없고 `mapBounds`도 없으면 모든 장소에서 찾아 근처 응답(`nearby: true`, 최대 100곳, 커서 없음)으로 준다. "근처"를 말하지 않아도 그렇고, "근처"를 말해도 `mapBounds`로 걸렀으면 근처 응답이 아니다(v0.10). FE가 기기 위치에서 반경 안만 남긴다. BE의 `preferences`와 `cursor`는 null이라도 넣으면 400이므로 AI 요청용 DTO를 따로 둔다.
+`conditions`에는 해석 결과와, "이 지역에서 검색"으로 고른 지도 영역(`mapBounds`)만 있다. 후속 검색 때도 `userId`(또는 `tasteProfile`)와 `location`은 다시 보내야 한다. `mapBounds`는 다시 보내지 않는다. 고른 지도 영역은 `conditions.mapBounds`로 돌아와 다음 후속 검색이 이어 쓴다. 지역은 지도 영역 → 이번 요청에 말한 지역 → 이전 요청의 지역 → `location` 1km 안 순서로 하나를 쓰고, 어느 것도 없으면 전국에서 찾아 `nationwide: true`로 준다(v0.10). BE의 `preferences`와 `cursor`는 null이라도 넣으면 400이므로 AI 요청용 DTO를 따로 둔다.
 
 v0.6부터 `conditions`에 분류별 조각(`locations`, `menus`, `hours`, `price`, `placeName`, `features`, `avoidCategories`, v0.8의 `avoidFoods`)이 붙는다. 뜻은 [spec.md](spec.md) 4.1절에 있다. null인 조각은 빠지고 빈 목록은 그대로 온다. BE와 FE는 지금처럼 해석하지 않고 돌려보내면 되고, 조각이 없는 v0.5 이전 `conditions`도 그대로 읽는다. 이 문서의 예시는 v0.9 모양이고 빈 목록은 줄였다.
 
@@ -73,7 +73,7 @@ BE Mock 장소(`samples/place/mock.json`)와 실제 인코더·GMS로 받은 응
 ```json
 {
   "conditions": {"version": 3, "text": "역삼역 조용하게 대화하기 좋은 식당", "embeddingText": "조용하고 대화하기 좋은 식당", "categories": [{"code": "RESTAURANT", "want": true}], "features": [{"text": "조용하고 차분한 곳", "value": "조용하고 차분한 곳", "code": "QUIET"}, {"text": "대화", "value": "대화", "code": "PURPOSE_TALK"}], "locations": [{"text": "역삼역", "kind": "STATION", "value": "역삼역"}]},
-  "nearby": false,
+  "nationwide": false,
   "items": [
     {
       "placeId": 5,
@@ -93,9 +93,9 @@ BE Mock 장소(`samples/place/mock.json`)와 실제 인코더·GMS로 받은 응
 | 필드 | 내용 | BE `PlaceSearchResponse`로 |
 | --- | --- | --- |
 | `conditions` | 해석한 조건. BE와 FE는 해석하지 않는다 | 그대로. FE가 후속 검색 때 돌려보낸다 |
-| `nearby` | 근처 응답인지. 요청문·이전 요청에 지역이 없고 `mapBounds`도 없을 때만 `true`다(v0.10. 전에는 "근처"를 말하면 `true`였다). `true`면 최대 100곳이고 FE가 기기 위치에서 반경 안만 남긴다 | 그대로 |
+| `nationwide` | 전국에서 찾았는지. 지도 영역, 말한 지역, 이전 요청의 지역, `location`이 모두 없을 때 `true`다. FE는 "위치를 확인할 수 없어 전체 지역 결과를 보여 드려요"를 띄운다(v0.10. 전에는 `nearby`가 와서 FE가 기기 위치로 걸렀다) | `nearby` 대신 넘긴다 |
 | `changeSummary` | 후속 검색에서 바뀐 점. 새 검색이면 빠진다 | 그대로 |
-| `items` | 카드. `score` 내림차순(점수가 없으면 유사도 순서), 일반 검색 20개·근처 검색 100개까지 | `placeId`로 `PlaceSummary`와 `openStatus`를 붙인다 |
+| `items` | 카드. `score` 내림차순(점수가 없으면 유사도 순서), 20개까지(v0.10. 전에는 근처 검색이 100개였다) | `placeId`로 `PlaceSummary`와 `openStatus`를 붙인다 |
 | `emptyReason` | 결과가 없을 때 `{cause, suggestion}` | 그대로 |
 | `interpretedBy`, `rankedBy` | `LLM` 또는 `RULE`, `SCORE` 또는 `SIMILARITY`(판정할 요청 조각도 취향도 없어 점수가 없을 때). 결과가 없으면 `rankedBy`가 빠진다(v0.7) | 지표에 쓴다 |
 | `fallbacks` | 대신 처리한 이유(아래 표) | 하나라도 있으면 `X-Fallback` 헤더에 쉼표로 붙인다(인프라 BE 계약 #17) |
@@ -117,7 +117,7 @@ BE Mock 장소(`samples/place/mock.json`)와 실제 인코더·GMS로 받은 응
 
 `RANK_LLM_FAILED`는 v0.7부터 나오지 않는다. 정렬 LLM을 뺐기 때문이다.
 
-BE는 검색마다 `modal_llm_calls_total`과 `modal_embedding_calls_total`을 센다. `INTERPRET_LLM_FAILED`, `EMBEDDING_UNAVAILABLE`은 각각 llm, embedding의 `_fallback_total`로 센다(`contracts/metrics.md`). v0.7부터 정렬 호출이 없어서, 결과가 있고 근처 검색이 아니면 세기로 한 `modal_reranker_calls_total`과 `RANK_LLM_FAILED`로 세기로 한 reranker `_fallback_total`은 세지 않는다. BE는 아직 이 지표를 구현하지 않았다(place-ai-search D-1).
+BE는 검색마다 `modal_llm_calls_total`과 `modal_embedding_calls_total`을 센다. `INTERPRET_LLM_FAILED`, `EMBEDDING_UNAVAILABLE`은 각각 llm, embedding의 `_fallback_total`로 센다(`contracts/metrics.md`). v0.7부터 정렬 호출이 없어서, 결과가 있으면 세기로 한 `modal_reranker_calls_total`과 `RANK_LLM_FAILED`로 세기로 한 reranker `_fallback_total`은 세지 않는다. BE는 아직 이 지표를 구현하지 않았다(place-ai-search D-1).
 
 ### 경우별 응답
 
@@ -137,7 +137,7 @@ BE는 검색마다 `modal_llm_calls_total`과 `modal_embedding_calls_total`을 �
 ```json
 {
   "conditions": {"version": 3, "text": "역삼역 조용하게 대화하기 좋은 식당 넓은 곳이면 좋겠어", "embeddingText": "조용하게 대화하기 좋은 넓은 곳", "categories": [{"code": "RESTAURANT", "want": true}], "features": [{"text": "조용하고 차분한 곳", "value": "조용하고 차분한 곳", "code": "QUIET"}, {"text": "대화", "value": "대화", "code": "PURPOSE_TALK"}, {"text": "자리가 넉넉한 곳", "value": "자리가 넉넉한 곳", "code": "SPACIOUS_SEATING"}], "locations": [{"text": "역삼역", "kind": "STATION", "value": "역삼역"}]},
-  "nearby": false,
+  "nationwide": false,
   "changeSummary": "넓은 곳이면 좋겠다고 했어요.",
   "items": [
     {
@@ -166,7 +166,7 @@ BE는 검색마다 `modal_llm_calls_total`과 `modal_embedding_calls_total`을 �
 ```json
 {
   "conditions": {"version": 3, "text": "선릉역 주차되는 카페", "embeddingText": "주차할 수 있는 카페", "categories": [{"code": "CAFE", "want": true}], "facilities": ["PARKING"], "locations": [{"text": "선릉역", "kind": "STATION", "value": "선릉역"}]},
-  "nearby": false,
+  "nationwide": false,
   "items": [],
   "emptyReason": {"cause": "선릉역 카페 중 주차할 수 있는 곳이 없어요", "suggestion": "주차 조건을 빼고 다시 찾아 보세요"},
   "interpretedBy": "LLM",
@@ -177,16 +177,16 @@ BE는 검색마다 `modal_llm_calls_total`과 `modal_embedding_calls_total`을 �
 
 #### 근처 검색
 
-역 없이 근처를 찾으면 역으로 거르지 않고 100곳까지 준다. FE가 현재 위치로 반경 안만 남긴다. 점수는 일반 검색과 같다. 따질 조건도 취향도 없으면 `score`가 빠지고 `reasons`와 `scoreItems`도 비며 유사도 순서다(`rankedBy`가 `SIMILARITY`). 폴백이 아니라서 `fallbacks`는 비어 있다.
+역 없이 근처를 찾으면 `location`에서 1km 안으로 거른다. 점수와 결과 수는 일반 검색과 같다. `location`이 없으면 "근처"를 말하지 않은 것으로 보고 전국에서 찾는다(`nationwide: true`). 따질 조건도 취향도 없으면 `score`가 빠지고 `reasons`와 `scoreItems`도 비며 유사도 순서다(`rankedBy`가 `SIMILARITY`). 폴백이 아니라서 `fallbacks`는 비어 있다.
 
 ```json
-{"query": "근처 카페"}
+{"query": "근처 카페", "location": {"lat": 37.5006, "lng": 127.0364}}
 ```
 
 ```json
 {
   "conditions": {"version": 3, "text": "근처 카페", "embeddingText": "카페", "categories": [{"code": "CAFE", "want": true}], "locations": [{"text": "근처", "kind": "HERE"}]},
-  "nearby": true,
+  "nationwide": false,
   "items": [{"placeId": 7, "labels": ["작업하기 좋아요", "조용해요"], "reasons": [], "scoreItems": []}],
   "interpretedBy": "LLM",
   "rankedBy": "SIMILARITY",
@@ -237,7 +237,7 @@ LLM 실패와 읽지 못한 입력은 오류가 아니라 200과 `fallbacks`로 
 
 | 항목 | 지금 값 |
 | --- | --- |
-| 결과 수 | 일반 검색 20곳, 근처 검색 100곳 |
+| 결과 수 | 20곳(근처 검색도 같다) |
 | 시간 | 검색 예산 9초, 가장 오래 걸려도 약 10초. 실제 응답은 1.7~8.6초(중앙값 3.4초) |
 | BE 타임아웃(제안) | 12초 |
 | 동시 처리 상한 | 컨테이너마다 8개 |
