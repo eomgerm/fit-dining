@@ -189,8 +189,10 @@ def make_result(
     interpret_error: str | None = None,
     empty: EmptyReason | None = None,
     invalid: tuple[int, ...] = (),
+    nearby: bool | None = None,
 ) -> SearchResult:
-    """검색 결과. 기본은 LLM으로 해석하고 점수로 정렬해 카드 한 장이 나온 결과다."""
+    """검색 결과. 기본은 LLM으로 해석하고 점수로 정렬해 카드 한 장이 나온 결과다.
+    근처 응답인지는 따로 주지 않으면 조건을 따른다."""
     trace = SearchTrace(
         embed_seconds=0.1,
         store_seconds=0.01,
@@ -203,6 +205,7 @@ def make_result(
         empty_reason=empty,
         invalid_place_ids=invalid,
         trace=trace,
+        nearby=conditions.nearby if nearby is None else nearby,
     )
 
 
@@ -360,6 +363,43 @@ class TestSearch:
 
         assert searched.calls[0][0].bounds is None
 
+    def test_map_bounds_only_passed(self, searched: FakeSearch) -> None:
+        """검색_이지역에서검색이면_지도영역만쓰라는표시를검색요청에넘긴다"""
+        post(client(), mapBounds={"swLat": 37.49, "neLng": 127.04}, mapBoundsOnly=True)
+
+        request = searched.calls[0][0]
+        assert (request.bounds, request.bounds_only) == (
+            MapBounds(sw_lat=37.49, ne_lng=127.04),
+            True,
+        )
+
+    def test_previous_map_bounds_passed(self, searched: FakeSearch) -> None:
+        """검색_이전조건에지도영역이있으면_이전요청의지도영역으로넘긴다"""
+        previous = {**CONDITIONS_V3_BODY, "mapBounds": {"swLat": 36.35, "neLat": 36.36}}
+
+        post(client(), query="조용한 곳", previousConditions=previous)
+
+        request = searched.calls[0][0]
+        assert request.previous_bounds == MapBounds(sw_lat=36.35, ne_lat=36.36)
+        assert request.previous is not None
+
+    def test_kept_bounds_in_conditions(self, searched: FakeSearch) -> None:
+        """검색_다음후속요청이쓸지도영역이있으면_조건에담고없으면뺀다"""
+        kept = MapBounds(36.35, 127.37, 36.36, 127.39)
+        searched.outcome = replace(make_result(), bounds=kept)
+
+        data = post(client(), mapBounds={"swLat": 36.35}, mapBoundsOnly=True)
+        searched.outcome = make_result()
+        plain = post(client())
+
+        assert data["conditions"]["mapBounds"] == {
+            "swLat": 36.35,
+            "swLng": 127.37,
+            "neLat": 36.36,
+            "neLng": 127.39,
+        }
+        assert "mapBounds" not in plain["conditions"]
+
     def test_follow_up(self, searched: FakeSearch) -> None:
         """검색_후속이면_changeSummary를준다"""
         searched.outcome = make_result(change_summary="넓은 곳을 더했어요")
@@ -474,6 +514,14 @@ class TestSearch:
         assert data["nearby"] is True
         assert data["rankedBy"] == "SCORE"
         assert data["fallbacks"] == []
+
+    def test_nearby_without_area(self, searched: FakeSearch) -> None:
+        """검색_근처를말하지않았어도거를지역이없어근처응답이면_nearby가참이다"""
+        searched.outcome = make_result(nearby=True)
+
+        data = post(client(), query="조용한 술집")
+
+        assert (CONDITIONS.nearby, data["nearby"]) == (False, True)
 
     @pytest.mark.parametrize(
         "taste",

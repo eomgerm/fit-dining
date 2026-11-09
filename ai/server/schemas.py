@@ -166,7 +166,10 @@ class SearchBody(Body):
         query: 사용자가 이번에 입력한 요청문
         previous_conditions: 후속 조건이면 FE가 돌려보낸 기준 요청의 `conditions`.
             BE는 해석하지 않고 그대로 넘긴다. 읽지 못하면 새 검색으로 본다.
-        map_bounds: 지도 영역. 있으면 역 대신 좌표로 거른다.
+        map_bounds: 지도 영역. "이 지역에서 검색"을 눌렀거나 FE가 위치를 얻지 못했을(아직
+            얻지 않았을) 때 온다. 이번 요청에도 이전 요청에도 지역이 없으면 이 영역으로 거른다.
+        map_bounds_only: "이 지역에서 검색"인지. 참이면 요청문과 이전 요청의 지역을 보지
+            않고 `map_bounds`(지도 영역)로만 거른다.
         user_id: 회원 id. BE가 로그인으로 확인한 id다. 있으면 취향 저장소에서 그 회원의
             취향을 꺼내고 `taste_profile`은 읽지 않는다. 비회원이면 null이다.
         taste_profile: 비회원 취향(`GuestTasteBody`). 기기가 저장한 온보딩 답을 BE가
@@ -177,6 +180,7 @@ class SearchBody(Body):
     query: str = Field(min_length=1, max_length=MAX_QUERY_LENGTH)
     previous_conditions: dict[str, Any] | None = None
     map_bounds: MapBoundsBody | None = None
+    map_bounds_only: bool = False
     user_id: str | None = Field(
         default=None, min_length=1, max_length=MAX_USER_ID_LENGTH
     )
@@ -345,6 +349,8 @@ class ConditionsBody(Body):
         hours: 시간
         price: 가격. 요청에 없으면 null이다.
         place_name: 가게 이름. 요청에 없으면 null이다.
+        map_bounds: "이 지역에서 검색"으로 고른 지도 영역. 다음 후속 요청이 이번 요청에
+            지역을 말하지 않았으면 이 영역에서 찾는다. 그 밖의 검색이면 null이다.
     """
 
     version: Literal[3] = 3
@@ -367,6 +373,7 @@ class ConditionsBody(Body):
     hours: list[HoursBody] = Field(default_factory=list, max_length=MAX_SEGMENTS)
     price: PriceBody | None = None
     place_name: PlaceNameBody | None = None
+    map_bounds: MapBoundsBody | None = None
 
     @field_validator("categories")
     @classmethod
@@ -467,7 +474,8 @@ class SearchResponse(Body):
 
     Attributes:
         conditions: 해석한 조건. 검색 응답의 `conditions`로 FE에 그대로 준다.
-        nearby: 근처 검색인지. 검색 응답의 `nearby`로 쓴다.
+        nearby: 근처 응답인지. 검색 응답의 `nearby`로 쓴다. 거를 지역이 하나도 없으면 참이고,
+            FE가 기기 위치에서 반경 안만 남긴다.
         change_summary: 후속 조건에서 바뀐 점. 새 검색이면 빠진다.
         items: 카드 목록. 핏 점수 내림차순이다. 결과가 없으면 비어 있다.
         empty_reason: 결과가 없을 때의 원인과 제안. 결과가 있으면 빠진다.

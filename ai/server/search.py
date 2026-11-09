@@ -140,11 +140,18 @@ def _search(deps: Dependencies, body: SearchBody) -> JSONResponse:
     if deps.store is None:
         return problem(503, "PLACES_UNAVAILABLE", "장소 저장소가 설정되지 않았다")
 
-    previous = None
+    previous, previous_bounds = None, None
     if body.previous_conditions is not None:
-        previous = _read_previous(body.previous_conditions)
+        previous, previous_bounds = _read_previous(body.previous_conditions)
     taste, taste_invalid = _resolve_taste(deps.taste_store, body)
-    request = SearchRequest(body.query, previous, taste, _bounds(body.map_bounds))
+    request = SearchRequest(
+        body.query,
+        previous,
+        taste,
+        _bounds(body.map_bounds),
+        body.map_bounds_only,
+        previous_bounds,
+    )
     try:
         result = search(
             request, deps.store, timeout=deps.gms_timeout, client=deps.gms_client
@@ -165,8 +172,8 @@ def _search(deps: Dependencies, body: SearchBody) -> JSONResponse:
     used_llm = interpretation.llm_error is None
     reason = result.empty_reason
     response = SearchResponse(
-        conditions=_conditions_body(conditions),
-        nearby=conditions.nearby,
+        conditions=_conditions_body(conditions, result.bounds),
+        nearby=result.nearby,
         change_summary=interpretation.change_summary,
         items=[_card_body(card) for card in result.cards],
         empty_reason=(
@@ -190,8 +197,10 @@ def _search(deps: Dependencies, body: SearchBody) -> JSONResponse:
         codes=list(conditions.codes),
         category_group=conditions.category_group,
         station=conditions.station,
-        nearby=conditions.nearby,
+        nearby=result.nearby,
         in_map_bounds=request.bounds is not None,
+        map_bounds_only=request.bounds_only,
+        previous_map_bounds=previous_bounds is not None,
         candidates=trace.candidates,
         items=len(result.cards),
         ranked_by=ranked_by,
@@ -229,16 +238,23 @@ def _ranked_by(result: SearchResult) -> str | None:
     return "SIMILARITY" if result.cards[0].score is None else "SCORE"
 
 
-def _read_previous(data: dict[str, Any]) -> Conditions | None:
-    """FE가 돌려보낸 이전 조건을 읽는다. 3차 조건이 아니면 옛 조건으로 읽는다. 읽지
-    못하면 None이다."""
+def _read_previous(
+    data: dict[str, Any],
+) -> tuple[Conditions | None, MapBounds | None]:
+    """FE가 돌려보낸 이전 조건을 읽는다. 3차 조건이 아니면 옛 조건으로 읽는다.
+
+    Returns:
+        (이전 조건, 이전 요청이 "이 지역에서 검색"으로 고른 지도 영역). 읽지 못하면 둘 다
+        None이다. 옛 조건에는 지도 영역이 없다.
+    """
     try:
         if data.get("version") == 3:
-            return _conditions(ConditionsBody.model_validate(data))
-        return _legacy_conditions(LegacyConditionsBody.model_validate(data))
+            body = ConditionsBody.model_validate(data)
+            return _conditions(body), _bounds(body.map_bounds)
+        return _legacy_conditions(LegacyConditionsBody.model_validate(data)), None
     except ValidationError:
         log("previous_invalid")
-        return None
+        return None, None
 
 
 def _bounds(body: MapBoundsBody | None) -> MapBounds | None:
@@ -299,9 +315,14 @@ def _segment(cls, body: Body | None):
     return None if body is None else cls(**body.model_dump())
 
 
-def _conditions_body(conditions: Conditions) -> ConditionsBody:
+def _conditions_body(
+    conditions: Conditions, bounds: MapBounds | None
+) -> ConditionsBody:
+    """응답의 조건. 다음 후속 요청이 쓸 지도 영역(`SearchResult.bounds`)을 함께 담는다."""
     # 조각은 속성 이름이 본문과 같아 dataclass를 dict로 바꿔 그대로 넘긴다.
-    return ConditionsBody.model_validate(asdict(conditions))
+    return ConditionsBody.model_validate(
+        {**asdict(conditions), "map_bounds": asdict(bounds) if bounds else None}
+    )
 
 
 def _resolve_taste(

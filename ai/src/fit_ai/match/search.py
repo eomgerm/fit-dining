@@ -3,8 +3,11 @@
 요청 해석 → 요청문 인코딩 → ① 후보 뽑기(장소 저장소) → ⓪ 취향 고르기 → ② 점수 →
 ③ 카드 만들기 순서다. 뽑힌 장소가 없으면 점수를 내지 않고 결과 없음 이유를 만든다.
 LLM은 요청 해석에만 쓰고, 순서는 핏 점수로 정한다. 근처 검색도 같다(docs/comparison/spec.md
-3장). 후보를 거를 지역은 이번 요청에 말한 지역, 지도 영역, 이전 요청의 지역 순서로 정한다.
-이번 요청에 말한 지역은 해석이 낸 이번 요청의 조건(`Interpretation.turn`)에서 꺼낸다.
+3장). 후보를 거를 지역은 이번 요청에 말한 지역, 이전 요청의 지역, 지도 영역 순서로 정하고,
+"이 지역에서 검색"이면 지도 영역만 쓴다. FE는 위치를 얻지 못했으면 늘 지도 영역을 보내므로,
+거를 지역이 없는 것은 FE가 위치를 얻었을 때(또는 지도가 없을 때)뿐이다. 그때는 모든 장소에서
+찾아 근처 응답으로 내고 FE가 기기 위치로 거른다(위치는 서버로 오지 않는다). 이번 요청에 말한
+지역은 해석이 낸 이번 요청의 조건(`Interpretation.turn`)에서 꺼낸다.
 영업시간과 가격은 안 맞는다고 확인된 곳만 거르고, 메뉴는 그 메뉴를 판다고 확인된 곳만
 남긴다(docs/comparison/spec.md 4.2).
 HTTP 요청·응답 모양과 폴백 코드로 바꾸는 일은 API(`server/search.py`)가 한다.
@@ -109,14 +112,20 @@ class SearchRequest:
         query: 사용자가 이번에 입력한 요청문
         previous: 후속 조건이면 기준 요청의 조건. 새 검색이면 None이다.
         taste: 사용자 취향 프로필. 취향이 없거나 읽지 못했으면 None이다.
-        bounds: 지도 영역("이 지역에서 검색"). 이번 요청에 지역을 말하지 않았으면 이전
-            요청의 지역 대신 이 영역으로 거른다.
+        bounds: 지도 영역. "이 지역에서 검색"을 눌렀거나 FE가 위치를 얻지 못했을(아직 얻지
+            않았을) 때 온다. 이번 요청에도 이전 요청에도 지역이 없으면 이 영역으로 거른다.
+        bounds_only: "이 지역에서 검색"인지. 참이면 요청문에 든 지역과 이전 요청의 지역을
+            보지 않고 `bounds`(지도 영역)로만 거른다.
+        previous_bounds: 이전 요청이 "이 지역에서 검색"으로 고른 지도 영역. 이번 요청에
+            지역을 말하지 않았으면 이전 요청의 지역으로 쓴다.
     """
 
     query: str
     previous: Conditions | None = None
     taste: TasteProfile | None = None
     bounds: MapBounds | None = None
+    bounds_only: bool = False
+    previous_bounds: MapBounds | None = None
 
 
 @dataclass(frozen=True)
@@ -137,12 +146,15 @@ class _Where:
     """후보를 거를 곳.
 
     Attributes:
-        areas: 거를 지역. 비어 있으면 위치로 거르지 않는다.
+        areas: 거를 지역. 비어 있으면 모든 장소에서 찾고 근처 응답으로 낸다.
         unready: 장소 데이터에 없어 거르지 못하는 지역(랜드마크 등)의 이름
+        kept: 다음 후속 요청이 이전 요청의 지역으로 쓸 지도 영역. "이 지역에서 검색"으로
+            고른 영역으로 거를 때만 있다.
     """
 
     areas: tuple[Area, ...] = ()
     unready: tuple[str, ...] = ()
+    kept: MapBounds | None = None
 
 
 @dataclass(frozen=True)
@@ -176,6 +188,12 @@ class SearchResult:
         empty_reason: 뽑힌 장소가 없을 때 원인과 제안. 있으면 None이다.
         invalid_place_ids: 프로필을 읽지 못해 뺀 장소의 id
         trace: 이번 검색의 기록
+        bounds: 다음 후속 요청이 이전 요청의 지역으로 쓸 지도 영역
+            (`SearchRequest.previous_bounds`). "이 지역에서 검색"으로 고른 영역으로 걸렀을
+            때만 있다.
+        nearby: 근처 응답인지. 참이면 돌려줄 카드가 더 많고(`NEARBY_K`), FE가 기기 위치에서
+            반경 안만 남긴다. 거를 지역이 하나도 없을 때만 참이다. "근처"를 말해도 지도
+            영역으로 걸렀으면 거짓이다.
     """
 
     interpretation: Interpretation
@@ -183,6 +201,8 @@ class SearchResult:
     empty_reason: EmptyReason | None
     invalid_place_ids: tuple[int, ...]
     trace: SearchTrace
+    bounds: MapBounds | None = None
+    nearby: bool = False
 
 
 def search(
@@ -207,12 +227,22 @@ def search(
         StoreError: 장소 저장소를 읽지 못했을 때
     """
     interpretation = interpret(request.query, request.previous, timeout, client)
+    if request.bounds_only and request.bounds is not None:
+        # 지도 영역이 이긴 요청문 속 지역은 조건에서 뺀다. 남기면 다음 후속 요청이 그 지역으로
+        # 돌아가고, "근처"였으면 근처 응답이 돼 FE가 지도 영역의 결과를 기기 위치로 다시 거른다.
+        interpretation = replace(
+            interpretation, conditions=replace(interpretation.conditions, locations=())
+        )
     conditions = interpretation.conditions
-    where = _where(conditions, interpretation.turn, request.bounds)
+    where = _where(conditions, interpretation.turn, request)
     if where.unready and not where.areas:
         # 거를 수 있는 지역 없이 랜드마크만 말했으면 어디서 찾을지 몰라 찾지 않는다.
         reason = empty_reason(conditions, unready=where.unready)
         return SearchResult(interpretation, (), reason, (), SearchTrace(0.0, 0.0, 0))
+    # 거를 지역이 하나도 없으면 모든 장소에서 찾고 근처 응답으로 낸다. 위치는 서버로 오지 않으므로
+    # FE가 기기 위치에서 반경 안만 남긴다(place-search D-108). 지역(지도 영역 포함)으로 거른
+    # 결과를 근처 응답으로 내면 FE가 기기 위치로 다시 걸러 비거나, 위치를 묻게 된다.
+    nearby = not where.areas
 
     start = time.perf_counter()
     query = _encode(conditions.embedding_text)
@@ -227,11 +257,15 @@ def search(
     if not found.candidates:
         unready = _unready(store, where, query)
         reason = empty_reason(conditions, where.areas, unready)
-        return SearchResult(interpretation, (), reason, found.invalid, trace)
+        return SearchResult(
+            interpretation, (), reason, found.invalid, trace, where.kept, nearby
+        )
     start = time.perf_counter()
-    cards = _score_cards(found.candidates, conditions, request.taste, store)
+    cards = _score_cards(found.candidates, conditions, request.taste, store, nearby)
     trace = replace(trace, score_seconds=time.perf_counter() - start)
-    return SearchResult(interpretation, cards, None, found.invalid, trace)
+    return SearchResult(
+        interpretation, cards, None, found.invalid, trace, where.kept, nearby
+    )
 
 
 def empty_reason(
@@ -340,31 +374,43 @@ def _object(word: str) -> str:
 def _where(
     conditions: Conditions,
     turn: Conditions | None,
-    bounds: MapBounds | None,
+    request: SearchRequest,
 ) -> _Where:
     """후보를 거를 곳을 정한다.
 
-    이번 요청에 말한 지역, 지도 영역, 이전 요청의 지역 순서로 앞선다(2026-11-02 결정).
-    "강남역 카페"를 찾고 지도를 옮겨 "이 지역에서 검색"을 누르면 지도 영역으로 찾고, 거기서
-    "선릉역으로"라고 하면 선릉역으로 찾는다. 이번 요청에 말한 지역은 해석이 낸 이번 요청의
-    조건(`turn`, `Interpretation.turn`)에서 바로 꺼낸다. 어딘지 알 수 없는 곳("회사 근처")은 말하지 않은 것으로
-    본다.
+    "이 지역에서 검색"이면 지도 영역만 쓴다. 그 밖에는 이번 요청에 말한 지역, 이전 요청의
+    지역, 지도 영역 순서로 앞선다(2026-11-09 결정, place-search D-108).
+    이전 요청이 "이 지역에서 검색"이었으면 그 지도 영역이 이전 요청의 지역이다. 그래서
+    "강남역 카페"를 찾고 지도를 옮겨 "이 지역에서 검색"을 누르면 지도 영역으로 찾고, 이어서
+    "조용한 곳으로"라고 하면 같은 지도 영역에서, "선릉역으로"라고 하면 선릉역에서 찾는다.
+    이번 요청에 말한 지역은 해석이 낸 이번 요청의 조건(`turn`, `Interpretation.turn`)에서
+    바로 꺼낸다. 어딘지 알 수 없는 곳("회사 근처")은 말하지 않은 것으로 본다. 어느 것도
+    없으면 거를 곳이 없다(모든 장소에서 찾아 근처 응답으로 낸다).
 
     Args:
         conditions: 이전 조건과 합친 조건
         turn: 이번 요청의 조건(`Interpretation.turn`). None이면 `conditions`와 같다(새 검색).
-        bounds: 지도 영역
+        request: 검색 요청. 지도 영역과 이전 요청의 지도 영역을 꺼낸다.
     """
-    said = [
-        loc
-        for loc in (turn or conditions).locations
-        if loc.kind is not LocationKind.UNKNOWN
-    ]
+    bounds = request.bounds
+    if request.bounds_only and bounds is not None:
+        return _Where((bounds,), kept=bounds)
+    said = _known((turn or conditions).locations)
     if said:
         return _areas(said, bounds)
+    if request.previous_bounds is not None:
+        return _Where((request.previous_bounds,), kept=request.previous_bounds)
+    previous = _known(conditions.locations)
+    if previous:
+        return _areas(previous, bounds)
     if bounds is not None:
         return _Where((bounds,))
-    return _areas(conditions.locations, None)
+    return _Where()
+
+
+def _known(locations: Sequence[Location]) -> list[Location]:
+    """어딘지 아는 지역 조각. 어딘지 알 수 없는 곳("회사 근처")을 뺀다."""
+    return [loc for loc in locations if loc.kind is not LocationKind.UNKNOWN]
 
 
 def _areas(locations: Sequence[Location], bounds: MapBounds | None) -> _Where:
@@ -554,8 +600,10 @@ def _score_cards(
     conditions: Conditions,
     taste: TasteProfile | None,
     store: PlaceStore,
+    nearby: bool,
 ) -> tuple[Card, ...]:
     """⓪ 취향을 고르고 ② 점수를 내서 ③ 카드를 만든다. 점수순으로 돌려줄 수만큼 자른다.
+    근처 응답이면 FE가 반경으로 거르고 남을 만큼 더 많이(`NEARBY_K`) 돌려준다.
 
     Raises:
         StoreError: 점수 기준을 만들 장소를 읽지 못했을 때
@@ -576,5 +624,5 @@ def _score_cards(
         scope_of(conditions.category_group, conditions.avoid_categories),
         baseline_for(store.places()),
     )
-    limit = NEARBY_K if conditions.nearby else GENERAL_K
+    limit = NEARBY_K if nearby else GENERAL_K
     return tuple(build_card(s) for s in scored[:limit])
