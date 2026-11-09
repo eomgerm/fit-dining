@@ -539,7 +539,7 @@ class TestWhere:
         assert result.empty_reason is not None
         assert result.empty_reason.cause == "홍대입구역은 아직 준비 중인 지역이에요"
         assert result.empty_reason.suggestion == (
-            "강남역, 역삼역, 선릉역 근처에서 찾아 보세요"
+            "강남역, 역삼역, 선릉역, 유성온천역, 구미역 근처에서 찾아 보세요"
         )
 
     def test_city_without_places(self, fake_gms: FakeGms) -> None:
@@ -873,4 +873,6 @@ class TestEmptyReason:
         reason = empty_reason(conditions, (), unready)
 
         assert reason.cause == cause
-        assert reason.suggestion == "강남역, 역삼역, 선릉역 근처에서 찾아 보세요"
+        assert reason.suggestion == (
+            "강남역, 역삼역, 선릉역, 유성온천역, 구미역 근처에서 찾아 보세요"
+        )
