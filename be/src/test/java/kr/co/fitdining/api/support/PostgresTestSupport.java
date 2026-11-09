@@ -15,14 +15,17 @@ import org.testcontainers.utility.DockerImageName;
 /**
  * 통합 테스트에 공통 PostgreSQL 컨테이너와 인증 설정을 제공하고 인증 스키마를 적용한다.
  */
-public abstract class PostgresTestSupport {
+public abstract class PostgresTestSupport extends RedisTestSupport {
     /**
      * {@code docker manifest inspect pgvector/pgvector:0.8.7-pg16}로 linux/arm64 변형을 확인했다(2026-10-26).
      * arm64 매니페스트: sha256:a45475a5bc7882f19e9ca17d49b67f665fa04d500350de2c47af325662445aec.
      * JVM 수명 동안 공유하며 JVM 종료 후 Ryuk이 정리한다.
      */
     protected static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer(
-            DockerImageName.parse("pgvector/pgvector:0.8.7-pg16").asCompatibleSubstituteFor("postgres"));
+            DockerImageName.parse("pgvector/pgvector:0.8.7-pg16").asCompatibleSubstituteFor("postgres"))
+            // Cached Spring contexts retain separate pools against this shared container.
+            // withCommand replaces Testcontainers' command, so preserve its fsync=off test optimization.
+            .withCommand("postgres", "-c", "fsync=off", "-c", "max_connections=300");
 
     static {
         POSTGRES.start();

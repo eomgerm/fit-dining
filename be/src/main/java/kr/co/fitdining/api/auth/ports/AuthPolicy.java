@@ -10,6 +10,8 @@ public interface AuthPolicy {
     long accessSeconds();
     /** @return absolute refresh family lifetime in seconds */
     long sessionSeconds();
+    /** @return HTTP session idle lifetime in seconds */
+    long sessionIdleSeconds();
     /** @return whether unknown accounts require a dummy password comparison */
     boolean compareDummyPassword();
     /** @return whether POST requests require the configured Origin */

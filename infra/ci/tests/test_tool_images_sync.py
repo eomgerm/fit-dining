@@ -50,6 +50,14 @@ class ToolImagesSyncTest(unittest.TestCase):
         self.assertTrue(support.exists(), f"{support.relative_to(ROOT)}가 없다. BE 시험의 DB 이미지를 검사할 수 없다")
         self.assertIn(f'DockerImageName.parse("{self.sh["PGVECTOR_IMAGE"]}")', support.read_text(encoding="utf-8"))
 
+    def test_be_testcontainers_redis_image_matches_both_compose_stacks(self):
+        support = ROOT / "be/src/test/java/kr/co/fitdining/api/support/RedisTestSupport.java"
+        match = re.search(r'DockerImageName\.parse\("(redis:[^"]+)"\)', support.read_text(encoding="utf-8"))
+        self.assertIsNotNone(match, "RedisTestSupport 이미지 핀을 찾지 못했다")
+        for compose, count in (("infra/data/compose.data.yml", 2), ("infra/local/compose.yml", 1)):
+            images = re.findall(r"^\s+image:\s+(redis:\S+)", (ROOT / compose).read_text(encoding="utf-8"), re.MULTILINE)
+            self.assertEqual(images, [match.group(1)] * count, compose)
+
     def test_app_dockerfile_base_defaults_match_the_pins(self):
         # hadolint가 FROM의 태그를 요구해서 Dockerfile에 핀 값을 직접 적는다. build-images.sh는 tool-images.sh의 값을 --build-arg로 넘기므로
         # 기본값이 어긋나도 이미지는 핀대로 만들어지지만, 같은 값으로 두어야 읽는 사람이 속지 않는다

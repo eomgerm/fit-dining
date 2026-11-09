@@ -13,6 +13,7 @@ import org.springframework.test.web.servlet.MockMvc;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
     "spring.datasource.hikari.maximum-pool-size=2",
     "APP_ENV=dev", "auth.simple.enabled=true",
+    "SPRING_DATA_REDIS_HOST=redis-dev", "SPRING_DATA_REDIS_PORT=6379", "SPRING_DATA_REDIS_PASSWORD=test-redis",
     "auth.simple.dev-key=12345678901234567890123456789012", "AUTH_DEMO_PASSWORD=password1",
     "AUTH_DEMO_EMAIL=dev-server@fitdining.local", "AUTH_DEMO_NICKNAME=서버개발자",
     "SPRING_DATASOURCE_URL=jdbc:postgresql://localhost/fit_dev",

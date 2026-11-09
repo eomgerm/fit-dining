@@ -1,5 +1,9 @@
 # 로컬 개발 스택
 
+BE 웹 앱은 Spring Session Redis 인덱스 저장소를 초기화하므로 Redis도 함께 띄워야 한다. 세션 생성은 후속 로그인 전환 단계에서 시작한다. 로컬 기본 접속은 `127.0.0.1:16379`이며 BE `.env`에 `SPRING_DATA_REDIS_PASSWORD=local-redis-password`(compose의 `REDIS_PASSWORD`와 같은 값)를 넣는다. 포트를 바꾸면 `SPRING_DATA_REDIS_PORT`도 맞춘다. 서버와 달리 로컬에서는 Redis 환경변수 계약 검사를 생략하지만 실제 Redis 연결은 필요하다.
+
+Redis 명령에 `--notify-keyspace-events Egx`를 지정하며 앱은 `CONFIG SET`을 실행하지 않는다. 설정을 적용하려면 기존 컨테이너를 재생성한다. Redis가 내려가면 `/actuator/health/readiness`가 DOWN이 된다.
+
 서버 없이 노트북에서 BE·FE를 개발할 때 쓰는 Postgres, Redis, Garage(S3), OpenSearch다. AI는 Modal의 dev 앱을 쓰므로 여기에 없다. 설계는 [design.md](../../docs/infra/design.md) 10.5절이다.
 
 ## 필요한 것

@@ -38,7 +38,7 @@ services:
     command:
       - sh
       - -c
-      - exec redis-server --requirepass "$$REDIS_PASSWORD" --maxmemory 96mb --maxmemory-policy noeviction --appendonly yes --appendfsync everysec
+      - exec redis-server --requirepass "$$REDIS_PASSWORD" --notify-keyspace-events Egx --maxmemory 96mb --maxmemory-policy noeviction --appendonly yes --appendfsync everysec
     ports:
       - 127.0.0.1:${FIT_LOCAL_REDIS_PORT:-16379}:6379
     volumes:

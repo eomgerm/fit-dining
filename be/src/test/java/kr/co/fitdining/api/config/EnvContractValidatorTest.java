@@ -26,6 +26,8 @@ class EnvContractValidatorTest {
 		env.put("SPRING_DATASOURCE_USERNAME", "fit_dev_app");
 		env.put("SPRING_DATASOURCE_PASSWORD", "secret-value");
 		env.put("SPRING_DATA_REDIS_HOST", "redis-dev");
+		env.put("SPRING_DATA_REDIS_PORT", "6379");
+		env.put("SPRING_DATA_REDIS_PASSWORD", "test-redis");
 		env.put("OPENSEARCH_INDEX_PREFIX", "dev-");
 		env.put("PLACE_MOCK_ENABLED", "true");
 		return env;
@@ -80,10 +82,9 @@ class EnvContractValidatorTest {
 		}
 
 		@Test
-		@DisplayName("검증_아직쓰지않는Redis와OpenSearch키가없어도_통과한다")
-		void validate_noRedisAndOpenSearch_noViolation() {
+		@DisplayName("검증_OpenSearch키가없어도_통과한다")
+		void validate_noOpenSearch_noViolation() {
 			Map<String, String> env = devEnv();
-			env.remove("SPRING_DATA_REDIS_HOST");
 			env.remove("OPENSEARCH_INDEX_PREFIX");
 
 			assertThat(validate(env, "dev")).isEmpty();
@@ -98,6 +99,24 @@ class EnvContractValidatorTest {
 			assertThat(validate(env, "dev")).isEmpty();
 		}
 
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = {"SPRING_DATA_REDIS_HOST", "SPRING_DATA_REDIS_PORT", "SPRING_DATA_REDIS_PASSWORD"})
+	void redisRequiredOnlyForWeb(String key) {
+		for (String value : List.of("", " ", "REPLACE_ME")) {
+			var env = devEnv();
+			env.put(key, value);
+			assertThat(validate(env, "dev")).anyMatch(message -> message.contains(key));
+			assertThat(validate(env, "migrate")).isEmpty();
+		}
+		var env = devEnv();
+		env.remove(key);
+		assertThat(validate(env, "dev")).anyMatch(message -> message.contains(key));
+		assertThat(validate(env, "migrate")).isEmpty();
+		var prod = prodEnv();
+		prod.remove(key);
+		assertThat(validate(prod, "prod")).anyMatch(message -> message.contains(key));
 	}
 
 	@Nested

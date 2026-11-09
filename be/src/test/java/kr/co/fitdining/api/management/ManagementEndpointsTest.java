@@ -113,10 +113,10 @@ class ManagementEndpointsTest extends PostgresTestSupport {
 		}
 
 		@Test
-		@DisplayName("readiness그룹_application.yml에서_DB만본다")
+		@DisplayName("readiness그룹_application.yml에서_DB와Redis를본다")
 		void readinessGroup_applicationYml_includesOnlyReadinessStateAndDb() throws IOException {
 			// 외부 서비스(Modal 등)를 보면 외부 장애가 readiness를 흔들어 재시작 폭풍이 난다
-			assertThat(applicationYml("management.endpoint.health.group.readiness.include")).isEqualTo("readinessState,db");
+			assertThat(applicationYml("management.endpoint.health.group.readiness.include")).isEqualTo("readinessState,db,redis");
 		}
 
 		@Test

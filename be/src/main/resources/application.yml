@@ -8,6 +8,17 @@ spring:
     name: api
   config:
     import: optional:file:.env[.properties]
+  session:
+    data:
+      redis:
+        repository-type: indexed
+        namespace: fitdining:session:${APP_ENV:local}
+        configure-action: none
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:127.0.0.1}
+      port: ${SPRING_DATA_REDIS_PORT:16379}
+      password: ${SPRING_DATA_REDIS_PASSWORD:}
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://127.0.0.1:15432/fit_dev}
     username: ${SPRING_DATASOURCE_USERNAME:fit_dev_app}
@@ -63,8 +74,8 @@ management:
         enabled: true
       group:
         readiness:
-          # 외부 서비스(Modal 등)를 보면 외부 장애가 readiness를 흔들어 재시작 폭풍이 난다. DB만 본다.
-          include: readinessState,db
+          # DB와 세션 저장소 Redis를 본다. 외부 서비스(Modal 등)는 제외한다.
+          include: readinessState,db,redis
 
 # 배포 이미지가 넣는 값(Dockerfile ENV). 로컬에서는 unknown이다.
 app:

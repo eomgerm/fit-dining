@@ -66,7 +66,7 @@ services:
     command:
       - sh
       - -c
-      - exec redis-server --requirepass "$$REDIS_PASSWORD" --maxmemory 96mb --maxmemory-policy noeviction --appendonly yes --appendfsync everysec
+      - exec redis-server --requirepass "$$REDIS_PASSWORD" --notify-keyspace-events Egx --maxmemory 96mb --maxmemory-policy noeviction --appendonly yes --appendfsync everysec
     mem_limit: 128m
     volumes:
       - redisdata-prod:/data
@@ -86,7 +86,7 @@ services:
     command:
       - sh
       - -c
-      - exec redis-server --requirepass "$$REDIS_PASSWORD" --maxmemory 96mb --maxmemory-policy noeviction --appendonly yes --appendfsync everysec
+      - exec redis-server --requirepass "$$REDIS_PASSWORD" --notify-keyspace-events Egx --maxmemory 96mb --maxmemory-policy noeviction --appendonly yes --appendfsync everysec
     mem_limit: 128m
     volumes:
       - redisdata-dev:/data

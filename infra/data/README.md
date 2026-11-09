@@ -1,5 +1,17 @@
 # 데이터 스택 (data)
 
+## 세션 저장소 용량과 알림
+
+배포 순서는 **데이터 스택 반영 → `bash infra/data/verify-data.sh` 통과 → BE 배포**다. BE를 배포하기 전에 변경된 compose로 `redis-prod`·`redis-dev` 컨테이너를 먼저 재생성해 `notify-keyspace-events`를 적용한다. AOF와 기존 볼륨은 유지하며, 재생성 중 짧은 연결 끊김이 생긴다. 앱이 자동 CONFIG를 하지 않으므로 이 순서를 바꾸면 만료 알림이 빠져 세션 인덱스 정리가 지연된다.
+
+BE는 환경마다 `fitdining:session:<APP_ENV>` 네임스페이스의 Spring Session 인덱스 저장소를 사용한다. Redis 명령의 `--notify-keyspace-events Egx`는 만료·삭제 이벤트를 전달한다. 앱은 `ConfigureRedisAction.NO_OP`와 `configure-action: none`으로 자동 `CONFIG SET`을 하지 않으므로 compose 변경 후 Redis 컨테이너를 재생성해야 한다.
+
+용량의 초기 추정은 세션 속성 JSON 2 KiB + Redis 해시·만료 키·사용자 인덱스·정리 메타데이터 2 KiB = 세션당 약 4 KiB다. 동시 세션 10,000개면 약 40 MiB이고 2배 여유를 잡으면 약 80 MiB다. 현재 `maxmemory 96mb`는 이 가정에서 가능하지만 다른 Redis 용도·allocator 단편화·만료 후 정리 지연을 더하면 부족할 수 있다. 20,000개면 원시 추정만 약 80 MiB여서 증설이 필요하다. 이는 실측이 아니며 로그인 전환 후 `MEMORY USAGE`, `INFO memory`, 실제 동시 세션 수로 보정한다. `noeviction`이므로 한도 도달 시 세션 저장이 실패한다.
+
+BE readiness는 DB와 Redis를 모두 확인한다. Redis 장애 시 새 배포 전환을 막는다. 이번 단계에서는 로그인 세션을 생성하지 않는다.
+
+통합 테스트는 JVM당 Redis 7.4.9-alpine 컨테이너 하나를 공유한다. CI `be:test`는 기존 `verify-heavy-be` 직렬화 설정을 유지한다. Redis 추가에 따른 전체 테스트 시간·메모리 실측은 Docker를 사용하는 검증 단계에서 확인해야 한다.
+
 서버 A의 Postgres(pgvector), OpenSearch, Redis 2개, Garage(사진 저장소)다. 설계는 [design.md](../../docs/infra/design.md) 7절이다. 환경(prod, dev)별 DB·role·버킷·키는 compose가 아니라 멱등 스크립트가 만든다.
 
 ## 자주 하는 일

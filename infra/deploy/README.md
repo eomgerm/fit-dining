@@ -1,5 +1,7 @@
 # 배포 (deploy)
 
+BE `/actuator/health/readiness`에는 DB와 세션 저장소 Redis가 포함된다. `lib.sh`의 준비 대기가 이 경로의 UP을 확인한 후 전환하므로 Redis 장애 시 새 색으로 전환되지 않는다. 배포 전 dev·prod 웹 앱 env에 `SPRING_DATA_REDIS_HOST`, `SPRING_DATA_REDIS_PORT`, `SPRING_DATA_REDIS_PASSWORD`가 실제 값으로 채워졌는지 확인한다(migrate 제외). Redis compose의 `--notify-keyspace-events Egx`도 적용해야 하며 앱은 Redis CONFIG 권한을 요구하지 않는다.
+
 서버 A에서 BE·FE를 배포하고 되돌린다(AI API는 켠 환경에서만, 아래 "AI API"). prod는 Blue/Green, dev는 단일 색 교체다. 설계는 [design.md](../../docs/infra/design.md) 6.4절과 6.8절이다. GitLab이 죽어도 서버에서 직접 실행할 수 있다.
 
 ## 자주 하는 일

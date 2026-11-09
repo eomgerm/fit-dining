@@ -7,7 +7,9 @@ import org.junit.jupiter.api.*;
 class SimpleAuthEnvTests {
     Map<String, String> environment(String name) {
         return new HashMap<>(Map.of("APP_ENV", name, "SPRING_DATASOURCE_URL", "jdbc:postgresql://postgres/fit_" + name,
-                "SPRING_DATASOURCE_USERNAME", "user", "SPRING_DATASOURCE_PASSWORD", "password"));
+                "SPRING_DATASOURCE_USERNAME", "user", "SPRING_DATASOURCE_PASSWORD", "password",
+                "SPRING_DATA_REDIS_HOST", "redis-" + name, "SPRING_DATA_REDIS_PORT", "6379",
+                "SPRING_DATA_REDIS_PASSWORD", "test-redis"));
     }
     @Test @DisplayName("prod 계약_간소 모드 활성화_거부")
     void validate_prodSimple_rejected() {

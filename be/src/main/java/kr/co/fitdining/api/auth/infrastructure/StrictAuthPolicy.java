@@ -8,6 +8,7 @@ public class StrictAuthPolicy implements AuthPolicy {
     @Override public boolean rejectRefreshReuse() { return true; }
     @Override public long accessSeconds() { return 1800; }
     @Override public long sessionSeconds() { return 86400; }
+    @Override public long sessionIdleSeconds() { return 7200; }
     @Override public boolean compareDummyPassword() { return true; }
     @Override public boolean checkOrigin() { return true; }
 }

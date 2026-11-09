@@ -15,7 +15,7 @@ import org.springframework.core.env.ConfigurableEnvironment;
  * {@code META-INF/spring.factories}로 등록한다.
  *
  * <p>{@code APP_ENV}가 없고 서버 프로필(dev, prod, migrate)도 아니면 로컬 개발로 보고 검사하지 않는다.
- * 지금 BE가 쓰는 키만 필수로 둔다. Redis와 OpenSearch 키는 아직 쓰지 않아 값이 있을 때만 맞춰 본다.
+ * Redis는 웹 앱에서 필수이며 migrate는 제외한다. OpenSearch는 값이 있을 때만 맞춰 본다.
  */
 public class EnvContractValidator implements EnvironmentPostProcessor, Ordered {
 
@@ -79,8 +79,13 @@ public class EnvContractValidator implements EnvironmentPostProcessor, Ordered {
 		if (!isMissing(url)) {
 			expect(violations, "SPRING_DATASOURCE_URL의 DB", databaseName(url), "fit_" + appEnv);
 		}
+		if (!activeProfiles.contains("migrate")) {
+			for (String key : List.of("SPRING_DATA_REDIS_HOST", "SPRING_DATA_REDIS_PORT", "SPRING_DATA_REDIS_PASSWORD")) {
+				if (isMissing(env.apply(key))) violations.add(key + " 값이 없거나 " + PLACEHOLDER + "다");
+			}
+		}
 		String redisHost = env.apply("SPRING_DATA_REDIS_HOST");
-		if (redisHost != null) {
+		if (!isMissing(redisHost)) {
 			expect(violations, "SPRING_DATA_REDIS_HOST", redisHost, "redis-" + appEnv);
 		}
 		String indexPrefix = env.apply("OPENSEARCH_INDEX_PREFIX");
@@ -94,13 +99,13 @@ public class EnvContractValidator implements EnvironmentPostProcessor, Ordered {
 		String devKey = env.apply("auth.simple.dev-key");
 		if (devKey == null) devKey = env.apply("AUTH_DEV_KEY");
 		if (appEnv.equals("prod")) {
-		    if (simpleEnabled) violations.add("auth.simple.enabled는 prod에서 켤 수 없다");
-		    if (devKey != null && !devKey.isBlank()) violations.add("AUTH_DEV_KEY는 prod에서 설정할 수 없다");
+			if (simpleEnabled) violations.add("auth.simple.enabled는 prod에서 켤 수 없다");
+			if (devKey != null && !devKey.isBlank()) violations.add("AUTH_DEV_KEY는 prod에서 설정할 수 없다");
 		}
 		if (appEnv.equals("dev") && simpleEnabled) {
-		    if (isMissing(devKey)) violations.add("AUTH_DEV_KEY 값이 없거나 " + PLACEHOLDER + "다");
-		    else if (devKey.length() < 32) violations.add("AUTH_DEV_KEY는 32자 이상이어야 한다");
-		    if (isMissing(env.apply("AUTH_DEMO_PASSWORD"))) violations.add("AUTH_DEMO_PASSWORD 값이 없거나 " + PLACEHOLDER + "다");
+			if (isMissing(devKey)) violations.add("AUTH_DEV_KEY 값이 없거나 " + PLACEHOLDER + "다");
+			else if (devKey.length() < 32) violations.add("AUTH_DEV_KEY는 32자 이상이어야 한다");
+			if (isMissing(env.apply("AUTH_DEMO_PASSWORD"))) violations.add("AUTH_DEMO_PASSWORD 값이 없거나 " + PLACEHOLDER + "다");
 		}
 		if (appEnv.equals("prod")) {
 			for (String key : MOCK_SWITCHES) {

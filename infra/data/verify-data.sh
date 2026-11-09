@@ -62,6 +62,15 @@ for env in prod dev; do
     "$([ "$(docker exec -e "REDISCLI_AUTH=${!pw_var}" "$c" redis-cli config get maxmemory-policy 2>/dev/null | tail -n 1)" = noeviction ] && echo 1 || echo 0)"
   ok_if "redis-$env의 AOF가 켜져 있다" \
     "$([ "$(docker exec -e "REDISCLI_AUTH=${!pw_var}" "$c" redis-cli config get appendonly 2>/dev/null | tail -n 1)" = yes ] && echo 1 || echo 0)"
+  # Redis는 플래그 순서를 정규화한다. 문자열 Egx와의 동등 비교 대신 필요한 각 플래그를 검사한다.
+  events="$(docker exec -e "REDISCLI_AUTH=${!pw_var}" "$c" redis-cli --raw config get notify-keyspace-events 2>/dev/null | tail -n 1)"
+  case "$events" in
+    *E*) case "$events" in
+      *A*|*g*x*|*x*g*) pass "redis-$env의 세션 만료·삭제 이벤트 알림이 켜져 있다" ;;
+      *) fail "redis-$env의 세션 만료·삭제 이벤트 알림이 켜져 있다" ;;
+    esac ;;
+    *) fail "redis-$env의 세션 만료·삭제 이벤트 알림이 켜져 있다" ;;
+  esac
 done
 ok_if "dev 비밀번호로는 prod Redis에 들어가지 못한다" \
   "$(succeeds grep -q -E 'WRONGPASS|NOAUTH' <<<"$(docker exec -e "REDISCLI_AUTH=$REDIS_DEV_PASSWORD" "$(svc_container redis-prod)" redis-cli ping 2>&1)")"

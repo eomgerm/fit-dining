@@ -10,6 +10,7 @@ public class SimpleAuthPolicy implements AuthPolicy {
     @Override public boolean rejectRefreshReuse() { return false; }
     @Override public long accessSeconds() { return 43200; }
     @Override public long sessionSeconds() { return 2592000; }
+    @Override public long sessionIdleSeconds() { return 43200; }
     @Override public boolean compareDummyPassword() { return false; }
     @Override public boolean checkOrigin() { return !local; }
 }

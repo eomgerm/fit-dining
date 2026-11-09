@@ -39,9 +39,9 @@
 | `SPRING_DATASOURCE_URL` | app, migrate | O | JDBC URL. 환경별 DB는 `fit_dev`, `fit_prod` |
 | `SPRING_DATASOURCE_USERNAME` | app, migrate | O | app은 `fit_dev_app`·`fit_prod_app`(DML), migrate는 `fit_migrator`(DDL) |
 | `SPRING_DATASOURCE_PASSWORD` | app, migrate | O | 비밀 |
-| `SPRING_DATA_REDIS_HOST` | app | O | `redis-dev` 또는 `redis-prod` |
-| `SPRING_DATA_REDIS_PORT` | app | O | `6379` |
-| `SPRING_DATA_REDIS_PASSWORD` | app | O | 비밀(requirepass) |
+| `SPRING_DATA_REDIS_HOST` | app | O | `redis-dev` 또는 `redis-prod`. dev·prod 웹 앱은 누락·공백·`REPLACE_ME`이면 기동 거부. 다른 환경 호스트도 거부. migrate는 필수 검사 제외 |
+| `SPRING_DATA_REDIS_PORT` | app | O | `6379`. dev·prod 웹 앱은 누락·공백·`REPLACE_ME`이면 기동 거부. migrate 제외 |
+| `SPRING_DATA_REDIS_PASSWORD` | app | O | 비밀(requirepass). dev·prod 웹 앱은 누락·공백·`REPLACE_ME`이면 기동 거부. migrate 제외 |
 | `OPENSEARCH_URL` | app | O | `http://opensearch:9200` |
 | `OPENSEARCH_INDEX_PREFIX` | app | O | `dev-` 또는 `prod-` |
 | `S3_ENDPOINT` | app | O | Garage S3 API. 서버는 `http://garage:3900` |

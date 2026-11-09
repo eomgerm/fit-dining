@@ -76,6 +76,7 @@ class SecurityHttpTests {
     @Test
     void sharedConfiguration_installsOneChain_withoutGeneratedUser(CapturedOutput output) {
         assertThat(context.getBeansOfType(SecurityFilterChain.class)).hasSize(1);
+        assertThat(context.getBeansOfType(org.springframework.session.SessionRepository.class)).isEmpty();
         assertThat(context.getBeansOfType(InMemoryUserDetailsManager.class)).isEmpty();
         assertThatThrownBy(() -> context.getBean(UserDetailsService.class).loadUserByUsername("user"))
                 .isInstanceOf(UsernameNotFoundException.class);
