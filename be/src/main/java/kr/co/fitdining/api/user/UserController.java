@@ -1,5 +1,7 @@
 package kr.co.fitdining.api.user;
 
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+
 import java.time.Instant;
 import java.util.List;
 import kr.co.fitdining.api.auth.ports.AuthUseCases.Identity;
@@ -18,19 +20,22 @@ public class UserController {
     @Value("${auth.cookie-secure}") private boolean secure;
     @GetMapping
     public UserService.Profile profile(@PathVariable String userId,
-            @RequestAttribute("auth.identity") Identity identity) {
+            @AuthenticationPrincipal Identity identity) {
         return service.profile(userId, identity);
     }
     @DeleteMapping
     public ResponseEntity<Void> withdraw(@PathVariable String userId,
-            @RequestAttribute("auth.identity") Identity identity, HttpServletResponse response) {
+            @AuthenticationPrincipal Identity identity, jakarta.servlet.http.HttpServletRequest request, HttpServletResponse response) {
         service.withdraw(userId, identity);
+        var session = request.getSession(false);
+        if (session != null) session.invalidate();
+        org.springframework.security.core.context.SecurityContextHolder.clearContext();
         AuthController.clearCookie(response, secure);
         return ResponseEntity.noContent().build();
     }
     @GetMapping("/preferences")
     public PreferencesResponse preferences(@PathVariable String userId,
-            @RequestAttribute("auth.identity") Identity identity) {
+            @AuthenticationPrincipal Identity identity) {
         UserPreferences value = service.preferences(userId, identity);
         return new PreferencesResponse(value.getMood(), value.getPriorities(), value.getPurposes(),
                 value.getTastes().stream().map(StoredTasteChip::chip).toList(), value.getUpdatedAt());

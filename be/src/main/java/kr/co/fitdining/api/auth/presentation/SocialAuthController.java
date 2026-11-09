@@ -35,6 +35,7 @@ public class SocialAuthController {
     private final SocialAccounts accounts;
     private final AuthTransactions transactions;
     private final AuthRefreshCookieWriter cookies;
+    private final SessionLogin sessions;
     private static final SecureRandom RANDOM = new SecureRandom();
 
     @GetMapping("/oauth/{provider}")
@@ -82,6 +83,7 @@ public class SocialAuthController {
             var issued = accounts.existing(provider, subject);
             if (issued != null) {
                 cookies.issued(issued, response);
+                sessions.establish(issued.identity(), request, response);
                 return redirect("/");
             }
 
@@ -100,7 +102,9 @@ public class SocialAuthController {
         if (!transactions.recordAttempt(request.getRemoteAddr(), "signup")) throw new AuthFailure("Limited", 429);
         var issued = accounts.signup(identity[0], identity[1], body.preferences());
         response.addHeader(HttpHeaders.SET_COOKIE, cookie("fitdining_social", "", true, 0).toString());
-        return ResponseEntity.status(201).body(cookies.issued(issued, response));
+        var tokenResponse = cookies.issued(issued, response);
+        sessions.establish(issued.identity(), request, response);
+        return ResponseEntity.status(201).body(tokenResponse);
     }
 
     private String callback(String provider) {

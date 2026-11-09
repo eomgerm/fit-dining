@@ -11,6 +11,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.test.json.JsonCompareMode;
 import org.springframework.test.web.servlet.MockMvc;
 
+@org.springframework.test.context.TestPropertySource(properties = {"auth.cookie-secure=false", "auth.frontend-origin=http://localhost:3000"})
 @WebMvcTest(controllers = OpsController.class,
 		properties = {"app.version.sha=0123abcd", "app.version.built-at=2026-10-23T07:00:00Z"})
 class OpsControllerTest {

@@ -1,4 +1,21 @@
-# 로그인·회원가입 (JWT)
+# 로그인·회원가입 (세션 + JWT 전환 기간)
+
+## 2026-11-09 세션 인증 전환
+
+- 로그인·이메일 가입·기존 회원 소셜 콜백·소셜 가입·개발 토큰 발급은 `SessionLogin.establish`에서 기존 세션을 무효화한 뒤 새 세션과 SecurityContext를 저장한다. AT·RT 응답도 계속 발급한다. `refresh`는 세션을 만들지 않는다.
+- `Authorization` 헤더가 있으면 Bearer만 검사한다. 잘못되거나 만료된 헤더는 유효한 세션이 있어도 401이다. 기존 만료 type `urn:fitdining:auth:access-token-expired`를 유지한다. 헤더가 없으면 Redis 세션, 둘 다 없으면 비회원이다.
+- 비회원 요청과 인증 실패는 세션을 만들지 않는다. 요청 캐시는 끄고 CSRF는 쿠키 저장소를 사용한다. 세션에는 SecurityContext와 단순 값만 저장하며, 인증 주체 이름은 userId이다.
+- `fitdining_session`은 HttpOnly, SameSite=Lax, Path=/이며 Secure는 `auth.cookie-secure`를 따른다. 기본 만료는 미사용 2시간과 생성 후 24시간이다. 개발 간편 모드는 기존 정책의 미사용 12시간·절대 30일을 따른다.
+- `GET /api/auth/me`는 기존 nickname·email과 함께 userId·sessionExpiresAt(epoch seconds)를 반환한다. `GET /api/auth/csrf`는 세션 생성 없이 XSRF-TOKEN 쿠키와 204를 반환한다.
+- 상태 변경 요청 중 Authorization 헤더가 없고 세션 인증이 있는 요청만 `X-XSRF-TOKEN`이 필요하다. 전환 기간에는 refresh·logout을 제외한다. 로그인 성공 시 CSRF 쿠키를 새로 발급한다.
+- 로그아웃은 현재 세션과 RT를 폐기한다. 탈퇴는 DB 커밋 후 해당 userId의 Redis 인덱스에 있는 세션을 삭제한다. DB 롤백 시 세션은 유지한다.
+- 기본 인가는 인증 필수다. 공개 POST는 login·signup·refresh·logout·dev/token·email-verifications·email-verifications/confirm·social/signup·places/search·onboarding/taste-analysis이다. 공개 GET은 oauth 시작·콜백, csrf, 장소 suggest·ids·상세·리뷰 목록, healthz·version이다. 장소 검색과 리뷰 목록은 선택 인증이며, 검색은 로그인 주체가 있으면 본문 preferences 대신 회원 취향을 사용한다.
+- `/actuator/**`는 Security 인가를 허용하고, 실제 노출 여부는 기존 Boot exposure 설정(health·prometheus)이 결정한다. 노출하지 않은 관리 경로는 404다. ERROR 디스패치도 허용하여 원래 오류 상태를 보존한다. 그 밖의 새 경로는 기본 차단한다.
+- Origin 검사 경로는 기존 인증·사용자·온보딩·검색 기록 범위를 유지하고 POST·DELETE에 적용한다. PUT·PATCH는 기존대로 제외한다. 개발 토큰 경로 및 checkOrigin=false 정책은 예외다. Next 공통 클라이언트는 BE_INTERNAL_URL 호출에 Origin을 넣지 않으며 배포 smoke.sh는 GET만 사용한다. 전체 API로 검사 범위를 확대하지 않는다.
+- 인증 필터 오류는 MVC와 같은 ProblemDetail 필드와 null 생략 규칙을 사용하며, application/problem+json·no-store·nosniff를 반환한다. CSRF 403은 "CSRF 토큰이 없거나 올바르지 않습니다."로 구분한다. 필터 인증이 본문·경로 변수 검증보다 먼저 수행되므로 잘못된 입력과 인증이 겹치면 401이다.
+- `no-store`는 인증·사용자·내 정보 경로와 기존 온보딩 경로 및 인증 오류 응답에 적용한다. 공개 장소·리뷰 조회·검색·healthz·version의 성공 응답에는 새로 붙이지 않는다. `/api/**`에는 nosniff를 적용한다.
+
+아래 JWT 설명은 전환 기간의 기존 토큰 계약으로 계속 적용한다.
 
 2026-10-23 기준 현재 구현의 동작과 실행 방법이다. 서버는 Java 21, Spring Boot 4.1.1이며, 프런트는 Next.js를 사용한다.
 

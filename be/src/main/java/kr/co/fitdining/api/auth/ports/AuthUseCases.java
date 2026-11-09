@@ -54,7 +54,7 @@ public interface AuthUseCases {
      * @param accessExpiresAt AT expiry in epoch seconds
      * @param sessionExpiresAt absolute RT family expiry in epoch seconds
      */
-    record Identity(String userId, String nickname, String sessionId, long accessExpiresAt, long sessionExpiresAt) {}
+    record Identity(String userId, String nickname, String sessionId, long accessExpiresAt, long sessionExpiresAt) implements java.security.Principal { @com.fasterxml.jackson.annotation.JsonIgnore public String getName() { return userId; } }
     /**
      * @param accessToken signed access JWT, never persisted
      * @param refreshToken signed refresh JWT, returned only via HttpOnly cookie

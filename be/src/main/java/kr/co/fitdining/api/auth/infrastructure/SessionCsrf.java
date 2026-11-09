@@ -30,7 +30,7 @@ public final class SessionCsrf {
         protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
                 throws ServletException, IOException {
             var token = (CsrfToken) request.getAttribute(CsrfToken.class.getName());
-            if (token != null) token.getToken();
+            if (token != null && request.getRequestURI().equals(request.getContextPath() + "/api/auth/csrf")) token.getToken();
             chain.doFilter(request, response);
         }
     }

@@ -43,11 +43,11 @@ public class SessionConfiguration {
     }
 
     static JsonMapper sessionMapper() {
-        // 191: allow the exact principal class using SecurityJacksonModules.getModules(loader,
-        // BasicPolymorphicTypeValidator.builder().allowIfSubType(Identity.class)).
-        // Preserve Security's restrictive validator; never allow an entire application package.
+        // Allow only the production principal while preserving Security's restrictive validator.
         return JsonMapper.builder()
-                .addModules(SecurityJacksonModules.getModules(SessionConfiguration.class.getClassLoader()))
+                .addModules(SecurityJacksonModules.getModules(SessionConfiguration.class.getClassLoader(),
+                    tools.jackson.databind.jsontype.BasicPolymorphicTypeValidator.builder()
+                        .allowIfSubType(kr.co.fitdining.api.auth.ports.AuthUseCases.Identity.class)))
                 .build();
     }
 }

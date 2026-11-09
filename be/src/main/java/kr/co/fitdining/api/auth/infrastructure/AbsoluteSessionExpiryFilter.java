@@ -10,7 +10,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-/** Not a bean: 191 must install before loading the session SecurityContext. */
+/** Installed before loading the session SecurityContext. */
 public final class AbsoluteSessionExpiryFilter extends OncePerRequestFilter {
     private final AuthPolicy policy;
     private final Clock clock;
@@ -24,7 +24,10 @@ public final class AbsoluteSessionExpiryFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
         var session = request.getSession(false);
-        if (session != null && clock.millis() - session.getCreationTime() >= policy.sessionSeconds() * 1000L) {
+        long expiresAt = session == null ? Long.MAX_VALUE : session.getCreationTime() + policy.sessionSeconds() * 1000L;
+        if (session != null && session.getAttribute("auth.expiresAt") instanceof Long issuedExpiry)
+            expiresAt = Math.min(expiresAt, issuedExpiry);
+        if (session != null && clock.millis() >= expiresAt) {
             session.invalidate();
             SecurityContextHolder.clearContext();
         }

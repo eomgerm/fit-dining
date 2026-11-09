@@ -47,6 +47,7 @@ import tools.jackson.databind.json.JsonMapper;
  * 북마크 API의 상태 코드, ProblemDetail, 인증 순서, 응답 JSON 키를 확인한다. 저장과 목록 계산은
  * {@code BookmarkPersistenceTest}가 실제 PostgreSQL로 확인하므로 여기서는 서비스와 인증 모듈을 대신한다.
  */
+@org.springframework.test.context.TestPropertySource(properties = {"auth.cookie-secure=false", "auth.frontend-origin=http://localhost:3000"})
 @WebMvcTest(controllers = BookmarkController.class)
 class BookmarkControllerTest {
 
@@ -178,15 +179,17 @@ class BookmarkControllerTest {
 
 		@ParameterizedTest(name = "{0} {1}")
 		@MethodSource("kr.co.fitdining.api.bookmark.BookmarkControllerTest#invalidPlaceIds")
-		@DisplayName("장소id_양의정수가아니면_토큰이없어도400이다")
-		void placeIdEndpoints_invalidPlaceId_returnsBadRequestBeforeAuth(Endpoint endpoint, String placeId) throws Exception {
-			mockMvc.perform(endpoint.request(placeId))
-					.andExpect(status().isBadRequest())
-					.andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON));
-			mockMvc.perform(endpoint.request(placeId).header("Authorization", "Bearer expired"))
-					.andExpect(status().isBadRequest());
-			verifyNoInteractions(bookmarkService, auth);
-		}
+		@DisplayName("placeIdEndpoints_invalidPlaceId_authenticationComesFirst")
+        void placeIdEndpoints_invalidPlaceId_authenticationComesFirst(Endpoint endpoint, String placeId) throws Exception {
+            mockMvc.perform(endpoint.request(placeId)).andExpect(status().isUnauthorized());
+            mockMvc.perform(endpoint.request(placeId).header("Authorization", "Bearer expired"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.type").value(AuthFailure.ACCESS_TOKEN_EXPIRED.toString()));
+            mockMvc.perform(endpoint.request(placeId).header("Authorization", "Bearer " + TOKEN))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON));
+            verifyNoInteractions(bookmarkService);
+        }
 
 	}
 

@@ -48,6 +48,16 @@ class SessionInfrastructureTests {
     }
 
     @Test
+    void productionIdentityRoundTripsAndIndexesByUserId() {
+        var identity = new kr.co.fitdining.api.auth.ports.AuthUseCases.Identity("user-42", "name", "family", 100, 200);
+        var context = new SecurityContextImpl(UsernamePasswordAuthenticationToken.authenticated(identity, null, List.of()));
+        var serializer = new SessionConfiguration().springSessionDefaultRedisSerializer();
+        var restored = (SecurityContextImpl) serializer.deserialize(serializer.serialize(context));
+        assertThat(restored.getAuthentication().getName()).isEqualTo("user-42");
+        assertThat(restored.getAuthentication().getPrincipal()).isEqualTo(identity);
+    }
+
+    @Test
     void changingSessionIdPreservesCreationTime() {
         var session = new MapSession();
         var created = session.getCreationTime();

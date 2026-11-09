@@ -4,7 +4,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 import java.time.Clock;
 import kr.co.fitdining.api.auth.ports.AuthUseCases;
-import kr.co.fitdining.api.auth.presentation.AuthWebConfiguration;
+import kr.co.fitdining.api.auth.infrastructure.SecurityConfiguration;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -15,7 +15,7 @@ import org.springframework.test.web.servlet.MockMvc;
 @org.junit.jupiter.api.extension.ExtendWith(org.springframework.boot.test.system.OutputCaptureExtension.class)
 @WebMvcTest(controllers = OnboardingController.class, properties = {
     "auth.cookie-secure=false", "auth.frontend-origin=http://localhost:3000"})
-@Import({AuthWebConfiguration.class, MockTasteAnalyzer.class, TasteAnalysisService.class, TasteAnalysisHttpTests.Configuration.class})
+@Import({kr.co.fitdining.api.auth.infrastructure.SecurityConfiguration.class, MockTasteAnalyzer.class, TasteAnalysisService.class, TasteAnalysisHttpTests.Configuration.class})
 class TasteAnalysisHttpTests {
     @org.springframework.boot.test.context.TestConfiguration
     static class Configuration { @Bean Clock clock() { return Clock.systemUTC(); } }

@@ -9,7 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.util.List;
 import kr.co.fitdining.api.auth.ports.AuthUseCases;
-import kr.co.fitdining.api.auth.presentation.AuthWebConfiguration;
+import kr.co.fitdining.api.auth.infrastructure.SecurityConfiguration;
 import kr.co.fitdining.api.onboarding.OnboardingController;
 import kr.co.fitdining.api.onboarding.TasteAnalysisService;
 import kr.co.fitdining.api.ops.OpsController;
@@ -32,7 +32,7 @@ import org.springframework.test.web.servlet.MvcResult;
 @WebMvcTest(controllers = {OpsController.class, OnboardingController.class}, properties = {
         "app.version.sha=test", "app.version.built-at=test",
         "auth.cookie-secure=false", "auth.frontend-origin=http://localhost:3000"})
-@Import(AuthWebConfiguration.class)
+@Import(kr.co.fitdining.api.auth.infrastructure.SecurityConfiguration.class)
 @ExtendWith(OutputCaptureExtension.class)
 class SecurityHttpTests {
     @Autowired MockMvc mvc;
@@ -68,9 +68,9 @@ class SecurityHttpTests {
     @Test
     void defaultLoginAndLogout_areNotProvided() throws Exception {
         assertUnchangedSecurityResponse(mvc.perform(get("/login"))
-                .andExpect(status().isNotFound()).andReturn());
+                .andExpect(status().isUnauthorized()).andReturn());
         assertUnchangedSecurityResponse(mvc.perform(post("/logout"))
-                .andExpect(status().isNotFound()).andReturn());
+                .andExpect(status().isUnauthorized()).andReturn());
     }
 
     @Test
@@ -85,7 +85,7 @@ class SecurityHttpTests {
 
     private static void assertUnchangedSecurityResponse(MvcResult result) {
         assertThat(result.getRequest().getSession(false)).isNull();
-        assertThat(result.getResponse().getHeaders("Set-Cookie")).isEmpty();
+        assertThat(result.getResponse().getHeaders("Set-Cookie")).noneMatch(cookie -> cookie.startsWith("fitdining_session="));
         for (String header : List.of("X-Frame-Options", "Strict-Transport-Security", "X-XSS-Protection",
                 "WWW-Authenticate", "Location", "Pragma", "Expires")) {
             assertThat(result.getResponse().getHeader(header)).as(header).isNull();

@@ -81,6 +81,7 @@ import tools.jackson.databind.json.JsonMapper;
  * 리뷰 API의 요청 검증, 인증, 오류 응답을 확인한다. 저장과 목록 계산은 {@code ReviewPersistenceTest}가
  * 실제 PostgreSQL로 확인하므로 여기서는 서비스와 인증 모듈을 대신한다.
  */
+@org.springframework.test.context.TestPropertySource(properties = {"auth.cookie-secure=false", "auth.frontend-origin=http://localhost:3000"})
 @WebMvcTest(controllers = ReviewController.class)
 class ReviewControllerTest {
 

@@ -53,6 +53,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+@org.springframework.test.context.TestPropertySource(properties = {"auth.cookie-secure=false", "auth.frontend-origin=http://localhost:3000"})
 @WebMvcTest(controllers = PlaceController.class, properties = "place.mock.enabled=true")
 @Import({PlaceService.class, MockPlaceSearchEngine.class, PlaceControllerTest.FixedClockConfig.class})
 class PlaceControllerTest {
@@ -512,19 +513,16 @@ class PlaceControllerTest {
 
 		@ParameterizedTest(name = "{0}")
 		@ValueSource(strings = {"suggest", "detail"})
-		@DisplayName("자동완성과상세_Authorization헤더를보지않아_잘못된토큰이어도응답이같다")
-		void suggestAndDetail_invalidAuthorization_sameResponse(String endpoint) throws Exception {
-			when(auth.authenticate(any())).thenThrow(new AuthFailure("x"));
-			String plain = mockMvc.perform(request(endpoint)).andExpect(status().isOk())
-					.andReturn().getResponse().getContentAsString();
-
-			for (String header : List.of("Bearer bad", "Basic x", "")) {
-				mockMvc.perform(request(endpoint).header("Authorization", header))
-						.andExpect(status().isOk())
-						.andExpect(content().json(plain, JsonCompareMode.STRICT));
-			}
-			verifyNoInteractions(auth);
-		}
+		@DisplayName("suggestAndDetail_invalidAuthorization_returnsUnauthorized")
+        void suggestAndDetail_invalidAuthorization_returnsUnauthorized(String endpoint) throws Exception {
+            when(auth.authenticate(any())).thenThrow(new AuthFailure("invalid"));
+            mockMvc.perform(request(endpoint)).andExpect(status().isOk());
+            for (String header : List.of("Bearer bad", "Basic x", "")) {
+                mockMvc.perform(request(endpoint).header("Authorization", header))
+                    .andExpect(status().isUnauthorized());
+            }
+            org.mockito.Mockito.verify(auth).authenticate("bad");
+        }
 
 		private static MockHttpServletRequestBuilder request(String endpoint) {
 			return endpoint.equals("suggest") ? get("/api/v1/places/suggest").param("q", "역삼")
@@ -579,12 +577,13 @@ class PlaceControllerTest {
 		}
 
 		@Test
-		@DisplayName("추천검색_본문이틀리고토큰도무효면_400이먼저다")
-		void search_invalidBodyAndToken_badRequestFirst() throws Exception {
-			mockMvc.perform(search("{\"query\":\"\"}").header("Authorization", "Bearer bad"))
-					.andExpect(status().isBadRequest());
-			verifyNoInteractions(auth);
-		}
+		@DisplayName("search_invalidBodyAndToken_unauthorizedFirst")
+        void search_invalidBodyAndToken_unauthorizedFirst() throws Exception {
+            when(auth.authenticate("bad")).thenThrow(new AuthFailure("invalid"));
+            mockMvc.perform(search("{\"query\":\"\"}").header("Authorization", "Bearer bad"))
+                .andExpect(status().isUnauthorized());
+            org.mockito.Mockito.verify(auth).authenticate("bad");
+        }
 
 		@Test
 		@DisplayName("추천검색_새모양preferences는받지만_Mock결과에반영하지않는다")

@@ -21,6 +21,7 @@ public class UserService {
     private final Clock clock;
     private final kr.co.fitdining.api.auth.repository.AuthSocialAccountRepository socialAccounts;
     private final SearchThreadService searchThreads;
+    private final kr.co.fitdining.api.auth.infrastructure.AccountSessions accountSessions;
     public record Profile(String userId, String nickname, String loginMethod) {}
     @Transactional(readOnly = true)
     public Profile profile(String userId, Identity identity) {
@@ -46,6 +47,7 @@ public class UserService {
     @Transactional
     public void withdraw(String userId, Identity identity) {
         requireOwner(userId, identity);
+        accountSessions.invalidateAfterCommit(userId);
         users.lockById(userId).ifPresent(user -> {
             if (user.getDeletedAt() != null) return;
             var now = clock.instant();

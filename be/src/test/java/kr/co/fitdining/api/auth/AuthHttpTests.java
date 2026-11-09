@@ -17,7 +17,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(controllers = AuthController.class, properties = {
     "auth.cookie-secure=false", "auth.frontend-origin=http://localhost:3000"})
-@Import({AuthRefreshCookieWriter.class, AuthWebConfiguration.class, AuthHttpTests.Configuration.class})
+@Import({AuthRefreshCookieWriter.class, kr.co.fitdining.api.auth.infrastructure.SecurityConfiguration.class, AuthHttpTests.Configuration.class})
 class AuthHttpTests {
     @org.springframework.boot.test.context.TestConfiguration
     static class Configuration { @Bean Clock authClock() { return Clock.systemUTC(); } }
@@ -104,7 +104,7 @@ class AuthHttpTests {
     void refresh_invalidToken_clearsCookie() throws Exception {
         when(auth.refresh(any())).thenThrow(new AuthFailure("internal reason"));
         mvc.perform(post("/api/auth/refresh").header("Origin", "http://localhost:3000"))
-                .andExpect(status().isUnauthorized()).andExpect(header().string("Set-Cookie", org.hamcrest.Matchers.containsString("Max-Age=0")))
+                .andExpect(status().isUnauthorized()).andExpect(cookie().maxAge("fitdining_rt", 0))
                 .andExpect(jsonPath("$.detail").value("인증을 확인해주세요."))
                 .andExpect(jsonPath("$.type").doesNotExist());
     }
@@ -146,7 +146,8 @@ class AuthHttpTests {
     }
     @Test @DisplayName("인증 경로_매핑 없는 요청_인증 예외 없이 404 반환")
     void auth_unknownMapping_doesNotThrowInterceptorFailure() throws Exception {
-        mvc.perform(post("/api/auth/unknown")).andExpect(status().isNotFound());
+        mvc.perform(post("/api/auth/unknown").header("Origin", "http://localhost:3000"))
+                .andExpect(status().isUnauthorized());
         verifyNoInteractions(auth);
     }
 

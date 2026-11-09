@@ -31,11 +31,14 @@ class DevSimpleAuthTests extends PostgresTestSupport {
 
     @Test @DisplayName("dev 개발 토큰_Origin 없이 올바른 키_쿠키와 보호 API 성공")
     void devToken_validKeyWithoutOrigin_returnsUsableToken() throws Exception {
-        String body = mvc.perform(post("/api/auth/dev/token")
+        var response = mvc.perform(post("/api/auth/dev/token")
                 .header("X-Dev-Key", "12345678901234567890123456789012"))
                 .andExpect(status().isOk())
-                .andExpect(header().string("Set-Cookie", org.hamcrest.Matchers.containsString("HttpOnly")))
-                .andReturn().getResponse().getContentAsString();
+                .andExpect(cookie().httpOnly("fitdining_rt", true))
+                .andReturn().getResponse();
+        String body = response.getContentAsString();
+        mvc.perform(get("/api/auth/me").cookie(response.getCookie("fitdining_session")))
+                .andExpect(status().isOk());
         String token = new tools.jackson.databind.ObjectMapper().readTree(body).get("accessToken").asString();
         mvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + token)).andExpect(status().isOk());
     }

@@ -57,6 +57,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * HTTP 수준에서 본다.
  */
 @ExtendWith(OutputCaptureExtension.class)
+@org.springframework.test.context.TestPropertySource(properties = {"auth.cookie-secure=false", "auth.frontend-origin=http://localhost:3000"})
 @WebMvcTest(controllers = PlaceController.class, properties = "place.mock.enabled=false")
 @Import({PlaceService.class, CatalogPlaceSearchEngine.class})
 class PlaceControllerMockDisabledTest {
@@ -239,17 +240,15 @@ class PlaceControllerMockDisabledTest {
 	}
 
 	@Test
-	@DisplayName("자동완성과상세_잘못된Authorization이있어도_401이아니고AI를부르지않는다")
-	void suggestAndDetail_badAuthorization_ignored() throws Exception {
-		when(keywordSearch.search(any(), anyInt(), anyInt())).thenReturn(List.of());
-		when(catalog.findPlace(7L)).thenReturn(Optional.of(detail()));
-
-		mockMvc.perform(get("/api/v1/places/suggest").param("q", "역삼").header("Authorization", "Bearer bad"))
-				.andExpect(status().isOk());
-		mockMvc.perform(get("/api/v1/places/{id}", 7).header("Authorization", "garbage"))
-				.andExpect(status().isOk());
-		verifyNoInteractions(aiClient, auth);
-	}
+	@DisplayName("suggestAndDetail_badAuthorization_rejected")
+    void suggestAndDetail_badAuthorization_rejected() throws Exception {
+        when(auth.authenticate("bad")).thenThrow(new kr.co.fitdining.api.auth.domain.AuthFailure("invalid"));
+        mockMvc.perform(get("/api/v1/places/suggest").param("q", "cafe").header("Authorization", "Bearer bad"))
+            .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/places/{id}", 7).header("Authorization", "garbage"))
+            .andExpect(status().isUnauthorized());
+        verifyNoInteractions(aiClient, catalog, keywordSearch);
+    }
 
 	private static final String SECRET = "비밀표식9c41";
 

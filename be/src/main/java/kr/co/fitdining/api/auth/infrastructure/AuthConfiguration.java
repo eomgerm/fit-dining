@@ -8,7 +8,6 @@ import kr.co.fitdining.api.auth.application.AuthTransactions;
 import kr.co.fitdining.api.auth.ports.AuthUseCases;
 import kr.co.fitdining.api.auth.ports.PasswordHasher;
 import kr.co.fitdining.api.auth.ports.TokenCodec;
-import kr.co.fitdining.api.auth.presentation.AuthWebConfiguration;
 import kr.co.fitdining.api.auth.ports.VerificationMailer;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.ApplicationRunner;
@@ -37,9 +36,6 @@ public class AuthConfiguration {
     }
     @Bean AuthSettings authSettings(Environment environment) { return AuthSettings.load(environment); }
     @Bean Clock authClock() { return Clock.systemUTC(); }
-    @Bean AuthWebConfiguration authWebConfiguration(AuthUseCases auth, AuthSettings settings, AuthPolicy policy) {
-        return new AuthWebConfiguration(auth, settings.origin(), Boolean.toString(settings.cookieSecure()), policy);
-    }
     @Bean
     @ConditionalOnBooleanProperty(name = "auth.simple.enabled", havingValue = false, matchIfMissing = true)
     PasswordHasher passwordHasher() { return bcrypt(12); }

@@ -113,7 +113,8 @@ class AuthServiceTests extends PostgresTestSupport {
     private int attempt(String action, String remoteAddress) throws Exception {
         var mvc = org.springframework.test.web.servlet.setup.MockMvcBuilders
                 .standaloneSetup(new kr.co.fitdining.api.auth.presentation.AuthController(auth,
-                        new kr.co.fitdining.api.auth.presentation.AuthRefreshCookieWriter(false, clock)))
+                        new kr.co.fitdining.api.auth.presentation.AuthRefreshCookieWriter(false, clock),
+                        new kr.co.fitdining.api.auth.infrastructure.SessionLogin(false)))
                 .setControllerAdvice(new kr.co.fitdining.api.auth.presentation.AuthExceptionHandler(environment)).build();
         String body = action.equals("login")
                 ? "{\"email\":\"demo@example.com\",\"password\":\"wrong\"}"

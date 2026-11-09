@@ -29,7 +29,7 @@ class AuthApplicationFlowTests extends PostgresTestSupport {
         assertTrue(session.has("sessionId"));
         assertTrue(session.has("accessExpiresAt"));
         assertTrue(session.has("sessionExpiresAt"));
-        String cookie = signup.headers().firstValue("set-cookie").orElseThrow();
+        String cookie = cookieHeader(signup, "fitdining_rt");
         assertTrue(cookie.contains("HttpOnly"));
         assertTrue(cookie.contains("SameSite=Strict"));
         assertTrue(cookie.contains("Path=/api/auth"));
@@ -44,7 +44,7 @@ class AuthApplicationFlowTests extends PostgresTestSupport {
         String rt = cookie.split(";", 2)[0];
         var logout = request("POST", "/logout", null, "http://localhost:3000", null, rt);
         assertEquals(204, logout.statusCode());
-        assertTrue(logout.headers().firstValue("set-cookie").orElseThrow().contains("Max-Age=0"));
+        assertTrue(cookieHeader(logout, "fitdining_rt").contains("Max-Age=0"));
         assertEquals(401, request("POST", "/refresh", null, "http://localhost:3000", null, rt).statusCode());
         assertEquals(204, request("POST", "/logout", null, "http://localhost:3000", null, null).statusCode());
         assertEquals(204, request("POST", "/logout", null, "http://localhost:3000", null, "fitdining_rt=invalid").statusCode());
@@ -77,7 +77,7 @@ class AuthApplicationFlowTests extends PostgresTestSupport {
         var login = request("POST", "/login", body, "http://localhost:3000", null, null);
         assertEquals(200, login.statusCode(), login.body());
         String at = mapper.readTree(login.body()).get("accessToken").asString();
-        String setCookie = login.headers().firstValue("set-cookie").orElseThrow();
+        String setCookie = cookieHeader(login, "fitdining_rt");
         assertTrue(setCookie.contains("HttpOnly")); assertTrue(setCookie.contains("SameSite=Strict"));
         assertTrue(setCookie.contains("Path=/api/auth"));
         assertEquals("no-store", login.headers().firstValue("cache-control").orElseThrow());
@@ -88,11 +88,11 @@ class AuthApplicationFlowTests extends PostgresTestSupport {
         String newAt = mapper.readTree(refresh.body()).get("accessToken").asString();
         var replay = request("POST", "/refresh", null, "http://localhost:3000", null, rtCookie);
         assertEquals(401, replay.statusCode());
-        assertTrue(replay.headers().firstValue("set-cookie").orElseThrow().contains("Max-Age=0"));
+        assertTrue(cookieHeader(replay, "fitdining_rt").contains("Max-Age=0"));
         assertEquals(200, request("GET", "/protected", null, null, newAt, null).statusCode());
         var again = request("POST", "/login", body, "http://localhost:3000", null, null);
         String freshAt = mapper.readTree(again.body()).get("accessToken").asString();
-        assertEquals(204, request("POST", "/logout", null, "http://localhost:3000", null, again.headers().firstValue("set-cookie").orElseThrow().split(";", 2)[0]).statusCode());
+        assertEquals(204, request("POST", "/logout", null, "http://localhost:3000", null, cookieHeader(again, "fitdining_rt").split(";", 2)[0]).statusCode());
         assertEquals(200, request("GET", "/me", null, null, freshAt, null).statusCode());
     }
     @Test @org.junit.jupiter.api.DisplayName("공개 API_인증 활성화_토큰 없이 장소 리뷰 처리")
@@ -106,6 +106,26 @@ class AuthApplicationFlowTests extends PostgresTestSupport {
                 .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString("{}")) .build(), HttpResponse.BodyHandlers.ofString());
         // 리뷰 등록은 로그인이 필요하다(리뷰 D-35). Origin 검사(403)가 아니라 인증(401)으로 거절한다.
         assertEquals(401, response.statusCode());
+    }
+
+    @Test
+    void redisSessionCookieAuthenticatesAndLogoutRemovesIt() throws Exception {
+        var login = request("POST", "/login", "{\"email\":\"demo@example.com\",\"password\":\"example-test-password1\"}",
+                "http://localhost:3000", null, null);
+        assertEquals(200, login.statusCode(), login.body());
+        String cookie = login.headers().allValues("set-cookie").stream()
+                .filter(value -> value.startsWith("fitdining_session=")).findFirst().orElseThrow().split(";", 2)[0];
+        var me = request("GET", "/me", null, null, null, cookie);
+        assertEquals(200, me.statusCode(), me.body());
+        assertEquals(mapper.readTree(login.body()).get("userId").asString(), mapper.readTree(me.body()).get("userId").asString());
+        assertEquals(mapper.readTree(login.body()).get("sessionExpiresAt").asLong(), mapper.readTree(me.body()).get("sessionExpiresAt").asLong());
+        assertEquals(204, request("POST", "/logout", null, "http://localhost:3000", null, cookie).statusCode());
+        assertEquals(401, request("GET", "/me", null, null, null, cookie).statusCode());
+    }
+
+    static String cookieHeader(HttpResponse<?> response, String name) {
+        return response.headers().allValues("set-cookie").stream().filter(value -> value.startsWith(name + "="))
+                .findFirst().orElseThrow();
     }
 
 }

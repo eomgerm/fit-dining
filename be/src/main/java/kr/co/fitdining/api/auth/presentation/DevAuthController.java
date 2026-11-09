@@ -26,18 +26,22 @@ public class DevAuthController {
     private final AuthUserRepository users;
     private final AuthTransactions transactions;
     private final AuthRefreshCookieWriter cookies;
+    private final kr.co.fitdining.api.auth.infrastructure.SessionLogin sessions;
 
     /** @param email optional existing account email; absent selects the configured demo account */
     public record DevTokenRequest(@Email @Size(max = 254) String email) {}
 
     @PostMapping("/api/auth/dev/token")
     public AuthController.TokenResponse token(@RequestHeader(name = "X-Dev-Key", required = false) String key,
-            @Valid @RequestBody(required = false) DevTokenRequest body, HttpServletResponse response) {
+            @Valid @RequestBody(required = false) DevTokenRequest body, jakarta.servlet.http.HttpServletRequest request, HttpServletResponse response) {
         if (settings.devKey() != null && (key == null || !MessageDigest.isEqual(
                 settings.devKey().getBytes(StandardCharsets.UTF_8), key.getBytes(StandardCharsets.UTF_8))))
             throw new AuthFailure("허용되지 않은 요청입니다.", 403);
         String email = body == null || body.email() == null ? settings.demoEmail() : AuthService.normalizeEmail(body.email());
-        return cookies.issued(transactions.login(users.findByEmail(email)
-                .orElseThrow(() -> new AuthFailure("계정을 찾을 수 없습니다.", 404))), response);
+        var issued = transactions.login(users.findByEmail(email)
+                .orElseThrow(() -> new AuthFailure("계정을 찾을 수 없습니다.", 404)));
+        var tokenResponse = cookies.issued(issued, response);
+        sessions.establish(issued.identity(), request, response);
+        return tokenResponse;
     }
 }

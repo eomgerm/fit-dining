@@ -1,5 +1,7 @@
 package kr.co.fitdining.api.auth.presentation;
 
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+
 import java.util.Map;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -15,7 +17,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.CookieValue;
 import kr.co.fitdining.api.auth.ports.AuthUseCases;
 import kr.co.fitdining.api.auth.ports.AuthUseCases.Identity;
@@ -28,8 +29,10 @@ public class AuthController {
     public static final String COOKIE = "fitdining_rt";
     private final AuthUseCases auth;
     private final AuthRefreshCookieWriter cookies;
+    private final kr.co.fitdining.api.auth.infrastructure.SessionLogin sessions;
 
-    public AuthController(AuthUseCases auth, AuthRefreshCookieWriter cookies) {
+    public AuthController(AuthUseCases auth, AuthRefreshCookieWriter cookies, kr.co.fitdining.api.auth.infrastructure.SessionLogin sessions) {
+        this.sessions = sessions;
         this.auth = auth;
         this.cookies = cookies;
     }
@@ -53,7 +56,10 @@ public class AuthController {
     public record TokenResponse(String userId, String accessToken, String nickname, String sessionId, long accessExpiresAt, long sessionExpiresAt) {}
     @PostMapping("/login")
     public TokenResponse login(@Valid @RequestBody LoginRequest body, HttpServletRequest request, HttpServletResponse response) {
-        return issued(auth.login(body.email(), body.password(), request.getRemoteAddr()), response);
+        var result = auth.login(body.email(), body.password(), request.getRemoteAddr());
+        var tokenResponse = issued(result, response);
+        sessions.establish(result.identity(), request, response);
+        return tokenResponse;
     }
     @PostMapping("/signup")
     public ResponseEntity<TokenResponse> signup(@Valid @RequestBody SignupRequest body,
@@ -62,22 +68,33 @@ public class AuthController {
                 ? auth.signup(body.email(), body.password(), body.nickname(), body.verificationToken(), request.getRemoteAddr())
                 : auth.signup(body.email(), body.password(), body.nickname(), body.verificationToken(), request.getRemoteAddr(),
                         body.preferences());
-        return ResponseEntity.status(201).body(issued(result, response));
+        var tokenResponse = issued(result, response);
+        sessions.establish(result.identity(), request, response);
+        return ResponseEntity.status(201).body(tokenResponse);
     }
     @PostMapping("/refresh")
     public TokenResponse refresh(@CookieValue(name = COOKIE, required = false) String token, HttpServletResponse response) {
         return issued(auth.refresh(token), response);
     }
     @PostMapping("/logout")
-    public ResponseEntity<Void> logout(@CookieValue(name = COOKIE, required = false) String token, HttpServletResponse response) {
+    public ResponseEntity<Void> logout(@CookieValue(name = COOKIE, required = false) String token, HttpServletRequest request, HttpServletResponse response) {
+        var session = request.getSession(false);
+        if (session != null) session.invalidate();
+        org.springframework.security.core.context.SecurityContextHolder.clearContext();
         auth.logout(token);
         cookies.clear(response);
         return ResponseEntity.noContent().build();
     }
+    public record MeResponse(String userId, String nickname, String email, long sessionExpiresAt) {}
+    @GetMapping("/csrf")
+    public ResponseEntity<Void> csrf() { return ResponseEntity.noContent().build(); }
     @GetMapping("/me")
-    public AuthUseCases.Profile me(@RequestAttribute("auth.identity") Identity identity) { return auth.me(identity.userId()); }
+    public MeResponse me(@AuthenticationPrincipal Identity identity) {
+        var profile = auth.me(identity.userId());
+        return new MeResponse(identity.userId(), profile.nickname(), profile.email(), identity.sessionExpiresAt());
+    }
     @GetMapping("/protected")
-    public Map<String, String> protectedResource(@RequestAttribute("auth.identity") Identity identity) {
+    public Map<String, String> protectedResource(@AuthenticationPrincipal Identity identity) {
         return Map.of("message", "인증에 성공했습니다.", "userId", identity.userId());
     }
     private TokenResponse issued(Issued issued, HttpServletResponse response) {

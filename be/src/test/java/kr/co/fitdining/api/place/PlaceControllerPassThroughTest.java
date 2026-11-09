@@ -52,6 +52,7 @@ import tools.jackson.databind.json.JsonMapper;
  * Mock 대신 계약을 벗어난 값을 돌려주는 가짜 엔진을 꽂아, 컨트롤러와 PlaceService가 엔진의 반환값을
  * 검증하거나 가공하지 않고 그대로 응답하는지 본다.
  */
+@org.springframework.test.context.TestPropertySource(properties = {"auth.cookie-secure=false", "auth.frontend-origin=http://localhost:3000"})
 @WebMvcTest(controllers = PlaceController.class, properties = "place.mock.enabled=false")
 @Import({PlaceService.class, PlaceControllerPassThroughTest.FakeEngine.class})
 class PlaceControllerPassThroughTest {

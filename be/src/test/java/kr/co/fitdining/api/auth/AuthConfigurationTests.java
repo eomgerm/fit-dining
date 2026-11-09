@@ -12,7 +12,6 @@ import kr.co.fitdining.api.auth.ports.AuthUseCases;
 import static org.mockito.Mockito.mock;
 import org.springframework.jdbc.datasource.*;
 import kr.co.fitdining.api.auth.infrastructure.AuthConfiguration;
-import kr.co.fitdining.api.auth.presentation.AuthWebConfiguration;
 
 class AuthConfigurationTests {
     private WebApplicationContextRunner runner(Map<String,String> values) {

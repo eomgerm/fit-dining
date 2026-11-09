@@ -134,7 +134,7 @@ class PreferencesFlowTests extends PostgresTestSupport {
         assertEquals(201, signup.statusCode(), signup.body());
         var session = mapper.readTree(signup.body());
         String user = session.get("userId").asString(), at = session.get("accessToken").asString();
-        String rt = signup.headers().firstValue("set-cookie").orElseThrow().split(";", 2)[0];
+        String rt = signup.headers().allValues("set-cookie").stream().filter(value -> value.startsWith("fitdining_rt=")).findFirst().orElseThrow().split(";", 2)[0];
         String credentials = "{\"email\":\"" + name + "@example.com\",\"password\":\"password123\"}";
         assertEquals(200, request("POST", "/api/auth/login", credentials, null).statusCode());
         assertEquals(403, request("DELETE", "/api/v1/users/other", null, at).statusCode());
@@ -143,7 +143,7 @@ class PreferencesFlowTests extends PostgresTestSupport {
         assertEquals(403, wrongOrigin.statusCode());
         var withdrawn = request("DELETE", "/api/v1/users/" + user, null, at);
         assertEquals(204, withdrawn.statusCode(), withdrawn.body());
-        String cookie = withdrawn.headers().firstValue("set-cookie").orElseThrow();
+        String cookie = withdrawn.headers().allValues("set-cookie").stream().filter(value -> value.startsWith("fitdining_rt=")).findFirst().orElseThrow();
         assertTrue(cookie.contains("Max-Age=0") && cookie.contains("Path=/api/auth") && cookie.contains("HttpOnly") && cookie.contains("SameSite=Strict"));
         assertNotNull(jdbc.queryForObject("select deleted_at from auth_users where id = ?", Timestamp.class, user));
         assertEquals(0, jdbc.queryForObject("select count(*) from user_preferences where user_id = ?", Integer.class, user));

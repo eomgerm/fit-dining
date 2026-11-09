@@ -42,7 +42,7 @@ import org.springframework.web.util.UriUtils;
     "auth.cookie-secure=false", "auth.frontend-origin=http://localhost:3000"
 })
 @Import({
-    AuthRefreshCookieWriter.class, AuthWebConfiguration.class, SocialHttpTests.Configuration.class
+    AuthRefreshCookieWriter.class, kr.co.fitdining.api.auth.infrastructure.SecurityConfiguration.class, SocialHttpTests.Configuration.class
 })
 @ExtendWith(OutputCaptureExtension.class)
 class SocialHttpTests {
@@ -92,7 +92,8 @@ class SocialHttpTests {
         assertTrue(cookie.isHttpOnly());
         assertEquals("/api/auth/oauth", cookie.getPath());
         assertEquals(600, cookie.getMaxAge());
-        assertTrue(result.getResponse().getHeader("Set-Cookie").contains("SameSite=Lax"));
+        assertTrue(result.getResponse().getHeaders("Set-Cookie").stream()
+            .filter(value -> value.startsWith("fitdining_oauth=")).findFirst().orElseThrow().contains("SameSite=Lax"));
         assertEquals("signup", tokens.decode(cookie.getValue(), "oauth_state", 4)[3]);
     }
 

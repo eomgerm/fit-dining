@@ -1,10 +1,11 @@
 package kr.co.fitdining.api.place;
 
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import java.util.List;
-import kr.co.fitdining.api.auth.domain.AuthFailure;
 import kr.co.fitdining.api.auth.ports.AuthUseCases;
 import kr.co.fitdining.api.place.dto.PlaceDetailResponse;
 import kr.co.fitdining.api.place.dto.PlaceSearchRequest;
@@ -13,13 +14,11 @@ import kr.co.fitdining.api.place.dto.PlaceSuggestResponse;
 import kr.co.fitdining.api.place.engine.PlaceSearchResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -40,10 +39,8 @@ import org.springframework.web.bind.annotation.RestController;
 public class PlaceController {
 
 	static final String FALLBACK_HEADER = "X-Fallback";
-	private static final String BEARER = "Bearer ";
 
 	private final PlaceService placeService;
-	private final AuthUseCases auth;
 
 	/**
 	 * 입력 중인 문장에 맞는 장소 후보를 돌려준다. "이 조건으로 추천받기" 항목이 항상 함께 온다.
@@ -63,20 +60,21 @@ public class PlaceController {
 	 * 요청도 같은 경로로 받는다. 결과가 없으면 오류가 아니라 200과 빈 목록이다. 로그인은 선택이다(place-ai-search D-4).
 	 * AI 대신 처리했으면 {@code X-Fallback} 헤더에 이유를 쉼표로 이어 싣는다(D-7).
 	 *
-	 * <p>오류는 본문, 인증, {@code cursor} 순서로 판단한다. 본문을 읽을 수 없거나 정의되지 않은 속성이 있거나,
+	 * <p>인증 헤더가 있으면 Security 필터에서 먼저 검증한다. 본문을 읽을 수 없거나 정의되지 않은 속성이 있거나,
 	 * {@code query}가 비었거나 공백뿐이거나 200자를 넘거나, {@code preferences}가 가입의 검증에 맞지 않으면 400.
 	 * {@code Authorization} 헤더가 있는데 {@code Bearer} 토큰이 유효하지 않으면 401(만료면 {@code type}이
 	 * {@code urn:fitdining:auth:access-token-expired}). {@code cursor}가 잘못되면 400(DB 모드에서는 있으면 400).
+	 * 헤더가 없으면 세션 주체를 사용하고, 세션도 없으면 비회원으로 검색한다. 인증 주체가 있으면 본문의 취향 대신 회원 취향을 사용한다.
 	 * 카탈로그 DB를 읽지 못하면 503.
 	 *
 	 * @param request 추천 검색 요청
-	 * @param authorization 선택. {@code Bearer <AT>}
+	 * @param identity 선택적인 세션 또는 Bearer 인증 주체. 비회원은 null이다.
 	 * @return 추천 결과
 	 */
 	@PostMapping("/search")
 	public ResponseEntity<PlaceSearchResponse> search(@Valid @RequestBody PlaceSearchRequest request,
-			@RequestHeader(name = HttpHeaders.AUTHORIZATION, required = false) String authorization) {
-		PlaceSearchResult result = placeService.search(request, authorization == null ? null : userId(authorization));
+			@AuthenticationPrincipal AuthUseCases.Identity identity) {
+		PlaceSearchResult result = placeService.search(request, identity == null ? null : identity.userId());
 		ResponseEntity.BodyBuilder response = ResponseEntity.ok();
 		if (result.fallback() != null) {
 			response.header(FALLBACK_HEADER, result.fallback());
@@ -109,11 +107,5 @@ public class PlaceController {
 		return placeService.placeIds();
 	}
 
-	private String userId(String authorization) {
-		if (!authorization.startsWith(BEARER)) {
-			throw new AuthFailure("로그인이 필요합니다.");
-		}
-		return auth.authenticate(authorization.substring(BEARER.length())).userId();
-	}
 
 }

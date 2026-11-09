@@ -1,11 +1,12 @@
 package kr.co.fitdining.api.review;
 
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Validator;
 import jakarta.validation.constraints.Positive;
 import java.util.Set;
-import kr.co.fitdining.api.auth.domain.AuthFailure;
 import kr.co.fitdining.api.auth.ports.AuthUseCases;
 import kr.co.fitdining.api.review.dto.ReviewCreateRequest;
 import kr.co.fitdining.api.review.dto.ReviewCreateResponse;
@@ -19,7 +20,6 @@ import kr.co.fitdining.api.review.dto.ReviewUpdateRequest;
 import kr.co.fitdining.api.review.exception.InvalidReportException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,7 +27,6 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -50,10 +49,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class ReviewController {
 
-	private static final String BEARER = "Bearer ";
 
 	private final ReviewService reviewService;
-	private final AuthUseCases auth;
 	private final Validator validator;
 
 	/**
@@ -64,14 +61,14 @@ public class ReviewController {
 	 *
 	 * @param placeId 장소 id
 	 * @param cursor 다음 페이지 요청일 때, 직전 응답의 {@code nextCursor}
-	 * @param authorization 선택. {@code Bearer <AT>}
+	 * @param identity 선택적인 세션 또는 Bearer 인증 주체. 비회원은 null이다.
 	 * @return 리뷰 목록. 리뷰 수는 첫 페이지에만 있다.
 	 */
 	@GetMapping("/places/{placeId}/reviews")
 	public ReviewListResponse list(@PathVariable @Positive long placeId,
 			@RequestParam(required = false) String cursor,
-			@RequestHeader(name = HttpHeaders.AUTHORIZATION, required = false) String authorization) {
-		return reviewService.list(placeId, cursor, authorization == null ? null : userId(authorization));
+			@AuthenticationPrincipal AuthUseCases.Identity identity) {
+		return reviewService.list(placeId, cursor, identity == null ? null : identity.userId());
 	}
 
 	/**
@@ -84,16 +81,16 @@ public class ReviewController {
 	 * {@code urn:fitdining:review:invalid-photo}). 같은 장소에 같은 방문일로 이미 썼으면 409.
 	 *
 	 * @param placeId 장소 id
-	 * @param authorization {@code Bearer <AT>}
+	 * @param identity 세션 또는 Bearer로 인증한 주체
 	 * @param request 등록 요청
 	 * @return 등록된 리뷰 id
 	 */
 	@PostMapping("/places/{placeId}/reviews")
 	@ResponseStatus(HttpStatus.CREATED)
 	public ReviewCreateResponse create(@PathVariable @Positive long placeId,
-			@RequestHeader(name = HttpHeaders.AUTHORIZATION, required = false) String authorization,
+			@AuthenticationPrincipal AuthUseCases.Identity identity,
 			@RequestBody ReviewCreateRequest request) {
-		String userId = userId(authorization);
+		String userId = identity.userId();
 		validate(request);
 		return reviewService.create(placeId, userId, request);
 	}
@@ -101,8 +98,8 @@ public class ReviewController {
 	/** 로그인한 사용자의 작성 화면 데이터. 오류: 401(인증), 404(없는 장소), 503(장소 검색 불가). */
 	@GetMapping("/places/{placeId}/review-form")
 	public ReviewFormResponse reviewForm(@PathVariable @Positive long placeId,
-			@RequestHeader(name = HttpHeaders.AUTHORIZATION, required = false) String authorization) {
-		return reviewService.reviewForm(placeId, userId(authorization));
+			@AuthenticationPrincipal AuthUseCases.Identity identity) {
+		return reviewService.reviewForm(placeId, identity.userId());
 	}
 
 	/**
@@ -111,8 +108,8 @@ public class ReviewController {
 	 */
 	@GetMapping("/reviews/{reviewId}")
 	public ReviewDetailResponse detail(@PathVariable @Positive long reviewId,
-			@RequestHeader(name = HttpHeaders.AUTHORIZATION, required = false) String authorization) {
-		return reviewService.detail(reviewId, userId(authorization));
+			@AuthenticationPrincipal AuthUseCases.Identity identity) {
+		return reviewService.detail(reviewId, identity.userId());
 	}
 
 	/**
@@ -126,9 +123,9 @@ public class ReviewController {
 	@PatchMapping("/reviews/{reviewId}")
 	@ResponseStatus(HttpStatus.NO_CONTENT)
 	public void update(@PathVariable @Positive long reviewId,
-			@RequestHeader(name = HttpHeaders.AUTHORIZATION, required = false) String authorization,
+			@AuthenticationPrincipal AuthUseCases.Identity identity,
 			@RequestBody ReviewUpdateRequest request) {
-		String userId = userId(authorization);
+		String userId = identity.userId();
 		validate(request);
 		if (!request.hasChange()) {
 			throw new ConstraintViolationException("고칠 필드가 없다", Set.of());
@@ -144,9 +141,9 @@ public class ReviewController {
 	 */
 	@PostMapping("/review-photos/upload-urls")
 	public ReviewPhotoUploadResponse photoUploads(
-			@RequestHeader(name = HttpHeaders.AUTHORIZATION, required = false) String authorization,
+			@AuthenticationPrincipal AuthUseCases.Identity identity,
 			@RequestBody ReviewPhotoUploadRequest request) {
-		String userId = userId(authorization);
+		String userId = identity.userId();
 		validate(request);
 		return reviewService.photoUploads(userId, request.count());
 	}
@@ -158,8 +155,8 @@ public class ReviewController {
 	@DeleteMapping("/reviews/{reviewId}")
 	@ResponseStatus(HttpStatus.NO_CONTENT)
 	public void delete(@PathVariable @Positive long reviewId,
-			@RequestHeader(name = HttpHeaders.AUTHORIZATION, required = false) String authorization) {
-		reviewService.delete(reviewId, userId(authorization));
+			@AuthenticationPrincipal AuthUseCases.Identity identity) {
+		reviewService.delete(reviewId, identity.userId());
 	}
 
 	/**
@@ -172,9 +169,9 @@ public class ReviewController {
 	@PostMapping("/reviews/{reviewId}/reports")
 	@ResponseStatus(HttpStatus.CREATED)
 	public void report(@PathVariable @Positive long reviewId,
-			@RequestHeader(name = HttpHeaders.AUTHORIZATION, required = false) String authorization,
+			@AuthenticationPrincipal AuthUseCases.Identity identity,
 			@RequestBody ReviewReportRequest request) {
-		String userId = userId(authorization);
+		String userId = identity.userId();
 		validate(request);
 		if (!request.detailAllowed()) {
 			throw new InvalidReportException();
@@ -190,12 +187,5 @@ public class ReviewController {
 		}
 	}
 
-	/** 인증 모듈을 직접 불러 AT에서 사용자 id를 꺼낸다. 실패하면 {@link AuthFailure}가 그대로 나간다. */
-	private String userId(String authorization) {
-		if (authorization == null || !authorization.startsWith(BEARER)) {
-			throw new AuthFailure("로그인이 필요합니다.");
-		}
-		return auth.authenticate(authorization.substring(BEARER.length())).userId();
-	}
 
 }

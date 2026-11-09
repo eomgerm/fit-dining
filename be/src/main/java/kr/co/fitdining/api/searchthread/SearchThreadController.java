@@ -1,10 +1,10 @@
 package kr.co.fitdining.api.searchthread;
 
-import kr.co.fitdining.api.auth.domain.AuthFailure;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+
 import kr.co.fitdining.api.auth.ports.AuthUseCases;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -13,7 +13,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -34,10 +33,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class SearchThreadController {
 
-	private static final String BEARER = "Bearer ";
 
 	private final SearchThreadService service;
-	private final AuthUseCases auth;
 
 	/**
 	 * 최근 검색 목록. 오류: 401(인증, 탈퇴), 400(cursor 형식).
@@ -46,15 +43,15 @@ public class SearchThreadController {
 	 */
 	@GetMapping
 	public ThreadPage list(@RequestParam(required = false) String cursor,
-			@RequestHeader(name = HttpHeaders.AUTHORIZATION, required = false) String authorization) {
-		return service.page(activeUser(authorization), cursor);
+			@AuthenticationPrincipal AuthUseCases.Identity identity) {
+		return service.page(activeUser(identity), cursor);
 	}
 
 	/** thread 하나. 오류: 401(인증, 탈퇴), 400(id 형식), 404(내 계정에 없음). */
 	@GetMapping("/{threadId}")
 	public ResponseEntity<byte[]> thread(@PathVariable String threadId,
-			@RequestHeader(name = HttpHeaders.AUTHORIZATION, required = false) String authorization) {
-		String userId = activeUser(authorization);
+			@AuthenticationPrincipal AuthUseCases.Identity identity) {
+		String userId = activeUser(identity);
 		TurnFormat.requireThreadId(threadId);
 		return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(service.thread(userId, threadId));
 	}
@@ -66,9 +63,9 @@ public class SearchThreadController {
 	@PutMapping("/{threadId}/turns/{turnId}")
 	@ResponseStatus(HttpStatus.NO_CONTENT)
 	public void addTurn(@PathVariable String threadId, @PathVariable String turnId,
-			@RequestHeader(name = HttpHeaders.AUTHORIZATION, required = false) String authorization,
+			@AuthenticationPrincipal AuthUseCases.Identity identity,
 			@RequestBody(required = false) byte[] body) {
-		String userId = activeUser(authorization);
+		String userId = activeUser(identity);
 		TurnFormat.requireThreadId(threadId);
 		service.addTurn(userId, threadId, TurnFormat.parse(turnId, body));
 	}
@@ -77,8 +74,8 @@ public class SearchThreadController {
 	@DeleteMapping("/{threadId}")
 	@ResponseStatus(HttpStatus.NO_CONTENT)
 	public void deleteThread(@PathVariable String threadId,
-			@RequestHeader(name = HttpHeaders.AUTHORIZATION, required = false) String authorization) {
-		String userId = activeUser(authorization);
+			@AuthenticationPrincipal AuthUseCases.Identity identity) {
+		String userId = activeUser(identity);
 		TurnFormat.requireThreadId(threadId);
 		service.deleteThread(userId, threadId);
 	}
@@ -86,18 +83,14 @@ public class SearchThreadController {
 	/** 내 검색 기록을 모두 지운다. 오류: 401(인증, 탈퇴)(D-18). */
 	@DeleteMapping
 	@ResponseStatus(HttpStatus.NO_CONTENT)
-	public void deleteAll(@RequestHeader(name = HttpHeaders.AUTHORIZATION, required = false) String authorization) {
-		service.deleteAll(activeUser(authorization));
+	public void deleteAll(@AuthenticationPrincipal AuthUseCases.Identity identity) {
+		service.deleteAll(activeUser(identity));
 	}
 
 	/** 인증 모듈을 직접 불러 AT에서 사용자 id를 꺼내고, 탈퇴하지 않은 회원인지 확인한다. */
-	private String activeUser(String authorization) {
-		if (authorization == null || !authorization.startsWith(BEARER)) {
-			throw new AuthFailure("로그인이 필요합니다.");
-		}
-		String userId = auth.authenticate(authorization.substring(BEARER.length())).userId();
-		service.requireActiveUser(userId);
-		return userId;
-	}
-
+	private String activeUser(AuthUseCases.Identity identity) {
+        String userId = identity.userId();
+        service.requireActiveUser(userId);
+        return userId;
+    }
 }
