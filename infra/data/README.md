@@ -55,6 +55,26 @@ BE는 서비스 이름으로 접속한다(`postgres`, `redis-prod`, `redis-dev`,
 
 AI API용 role `fit_prod_ai`, `fit_dev_ai`는 읽기 전용이다. `grant-ai-read.sh`의 목록에 있는 객체(뷰 `ai_place_search`, 테이블 `user_preferences`)의 SELECT만 받고, 뷰는 소유자 권한으로 실행되므로 뷰 밑의 테이블과 인증 테이블은 읽지 못한다. 마이그레이터가 만드는 새 객체에는 기본 권한을 주지 않는다(앱 role과 다르다). 목록에 객체를 더하려면 BE·AI 팀과 정한 뒤 그 스크립트의 목록을 고치는 MR을 만든다. 접속은 6개까지, 쿼리는 10초, 트랜잭션은 기본이 읽기 전용이다. 비밀번호는 `FIT_PROD_AI_PASSWORD`, `FIT_DEV_AI_PASSWORD`이고 AI 컨테이너 env의 `DATABASE_URL`에 같은 값이 들어간다.
 
+팀원이 prod 장소 데이터를 직접 볼 때 쓰는 읽기 전용 계정 `fit_prod_ro1`~`fit_prod_ro5`는 스크립트가 아니라 서버에서 SQL로 만들었다(임시 접근이라 스크립트와 시험을 늘리지 않았다). 권한은 접속할 수 없는 그룹 role `fit_prod_ro`가 갖고 `ensure-databases.sh`는 이 그룹 role의 이름만 만든다. prod 덤프에 이 role의 권한이 들어가서, 복원 검증(`verify-dump.sh`)과 서버를 새로 세운 뒤의 복원에 role이 있어야 하기 때문이다. **권한을 주기 전에 서버의 백업 코드 사본을 먼저 갱신한다**(`sudo bash ~/fit-repo/infra/backup/install.sh app`). 순서를 바꾸면 그 뒤 백업의 복원 검증이 실패해 덤프가 B로 가지 않는다(AI role과 같은 함정이다). 읽는 것은 장소 테이블 10개(`copy-places.sh`의 `TABLES`)뿐이고 사용자·리뷰·인증 테이블과 마이그레이션 기록은 읽지 못한다. 계정에는 쿼리 10초, 접속 2개, 읽기 전용 기본값이 걸려 있다. 서버에서 한 일은 아래와 같다(한 번만 실행한다). 비밀번호는 `psql`의 `\password fit_prod_ro1`처럼 입력창에 넣는다(셸 기록에 남지 않는다).
+
+```sql
+-- sudo docker exec -it fit-data-postgres-1 psql -U postgres -d fit_prod -v ON_ERROR_STOP=1
+GRANT CONNECT ON DATABASE fit_prod TO fit_prod_ro;
+GRANT USAGE ON SCHEMA public TO fit_prod_ro;
+GRANT SELECT ON places, place_profiles, place_personas, place_hours, place_menus,
+  place_photos, place_subways, place_bus_stops, place_seats, place_broadcasts TO fit_prod_ro;
+DO $$
+BEGIN
+  FOR n IN 1..5 LOOP
+    EXECUTE format('CREATE ROLE %I LOGIN IN ROLE fit_prod_ro CONNECTION LIMIT 2', 'fit_prod_ro' || n);
+    EXECUTE format('ALTER ROLE %I SET statement_timeout = ''10s''', 'fit_prod_ro' || n);
+    EXECUTE format('ALTER ROLE %I SET default_transaction_read_only = on', 'fit_prod_ro' || n);
+  END LOOP;
+END $$;
+```
+
+한 사람만 막으려면 `ALTER ROLE fit_prod_ro3 NOLOGIN;`과 `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE usename = 'fit_prod_ro3';`를 실행한다. 서비스를 종료할 때는 RB-10 전에 `DROP OWNED BY fit_prod_ro; DROP ROLE fit_prod_ro1, fit_prod_ro2, fit_prod_ro3, fit_prod_ro4, fit_prod_ro5, fit_prod_ro;`로 지운다.
+
 각 앱 role은 자기 DB에만 접속한다. 마이그레이터가 만드는 테이블과 시퀀스에는 앱 role의 DML 권한이 자동으로 붙는다. 초기화 스크립트를 다시 돌리면 다른 방법으로 만든 기존 테이블에도 같은 권한을 준다.
 
 ## data.env

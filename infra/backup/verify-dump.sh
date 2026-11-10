@@ -67,7 +67,7 @@ done
 
 # 덤프에 들어 있는 소유자와 권한이 복원되도록 role 이름만 만들어 둔다(비밀번호는 필요 없다)
 docker exec "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -qAt \
-  -c 'CREATE ROLE fit_migrator' -c 'CREATE ROLE fit_prod_app' -c 'CREATE ROLE fit_dev_app' -c 'CREATE ROLE fit_prod_ai' -c 'CREATE ROLE fit_dev_ai' >/dev/null
+  -c 'CREATE ROLE fit_migrator' -c 'CREATE ROLE fit_prod_app' -c 'CREATE ROLE fit_dev_app' -c 'CREATE ROLE fit_prod_ai' -c 'CREATE ROLE fit_dev_ai' -c 'CREATE ROLE fit_prod_ro' >/dev/null
 docker exec "$NAME" createdb -U postgres fit_verify
 
 if ! err="$(docker exec -i "$NAME" pg_restore -U postgres -d fit_verify --exit-on-error <"$DUMP" 2>&1)"; then

@@ -689,7 +689,7 @@ B의 알림은 모두 prod에 관한 것이라 수신자는 하나다. 프로브
 | 대상 | 접근 |
 |---|---|
 | 인프라 담당 | A, B 모두 개인 계정(sudo) |
-| 팀원 | A의 `fit-dev`(비특권, 셸 없음)로 SSH 터널만. `PermitOpen`으로 Grafana(3000), Dozzle(8888), dev DB(5432)만 허용. B에는 접근 없음 |
+| 팀원 | A의 `fit-dev`(비특권, 셸 없음)로 SSH 터널만. `PermitOpen`으로 Grafana(3000), Dozzle(8888), dev DB(5432)만 허용. B에는 접근 없음. 같은 5432 터널로 prod 장소 테이블 10개만 읽는 읽기 전용 계정 `fit_prod_ro1~5`를 쓸 수 있다(서버에서 SQL로 만든 임시 접근. `infra/data/README.md`) |
 | 배포·prod | 인프라 담당만 |
 
 Grafana는 팀원에게 viewer 계정을 준다. A503에서는 SSH 보유자만 로그를 볼 수 있어 원인을 못 좁힌 사례가 있었다.

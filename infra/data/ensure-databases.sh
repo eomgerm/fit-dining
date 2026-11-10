@@ -3,7 +3,9 @@
 # init 스크립트가 빈 볼륨에서 한 번만 돌기 때문이다(A503 함정). role 비밀번호는 매번 data.env 값으로 맞춘다.
 #   bash infra/data/ensure-databases.sh
 # role: fit_migrator(DDL), fit_prod_app, fit_dev_app(DML만), fit_monitor(관측성: pg_monitor 권한으로 통계만 읽는다),
-#       fit_prod_ai, fit_dev_ai(AI API용 읽기 전용. grant-ai-read.sh가 정한 객체만 SELECT한다).
+#       fit_prod_ai, fit_dev_ai(AI API용 읽기 전용. grant-ai-read.sh가 정한 객체만 SELECT한다),
+#       fit_prod_ro(팀원용 prod 읽기 전용 계정 fit_prod_ro1~5의 그룹 role. 접속할 수 없고 이름만 여기서 만든다. 계정과 권한은 서버에서 SQL로 만든다: infra/data/README.md.
+#       prod 덤프에 이 role의 권한이 들어가서 복원하는 서버에도 role이 있어야 복원된다).
 # DB: fit_prod, fit_dev(소유자 fit_migrator). 각 app·ai role은 자기 DB에만 접속하고 fit_monitor는 앱 DB에 접속하지 못한다(postgres DB에서 통계를 읽는다).
 # dev 앱 role에는 statement_timeout 30초를, ai role에는 10초와 접속 수 6개 상한, 읽기 전용 트랜잭션 기본값을 건다. 비밀번호는 표준 입력으로만 넘기고 서버의 통계·로그에 남지 않게 세션 설정을 끈다.
 set -euo pipefail
@@ -21,6 +23,7 @@ SELECT 'CREATE ROLE fit_dev_app LOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WH
 SELECT 'CREATE ROLE fit_monitor LOGIN IN ROLE pg_monitor' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'fit_monitor') \gexec
 SELECT 'CREATE ROLE fit_prod_ai LOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'fit_prod_ai') \gexec
 SELECT 'CREATE ROLE fit_dev_ai LOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'fit_dev_ai') \gexec
+SELECT 'CREATE ROLE fit_prod_ro NOLOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'fit_prod_ro') \gexec
 ALTER ROLE fit_migrator PASSWORD '${FIT_MIGRATOR_PASSWORD}';
 ALTER ROLE fit_prod_app PASSWORD '${FIT_PROD_APP_PASSWORD}';
 ALTER ROLE fit_dev_app PASSWORD '${FIT_DEV_APP_PASSWORD}';

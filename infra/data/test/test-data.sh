@@ -134,7 +134,7 @@ run_idempotent_checks() {
   run_script init-data.sh
   ok_if "다시 실행해도 성공한다" "$(is "$rc" 0)"
   ok_if "두 번째 실행은 Garage 레이아웃을 다시 적용하지 않는다" "$(is "$(has "$out" '레이아웃을 적용했다')" 0)"
-  ok_if "role은 6개뿐이다(마이그레이터, prod 앱, dev 앱, 모니터링, prod AI, dev AI)" "$(is "$(psql_admin -d postgres -c "SELECT count(*) FROM pg_roles WHERE rolname LIKE 'fit\\_%'")" 6)"
+  ok_if "role은 7개뿐이다(마이그레이터, prod 앱, dev 앱, 모니터링, prod AI, dev AI, 팀원용 읽기 전용 그룹)" "$(is "$(psql_admin -d postgres -c "SELECT count(*) FROM pg_roles WHERE rolname LIKE 'fit\\_%'")" 7)"
   ok_if "DB는 2개뿐이다" "$(is "$(psql_admin -d postgres -c "SELECT count(*) FROM pg_database WHERE datname LIKE 'fit\\_%'")" 2)"
   ok_if "재실행이 기존 데이터를 건드리지 않는다(Postgres)" "$(is "$(pg_as fit_migrator "$FIT_MIGRATOR_PASSWORD" fit_prod 'SELECT id FROM keep_rows')" 7)"
   out="$(prod_s3 get fit-prod-photos keep.txt)"
