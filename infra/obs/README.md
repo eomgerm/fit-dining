@@ -1,6 +1,6 @@
 # 관측 (서버 A)
 
-서버 A의 `fit-obs` 프로젝트다. Prometheus가 호스트·컨테이너·앱·데이터·백업 지표를 모으고, 알림 규칙 35개가 Alertmanager를 거쳐 Mattermost로 간다. Grafana 대시보드 3개와 로그 UI(Dozzle)가 있다. 설계는 [design.md](../../docs/infra/design.md) 9절이다. B가 A를 밖에서 보는 쪽은 [ops/README.md](../ops/README.md)다.
+서버 A의 `fit-obs` 프로젝트다. Prometheus가 호스트·컨테이너·앱·데이터·백업 지표를 모으고, 알림 규칙 37개가 Alertmanager를 거쳐 Mattermost로 간다. Grafana 대시보드 3개와 로그 UI(Dozzle)가 있다. 설계는 [design.md](../../docs/infra/design.md) 9절이다. B가 A를 밖에서 보는 쪽은 [ops/README.md](../ops/README.md)다.
 
 ## 자주 하는 일
 
@@ -58,7 +58,7 @@ Prometheus가 긁는 대상: prometheus, alertmanager, node, cadvisor, caddy(엣
 | `containers.yml`(2) | 재시작 반복, 컨테이너 메모리 |
 | `app.yml`(8) | BE prod·dev 다운, 5xx, 검색·일반 지연, 배치 지연, 배치·HTTP 지표 누락 |
 | `modal.yml`(3) | Modal 폴백 비율, 예산, 예산 지표 누락(기록 규칙(recording rule)으로 15분 비율을 만든다) |
-| `data.yml`(5) | Postgres 다운·연결 수, OpenSearch 다운·red·힙 |
+| `data.yml`(7) | Postgres 다운·연결 수, OpenSearch 다운·red·힙, Redis 컨테이너 사라짐(prod 2분, dev 5분. exporter가 없어 cAdvisor로 본다) |
 | `backup.yml`(8) | 백업 신선도(pg, photos, caddy), 복원 검증, outbox, 지표 누락, B 도달 불가 |
 
 CPU 알림(30분, 2시간)은 그 길이만큼 지표가 쌓인 뒤부터 본다. 쌓인 기간이 창보다 짧으면 rate가 창 길이로 나뉘어 사용률이 부풀려지기 때문이다(처음 설치한 직후의 오탐).

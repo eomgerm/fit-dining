@@ -1,4 +1,4 @@
-# 데이터 서비스 알림(설계 9.2절). postgres-exporter와 OpenSearch exporter가 지표를 낸다.
+# 데이터 서비스 알림(설계 9.2절). postgres-exporter와 OpenSearch exporter가 지표를 낸다. Redis는 exporter가 없어서 cAdvisor가 컨테이너를 보는지로 감시한다.
 groups:
   - name: fit-data
     rules:
@@ -46,3 +46,23 @@ groups:
           summary: OpenSearch 힙 사용이 90%를 넘었다
           description: 힙 사용 비율 {{ $value | humanizePercentage }}(힙 768MB). k-NN 네이티브 메모리와 함께 본다
           runbook: RB-07
+
+      # Redis 컨테이너가 사라진 것만 잡는다. 떠 있지만 응답하지 않는 경우(먹통)는 잡지 못한다(exporter가 없다).
+      # cAdvisor가 죽어 지표가 통째로 없을 때는 울리지 않는다(그때는 FitScrapeTargetDown이 운다)
+      - alert: FitRedisProdDown
+        expr: absent(container_last_seen{name=~"fit-data-redis-prod-.*"}) and on() (up{job="cadvisor"} == 1)
+        for: 2m
+        labels: {severity: critical, env: prod}
+        annotations:
+          summary: prod Redis 컨테이너가 보이지 않는다
+          description: cAdvisor가 redis-prod 컨테이너를 2분 넘게 보지 못했다. 세션 저장과 호출 예산 카운터가 멈춘다. 떠 있지만 응답하지 않는 경우는 이 알림이 잡지 못한다
+          runbook: RB-01
+
+      - alert: FitRedisDevDown
+        expr: absent(container_last_seen{name=~"fit-data-redis-dev-.*"}) and on() (up{job="cadvisor"} == 1)
+        for: 5m
+        labels: {severity: warning, env: dev}
+        annotations:
+          summary: dev Redis 컨테이너가 보이지 않는다
+          description: cAdvisor가 redis-dev 컨테이너를 5분 넘게 보지 못했다. dev의 로그인 세션과 호출 예산 카운터가 멈춘다
+          runbook: RB-01

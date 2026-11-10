@@ -112,3 +112,73 @@ tests:
               summary: OpenSearch 힙 사용이 90%를 넘었다
               description: 힙 사용 비율 95%(힙 768MB). k-NN 네이티브 메모리와 함께 본다
               runbook: RB-07
+
+  # Redis 컨테이너가 사라지면(cAdvisor 시계열이 stale) prod는 2분, dev는 5분 뒤 울린다. 3분에 사라졌다고 본다
+  - interval: 1m
+    input_series:
+      - series: 'up{job="cadvisor"}'
+        values: '1+0x12'
+      - series: 'container_last_seen{name="fit-data-redis-prod-1"}'
+        values: '1 1 1 stale stale stale stale stale stale stale stale stale stale'
+      - series: 'container_last_seen{name="fit-data-redis-dev-1"}'
+        values: '1 1 1 stale stale stale stale stale stale stale stale stale stale'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: FitRedisProdDown
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: FitRedisProdDown
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: FitRedisProdDown
+        exp_alerts:
+          - exp_labels: {severity: critical, env: prod}
+            exp_annotations:
+              summary: prod Redis 컨테이너가 보이지 않는다
+              description: cAdvisor가 redis-prod 컨테이너를 2분 넘게 보지 못했다. 세션 저장과 호출 예산 카운터가 멈춘다. 떠 있지만 응답하지 않는 경우는 이 알림이 잡지 못한다
+              runbook: RB-01
+      - eval_time: 6m
+        alertname: FitRedisDevDown
+        exp_alerts: []
+      - eval_time: 9m
+        alertname: FitRedisDevDown
+        exp_alerts:
+          - exp_labels: {severity: warning, env: dev}
+            exp_annotations:
+              summary: dev Redis 컨테이너가 보이지 않는다
+              description: cAdvisor가 redis-dev 컨테이너를 5분 넘게 보지 못했다. dev의 로그인 세션과 호출 예산 카운터가 멈춘다
+              runbook: RB-01
+
+  # 컨테이너가 계속 보이면 울리지 않는다
+  - interval: 1m
+    input_series:
+      - series: 'up{job="cadvisor"}'
+        values: '1+0x12'
+      - series: 'container_last_seen{name="fit-data-redis-prod-1"}'
+        values: '1+0x12'
+      - series: 'container_last_seen{name="fit-data-redis-dev-1"}'
+        values: '1+0x12'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: FitRedisProdDown
+        exp_alerts: []
+      - eval_time: 9m
+        alertname: FitRedisDevDown
+        exp_alerts: []
+
+  # cAdvisor가 죽어 지표가 통째로 없으면(Redis가 아니라 수집이 문제다) 울리지 않는다
+  - interval: 1m
+    input_series:
+      - series: 'up{job="cadvisor"}'
+        values: '1 1 1 0 0 0 0 0 0 0 0 0 0'
+      - series: 'container_last_seen{name="fit-data-redis-prod-1"}'
+        values: '1 1 1 stale stale stale stale stale stale stale stale stale stale'
+      - series: 'container_last_seen{name="fit-data-redis-dev-1"}'
+        values: '1 1 1 stale stale stale stale stale stale stale stale stale stale'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: FitRedisProdDown
+        exp_alerts: []
+      - eval_time: 9m
+        alertname: FitRedisDevDown
+        exp_alerts: []

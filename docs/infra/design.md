@@ -614,6 +614,7 @@ Garage는 단일 노드라도 레이아웃 설정이 필요하다(`layout assign
 | 앱 오류 | 5xx >2%(최소 요청 수), p95 지연 10분(경로별: 검색 >4s, 그 외 >1s, 추정) | warning |
 | 배치 | 04:00 배치 마지막 성공 >26시간 | warning |
 | OpenSearch·Postgres | red, 힙 >90%, 연결 >80%, pg_up==0 | critical / warning |
+| Redis | redis-prod·redis-dev 컨테이너가 cAdvisor에서 사라짐(prod 2분, dev 5분. exporter가 없어 먹통은 잡지 못한다) | critical(prod) / warning(dev) |
 | 폴백 | `*_fallback_ratio` >30% 15분(임베딩·리랭커·LLM 각각) | warning |
 | Modal 예산 | 일일 호출 예산 80% 소진(Redis 카운터) | warning |
 | 백업 | 마지막 성공 pg >8시간, photos >36시간, caddy >9일, 복원 검증 실패나 36시간 넘게 없음, 전송 대기(outbox) 파일 | warning |

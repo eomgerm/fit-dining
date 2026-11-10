@@ -89,7 +89,7 @@ sudo docker inspect -f 'health={{.State.Health.Status}}' fit-data-garage-1   # u
 
 | 런북 | 알림 |
 |---|---|
-| RB-01 | `FitScrapeTargetDown`(주의, 5분), `FitOpsScrapeTargetDown`(주의, 5분), `FitPortUnreachable`(장애, 2분), `FitOpsWatcherDown`(장애, 2분), `FitPortExposed`(장애), `FitPortAuditStale`, `FitPortAuditMissing`, `FitProbeMetricMissing`, `FitVaultUnreachable` |
+| RB-01 | `FitScrapeTargetDown`(주의, 5분), `FitOpsScrapeTargetDown`(주의, 5분), `FitPortUnreachable`(장애, 2분), `FitOpsWatcherDown`(장애, 2분), `FitPortExposed`(장애), `FitPortAuditStale`, `FitPortAuditMissing`, `FitProbeMetricMissing`, `FitVaultUnreachable`, `FitRedisProdDown`(장애, 2분), `FitRedisDevDown`(주의, 5분) |
 | RB-02 | `FitBeProdDown`(장애, 2분), `FitBeDevDown`, `FitHttp5xxHigh`, `FitHttpLatencyHigh`, `FitHttpMetricMissing`, `FitExternalDown`(장애, 2분) |
 | RB-03 | `FitMemoryLow`(장애, 8% 미만 5분), `FitSwapHigh`(50%), `FitOomKill`(장애), `FitContainerRestartLoop`(장애), `FitContainerMemoryHigh`(90%), `FitOpsMemoryLow` |
 | RB-04 | `FitDiskUsageHigh`(80%), `FitDiskUsageCritical`(90%), `FitDiskFillingUp`(24시간 안에 가득), `FitOpsDiskHigh` |
