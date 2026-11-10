@@ -22,6 +22,7 @@ import kr.co.fitdining.api.place.dto.PlaceCard;
 import kr.co.fitdining.api.place.dto.PlaceDetailResponse.Menu;
 import kr.co.fitdining.api.place.dto.PlaceDetailResponse;
 import kr.co.fitdining.api.place.dto.PlaceSearchRequest;
+import kr.co.fitdining.api.place.dto.PlaceSearchRequest.MapBounds;
 import kr.co.fitdining.api.place.dto.PlaceSearchResponse.EmptyReason;
 import kr.co.fitdining.api.place.dto.PlaceSearchResponse;
 import kr.co.fitdining.api.place.dto.PlaceSuggestResponse.SuggestType;
@@ -45,8 +46,7 @@ public class MockPlaceSearchEngine implements PlaceSearchEngine {
 	static final String ACTION_LABEL = "이 조건으로 추천받기";
 	static final int SUGGEST_LIMIT = 5;
 	static final int PAGE_SIZE = 20;
-	static final int NEARBY_LIMIT = 100;
-	static final String NEARBY_KEYWORD = "근처";
+	static final int NEARBY_LIMIT = 10;
 	static final String SCENARIO_HEADER = "X-Mock-Scenario";
 	static final String EMPTY_SCENARIO = "empty";
 	static final String CHANGE_SUMMARY = "요청하신 조건을 반영했어요";
@@ -101,10 +101,45 @@ public class MockPlaceSearchEngine implements PlaceSearchEngine {
 		return suggestions;
 	}
 
-	/** 회원 id와 {@code preferences}는 결과에 반영하지 않는다. {@code X-Fallback}은 없다. */
+	/**
+	 * 목적별로 응답한다(place-ai-search AC-22, AC-33). 회원 id와 {@code preferences}는 결과에 반영하지 않는다.
+	 * {@code X-Fallback}은 없다.
+	 */
 	@Override
 	public PlaceSearchResult search(SearchPurpose purpose, PlaceSearchRequest request, String userId) {
-		return new PlaceSearchResult(searchResponse(request), null);
+		PlaceSearchResponse response = switch (purpose) {
+			case NEARBY -> nearbyResponse(request);
+			case SEARCH -> searchResponse(request);
+			case REGION -> regionResponse(request);
+		};
+		return new PlaceSearchResult(response, null);
+	}
+
+	/** 지도 영역 안 장소의 점수 상위 10곳. 커서가 없고 empty 시나리오에서도 {@code nearby}다. */
+	private PlaceSearchResponse nearbyResponse(PlaceSearchRequest request) {
+		if (isEmptyScenario()) {
+			return new PlaceSearchResponse(Map.of(), true, 0, List.of(), null, EMPTY_REASON, null);
+		}
+		List<PlaceCard> within = within(rankedCards(), request.mapBounds());
+		List<PlaceCard> cards = within.subList(0, Math.min(NEARBY_LIMIT, within.size()));
+		return new PlaceSearchResponse(Map.of(), true, cards.size(), cards, null,
+				cards.isEmpty() ? EMPTY_REASON : null, null);
+	}
+
+	/** 지도 영역 안 장소를 20곳씩 나눈 페이지. 받은 조건({@code previousConditions}에 담겨 온다)을 돌려주고 변경 요약은 없다. */
+	private PlaceSearchResponse regionResponse(PlaceSearchRequest request) {
+		Map<String, Object> conditions = request.previousConditions() != null ? request.previousConditions() : Map.of();
+		List<PlaceCard> within = within(rankedCards(), request.mapBounds());
+		if (hasCursor(request)) {
+			int offset = decodeCursor(request.cursor());
+			return new PlaceSearchResponse(conditions, false, within.size(), page(within, offset),
+					nextCursor(within, offset), null, null);
+		}
+		if (isEmptyScenario()) {
+			return new PlaceSearchResponse(conditions, false, 0, List.of(), null, EMPTY_REASON, null);
+		}
+		return new PlaceSearchResponse(conditions, false, within.size(), page(within, 0), nextCursor(within, 0),
+				within.isEmpty() ? EMPTY_REASON : null, null);
 	}
 
 	private PlaceSearchResponse searchResponse(PlaceSearchRequest request) {
@@ -112,8 +147,8 @@ public class MockPlaceSearchEngine implements PlaceSearchEngine {
 		Map<String, Object> conditions = previousConditions != null ? previousConditions : Map.of();
 		List<PlaceCard> ranked = rankedCards();
 
-		// 커서가 있으면 질의, 헤더, "근처"를 무시하고 오프셋만 따른다.
-		if (request.cursor() != null && !request.cursor().isEmpty()) {
+		// 커서가 있으면 질의와 헤더를 무시하고 오프셋만 따른다.
+		if (hasCursor(request)) {
 			int offset = decodeCursor(request.cursor());
 			return new PlaceSearchResponse(conditions, false, ranked.size(), page(ranked, offset), nextCursor(ranked, offset),
 					null, null);
@@ -123,12 +158,22 @@ public class MockPlaceSearchEngine implements PlaceSearchEngine {
 		if (isEmptyScenario()) {
 			return new PlaceSearchResponse(conditions, false, 0, List.of(), null, EMPTY_REASON, changeSummary);
 		}
-		if (request.query().contains(NEARBY_KEYWORD)) {
-			List<PlaceCard> candidates = ranked.subList(0, Math.min(NEARBY_LIMIT, ranked.size()));
-			return new PlaceSearchResponse(conditions, true, ranked.size(), candidates, null, null, changeSummary);
-		}
 		return new PlaceSearchResponse(conditions, false, ranked.size(), page(ranked, 0), nextCursor(ranked, 0), null,
 				changeSummary);
+	}
+
+	/** 빈 문자열 커서는 없는 것(첫 페이지)으로 본다. */
+	private static boolean hasCursor(PlaceSearchRequest request) {
+		return request.cursor() != null && !request.cursor().isEmpty();
+	}
+
+	/** 위도·경도가 영역 안(경계 포함)인 카드만 순서를 지켜 남긴다. 영역의 네 값은 검증돼 있다. */
+	private static List<PlaceCard> within(List<PlaceCard> cards, MapBounds area) {
+		return cards.stream().filter(card -> {
+			double lat = card.place().lat();
+			double lng = card.place().lng();
+			return lat >= area.swLat() && lat <= area.neLat() && lng >= area.swLng() && lng <= area.neLng();
+		}).toList();
 	}
 
 	@Override

@@ -206,13 +206,13 @@ class PlaceControllerTest {
 		}
 
 		@Test
-		@DisplayName("추천검색_질의에근처가있으면_커서없이후보전체를점수순으로준다")
-		void search_nearbyQuery_returnsAllWithoutCursor() throws Exception {
+		@DisplayName("추천검색_질의에근처가있어도_다른질의와같이점수순20곳씩페이지를준다")
+		void search_nearQuery_pagedLikeOtherQueries() throws Exception {
 			String body = mockMvc.perform(search("{\"query\":\"내 근처 조용한 카페\"}"))
 					.andExpect(status().isOk())
-					.andExpect(jsonPath("$.nearby").value(true))
-					.andExpect(jsonPath("$.items", hasSize(36)))
-					.andExpect(jsonPath("$.nextCursor").doesNotExist())
+					.andExpect(jsonPath("$.nearby").value(false))
+					.andExpect(jsonPath("$.items", hasSize(20)))
+					.andExpect(jsonPath("$.nextCursor").isString())
 					.andReturn().getResponse().getContentAsString();
 			List<Integer> scores = JsonPath.read(body, "$.items[*].score");
 			assertThat(scores).isSortedAccordingTo(Comparator.reverseOrder());
@@ -277,7 +277,7 @@ class PlaceControllerTest {
 		@DisplayName("추천검색_근처질의에previousConditions를넣으면_changeSummary를준다")
 		void search_nearbyWithPreviousConditions_hasChangeSummary() throws Exception {
 			mockMvc.perform(search("{\"query\":\"근처 카페\",\"previousConditions\":{\"area\":\"역삼\"}}"))
-					.andExpect(jsonPath("$.nearby").value(true))
+					.andExpect(jsonPath("$.nearby").value(false))
 					.andExpect(jsonPath("$.conditions.area").value("역삼"))
 					.andExpect(jsonPath("$.changeSummary").value("요청하신 조건을 반영했어요"));
 		}
