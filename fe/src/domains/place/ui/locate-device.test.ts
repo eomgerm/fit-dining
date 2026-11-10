@@ -290,6 +290,36 @@ describe("locateDevice", () => {
     expect(device.options()).toEqual({ timeout: 10_000, maximumAge: 300_000 });
   });
 
+  it("10초 안에 위치가 오지 않으면(브라우저 시간 초과) failed가 된다", async () => {
+    vi.useFakeTimers();
+    try {
+      // 브라우저처럼 옵션의 timeout이 지나면 시간 초과(code 3)로 끝낸다
+      vi.stubGlobal("navigator", {
+        geolocation: {
+          getCurrentPosition: (
+            _: PositionCallback,
+            error: PositionErrorCallback,
+            options: PositionOptions,
+          ) =>
+            setTimeout(
+              () => error({ code: 3 } as GeolocationPositionError),
+              options.timeout,
+            ),
+        },
+      });
+      const result = locateDevice();
+
+      await vi.advanceTimersByTimeAsync(9_999);
+      expect(snapshot().location).toEqual({ status: "pending" });
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await result).toBeUndefined();
+      expect(snapshot().location).toEqual({ status: "failed" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("조회가 끝나면 다음 요청은 새로 조회한다", async () => {
     const device = stubDevice();
     const first = locateDevice();

@@ -23,7 +23,7 @@ type Session = {
 
 const sessions = new WeakMap<object, Session>();
 
-function session() {
+function pageSessionState() {
   const key = searchStore.pageSession;
   let current = sessions.get(key);
   if (!current) {
@@ -34,7 +34,7 @@ function session() {
 }
 
 function currentPosition() {
-  const current = session();
+  const current = pageSessionState();
   current.inFlight ??= new Promise<LatLng>((resolve, reject) => {
     if (!navigator.geolocation) {
       reject(new Error("geolocation unavailable"));
@@ -69,7 +69,7 @@ export async function locateDevice() {
 
 // "내 위치" 버튼. 누른 순간부터 남은 처음 이동을 대신하고, 처음 조회가 진행 중이면 같은 조회를 기다린다(spec 62번)
 export function locateFromButton() {
-  session().buttonTookOver = true;
+  pageSessionState().buttonTookOver = true;
   searchStore.finishInitialView();
   return locateDevice();
 }
@@ -87,7 +87,7 @@ async function geolocationPermission() {
 
 // 처음 조회의 결과를 store에 옮긴다(spec 62번). 처음 이동이 이미 끝났으면(버튼, 사용자가 지도를 움직임)
 // 이미 정해진 위치를 덮지 않고, 버튼이 대신했으면 알리지 않는다
-function apply(result: InitialLocation) {
+function applyInitialLocation(result: InitialLocation) {
   const { location, initialView } = searchStore.getSnapshot();
   if (result.status === "unavailable") {
     searchStore.finishInitialView();
@@ -101,16 +101,17 @@ function apply(result: InitialLocation) {
   }
   if (location.status === "ok") return;
   searchStore.setLocation({ status: "failed" });
-  if (!session().buttonTookOver) searchStore.noticeLocation(result.status);
+  if (!pageSessionState().buttonTookOver)
+    searchStore.noticeLocation(result.status);
   searchStore.finishInitialView();
 }
 
-async function decide(): Promise<InitialLocation> {
+async function decideInitialLocation(): Promise<InitialLocation> {
   const permission = await geolocationPermission();
   if (permission === "denied") return { status: "denied" };
   if (permission !== "granted") return { status: "unavailable" };
   const { initialView, location } = searchStore.getSnapshot();
-  const { inFlight } = session();
+  const { inFlight } = pageSessionState();
   // 처음 이동이 이미 끝났으면 새로 조회하지 않는다. 진행 중인 버튼 조회가 있으면 그 결과를 기다린다
   if (initialView === "done" && !inFlight) {
     return location.status === "ok"
@@ -127,9 +128,9 @@ async function decide(): Promise<InitialLocation> {
 // 앱을 열 때의 위치 결정. 페이지 세션에 한 번만 하고 다시 들어온 화면은 같은 결과를 기다린다.
 // 권한이 이미 허용이면 묻지 않고 위치를 받고, 그 밖에는 요청하지 않는다(spec 40번)
 export function initialLocation() {
-  const current = session();
-  current.initial ??= decide().then((result) => {
-    apply(result);
+  const current = pageSessionState();
+  current.initial ??= decideInitialLocation().then((result) => {
+    applyInitialLocation(result);
     return result;
   });
   return current.initial;

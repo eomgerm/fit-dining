@@ -727,6 +727,57 @@ describe("SearchScreen", () => {
         expect(device.getCurrentPosition).toHaveBeenCalledTimes(1);
       });
 
+      it("'내 위치'로 찾는 중에 다른 화면으로 갔다 오면 파란색이 꺼져 있다", async () => {
+        const device = stubLocationLater();
+        const view = renderHideableScreen();
+        await waitFor(() => expect(mapState()).toBe("ready"));
+        await waitFor(() =>
+          expect(device.getCurrentPosition).toHaveBeenCalled(),
+        );
+        fireEvent.click(screen.getByRole("button", { name: "내 위치" }));
+        expect(
+          screen
+            .getByRole("button", { name: "내 위치" })
+            .getAttribute("aria-busy"),
+        ).toBe("true");
+
+        view.hide();
+        view.show();
+        await act(async () => {});
+
+        expect(
+          screen
+            .getByRole("button", { name: "내 위치" })
+            .getAttribute("aria-busy"),
+        ).toBe("false");
+      });
+
+      it("처음 이동 뒤 지도가 멈춤을 알리지 않아도 1.5초 안에 끝나고, 근처 응답의 '위치를 확인하는 중'도 사라진다", async () => {
+        const device = stubLocationLater();
+        renderScreen();
+        await waitFor(() => expect(mapState()).toBe("ready"));
+        await waitFor(() =>
+          expect(device.getCurrentPosition).toHaveBeenCalled(),
+        );
+        fireEvent.change(screen.getByRole("textbox", { name: "장소 검색" }), {
+          target: { value: "근처 카페" },
+        });
+        fireEvent.submit(screen.getByRole("search"));
+        expect(await screen.findByText("위치를 확인하는 중")).toBeTruthy();
+
+        await device.succeed();
+        await waitFor(() => expect(map.created[0].panTo).toHaveBeenCalled());
+        expect(initialView()).toBe("applying");
+
+        // idle을 일으키지 않는다
+        await waitFor(() => expect(initialView()).toBe("done"), {
+          timeout: 3000,
+        });
+        await waitFor(() =>
+          expect(screen.queryByText("위치를 확인하는 중")).toBeNull(),
+        );
+      });
+
       it("위치를 기다리는 동안 지도를 끌면 처음 이동이 취소되고, 늦게 온 위치는 내 위치 점으로만 남는다", async () => {
         const device = stubLocationLater();
         renderScreen();
