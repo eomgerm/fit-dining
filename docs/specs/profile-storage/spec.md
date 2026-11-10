@@ -40,10 +40,10 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 |---|---|---|---|
 | `mood`, `priorities`, `purposes` | 기존 | 온보딩 원본 | 온보딩(-58). 바꾸지 않는다 |
 | `tastes` | jsonb(기존) | 온보딩 원본 칩. 칩 하나는 39가 직접 입력을 해석한 항목 하나다(taste-profile spec 1단계 "칩 표시"). 원소에 `code`, `vector`가 더해진다: `[{polarity, label, code, vector}]`. `code`는 코드표 코드 또는 null, 코드 없는 칩의 `label`은 39의 `positive_text`이고, `vector`는 코드 없는 LIKE 칩만 | `polarity`, `label`은 온보딩. `code`, `vector`는 온보딩 때 39 |
-| `features` | jsonb, NOT NULL, 기본 `[]`, 배열 CHECK | 취향 프로필 결과 `[{code, layer, like, weight}]`, `weight`는 1~3 | 온보딩 때 39, 이후 04:00 배치 |
+| `features` | jsonb, NOT NULL, 기본 `[]`, 배열 CHECK | 취향 프로필 결과 `[{code, layer, like, weight, category}]`. `weight`는 0보다 큰 실수이고 상한이 없다. `category`는 null이면 전체 취향, `RESTAURANT`·`CAFE`·`BAR`면 그 업종의 취향이다(D-20) | 온보딩 때 39, 이후 04:00 배치 |
 | `features_refreshed_at` | timestamptz, null 허용(V21) | 04:00 배치가 `features`를 마지막으로 다시 계산한 실행 시작 시각. null은 아직 배치가 계산하지 않음(D-15) | 04:00 배치 |
 
-원본을 남기는 이유: `weight`는 min(긍정 − 부정, 3)이고 같은 장소는 최신 평가 하나만 센다(taste-profile spec 4단계). 상한에서 정보가 잘려 `features`만으로는 리뷰를 빼거나 더해 다시 계산할 수 없다. 코드표에 없는 칩의 `vector`도 검색에 쓴다(D-3).
+원본을 남기는 이유: `weight`는 근거마다 뒤에 쌓인 리뷰 수로 줄인 무게의 합이고 같은 장소는 최신 평가 하나만 센다(taste-profile spec 3단계). 합에서 근거별 정보가 사라져 `features`만으로는 리뷰를 빼거나 더해 다시 계산할 수 없다. 코드표에 없는 칩의 `vector`도 검색에 쓴다(D-3).
 
 ### `places`(새 테이블)
 

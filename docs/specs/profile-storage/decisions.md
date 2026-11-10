@@ -115,3 +115,10 @@ Glossary: none · ADRs: none
   주의: `places.station`으로 거르는 "OO역 근처" 검색에는 채운 장소(최대 3km)가 섞인다.
 - Rejected: 거리 상관없이 전부 채우기 → 구미는 최대 12km, 부산은 중앙값 8km 떨어진 역이 들어가서 역 근처 검색이 부정확해진다. 하남산단 역(광주 지하철)을 새로 구해 코드 추가 → 별도 작업이라 이번에는 하지 않는다. 비워 두기 → 요청으로 채우기로 했다.
 - Anchors: `ai/src/fit_ai/place/from_crawl.py#STATION_LOCATION_BY_NAVER_ID` · `ai/src/fit_ai/place/from_crawl.py#STATION_FILL_MAX_KM` · `ai/src/fit_ai/place/from_crawl.py#nearest_station` · `ai/tests/match/test_station_contract.py`
+## D-20 취향 세기는 실수이고, 업종별 취향은 `features` 원소의 `category`로 둔다
+- Status: settled
+- Decision: Jira S15P31A302-200. `features` 원소는 `{code, layer, like, weight, category}`다. `weight`는 0보다 큰 실수이고 상한이 없다. 근거마다 0.5^(뒤에 쌓인 리뷰 수 ÷ 10)에 재방문 의사면 1.5를 곱한 무게의 합이다(taste-profile spec 3단계). `category`가 null이면 전체 취향, `RESTAURANT`·`CAFE`·`BAR`면 그 업종의 취향이다(spec 4단계). 업종별 원소는 리뷰가 있는 회원만 있고, 전체 취향과 한 목록에 둔다. 새 컬럼은 없다. 04:00 배치는 리뷰마다 `reviews.revisit_intent`를 함께 보낸다.
+  배포 때 V24가 `features_refreshed_at`을 비운다. 그러면 리뷰가 있는 회원(지운 리뷰만 있는 회원 포함)이 다음 04:00에 모두 새 규칙으로 다시 계산된다. 리뷰가 없는 회원은 근거가 온보딩뿐이라 결과가 같아 대상이 아니다. 다시 계산되기 전에도 AI는 옛 정수 `weight`를 읽고 `category`가 없는 원소를 전체 취향으로 읽는다. 회원 데이터를 한꺼번에 바꾸는 마이그레이션이라 넣을 때 승인을 받는다.
+  AI와 BE는 서로 모르는 속성을 거절한다(AI 요청 `extra="forbid"`, BE `fail-on-unknown-properties`). 그래서 BE만 먼저 배포하면 AI가 `revisitIntent`를 거절하고, AI만 먼저 배포하면 BE가 `category`를 읽지 못해 배치가 실패한다. 둘을 같이 배포한다.
+- Rejected: 업종별 취향을 별도 컬럼이나 테이블로 → 사용자당 한 번에 읽고 쓰는 값이라 나눌 이유가 없고(D-3), 원소에 칸 하나를 더하면 옛 행도 그대로 읽힌다. 배포 뒤 새 리뷰를 쓴 회원만 다시 계산 → 리뷰를 쉬는 회원에게 옛 세기(최대 3, 업종 없음)가 계속 남는다. 리뷰가 없는 회원까지 다시 계산 → 결과가 같다.
+- Anchors: `be/src/main/resources/db/migration/V24__recompute_taste_features.sql` (new) · `be/src/main/java/kr/co/fitdining/api/user/TasteFeature.java#TasteFeature` · `be/src/main/java/kr/co/fitdining/api/onboarding/TasteRefreshBatch.java#TasteRefreshBatch.evidence` · `ai/src/fit_ai/taste/profile.py#compute_features` · `ai/src/fit_ai/match/taste_select.py#select_tastes`
