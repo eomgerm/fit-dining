@@ -1,6 +1,5 @@
 import { cn } from "@/shared/lib/cn";
 import { Tag } from "@/shared/ui/display/tag";
-import { WarningIcon } from "@/shared/ui/icon/icons/warning";
 
 import type { LatLng, PlaceCard as PlaceCardData } from "../model/place-types";
 import { FitScore } from "./fit-score";
@@ -27,7 +26,12 @@ export function PlaceCard({
   here,
   onPress,
 }: PlaceCardProps) {
-  const { place, score, labels, caution, openStatus } = card;
+  const { place, score, labels, openStatus, scoreItems } = card;
+  // 이번 검색에서 맞은 조건 태그만 강조한다. AI는 맞은 조건 태그를 근거 항목과 같은 문구로
+  // 보내고, 채운 태그(장소 특징, 업종·역 이름)는 회색이다(ai/docs/comparison/api.md)
+  const matched = new Set(
+    scoreItems.filter((item) => item.matched).map((item) => item.label),
+  );
   return (
     // 빈 카드(PlaceCardSkeleton) 자리에 처음 그려질 때 투명도만 200ms로 나타난다. 움직임 줄이기에서는 120ms다.
     // 선택 테두리(120ms)와 시간이 달라 감싸는 쪽에서 바꾼다
@@ -65,20 +69,17 @@ export function PlaceCard({
               {score !== undefined && <FitScore score={score} />}
             </div>
             <div className="flex flex-wrap gap-1">
-              {labels.map((label, index) => (
-                <Tag key={label} variant={index === 0 ? "match" : "default"}>
+              {labels.map((label) => (
+                <Tag
+                  key={label}
+                  variant={matched.has(label) ? "match" : "default"}
+                >
                   {label}
                 </Tag>
               ))}
             </div>
           </div>
         </div>
-        {caution && (
-          <p className="flex items-center gap-1.5 text-caption-md text-warning">
-            <WarningIcon size="sm" />
-            {caution}
-          </p>
-        )}
       </button>
     </div>
   );

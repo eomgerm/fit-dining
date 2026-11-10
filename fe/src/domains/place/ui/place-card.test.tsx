@@ -44,4 +44,45 @@ describe("PlaceCard", () => {
     expect(screen.getByText("카페 온담")).toBeTruthy();
     expect(screen.getByText("조용해요")).toBeTruthy();
   });
+
+  // 강조색 태그는 bg-primary-soft(Tag variant="match")다
+  const highlighted = (text: string) =>
+    screen.getByText(text).className.includes("bg-primary-soft");
+
+  it("이번 검색에서 맞은 조건 태그에만 강조색을 칠한다", () => {
+    renderCard({
+      ...card,
+      labels: ["작업하기 좋아요", "조용해요"],
+      scoreItems: [
+        {
+          source: "REQUEST",
+          label: "작업하기 좋아요",
+          matched: true,
+          evidenceCount: 7,
+        },
+        {
+          source: "PREFERENCE",
+          label: "조용해요",
+          matched: false,
+          evidenceCount: 1,
+        },
+      ],
+    });
+
+    expect(highlighted("작업하기 좋아요")).toBe(true);
+    expect(highlighted("조용해요")).toBe(false);
+  });
+
+  it("맞은 조건이 없으면 첫 태그도 회색이다", () => {
+    renderCard(card);
+
+    expect(highlighted("조용해요")).toBe(false);
+    expect(highlighted("넓어요")).toBe(false);
+  });
+
+  it("주의점이 있어도 카드에는 그리지 않는다", () => {
+    renderCard({ ...card, caution: "주말엔 웨이팅이 길어요" });
+
+    expect(screen.queryByText("주말엔 웨이팅이 길어요")).toBeNull();
+  });
 });
