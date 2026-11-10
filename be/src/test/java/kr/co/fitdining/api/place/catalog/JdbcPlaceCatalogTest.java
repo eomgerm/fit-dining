@@ -1,6 +1,7 @@
 package kr.co.fitdining.api.place.catalog;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -11,6 +12,7 @@ import java.util.Optional;
 import java.util.UUID;
 import kr.co.fitdining.api.place.dto.OpenStatus;
 import kr.co.fitdining.api.place.dto.PlaceCard;
+import kr.co.fitdining.api.place.dto.PlaceSearchRequest.MapBounds;
 import kr.co.fitdining.api.place.dto.PlaceDetailResponse;
 import kr.co.fitdining.api.place.dto.PlaceDetailResponse.Break;
 import kr.co.fitdining.api.place.dto.PlaceDetailResponse.DayCode;
@@ -282,6 +284,62 @@ class JdbcPlaceCatalogTest extends PostgresTestSupport {
 		assertThat(cards.get(1).openStatus()).isEqualTo(OpenStatus.OPEN);
 		assertThat(cards.get(1).place().categoryGroup()).isEqualTo(CategoryGroup.BAR);
 		assertThat(cards.get(1).place().station()).isEqualTo(Station.SEOLLEUNG);
+	}
+
+	private long placeAt(double lat, double lng) {
+		return jdbc.queryForObject("""
+				INSERT INTO places (naver_place_id, name, category_group, station, lat, lng)
+				VALUES (?, '영역 장소', 'CAFE', NULL, ?, ?) RETURNING place_id""", Long.class,
+				UUID.randomUUID().toString(), lat, lng);
+	}
+
+	@Test
+	@DisplayName("영역카드_경계를포함한영역안장소만_id순으로점수없이읽는다")
+	void cardsWithin_inclusiveArea_inIdOrderWithoutScore() {
+		long corner = placeAt(37.40, 127.00);
+		long inside = placeAt(37.45, 127.05);
+		long otherCorner = placeAt(37.50, 127.10);
+		placeAt(37.39, 127.05);
+		placeAt(37.45, 127.11);
+		hours(inside, "WED", "11:00", "22:00", false, "[]", "{}");
+
+		List<PlaceCard> cards = catalog.cardsWithin(new MapBounds(37.40, 127.00, 37.50, 127.10), 10);
+
+		assertThat(cards).extracting(card -> card.place().id()).containsExactly(corner, inside, otherCorner);
+		assertThat(cards).allSatisfy(card -> {
+			assertThat(card.score()).isNull();
+			assertThat(card.labels()).isEmpty();
+			assertThat(card.reasons()).isEmpty();
+			assertThat(card.scoreItems()).isEmpty();
+		});
+		assertThat(cards.get(0).openStatus()).isEqualTo(OpenStatus.UNKNOWN);
+		assertThat(cards.get(1).openStatus()).isEqualTo(OpenStatus.OPEN);
+	}
+
+	@Test
+	@DisplayName("영역카드_영역안장소가많으면_id가작은앞n곳만읽는다")
+	void cardsWithin_moreThanLimit_firstByIdOnly() {
+		List<Long> ids = new java.util.ArrayList<>();
+		for (int i = 0; i < 4; i++) {
+			ids.add(placeAt(37.45, 127.05));
+		}
+
+		assertThat(catalog.cardsWithin(new MapBounds(37.40, 127.00, 37.50, 127.10), 3))
+				.extracting(card -> card.place().id()).containsExactlyElementsOf(ids.subList(0, 3));
+	}
+
+	@Test
+	@DisplayName("영역카드_DB오류가나도_예외메시지에좌표가없다")
+	void cardsWithin_databaseError_messageWithoutCoordinates() {
+		placeAt(37.45, 127.05);
+
+		// LIMIT에 음수를 주면 Postgres가 오류를 낸다. 좌표는 바인딩되어 SQL 문자열과 메시지에 나오지 않아야 한다.
+		assertThatThrownBy(() -> catalog.cardsWithin(
+				new MapBounds(37.4987654321, 127.0123456789, 37.5123456789, 127.0587654321), -1))
+				.isInstanceOf(org.springframework.dao.DataAccessException.class)
+				.satisfies(e -> assertThat(String.valueOf(e) + e.getCause()).doesNotContain("37.4987654321")
+						.doesNotContain("127.0123456789").doesNotContain("37.5123456789")
+						.doesNotContain("127.0587654321"));
 	}
 
 	@Test

@@ -175,12 +175,13 @@ class PlaceControllerMockDisabledTest {
 	@DisplayName("추천검색_AI를쓸수없으면_대체결과와AI_UNAVAILABLE헤더로200이다")
 	void search_aiUnavailable_returnsFallbackWithHeader() throws Exception {
 		when(aiClient.search(any(), any(), any())).thenReturn(Optional.empty());
-		when(catalog.nearbyCandidates()).thenReturn(List.of(card()));
+		when(keywordSearch.search(any(), anyInt(), anyInt())).thenReturn(List.of(new PlaceKeywordHit(PLACE, null, true)));
+		when(catalog.cards(any())).thenReturn(List.of(card()));
 
-		mockMvc.perform(search("{\"query\":\"근처 맛집\"}"))
+		mockMvc.perform(search("{\"query\":\"카페\"}"))
 				.andExpect(status().isOk())
 				.andExpect(header().string("X-Fallback", "AI_UNAVAILABLE"))
-				.andExpect(jsonPath("$.nearby").value(true))
+				.andExpect(jsonPath("$.nearby").value(false))
 				.andExpect(jsonPath("$.items[0].place.id").value(7))
 				.andExpect(jsonPath("$.items[0].score").doesNotExist())
 				.andExpect(jsonPath("$.items[0].labels").isEmpty());
@@ -234,9 +235,10 @@ class PlaceControllerMockDisabledTest {
 	@DisplayName("추천검색_카탈로그DB오류는_대체하지않고503이다")
 	void search_catalogError_returnsServiceUnavailable() throws Exception {
 		when(aiClient.search(any(), any(), any())).thenReturn(Optional.empty());
-		when(catalog.nearbyCandidates()).thenThrow(new DataAccessResourceFailureException("db"));
+		when(keywordSearch.search(any(), anyInt(), anyInt())).thenReturn(List.of(new PlaceKeywordHit(PLACE, null, true)));
+		when(catalog.cards(any())).thenThrow(new DataAccessResourceFailureException("db"));
 
-		expectUnavailable(search("{\"query\":\"근처 맛집\"}"));
+		expectUnavailable(search("{\"query\":\"카페\"}"));
 	}
 
 	@Test

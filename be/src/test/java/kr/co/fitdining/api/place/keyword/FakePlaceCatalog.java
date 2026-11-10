@@ -9,6 +9,7 @@ import kr.co.fitdining.api.place.catalog.PlaceCatalog;
 import kr.co.fitdining.api.place.catalog.PlaceSearchDocument;
 import kr.co.fitdining.api.place.dto.PlaceCard;
 import kr.co.fitdining.api.place.dto.PlaceDetailResponse;
+import kr.co.fitdining.api.place.dto.PlaceSearchRequest.MapBounds;
 
 /** 검색 문서만 돌려주는 가짜 카탈로그. 읽은 횟수를 센다. */
 final class FakePlaceCatalog implements PlaceCatalog {
@@ -43,6 +44,11 @@ final class FakePlaceCatalog implements PlaceCatalog {
 
 	@Override
 	public List<PlaceCard> cards(Collection<Long> ids) {
+		throw new UnsupportedOperationException();
+	}
+
+	@Override
+	public List<PlaceCard> cardsWithin(MapBounds area, int limit) {
 		throw new UnsupportedOperationException();
 	}
 

@@ -42,6 +42,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
@@ -346,39 +347,27 @@ class CatalogPlaceSearchEngineTest {
 		}
 
 		@ParameterizedTest
-		@ValueSource(strings = {"근처 맛집", "  근처 맛집\t"})
-		@DisplayName("대체_홈요청은_카탈로그전체를nearby로준다")
-		void fallback_home_wholeCatalogNearby(String query) {
-			unavailable();
-			when(catalog.nearbyCandidates()).thenReturn(List.of(card(A, OpenStatus.OPEN), card(B, OpenStatus.OPEN)));
-
-			PlaceSearchResponse response = engine.search(SearchPurpose.SEARCH, new PlaceSearchRequest(query, null, Map.of(), null, null), null)
-					.response();
-
-			assertThat(response.nearby()).isTrue();
-			assertThat(response.items()).extracting(card -> card.place().id()).containsExactly(1L, 2L);
-			assertThat(response.totalCount()).isEqualTo(2);
-			verify(keywordSearch, never()).search(any(), anyInt(), anyInt());
-		}
-
-		@ParameterizedTest
-		@ValueSource(strings = {"근처 맛집집", "근처  맛집", "강남역 근처 맛집"})
-		@DisplayName("대체_홈문장이아니면_키워드검색이다")
-		void fallback_notHomeQuery_keyword(String query) {
+		@ValueSource(strings = {"근처 맛집", "  근처 맛집\t", "강남역 근처 맛집"})
+		@DisplayName("대체_SEARCH는근처맛집이어도_홈으로보지않고키워드검색이다")
+		void fallback_searchHomeSentence_keyword(String query) {
 			unavailable();
 			when(keywordSearch.search(any(), anyInt(), anyInt())).thenReturn(List.of());
 
-			assertThat(engine.search(SearchPurpose.SEARCH, request(query), null).response().nearby()).isFalse();
+			PlaceSearchResponse response = engine.search(SearchPurpose.SEARCH, request(query), null).response();
+
+			assertThat(response.nearby()).isFalse();
+			verify(keywordSearch).search(query, 0, Integer.MAX_VALUE);
 			verify(catalog, never()).nearbyCandidates();
+			verify(catalog, never()).cardsWithin(any(), anyInt());
 		}
 
 		@Test
-		@DisplayName("대체_이전조건이있으면_홈요청이아니고conditions로돌려준다")
-		void fallback_homeWithPrevious_keywordAndEchoesConditions() {
+		@DisplayName("대체_SEARCH에이전조건이있으면_conditions로돌려준다")
+		void fallback_searchWithPrevious_echoesConditions() {
 			unavailable();
 			when(keywordSearch.search(any(), anyInt(), anyInt())).thenReturn(List.of());
 
-			PlaceSearchResponse response = engine.search(SearchPurpose.SEARCH, 
+			PlaceSearchResponse response = engine.search(SearchPurpose.SEARCH,
 					new PlaceSearchRequest("근처 맛집", null, Map.of("text", "이전"), null, null), null).response();
 
 			assertThat(response.nearby()).isFalse();
@@ -386,37 +375,27 @@ class CatalogPlaceSearchEngineTest {
 		}
 
 		@Test
-		@DisplayName("대체_홈요청도지도영역이있으면_영역안만남는다")
-		void fallback_homeWithBounds_filtered() {
-			unavailable();
-			when(catalog.nearbyCandidates()).thenReturn(List.of(card(at(1L, 37.50, 127.00), OpenStatus.OPEN),
-					card(at(2L, 37.60, 127.00), OpenStatus.OPEN)));
-
-			PlaceSearchResponse response = engine.search(SearchPurpose.SEARCH, new PlaceSearchRequest("근처 맛집", null, null,
-					new MapBounds(37.40, null, 37.55, null), null), null).response();
-
-			assertThat(response.nearby()).isTrue();
-			assertThat(response.items()).extracting(card -> card.place().id()).containsExactly(1L);
-		}
-
-		@Test
-		@DisplayName("대체_지도영역은경계를포함하고_빈값은그쪽을제한하지않는다")
-		void fallback_bounds_inclusiveAndOpenSides() {
+		@DisplayName("대체_SEARCH는지도영역이있든없든_같은장소를같은순서로준다")
+		void fallback_searchIgnoresBounds_sameResult() {
 			unavailable();
 			when(keywordSearch.search("카페", 0, Integer.MAX_VALUE)).thenReturn(List.of(
-					hit(at(1L, 37.40, 127.00)), hit(at(2L, 37.50, 127.10)), hit(at(3L, 37.39, 127.00)),
-					hit(at(4L, 37.45, 127.11)), hit(at(5L, 80.0, -50.0))));
+					hit(at(3L, 80.0, -50.0)), hit(at(1L, 37.40, 127.00)), hit(at(2L, 37.39, 127.00))));
 			when(catalog.cards(any())).thenAnswer(invocation -> cardsFor(invocation.getArgument(0)));
 
-			PlaceSearchResponse response = engine.search(SearchPurpose.SEARCH, new PlaceSearchRequest("카페", null, null,
-					new MapBounds(37.40, null, 37.50, 127.10), null), null).response();
+			List<Long> withoutBounds = ids(engine.search(SearchPurpose.SEARCH, request("카페"), null));
+			List<Long> withBounds = ids(engine.search(SearchPurpose.SEARCH, new PlaceSearchRequest("카페", null, null,
+					new MapBounds(37.40, 126.0, 37.50, 128.0), null), null));
+			List<Long> partialBounds = ids(engine.search(SearchPurpose.SEARCH, new PlaceSearchRequest("카페", null, null,
+					new MapBounds(37.40, null, null, null), null), null));
 
-			assertThat(response.items()).extracting(card -> card.place().id()).containsExactly(1L, 2L);
+			assertThat(withoutBounds).containsExactly(3L, 1L, 2L);
+			assertThat(withBounds).isEqualTo(withoutBounds);
+			assertThat(partialBounds).isEqualTo(withoutBounds);
 		}
 
 		@Test
-		@DisplayName("대체_키워드결과는_전체를영역으로거른뒤앞20곳을id로읽고순위순이며없는장소는빠진다")
-		void fallback_keyword_filterThenTwentyThenRead() {
+		@DisplayName("대체_SEARCH키워드결과는_앞20곳을id로읽고순위순이며없는장소는빠진다")
+		void fallback_keyword_twentyThenRead() {
 			unavailable();
 			List<PlaceKeywordHit> hits = new ArrayList<>();
 			hits.add(hit(at(100L, 10.0, 10.0)));
@@ -431,16 +410,84 @@ class CatalogPlaceSearchEngineTest {
 					new MapBounds(37.0, 126.0, 38.0, 128.0), null), null).response();
 
 			List<Long> expected = new ArrayList<>();
-			for (long id = 30; id >= 11; id--) {
+			expected.add(100L);
+			for (long id = 30; id >= 12; id--) {
 				if (id != 25L) {
 					expected.add(id);
 				}
 			}
-			verify(catalog).cards(argThat(ids -> ids.size() == 20 && !ids.contains(100L) && ids.contains(11L)));
+			verify(catalog).cards(argThat(ids -> ids.size() == 20 && ids.contains(100L) && ids.contains(12L)));
 			assertThat(response.items()).extracting(card -> card.place().id()).containsExactlyElementsOf(expected);
 			assertThat(response.totalCount()).isEqualTo(19);
 		}
 
+		@Test
+		@DisplayName("대체_NEARBY는_영역안장소10곳을nearby로주고conditions가비어있다")
+		void fallback_nearby_tenAreaPlacesNearby() {
+			unavailable();
+			when(catalog.cardsWithin(AREA, 10)).thenReturn(List.of(card(at(4L, 37.5, 127.0), OpenStatus.OPEN),
+					card(at(7L, 37.5, 127.0), OpenStatus.CLOSED)));
+
+			PlaceSearchResult result = engine.search(SearchPurpose.NEARBY, areaRequest(null), null);
+
+			PlaceSearchResponse response = result.response();
+			assertThat(result.fallback()).isEqualTo("AI_UNAVAILABLE");
+			assertThat(response.nearby()).isTrue();
+			assertThat(response.conditions()).isEmpty();
+			assertThat(response.items()).extracting(card -> card.place().id()).containsExactly(4L, 7L);
+			assertThat(response.totalCount()).isEqualTo(2);
+			assertThat(response.emptyReason()).isNull();
+			assertThat(response.nextCursor()).isNull();
+			assertThat(response.changeSummary()).isNull();
+			verify(keywordSearch, never()).search(any(), anyInt(), anyInt());
+			verify(catalog, never()).nearbyCandidates();
+		}
+
+		@Test
+		@DisplayName("대체_REGION은_영역안장소20곳을주고받은조건대신빈conditions다")
+		void fallback_region_twentyAreaPlacesEmptyConditions() {
+			unavailable();
+			when(catalog.cardsWithin(AREA, 20)).thenReturn(List.of(card(at(4L, 37.5, 127.0), OpenStatus.OPEN)));
+
+			PlaceSearchResponse response = engine.search(SearchPurpose.REGION, areaRequest(Map.of("text", "강남역 파스타")),
+					null).response();
+
+			assertThat(response.nearby()).isFalse();
+			assertThat(response.conditions()).isEmpty();
+			assertThat(response.items()).extracting(card -> card.place().id()).containsExactly(4L);
+			assertThat(response.items().getFirst().score()).isNull();
+			assertThat(response.changeSummary()).isNull();
+			verify(keywordSearch, never()).search(any(), anyInt(), anyInt());
+		}
+
+		@ParameterizedTest
+		@EnumSource(value = SearchPurpose.class, names = {"NEARBY", "REGION"})
+		@DisplayName("대체_영역결과가비면_지역문구emptyReason이다")
+		void fallback_emptyArea_areaEmptyReason(SearchPurpose purpose) {
+			unavailable();
+			when(catalog.cardsWithin(any(), anyInt())).thenReturn(List.of());
+
+			PlaceSearchResponse response = engine.search(purpose, areaRequest(null), null).response();
+
+			assertThat(response.items()).isEmpty();
+			assertThat(response.totalCount()).isZero();
+			assertThat(response.emptyReason()).isEqualTo(new EmptyReason(
+					"이 지역에는 아직 보여 드릴 장소가 없어요", "지도를 옮기거나 넓혀서 다시 찾아 보세요"));
+		}
+
+		@ParameterizedTest
+		@EnumSource(value = SearchPurpose.class, names = {"NEARBY", "REGION"})
+		@DisplayName("대체_영역요청의AI카드id가전부카탈로그에없으면_영역대체다")
+		void fallback_areaAllIdsUnknown_areaFallback(SearchPurpose purpose) {
+			ai(response(List.of(item(9L))));
+			when(catalog.cards(List.of(9L))).thenReturn(List.of());
+			when(catalog.cardsWithin(any(), anyInt())).thenReturn(List.of(card(at(4L, 37.5, 127.0), OpenStatus.OPEN)));
+
+			PlaceSearchResult result = engine.search(purpose, areaRequest(null), null);
+
+			assertThat(result.fallback()).isEqualTo("AI_UNAVAILABLE");
+			assertThat(result.response().items()).extracting(card -> card.place().id()).containsExactly(4L);
+		}
 		@Test
 		@DisplayName("대체_카드는점수없이빈목록이고_conditions는받은값이며커서와요약이없다")
 		void fallback_keywordHit_cardWithoutScore() {
@@ -488,8 +535,10 @@ class CatalogPlaceSearchEngineTest {
 			assertThatThrownBy(() -> engine.search(SearchPurpose.SEARCH, request("카페"), null))
 					.isInstanceOf(PlaceSearchUnavailableException.class);
 
-			when(catalog.nearbyCandidates()).thenThrow(new DataAccessResourceFailureException("db"));
-			assertThatThrownBy(() -> engine.search(SearchPurpose.SEARCH, request("근처 맛집"), null))
+			when(catalog.cardsWithin(any(), anyInt())).thenThrow(new DataAccessResourceFailureException("db"));
+			assertThatThrownBy(() -> engine.search(SearchPurpose.NEARBY, areaRequest(null), null))
+					.isInstanceOf(DataAccessResourceFailureException.class);
+			assertThatThrownBy(() -> engine.search(SearchPurpose.REGION, areaRequest(null), null))
 					.isInstanceOf(DataAccessResourceFailureException.class);
 		}
 
@@ -507,6 +556,66 @@ class CatalogPlaceSearchEngineTest {
 		void unavailable() {
 			when(aiClient.search(any(), any(), any())).thenReturn(Optional.empty());
 		}
+	}
+
+	@Nested
+	@DisplayName("NEARBY AI 결과")
+	class NearbyAi {
+
+		@Test
+		@DisplayName("NEARBY_AI카드는_카탈로그확인뒤앞10곳만남기고totalCount는남은수다")
+		void nearby_aiCards_tenAfterCatalogCheck() {
+			List<AiSearchClient.Item> items = new ArrayList<>();
+			items.add(item(1L));
+			items.add(item(1L));
+			for (long id = 2; id <= 14; id++) {
+				items.add(item(id));
+			}
+			ai(new AiSearchClient.Response(Map.of("text", "t"), true, null, null, items, List.of("TASTE_INVALID"), null,
+					null, null));
+			// 2번은 카탈로그에 없다. 자르기 전에 빠져서 11번까지 10곳이 남아야 한다
+			when(catalog.cards(any())).thenAnswer(invocation -> cardsFor(invocation.<List<Long>>getArgument(0).stream()
+					.filter(id -> id != 2L).toList()));
+
+			PlaceSearchResult result = engine.search(SearchPurpose.NEARBY, areaRequest(null), null);
+
+			assertThat(result.response().items()).extracting(card -> card.place().id())
+					.containsExactly(1L, 3L, 4L, 5L, 6L, 7L, 8L, 9L, 10L, 11L);
+			assertThat(result.response().totalCount()).isEqualTo(10);
+			assertThat(result.response().nearby()).isTrue();
+			assertThat(result.response().conditions()).containsEntry("text", "t");
+			assertThat(result.fallback()).isEqualTo("TASTE_INVALID");
+			verify(catalog, never()).cardsWithin(any(), anyInt());
+		}
+
+		@ParameterizedTest
+		@EnumSource(value = SearchPurpose.class, names = {"SEARCH", "REGION"})
+		@DisplayName("AI카드_SEARCH와REGION은_10곳으로자르지않고영역으로다시거르지않는다")
+		void aiCards_searchAndRegion_notTrimmedNorFiltered(SearchPurpose purpose) {
+			List<AiSearchClient.Item> items = new ArrayList<>();
+			for (long id = 1; id <= 15; id++) {
+				items.add(item(id));
+			}
+			ai(response(items));
+			// AI가 준 장소가 영역 밖(80, -50)이어도 BE는 다시 거르지 않는다
+			when(catalog.cards(any())).thenAnswer(invocation -> invocation.<List<Long>>getArgument(0).stream().sorted()
+					.map(id -> card(at(id, 80.0, -50.0), OpenStatus.OPEN)).toList());
+
+			PlaceSearchResponse response = engine.search(purpose, areaRequest(null), null).response();
+
+			assertThat(response.items()).hasSize(15);
+			assertThat(response.totalCount()).isEqualTo(15);
+		}
+	}
+
+	private static final MapBounds AREA = new MapBounds(37.49, 127.02, 37.51, 127.05);
+
+	private static PlaceSearchRequest areaRequest(Map<String, Object> conditions) {
+		return new PlaceSearchRequest(SearchPurpose.NEARBY_QUERY, null, conditions, AREA, null);
+	}
+
+	private static List<Long> ids(PlaceSearchResult result) {
+		return result.response().items().stream().map(card -> card.place().id()).toList();
 	}
 
 	private static final String SECRET = "비밀표식9c41";

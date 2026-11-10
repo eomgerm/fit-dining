@@ -12,12 +12,10 @@ import kr.co.fitdining.api.place.catalog.PlaceCatalog;
 import kr.co.fitdining.api.place.dto.PlaceCard;
 import kr.co.fitdining.api.place.dto.PlaceDetailResponse;
 import kr.co.fitdining.api.place.dto.PlaceSearchRequest;
-import kr.co.fitdining.api.place.dto.PlaceSearchRequest.MapBounds;
 import kr.co.fitdining.api.place.dto.PlaceSearchResponse;
 import kr.co.fitdining.api.place.dto.PlaceSearchResponse.EmptyReason;
 import kr.co.fitdining.api.place.dto.PlaceSuggestResponse;
 import kr.co.fitdining.api.place.dto.PlaceSuggestResponse.SuggestType;
-import kr.co.fitdining.api.place.dto.PlaceSummary;
 import kr.co.fitdining.api.place.keyword.PlaceKeywordHit;
 import kr.co.fitdining.api.place.keyword.PlaceKeywordSearch;
 import lombok.RequiredArgsConstructor;
@@ -37,12 +35,15 @@ public class CatalogPlaceSearchEngine implements PlaceSearchEngine {
 
 	static final String ACTION_LABEL = "이 조건으로 추천받기";
 	static final int SUGGEST_LIMIT = 5;
-	static final String HOME_QUERY = "근처 맛집";
 	static final int FALLBACK_LIMIT = 20;
+	static final int NEARBY_LIMIT = 10;
 	static final String AI_UNAVAILABLE = "AI_UNAVAILABLE";
 	static final EmptyReason FALLBACK_EMPTY_REASON = new EmptyReason(
 			"지금은 가게 이름, 메뉴, 업종, 역 이름으로만 찾을 수 있어요",
 			"가게 이름이나 메뉴 이름으로 다시 검색해 보세요");
+	static final EmptyReason AREA_EMPTY_REASON = new EmptyReason(
+			"이 지역에는 아직 보여 드릴 장소가 없어요",
+			"지도를 옮기거나 넓혀서 다시 찾아 보세요");
 
 	private final PlaceCatalog catalog;
 	private final PlaceKeywordSearch keywordSearch;
@@ -80,18 +81,21 @@ public class CatalogPlaceSearchEngine implements PlaceSearchEngine {
 			ai = Optional.empty();
 		}
 		if (ai.isPresent()) {
-			PlaceSearchResponse response = aiResponse(ai.get());
+			PlaceSearchResponse response = aiResponse(purpose, ai.get());
 			if (response != null) {
 				List<String> fallbacks = ai.get().fallbacks();
 				return new PlaceSearchResult(response,
 						fallbacks == null || fallbacks.isEmpty() ? null : String.join(",", fallbacks));
 			}
 		}
-		return new PlaceSearchResult(fallback(request), AI_UNAVAILABLE);
+		return new PlaceSearchResult(fallback(purpose, request), AI_UNAVAILABLE);
 	}
 
-	/** AI 카드에 장소 정보와 영업 상태를 붙인다. 카드가 있는데 id가 전부 카탈로그에 없으면 null이다(대체한다). */
-	private PlaceSearchResponse aiResponse(AiSearchClient.Response ai) {
+	/**
+	 * AI 카드에 장소 정보와 영업 상태를 붙인다. NEARBY는 카탈로그 확인을 마친 카드에서 앞 10곳만 남긴다(place-ai-search AC-32).
+	 * 카드가 있는데 id가 전부 카탈로그에 없으면 null이다(대체한다).
+	 */
+	private PlaceSearchResponse aiResponse(SearchPurpose purpose, AiSearchClient.Response ai) {
 		log.info("AI search answered: interpretedBy={}, rankedBy={}, models={}", ai.interpretedBy(), ai.rankedBy(),
 				ai.models());
 		Map<Long, AiSearchClient.Item> items = new LinkedHashMap<>();
@@ -111,45 +115,37 @@ public class CatalogPlaceSearchEngine implements PlaceSearchEngine {
 					return new PlaceCard(place.place(), item.score(), orEmpty(item.labels()), null, place.openStatus(),
 							orEmpty(item.reasons()), orEmpty(item.scoreItems()));
 				})
+				.limit(purpose == SearchPurpose.NEARBY ? NEARBY_LIMIT : Long.MAX_VALUE)
 				.toList();
 		return new PlaceSearchResponse(ai.conditions() != null ? ai.conditions() : Map.of(),
 				Boolean.TRUE.equals(ai.nearby()), cards.size(), cards, null, ai.emptyReason(), ai.changeSummary());
 	}
 
-	/** 홈 요청은 카탈로그 전체, 그 밖은 키워드 검색 결과다. 점수 없이 지도 영역으로만 거른다(AC-9 ~ AC-12). */
-	private PlaceSearchResponse fallback(PlaceSearchRequest request) {
-		MapBounds bounds = request.mapBounds();
+	/**
+	 * 점수 없는 대체 결과(place-ai-search AC-9 ~ AC-12). SEARCH는 키워드 검색이고 지도 영역을 보지 않는다.
+	 * NEARBY와 REGION은 지도 영역 안 장소를 {@code place_id} 순서로 각각 10곳, 20곳 주고 조건은 비운다.
+	 */
+	private PlaceSearchResponse fallback(SearchPurpose purpose, PlaceSearchRequest request) {
+		if (purpose == SearchPurpose.SEARCH) {
+			return keywordFallback(request);
+		}
+		boolean nearby = purpose == SearchPurpose.NEARBY;
+		List<PlaceCard> cards = catalog.cardsWithin(request.mapBounds(), nearby ? NEARBY_LIMIT : FALLBACK_LIMIT);
+		return new PlaceSearchResponse(Map.of(), nearby, cards.size(), cards, null,
+				cards.isEmpty() ? AREA_EMPTY_REASON : null, null);
+	}
+
+	/** 키워드 검색 히트의 앞 20곳을 카탈로그에서 읽어 순위 순서대로 카드로 만든다. */
+	private PlaceSearchResponse keywordFallback(PlaceSearchRequest request) {
 		Map<String, Object> previous = request.previousConditions();
-		boolean home = request.query().strip().equals(HOME_QUERY) && (previous == null || previous.isEmpty());
-		List<PlaceCard> cards;
-		if (home) {
-			cards = catalog.nearbyCandidates().stream().filter(card -> within(card.place(), bounds)).toList();
-		} else {
-			List<Long> ids = keywordSearch.search(request.query(), 0, Integer.MAX_VALUE).stream()
-					.map(PlaceKeywordHit::place)
-					.filter(place -> within(place, bounds))
-					.limit(FALLBACK_LIMIT)
-					.map(PlaceSummary::id)
-					.toList();
-			Map<Long, PlaceCard> places = byId(catalog.cards(ids));
-			cards = ids.stream().map(places::get).filter(Objects::nonNull).toList();
-		}
-		return new PlaceSearchResponse(previous != null ? previous : Map.of(), home, cards.size(), cards, null,
+		List<Long> ids = keywordSearch.search(request.query(), 0, Integer.MAX_VALUE).stream()
+				.limit(FALLBACK_LIMIT)
+				.map(hit -> hit.place().id())
+				.toList();
+		Map<Long, PlaceCard> places = byId(catalog.cards(ids));
+		List<PlaceCard> cards = ids.stream().map(places::get).filter(Objects::nonNull).toList();
+		return new PlaceSearchResponse(previous != null ? previous : Map.of(), false, cards.size(), cards, null,
 				cards.isEmpty() ? FALLBACK_EMPTY_REASON : null, null);
-	}
-
-	/** 위도·경도가 영역 안(경계 포함)이다. 빈 값은 그쪽을 제한하지 않는다. */
-	private static boolean within(PlaceSummary place, MapBounds bounds) {
-		return bounds == null || (inRange(place.lat(), bounds.swLat(), bounds.neLat())
-				&& inRange(place.lng(), bounds.swLng(), bounds.neLng()));
-	}
-
-	/** 경계가 있는데 좌표가 없으면 밖이다. */
-	private static boolean inRange(Double value, Double min, Double max) {
-		if (min == null && max == null) {
-			return true;
-		}
-		return value != null && (min == null || value >= min) && (max == null || value <= max);
 	}
 
 	private static Map<Long, PlaceCard> byId(List<PlaceCard> cards) {

@@ -33,6 +33,7 @@ import kr.co.fitdining.api.place.dto.PlaceDetailResponse.Parking;
 import kr.co.fitdining.api.place.dto.PlaceDetailResponse.Pet;
 import kr.co.fitdining.api.place.dto.PlaceDetailResponse.Seat;
 import kr.co.fitdining.api.place.dto.PlaceDetailResponse.Subway;
+import kr.co.fitdining.api.place.dto.PlaceSearchRequest.MapBounds;
 import kr.co.fitdining.api.place.dto.PlaceSummary;
 import kr.co.fitdining.api.place.dto.PlaceSummary.CategoryGroup;
 import kr.co.fitdining.api.place.dto.PlaceSummary.Station;
@@ -95,6 +96,17 @@ public class JdbcPlaceCatalog implements PlaceCatalog {
 	private static final String HOURS_BY_IDS_SQL = """
 			SELECT place_id, day_of_week, open_time, close_time, closed, breaks, last_orders
 			FROM place_hours WHERE place_id IN (:ids)""";
+	// 좌표와 개수는 바인딩한다. 경계도 영역 안이다(BETWEEN)
+	private static final String AREA_PLACE_IDS = """
+			SELECT place_id FROM places
+			WHERE lat BETWEEN :swLat AND :neLat AND lng BETWEEN :swLng AND :neLng
+			ORDER BY place_id LIMIT :limit""";
+	private static final String AREA_PLACES_SQL = """
+			SELECT place_id, name, category_group, station, lat, lng, thumbnail_url
+			FROM places WHERE place_id IN (""" + AREA_PLACE_IDS + ") ORDER BY place_id";
+	private static final String AREA_HOURS_SQL = """
+			SELECT place_id, day_of_week, open_time, close_time, closed, breaks, last_orders
+			FROM place_hours WHERE place_id IN (""" + AREA_PLACE_IDS + ")";
 	private static final String ALL_MENU_NAMES_SQL = """
 			SELECT place_id, name FROM place_menus ORDER BY place_id, sort_order""";
 
@@ -130,6 +142,16 @@ public class JdbcPlaceCatalog implements PlaceCatalog {
 			return List.of();
 		}
 		return cards(jdbc.sql(PLACES_BY_IDS_SQL).param("ids", ids), jdbc.sql(HOURS_BY_IDS_SQL).param("ids", ids));
+	}
+
+	@Override
+	public List<PlaceCard> cardsWithin(MapBounds area, int limit) {
+		return cards(area(jdbc.sql(AREA_PLACES_SQL), area, limit), area(jdbc.sql(AREA_HOURS_SQL), area, limit));
+	}
+
+	private static JdbcClient.StatementSpec area(JdbcClient.StatementSpec spec, MapBounds area, int limit) {
+		return spec.param("swLat", area.swLat()).param("swLng", area.swLng()).param("neLat", area.neLat())
+				.param("neLng", area.neLng()).param("limit", limit);
 	}
 
 	/** 장소 행과 영업시간 행으로 점수 없는 카드를 만든다. 영업 상태는 지금 서울 시각 기준이다. */

@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Optional;
 import kr.co.fitdining.api.place.dto.PlaceCard;
 import kr.co.fitdining.api.place.dto.PlaceDetailResponse;
+import kr.co.fitdining.api.place.dto.PlaceSearchRequest.MapBounds;
 
 /**
  * 장소 카탈로그를 읽는 포트(읽기 전용). 지금은 Postgres(JdbcClient)가 구현한다.
@@ -40,6 +41,16 @@ public interface PlaceCatalog {
 	 * @return 카탈로그에 있는 id의 카드({@code place_id} 오름차순). 없는 id는 빠진다. 점수, 라벨, 이유는 비어 있다.
 	 */
 	List<PlaceCard> cards(Collection<Long> ids);
+
+	/**
+	 * 지도 영역 안 장소를 앞에서 정해진 수만 카드로 읽는다. AI 대신 처리하는 NEARBY·REGION 대체 결과가 쓴다(place-ai-search
+	 * D-6). 영역과 개수는 DB에서 거르고, 좌표는 SQL에 바인딩해 오류 메시지와 로그에 남지 않게 한다.
+	 *
+	 * @param area 지도 영역. 네 값이 모두 있다. 경계에 있는 장소도 영역 안이다.
+	 * @param limit 읽을 최대 장소 수
+	 * @return 영역 안 장소의 카드({@code place_id} 오름차순, 최대 {@code limit}개). 점수, 라벨, 이유는 비어 있다.
+	 */
+	List<PlaceCard> cardsWithin(MapBounds area, int limit);
 
 	/**
 	 * 키워드 검색 문서 전체를 읽는다.
