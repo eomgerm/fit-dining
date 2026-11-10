@@ -35,7 +35,7 @@ const member: ThreadAuth = {
   current: () => ({ kind: "member", userId: "u1", sessionId: "s1" }),
   resolve: async () => ({ kind: "member", userId: "u1", sessionId: "s1" }),
   send: async (_key, request) => {
-    const data = await request("at");
+    const data = await request();
     return data as never;
   },
 };

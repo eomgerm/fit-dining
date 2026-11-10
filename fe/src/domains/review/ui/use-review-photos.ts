@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import type { WithAccessToken } from "../api/queries";
+import type { WithSession } from "../api/queries";
 import { fetchPhotoUploads, putPhoto } from "../api/review-api";
 import { compressPhoto } from "../model/photo-compress";
 import type { PhotoView } from "../model/review";
@@ -31,12 +31,12 @@ type Blobs = { photo: Blob; thumb: Blob };
 export function useReviewPhotos({
   saved,
   max,
-  withAccessToken,
+  authenticated,
   onUnreadable,
 }: {
   saved: readonly PhotoView[];
   max: number;
-  withAccessToken: WithAccessToken;
+  authenticated: WithSession;
   onUnreadable: () => void;
 }) {
   const [tiles, setTiles] = useState<PhotoTile[]>(() =>
@@ -76,9 +76,7 @@ export function useReviewPhotos({
     try {
       const {
         uploads: [target],
-      } = await withAccessToken((accessToken) =>
-        fetchPhotoUploads(1, accessToken, controller.signal),
-      );
+      } = await authenticated(() => fetchPhotoUploads(1, controller.signal));
       await putPhoto(target.uploadUrl, files.photo, controller.signal);
       await putPhoto(target.thumbUploadUrl, files.thumb, controller.signal);
       patch(key, { status: "uploaded", photoId: target.photoId });

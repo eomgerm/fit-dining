@@ -21,7 +21,7 @@ import { useToast } from "@/shared/ui/overlay/toast";
 import {
   useReviewDetail,
   useUpdateReview,
-  type WithAccessToken,
+  type WithSession,
 } from "../api/queries";
 import {
   isDescriptionChanged,
@@ -37,7 +37,7 @@ import { UNREADABLE_PHOTO, useReviewPhotos } from "./use-review-photos";
 type ReviewEditFormProps = {
   reviewId: number;
   // 요청에 AT를 붙인다. 인증 도메인을 쓰는 app이 넘긴다
-  withAccessToken: WithAccessToken;
+  authenticated: WithSession;
   // 화면 이동은 부르는 쪽(app)이 정한다
   onSuccess: () => void;
   onClose: () => void;
@@ -47,12 +47,12 @@ type ReviewEditFormProps = {
 // 리뷰 수정(6-07, D-44, D-45). 내 리뷰를 받은 뒤 본문과 사진 칸을 그린다
 export function ReviewEditForm({
   reviewId,
-  withAccessToken,
+  authenticated,
   onSuccess,
   onClose,
   onSignedOut,
 }: ReviewEditFormProps) {
-  const detail = useReviewDetail(reviewId, withAccessToken);
+  const detail = useReviewDetail(reviewId, authenticated);
   const signedOut = isApiError(detail.error) && detail.error.status === 401;
   // 사진이 바뀌어(409) 다시 받을 때 쓰던 본문을 남겨, 다시 그린 입력칸이 이 본문으로 시작하게 한다
   const [keptDescription, setKeptDescription] = useState<string | null>(null);
@@ -68,7 +68,7 @@ export function ReviewEditForm({
       <ReviewEditFields
         review={review}
         initialDescription={keptDescription}
-        withAccessToken={withAccessToken}
+        authenticated={authenticated}
         onSuccess={onSuccess}
         onClose={onClose}
         onReload={(description) => {
@@ -126,7 +126,7 @@ export function ReviewEditForm({
 type ReviewEditFieldsProps = {
   review: ReviewDetailResponse;
   initialDescription: string | null;
-  withAccessToken: WithAccessToken;
+  authenticated: WithSession;
   onSuccess: () => void;
   onClose: () => void;
   onReload: (description: string) => void;
@@ -135,7 +135,7 @@ type ReviewEditFieldsProps = {
 function ReviewEditFields({
   review,
   initialDescription,
-  withAccessToken,
+  authenticated,
   onSuccess,
   onClose,
   onReload,
@@ -147,12 +147,12 @@ function ReviewEditFields({
   // 닫히는 동안 문구가 바뀌지 않게 마지막 실패 종류는 남겨 둔다
   const [failure, setFailure] = useState<EditFailure>("server");
   const [failureOpen, setFailureOpen] = useState(false);
-  const updateReview = useUpdateReview(review, withAccessToken);
+  const updateReview = useUpdateReview(review, authenticated);
   const toast = useToast();
   const photos = useReviewPhotos({
     saved: review.photos,
     max: review.limits.photoMax,
-    withAccessToken,
+    authenticated,
     onUnreadable: () => toast(UNREADABLE_PHOTO),
   });
   const descriptionChanged = isDescriptionChanged(

@@ -5,14 +5,13 @@ import {
   markSignedIn,
   signedInMarks,
 } from "../model/signed-in-cookie";
+import { csrfHeaders } from "@/shared/api/csrf";
 import type { SignupPreferences } from "../model/signup";
 
 export type AuthSession = {
   userId: string;
-  accessToken: string;
   nickname: string;
-  sessionId: string;
-  accessExpiresAt: number;
+  email?: string;
   sessionExpiresAt: number;
 };
 export { ApiError as AuthError } from "@/shared/api/api-error";
@@ -20,20 +19,25 @@ import {
   ApiError as AuthError,
   type ProblemDetail,
 } from "@/shared/api/api-error";
-export const ACCESS_TOKEN_EXPIRED_TYPE =
-  "urn:fitdining:auth:access-token-expired";
 let session: AuthSession | null = null;
-let pendingRefresh: Promise<AuthSession> | null = null;
+let revision = 0;
+let pendingRestore: Promise<AuthSession> | null = null;
 let channel: BroadcastChannel | null = null;
 const listeners = new Set<() => void>();
 function update(value: AuthSession | null) {
+  revision++;
   session = value;
   listeners.forEach((listener) => listener());
 }
 function connectChannel() {
   if (!channel && typeof BroadcastChannel !== "undefined") {
     channel = new BroadcastChannel("fitdining-auth");
-    channel.onmessage = () => update(null);
+    channel.onmessage = () => {
+      // A cookie change supersedes any check sent with the previous cookie.
+      pendingRestore = null;
+      update(null);
+      void checkSession().catch(() => {});
+    };
   }
 }
 export function subscribe(listener: () => void) {
@@ -74,10 +78,12 @@ async function exchange<T>(
   try {
     response = await fetch(`/api/auth${path}`, {
       ...options,
+      headers: await csrfHeaders(options.method ?? "GET", options.headers),
       credentials: "include",
       cache: "no-store",
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof AuthError) throw error;
     throw new AuthError("network", "서버에 연결할 수 없습니다.");
   }
   const serverNow = Date.parse(response.headers.get("Date") ?? "");
@@ -102,12 +108,19 @@ async function send<T>(path: string, options: RequestInit = {}): Promise<T> {
 // 세션을 받아 메모리에 두고 로그인 표시를 남긴다. 표시 수명은 기기 시계가 아니라 서버 시각으로 잰다
 async function startSession(path: string, options: RequestInit) {
   const { body: next, serverNow } = await exchange<AuthSession>(path, options);
-  update(next);
+  // Keep only the session contract, even while BE still returns legacy fields.
+  const current: AuthSession = {
+    userId: next.userId,
+    nickname: next.nickname,
+    ...(next.email ? { email: next.email } : {}),
+    sessionExpiresAt: next.sessionExpiresAt,
+  };
+  update(current);
   markSignedIn(
     next.sessionExpiresAt,
     Number.isNaN(serverNow) ? undefined : serverNow,
   );
-  return next;
+  return current;
 }
 export async function login(email: string, password: string) {
   return browserLock(async () => {
@@ -183,30 +196,54 @@ export async function socialSignup(
     return next;
   });
 }
-export function refresh(): Promise<AuthSession> {
-  if (!pendingRefresh) {
+export function checkSession(): Promise<AuthSession> {
+  if (!pendingRestore) {
     // 다른 탭이 잠금을 쥐어 기다리는 사이 누른 소셜 버튼의 표시도 남도록 잠금 전에 읽는다
     const marksAtSend = signedInMarks();
-    pendingRefresh = browserLock(async () => {
+    const checking = check().finally(() => {
+      if (pendingRestore === checking) pendingRestore = null;
+    });
+    async function check(): Promise<AuthSession> {
+      const revisionAtSend = revision;
       try {
-        const next = await startSession("/refresh", { method: "POST" });
+        const { body: next, serverNow } = await exchange<AuthSession>("/me");
+        if (revision !== revisionAtSend) {
+          if (pendingRestore && pendingRestore !== checking)
+            return pendingRestore;
+          if (session) return session;
+          throw new AuthError("http", "로그인 상태가 변경되었습니다.", {
+            status: 401,
+          });
+        }
+        update(next);
+        markSignedIn(
+          next.sessionExpiresAt,
+          Number.isNaN(serverNow) ? undefined : serverNow,
+        );
         return next;
       } catch (error) {
-        if (error instanceof AuthError && error.status === 401) {
+        if (revision !== revisionAtSend) {
+          if (pendingRestore && pendingRestore !== checking)
+            return pendingRestore;
+          if (session) return session;
+        }
+        if (
+          revision === revisionAtSend &&
+          error instanceof AuthError &&
+          error.status === 401
+        ) {
           update(null);
           clearSignedIn(marksAtSend);
-          channel?.postMessage("session-changed");
         }
         throw error;
       }
-    }).finally(() => {
-      pendingRefresh = null;
-    });
+    }
+    pendingRestore = checking;
   }
-  return pendingRefresh;
+  return pendingRestore;
 }
 export async function restore() {
-  return session ?? refresh();
+  return session ?? checkSession();
 }
 export async function logout() {
   return browserLock(async () => {

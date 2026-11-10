@@ -67,11 +67,8 @@ vi.mock("@/shared/lib/runtime-config", () => ({
 
 const member = (userId: string, sessionId = "s1"): AuthSession => ({
   userId,
-  sessionId,
-  accessToken: `at.${userId}.${sessionId}`,
   nickname: userId,
-  accessExpiresAt: 0,
-  sessionExpiresAt: 0,
+  sessionExpiresAt: Number(sessionId.replace(/\D/g, "")) || 1,
 });
 
 function card(id: number): PlaceCard {
@@ -123,8 +120,7 @@ const server = {
   },
 };
 
-const userOf = (init?: RequestInit) =>
-  new Headers(init?.headers).get("Authorization")?.split(".")[1] ?? "";
+const userOf = () => auth.session?.userId ?? "";
 
 function threadsOf(user: string) {
   const threads = server.threads.get(user) ?? [];
@@ -178,7 +174,7 @@ async function handle(url: string, init?: RequestInit): Promise<Response> {
       ...(!followUp && { nextCursor: "Mg" }),
     } satisfies PlaceSearchResponse);
   }
-  const user = userOf(init);
+  const user = userOf();
   const list = url.match(/^\/api\/v1\/me\/search-threads(?:\?cursor=(.*))?$/);
   if (list) {
     const cursor = list[1];
@@ -739,7 +735,7 @@ describe("로그인 세션이 바뀔 때", () => {
     await newSearch("역삼 카페");
     await results();
 
-    act(() => setSession({ ...member("u1"), accessToken: "at.u1.renewed" }));
+    act(() => setSession({ ...member("u1"), nickname: "renewed" }));
     expect(screen.getByRole("heading", { name: "“역삼 카페”" })).toBeTruthy();
 
     act(() => setSession(member("u1", "s2")));

@@ -24,12 +24,9 @@ vi.mock("@/domains/auth/api/auth-client", () => ({
   subscribe: () => () => {},
 }));
 
-const session = (userId: string, accessToken: string): AuthSession => ({
+const session = (userId: string): AuthSession => ({
   userId,
-  sessionId: "s1",
-  accessToken,
   nickname: userId,
-  accessExpiresAt: 0,
   sessionExpiresAt: 0,
 });
 
@@ -87,15 +84,15 @@ afterEach(() => {
 });
 
 describe("검색 요청에 싣는 값", () => {
-  it("확인된 회원이면 그 세션의 토큰만 싣고 기기 답은 싣지 않는다", async () => {
-    auth.session = session("user-1", "at-1");
+  it("확인된 회원이면 인증 헤더와 기기 답 없이 세션 쿠키로 보낸다", async () => {
+    auth.session = session("user-1");
     localStorage.setItem("fd.onboarding.answers.v1", JSON.stringify(answers));
     const { placeQueries, queryClient } = await load();
 
     await queryClient.fetchQuery(placeQueries.nearby());
 
     expect(sent(0)).toEqual({
-      token: "Bearer at-1",
+      token: null,
       body: { query: "근처 맛집" },
     });
   });
@@ -145,10 +142,10 @@ describe("검색 요청에 싣는 값", () => {
     expect(sent(0)).toEqual({ token: null, body: { query: "근처 맛집" } });
   });
 
-  it("회원 토큰이 만료돼 401이면 한 번 갱신해 새 토큰으로 다시 보낸다", async () => {
-    auth.session = session("user-1", "old-at");
+  it("회원 세션이 만료돼 401이면 재시도 없이 비회원으로 전환한다", async () => {
+    auth.session = session("user-1");
     auth.refresh.mockImplementation(async () => {
-      auth.session = session("user-1", "new-at");
+      auth.session = session("user-1");
       return auth.session;
     });
     fetchMock.mockResolvedValueOnce(
@@ -159,11 +156,13 @@ describe("검색 요청에 싣는 값", () => {
     );
     const { placeQueries, queryClient } = await load();
 
-    await queryClient.fetchQuery(placeQueries.nearby());
+    await expect(
+      queryClient.fetchQuery(placeQueries.nearby()),
+    ).rejects.toMatchObject({ status: 401 });
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(sent(0).token).toBe("Bearer old-at");
-    expect(sent(1).token).toBe("Bearer new-at");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(sent(0).token).toBe(null);
+    expect(auth.refresh).not.toHaveBeenCalled();
   });
 
   it("검색과 다음 페이지도 같은 규칙으로 싣고, 캐시의 요청에는 preferences가 없다", async () => {

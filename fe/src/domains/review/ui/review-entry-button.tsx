@@ -9,7 +9,7 @@ import { CalendarIcon } from "@/shared/ui/icon/icons/calendar";
 import { PinIcon } from "@/shared/ui/icon/icons/pin";
 import { ConfirmDialog } from "@/shared/ui/overlay/confirm-dialog";
 
-import { reviewKeys, type WithAccessToken } from "../api/queries";
+import { reviewKeys, type WithSession } from "../api/queries";
 import { fetchReviewForm } from "../api/review-api";
 import type { DevicePosition } from "../model/nearby-check";
 import type { ReviewFormResponse } from "../model/review";
@@ -59,7 +59,7 @@ function currentPosition() {
 type ReviewEntryButtonProps = {
   placeId: number;
   // 작성 화면 데이터에 AT를 붙인다. 인증 도메인을 쓰는 app이 넘긴다
-  withAccessToken: WithAccessToken;
+  authenticated: WithSession;
   // 작성 화면으로 간다. 화면 이동은 app이 정한다
   onEnter: () => void;
   // 로그인 안내(6-E05)에서 "로그인"을 누르면 부른다. 화면 이동은 app이 정한다
@@ -71,7 +71,7 @@ type ReviewEntryButtonProps = {
 // 위치를 3초 넘게 기다리면 7-E02와 같은 구성의 대기 창을 띄우고, 결과가 나오면 같은 창의 내용만 바꾼다(D-53)
 export function ReviewEntryButton({
   placeId,
-  withAccessToken,
+  authenticated,
   onEnter,
   onSignIn,
 }: ReviewEntryButtonProps) {
@@ -142,9 +142,7 @@ export function ReviewEntryButton({
       const data = await queryClient.fetchQuery({
         queryKey: reviewKeys.form(placeId),
         queryFn: ({ signal }) =>
-          withAccessToken((accessToken) =>
-            fetchReviewForm(placeId, accessToken, signal),
-          ),
+          authenticated(() => fetchReviewForm(placeId, signal)),
         staleTime: 0,
         // 작성 화면처럼 다시 시도하지 않고, 오프라인이면 기다리지 않고 바로 실패한다
         retry: false,

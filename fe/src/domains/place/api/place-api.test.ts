@@ -100,7 +100,7 @@ describe("searchPlaces", () => {
     timeout.mockRestore();
   });
 
-  it("넘긴 토큰은 Authorization으로, 비회원 답은 본문의 preferences로 싣는다", async () => {
+  it("인증 헤더 없이 보내고 비회원 답은 본문의 preferences로 싣는다", async () => {
     const preferences = {
       mood: null,
       priorities: ["SPACIOUS" as const],
@@ -108,11 +108,11 @@ describe("searchPlaces", () => {
       tastes: [{ polarity: "LIKE" as const, label: "창가 자리", code: null }],
     };
 
-    await searchPlaces({ query: "카페" }, undefined, { accessToken: "at-1" });
+    await searchPlaces({ query: "카페" }, undefined, {});
     await searchPlaces({ query: "카페" }, undefined, { preferences });
     await searchPlaces({ query: "카페" });
 
-    expect(sentHeaders(0).get("Authorization")).toBe("Bearer at-1");
+    expect(sentHeaders(0).get("Authorization")).toBe(null);
     expect(JSON.parse(sentBody(0))).toEqual({ query: "카페" });
     expect(sentHeaders(1).has("Authorization")).toBe(false);
     expect(JSON.parse(sentBody(1))).toEqual({ query: "카페", preferences });

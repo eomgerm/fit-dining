@@ -16,7 +16,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/shared/api/api-error";
 import { ToastProvider } from "@/shared/ui/overlay/toast";
 
-import { reviewKeys, type WithAccessToken } from "../api/queries";
+import { reviewKeys, type WithSession } from "../api/queries";
 import type { ReviewFormResponse } from "../model/review";
 import { ReviewForm, ReviewWriteFlow } from "./review-form";
 import {
@@ -68,7 +68,7 @@ function form(reviewedDates: string[] = []): ReviewFormResponse {
   };
 }
 
-const withAccessToken: WithAccessToken = (send) => send("token");
+const authenticated: WithSession = (send) => send();
 const unauthorized = () =>
   new ApiError("http", "로그인이 필요합니다", { status: 401 });
 
@@ -80,7 +80,7 @@ function flow(
     <ReviewWriteFlow
       placeId={3}
       form={data}
-      withAccessToken={withAccessToken}
+      authenticated={authenticated}
       onSuccess={() => {}}
       onClose={props.onClose ?? (() => {})}
       onReload={props.onReload ?? (() => {})}
@@ -114,7 +114,7 @@ function mountForm(
   return mount(
     <ReviewForm
       placeId={3}
-      withAccessToken={withAccessToken}
+      authenticated={authenticated}
       onSuccess={() => {}}
       onClose={props.onClose ?? (() => {})}
       onSignedOut={props.onSignedOut ?? (() => {})}

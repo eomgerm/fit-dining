@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "@/shared/api/api-error";
 
-import type { WithAccessToken } from "../api/queries";
+import type { WithSession } from "../api/queries";
 import { UnreadablePhotoError } from "../model/photo-compress";
 import { useReviewPhotos } from "./use-review-photos";
 
@@ -20,7 +20,7 @@ vi.mock("../model/photo-compress", async (original) => ({
   compressPhoto: compress.compressPhoto,
 }));
 
-const withAccessToken: WithAccessToken = (send) => send("token");
+const authenticated: WithSession = (send) => send();
 const file = (name: string) => new File(["x"], name, { type: "image/jpeg" });
 let issued = 0;
 
@@ -29,7 +29,7 @@ function mount(
 ) {
   const onUnreadable = vi.fn();
   const view = renderHook(() =>
-    useReviewPhotos({ saved, max: 5, withAccessToken, onUnreadable }),
+    useReviewPhotos({ saved, max: 5, authenticated, onUnreadable }),
   );
   return { ...view, onUnreadable };
 }
@@ -69,7 +69,7 @@ describe("useReviewPhotos", () => {
     expect(result.current.busy).toBe(false);
     expect(api.fetchPhotoUploads).toHaveBeenCalledWith(
       1,
-      "token",
+
       expect.any(AbortSignal),
     );
     expect(api.putPhoto.mock.calls.map(([url]) => url)).toEqual([

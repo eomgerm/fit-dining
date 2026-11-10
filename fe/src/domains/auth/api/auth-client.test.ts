@@ -39,6 +39,7 @@ function environment(
     oldChannel = globalThis.BroadcastChannel;
   let queue: Promise<unknown> = Promise.resolve();
   const messages: string[] = [];
+  let receive: (() => void) | undefined;
   Object.defineProperty(globalThis, "navigator", {
     configurable: true,
     value: {
@@ -57,6 +58,9 @@ function environment(
   vi.stubGlobal(
     "BroadcastChannel",
     class {
+      set onmessage(listener: () => void) {
+        receive = listener;
+      }
       postMessage(message: string) {
         messages.push(message);
       }
@@ -64,6 +68,7 @@ function environment(
   );
   return {
     messages,
+    receive: () => receive?.(),
     reset() {
       if (oldNavigator)
         Object.defineProperty(globalThis, "navigator", oldNavigator);
@@ -108,11 +113,11 @@ test("endSession clears the session and notifies other tabs", async () => {
   }
 });
 
-// 만료된 AT로 동시에 나간 요청들(withAccessToken)이 갱신을 한 번만 부르게 한다
-test("simultaneous refreshes share one refresh request", async () => {
+// 여러 화면의 동시 세션 확인 요청은 GET /me 한 번으로 합친다
+test("simultaneous checks share one me request", async () => {
   let refreshes = 0;
   const env = environment(async (url) => {
-    if (url.endsWith("/refresh")) {
+    if (url.endsWith("/me")) {
       refreshes++;
       return json(value("at-2"));
     }
@@ -120,30 +125,35 @@ test("simultaneous refreshes share one refresh request", async () => {
   });
   try {
     const auth = await load();
-    const [first, second] = await Promise.all([auth.refresh(), auth.refresh()]);
+    const [first, second] = await Promise.all([
+      auth.checkSession(),
+      auth.checkSession(),
+    ]);
     assert.equal(refreshes, 1);
     assert.equal(first, second);
-    assert.equal(auth.getSession()?.accessToken, "at-2");
+    assert.equal(auth.getSession()?.userId, "user-1");
   } finally {
     env.reset();
   }
 });
 
-test("logout uses only its cookie even with expired AT then clears memory", async () => {
+test("logout uses its session cookie and clears memory", async () => {
   const calls: string[] = [];
   const env = environment(async (url, options) => {
     const path = new URL(url, "http://localhost:3000").pathname;
     calls.push(path);
     if (url.endsWith("/login")) return json(value("old", 0));
-    if (url.endsWith("/refresh")) return json(value("new"));
-    assert.equal(options.headers, undefined);
+    if (url.endsWith("/me")) return json(value("new"));
+    assert.equal(new Headers(options.headers).has("Authorization"), false);
     assert.equal(options.credentials, "include");
     return new Response(null, { status: 204 });
   });
   try {
     const auth = await load();
     await auth.login("demo", "password");
+    cookie.clearSignedIn.mockClear();
     await auth.logout();
+    assert.deepEqual(cookie.clearSignedIn.mock.calls, [[]]);
     assert.deepEqual(calls, ["/api/auth/login", "/api/auth/logout"]);
     assert.equal(auth.getSession(), null);
     assert.equal(env.messages.length, 2);
@@ -270,7 +280,7 @@ test("social signup saves session and broadcasts the cookie change", async () =>
     await auth.socialSignup({
       agreements: { ageOver14: true, terms: true, privacy: true },
     });
-    assert.equal(auth.getSession()?.accessToken, "social-at");
+    assert.equal(auth.getSession()?.userId, "user-1");
     assert.deepEqual(env.messages, ["session-changed"]);
   } finally {
     env.reset();
@@ -373,7 +383,7 @@ test("session start marks signed in until the session expires by server time", a
         auth.socialSignup({
           agreements: { ageOver14: true, terms: true, privacy: true },
         }),
-      () => auth.refresh(),
+      () => auth.checkSession(),
     ]) {
       cookie.markSignedIn.mockClear();
       await start();
@@ -387,14 +397,14 @@ test("session start marks signed in until the session expires by server time", a
 
 test("session end clears the signed-in mark", async () => {
   const env = environment(async (url) =>
-    url.endsWith("/refresh")
+    url.endsWith("/me")
       ? json({ status: 401, detail: "expired" }, 401)
       : new Response(null, { status: 204 }),
   );
   try {
     const auth = await load();
     for (const end of [
-      () => auth.refresh().catch(() => {}),
+      () => auth.checkSession().catch(() => {}),
       () => auth.logout(),
       async () => auth.endSession(),
     ]) {
@@ -408,7 +418,7 @@ test("session end clears the signed-in mark", async () => {
 });
 
 // 기다리는 사이 새로 심은 표시(소셜 버튼)는 남도록 요청을 보낼 때의 표시 횟수를 넘긴다
-test("refresh 401 clears only the mark that existed when it was sent", async () => {
+test("me 401 clears only the mark that existed when it was sent", async () => {
   const env = environment(async () =>
     json({ status: 401, detail: "expired" }, 401),
   );
@@ -416,7 +426,7 @@ test("refresh 401 clears only the mark that existed when it was sent", async () 
     const auth = await load();
     cookie.clearSignedIn.mockClear();
     cookie.signedInMarks.mockReturnValueOnce("mark-7");
-    await assert.rejects(auth.refresh(), { status: 401 });
+    await assert.rejects(auth.checkSession(), { status: 401 });
     assert.deepEqual(cookie.clearSignedIn.mock.calls, [["mark-7"]]);
   } finally {
     env.reset();
@@ -438,7 +448,7 @@ test("unauthorized logout also clears the signed-in mark", async () => {
 });
 
 // AT만 거절된 경우(clearSession)와 연결 실패는 세션이 끝난 게 아니다. RT로 다시 갱신할 수 있다
-test("expired access token or network failure keeps the signed-in mark", async () => {
+test("local invalidation or network failure keeps the signed-in mark", async () => {
   const env = environment(async () => {
     throw new TypeError("offline");
   });
@@ -446,9 +456,104 @@ test("expired access token or network failure keeps the signed-in mark", async (
     const auth = await load();
     cookie.clearSignedIn.mockClear();
     auth.clearSession();
-    await assert.rejects(auth.refresh(), { kind: "network" });
+    await assert.rejects(auth.checkSession(), { kind: "network" });
     assert.equal(cookie.clearSignedIn.mock.calls.length, 0);
   } finally {
     env.reset();
   }
 });
+
+test("session checks use GET me without Web Locks", async () => {
+  const env = environment(async (url, options) => {
+    assert.equal(url, "/api/auth/me");
+    assert.equal(options.method ?? "GET", "GET");
+    assert.equal(new Headers(options.headers).has("Authorization"), false);
+    return json(value());
+  }, false);
+  try {
+    const auth = await load();
+    assert.equal((await auth.restore()).userId, "user-1");
+  } finally {
+    env.reset();
+  }
+});
+
+test("a server error checking me keeps login marks and remains unknown", async () => {
+  const env = environment(async () => json({ status: 503 }, 503));
+  try {
+    const auth = await load();
+    cookie.clearSignedIn.mockClear();
+    await assert.rejects(auth.restore(), { status: 503 });
+    assert.equal(auth.getSession(), null);
+    assert.equal(cookie.clearSignedIn.mock.calls.length, 0);
+  } finally {
+    env.reset();
+  }
+});
+
+test("a late me response cannot restore a locally ended session", async () => {
+  let respond!: (response: Response) => void;
+  const env = environment(
+    () =>
+      new Promise<Response>((resolve) => {
+        respond = resolve;
+      }),
+  );
+  try {
+    const auth = await load();
+    const checking = auth.restore();
+    await Promise.resolve();
+    auth.endSession();
+    respond(json(value()));
+    await assert.rejects(checking, { status: 401 });
+    assert.equal(auth.getSession(), null);
+  } finally {
+    env.reset();
+  }
+});
+
+test.each([
+  [200, false],
+  [401, false],
+  [200, true],
+  [401, true],
+])(
+  "another tab login supersedes an in-flight me response (status=%s, newFirst=%s)",
+  async (status, newFirst) => {
+    const responses: Array<(response: Response) => void> = [];
+    const env = environment(
+      async () => new Promise<Response>((resolve) => responses.push(resolve)),
+    );
+    try {
+      const auth = await load();
+      const unsubscribe = auth.subscribe(() => {});
+      const original = auth.restore();
+      await Promise.resolve();
+      env.receive();
+      const replacement = auth.restore();
+      await Promise.resolve();
+      assert.equal(responses.length, 2);
+      const member = { ...value(), userId: "other-tab-user" };
+      if (newFirst) {
+        responses[1](json(member));
+        await replacement;
+        assert.equal(auth.getSession()?.userId, member.userId);
+        responses[0](
+          status === 401 ? json({ status: 401 }, 401) : json(value()),
+        );
+      } else {
+        responses[0](
+          status === 401 ? json({ status: 401 }, 401) : json(value()),
+        );
+        await Promise.resolve();
+        responses[1](json(member));
+      }
+      assert.equal((await original).userId, member.userId);
+      assert.equal((await replacement).userId, member.userId);
+      assert.equal(auth.getSession()?.userId, member.userId);
+      unsubscribe();
+    } finally {
+      env.reset();
+    }
+  },
+);

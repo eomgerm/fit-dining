@@ -4,6 +4,8 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
+HTTP 로컬 실행에서는 BE 환경변수를 `AUTH_COOKIE_SECURE=false`로 설정해야 세션·CSRF 쿠키가 저장되고 비회원 검색도 동작합니다.
+
 First, run the development server:
 
 ```bash

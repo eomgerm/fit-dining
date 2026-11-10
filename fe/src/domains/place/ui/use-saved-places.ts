@@ -48,7 +48,7 @@ export function useSavedPlaces(access: BookmarkAccess, active: boolean) {
     if (!userId || removing.has(placeId)) return;
     setRemoving((ids) => new Set(ids).add(placeId));
     try {
-      await access.send(userId, (token) => removeBookmark(placeId, token));
+      await access.send(userId, () => removeBookmark(placeId));
     } catch (error) {
       if (error instanceof BookmarkAccountChanged) return;
       const current = access.currentUserId();

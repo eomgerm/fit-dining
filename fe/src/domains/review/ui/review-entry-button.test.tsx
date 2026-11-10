@@ -14,7 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/shared/api/api-error";
 import { createQueryClient } from "@/shared/api/query-client";
 
-import type { WithAccessToken } from "../api/queries";
+import type { WithSession } from "../api/queries";
 import type { ReviewFormResponse } from "../model/review";
 import { ReviewEntryButton } from "./review-entry-button";
 import { clearVisitEntry, useVisitEntry } from "./visit-entry-store";
@@ -59,17 +59,17 @@ function answerWith(...coords: (typeof near | null)[]) {
   }
 }
 
-const withAccessToken: WithAccessToken = (send) => send("at");
+const authenticated: WithSession = (send) => send();
 
 // 앱과 같은 재시도 설정의 QueryClient로 그린다
-function mount(props: { withAccessToken?: WithAccessToken } = {}) {
+function mount(props: { authenticated?: WithSession } = {}) {
   const onEnter = vi.fn();
   const onSignIn = vi.fn();
   const view = render(
     <QueryClientProvider client={createQueryClient()}>
       <ReviewEntryButton
         placeId={3}
-        withAccessToken={props.withAccessToken ?? withAccessToken}
+        authenticated={props.authenticated ?? authenticated}
         onEnter={onEnter}
         onSignIn={onSignIn}
       />
@@ -78,7 +78,7 @@ function mount(props: { withAccessToken?: WithAccessToken } = {}) {
   return { onEnter, onSignIn, unmount: view.unmount };
 }
 
-const signedOut: WithAccessToken = () =>
+const signedOut: WithSession = () =>
   Promise.reject(new ApiError("http", "x", { status: 401 }));
 
 const entry = () => renderHook(() => useVisitEntry(3)).result.current;
@@ -166,7 +166,7 @@ describe("ReviewEntryButton", () => {
   });
 
   it("로그인하지 않았으면 위치를 묻지 않고 작성 화면 대신 로그인 안내를 띄운다(6-E05)", async () => {
-    const { onEnter, onSignIn } = mount({ withAccessToken: signedOut });
+    const { onEnter, onSignIn } = mount({ authenticated: signedOut });
 
     press("방문 평가 남기기");
 
@@ -180,7 +180,7 @@ describe("ReviewEntryButton", () => {
   });
 
   it("로그인 안내의 로그인은 창을 닫고 로그인으로 보낸다", async () => {
-    const { onEnter, onSignIn } = mount({ withAccessToken: signedOut });
+    const { onEnter, onSignIn } = mount({ authenticated: signedOut });
 
     press("방문 평가 남기기");
     await screen.findByText("로그인이 필요해요");
@@ -194,7 +194,7 @@ describe("ReviewEntryButton", () => {
   });
 
   it("로그인 안내의 취소는 장소 상세에 남는다", async () => {
-    const { onEnter, onSignIn } = mount({ withAccessToken: signedOut });
+    const { onEnter, onSignIn } = mount({ authenticated: signedOut });
 
     press("방문 평가 남기기");
     await screen.findByText("로그인이 필요해요");

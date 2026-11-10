@@ -13,8 +13,8 @@ import {
   useDeleteReview,
   useReportReview,
   useReviewList,
-  type WithAccessToken,
-  type WithOptionalAccessToken,
+  type WithSession,
+  type WithOptionalSession,
 } from "../api/queries";
 import { PREVIEW_SIZE, type ReviewReportRequest } from "../model/review";
 import { deleteFailureMessage } from "./edit-failure";
@@ -29,9 +29,9 @@ type ReviewSectionProps = {
   // 장소 상세가 리뷰 탭으로 바꾸는 함수를 넘긴다. 없으면 리뷰 탭 전체 목록(6-03)이다
   onShowAll?: () => void;
   // 로그인했으면 AT를 붙여 내 리뷰에 "내 리뷰" 태그가 붙게 받는다. 리뷰 도메인은 인증 도메인을 부를 수 없어 app이 넘긴다
-  withOptionalAccessToken: WithOptionalAccessToken;
+  withOptionalSession: WithOptionalSession;
   // 내 리뷰 삭제 요청에 AT를 붙인다
-  withAccessToken: WithAccessToken;
+  authenticated: WithSession;
   // 내 리뷰 ⋯ 메뉴의 "수정하기". 화면 이동은 app이 정한다(D-44)
   onEdit: (reviewId: number) => void;
   // 로그인 안내(6-E05)에서 "로그인"을 누르면 부른다. 로그인 화면으로 가는 것은 app이 정한다(PRD FR-12)
@@ -51,8 +51,8 @@ type ReviewSectionProps = {
 export function ReviewSection({
   placeId,
   onShowAll,
-  withOptionalAccessToken,
-  withAccessToken,
+  withOptionalSession,
+  authenticated,
   onEdit,
   onSignIn,
   className,
@@ -65,18 +65,18 @@ export function ReviewSection({
     isFetchNextPageError,
     fetchNextPage,
     refetch,
-  } = useReviewList(placeId, withOptionalAccessToken);
+  } = useReviewList(placeId, withOptionalSession);
   const endRef = useOnVisible(() => fetchNextPage());
   const [deleting, setDeleting] = useState<number | null>(null);
   // "삭제"를 눌렀으면 창이 닫힐 때 리뷰 섹션으로 포커스를 보낸다. 지운 리뷰의 ⋯ 버튼은 목록에서 빠진다
   const [confirmed, setConfirmed] = useState(false);
   const sectionRef = useRef<HTMLElement>(null);
-  const deleteReview = useDeleteReview(placeId, withAccessToken);
+  const deleteReview = useDeleteReview(placeId, authenticated);
   const [signingIn, setSigningIn] = useState(false);
   const [reporting, setReporting] = useState<number | null>(null);
   // 신고한 리뷰가 지워져(404) 목록에서 빠지면 시트가 닫힐 때 리뷰 섹션으로 포커스를 보낸다
   const [reportedGone, setReportedGone] = useState(false);
-  const reportReview = useReportReview(placeId, withAccessToken);
+  const reportReview = useReportReview(placeId, authenticated);
   const toast = useToast();
   const pages = data?.pages ?? [];
   const isPreview = onShowAll !== undefined;
@@ -110,7 +110,7 @@ export function ReviewSection({
   // 회원만 신고할 수 있다(PRD FR-12). 시트를 열기 전에 세션을 확인해, 사유를 고른 뒤에야 로그인을 묻지 않는다
   async function openReport(reviewId: number) {
     try {
-      await withAccessToken(async () => undefined);
+      await authenticated(async () => undefined);
     } catch (error) {
       if (isApiError(error) && error.status === 401) setSigningIn(true);
       else toast(reportFailure(error).message);

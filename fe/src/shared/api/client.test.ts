@@ -226,3 +226,15 @@ describe("request", () => {
     });
   });
 });
+
+it("Next 서버의 상태 변경 요청에는 CSRF 발급과 헤더를 넣지 않는다", async () => {
+  vi.stubEnv("NEXT_RUNTIME", "nodejs");
+  vi.stubEnv("BE_INTERNAL_URL", "http://caddy:8081");
+  const fetchMock = stubFetch(new Response(null, { status: 204 }));
+  await request("/v1/example", { method: "POST", body: { value: 1 } });
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  expect(fetchMock.mock.calls[0][0]).toBe("http://caddy:8081/api/v1/example");
+  expect(
+    new Headers(fetchMock.mock.calls[0][1]?.headers).has("X-XSRF-TOKEN"),
+  ).toBe(false);
+});

@@ -91,8 +91,8 @@ function UserBookmarkButton({
   const write = useMutation({
     networkMode: "always",
     mutationFn: (save: boolean) =>
-      access.send(userId, (token) =>
-        save ? saveBookmark(placeId, token) : removeBookmark(placeId, token),
+      access.send(userId, () =>
+        save ? saveBookmark(placeId) : removeBookmark(placeId),
       ),
   });
   // 실패 뒤 저장 여부를 다시 확인하는 중. 결과가 올 때까지 버튼을 확정하지 않는다

@@ -4,7 +4,7 @@ import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
-import { useReviewList, type WithOptionalAccessToken } from "./queries";
+import { useReviewList, type WithOptionalSession } from "./queries";
 
 const api = vi.hoisted(() => ({
   fetchReviews: vi.fn(),
@@ -14,9 +14,9 @@ const api = vi.hoisted(() => ({
 vi.mock("./review-api", () => api);
 
 describe("useReviewList", () => {
-  it("app이 넘긴 함수가 준 AT로 목록을 받는다", async () => {
+  it("app이 넘긴 함수를 통해 세션 쿠키로 목록을 받는다", async () => {
     api.fetchReviews.mockResolvedValue({ items: [] });
-    const withToken: WithOptionalAccessToken = (send) => send("access");
+    const withToken: WithOptionalSession = (send) => send();
     const client = new QueryClient();
     const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
@@ -31,7 +31,6 @@ describe("useReviewList", () => {
       3,
       undefined,
       expect.any(AbortSignal),
-      "access",
     );
   });
 });

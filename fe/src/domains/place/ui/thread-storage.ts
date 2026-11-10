@@ -45,10 +45,7 @@ export type ThreadAuth = {
   // 세션 키를 확인한다. 세션이 없으면 복원을 한 번 시도하고, 시간 초과나 연결 오류면 unknown이다
   resolve(): Promise<SessionKey>;
   // key 세션의 AT로 보낸다. 만료면 한 번 갱신한다. 처음 토큰이나 갱신 결과가 key와 다른 세션이면 보내지 않고 던진다
-  send<T>(
-    key: MemberKey,
-    request: (accessToken: string) => Promise<T>,
-  ): Promise<T>;
+  send<T>(key: MemberKey, request: () => Promise<T>): Promise<T>;
 };
 
 const GUEST: SessionKey = { kind: "guest" };
@@ -242,9 +239,7 @@ async function send(
 ): Promise<"saved" | "failed" | "stopped"> {
   for (let attempt = 0; ; attempt += 1) {
     try {
-      await auth.send(key, (accessToken) =>
-        putTurn(threadId, turn, accessToken),
-      );
+      await auth.send(key, () => putTurn(threadId, turn));
       return "saved";
     } catch (error) {
       if (!isApiError(error)) return "stopped";
@@ -301,7 +296,7 @@ export async function removeThread(
     if (key.kind === "unknown" || !auth)
       throw new Error("로그인 상태를 확인하지 못했어요");
     await settle(ids);
-    await auth.send(key, (accessToken) => deleteThread(threadId, accessToken));
+    await auth.send(key, () => deleteThread(threadId));
   } catch (error) {
     restore();
     throw error;
@@ -325,7 +320,7 @@ export async function removeAllThreads(key: SessionKey, auth?: ThreadAuth) {
     if (key.kind === "unknown" || !auth)
       throw new Error("로그인 상태를 확인하지 못했어요");
     await settle(ids);
-    await auth.send(key, (accessToken) => deleteAllThreads(accessToken));
+    await auth.send(key, () => deleteAllThreads());
   } catch (error) {
     restore();
     throw error;
@@ -366,9 +361,7 @@ export function useThreadList(auth?: ThreadAuth) {
       if (key.kind === "guest") return { items: deviceSummaries() };
       if (key.kind === "unknown" || !auth)
         throw new Error("로그인 상태를 확인하지 못했어요");
-      return auth.send(key, (accessToken) =>
-        fetchThreadPage(accessToken, pageParam, signal),
-      );
+      return auth.send(key, () => fetchThreadPage(pageParam, signal));
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextCursor,
@@ -385,9 +378,7 @@ export function useThreadList(auth?: ThreadAuth) {
   async function load(threadId: string, signal?: AbortSignal) {
     const key = source.current;
     if (key.kind === "member" && auth) {
-      const data = await auth.send(key, (accessToken) =>
-        fetchThread(threadId, accessToken, signal),
-      );
+      const data = await auth.send(key, () => fetchThread(threadId, signal));
       const [thread] = parseThreads(JSON.stringify([data]));
       if (thread?.id !== threadId)
         throw new Error("검색 기록이 올바르지 않아요");

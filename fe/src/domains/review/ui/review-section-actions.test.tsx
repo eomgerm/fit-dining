@@ -18,8 +18,8 @@ import { ToastProvider } from "@/shared/ui/overlay/toast";
 
 import {
   reviewKeys,
-  type WithAccessToken,
-  type WithOptionalAccessToken,
+  type WithSession,
+  type WithOptionalSession,
 } from "../api/queries";
 import type {
   ReviewFormResponse,
@@ -60,11 +60,11 @@ const page = (items: ReviewItem[]): ReviewListResponse => ({
   items,
 });
 
-const signedIn: WithOptionalAccessToken = (send) => send("token");
-const withAccessToken: WithAccessToken = (send) => send("token");
+const signedIn: WithOptionalSession = (send) => send();
+const authenticated: WithSession = (send) => send();
 const http = (status: number) => new ApiError("http", "", { status });
 
-function mount(accessToken: WithAccessToken = withAccessToken) {
+function mount(accessToken: WithSession = authenticated) {
   const onEdit = vi.fn();
   const onSignIn = vi.fn();
   const client = new QueryClient({
@@ -75,8 +75,8 @@ function mount(accessToken: WithAccessToken = withAccessToken) {
       <ToastProvider>
         <ReviewSection
           placeId={3}
-          withOptionalAccessToken={signedIn}
-          withAccessToken={accessToken}
+          withOptionalSession={signedIn}
+          authenticated={accessToken}
           onEdit={onEdit}
           onSignIn={onSignIn}
         />
@@ -149,7 +149,7 @@ describe("ReviewSection 내 리뷰 메뉴", () => {
     finish();
 
     expect(await screen.findByText("리뷰를 삭제했어요")).toBeTruthy();
-    expect(api.deleteReview).toHaveBeenCalledWith(2, "token");
+    expect(api.deleteReview).toHaveBeenCalledWith(2);
     expect(screen.queryByText("내가 쓴 리뷰")).toBeNull();
     expect(api.fetchReviews).toHaveBeenCalledTimes(2);
     expect(client.getQueryState(reviewKeys.form(3))?.isInvalidated).toBe(true);
@@ -326,11 +326,7 @@ describe("ReviewSection 남의 리뷰 신고", () => {
     expect(
       await screen.findByText("신고했어요. 확인 후 처리할게요."),
     ).toBeTruthy();
-    expect(api.reportReview).toHaveBeenCalledWith(
-      1,
-      { reason: "AD_SPAM" },
-      "token",
-    );
+    expect(api.reportReview).toHaveBeenCalledWith(1, { reason: "AD_SPAM" });
     await waitFor(() => expect(sheet()).toBeNull());
     expect(api.fetchReviews).toHaveBeenCalledTimes(1);
   });
@@ -348,11 +344,10 @@ describe("ReviewSection 남의 리뷰 신고", () => {
     fireEvent.click(submitButton());
 
     await waitFor(() =>
-      expect(api.reportReview).toHaveBeenCalledWith(
-        1,
-        { reason: "OTHER", detail: "가게와 상관없는 홍보예요" },
-        "token",
-      ),
+      expect(api.reportReview).toHaveBeenCalledWith(1, {
+        reason: "OTHER",
+        detail: "가게와 상관없는 홍보예요",
+      }),
     );
   });
 

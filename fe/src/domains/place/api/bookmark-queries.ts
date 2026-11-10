@@ -25,9 +25,7 @@ export const bookmarkQueries = {
     queryOptions({
       queryKey: bookmarkKeys.status(userId, placeId),
       queryFn: ({ signal }) =>
-        access.send(userId, (token) =>
-          getBookmarkStatus(placeId, token, signal),
-        ),
+        access.send(userId, () => getBookmarkStatus(placeId, signal)),
       ...noAutoRetry,
     }),
 
@@ -36,8 +34,7 @@ export const bookmarkQueries = {
   list: (access: BookmarkAccess, userId: string, entry: number) =>
     queryOptions({
       queryKey: [...bookmarkKeys.lists(userId), entry] as const,
-      queryFn: ({ signal }) =>
-        access.send(userId, (token) => getBookmarks(token, signal)),
+      queryFn: ({ signal }) => access.send(userId, () => getBookmarks(signal)),
       gcTime: 0,
       ...noAutoRetry,
     }),

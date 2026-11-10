@@ -35,17 +35,10 @@ vi.mock("@/domains/auth/api/auth-client", () => ({
   },
 }));
 
-const session = (
-  userId: string,
-  sessionId = "s1",
-  accessToken = `${userId}-${sessionId}-at`,
-): AuthSession => ({
+const session = (userId: string, sessionId = "s1"): AuthSession => ({
   userId,
-  sessionId,
-  accessToken,
   nickname: userId,
-  accessExpiresAt: 0,
-  sessionExpiresAt: 0,
+  sessionExpiresAt: Number(sessionId.replace(/\D/g, "")) || 1,
 });
 
 // 모듈을 테스트마다 새로 불러오므로 instanceof가 맞도록 오류 클래스도 그때 불러온다
@@ -102,7 +95,7 @@ function stubFetch() {
       const put: Put = {
         thread: match[1],
         turn: match[2],
-        token: new Headers(init.headers).get("Authorization") ?? "",
+        token: new Headers(init.headers).get("X-XSRF-TOKEN") ?? "",
         body: JSON.parse(String(init.body)),
       };
       puts.push(put);
@@ -293,7 +286,7 @@ describe("회원", () => {
     auth.session = session("u1");
   });
 
-  it("검색을 시작한 세션의 AT로 보내고 기기에는 쓰지 않는다", async () => {
+  it("검색을 시작한 세션에서 CSRF 헤더로 보내고 기기에는 쓰지 않는다", async () => {
     const { begin, save } = await load();
 
     save(begin(), "thread-1", turn("entry-1"));
@@ -303,7 +296,7 @@ describe("회원", () => {
     expect(puts[0]).toMatchObject({
       thread: "thread-1",
       turn: "entry-1",
-      token: "Bearer u1-s1-at",
+      token: "test-csrf",
     });
     expect(puts[0].body).not.toHaveProperty("nextCursor");
     expect(puts[0].body.response).not.toHaveProperty("nextCursor");
@@ -420,7 +413,7 @@ describe("회원", () => {
     expect(puts).toEqual([]);
   });
 
-  it("만료돼 갱신한 결과가 다른 계정이면 보내지 않는다", async () => {
+  it("세션 만료 401이면 다른 계정으로 재시도하지 않는다", async () => {
     responder = () => problem(401, EXPIRED);
     auth.refresh.mockImplementation(async () => {
       setSession(session("u2"));
@@ -431,10 +424,10 @@ describe("회원", () => {
     save(begin(), "thread-1", turn("entry-1"));
     await flush();
 
-    expect(puts.map(({ token }) => token)).toEqual(["Bearer u1-s1-at"]);
+    expect(puts.map(({ token }) => token)).toEqual(["test-csrf"]);
   });
 
-  it("만료돼 같은 세션으로 갱신하면 새 AT로 다시 보내고 화면 상태를 비우지 않는다", async () => {
+  it("세션 만료 401이면 재시도하지 않고 이전 회원 화면 상태를 비운다", async () => {
     let first = true;
     responder = () => {
       if (first) {
@@ -444,7 +437,7 @@ describe("회원", () => {
       return new Response(null, { status: 204 });
     };
     auth.refresh.mockImplementation(async () => {
-      setSession(session("u1", "s1", "renewed"));
+      setSession(session("u1", "s1"));
       return auth.session!;
     });
     const { begin, save } = await load();
@@ -455,11 +448,8 @@ describe("회원", () => {
     save(begin(), "thread-1", turn("entry-1"));
     await flush();
 
-    expect(puts.map(({ token }) => token)).toEqual([
-      "Bearer u1-s1-at",
-      "Bearer renewed",
-    ]);
-    expect(queryClient.clear).not.toHaveBeenCalled();
+    expect(puts.map(({ token }) => token)).toEqual(["test-csrf"]);
+    expect(queryClient.clear).toHaveBeenCalledTimes(1);
   });
 
   it("만료가 아닌 401이면 이 탭의 세션만 지우고 그 뒤 turn은 보내지 않는다", async () => {
@@ -494,7 +484,7 @@ describe("회원", () => {
     const { saveTurn, resetThreadSession, threadAuth } = await load();
     const target = new Promise<never>((resolve) => {
       resolveKey = () =>
-        resolve({ kind: "member", userId: "u1", sessionId: "s1" } as never);
+        resolve({ kind: "member", userId: "u1", sessionId: "1" } as never);
     });
 
     saveTurn(target, "thread-1", turn("entry-1"), threadAuth);
@@ -545,14 +535,14 @@ describe("세션 전환 감지", () => {
     const { queryClient } = await watch();
 
     setSession(session("u1"));
-    setSession(session("u1", "s1", "renewed"));
+    setSession(session("u1", "s1"));
 
     expect(queryClient.clear).not.toHaveBeenCalled();
   });
 });
 
 describe("최근 검색 지우기(D-18)", () => {
-  const member = { kind: "member", userId: "u1", sessionId: "s1" } as const;
+  const member = { kind: "member", userId: "u1", sessionId: "1" } as const;
   const guestIds = () =>
     JSON.parse(
       localStorage.getItem("fit-dining:guest-search-threads") ?? "[]",

@@ -128,13 +128,13 @@ describe("로그인 상태", () => {
   });
 });
 
-describe("누른 계정의 AT로만 보내기", () => {
-  it("지금 세션이 누른 계정이면 그 AT로 보낸다", async () => {
+describe("누른 계정의 세션에서만 보내기", () => {
+  it("지금 세션이 누른 계정이면 토큰 인자 없이 보낸다", async () => {
     auth.session = { userId: "a", accessToken: "t1" };
     const { result } = renderAccess();
-    const request = vi.fn(async (token: string) => token);
+    const request = vi.fn(async () => "sent");
 
-    await expect(result.current.send("a", request)).resolves.toBe("t1");
+    await expect(result.current.send("a", request)).resolves.toBe("sent");
   });
 
   it("로그인 정보가 없거나 다른 계정이면 보내지 않는다", async () => {
@@ -153,10 +153,13 @@ describe("누른 계정의 AT로만 보내기", () => {
     expect(auth.refresh).not.toHaveBeenCalled();
   });
 
-  it("같은 계정이어도 보내려는 AT가 지금 세션의 AT가 아니면 보내지 않는다", async () => {
+  it("복원을 기다리는 사이 계정이 바뀌면 보내지 않는다", async () => {
     auth.session = { userId: "a", accessToken: "t1" };
     // 복원이 돌려준 세션이 그사이 바뀐 경우(다른 계정으로 갔다가 같은 계정으로 다시 로그인)
-    auth.restore.mockResolvedValue({ userId: "a", accessToken: "stale" });
+    auth.restore.mockImplementation(async () => {
+      auth.session = { userId: "b", accessToken: "stale" };
+      return auth.session;
+    });
     const { result } = renderAccess();
     const request = vi.fn(async () => "sent");
 
@@ -166,7 +169,7 @@ describe("누른 계정의 AT로만 보내기", () => {
     expect(request).not.toHaveBeenCalled();
   });
 
-  it("AT가 만료돼 RT로 갱신했더니 다른 계정이면 다시 보내지 않는다", async () => {
+  it("세션이 만료되면 다른 계정으로 다시 보내지 않는다", async () => {
     auth.session = { userId: "a", accessToken: "t1" };
     auth.refresh.mockImplementation(async () => {
       auth.session = { userId: "b", accessToken: "t2" };
@@ -177,13 +180,13 @@ describe("누른 계정의 AT로만 보내기", () => {
       throw expired();
     });
 
-    await expect(result.current.send("a", request)).rejects.toBeInstanceOf(
-      BookmarkAccountChanged,
-    );
+    await expect(result.current.send("a", request)).rejects.toMatchObject({
+      status: 401,
+    });
     expect(request).toHaveBeenCalledTimes(1);
   });
 
-  it("같은 계정으로 갱신했으면 새 AT로 한 번 다시 보낸다", async () => {
+  it("같은 계정이어도 만료된 요청을 다시 보내지 않는다", async () => {
     auth.session = { userId: "a", accessToken: "t1" };
     auth.refresh.mockImplementation(async () => {
       auth.session = { userId: "a", accessToken: "t2" };
@@ -191,10 +194,12 @@ describe("누른 계정의 AT로만 보내기", () => {
     });
     const { result } = renderAccess();
     const request = vi
-      .fn<(token: string) => Promise<string>>()
+      .fn<() => Promise<string>>()
       .mockRejectedValueOnce(expired())
-      .mockImplementation(async (token) => token);
+      .mockImplementation(async () => "sent");
 
-    await expect(result.current.send("a", request)).resolves.toBe("t2");
+    await expect(result.current.send("a", request)).rejects.toMatchObject({
+      status: 401,
+    });
   });
 });

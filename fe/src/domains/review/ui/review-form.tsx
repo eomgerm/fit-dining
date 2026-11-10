@@ -30,7 +30,7 @@ import { useToast } from "@/shared/ui/overlay/toast";
 import {
   useCreateReview,
   useReviewForm,
-  type WithAccessToken,
+  type WithSession,
 } from "../api/queries";
 import type { ReviewFormResponse } from "../model/review";
 import {
@@ -60,7 +60,7 @@ import { VisitDateSheet } from "./visit-calendar";
 type ReviewFormProps = {
   placeId: number;
   // 요청에 AT를 붙인다. 인증 도메인을 쓰는 app이 넘긴다
-  withAccessToken: WithAccessToken;
+  authenticated: WithSession;
   // 화면 이동은 부르는 쪽(app)이 정한다
   onSuccess: (reviewId: number) => void;
   onClose: () => void;
@@ -70,12 +70,12 @@ type ReviewFormProps = {
 // 방문 평가 2단계 작성(7-01~7-05, D-41). 작성 화면 데이터를 받은 뒤 흐름을 그린다
 export function ReviewForm({
   placeId,
-  withAccessToken,
+  authenticated,
   onSuccess,
   onClose,
   onSignedOut,
 }: ReviewFormProps) {
-  const form = useReviewForm(placeId, withAccessToken);
+  const form = useReviewForm(placeId, authenticated);
   // 등록하거나 닫은 뒤 Next가 숨겨 둔 화면을 다시 열면 빈 입력으로 시작하도록 흐름을 새로 만든다
   const [round, setRound] = useState(0);
   // 쓰는 중에 다시 받다가 난 401은 입력을 지키려고 넘기고, 등록할 때 다시 로그인하라고 안내한다
@@ -98,7 +98,7 @@ export function ReviewForm({
         key={round}
         placeId={placeId}
         form={form.data}
-        withAccessToken={withAccessToken}
+        authenticated={authenticated}
         onSuccess={(reviewId) => {
           clearVisitEntry(placeId);
           setRound(round + 1);
@@ -149,7 +149,7 @@ type Page = "good" | "bad" | "detail";
 type ReviewWriteFlowProps = {
   placeId: number;
   form: ReviewFormResponse;
-  withAccessToken: WithAccessToken;
+  authenticated: WithSession;
   onSuccess: (reviewId: number) => void;
   onClose: () => void;
   onReload: () => void;
@@ -158,7 +158,7 @@ type ReviewWriteFlowProps = {
 export function ReviewWriteFlow({
   placeId,
   form,
-  withAccessToken,
+  authenticated,
   onSuccess,
   onClose,
   onReload,
@@ -193,12 +193,12 @@ export function ReviewWriteFlow({
   // 닫히는 동안 문구가 바뀌지 않게 마지막 실패 종류는 남겨 둔다
   const [failure, setFailure] = useState<SubmitFailure>("server");
   const [failureOpen, setFailureOpen] = useState(false);
-  const createReview = useCreateReview(placeId, withAccessToken);
+  const createReview = useCreateReview(placeId, authenticated);
   const toast = useToast();
   const photos = useReviewPhotos({
     saved: [],
     max: form.limits.photoMax,
-    withAccessToken,
+    authenticated,
     onUnreadable: () => toast(UNREADABLE_PHOTO),
   });
   const allTags = [...form.tags.good, ...form.tags.bad];

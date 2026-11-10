@@ -226,7 +226,7 @@ function Harness({ initial }: { initial: BookmarkSession }) {
     currentUserId: () => harness.current,
     async send(userId, request) {
       if (harness.current !== userId) throw new BookmarkAccountChanged();
-      return request(`token-${userId}`);
+      return request();
     },
     endSession: () => {
       harness.endSession();
@@ -282,7 +282,7 @@ describe("저장한 장소 화면 들어가기", () => {
       "저장 장소 3",
       "저장 장소 5",
     ]);
-    expect(listCalls).toEqual(["Bearer token-a"]);
+    expect(listCalls).toEqual([""]);
     // 검색창, 오른쪽 위 버튼, 주변 추천은 보이지 않는다
     expect(screen.queryByRole("textbox", { name: "장소 검색" })).toBeNull();
     expect(screen.queryByRole("button", { name: "저장한 장소" })).toBeNull();
@@ -741,7 +741,7 @@ describe("비로그인과 세션 종료", () => {
     act(() => harness.setSession({ status: "user", userId: "b" }));
 
     expect(cardNames(await savedList())).toEqual(["저장 장소 8"]);
-    expect(listCalls).toEqual(["Bearer token-a", "Bearer token-b"]);
+    expect(listCalls).toEqual(["", ""]);
   });
 });
 

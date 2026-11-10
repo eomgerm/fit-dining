@@ -16,7 +16,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/shared/api/api-error";
 import { ToastProvider } from "@/shared/ui/overlay/toast";
 
-import { reviewKeys, type WithAccessToken } from "../api/queries";
+import { reviewKeys, type WithSession } from "../api/queries";
 import type { ReviewDetailResponse, ReviewListResponse } from "../model/review";
 import { ReviewEditForm } from "./review-edit-form";
 
@@ -36,7 +36,7 @@ const review: ReviewDetailResponse = {
   limits: { descriptionMax: 500, photoMax: 5 },
 };
 
-const withAccessToken: WithAccessToken = (send) => send("token");
+const authenticated: WithSession = (send) => send();
 const http = (status: number) => new ApiError("http", "", { status });
 
 function mount() {
@@ -51,7 +51,7 @@ function mount() {
       <ToastProvider>
         <ReviewEditForm
           reviewId={12}
-          withAccessToken={withAccessToken}
+          authenticated={authenticated}
           {...props}
         />
       </ToastProvider>
@@ -117,11 +117,10 @@ describe("ReviewEditForm 사진", () => {
     fireEvent.click(submitButton());
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalled());
-    expect(api.updateReview).toHaveBeenCalledWith(
-      12,
-      { photos: ["p2"], basePhotos: ["p1", "p2"] },
-      "token",
-    );
+    expect(api.updateReview).toHaveBeenCalledWith(12, {
+      photos: ["p2"],
+      basePhotos: ["p1", "p2"],
+    });
   });
 
   it("본문만 고치면 사진은 보내지 않는다", async () => {
@@ -133,11 +132,9 @@ describe("ReviewEditForm 사진", () => {
     fireEvent.click(submitButton());
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalled());
-    expect(api.updateReview).toHaveBeenCalledWith(
-      12,
-      { description: "고친 본문" },
-      "token",
-    );
+    expect(api.updateReview).toHaveBeenCalledWith(12, {
+      description: "고친 본문",
+    });
   });
 
   it("쓸 수 없는 사진(400)이면 사진 안내를 띄운다", async () => {
@@ -195,7 +192,7 @@ describe("ReviewEditForm", () => {
     expect(submitButton().hasAttribute("disabled")).toBe(true);
     expect(api.fetchReview).toHaveBeenCalledWith(
       12,
-      "token",
+
       expect.anything(),
     );
   });
@@ -208,11 +205,9 @@ describe("ReviewEditForm", () => {
     fireEvent.click(submitButton());
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalled());
-    expect(api.updateReview).toHaveBeenCalledWith(
-      12,
-      { description: "고친 본문" },
-      "token",
-    );
+    expect(api.updateReview).toHaveBeenCalledWith(12, {
+      description: "고친 본문",
+    });
     expect(await screen.findByText("리뷰를 수정했어요")).toBeTruthy();
   });
 
@@ -243,11 +238,7 @@ describe("ReviewEditForm", () => {
     fireEvent.click(submitButton());
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalled());
-    expect(api.updateReview).toHaveBeenCalledWith(
-      12,
-      { description: "" },
-      "token",
-    );
+    expect(api.updateReview).toHaveBeenCalledWith(12, { description: "" });
   });
 
   it("고친 것이 없으면 뒤로 바로 나간다", async () => {
@@ -407,7 +398,7 @@ describe("ReviewEditForm", () => {
         <ToastProvider>
           <ReviewEditForm
             reviewId={12}
-            withAccessToken={withAccessToken}
+            authenticated={authenticated}
             onSuccess={() => {}}
             onClose={() => {}}
             onSignedOut={() => {}}

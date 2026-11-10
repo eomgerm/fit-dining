@@ -24,10 +24,7 @@ export type BookmarkAccess = {
   currentUserId: () => string | undefined;
   // userId 계정의 AT로만 보낸다. 보내는 순간 계정이 다르거나 로그인 정보가 없으면
   // BookmarkAccountChanged로 끝난다. 만료된 AT는 한 번 갱신해 다시 보낸다
-  send: <T>(
-    userId: string,
-    request: (accessToken: string) => Promise<T>,
-  ) => Promise<T>;
+  send: <T>(userId: string, request: () => Promise<T>) => Promise<T>;
   // RT 갱신을 거쳐도 401이면 세션이 끝난 것으로 보고 앱의 로그인 정보를 지운다(D-7)
   endSession: () => void;
   // 로그인 화면으로 간다. 로그인한 뒤 returnTo로 돌아온다(D-8)

@@ -1,3 +1,4 @@
+import { csrfHeaders } from "./csrf";
 import { ApiError, type ProblemDetail } from "./api-error";
 
 type QueryValue = string | number | boolean | undefined;
@@ -46,7 +47,10 @@ export async function requestWithHeaders<T>(
   try {
     const response = await fetch(buildUrl(path, query), {
       method,
-      headers: requestHeaders,
+      headers:
+        typeof window !== "undefined" && !/^(GET|HEAD|OPTIONS)$/.test(method)
+          ? await csrfHeaders(method, requestHeaders)
+          : requestHeaders,
       body: requestBody,
       signal: signal ? anySignal(signal, timeout) : timeout,
     });

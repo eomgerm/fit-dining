@@ -6,14 +6,14 @@ import { ToastProvider } from "@/shared/ui/overlay/toast";
 
 import {
   reviewKeys,
-  type WithAccessToken,
-  type WithOptionalAccessToken,
+  type WithSession,
+  type WithOptionalSession,
 } from "../api/queries";
 import type { ReviewListResponse } from "../model/review";
 import { ReviewSection } from "./review-section";
 
-const anonymous: WithOptionalAccessToken = (send) => send();
-const withAccessToken: WithAccessToken = (send) => send("token");
+const anonymous: WithOptionalSession = (send) => send();
+const authenticated: WithSession = (send) => send();
 
 // 서버 렌더에서는 쿼리가 돌지 않아 처음 불러오는 중 모양이 나온다. 두 모양의 차이만 확인한다
 function render(onShowAll?: () => void) {
@@ -23,8 +23,8 @@ function render(onShowAll?: () => void) {
         <ReviewSection
           placeId={1}
           onShowAll={onShowAll}
-          withOptionalAccessToken={anonymous}
-          withAccessToken={withAccessToken}
+          withOptionalSession={anonymous}
+          authenticated={authenticated}
           onEdit={() => {}}
           onSignIn={() => {}}
         />
@@ -76,8 +76,8 @@ describe("ReviewSection", () => {
         <ToastProvider>
           <ReviewSection
             placeId={1}
-            withOptionalAccessToken={anonymous}
-            withAccessToken={withAccessToken}
+            withOptionalSession={anonymous}
+            authenticated={authenticated}
             onEdit={() => {}}
             onSignIn={() => {}}
           />

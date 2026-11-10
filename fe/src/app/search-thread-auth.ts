@@ -1,13 +1,12 @@
 import type { QueryClient } from "@tanstack/react-query";
 
 import {
-  clearSession,
   getSession,
   restore,
   subscribe,
   type AuthSession,
 } from "@/domains/auth/api/auth-client";
-import { withAccessToken } from "@/domains/auth/api/with-access-token";
+import { authenticated } from "@/domains/auth/api/authenticated";
 import { searchStore } from "@/domains/place/model/search-store";
 import {
   resetThreadSession,
@@ -30,10 +29,11 @@ let confirmed: SessionKey | undefined;
 let watching = false;
 const changeListeners = new Set<() => void>();
 
+// /me는 서버 세션 ID를 노출하지 않는다. 절대 만료 시각은 같은 로그인의 재확인 동안 일정하다.
 const keyOf = (session: AuthSession): MemberKey => ({
   kind: "member",
   userId: session.userId,
-  sessionId: session.sessionId,
+  sessionId: String(session.sessionExpiresAt),
 });
 
 function sameKey(a: SessionKey, b: SessionKey) {
@@ -47,7 +47,7 @@ function currentKey(): SessionKey {
   return signedOut ? GUEST : UNKNOWN;
 }
 
-// 모름이 확인된 값이 되는 것과 같은 세션의 AT 갱신은 바뀐 것이 아니다
+// 모름이 확인된 값이 되는 것과 같은 세션을 다시 확인하는 것은 바뀐 것이 아니다
 function observe() {
   const key = currentKey();
   if (key.kind === "unknown") return;
@@ -62,7 +62,7 @@ function watch() {
   if (watching) return;
   watching = true;
   subscribe(() => {
-    // 세션 없이 알림이 오면 로그아웃, 다른 탭의 로그아웃, 갱신 실패, 인증 상실 중 하나라 세션 없음이 확인된 것이다
+    // 세션 없이 알림이 오면 로그아웃, 다른 탭의 로그아웃, 세션 확인 실패, 인증 상실 중 하나라 세션 없음이 확인된 것이다
     signedOut = getSession() === null;
     observe();
   });
@@ -97,29 +97,17 @@ async function resolveKey(): Promise<SessionKey> {
   }
 }
 
-// key 세션일 때만 보낸다. withAccessToken은 계정을 확인하지 않으므로 처음 토큰과 갱신한 토큰 모두 여기서 비교한다
+// 요청을 보내기 직전에 검색을 시작한 로그인인지 확인한다.
 class SessionMismatchError extends Error {}
 
-async function sendAs<T>(
-  key: MemberKey,
-  request: (accessToken: string) => Promise<T>,
-) {
-  try {
-    return await withAccessToken((accessToken) => {
-      const session = getSession();
-      if (
-        session?.accessToken !== accessToken ||
-        !sameKey(keyOf(session), key)
-      ) {
-        throw new SessionMismatchError("다른 로그인 세션입니다");
-      }
-      return request(accessToken);
-    });
-  } catch (error) {
-    // 만료가 아닌 401이나 갱신하고도 401이면 인증을 잃었다. 서버 로그아웃이나 다른 탭 알림 없이 이 탭의 세션만 지운다
-    if (isApiError(error) && error.status === 401) clearSession();
-    throw error;
-  }
+async function sendAs<T>(key: MemberKey, request: () => Promise<T>) {
+  return authenticated(() => {
+    const session = getSession();
+    if (!session || !sameKey(keyOf(session), key)) {
+      throw new SessionMismatchError("다른 로그인 세션입니다");
+    }
+    return request();
+  });
 }
 
 export const threadAuth: ThreadAuth = {

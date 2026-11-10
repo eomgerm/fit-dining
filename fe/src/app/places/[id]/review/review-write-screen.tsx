@@ -1,6 +1,6 @@
 "use client";
 
-import { withAccessToken } from "@/domains/auth/api/with-access-token";
+import { authenticated } from "@/domains/auth/api/authenticated";
 import { ReviewForm } from "@/domains/review/ui/review-form";
 
 import { useLeave, useSignedIn } from "../review-screen";
@@ -14,7 +14,7 @@ export function ReviewWriteScreen({ placeId }: { placeId: number }) {
   return (
     <ReviewForm
       placeId={placeId}
-      withAccessToken={withAccessToken}
+      authenticated={authenticated}
       onSuccess={() => leave(placeId)}
       onClose={() => leave(placeId)}
       onSignedOut={goToLogin}

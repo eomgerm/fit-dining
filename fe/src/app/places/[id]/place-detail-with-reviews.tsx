@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 
-import { withAccessToken } from "@/domains/auth/api/with-access-token";
+import { authenticated } from "@/domains/auth/api/authenticated";
 import { PlaceDetailScreen } from "@/domains/place/ui/place-detail-screen";
 import { reviewEditHref, reviewWriteHref } from "@/domains/review/model/review";
 import { ReviewEntryButton } from "@/domains/review/ui/review-entry-button";
@@ -10,7 +10,7 @@ import { ReviewSection } from "@/domains/review/ui/review-section";
 
 import { rememberLoginReturn } from "../../login-return";
 import { useBookmarkAccess } from "../../use-bookmark-access";
-import { withOptionalAccessToken } from "./with-optional-access-token";
+import { withOptionalSession } from "./with-optional-session";
 
 // 장소 상세에 리뷰와 저장 버튼의 인증을 끼운다. 도메인끼리는 import하지 않으므로 app이 조합한다(리뷰 D-32, 북마크 D-5)
 export function PlaceDetailWithReviews({
@@ -39,8 +39,8 @@ export function PlaceDetailWithReviews({
           <ReviewSection
             placeId={placeId}
             onShowAll={showReviews}
-            withOptionalAccessToken={withOptionalAccessToken}
-            withAccessToken={withAccessToken}
+            withOptionalSession={withOptionalSession}
+            authenticated={authenticated}
             onEdit={editReview(placeId)}
             onSignIn={signIn}
           />
@@ -48,8 +48,8 @@ export function PlaceDetailWithReviews({
         reviewTab: (placeId) => (
           <ReviewSection
             placeId={placeId}
-            withOptionalAccessToken={withOptionalAccessToken}
-            withAccessToken={withAccessToken}
+            withOptionalSession={withOptionalSession}
+            authenticated={authenticated}
             onEdit={editReview(placeId)}
             onSignIn={signIn}
           />
@@ -57,7 +57,7 @@ export function PlaceDetailWithReviews({
         bottomAction: (placeId) => (
           <ReviewEntryButton
             placeId={placeId}
-            withAccessToken={withAccessToken}
+            authenticated={authenticated}
             onEnter={() => router.push(reviewWriteHref(placeId))}
             onSignIn={signIn}
           />

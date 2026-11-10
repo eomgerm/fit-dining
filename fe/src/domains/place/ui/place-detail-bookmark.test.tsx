@@ -164,7 +164,7 @@ function Harness({ initial }: { initial: BookmarkSession }) {
     currentUserId: () => harness.current,
     async send(userId, request) {
       if (harness.current !== userId) throw new BookmarkAccountChanged();
-      return request(`token-${userId}`);
+      return request();
     },
     endSession: () => {
       harness.endSession();
@@ -218,7 +218,7 @@ describe("상세 저장 버튼의 모양", () => {
     expect(bookmarkCalls()[0]).toEqual({
       method: "GET",
       url: "/api/v1/me/bookmarks/1",
-      auth: "Bearer token-a",
+      auth: null,
     });
   });
 
@@ -275,7 +275,7 @@ describe("저장과 해제", () => {
     expect(await screen.findByText("저장했어요")).toBeTruthy();
     const saved = await button("저장 해제");
     expect(saved.getAttribute("aria-pressed")).toBe("true");
-    expect(bookmarkCalls("PUT")[0].auth).toBe("Bearer token-a");
+    expect(bookmarkCalls("PUT")[0].auth).toBe(null);
 
     fireEvent.click(saved);
     expect(await screen.findByText("저장을 해제했어요")).toBeTruthy();
@@ -438,7 +438,7 @@ describe("계정 전환", () => {
 
     expect(await button("저장")).toBeTruthy();
     expect(screen.queryByText("저장했어요")).toBeNull();
-    expect(bookmarkCalls("GET")[1].auth).toBe("Bearer token-b");
+    expect(bookmarkCalls("GET")[1].auth).toBe(null);
     expect(queryClient.getQueryData(bookmarkKeys.status("a", 1))).toEqual({
       bookmarked: false,
     });

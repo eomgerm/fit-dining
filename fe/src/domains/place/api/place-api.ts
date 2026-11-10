@@ -11,9 +11,8 @@ import type {
 // BE가 AI를 기다리는 12초보다 길어야 대체 결과가 화면에 닿는다(place-ai-search D-3)
 const SEARCH_TIMEOUT_MS = 15_000;
 
-// 회원이면 토큰, 비회원이면 기기의 온보딩 답. 무엇을 실을지는 app이 정한다(D-16)
+// 회원이면 추가 값 없이, 비회원이면 기기의 온보딩 답. 무엇을 실을지는 app이 정한다(D-16)
 export type SearchExtras = {
-  accessToken?: string;
   preferences?: SearchPreferences;
 };
 
@@ -39,16 +38,13 @@ export function suggestPlaces(q: string, signal?: AbortSignal) {
 export async function searchPlaces(
   body: PlaceSearchRequest,
   signal?: AbortSignal,
-  { accessToken, preferences }: SearchExtras = {},
+  { preferences }: SearchExtras = {},
 ) {
   const { data, headers } = await requestWithHeaders<PlaceSearchResponse>(
     "/v1/places/search",
     {
       method: "POST",
       body: preferences ? { ...body, preferences } : body,
-      headers: accessToken
-        ? { Authorization: `Bearer ${accessToken}` }
-        : undefined,
       signal,
       timeoutMs: SEARCH_TIMEOUT_MS,
     },
