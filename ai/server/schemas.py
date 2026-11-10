@@ -6,7 +6,7 @@ JSON 이름은 BE와 같은 camelCase다. 요청의 모르는 속성은 거부�
 
 from typing import Annotated, Any, Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from fit_ai.match.interpretation import (
     FOOD_CODES,
@@ -144,7 +144,7 @@ class GuestTasteBody(ProfileBody):
 
 
 class MapBoundsBody(Body):
-    """지도 영역("이 지역에서 검색"). BE `MapBounds`와 같다. 빠진 값은 제한하지 않는다.
+    """지도 영역(FE 화면에 보이는 사각형). BE `MapBounds`와 같다. 빠진 값은 제한하지 않는다.
 
     Attributes:
         sw_lat: 남서쪽 위도
@@ -178,11 +178,15 @@ class SearchBody(Body):
         query: 사용자가 이번에 입력한 요청문
         previous_conditions: 후속 조건이면 FE가 돌려보낸 기준 요청의 `conditions`.
             BE는 해석하지 않고 그대로 넘긴다. 읽지 못하면 새 검색으로 본다.
-        map_bounds: 지도 영역. "이 지역에서 검색"을 눌렀을 때만 온다. 오면 요청문과 이전
-            요청의 지역을 보지 않고 이 영역으로만 거른다.
+        map_bounds: 지도 영역. FE가 요청마다 지금 화면을 보낸다. `map_first`가 참일 때만
+            쓰고, 거짓이면 거르기에 쓰지 않는다.
+        map_first: "이 지역에서 검색"으로 보낸 요청인지. 참이면 요청문과 이전 요청의 지역을
+            보지 않고 지도 영역으로만 거른다. 참인데 지도 영역이 없거나 비었으면 400이다.
         location: 사용자 위치(`UserLocationBody`). FE가 기기 위치를 얻었으면 요청마다 온다.
             이번 요청에도 이전 요청에도 지역이 없거나 "근처"를 말했으면 이 위치에서 1km
             안으로 거른다. 응답 조건과 로그에 남기지 않는다.
+        rules_only: 참이면 해석 LLM을 부르지 않고 규칙으로만 해석한다. 첫 화면 주변 카드처럼
+            FE가 정한 고정 문장에만 쓴다. 폴백이 아니라 `fallbacks`에 담지 않는다.
         user_id: 회원 id. BE가 로그인으로 확인한 id다. 있으면 취향 저장소에서 그 회원의
             취향을 꺼내고 `taste_profile`은 읽지 않는다. 비회원이면 null이다.
         taste_profile: 비회원 취향(`GuestTasteBody`). 기기가 저장한 온보딩 답을 BE가
@@ -193,7 +197,9 @@ class SearchBody(Body):
     query: str = Field(min_length=1, max_length=MAX_QUERY_LENGTH)
     previous_conditions: dict[str, Any] | None = None
     map_bounds: MapBoundsBody | None = None
+    map_first: bool = Field(default=False, strict=True)
     location: UserLocationBody | None = None
+    rules_only: bool = Field(default=False, strict=True)
     user_id: str | None = Field(
         default=None, min_length=1, max_length=MAX_USER_ID_LENGTH
     )
@@ -205,6 +211,16 @@ class SearchBody(Body):
         if not value.strip():
             raise ValueError("공백만 있다")
         return value
+
+    @model_validator(mode="after")
+    def _map_first_has_bounds(self) -> "SearchBody":
+        # 값이 하나도 없는 영역으로 거르면 역 필터가 빠져 모든 역의 장소가 나온다.
+        bounds = self.map_bounds
+        if self.map_first and (
+            bounds is None or all(v is None for v in bounds.model_dump().values())
+        ):
+            raise ValueError("mapFirst인데 지도 영역이 없다")
+        return self
 
 
 Segment = Annotated[str, Field(min_length=1, max_length=MAX_SEGMENT_LENGTH)]

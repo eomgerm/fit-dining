@@ -149,13 +149,15 @@ def _search(deps: Dependencies, body: SearchBody) -> JSONResponse:
         body.query,
         previous,
         taste,
-        bounds=_bounds(body.map_bounds),
+        # 지도 영역은 요청마다 오지만 "이 지역에서 검색"(mapFirst)일 때만 거르기에 쓴다.
+        bounds=_bounds(body.map_bounds) if body.map_first else None,
         previous_bounds=previous_bounds,
         location=(
             UserLocation(body.location.lat, body.location.lng)
             if body.location
             else None
         ),
+        rules_only=body.rules_only,
     )
     try:
         result = search(
@@ -174,7 +176,7 @@ def _search(deps: Dependencies, body: SearchBody) -> JSONResponse:
     conditions = interpretation.conditions
     fallbacks = _fallbacks(body, previous, taste_invalid, result)
     ranked_by = _ranked_by(result)
-    used_llm = interpretation.llm_error is None
+    used_llm = not interpretation.by_rules
     reason = result.empty_reason
     response = SearchResponse(
         conditions=_conditions_body(conditions, result.bounds),
@@ -186,7 +188,7 @@ def _search(deps: Dependencies, body: SearchBody) -> JSONResponse:
             if reason
             else None
         ),
-        interpreted_by="RULE" if interpretation.llm_error else "LLM",
+        interpreted_by="LLM" if used_llm else "RULE",
         ranked_by=ranked_by,
         fallbacks=fallbacks,
         models=ModelsBody(
@@ -197,12 +199,15 @@ def _search(deps: Dependencies, body: SearchBody) -> JSONResponse:
     log(
         "search",
         interpreted_by=response.interpreted_by,
+        rules_only=request.rules_only,
         follow_up=previous is not None,
         # 코드와 업종·역은 요청문을 되살릴 수 없는 거친 값이라 남긴다.
         codes=list(conditions.codes),
         category_group=conditions.category_group,
         station=conditions.station,
         nationwide=result.nationwide,
+        # 지도 영역은 좌표 없이 왔는지만 남긴다.
+        has_map_bounds=_bounds(body.map_bounds) is not None,
         in_map_bounds=request.bounds is not None,
         previous_map_bounds=previous_bounds is not None,
         # 사용자 위치는 좌표를 남기지 않고 왔는지만 남긴다.

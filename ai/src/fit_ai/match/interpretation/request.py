@@ -281,14 +281,17 @@ class Interpretation:
     Attributes:
         conditions: 해석한 조건. 후속 조건이면 이전 조건과 합친 조건이다.
         change_summary: 후속 조건에서 바뀐 점. 새 검색이면 None이다.
-        llm_error: 규칙으로 해석한 이유. LLM으로 해석했으면 None이다.
-        llm_seconds: LLM 호출에 걸린 시간(초)
+        llm_error: LLM이 실패해 규칙으로 해석한 이유. LLM으로 해석했거나 요청대로 규칙만
+            썼으면(`rules_only`) None이다.
+        llm_seconds: LLM 호출에 걸린 시간(초). LLM을 부르지 않았으면 None이다.
         gms_failed: GMS 호출 자체가 실패했는지(꺼짐 포함). 출력 검사에 걸린 것과
             다르다. 검색은 이때 정렬 LLM을 부르지 않는다.
         turn: 이번 요청의 조건. 지역 고르기가 이번 요청에 말한 지역을 볼 때 쓴다. 규칙
             해석이면 이번 요청만 해석한 조건이고, LLM 해석의 후속이면 합친 조건에서 이번
             요청에 지역을 말하지 않았을 때 지역을 비운 것이다.
             None이면 `conditions`와 같다고 본다(새 검색).
+        rules_only: 요청이 LLM을 부르지 말라고 해서 규칙으로만 해석했는지. LLM 실패와
+            달리 폴백이 아니다.
     """
 
     conditions: Conditions
@@ -297,6 +300,12 @@ class Interpretation:
     llm_seconds: float | None = None
     gms_failed: bool = False
     turn: Conditions | None = None
+    rules_only: bool = False
+
+    @property
+    def by_rules(self) -> bool:
+        """규칙으로 해석했는지. LLM이 실패했거나 요청대로 규칙만 썼을 때 참이다."""
+        return self.rules_only or self.llm_error is not None
 
 
 def _assemble(

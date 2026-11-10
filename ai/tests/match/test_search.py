@@ -366,6 +366,21 @@ class TestWhere:
         request = SearchRequest("요청", location=location)
         assert _where(PREVIOUS, turn, request).areas == areas
 
+    def test_rules_only_home(self, fake_gms: FakeGms) -> None:
+        """지역_규칙만쓰는첫화면요청이면_GMS없이근처를사용자위치반경으로거른다"""
+        calls = fake_gms(answers())
+        store = FakeStore()
+
+        result = search(
+            SearchRequest("근처 맛집", location=HERE, rules_only=True), store
+        )
+
+        assert calls == []
+        assert result.interpretation.rules_only is True
+        assert areas_of(store) == (RADIUS,)
+        assert result.nationwide is False
+        assert result.cards
+
     @pytest.mark.parametrize("previous", [None, PREVIOUS])
     def test_bounds_beat_locations(
         self, fake_gms: FakeGms, previous: Conditions | None

@@ -123,12 +123,15 @@ class SearchRequest:
         query: 사용자가 이번에 입력한 요청문
         previous: 후속 조건이면 기준 요청의 조건. 새 검색이면 None이다.
         taste: 사용자 취향 프로필. 취향이 없거나 읽지 못했으면 None이다.
-        bounds: 지도 영역. "이 지역에서 검색"을 눌렀을 때만 온다. 오면 요청문에 든 지역과
-            이전 요청의 지역을 보지 않고 이 영역으로만 거른다.
+        bounds: "이 지역에서 검색"으로 고른 지도 영역. 오면 요청문에 든 지역과 이전 요청의
+            지역을 보지 않고 이 영역으로만 거른다. 버튼이 아닌 요청에 함께 온 지도 영역은
+            API가 넘기지 않는다(`mapFirst`, docs/comparison/api.md).
         previous_bounds: 이전 요청이 "이 지역에서 검색"으로 고른 지도 영역. 이번 요청에
             지역을 말하지 않았으면 이전 요청의 지역으로 쓴다.
         location: 사용자 위치. FE가 얻었으면 온다. 이번 요청에도 이전 요청에도 지역이
             없거나 "근처"를 말했으면 이 위치에서 반경(`NEARBY_RADIUS_M`) 안으로 거른다.
+        rules_only: 참이면 해석 LLM을 부르지 않고 규칙으로만 해석한다. 첫 화면 주변 카드의
+            고정 문장("근처 맛집")에 쓴다.
     """
 
     query: str
@@ -137,6 +140,7 @@ class SearchRequest:
     bounds: MapBounds | None = None
     previous_bounds: MapBounds | None = None
     location: UserLocation | None = None
+    rules_only: bool = False
 
 
 @dataclass(frozen=True)
@@ -237,7 +241,13 @@ def search(
         EmbeddingError: 요청문을 벡터로 바꾸지 못했을 때
         StoreError: 장소 저장소를 읽지 못했을 때
     """
-    interpretation = interpret(request.query, request.previous, timeout, client)
+    interpretation = interpret(
+        request.query,
+        request.previous,
+        timeout,
+        client,
+        rules_only=request.rules_only,
+    )
     if request.bounds is not None:
         # 지도 영역은 "이 지역에서 검색"에만 오고 오면 지도 영역으로만 거른다. 지도 영역이 이긴
         # 요청문 속 지역은 조건에서 뺀다. 남기면 다음 후속 요청이 그 지역으로 돌아간다.

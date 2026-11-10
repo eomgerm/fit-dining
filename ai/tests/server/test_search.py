@@ -321,6 +321,7 @@ class TestSearch:
             client(store=store, gms_timeout=3.0),
             previousConditions=CONDITIONS_BODY,
             mapBounds={"swLat": 37.49, "neLng": 127.04},
+            mapFirst=True,
             tasteProfile=TASTE_BODY,
         )
 
@@ -356,13 +357,78 @@ class TestSearch:
         assert searched.clients == [gms_client]
 
     @pytest.mark.parametrize(
-        "bounds", [{}, {"swLat": None, "swLng": None, "neLat": None, "neLng": None}]
+        "body",
+        [
+            {"mapFirst": True},
+            {"mapFirst": True, "mapBounds": None},
+            {"mapFirst": True, "mapBounds": {}},
+            {
+                "mapFirst": True,
+                "mapBounds": {
+                    "swLat": None,
+                    "swLng": None,
+                    "neLat": None,
+                    "neLng": None,
+                },
+            },
+        ],
     )
-    def test_empty_map_bounds_is_none(self, searched: FakeSearch, bounds: dict) -> None:
-        """검색_지도영역에값이하나도없으면_영역이없는것으로보고역으로거른다"""
-        post(client(), mapBounds=bounds)
+    def test_map_first_without_bounds_is_rejected(
+        self, searched: FakeSearch, body: dict
+    ) -> None:
+        """검색_이지역에서검색인데지도영역에값이하나도없으면_역필터가빠지지않게400이다"""
+        response = client().post("/v1/search", json={"query": QUERY_TEXT, **body})
 
-        assert searched.calls[0][0].bounds is None
+        assert response.status_code == 400
+        assert searched.calls == []
+
+    def test_map_bounds_without_map_first_not_used(
+        self, searched: FakeSearch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """검색_이지역에서검색이아니면_함께온지도영역을거르기에쓰지않고왔는지만남긴다"""
+        caplog.set_level(logging.INFO, logger="server")
+
+        post(client(), mapBounds={"swLat": 37.4912, "neLng": 127.04})
+        post(client(), mapBounds={"swLat": 37.4912}, mapFirst=False)
+
+        assert [call[0].bounds for call in searched.calls] == [None, None]
+        assert "37.4912" not in caplog.text
+        events = [
+            json.loads(r.getMessage()) for r in caplog.records if r.name == "server"
+        ]
+        assert [(e["has_map_bounds"], e["in_map_bounds"]) for e in events] == [
+            (True, False),
+            (True, False),
+        ]
+
+    def test_rules_only_passed(self, searched: FakeSearch) -> None:
+        """검색_rulesOnly가오면_검색요청에넘기고없으면거짓이다"""
+        post(client(), query="근처 맛집", rulesOnly=True)
+        post(client(), query="근처 맛집")
+
+        assert [call[0].rules_only for call in searched.calls] == [True, False]
+
+    def test_rules_only_is_not_fallback(
+        self, searched: FakeSearch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """검색_요청대로규칙만썼으면_규칙으로표시하고LLM모델을빼지만폴백은아니다"""
+        caplog.set_level(logging.INFO, logger="server")
+        result = make_result()
+        searched.outcome = replace(
+            result,
+            interpretation=Interpretation(CONDITIONS, None, rules_only=True),
+        )
+
+        data = post(client(), query="근처 맛집", rulesOnly=True)
+
+        assert data["interpretedBy"] == "RULE"
+        assert data["fallbacks"] == []
+        assert data["models"] == {"embedding": MODELS["embedding"]}
+        events = [
+            json.loads(r.getMessage()) for r in caplog.records if r.name == "server"
+        ]
+        assert events[-1]["rules_only"] is True
+        assert events[-1]["interpret_llm_error"] is None
 
     def test_user_location_passed(self, searched: FakeSearch) -> None:
         """검색_사용자위치가오면_위도경도를검색요청에넘긴다"""
@@ -386,7 +452,7 @@ class TestSearch:
         assert events[-1]["has_location"] is True
 
     def test_map_bounds_only_is_rejected(self, searched: FakeSearch) -> None:
-        """검색_지도영역은이지역에서검색에만오므로_mapBoundsOnly는모르는속성으로거부한다"""
+        """검색_이지역에서검색표시는mapFirst이므로_mapBoundsOnly는모르는속성으로거부한다"""
         response = client().post(
             "/v1/search",
             json={
@@ -414,7 +480,7 @@ class TestSearch:
         kept = MapBounds(36.35, 127.37, 36.36, 127.39)
         searched.outcome = replace(make_result(), bounds=kept)
 
-        data = post(client(), mapBounds={"swLat": 36.35})
+        data = post(client(), mapBounds={"swLat": 36.35}, mapFirst=True)
         searched.outcome = make_result()
         plain = post(client())
 
@@ -717,6 +783,13 @@ class TestErrors:
             {"query": QUERY_TEXT, "location": {"lat": 91, "lng": 127.29}},
             {"query": QUERY_TEXT, "location": {"lat": 36.35, "lng": 181}},
             {"query": QUERY_TEXT, "location": {"lat": 36.35, "lng": 127.29, "acc": 5}},
+            # 버튼 표시와 규칙만 쓰기는 참/거짓만 받는다.
+            {"query": QUERY_TEXT, "mapBounds": {"swLat": 37.4}, "mapFirst": "true"},
+            {"query": QUERY_TEXT, "mapBounds": {"swLat": 37.4}, "mapFirst": 1},
+            {"query": QUERY_TEXT, "mapFirst": None},
+            {"query": QUERY_TEXT, "rulesOnly": "true"},
+            {"query": QUERY_TEXT, "rulesOnly": 1},
+            {"query": QUERY_TEXT, "rulesOnly": None},
             {"query": QUERY_TEXT, "userId": ""},
             {"query": QUERY_TEXT, "userId": "u" * 65},
             {"query": QUERY_TEXT, "userId": 3},

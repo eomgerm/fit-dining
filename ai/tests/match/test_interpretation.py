@@ -819,6 +819,47 @@ class TestRuleFollowUp:
         assert conditions.codes == ("LIVELY",)
 
 
+class TestRulesOnly:
+    """요청이 규칙만 쓰라고 할 때(첫 화면 주변 카드의 고정 문장 "근처 맛집")"""
+
+    def test_no_gms_call(self, fake_gms: FakeGms) -> None:
+        """규칙만_요청이규칙만쓰라고하면_GMS를부르지않고규칙으로해석하며실패로표시하지않는다"""
+        calls = fake_gms(lambda messages: None)
+
+        result = interpret("근처 맛집", rules_only=True)
+
+        assert calls == []
+        assert result.conditions == interpret_by_rules("근처 맛집")
+        assert [loc.kind for loc in result.conditions.locations] == [LocationKind.HERE]
+        assert result.conditions.embedding_text == "맛집"
+        assert (result.rules_only, result.by_rules) == (True, True)
+        assert (result.llm_error, result.llm_seconds, result.gms_failed) == (
+            None,
+            None,
+            False,
+        )
+        assert result.change_summary is None
+
+    def test_follow_up(self, fake_gms: FakeGms) -> None:
+        """규칙만_후속이면_이전조건과규칙으로합치고기본바뀐점문구를준다"""
+        calls = fake_gms(lambda messages: None)
+
+        result = interpret("주차도 되면 좋겠어", PREVIOUS, rules_only=True)
+
+        assert calls == []
+        assert result.conditions == interpret_by_rules("주차도 되면 좋겠어", PREVIOUS)
+        assert result.change_summary == DEFAULT_CHANGE_SUMMARY
+
+    def test_llm_failure_is_not_rules_only(self, fake_gms: FakeGms) -> None:
+        """규칙만_LLM이실패해규칙으로해석한것은_요청대로규칙만쓴것과구분한다"""
+        fake_gms(lambda messages: None)
+
+        result = interpret("근처 맛집")
+
+        assert (result.rules_only, result.by_rules) == (False, True)
+        assert result.llm_error is not None
+
+
 class TestCorrections:
     """고친 말"""
 

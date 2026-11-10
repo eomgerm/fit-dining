@@ -4,7 +4,8 @@
 한 번 더 부른다. 그래도 실패하거나 출력이 형식에 맞지 않으면 다시 부르지 않고 낱말
 규칙으로 해석한다(인프라 설계 11.2). 후속 조건이면 LLM은 이전 조건에 새 요청을
 반영한 조건 전체를 내고(2026-11-05), 규칙 해석은 이번 요청만 해석해 이전 조건과 분류별 규칙으로
-합친다(검색 spec D-50, docs/comparison/conditions-v3.md 4장).
+합친다(검색 spec D-50, docs/comparison/conditions-v3.md 4장). 요청이 규칙만 쓰라고 하면
+(`rules_only`, 첫 화면 주변 카드처럼 FE가 정한 고정 문장) GMS를 부르지 않고 규칙으로 해석한다.
 정리는 docs/comparison/spec.md 4.1에 있다.
 
 모듈은 하는 일별로 나눴다.
@@ -13,7 +14,7 @@
 - `codes`: 분류별 조건과 공유 코드표 잇기(점수용 코드)
 - `request`: 조건(`Conditions`)과 해석 결과, 여러 모듈이 같이 쓰는 값과 함수
 - `merge`: 이전 조건과 이번 요청 합치기
-- `rules`: 규칙 해석(LLM이 실패했을 때)
+- `rules`: 규칙 해석(LLM이 실패했을 때나 요청이 규칙만 쓰라고 할 때)
 - `llm`: 프롬프트와 LLM 출력 읽기
 
 의존은 segments ← codes ← request ← merge ← rules ← llm ← 이 파일 한 방향이다. 밖에서는 이 파일이
@@ -92,6 +93,8 @@ def interpret(
     previous: Conditions | None = None,
     timeout: float = 5.0,
     client: httpx.Client | None = None,
+    *,
+    rules_only: bool = False,
 ) -> Interpretation:
     """요청문을 조건으로 바꾼다. LLM이 실패하면 규칙으로 해석한다.
 
@@ -101,10 +104,14 @@ def interpret(
         timeout: GMS 한 번 부를 때 기다리는 시간(초). 후속이면
             `FOLLOW_UP_TIMEOUT_SECONDS`보다 짧지 않게 기다리고 시간 초과면 다시 부르지 않는다.
         client: GMS 연결을 다시 쓰는 HTTP 클라이언트. 없으면 부를 때마다 만든다.
+        rules_only: 참이면 GMS를 부르지 않고 규칙으로만 해석한다. 첫 화면의 "근처 맛집"처럼
+            FE가 정한 고정 문장에 쓴다. 규칙 해석은 자유 문장에 약하다(spec 4.1).
 
     Returns:
         해석 결과
     """
+    if rules_only:
+        return _by_rules(query, previous, rules_only=True)
     follow_up = previous is not None
     start = time.perf_counter()
     data = gms.call_json(
@@ -141,9 +148,10 @@ def interpret(
 def _by_rules(
     query: str,
     previous: Conditions | None,
-    error: str,
-    seconds: float | None,
+    error: str | None = None,
+    seconds: float | None = None,
     gms_failed: bool = False,
+    rules_only: bool = False,
 ) -> Interpretation:
     return Interpretation(
         conditions=interpret_by_rules(query, previous),
@@ -152,4 +160,5 @@ def _by_rules(
         llm_seconds=seconds,
         gms_failed=gms_failed,
         turn=rule_turn(query),
+        rules_only=rules_only,
     )
