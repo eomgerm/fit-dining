@@ -1,6 +1,6 @@
 # AI 검색 API 명세
 
-Status: 초안 v0.10 · Jira: S15P31A302-41, S15P31A302-136, S15P31A302-158 · 작성일: 2026-10-23 · 고친 날: 2026-11-09
+Status: 초안 v0.11 · Jira: S15P31A302-41, S15P31A302-136, S15P31A302-158 · 작성일: 2026-10-23 · 고친 날: 2026-11-10
 
 BE는 검색 첫 페이지마다 AI를 한 번 부른다. AI는 요청을 해석하고 DB에서 후보를 뽑아 핏 점수로 정렬한 뒤 카드의 AI 필드를 돌려준다. v0.7부터 정렬에 LLM을 쓰지 않는다. BE는 카드에 장소 정보와 영업 상태를 붙여 FE에 준다.
 
@@ -29,8 +29,10 @@ JSON 이름은 camelCase다. 요청에 모르는 속성이 있으면 400이고(�
 | --- | --- | --- | --- |
 | `query` | O | 요청문. 1~200자, 공백만은 안 된다 | `query` |
 | `previousConditions` | | 후속 검색이면 직전 응답의 `conditions`. 읽지 못하면 새 검색으로 본다 | `previousConditions` |
-| `mapBounds` | | 지도 영역(숫자). "이 지역에서 검색"을 눌렀을 때만 온다. 오면 요청문과 이전 요청의 지역을 보지 않고 이 영역으로만 거르고, 그 영역을 응답 `conditions.mapBounds`에 남긴다(v0.10. 전에는 위치를 얻지 못했을 때도 왔고 요청문의 지역이 앞섰다). 빠진 값은 제한하지 않고 `{}`는 없는 것으로 본다 | `mapBounds` |
+| `mapBounds` | | 지도 영역(숫자). FE가 요청마다 지금 화면을 보낸다. `mapFirst`가 `true`일 때만 쓰고, 아니면 거르기에 쓰지 않는다(v0.11). 빠진 값은 제한하지 않는다 | `mapBounds` |
+| `mapFirst` | | "이 지역에서 검색"으로 보낸 요청이면 `true`(참/거짓만, 빼면 `false`). `true`면 요청문과 이전 요청의 지역을 보지 않고 `mapBounds`로만 거르고, 그 영역을 응답 `conditions.mapBounds`에 남긴다. `true`인데 `mapBounds`가 없거나 `{}`이면 400이다(v0.11) | 새로 추가 |
 | `location` | | 사용자 위치 `{lat, lng}`(위도 -90~90, 경도 -180~180의 숫자). FE가 기기 위치를 얻었으면 요청마다 보낸다. 요청문에도 이전 요청에도 지역이 없거나 "근처"를 말했으면 이 위치에서 1km 안으로 거른다. AI는 응답 `conditions`와 로그에 남기지 않는다(v0.10) | 새로 추가(S15P31A302-196에서 넘김) |
+| `rulesOnly` | | `true`면 해석 LLM을 부르지 않고 낱말 규칙으로만 해석한다(참/거짓만, 빼면 `false`). 첫 화면 주변 카드의 "근처 맛집"처럼 FE가 정한 고정 문장에만 쓴다. 규칙 해석은 자유 문장에 약하다. 폴백이 아니라서 `fallbacks`에 담지 않고 `interpretedBy`만 `RULE`이다(v0.11) | 새로 추가 |
 | `userId` | | 회원 id(1~64자). BE가 로그인으로 확인한 id만 보낸다. 있으면 AI가 회원 취향(`user_preferences`)을 직접 읽고 `tasteProfile`은 읽지 않는다. 취향이 저장돼 있지 않으면 취향 없이 정렬한다 | 로그인 사용자 |
 | `tasteProfile` | | 비회원 취향. 기기가 저장한 온보딩 답을 BE가 그대로 넘긴다(아래 예). 없으면 취향 없이 정렬한다. 모양이 틀리면 취향 없이 정렬하고 `TASTE_INVALID`를 담는다 | 없음(5장) |
 
@@ -52,7 +54,7 @@ JSON 이름은 camelCase다. 요청에 모르는 속성이 있으면 400이고(�
 - `vector`는 온보딩 담당이 코드 없는 좋아함 칩에 붙인다(길이 1024). 회원 행처럼 그 칩의 벡터만 쓰고 다른 칩에 붙은 벡터는 버린다. 벡터가 없는 칩은 보관만 하고 정렬에 쓰지 않는다.
 - 모양이 틀린 경우: 모르는 필드(`features` 포함), 목록에 없는 값, 칩 20개 초과, 문구 1~100자 밖, 벡터 길이가 1024가 아님
 
-`conditions`에는 해석 결과와, "이 지역에서 검색"으로 고른 지도 영역(`mapBounds`)만 있다. 후속 검색 때도 `userId`(또는 `tasteProfile`)와 `location`은 다시 보내야 한다. `mapBounds`는 다시 보내지 않는다. 고른 지도 영역은 `conditions.mapBounds`로 돌아와 다음 후속 검색이 이어 쓴다. 지역은 지도 영역 → 이번 요청에 말한 지역 → 이전 요청의 지역 → `location` 1km 안 순서로 하나를 쓰고, 어느 것도 없으면 전국에서 찾아 `nationwide: true`로 준다(v0.10). BE의 `preferences`와 `cursor`는 null이라도 넣으면 400이므로 AI 요청용 DTO를 따로 둔다.
+`conditions`에는 해석 결과와, "이 지역에서 검색"으로 고른 지도 영역(`mapBounds`)만 있다. 후속 검색 때도 `userId`(또는 `tasteProfile`)와 `location`은 다시 보내야 한다. 후속 검색에 함께 온 `mapBounds`는 `mapFirst`가 아니면 쓰지 않는다. 버튼으로 고른 지도 영역은 `conditions.mapBounds`로 돌아와 다음 후속 검색이 이어 쓴다. 지역은 지도 영역(`mapFirst`) → 이번 요청에 말한 지역 → 이전 요청의 지역 → `location` 1km 안 순서로 하나를 쓰고, 어느 것도 없으면 전국에서 찾아 `nationwide: true`로 준다(v0.10). `mapFirst`가 아닐 때 온 지도 영역은 이 순서에 들어가지 않는다. 위치가 없을 때도 화면이 아니라 전국에서 찾는다(v0.11, 2026-11-10 결정). BE의 `preferences`와 `cursor`는 null이라도 넣으면 400이므로 AI 요청용 DTO를 따로 둔다.
 
 v0.6부터 `conditions`에 분류별 조각(`locations`, `menus`, `hours`, `price`, `placeName`, `features`, `avoidCategories`, v0.8의 `avoidFoods`)이 붙는다. 뜻은 [spec.md](spec.md) 4.1절에 있다. null인 조각은 빠지고 빈 목록은 그대로 온다. BE와 FE는 지금처럼 해석하지 않고 돌려보내면 되고, 조각이 없는 v0.5 이전 `conditions`도 그대로 읽는다. 이 문서의 예시는 v0.9 모양이고 빈 목록은 줄였다.
 
@@ -97,7 +99,7 @@ BE Mock 장소(`samples/place/mock.json`)와 실제 인코더·GMS로 받은 응
 | `changeSummary` | 후속 검색에서 바뀐 점. 새 검색이면 빠진다 | 그대로 |
 | `items` | 카드. `score` 내림차순(점수가 없으면 유사도 순서), 20개까지(v0.10. 전에는 근처 검색이 100개였다) | `placeId`로 `PlaceSummary`와 `openStatus`를 붙인다 |
 | `emptyReason` | 결과가 없을 때 `{cause, suggestion}` | 그대로 |
-| `interpretedBy`, `rankedBy` | `LLM` 또는 `RULE`, `SCORE` 또는 `SIMILARITY`(판정할 요청 조각도 취향도 없어 점수가 없을 때). 결과가 없으면 `rankedBy`가 빠진다(v0.7) | 지표에 쓴다 |
+| `interpretedBy`, `rankedBy` | `LLM` 또는 `RULE`(LLM이 실패했거나 `rulesOnly`), `SCORE` 또는 `SIMILARITY`(판정할 요청 조각도 취향도 없어 점수가 없을 때). 결과가 없으면 `rankedBy`가 빠진다(v0.7) | 지표에 쓴다 |
 | `fallbacks` | 대신 처리한 이유(아래 표) | 하나라도 있으면 `X-Fallback` 헤더에 쉼표로 붙인다(인프라 BE 계약 #17) |
 | `models` | 결과를 낸 모델 | 로그에 쓴다 |
 
@@ -193,6 +195,18 @@ BE는 검색마다 `modal_llm_calls_total`과 `modal_embedding_calls_total`을 �
   "fallbacks": [],
   "models": {"embedding": "dragonkue/snowflake-arctic-embed-l-v2.0-ko@55ec6e9358a56d56af759bc8372e970caf8c305f", "llm": "gpt-6-luna"}
 }
+```
+
+#### 첫 화면 주변 카드(`rulesOnly`)
+
+해석 LLM을 부르지 않는다. "근처 맛집"은 규칙 해석과 LLM 해석의 조건이 같다(2026-11-10, 서울 300곳에서 10번씩 돌려 결과 20곳의 순서까지 같았다). AI 처리 시간은 중앙값 2.15초에서 0.07초가 됐다(로컬 인코더로 잼. 줄어든 것은 GMS 호출이다). `models.llm`이 빠지지만 폴백이 아니라서 `fallbacks`는 비어 있다. 아래 응답은 `items`를 줄였다.
+
+```json
+{"query": "근처 맛집", "location": {"lat": 37.5006, "lng": 127.0364}, "rulesOnly": true}
+```
+
+```json
+{"conditions": {"version": 3, "text": "근처 맛집", "embeddingText": "맛집", "categories": [{"code": "RESTAURANT", "want": true}], "locations": [{"text": "근처", "kind": "HERE"}]}, "nationwide": false, "interpretedBy": "RULE", "rankedBy": "SIMILARITY", "fallbacks": [], "models": {"embedding": "dragonkue/snowflake-arctic-embed-l-v2.0-ko@55ec6e9358a56d56af759bc8372e970caf8c305f"}}
 ```
 
 #### 입력을 읽지 못함
