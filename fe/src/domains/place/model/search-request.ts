@@ -84,21 +84,25 @@ function finiteBounds(value: unknown): MapBounds | undefined {
   return { swLat, swLng, neLat, neLng } as MapBounds;
 }
 
-// region API가 받는 영역인지. BE 검증(place-ai-search AC-29)과 같다. 경계값은 받는다
-export function isValidBounds(value: unknown): value is MapBounds {
+// region API가 받는 영역이면 그 네 값. BE 검증(place-ai-search AC-29)과 같고 경계값은 받는다
+function regionBounds(value: unknown): MapBounds | undefined {
   const bounds = finiteBounds(value);
-  if (!bounds) return false;
+  if (!bounds) return;
   const { swLat, swLng, neLat, neLng } = bounds;
   const lat = (n: number) => n >= -90 && n <= 90;
   const lng = (n: number) => n >= -180 && n <= 180;
-  return (
+  const valid =
     lat(swLat) &&
     lat(neLat) &&
     lng(swLng) &&
     lng(neLng) &&
     swLat < neLat &&
-    swLng < neLng
-  );
+    swLng < neLng;
+  return valid ? bounds : undefined;
+}
+
+export function isValidBounds(value: unknown) {
+  return regionBounds(value) !== undefined;
 }
 
 // 저장된 thread turn의 요청. 형식 검사는 query만 보므로 나머지 값은 무엇이든 올 수 있다.
@@ -114,13 +118,14 @@ export function runnableRequest(turn: {
 }): SearchRequest | undefined {
   const { kind, request, response } = turn;
   if (kind === "region") {
-    if (!isValidBounds(request.mapBounds)) return;
+    const mapBounds = regionBounds(request.mapBounds);
+    if (!mapBounds) return;
     return {
       query: request.query,
       conditions: isObject(request.conditions)
         ? request.conditions
         : response.conditions,
-      mapBounds: finiteBounds(request.mapBounds)!,
+      mapBounds,
     };
   }
   const mapBounds = finiteBounds(request.mapBounds);

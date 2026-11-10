@@ -177,7 +177,7 @@ export type PlaceMapHandle = {
   // 지도 위쪽 safe-area와 그 UI가 겹친 높이를 뺀 띠를 위경도로 바꾼다. 띠가 너무 작거나 변환이 실패하면
   // getBounds() 전체, 지도가 없으면 undefined
   visibleBounds(coverTop?: number): MapBounds | undefined;
-  // 결과 맞춤 이동(spec 69번). 2곳 이상이면 fitBounds(확대 정도 상한 17), 1곳이면 panTo, 0곳이면 없음.
+  // 결과 맞춤 이동(spec 69번). 2곳 이상이면 fitBounds(확대 정도 상한 FIT_MAX_ZOOM), 1곳이면 panTo, 0곳이면 없음.
   // 코드 이동이라 사용자 이동으로 세지 않는다. 지도를 옮기기 시작했으면 true
   fitTo(points: LatLng[], coverTop?: number): boolean;
   // 지도가 그 위치로 이동을 마치면 끝난다. resetZoom이면 확대 정도도 처음 화면과 같게 맞추며

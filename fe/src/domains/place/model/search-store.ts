@@ -77,7 +77,7 @@ type RestoredEntryInput = Omit<AddEntryInput, "request"> & {
   request: StoredSearchRequest;
 };
 
-// "이 지역에서 검색"도 기준 요청의 문장을 그대로 다시 보내므로 문장은 늘 요청의 query다
+// 기록 항목을 만든다. 문장은 부르는 쪽이 요청의 query로 넘긴다("이 지역에서 검색"도 기준 요청의 문장을 그대로 다시 보낸다)
 function toEntry({
   id,
   kind,

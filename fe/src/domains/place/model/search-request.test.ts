@@ -156,6 +156,7 @@ describe("isValidBounds", () => {
     ["경도 범위 밖", { ...bounds, swLng: -180.0001 }],
     ["sw == ne 위도", { ...bounds, neLat: bounds.swLat }],
     ["sw > ne 경도", { ...bounds, swLng: 127.05 }],
+    ["sw == ne 경도", { ...bounds, neLng: bounds.swLng }],
   ])("%s이면 틀리다", (_, value) => {
     expect(isValidBounds(value)).toBe(false);
   });
