@@ -103,7 +103,7 @@ public class MockPlaceSearchEngine implements PlaceSearchEngine {
 
 	/** 회원 id와 {@code preferences}는 결과에 반영하지 않는다. {@code X-Fallback}은 없다. */
 	@Override
-	public PlaceSearchResult search(PlaceSearchRequest request, String userId) {
+	public PlaceSearchResult search(SearchPurpose purpose, PlaceSearchRequest request, String userId) {
 		return new PlaceSearchResult(searchResponse(request), null);
 	}
 

@@ -128,10 +128,10 @@ class CatalogPlaceSearchEngineTest {
 			ai(response(List.of(item(1L))));
 			when(catalog.cards(any())).thenReturn(List.of(card(A, OpenStatus.OPEN)));
 
-			engine.search(request("근처 맛집"), null);
-			engine.search(request("근처 맛집"), null);
+			engine.search(SearchPurpose.SEARCH, request("근처 맛집"), null);
+			engine.search(SearchPurpose.SEARCH, request("근처 맛집"), null);
 
-			verify(aiClient, times(2)).search(any(), any());
+			verify(aiClient, times(2)).search(any(), any(), any());
 			verify(catalog, never()).nearbyCandidates();
 		}
 
@@ -139,7 +139,7 @@ class CatalogPlaceSearchEngineTest {
 		@ValueSource(strings = {"", "abc"})
 		@DisplayName("추천검색_cursor가null이아니면_AI를부르지않고400예외다")
 		void search_cursor_throwsInvalidCursorWithoutAi(String cursor) {
-			assertThatThrownBy(() -> engine.search(new PlaceSearchRequest("근처 맛집", null, null, null, cursor), null))
+			assertThatThrownBy(() -> engine.search(SearchPurpose.SEARCH, new PlaceSearchRequest("근처 맛집", null, null, null, cursor), null))
 					.isInstanceOf(InvalidCursorException.class);
 			verifyNoInteractions(aiClient);
 		}
@@ -150,11 +150,11 @@ class CatalogPlaceSearchEngineTest {
 			ai(response(List.of()));
 			PlaceSearchRequest request = request("카페");
 
-			engine.search(request, "user-1");
-			engine.search(request, null);
+			engine.search(SearchPurpose.SEARCH, request, "user-1");
+			engine.search(SearchPurpose.SEARCH, request, null);
 
-			verify(aiClient).search(request, "user-1");
-			verify(aiClient).search(request, null);
+			verify(aiClient).search(SearchPurpose.SEARCH, request, "user-1");
+			verify(aiClient).search(SearchPurpose.SEARCH, request, null);
 		}
 
 		@Test
@@ -185,7 +185,7 @@ class CatalogPlaceSearchEngineTest {
 					List.of(), null, null, null));
 			when(catalog.cards(any())).thenReturn(List.of(card(A, OpenStatus.CLOSED), card(B, OpenStatus.BREAK)));
 
-			PlaceSearchResult result = engine.search(request("카페"), null);
+			PlaceSearchResult result = engine.search(SearchPurpose.SEARCH, request("카페"), null);
 
 			PlaceSearchResponse response = result.response();
 			assertThat(result.fallback()).isNull();
@@ -212,7 +212,7 @@ class CatalogPlaceSearchEngineTest {
 			ai(new AiSearchClient.Response(null, null, null, null, List.of(item(1L)), null, null, null, null));
 			when(catalog.cards(any())).thenReturn(List.of(card(A, OpenStatus.OPEN)));
 
-			PlaceSearchResult result = engine.search(request("카페"), null);
+			PlaceSearchResult result = engine.search(SearchPurpose.SEARCH, request("카페"), null);
 
 			PlaceCard card = result.response().items().getFirst();
 			assertThat(card.score()).isNull();
@@ -233,7 +233,7 @@ class CatalogPlaceSearchEngineTest {
 					new AiSearchClient.Item(1L, 10, null, null, null))));
 			when(catalog.cards(any())).thenReturn(List.of(card(A, OpenStatus.OPEN), card(B, OpenStatus.OPEN)));
 
-			PlaceSearchResponse response = engine.search(request("카페"), null).response();
+			PlaceSearchResponse response = engine.search(SearchPurpose.SEARCH, request("카페"), null).response();
 
 			assertThat(response.items()).extracting(card -> card.place().id()).containsExactly(1L, 2L);
 			assertThat(response.items().getFirst().score()).isEqualTo(90);
@@ -247,7 +247,7 @@ class CatalogPlaceSearchEngineTest {
 			ai(response(List.of(item(9L), item(1L), item(9L), item(8L))));
 			when(catalog.cards(any())).thenReturn(List.of(card(A, OpenStatus.OPEN)));
 
-			PlaceSearchResult result = engine.search(request("카페"), null);
+			PlaceSearchResult result = engine.search(SearchPurpose.SEARCH, request("카페"), null);
 
 			assertThat(result.response().items()).extracting(card -> card.place().id()).containsExactly(1L);
 			assertThat(result.response().totalCount()).isEqualTo(1);
@@ -261,7 +261,7 @@ class CatalogPlaceSearchEngineTest {
 			ai(new AiSearchClient.Response(Map.of(), false, null, new EmptyReason("c", "s"), List.of(), null, null,
 					null, null));
 
-			PlaceSearchResult result = engine.search(request("카페"), null);
+			PlaceSearchResult result = engine.search(SearchPurpose.SEARCH, request("카페"), null);
 
 			assertThat(result.fallback()).isNull();
 			assertThat(result.response().items()).isEmpty();
@@ -275,7 +275,7 @@ class CatalogPlaceSearchEngineTest {
 			ai(new AiSearchClient.Response(Map.of(), false, null, null, List.of(),
 					List.of("PREVIOUS_INVALID", "TASTE_INVALID", "new_value"), null, null, null));
 
-			assertThat(engine.search(request("카페"), null).fallback())
+			assertThat(engine.search(SearchPurpose.SEARCH, request("카페"), null).fallback())
 					.isEqualTo("PREVIOUS_INVALID,TASTE_INVALID,new_value");
 		}
 
@@ -290,7 +290,7 @@ class CatalogPlaceSearchEngineTest {
 					mapper.readTree("{\"llm\":\"gpt-x\"}")));
 			when(catalog.cards(any())).thenReturn(List.of(card(A, OpenStatus.OPEN)));
 
-			engine.search(new PlaceSearchRequest(SECRET, null, Map.of("text", SECRET), null, null), null);
+			engine.search(SearchPurpose.SEARCH, new PlaceSearchRequest(SECRET, null, Map.of("text", SECRET), null, null), null);
 
 			assertThat(output.getAll()).contains("INFO").contains("LLM").contains("SIMILARITY").contains("gpt-x")
 					.doesNotContain(SECRET);
@@ -302,7 +302,7 @@ class CatalogPlaceSearchEngineTest {
 			ai(response(List.of(item(1L))));
 			when(catalog.cards(any())).thenThrow(new DataAccessResourceFailureException("db"));
 
-			assertThatThrownBy(() -> engine.search(request("카페"), null))
+			assertThatThrownBy(() -> engine.search(SearchPurpose.SEARCH, request("카페"), null))
 					.isInstanceOf(DataAccessResourceFailureException.class);
 		}
 	}
@@ -314,19 +314,19 @@ class CatalogPlaceSearchEngineTest {
 		@Test
 		@DisplayName("대체_AI가빈값이면_AI_UNAVAILABLE이다")
 		void fallback_aiEmpty_aiUnavailable() {
-			when(aiClient.search(any(), any())).thenReturn(Optional.empty());
+			when(aiClient.search(any(), any(), any())).thenReturn(Optional.empty());
 			when(keywordSearch.search(any(), anyInt(), anyInt())).thenReturn(List.of());
 
-			assertThat(engine.search(request("카페"), null).fallback()).isEqualTo("AI_UNAVAILABLE");
+			assertThat(engine.search(SearchPurpose.SEARCH, request("카페"), null).fallback()).isEqualTo("AI_UNAVAILABLE");
 		}
 
 		@Test
 		@DisplayName("대체_AI클라이언트의예상못한예외는_대체로바꾼다")
 		void fallback_clientThrows_fallsBack() {
-			when(aiClient.search(any(), any())).thenThrow(new IllegalStateException(SECRET));
+			when(aiClient.search(any(), any(), any())).thenThrow(new IllegalStateException(SECRET));
 			when(keywordSearch.search(any(), anyInt(), anyInt())).thenReturn(List.of());
 
-			assertThat(engine.search(request("카페"), null).fallback()).isEqualTo("AI_UNAVAILABLE");
+			assertThat(engine.search(SearchPurpose.SEARCH, request("카페"), null).fallback()).isEqualTo("AI_UNAVAILABLE");
 		}
 
 		@Test
@@ -337,7 +337,7 @@ class CatalogPlaceSearchEngineTest {
 			when(catalog.cards(List.of(9L))).thenReturn(List.of());
 			when(keywordSearch.search(any(), anyInt(), anyInt())).thenReturn(List.of());
 
-			PlaceSearchResult result = engine.search(request("카페"), null);
+			PlaceSearchResult result = engine.search(SearchPurpose.SEARCH, request("카페"), null);
 
 			assertThat(result.fallback()).isEqualTo("AI_UNAVAILABLE");
 			assertThat(result.response().nearby()).isFalse();
@@ -352,7 +352,7 @@ class CatalogPlaceSearchEngineTest {
 			unavailable();
 			when(catalog.nearbyCandidates()).thenReturn(List.of(card(A, OpenStatus.OPEN), card(B, OpenStatus.OPEN)));
 
-			PlaceSearchResponse response = engine.search(new PlaceSearchRequest(query, null, Map.of(), null, null), null)
+			PlaceSearchResponse response = engine.search(SearchPurpose.SEARCH, new PlaceSearchRequest(query, null, Map.of(), null, null), null)
 					.response();
 
 			assertThat(response.nearby()).isTrue();
@@ -368,7 +368,7 @@ class CatalogPlaceSearchEngineTest {
 			unavailable();
 			when(keywordSearch.search(any(), anyInt(), anyInt())).thenReturn(List.of());
 
-			assertThat(engine.search(request(query), null).response().nearby()).isFalse();
+			assertThat(engine.search(SearchPurpose.SEARCH, request(query), null).response().nearby()).isFalse();
 			verify(catalog, never()).nearbyCandidates();
 		}
 
@@ -378,7 +378,7 @@ class CatalogPlaceSearchEngineTest {
 			unavailable();
 			when(keywordSearch.search(any(), anyInt(), anyInt())).thenReturn(List.of());
 
-			PlaceSearchResponse response = engine.search(
+			PlaceSearchResponse response = engine.search(SearchPurpose.SEARCH, 
 					new PlaceSearchRequest("근처 맛집", null, Map.of("text", "이전"), null, null), null).response();
 
 			assertThat(response.nearby()).isFalse();
@@ -392,7 +392,7 @@ class CatalogPlaceSearchEngineTest {
 			when(catalog.nearbyCandidates()).thenReturn(List.of(card(at(1L, 37.50, 127.00), OpenStatus.OPEN),
 					card(at(2L, 37.60, 127.00), OpenStatus.OPEN)));
 
-			PlaceSearchResponse response = engine.search(new PlaceSearchRequest("근처 맛집", null, null,
+			PlaceSearchResponse response = engine.search(SearchPurpose.SEARCH, new PlaceSearchRequest("근처 맛집", null, null,
 					new MapBounds(37.40, null, 37.55, null), null), null).response();
 
 			assertThat(response.nearby()).isTrue();
@@ -408,7 +408,7 @@ class CatalogPlaceSearchEngineTest {
 					hit(at(4L, 37.45, 127.11)), hit(at(5L, 80.0, -50.0))));
 			when(catalog.cards(any())).thenAnswer(invocation -> cardsFor(invocation.getArgument(0)));
 
-			PlaceSearchResponse response = engine.search(new PlaceSearchRequest("카페", null, null,
+			PlaceSearchResponse response = engine.search(SearchPurpose.SEARCH, new PlaceSearchRequest("카페", null, null,
 					new MapBounds(37.40, null, 37.50, 127.10), null), null).response();
 
 			assertThat(response.items()).extracting(card -> card.place().id()).containsExactly(1L, 2L);
@@ -427,7 +427,7 @@ class CatalogPlaceSearchEngineTest {
 			when(catalog.cards(any())).thenAnswer(invocation -> cardsFor(invocation.<List<Long>>getArgument(0).stream()
 					.filter(id -> id != 25L).toList()));
 
-			PlaceSearchResponse response = engine.search(new PlaceSearchRequest("카페", null, null,
+			PlaceSearchResponse response = engine.search(SearchPurpose.SEARCH, new PlaceSearchRequest("카페", null, null,
 					new MapBounds(37.0, 126.0, 38.0, 128.0), null), null).response();
 
 			List<Long> expected = new ArrayList<>();
@@ -448,7 +448,7 @@ class CatalogPlaceSearchEngineTest {
 			when(keywordSearch.search(any(), anyInt(), anyInt())).thenReturn(List.of(hit(A)));
 			when(catalog.cards(any())).thenReturn(List.of(card(A, OpenStatus.CLOSING_SOON)));
 
-			PlaceSearchResponse response = engine.search(
+			PlaceSearchResponse response = engine.search(SearchPurpose.SEARCH, 
 					new PlaceSearchRequest("하노이", null, Map.of("text", "이전"), null, null), null).response();
 
 			PlaceCard card = response.items().getFirst();
@@ -471,7 +471,7 @@ class CatalogPlaceSearchEngineTest {
 			unavailable();
 			when(keywordSearch.search(any(), anyInt(), anyInt())).thenReturn(List.of());
 
-			PlaceSearchResponse response = engine.search(request("조용한 데이트 장소"), null).response();
+			PlaceSearchResponse response = engine.search(SearchPurpose.SEARCH, request("조용한 데이트 장소"), null).response();
 
 			assertThat(response.items()).isEmpty();
 			assertThat(response.totalCount()).isZero();
@@ -485,34 +485,34 @@ class CatalogPlaceSearchEngineTest {
 		void fallback_keywordAndCatalogErrors_propagate() {
 			unavailable();
 			when(keywordSearch.search(any(), anyInt(), anyInt())).thenThrow(new PlaceSearchUnavailableException());
-			assertThatThrownBy(() -> engine.search(request("카페"), null))
+			assertThatThrownBy(() -> engine.search(SearchPurpose.SEARCH, request("카페"), null))
 					.isInstanceOf(PlaceSearchUnavailableException.class);
 
 			when(catalog.nearbyCandidates()).thenThrow(new DataAccessResourceFailureException("db"));
-			assertThatThrownBy(() -> engine.search(request("근처 맛집"), null))
+			assertThatThrownBy(() -> engine.search(SearchPurpose.SEARCH, request("근처 맛집"), null))
 					.isInstanceOf(DataAccessResourceFailureException.class);
 		}
 
 		@Test
 		@DisplayName("대체_입력에표식이있어도_로그에검색문장과이전조건이없다")
 		void fallback_secretInput_notLogged(CapturedOutput output) {
-			when(aiClient.search(any(), any())).thenThrow(new IllegalStateException(SECRET));
+			when(aiClient.search(any(), any(), any())).thenThrow(new IllegalStateException(SECRET));
 			when(keywordSearch.search(any(), anyInt(), anyInt())).thenReturn(List.of());
 
-			engine.search(new PlaceSearchRequest(SECRET, null, Map.of("text", SECRET), null, null), null);
+			engine.search(SearchPurpose.SEARCH, new PlaceSearchRequest(SECRET, null, Map.of("text", SECRET), null, null), null);
 
 			assertThat(output.getAll()).doesNotContain(SECRET);
 		}
 
 		void unavailable() {
-			when(aiClient.search(any(), any())).thenReturn(Optional.empty());
+			when(aiClient.search(any(), any(), any())).thenReturn(Optional.empty());
 		}
 	}
 
 	private static final String SECRET = "비밀표식9c41";
 
 	private void ai(AiSearchClient.Response response) {
-		when(aiClient.search(any(), any())).thenReturn(Optional.of(response));
+		when(aiClient.search(any(), any(), any())).thenReturn(Optional.of(response));
 	}
 
 	private static AiSearchClient.Response response(List<AiSearchClient.Item> items) {

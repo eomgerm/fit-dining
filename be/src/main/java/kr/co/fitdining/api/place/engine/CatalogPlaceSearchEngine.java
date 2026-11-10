@@ -68,13 +68,13 @@ public class CatalogPlaceSearchEngine implements PlaceSearchEngine {
 	 * {@code cursor}가 null이 아니면(빈 문자열 포함) AI를 부르지 않고 400이다. 그 밖에는 요청마다 AI를 부른다.
 	 */
 	@Override
-	public PlaceSearchResult search(PlaceSearchRequest request, String userId) {
+	public PlaceSearchResult search(SearchPurpose purpose, PlaceSearchRequest request, String userId) {
 		if (request.cursor() != null) {
 			throw new InvalidCursorException();
 		}
 		Optional<AiSearchClient.Response> ai;
 		try {
-			ai = aiClient.search(request, userId);
+			ai = aiClient.search(purpose, request, userId);
 		} catch (RuntimeException e) {
 			log.error("AI search failed: kind=INVALID, reason={}", e.getClass().getSimpleName());
 			ai = Optional.empty();

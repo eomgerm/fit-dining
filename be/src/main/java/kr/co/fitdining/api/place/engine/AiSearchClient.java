@@ -126,12 +126,13 @@ public class AiSearchClient {
 	/**
 	 * AI 검색을 부른다.
 	 *
+	 * @param purpose 요청의 목적. AI 요청 본문의 목적별 속성을 정한다(place-ai-search D-18).
 	 * @param request 추천 검색 요청. {@code cursor}는 보내지 않고, {@code preferences}는 비회원일 때만 {@code tasteProfile}로 보낸다.
 	 * @param userId 검증된 토큰의 사용자 id. 비회원이면 null이다.
 	 * @return 읽을 수 있는 200 응답. 주소가 없거나, circuit breaker가 열려 있거나, 기다려도 permit을 받지 못하거나, 실패하면 빈
 	 *     값이다.
 	 */
-	public Optional<Response> search(PlaceSearchRequest request, String userId) {
+	public Optional<Response> search(SearchPurpose purpose, PlaceSearchRequest request, String userId) {
 		if (baseUrl.isEmpty()) {
 			log.error("AI search skipped: fitdining.ai.base-url is blank");
 			return Optional.empty();
@@ -150,7 +151,7 @@ public class AiSearchClient {
 			if (skipWhileOpen()) {
 				return Optional.empty();
 			}
-			Response response = call(body(request, userId), deadline);
+			Response response = call(body(purpose, request, userId), deadline);
 			recordSuccess();
 			return Optional.of(response);
 		} catch (Failure failure) {
@@ -200,15 +201,25 @@ public class AiSearchClient {
 		return false;
 	}
 
-	private static byte[] body(PlaceSearchRequest request, String userId) {
+	/**
+	 * 목적별 AI 요청 본문. NEARBY는 BE 상수 문장과 {@code rulesOnly}, REGION은 보던 조건({@code previousConditions}에 담겨
+	 * 온다)과 {@code mapFirst}를 싣고, SEARCH에는 두 표시가 없다(place-ai-search AI 요청 표).
+	 */
+	private static byte[] body(SearchPurpose purpose, PlaceSearchRequest request, String userId) {
 		Map<String, Object> body = new LinkedHashMap<>();
-		body.put("query", request.query());
-		if (request.previousConditions() != null && !request.previousConditions().isEmpty()) {
+		body.put("query", purpose == SearchPurpose.NEARBY ? SearchPurpose.NEARBY_QUERY : request.query());
+		if (purpose != SearchPurpose.NEARBY && request.previousConditions() != null
+				&& !request.previousConditions().isEmpty()) {
 			body.put("previousConditions", request.previousConditions());
 		}
 		Map<String, Double> bounds = bounds(request.mapBounds());
 		if (!bounds.isEmpty()) {
 			body.put("mapBounds", bounds);
+		}
+		if (purpose == SearchPurpose.NEARBY) {
+			body.put("rulesOnly", true);
+		} else if (purpose == SearchPurpose.REGION) {
+			body.put("mapFirst", true);
 		}
 		if (userId != null) {
 			body.put("userId", userId);

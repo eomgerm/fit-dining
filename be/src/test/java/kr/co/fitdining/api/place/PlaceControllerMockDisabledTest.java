@@ -154,7 +154,7 @@ class PlaceControllerMockDisabledTest {
 	@Test
 	@DisplayName("추천검색_AI결과면_카드와AI의fallbacks헤더로200이다")
 	void search_aiResult_returnsCardsWithFallbackHeader() throws Exception {
-		when(aiClient.search(any(), any())).thenReturn(Optional.of(new AiSearchClient.Response(Map.of("text", "t"),
+		when(aiClient.search(any(), any(), any())).thenReturn(Optional.of(new AiSearchClient.Response(Map.of("text", "t"),
 				false, null, null, List.of(new AiSearchClient.Item(7L, 88, List.of("조용해요"), null, null)),
 				List.of("TASTE_INVALID"), null, null, null)));
 		when(catalog.cards(any())).thenReturn(List.of(card()));
@@ -174,7 +174,7 @@ class PlaceControllerMockDisabledTest {
 	@Test
 	@DisplayName("추천검색_AI를쓸수없으면_대체결과와AI_UNAVAILABLE헤더로200이다")
 	void search_aiUnavailable_returnsFallbackWithHeader() throws Exception {
-		when(aiClient.search(any(), any())).thenReturn(Optional.empty());
+		when(aiClient.search(any(), any(), any())).thenReturn(Optional.empty());
 		when(catalog.nearbyCandidates()).thenReturn(List.of(card()));
 
 		mockMvc.perform(search("{\"query\":\"근처 맛집\"}"))
@@ -199,7 +199,7 @@ class PlaceControllerMockDisabledTest {
 	@Test
 	@DisplayName("추천검색_cursor가null이면_커서없음이다")
 	void search_nullCursor_searches() throws Exception {
-		when(aiClient.search(any(), any())).thenReturn(Optional.empty());
+		when(aiClient.search(any(), any(), any())).thenReturn(Optional.empty());
 		when(keywordSearch.search(any(), anyInt(), anyInt())).thenReturn(List.of());
 
 		mockMvc.perform(search("{\"query\":\"카페\",\"cursor\":null}")).andExpect(status().isOk());
@@ -221,19 +221,19 @@ class PlaceControllerMockDisabledTest {
 	@DisplayName("추천검색_유효한토큰이면_토큰의사용자id로AI를부른다")
 	void search_validToken_callsAiWithTokenUserId() throws Exception {
 		when(auth.authenticate("token")).thenReturn(new AuthUseCases.Identity("user-1", "닉", "s", 0, 0));
-		when(aiClient.search(any(), any())).thenReturn(Optional.empty());
+		when(aiClient.search(any(), any(), any())).thenReturn(Optional.empty());
 		when(keywordSearch.search(any(), anyInt(), anyInt())).thenReturn(List.of());
 
 		mockMvc.perform(search("{\"query\":\"카페\"}").header("Authorization", "Bearer token"))
 				.andExpect(status().isOk());
 
-		verify(aiClient).search(any(), eq("user-1"));
+		verify(aiClient).search(any(), any(), eq("user-1"));
 	}
 
 	@Test
 	@DisplayName("추천검색_카탈로그DB오류는_대체하지않고503이다")
 	void search_catalogError_returnsServiceUnavailable() throws Exception {
-		when(aiClient.search(any(), any())).thenReturn(Optional.empty());
+		when(aiClient.search(any(), any(), any())).thenReturn(Optional.empty());
 		when(catalog.nearbyCandidates()).thenThrow(new DataAccessResourceFailureException("db"));
 
 		expectUnavailable(search("{\"query\":\"근처 맛집\"}"));
@@ -272,14 +272,14 @@ class PlaceControllerMockDisabledTest {
 		when(keywordSearch.search(any(), anyInt(), anyInt())).thenReturn(List.of(new PlaceKeywordHit(PLACE, null, true)));
 		when(catalog.cards(any())).thenReturn(List.of(card()));
 		switch (scenario) {
-			case "AI 성공" -> when(aiClient.search(any(), any())).thenReturn(Optional.of(new AiSearchClient.Response(
+			case "AI 성공" -> when(aiClient.search(any(), any(), any())).thenReturn(Optional.of(new AiSearchClient.Response(
 					Map.of("text", SECRET), false, SECRET, null, List.of(new AiSearchClient.Item(7L, 1, List.of(SECRET),
 							List.of(new Reason(SECRET, List.of(), SECRET, SECRET)), null)), List.of(), null, null, null)));
 			case "503" -> {
-				when(aiClient.search(any(), any())).thenReturn(Optional.empty());
+				when(aiClient.search(any(), any(), any())).thenReturn(Optional.empty());
 				when(catalog.cards(any())).thenThrow(new DataAccessResourceFailureException("db"));
 			}
-			default -> when(aiClient.search(any(), any())).thenReturn(Optional.empty());
+			default -> when(aiClient.search(any(), any(), any())).thenReturn(Optional.empty());
 		}
 
 		mockMvc.perform(request).andExpect(status().is(status));

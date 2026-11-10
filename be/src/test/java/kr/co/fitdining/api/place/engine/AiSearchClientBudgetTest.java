@@ -97,7 +97,7 @@ class AiSearchClientBudgetTest {
 	/** 상한만큼 검색을 AI 응답 대기 상태로 만든다. 서버는 {@code release}가 열릴 때까지 응답하지 않는다. */
 	List<Future<Boolean>> fill(AiSearchClient client, ExecutorService pool) throws InterruptedException {
 		List<Future<Boolean>> waiting = IntStream.range(0, AiSearchClient.MAX_IN_FLIGHT)
-				.mapToObj(i -> pool.submit(() -> client.search(request(), null).isPresent()))
+				.mapToObj(i -> pool.submit(() -> client.search(SearchPurpose.SEARCH, request(), null).isPresent()))
 				.toList();
 		long deadline = System.nanoTime() + Duration.ofSeconds(5).toNanos();
 		while (calls.get() < AiSearchClient.MAX_IN_FLIGHT && System.nanoTime() < deadline) {
@@ -137,7 +137,7 @@ class AiSearchClientBudgetTest {
 	void budget_timelyResponse_succeeds() {
 		handler = (exchange, call) -> respond(exchange, 200, OK);
 
-		assertThat(client().search(request(), null)).isPresent();
+		assertThat(client().search(SearchPurpose.SEARCH, request(), null)).isPresent();
 	}
 
 	@Test
@@ -148,7 +148,7 @@ class AiSearchClientBudgetTest {
 			respond(exchange, 200, OK);
 		};
 
-		long elapsed = timed(() -> assertThat(client().search(request(), null)).isEmpty());
+		long elapsed = timed(() -> assertThat(client().search(SearchPurpose.SEARCH, request(), null)).isEmpty());
 
 		assertThat(elapsed).isLessThan(1500);
 		assertThat(output.getAll()).contains("WARN").contains("kind=TIMEOUT").doesNotContain(SECRET);
@@ -168,7 +168,7 @@ class AiSearchClientBudgetTest {
 			body.write(bytes, 5, bytes.length - 5);
 		};
 
-		long elapsed = timed(() -> assertThat(client().search(request(), null)).isEmpty());
+		long elapsed = timed(() -> assertThat(client().search(SearchPurpose.SEARCH, request(), null)).isEmpty());
 
 		assertThat(elapsed).isLessThan(1500);
 		assertThat(output.getAll()).contains("WARN").contains("kind=TIMEOUT").doesNotContain(SECRET);
@@ -188,7 +188,7 @@ class AiSearchClientBudgetTest {
 		};
 		AiSearchClient client = client(timing(Duration.ofSeconds(5)));
 
-		long elapsed = timed(() -> assertThat(client.search(request(), null)).isEmpty());
+		long elapsed = timed(() -> assertThat(client.search(SearchPurpose.SEARCH, request(), null)).isEmpty());
 
 		assertThat(elapsed).isLessThan(4000);
 		assertThat(output.getAll()).contains("WARN").contains("kind=CONNECTION").doesNotContain(SECRET);
@@ -207,7 +207,7 @@ class AiSearchClientBudgetTest {
 			respond(exchange, 200, OK);
 		};
 
-		long elapsed = timed(() -> assertThat(client().search(request(), null)).isEmpty());
+		long elapsed = timed(() -> assertThat(client().search(SearchPurpose.SEARCH, request(), null)).isEmpty());
 
 		assertThat(calls).hasValue(2);
 		assertThat(elapsed).isLessThan(1500);
@@ -230,7 +230,7 @@ class AiSearchClientBudgetTest {
 					return unbounded;
 				}, Thread::sleep);
 
-		assertThat(client.search(request(), null)).isEmpty();
+		assertThat(client.search(SearchPurpose.SEARCH, request(), null)).isEmpty();
 		assertThat(attempts).hasValue(1);
 		assertThat(output.getAll()).contains("kind=BUSY");
 	}
@@ -240,7 +240,7 @@ class AiSearchClientBudgetTest {
 	void budget_busyThenSuccess_succeeds() {
 		handler = (exchange, call) -> respond(exchange, call == 1 ? 503 : 200, call == 1 ? BUSY : OK);
 
-		assertThat(client().search(request(), null)).isPresent();
+		assertThat(client().search(SearchPurpose.SEARCH, request(), null)).isPresent();
 		assertThat(calls).hasValue(2);
 	}
 
@@ -257,7 +257,7 @@ class AiSearchClientBudgetTest {
 			respond(exchange, 200, OK);
 		};
 
-		assertThat(client().search(request(), null)).isPresent();
+		assertThat(client().search(SearchPurpose.SEARCH, request(), null)).isPresent();
 
 		// Retry-After 1초를 TIMING의 상한 300ms로 줄여 쉰다
 		assertThat(calls).hasValue(2);
@@ -276,7 +276,7 @@ class AiSearchClientBudgetTest {
 			return RestClient.create();
 		}, duration -> Thread.sleep(duration.plusMillis(300)));
 
-		assertThat(client.search(request(), null)).isEmpty();
+		assertThat(client.search(SearchPurpose.SEARCH, request(), null)).isEmpty();
 		assertThat(attempts).hasValue(1);
 		assertThat(output.getAll()).contains("kind=BUSY");
 	}
@@ -295,7 +295,7 @@ class AiSearchClientBudgetTest {
 			List<Future<Boolean>> waiting = fill(client, pool);
 
 			for (int i = 0; i < AiSearchClient.FAILURE_THRESHOLD; i++) {
-				long elapsed = timed(() -> assertThat(client.search(request(), null)).isEmpty());
+				long elapsed = timed(() -> assertThat(client.search(SearchPurpose.SEARCH, request(), null)).isEmpty());
 				// permit 대기 200ms만 기다린다
 				assertThat(elapsed).isBetween(150L, 1000L);
 			}
@@ -309,7 +309,7 @@ class AiSearchClientBudgetTest {
 			release.countDown();
 			pool.shutdownNow();
 		}
-		assertThat(client.search(request(), null)).isPresent();
+		assertThat(client.search(SearchPurpose.SEARCH, request(), null)).isPresent();
 		assertThat(output.getAll()).contains("WARN").contains("in-flight limit reached")
 				.doesNotContain("circuit opened").doesNotContain(SECRET);
 	}
@@ -330,7 +330,7 @@ class AiSearchClientBudgetTest {
 		try {
 			List<Future<Boolean>> waiting = fill(client, pool);
 			long start = System.nanoTime();
-			Future<Boolean> ninth = pool.submit(() -> client.search(request(), null).isPresent());
+			Future<Boolean> ninth = pool.submit(() -> client.search(SearchPurpose.SEARCH, request(), null).isPresent());
 			Thread.sleep(200);
 			assertThat(ninth).isNotDone();
 
@@ -363,7 +363,7 @@ class AiSearchClientBudgetTest {
 		try {
 			fill(client, pool);
 
-			long elapsed = timed(() -> assertThat(client.search(request(), null)).isEmpty());
+			long elapsed = timed(() -> assertThat(client.search(SearchPurpose.SEARCH, request(), null)).isEmpty());
 
 			assertThat(elapsed).isLessThan(2000);
 		} finally {
@@ -380,7 +380,7 @@ class AiSearchClientBudgetTest {
 		AiSearchClient client = client();
 
 		for (int i = 0; i < AiSearchClient.MAX_IN_FLIGHT * 2; i++) {
-			assertThat(client.search(request(), null)).isEmpty();
+			assertThat(client.search(SearchPurpose.SEARCH, request(), null)).isEmpty();
 		}
 		assertThat(calls).hasValue(AiSearchClient.MAX_IN_FLIGHT * 2);
 	}

@@ -36,6 +36,7 @@ import kr.co.fitdining.api.place.dto.PlaceSummary.Station;
 import kr.co.fitdining.api.place.dto.PlaceSummary;
 import kr.co.fitdining.api.place.engine.PlaceSearchEngine;
 import kr.co.fitdining.api.place.engine.PlaceSearchResult;
+import kr.co.fitdining.api.place.engine.SearchPurpose;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -103,7 +104,7 @@ class PlaceControllerPassThroughTest {
 		String fallback;
 
 		@Override
-		public PlaceSearchResult search(PlaceSearchRequest request, String userId) {
+		public PlaceSearchResult search(SearchPurpose purpose, PlaceSearchRequest request, String userId) {
 			lastRequest = request;
 			lastUserId = userId;
 			return new PlaceSearchResult(SEARCH, fallback);

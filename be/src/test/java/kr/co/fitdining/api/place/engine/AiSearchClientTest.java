@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.headerDoesNotExist;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withException;
@@ -44,6 +45,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
@@ -113,7 +115,7 @@ class AiSearchClientTest {
 					.andExpect(content().json("{\"query\":\"근처 맛집\"}", JsonCompareMode.STRICT))
 					.andRespond(withSuccess(OK, MediaType.APPLICATION_JSON));
 
-			assertThat(client().search(request("근처 맛집"), null)).isPresent();
+			assertThat(client().search(SearchPurpose.SEARCH, request("근처 맛집"), null)).isPresent();
 		}
 
 		@Test
@@ -133,7 +135,7 @@ class AiSearchClientTest {
 					.andExpect(content().string(org.hamcrest.Matchers.containsString("\"station\":null")))
 					.andRespond(withSuccess(OK, MediaType.APPLICATION_JSON));
 
-			client().search(request, "user-1");
+			client().search(SearchPurpose.SEARCH, request, "user-1");
 		}
 
 		@Test
@@ -150,7 +152,7 @@ class AiSearchClientTest {
 							           {"polarity":"DISLIKE","label":"매운 음식"}]}}""", JsonCompareMode.STRICT))
 					.andRespond(withSuccess(OK, MediaType.APPLICATION_JSON));
 
-			client().search(new PlaceSearchRequest("카페", preferences, null, null, null), null);
+			client().search(SearchPurpose.SEARCH, new PlaceSearchRequest("카페", preferences, null, null, null), null);
 		}
 
 		@Test
@@ -162,7 +164,7 @@ class AiSearchClientTest {
 							"tastes":[{"polarity":"LIKE","label":"창가 자리"}]}}"""))
 					.andRespond(withSuccess(OK, MediaType.APPLICATION_JSON));
 
-			client().search(new PlaceSearchRequest("카페", new Preferences(null, null, null,
+			client().search(SearchPurpose.SEARCH, new PlaceSearchRequest("카페", new Preferences(null, null, null,
 					List.of(new Preferences.TasteChip(Preferences.Polarity.LIKE, "창가 자리"))), null, null, null), null);
 		}
 
@@ -173,7 +175,7 @@ class AiSearchClientTest {
 					.andExpect(content().string("{\"query\":\"카페\"}"))
 					.andRespond(withSuccess(OK, MediaType.APPLICATION_JSON));
 
-			client().search(new PlaceSearchRequest("카페", null, Map.of(), new MapBounds(null, null, null, null), null),
+			client().search(SearchPurpose.SEARCH, new PlaceSearchRequest("카페", null, Map.of(), new MapBounds(null, null, null, null), null),
 					null);
 		}
 
@@ -183,7 +185,7 @@ class AiSearchClientTest {
 			server.expect(requestTo(URL)).andExpect(header("Modal-Key", "key")).andExpect(header("Modal-Secret", "secret"))
 					.andRespond(withSuccess(OK, MediaType.APPLICATION_JSON));
 
-			client("http://ai.test", "key", "secret").search(request("카페"), null);
+			client("http://ai.test", "key", "secret").search(SearchPurpose.SEARCH, request("카페"), null);
 		}
 
 		@ParameterizedTest
@@ -194,7 +196,86 @@ class AiSearchClientTest {
 					.andExpect(headerDoesNotExist("Modal-Secret"))
 					.andRespond(withSuccess(OK, MediaType.APPLICATION_JSON));
 
-			client("http://ai.test", blank, blank).search(request("카페"), null);
+			client("http://ai.test", blank, blank).search(SearchPurpose.SEARCH, request("카페"), null);
+		}
+	}
+
+	@Nested
+	@DisplayName("목적별 AI 요청 (place-ai-search D-18)")
+	class PurposeRequest {
+
+		static final MapBounds AREA = new MapBounds(37.49, 127.02, 37.51, 127.05);
+
+		@Test
+		@DisplayName("AI요청_NEARBY는_상수문장과네값영역과rulesOnly를보낸다")
+		void request_nearby_sendsConstantQueryAreaAndRulesOnly() {
+			server.expect(requestTo(URL))
+					.andExpect(content().json("""
+							{"query":"근처 맛집","mapBounds":{"swLat":37.49,"swLng":127.02,"neLat":37.51,"neLng":127.05},
+							 "rulesOnly":true}""", JsonCompareMode.STRICT))
+					.andRespond(withSuccess(OK, MediaType.APPLICATION_JSON));
+
+			client().search(SearchPurpose.NEARBY, new PlaceSearchRequest("아무 문장", null, null, AREA, null), null);
+		}
+
+		@Test
+		@DisplayName("AI요청_REGION은_조건을previousConditions로영역과mapFirst와함께보낸다")
+		void request_region_sendsConditionsAsPreviousWithMapFirst() {
+			Map<String, Object> conditions = new LinkedHashMap<>();
+			conditions.put("text", "강남역 파스타");
+			conditions.put("station", null);
+			server.expect(requestTo(URL))
+					.andExpect(content().json("""
+							{"query":"강남역 파스타","previousConditions":{"text":"강남역 파스타","station":null},
+							 "mapBounds":{"swLat":37.49,"swLng":127.02,"neLat":37.51,"neLng":127.05},
+							 "mapFirst":true}""", JsonCompareMode.STRICT))
+					.andRespond(withSuccess(OK, MediaType.APPLICATION_JSON));
+
+			client().search(SearchPurpose.REGION, new PlaceSearchRequest("강남역 파스타", null, conditions, AREA, null),
+					null);
+		}
+
+		@Test
+		@DisplayName("AI요청_REGION의조건이비었으면_previousConditions없이mapFirst를보낸다")
+		void request_regionEmptyConditions_omitsPrevious() {
+			server.expect(requestTo(URL))
+					.andExpect(content().json("""
+							{"query":"파스타","mapBounds":{"swLat":37.49,"swLng":127.02,"neLat":37.51,"neLng":127.05},
+							 "mapFirst":true}""", JsonCompareMode.STRICT))
+					.andRespond(withSuccess(OK, MediaType.APPLICATION_JSON));
+
+			client().search(SearchPurpose.REGION, new PlaceSearchRequest("파스타", null, Map.of(), AREA, null), null);
+		}
+
+		@Test
+		@DisplayName("AI요청_SEARCH는_rulesOnly와mapFirst를false로도넣지않는다")
+		void request_search_noPurposeFlags() {
+			server.expect(requestTo(URL))
+					.andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("rulesOnly"))))
+					.andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("mapFirst"))))
+					.andRespond(withSuccess(OK, MediaType.APPLICATION_JSON));
+
+			client().search(SearchPurpose.SEARCH, new PlaceSearchRequest("근처 맛집", null, Map.of("text", "t"), AREA, null),
+					null);
+		}
+
+		@ParameterizedTest
+		@EnumSource(SearchPurpose.class)
+		@DisplayName("AI요청_목적과상관없이_회원은userId만비회원은tasteProfile을보낸다")
+		void request_anyPurpose_userIdOrTasteProfile(SearchPurpose purpose) {
+			Preferences preferences = new Preferences(Preferences.Mood.QUIET, null, null, null);
+			server.expect(requestTo(URL))
+					.andExpect(jsonPath("$.userId").value("user-1"))
+					.andExpect(jsonPath("$.tasteProfile").doesNotExist())
+					.andRespond(withSuccess(OK, MediaType.APPLICATION_JSON));
+			server.expect(requestTo(URL))
+					.andExpect(jsonPath("$.userId").doesNotExist())
+					.andExpect(jsonPath("$.tasteProfile.mood").value("QUIET"))
+					.andRespond(withSuccess(OK, MediaType.APPLICATION_JSON));
+			PlaceSearchRequest request = new PlaceSearchRequest("카페", preferences, null, AREA, null);
+
+			client().search(purpose, request, "user-1");
+			client().search(purpose, request, null);
 		}
 	}
 
@@ -214,7 +295,7 @@ class AiSearchClientTest {
 					 "fallbacks":["PREVIOUS_INVALID","TASTE_INVALID"],"interpretedBy":"RULE","rankedBy":"SIMILARITY",
 					 "models":{"embedding":"e"}}""", MediaType.APPLICATION_JSON));
 
-			AiSearchClient.Response response = client().search(request("카페"), null).orElseThrow();
+			AiSearchClient.Response response = client().search(SearchPurpose.SEARCH, request("카페"), null).orElseThrow();
 
 			assertThat(response.conditions()).containsEntry("text", "t").containsEntry("station", null);
 			assertThat(response.nearby()).isTrue();
@@ -238,7 +319,7 @@ class AiSearchClientTest {
 					  "scoreItems":[{"source":"REQUEST","label":"l","z":[1]}]}],"newTop":{"a":1},
 					 "interpretedBy":{"any":[1]},"rankedBy":3,"models":"text"}""", MediaType.APPLICATION_JSON));
 
-			AiSearchClient.Response response = client().search(request("카페"), null).orElseThrow();
+			AiSearchClient.Response response = client().search(SearchPurpose.SEARCH, request("카페"), null).orElseThrow();
 
 			assertThat(response.items()).singleElement().satisfies(item -> {
 				assertThat(item.score()).isNull();
@@ -257,14 +338,14 @@ class AiSearchClientTest {
 		@ValueSource(strings = {"", "   "})
 		@DisplayName("AI실패_주소가비었거나공백뿐이면_부르지않고ERROR다")
 		void failure_blankBaseUrl_skipsCallAndLogsError(String blank, CapturedOutput output) {
-			assertThat(client(blank, "", "").search(request("카페"), null)).isEmpty();
+			assertThat(client(blank, "", "").search(SearchPurpose.SEARCH, request("카페"), null)).isEmpty();
 			assertThat(output.getAll()).contains("ERROR").contains("base-url is blank");
 		}
 
 		@Test
 		@DisplayName("AI실패_형식이잘못된주소는_ERROR로대체한다")
 		void failure_malformedBaseUrl_logsError(CapturedOutput output) {
-			assertThat(client("http://ai test", "", "").search(request("카페"), null)).isEmpty();
+			assertThat(client("http://ai test", "", "").search(SearchPurpose.SEARCH, request("카페"), null)).isEmpty();
 			assertThat(output.getAll()).contains("ERROR").contains("kind=INVALID");
 		}
 
@@ -274,7 +355,7 @@ class AiSearchClientTest {
 			// 스프링이 쓰는 생성자다. 여기서 주소를 해석하면 기동이 실패한다(AC-7 ⑦).
 			AiSearchClient bean = new AiSearchClient("http://ai test", "", "", Optional.empty());
 
-			assertThat(bean.search(request("카페"), null)).isEmpty();
+			assertThat(bean.search(SearchPurpose.SEARCH, request("카페"), null)).isEmpty();
 			assertThat(output.getAll()).contains("ERROR").contains("kind=INVALID");
 		}
 
@@ -284,7 +365,7 @@ class AiSearchClientTest {
 		void failure_connection_logsWarn(Class<? extends IOException> type, CapturedOutput output) throws Exception {
 			server.expect(requestTo(URL)).andRespond(withException(type.getConstructor(String.class).newInstance(SECRET)));
 
-			assertThat(client().search(request("카페"), null)).isEmpty();
+			assertThat(client().search(SearchPurpose.SEARCH, request("카페"), null)).isEmpty();
 			assertThat(output.getAll()).contains("WARN").contains("kind=CONNECTION").contains(type.getSimpleName())
 					.doesNotContain(SECRET);
 		}
@@ -294,7 +375,7 @@ class AiSearchClientTest {
 		void failure_timeout_logsWarn(CapturedOutput output) {
 			server.expect(requestTo(URL)).andRespond(withException(new SocketTimeoutException(SECRET)));
 
-			assertThat(client().search(request("카페"), null)).isEmpty();
+			assertThat(client().search(SearchPurpose.SEARCH, request("카페"), null)).isEmpty();
 			assertThat(output.getAll()).contains("WARN").contains("kind=TIMEOUT").doesNotContain(SECRET);
 		}
 
@@ -307,7 +388,7 @@ class AiSearchClientTest {
 					.body("{\"code\":\"" + code + "\",\"detail\":\"" + SECRET + "\"}")
 					.contentType(MediaType.APPLICATION_PROBLEM_JSON));
 
-			assertThat(client().search(request("카페"), null)).isEmpty();
+			assertThat(client().search(SearchPurpose.SEARCH, request("카페"), null)).isEmpty();
 			assertThat(output.getAll()).contains("WARN").contains("kind=SERVER_ERROR")
 					.contains("reason=" + status + ":" + code + ",").contains("elapsedMs=").doesNotContain(SECRET);
 		}
@@ -319,7 +400,7 @@ class AiSearchClientTest {
 			server.expect(requestTo(URL)).andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE)
 					.body("{\"code\":" + code + "}").contentType(MediaType.APPLICATION_PROBLEM_JSON));
 
-			assertThat(client().search(request("카페"), null)).isEmpty();
+			assertThat(client().search(SearchPurpose.SEARCH, request("카페"), null)).isEmpty();
 			assertThat(output.getAll()).contains("reason=503,").doesNotContain(SECRET).doesNotContain("lower_case");
 		}
 
@@ -331,7 +412,7 @@ class AiSearchClientTest {
 					.andRespond(withStatus(HttpStatusCode.valueOf(status)).body("{\"code\":\"OTHER\",\"detail\":\"" + SECRET + "\"}")
 							.contentType(MediaType.APPLICATION_JSON));
 
-			assertThat(client().search(request("카페"), null)).isEmpty();
+			assertThat(client().search(SearchPurpose.SEARCH, request("카페"), null)).isEmpty();
 			assertThat(output.getAll()).contains("WARN").contains("kind=SERVER_ERROR").contains("reason=" + status)
 					.doesNotContain(SECRET);
 		}
@@ -343,7 +424,7 @@ class AiSearchClientTest {
 			server.expect(ExpectedCount.once(), requestTo(URL))
 					.andRespond(withStatus(HttpStatusCode.valueOf(status)).body(SECRET));
 
-			assertThat(client().search(request("카페"), null)).isEmpty();
+			assertThat(client().search(SearchPurpose.SEARCH, request("카페"), null)).isEmpty();
 			assertThat(output.getAll()).contains("ERROR").contains("kind=STATUS").contains("reason=" + status)
 					.doesNotContain(SECRET);
 		}
@@ -376,7 +457,7 @@ class AiSearchClientTest {
 		void failure_unreadableBody_logsErrorWithoutBody(String body, CapturedOutput output) {
 			server.expect(requestTo(URL)).andRespond(withSuccess(body, MediaType.APPLICATION_JSON));
 
-			assertThat(client().search(request("카페"), null)).isEmpty();
+			assertThat(client().search(SearchPurpose.SEARCH, request("카페"), null)).isEmpty();
 			assertThat(output.getAll()).contains("ERROR").contains("kind=INVALID").doesNotContain(SECRET);
 		}
 
@@ -388,7 +469,7 @@ class AiSearchClientTest {
 						throw new IllegalStateException(SECRET);
 					}, slept::add);
 
-			assertThat(failing.search(request("카페"), null)).isEmpty();
+			assertThat(failing.search(SearchPurpose.SEARCH, request("카페"), null)).isEmpty();
 			assertThat(output.getAll()).contains("ERROR").contains("IllegalStateException").doesNotContain(SECRET);
 		}
 
@@ -397,9 +478,22 @@ class AiSearchClientTest {
 		void failure_requestValues_notLogged(CapturedOutput output) {
 			server.expect(requestTo(URL)).andRespond(withStatus(HttpStatus.BAD_REQUEST));
 
-			client().search(new PlaceSearchRequest(SECRET, null, Map.of("text", SECRET), null, null), "user-1");
+			client().search(SearchPurpose.SEARCH, new PlaceSearchRequest(SECRET, null, Map.of("text", SECRET), null, null), "user-1");
 
 			assertThat(output.getAll()).doesNotContain(SECRET);
+		}
+
+		@ParameterizedTest
+		@EnumSource(value = SearchPurpose.class, names = {"NEARBY", "REGION"})
+		@DisplayName("AI실패_영역요청의좌표와조건은_로그에없다")
+		void failure_areaValues_notLogged(SearchPurpose purpose, CapturedOutput output) {
+			server.expect(requestTo(URL)).andRespond(withStatus(HttpStatus.BAD_REQUEST));
+
+			client().search(purpose, new PlaceSearchRequest(SECRET, null, Map.of("text", SECRET),
+					new MapBounds(37.4987654321, 127.0123456789, 37.5123456789, 127.0587654321), null), null);
+
+			assertThat(output.getAll()).doesNotContain(SECRET).doesNotContain("37.4987654321")
+					.doesNotContain("127.0123456789").doesNotContain("37.5123456789").doesNotContain("127.0587654321");
 		}
 	}
 
@@ -420,7 +514,7 @@ class AiSearchClientTest {
 			expectBusy("1");
 			server.expect(requestTo(URL)).andRespond(withSuccess(OK, MediaType.APPLICATION_JSON));
 
-			assertThat(client().search(request("카페"), null)).isPresent();
+			assertThat(client().search(SearchPurpose.SEARCH, request("카페"), null)).isPresent();
 			assertThat(slept).containsExactly(Duration.ofSeconds(1));
 		}
 
@@ -430,7 +524,7 @@ class AiSearchClientTest {
 			expectBusy("30");
 			server.expect(requestTo(URL)).andRespond(withSuccess(OK, MediaType.APPLICATION_JSON));
 
-			assertThat(client().search(request("카페"), null)).isPresent();
+			assertThat(client().search(SearchPurpose.SEARCH, request("카페"), null)).isPresent();
 			assertThat(slept).containsExactly(AiSearchClient.MAX_RETRY_AFTER);
 		}
 
@@ -441,7 +535,7 @@ class AiSearchClientTest {
 			expectBusy(retryAfter);
 			server.expect(requestTo(URL)).andRespond(withSuccess(OK, MediaType.APPLICATION_JSON));
 
-			assertThat(client().search(request("카페"), null)).isPresent();
+			assertThat(client().search(SearchPurpose.SEARCH, request("카페"), null)).isPresent();
 			assertThat(slept).isEmpty();
 		}
 
@@ -451,7 +545,7 @@ class AiSearchClientTest {
 			expectBusy(null);
 			server.expect(requestTo(URL)).andRespond(withSuccess(OK, MediaType.APPLICATION_JSON));
 
-			assertThat(client().search(request("카페"), null)).isPresent();
+			assertThat(client().search(SearchPurpose.SEARCH, request("카페"), null)).isPresent();
 			assertThat(slept).isEmpty();
 		}
 
@@ -464,7 +558,7 @@ class AiSearchClientTest {
 					AiSearchClient.PERMIT_WAIT), clock, timeout -> rest, slept::add);
 			expectBusy("1");
 
-			assertThat(client.search(request("카페"), null)).isEmpty();
+			assertThat(client.search(SearchPurpose.SEARCH, request("카페"), null)).isEmpty();
 			assertThat(slept).isEmpty();
 			assertThat(output.getAll()).contains("WARN").contains("kind=BUSY")
 					.contains("reason=503:BUSY, retry skipped: leftMs=").contains("retryAfterMs=1000");
@@ -484,10 +578,10 @@ class AiSearchClientTest {
 
 			try {
 				for (int i = 0; i < AiSearchClient.FAILURE_THRESHOLD; i++) {
-					assertThat(client.search(request("카페"), null)).isEmpty();
+					assertThat(client.search(SearchPurpose.SEARCH, request("카페"), null)).isEmpty();
 					assertThat(Thread.interrupted()).isTrue();
 				}
-				assertThat(client.search(request("카페"), null)).isPresent();
+				assertThat(client.search(SearchPurpose.SEARCH, request("카페"), null)).isPresent();
 			} finally {
 				Thread.interrupted();
 			}
@@ -500,7 +594,7 @@ class AiSearchClientTest {
 			server.expect(ExpectedCount.times(2), requestTo(URL)).andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE)
 					.body(BUSY).contentType(MediaType.APPLICATION_PROBLEM_JSON));
 
-			assertThat(client().search(request("카페"), null)).isEmpty();
+			assertThat(client().search(SearchPurpose.SEARCH, request("카페"), null)).isEmpty();
 			assertThat(output.getAll()).contains("WARN").contains("kind=BUSY").contains("reason=503:BUSY after retry")
 					.contains("elapsedMs=");
 		}
@@ -512,7 +606,7 @@ class AiSearchClientTest {
 					.contentType(MediaType.APPLICATION_PROBLEM_JSON));
 			server.expect(requestTo(URL)).andRespond(withStatus(HttpStatus.INTERNAL_SERVER_ERROR));
 
-			assertThat(client().search(request("카페"), null)).isEmpty();
+			assertThat(client().search(SearchPurpose.SEARCH, request("카페"), null)).isEmpty();
 			assertThat(output.getAll()).contains("kind=SERVER_ERROR");
 		}
 	}
@@ -556,7 +650,7 @@ class AiSearchClientTest {
 
 		Optional<AiSearchClient.Response> call(Reply reply) {
 			replies.add(reply);
-			return client.search(request("카페"), null);
+			return client.search(SearchPurpose.SEARCH, request("카페"), null);
 		}
 
 		void fail(int times) {
@@ -572,8 +666,23 @@ class AiSearchClientTest {
 		/** AI를 부르지 않고 바로 빈 값이다 */
 		void skipped() {
 			int before = calls;
-			assertThat(client.search(request("카페"), null)).isEmpty();
+			assertThat(client.search(SearchPurpose.SEARCH, request("카페"), null)).isEmpty();
 			assertThat(calls).isEqualTo(before);
+		}
+
+		@Test
+		@DisplayName("차단기_NEARBY실패로열린차단은_SEARCH와REGION도막는다")
+		void breaker_openedByNearby_skipsOtherPurposes() {
+			PlaceSearchRequest area = new PlaceSearchRequest("카페", null, null,
+					new MapBounds(37.49, 127.02, 37.51, 127.05), null);
+			for (int i = 0; i < 3; i++) {
+				replies.add(status(HttpStatus.INTERNAL_SERVER_ERROR));
+				assertThat(client.search(SearchPurpose.NEARBY, area, null)).isEmpty();
+			}
+
+			skipped();
+			assertThat(client.search(SearchPurpose.REGION, area, null)).isEmpty();
+			assertThat(calls).isEqualTo(3);
 		}
 
 		@Test
@@ -622,7 +731,7 @@ class AiSearchClientTest {
 				replies.add(busy());
 			}
 			for (int i = 0; i < 3; i++) {
-				assertThat(client.search(request("카페"), null)).isEmpty();
+				assertThat(client.search(SearchPurpose.SEARCH, request("카페"), null)).isEmpty();
 			}
 			skipped();
 		}

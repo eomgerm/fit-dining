@@ -6,6 +6,7 @@ import kr.co.fitdining.api.place.dto.PlaceSearchRequest;
 import kr.co.fitdining.api.place.dto.PlaceSuggestResponse;
 import kr.co.fitdining.api.place.engine.PlaceSearchEngine;
 import kr.co.fitdining.api.place.engine.PlaceSearchResult;
+import kr.co.fitdining.api.place.engine.SearchPurpose;
 import kr.co.fitdining.api.place.exception.PlaceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -25,7 +26,7 @@ public class PlaceService {
 	}
 
 	public PlaceSearchResult search(PlaceSearchRequest request, String userId) {
-		return engine.search(request, userId);
+		return engine.search(SearchPurpose.SEARCH, request, userId);
 	}
 
 	public PlaceDetailResponse getPlace(long id) {

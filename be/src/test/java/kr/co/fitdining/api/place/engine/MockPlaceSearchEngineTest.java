@@ -17,6 +17,7 @@ import kr.co.fitdining.api.place.dto.OpenStatus;
 import kr.co.fitdining.api.place.dto.PlaceCard;
 import kr.co.fitdining.api.place.dto.PlaceDetailResponse.DayCode;
 import kr.co.fitdining.api.place.dto.PlaceSearchRequest;
+import kr.co.fitdining.api.place.dto.PlaceSearchResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -46,8 +47,17 @@ class MockPlaceSearchEngineTest {
 		return new MockPlaceSearchEngine(jsonMapper, Optional.of(Clock.fixed(instant, clockZone)));
 	}
 
+	/** 모든 장소의 카드. SEARCH 페이지를 끝까지 넘겨 모은다. */
 	private static List<PlaceCard> cards(MockPlaceSearchEngine engine) {
-		return new ArrayList<>(engine.search(new PlaceSearchRequest("근처", null, null, null, null), null).response().items());
+		List<PlaceCard> cards = new ArrayList<>();
+		String cursor = null;
+		do {
+			PlaceSearchResponse page = engine.search(SearchPurpose.SEARCH,
+					new PlaceSearchRequest("카페", null, null, null, cursor), null).response();
+			cards.addAll(page.items());
+			cursor = page.nextCursor();
+		} while (cursor != null);
+		return cards;
 	}
 
 	@Nested
