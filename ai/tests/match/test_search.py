@@ -766,6 +766,27 @@ class TestScoring:
             ("PURPOSE_WORK", Source.PREFERENCE),
         ]
 
+    def test_request_category_uses_its_category_tastes(self, fake_gms: FakeGms) -> None:
+        """검색_요청업종의취향이있으면_전체취향대신그업종취향으로점수를낸다"""
+        fake_gms(answers())
+        taste = TasteProfile(
+            "u1",
+            (
+                TasteFeature("PURPOSE_WORK", Layer.PURPOSE, True, 1),
+                TasteFeature("PURPOSE_TALK", Layer.PURPOSE, True, 2.5, "CAFE"),
+                TasteFeature("PURPOSE_GROUP", Layer.PURPOSE, True, 2.5, "BAR"),
+            ),
+            free_texts=(),
+        )
+
+        result = run(taste=taste)
+
+        items = [(i.condition_id, i.source) for i in result.cards[0].score_items]
+        assert items == [
+            ("QUIET", Source.REQUEST),
+            ("PURPOSE_TALK", Source.PREFERENCE),
+        ]
+
     def test_disliked_taste_lowers_score_not_card(self, fake_gms: FakeGms) -> None:
         """검색_조건없는요청에서조용한곳을싫어하면_조용한곳일수록낮고카드항목에는없다"""
         fake_gms(answers(codes=[]))

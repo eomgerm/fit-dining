@@ -1,6 +1,6 @@
 {
   "1": {
-    "schema": "taste-profile/v0",
+    "schema": "taste-profile/v1",
     "user_id": "u1",
     "original_text": null,
     "embedding": {
@@ -13,19 +13,22 @@
         "code": "QUIET",
         "layer": "axis",
         "like": true,
-        "weight": 1
+        "weight": 1.0,
+        "category": null
       },
       {
         "code": "LIVELY",
         "layer": "axis",
         "like": false,
-        "weight": 1
+        "weight": 1.0,
+        "category": null
       },
       {
         "code": "PURPOSE_WORK",
         "layer": "purpose",
         "like": true,
-        "weight": 1
+        "weight": 1.0,
+        "category": null
       }
     ],
     "free_texts": [],
@@ -47,7 +50,7 @@
     ]
   },
   "2": {
-    "schema": "taste-profile/v0",
+    "schema": "taste-profile/v1",
     "user_id": "u2",
     "original_text": null,
     "embedding": {
@@ -60,13 +63,15 @@
         "code": "VALUE_FOR_MONEY",
         "layer": "importance",
         "like": true,
-        "weight": 1
+        "weight": 1.0,
+        "category": null
       },
       {
         "code": "PURPOSE_TALK",
         "layer": "purpose",
         "like": true,
-        "weight": 1
+        "weight": 1.0,
+        "category": null
       }
     ],
     "free_texts": [],
@@ -88,7 +93,7 @@
     ]
   },
   "3": {
-    "schema": "taste-profile/v0",
+    "schema": "taste-profile/v1",
     "user_id": "u3",
     "original_text": "시끄럽지 않은 데가 좋아요",
     "embedding": {
@@ -101,19 +106,22 @@
         "code": "QUIET",
         "layer": "axis",
         "like": true,
-        "weight": 1
+        "weight": 1.0,
+        "category": null
       },
       {
         "code": "LIVELY",
         "layer": "axis",
         "like": false,
-        "weight": 1
+        "weight": 1.0,
+        "category": null
       },
       {
         "code": "PURPOSE_DATE",
         "layer": "purpose",
         "like": true,
-        "weight": 1
+        "weight": 1.0,
+        "category": null
       }
     ],
     "free_texts": [],
@@ -136,7 +144,7 @@
     ]
   },
   "4": {
-    "schema": "taste-profile/v0",
+    "schema": "taste-profile/v1",
     "user_id": "u4",
     "original_text": "점심엔 담백한 국물 요리가 좋아요",
     "embedding": {
@@ -149,7 +157,8 @@
         "code": "PURPOSE_SOLO",
         "layer": "purpose",
         "like": true,
-        "weight": 1
+        "weight": 1.0,
+        "category": null
       }
     ],
     "free_texts": [
@@ -1204,7 +1213,7 @@
     ]
   },
   "5": {
-    "schema": "taste-profile/v0",
+    "schema": "taste-profile/v1",
     "user_id": "u5",
     "original_text": "너무 매운 건 못 먹어요",
     "embedding": {
@@ -1217,13 +1226,15 @@
         "code": "PURPOSE_GROUP",
         "layer": "purpose",
         "like": true,
-        "weight": 1
+        "weight": 1.0,
+        "category": null
       },
       {
         "code": "FOOD_SPICY",
         "layer": "food",
         "like": false,
-        "weight": 1
+        "weight": 1.0,
+        "category": null
       }
     ],
     "free_texts": [],
@@ -1246,7 +1257,7 @@
     ]
   },
   "6": {
-    "schema": "taste-profile/v0",
+    "schema": "taste-profile/v1",
     "user_id": "u6",
     "original_text": "프로젝트 끝나고 시끌벅적하게 한잔하는 곳",
     "embedding": {
@@ -1259,13 +1270,15 @@
         "code": "QUIET",
         "layer": "axis",
         "like": false,
-        "weight": 1
+        "weight": 1.0,
+        "category": null
       },
       {
         "code": "LIVELY",
         "layer": "axis",
         "like": true,
-        "weight": 1
+        "weight": 1.0,
+        "category": null
       }
     ],
     "free_texts": [
@@ -1286,7 +1299,7 @@
     ]
   },
   "7": {
-    "schema": "taste-profile/v0",
+    "schema": "taste-profile/v1",
     "user_id": "u1",
     "original_text": null,
     "embedding": {
@@ -1299,25 +1312,113 @@
         "code": "QUIET",
         "layer": "axis",
         "like": true,
-        "weight": 3
+        "weight": 4.319,
+        "category": null
       },
       {
         "code": "LIVELY",
         "layer": "axis",
         "like": false,
-        "weight": 3
+        "weight": 4.319,
+        "category": null
       },
       {
         "code": "SHORT_WAIT",
         "layer": "importance",
         "like": true,
-        "weight": 1
+        "weight": 1.0,
+        "category": null
       },
       {
         "code": "PURPOSE_WORK",
         "layer": "purpose",
         "like": true,
-        "weight": 1
+        "weight": 0.707,
+        "category": null
+      },
+      {
+        "code": "QUIET",
+        "layer": "axis",
+        "like": true,
+        "weight": 4.319,
+        "category": "RESTAURANT"
+      },
+      {
+        "code": "LIVELY",
+        "layer": "axis",
+        "like": false,
+        "weight": 4.319,
+        "category": "RESTAURANT"
+      },
+      {
+        "code": "SHORT_WAIT",
+        "layer": "importance",
+        "like": true,
+        "weight": 0.5,
+        "category": "RESTAURANT"
+      },
+      {
+        "code": "PURPOSE_WORK",
+        "layer": "purpose",
+        "like": true,
+        "weight": 0.707,
+        "category": "RESTAURANT"
+      },
+      {
+        "code": "QUIET",
+        "layer": "axis",
+        "like": true,
+        "weight": 4.319,
+        "category": "CAFE"
+      },
+      {
+        "code": "LIVELY",
+        "layer": "axis",
+        "like": false,
+        "weight": 4.319,
+        "category": "CAFE"
+      },
+      {
+        "code": "SHORT_WAIT",
+        "layer": "importance",
+        "like": true,
+        "weight": 1.0,
+        "category": "CAFE"
+      },
+      {
+        "code": "PURPOSE_WORK",
+        "layer": "purpose",
+        "like": true,
+        "weight": 0.707,
+        "category": "CAFE"
+      },
+      {
+        "code": "QUIET",
+        "layer": "axis",
+        "like": true,
+        "weight": 4.319,
+        "category": "BAR"
+      },
+      {
+        "code": "LIVELY",
+        "layer": "axis",
+        "like": false,
+        "weight": 4.319,
+        "category": "BAR"
+      },
+      {
+        "code": "SHORT_WAIT",
+        "layer": "importance",
+        "like": true,
+        "weight": 0.5,
+        "category": "BAR"
+      },
+      {
+        "code": "PURPOSE_WORK",
+        "layer": "purpose",
+        "like": true,
+        "weight": 0.707,
+        "category": "BAR"
       }
     ],
     "free_texts": [],

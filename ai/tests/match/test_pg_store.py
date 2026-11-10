@@ -230,7 +230,7 @@ TASTE_ROWS = [
     ),
     # 취향 분석 결과를 더하기 전의 온보딩 원본 칩(code, vector 키 없음), 계산 실패한 결과([])
     ("user-2", [{"polarity": "LIKE", "label": "넓은 데"}], []),
-    ("user-3", None, [{"code": "QUIET", "layer": "axis", "like": True, "weight": 9}]),
+    ("user-3", None, [{"code": "QUIET", "layer": "axis", "like": True, "weight": 0}]),
     ("user-4", [{"polarity": "MAYBE", "label": "조용한 곳"}], QUIET_FEATURES),
 ]
 
@@ -529,7 +529,7 @@ class TestTasteStore:
 
     @pytest.mark.parametrize("user_id", ["user-3", "user-4"])
     def test_broken_row_raises(self, tastes: PgTasteStore, user_id: str) -> None:
-        """취향저장소_가중치가범위밖이거나polarity가다르면_ValueError다"""
+        """취향저장소_세기가0이하이거나polarity가다르면_ValueError다"""
         with pytest.raises(ValueError):
             tastes.find(user_id)
 

@@ -618,9 +618,9 @@ class TestSearch:
     @pytest.mark.parametrize(
         "taste",
         [
-            # 취향 분석 출력 모양(taste-profile/v0)은 받지 않는다.
+            # 취향 분석 출력 모양(taste-profile/v1)은 받지 않는다.
             {
-                "schema": "taste-profile/v0",
+                "schema": "taste-profile/v1",
                 "user_id": "u1",
                 "features": [QUIET_FEATURE],
             },
@@ -712,7 +712,11 @@ class TestSearch:
         [
             StoreError("취향 저장소를 읽지 못했다: OperationalError"),
             ValueError("취향의 weight가 범위를 벗어났다"),
-            TasteProfile.from_stored("user-1", [QUIET_FEATURE] * 51, None),
+            TasteProfile.from_stored(
+                "user-1",
+                [QUIET_FEATURE] * (server_search.MAX_TASTE_FEATURES + 1),
+                None,
+            ),
         ],
     )
     def test_member_taste_unreadable(

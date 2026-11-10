@@ -70,7 +70,7 @@ def test_features_match_sample_profile(no, path):
     assert resp.json()["features"] == SAMPLES[no]["features"]
 
 
-def review(code, place, day, category="카페"):
+def review(code, place, day, category="카페", revisit=False):
     """배치가 보내는 리뷰 근거. `code`는 사용자 쪽 코드다."""
     return {
         "placeId": place,
@@ -78,6 +78,7 @@ def review(code, place, day, category="카페"):
         "category": category,
         "code": code,
         "createdAt": f"2026-10-{day}T12:00:00+09:00",
+        "revisitIntent": revisit,
     }
 
 
@@ -95,9 +96,31 @@ def test_refresh_sample_7_matches_sample_profile():
 def test_refresh_flips_noise_pole_after_3_opposite_places():
     body = {"mood": "QUIET", "reviews": [review("LIVELY", p, 23) for p in (1, 2, 3)]}
     resp = client().post("/v1/taste/refresh", json=body)
-    assert [(f["code"], f["like"]) for f in resp.json()["features"]] == [
-        ("QUIET", False),
-        ("LIVELY", True),
+    assert [
+        (f["code"], f["like"]) for f in resp.json()["features"] if f["category"] is None
+    ] == [("QUIET", False), ("LIVELY", True)]
+
+
+def test_refresh_weighs_revisit_reviews_and_returns_category_tastes():
+    body = {
+        "reviews": [
+            review("COZY", 1, 23, revisit=True),
+            review("VALUE_FOR_MONEY", 2, 23, category="식당"),
+        ]
+    }
+    resp = client().post("/v1/taste/refresh", json=body)
+    assert resp.status_code == 200
+    assert [
+        (f["category"], f["code"], f["weight"]) for f in resp.json()["features"]
+    ] == [
+        (None, "COZY", 1.5),
+        (None, "VALUE_FOR_MONEY", 1.0),
+        ("RESTAURANT", "COZY", 0.75),
+        ("RESTAURANT", "VALUE_FOR_MONEY", 1.0),
+        ("CAFE", "COZY", 1.5),
+        ("CAFE", "VALUE_FOR_MONEY", 0.5),
+        ("BAR", "COZY", 0.75),
+        ("BAR", "VALUE_FOR_MONEY", 0.5),
     ]
 
 
@@ -108,6 +131,8 @@ def test_refresh_flips_noise_pole_after_3_opposite_places():
         review("NOPE", 1, 23),
         review("QUIET", 1, 23) | {"direction": 1},
         {k: v for k, v in review("QUIET", 1, 23).items() if k != "placeId"},
+        {k: v for k, v in review("QUIET", 1, 23).items() if k != "revisitIntent"},
+        review("QUIET", 1, 23, category="편의점"),
     ],
 )
 def test_refresh_rejects_invalid_review(evidence):

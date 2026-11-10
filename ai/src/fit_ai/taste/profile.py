@@ -1,5 +1,6 @@
-"""근거 장부 행 → 취향 프로필(spec 2·3·5·6단계). LLM은 쓰지 않는다."""
+"""근거 장부 행 → 취향 프로필(spec 2~6단계). LLM은 쓰지 않는다."""
 
+from bisect import bisect_right
 from collections import defaultdict
 from collections.abc import Callable
 from datetime import datetime
@@ -8,10 +9,15 @@ from typing import Literal, TypedDict
 from fit_ai.embedding import MODEL_ID, REVISION, encode_queries
 from fit_ai.features import FEATURES
 
-SCHEMA = "taste-profile/v0"
-MAX_WEIGHT = 3  # 검증 전 초기값(PRD OQ-11)
+SCHEMA = "taste-profile/v1"
+HALF_LIFE_REVIEWS = 10  # 근거 무게가 절반이 되는 뒤 리뷰 수. 시작값
+REVISIT_WEIGHT = 1.5  # 재방문 의사가 있는 리뷰 근거의 무게 배수. 시작값
+OTHER_CATEGORY_SHARE = 0.5  # 업종별 취향에 섞는 다른 업종 리뷰 근거의 몫. 시작값
+WEIGHT_DIGITS = 3  # 세기를 저장할 소수 자리
 FLIP_PLACES = 3  # 소음 축 방향을 바꾸는 반대 평가 장소 수(PRD FR-14)
 NOISE = ("QUIET", "LIVELY")
+CATEGORIES = {"식당": "RESTAURANT", "카페": "CAFE", "술집": "BAR"}
+"""리뷰 근거의 업종 → 업종별 취향의 `category`. 값은 검색 요청의 업종 코드와 같다."""
 _ORDER = {code: i for i, code in enumerate(FEATURES)}
 
 
@@ -24,7 +30,8 @@ class Row(TypedDict, total=False):
     source: Literal["onboarding", "review", "free_text"]
     place_id: str
     review_id: str
-    category: str
+    category: str  # 식당, 카페, 술집
+    revisit_intent: bool  # 리뷰 근거만. 없으면 False로 본다
     quote: str
     positive_text: str
     created_at: str  # ISO 8601, 시간대 포함
@@ -77,54 +84,139 @@ def _latest_per_place(rows: list[Row]) -> list[Row]:
     return others + list(latest.values())
 
 
-def _feature(code: str, like: bool, weight: int) -> dict:
-    return {"code": code, "layer": FEATURES[code].layer, "like": like, "weight": weight}
+def _when(r: Row) -> datetime:
+    return datetime.fromisoformat(r["created_at"])
 
 
-def compute_features(rows: list[Row]) -> list[dict]:
-    """특징마다 좋아하는지와 가중치를 정한다. 받은 행은 모두 유효한 근거로 본다."""
-    coded = _latest_per_place([r for r in rows if r.get("code")])
+def _weigher(rows: list[Row]) -> Callable[[Row], float]:
+    """근거 하나의 무게를 내는 함수를 만든다(spec 3단계).
 
-    net: dict[str, int] = defaultdict(int)  # 소음 축은 QUIET 쪽 부호로 한 번에 센다
-    for r in coded:
-        if r["code"] in NOISE:
-            net["QUIET"] += _noise_sign(r)
-        else:
-            net[r["code"]] += r["direction"]
+    무게는 0.5^(뒤에 쓴 리뷰 수 ÷ `HALF_LIFE_REVIEWS`)이고, 재방문 의사가 있는 리뷰면
+    `REVISIT_WEIGHT`를 곱한다. 시간이 아니라 리뷰 수로 줄여서 리뷰를 쉬는 동안에는 바뀌지
+    않는다. 리뷰는 장소마다 가장 늦은 것 하나만 센다. 온보딩 답과 직접 입력은 가장 오래된
+    근거라 뒤에 쓴 리뷰가 그 회원의 리뷰 전체다.
+    """
+    latest: dict[str, datetime] = {}
+    for r in rows:
+        if r["source"] == "review":
+            when = _when(r)
+            if r["place_id"] not in latest or when > latest[r["place_id"]]:
+                latest[r["place_id"]] = when
+    times = sorted(latest.values())
 
-    out = []
-    noise = net.pop("QUIET", 0)
-    pole = next(
-        (
-            r["code"]
-            for r in coded
-            if r["source"] == "onboarding" and r["code"] in NOISE
-        ),
-        None,
-    )
-    # 온보딩 극이 있으면 그 극을 지키고, 없으면 근거 합의 부호를 따른다
-    sign = {"QUIET": 1, "LIVELY": -1}.get(pole, 1 if noise > 0 else -1)
+    def weigh(r: Row) -> float:
+        after = (
+            len(times) - bisect_right(times, _when(r))
+            if r["source"] == "review"
+            else len(times)
+        )
+        revisit = REVISIT_WEIGHT if r.get("revisit_intent") else 1
+        return 0.5 ** (after / HALF_LIFE_REVIEWS) * revisit
+
+    return weigh
+
+
+def _noise(rows: list[Row], weigh: Callable[[Row], float]) -> list[tuple]:
+    """소음 축의 (코드, 좋아함, 세기). 방향은 근거 수로, 세기는 무게 합으로 정한다."""
+    count = sum(_noise_sign(r) for r in rows)
+    weighted = sum(_noise_sign(r) * weigh(r) for r in rows)
+    pole = next((r["code"] for r in rows if r["source"] == "onboarding"), None)
+    # 온보딩 극이 있으면 그 극을 지키고, 없으면 근거 수의 부호를 따른다.
+    # 근거 수가 같으면 무게 합(최근 근거 쪽)을 따른다.
+    sign = {"QUIET": 1, "LIVELY": -1}.get(pole, 1 if (count or weighted) > 0 else -1)
     # 반대 평가가 서로 다른 장소 3곳 이상이고 과반이면 근거 쪽으로 바꾼다(PRD FR-14)
     against = {
         r["place_id"]
-        for r in coded
-        if r["source"] == "review" and r["code"] in NOISE and _noise_sign(r) == -sign
+        for r in rows
+        if r["source"] == "review" and _noise_sign(r) == -sign
     }
-    if len(against) >= FLIP_PLACES and noise * sign < 0:
+    if len(against) >= FLIP_PLACES and count * sign < 0:
         sign = -sign
-    if (strength := noise * sign) > 0:
-        liked, disliked = NOISE if sign > 0 else NOISE[::-1]
-        weight = min(strength, MAX_WEIGHT)
-        out += [_feature(liked, True, weight), _feature(disliked, False, weight)]
+    strength = round(weighted * sign, WEIGHT_DIGITS)
+    if strength <= 0:
+        return []
+    liked, disliked = NOISE if sign > 0 else NOISE[::-1]
+    return [(liked, True, strength), (disliked, False, strength)]
 
-    for code, n in net.items():
-        if n > 0:
-            out.append(_feature(code, True, min(n, MAX_WEIGHT)))
-        elif (
-            n < 0 and FEATURES[code].layer == "food"
-        ):  # 반대 극이 없는 비선호는 음식·맛만
-            out.append(_feature(code, False, min(-n, MAX_WEIGHT)))
+
+def _axis(key: str, rows: list[Row], weigh: Callable[[Row], float]) -> list[tuple]:
+    """한 축의 (코드, 좋아함, 세기) 목록. 세기는 같은 쪽 무게 합 − 반대쪽 무게 합이다."""
+    if key == "NOISE":
+        return _noise(rows, weigh)
+    net = round(sum(r["direction"] * weigh(r) for r in rows), WEIGHT_DIGITS)
+    if net > 0:
+        return [(key, True, net)]
+    if net < 0 and FEATURES[key].layer == "food":  # 반대 극이 없는 비선호는 음식·맛만
+        return [(key, False, -net)]
+    return []
+
+
+def _in_category(r: Row, category: str) -> bool:
+    return r["source"] != "review" or CATEGORIES[r["category"]] == category
+
+
+def _category_axis(
+    key: str,
+    rows: list[Row],
+    weigh: Callable[[Row], float],
+    category: str,
+    overall: list[tuple],
+) -> list[tuple]:
+    """업종별 취향의 한 축(spec 4단계).
+
+    양쪽 축(소음, 음식·맛)은 그 업종 리뷰와 리뷰가 아닌 근거만으로 정한다. 다른 업종 근거를
+    섞으면 방향이 흐려지기 때문이다. 그 업종 리뷰 근거가 없으면 전체 취향을 쓴다. 한 방향
+    축(중요 기준, 방문 목적)은 다른 업종 리뷰 근거를 `OTHER_CATEGORY_SHARE`만큼 섞는다.
+    """
+    if key == "NOISE" or FEATURES[key].layer == "food":
+        own = [r for r in rows if _in_category(r, category)]
+        if not any(r["source"] == "review" for r in own):
+            return overall
+        return _axis(key, own, weigh)
+    return _axis(
+        key,
+        rows,
+        lambda r: weigh(r) * (1 if _in_category(r, category) else OTHER_CATEGORY_SHARE),
+    )
+
+
+def _features(axes: dict[str, list[tuple]], category: str | None) -> list[dict]:
+    out = [
+        {
+            "code": code,
+            "layer": FEATURES[code].layer,
+            "like": like,
+            "weight": weight,
+            "category": category,
+        }
+        for found in axes.values()
+        for code, like, weight in found
+    ]
     return sorted(out, key=lambda f: _ORDER[f["code"]])
+
+
+def compute_features(rows: list[Row]) -> list[dict]:
+    """특징마다 좋아하는지와 세기를 정한다. 받은 행은 모두 유효한 근거로 본다.
+
+    전체 취향(`category` None)을 내고, 리뷰 근거가 있으면 업종별 취향(`CATEGORIES`)도
+    낸다. 리뷰가 없으면 업종별 취향이 전체 취향과 같아서 내지 않는다.
+    """
+    coded = _latest_per_place([r for r in rows if r.get("code")])
+    weigh = _weigher(rows)
+    axes: dict[str, list[Row]] = defaultdict(list)
+    for r in coded:
+        axes[_feature_key(r["code"])].append(r)
+    overall = {key: _axis(key, found, weigh) for key, found in axes.items()}
+    out = _features(overall, None)
+    if not any(r["source"] == "review" for r in coded):
+        return out
+    for category in CATEGORIES.values():
+        per = {
+            key: _category_axis(key, found, weigh, category, overall[key])
+            for key, found in axes.items()
+        }
+        out += _features(per, category)
+    return out
 
 
 def _free_texts(

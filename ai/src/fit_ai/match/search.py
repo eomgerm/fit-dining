@@ -649,6 +649,7 @@ def _score_cards(
             taste.features,
             conditions.codes,
             menu_requested=bool(menu_terms(conditions.menus)),
+            category_group=conditions.category_group,
         )
         if taste
         else ()

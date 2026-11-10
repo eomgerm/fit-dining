@@ -10,7 +10,7 @@
 - 음식 종류("양식"): 장소의 음식 종류가 같으면 1, 다르면 0, 모르면 업종 범위에서 그 종류의
   비율이다.
 
-요청 점수는 요청 조건 점수의 기하평균(모두 원함), 취향 점수는 취향 가중치로 낸 평균이다.
+요청 점수는 요청 조건 점수의 기하평균(모두 원함), 취향 점수는 취향 세기로 낸 가중 평균이다.
 싫어하는 취향은 1 − 조건 점수로 넣는다. 핏 점수는 요청 0.7, 취향 0.3으로 더한다. 점수를
 먼저 내고 그 점수로 순서를 정한다. 비교 대상은 그 검색의 후보가 아니라 업종 범위 안의 장소
 전체라서, 같은 장소와 같은 요청이면 늘 같은 점수다(docs/comparison/spec.md 4.3).
@@ -56,7 +56,7 @@ class ItemScore:
         code: 조건 코드
         request: 요청 조각이면 True, 취향이면 False다.
         like: 좋아함이면 True, 싫어함이면 False다. 요청 조각은 True다.
-        weight: 취향 가중치(1~3). 요청 조각은 1이다.
+        weight: 취향 세기(0보다 큰 수). 요청 조각은 1이다.
         value: 조건 점수(0~1). 싫어하는 취향도 뒤집기 전 값이다.
         evidence_count: 근거가 된 리뷰 수. 장소 정보로 판정했으면 0이다.
         from_reviews: 리뷰로 판정했으면 True, 장소 정보로 판정했으면 False다.
@@ -65,7 +65,7 @@ class ItemScore:
     code: str
     request: bool
     like: bool
-    weight: int
+    weight: float
     value: float
     evidence_count: int
     from_reviews: bool
@@ -272,7 +272,7 @@ def fit_score(items: Sequence[ItemScore]) -> float | None:
     """조건 점수를 핏 점수(0~1)로 합친다.
 
     요청 점수는 요청 조건 점수의 기하평균이다. 요청은 모두 원하는 것이라, 하나가 확실히 안
-    맞으면 크게 깎이고 근거가 약하면 조금 깎인다. 취향 점수는 취향 가중치로 낸 평균이고,
+    맞으면 크게 깎이고 근거가 약하면 조금 깎인다. 취향 점수는 취향 세기로 낸 가중 평균이고,
     싫어하는 취향은 1 − 조건 점수다. 둘 다 있으면 요청 `REQUEST_WEIGHT`, 취향 나머지로
     더하고, 한쪽만 있으면 그쪽만 쓴다.
 
@@ -311,7 +311,7 @@ def _item(
     code: str,
     request: bool,
     like: bool,
-    weight: int,
+    weight: float,
     scope: frozenset[str],
     baseline: Baseline,
 ) -> ItemScore:

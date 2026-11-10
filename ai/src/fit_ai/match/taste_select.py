@@ -7,21 +7,19 @@
 하나로 읽는다.
 """
 
+import math
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
 from fit_ai.features import FEATURES
-from fit_ai.match.conditions import Layer
+from fit_ai.match.conditions import CATEGORY_NAMES, Layer
 
 FOOD_SPICY = "FOOD_SPICY"
 """매운맛 코드. 음식 층이지만 음식 종류는 아니라 따로 다룬다."""
 
-SCHEMA = "taste-profile/v0"
+SCHEMA = "taste-profile/v1"
 """읽을 수 있는 취향 프로필 형식"""
-
-MAX_WEIGHT = 3
-"""취향 강도 상한. 취향 spec과 같다."""
 
 POLARITY = {"LIKE": True, "DISLIKE": False}
 """온보딩 칩의 `polarity`(BE `Preferences.Polarity`)를 좋아함 여부로 바꾸는 표"""
@@ -39,13 +37,15 @@ class TasteFeature:
         code: 특징 코드(`QUIET`, `PURPOSE_GROUP`, `FOOD_SPICY` 등)
         layer: 층
         like: 좋아하면 True, 싫어하면 False
-        weight: 강도. 1~3이다.
+        weight: 세기. 0보다 큰 수다. 상한은 없고 오래된 근거가 약해져 약 15에서 멈춘다.
+        category: 업종(`RESTAURANT`, `CAFE`, `BAR`). 전체 취향이면 None이다.
     """
 
     code: str
     layer: Layer
     like: bool
-    weight: int
+    weight: float
+    category: str | None = None
 
 
 @dataclass(frozen=True)
@@ -96,8 +96,8 @@ class TasteProfile:
             취향 프로필
 
         Raises:
-            ValueError: `schema`가 `SCHEMA`와 다르거나, 모르는 층이 있거나, 강도나 문장
-                길이가 범위를 벗어날 때
+            ValueError: `schema`가 `SCHEMA`와 다르거나, 모르는 층이나 업종이 있거나, 세기나
+                문장 길이가 범위를 벗어날 때
             KeyError: 필수 필드가 없을 때
             TypeError: 필드의 타입이 다를 때
         """
@@ -125,7 +125,8 @@ class TasteProfile:
 
         Args:
             user_id: 사용자 id. 비회원이면 빈 문자열이다.
-            features: 취향 계산 결과(`{code, layer, like, weight}` 목록)
+            features: 취향 계산 결과(`{code, layer, like, weight, category}` 목록).
+                `category`가 없는 옛 원소는 전체 취향으로 읽는다.
             tastes: 온보딩 칩(`{polarity, label, code, vector}` 목록). 없으면 None이다.
 
         Returns:
@@ -188,8 +189,12 @@ def select_tastes(
     features: Sequence[TasteFeature],
     request_codes: Iterable[str],
     menu_requested: bool = False,
+    category_group: str | None = None,
 ) -> tuple[TasteFeature, ...]:
-    """요청과 겹치는 묶음의 취향을 뺀다.
+    """요청 업종의 취향을 고르고 요청과 겹치는 묶음의 취향을 뺀다.
+
+    요청에 업종이 있고 그 업종의 취향이 있으면 그것을, 아니면 전체 취향을 쓴다. 업종별
+    취향은 리뷰가 있는 회원만 있고, 리뷰가 없으면 전체 취향과 같다.
 
     묶음은 소음(성향 축), 방문 목적, 음식 종류, 매운맛 네 가지다. 요청에 한 묶음의
     코드가 하나라도 있으면 그 묶음의 취향은 좋아함과 싫어함을 모두 뺀다. 메뉴로 거른
@@ -202,15 +207,19 @@ def select_tastes(
         request_codes: 요청 해석이 낸 조건 코드. 인원은 목적 코드(`PURPOSE_GROUP` 등)로
             바꿔서 넘긴다.
         menu_requested: 요청이 메뉴로 걸렀는지(`search.menu_terms`가 비지 않았는지)
+        category_group: 요청 업종. 업종을 말하지 않았으면 None이다.
 
     Returns:
         남은 취향. 순서는 그대로다.
     """
+    in_category = [f for f in features if f.category == category_group]
+    if category_group is not None and not in_category:
+        in_category = [f for f in features if f.category is None]
     request_groups = {_group(code) for code in request_codes} - {None}
     if menu_requested:
         request_groups.add(Layer.FOOD)
     return tuple(
-        feature for feature in features if _group(feature.code) not in request_groups
+        feature for feature in in_category if _group(feature.code) not in request_groups
     )
 
 
@@ -221,16 +230,30 @@ def _list(value: object) -> list[dict[str, Any]]:
 
 
 def _feature(data: dict[str, Any]) -> TasteFeature:
-    """`features` 원소 하나를 읽는다. 타입이 틀리면 검색 중에 터지므로 여기서 막는다."""
+    """`features` 원소 하나를 읽는다. 타입이 틀리면 검색 중에 터지므로 여기서 막는다.
+
+    옛 정수 세기(1~3)도 읽는다.
+    """
     code, like, weight = data["code"], data["like"], data["weight"]
+    category = data.get("category")
     if not isinstance(code, str) or not isinstance(like, bool):
         raise TypeError("취향의 code나 like 타입이 다르다")
     # bool은 int의 하위 타입이라 따로 막는다.
-    if not isinstance(weight, int) or isinstance(weight, bool):
-        raise TypeError("취향의 weight가 정수가 아니다")
-    if not 1 <= weight <= MAX_WEIGHT:
+    if not isinstance(weight, int | float) or isinstance(weight, bool):
+        raise TypeError("취향의 weight가 수가 아니다")
+    if not math.isfinite(weight) or weight <= 0:
         raise ValueError("취향의 weight가 범위를 벗어났다")
-    return TasteFeature(code=code, layer=Layer(data["layer"]), like=like, weight=weight)
+    if category is not None and not isinstance(category, str):
+        raise TypeError("취향의 category가 문자열이 아니다")
+    if category is not None and category not in CATEGORY_NAMES:
+        raise ValueError("취향의 category가 모르는 업종이다")
+    return TasteFeature(
+        code=code,
+        layer=Layer(data["layer"]),
+        like=like,
+        weight=weight,
+        category=category,
+    )
 
 
 def _free_text(data: dict[str, Any]) -> FreeText:

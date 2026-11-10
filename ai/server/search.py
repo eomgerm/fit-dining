@@ -61,8 +61,9 @@ from server.schemas import (
 )
 from server.taste_profile import to_rows
 
-MAX_TASTE_FEATURES = 50
-"""취향 프로필의 취향 수 상한. 넘으면 읽지 않는다(요청당 비용 상한)."""
+MAX_TASTE_FEATURES = 200
+"""취향 프로필의 취향 수 상한. 넘으면 읽지 않는다(요청당 비용 상한). 전체 취향과 업종별
+취향 3벌을 함께 저장하므로 한 벌 50개의 4배다."""
 
 MAX_TASTE_FREE_TEXTS = 20
 """취향 프로필의 취향 문장 수 상한. 넘으면 읽지 않는다(요청당 비용 상한)."""

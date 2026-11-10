@@ -11,7 +11,7 @@ from fit_ai.match.taste_select import TasteFeature, TasteProfile, select_tastes
 
 # spec 샘플 5번 사용자에 소음, 음식 종류 취향과 취향 문장을 더했다.
 PROFILE = {
-    "schema": "taste-profile/v0",
+    "schema": "taste-profile/v1",
     "user_id": "u5",
     "original_text": "너무 매운 건 못 먹어요",
     "features": [
@@ -61,7 +61,25 @@ class TestReadProfile:
     def test_reject_other_schema(self) -> None:
         """프로필읽기_형식버전이다르면_오류로멈춘다"""
         with pytest.raises(ValueError, match="형식"):
-            TasteProfile.from_dict({**PROFILE, "schema": "taste-profile/v1"})
+            TasteProfile.from_dict({**PROFILE, "schema": "taste-profile/v0"})
+
+    def test_reads_real_weight_and_category(self) -> None:
+        """프로필읽기_세기가실수이고업종이있으면_그대로읽는다"""
+        feature = {"code": "COZY", "layer": "importance", "like": True}
+        profile = TasteProfile.from_dict(
+            {
+                **PROFILE,
+                "features": [
+                    {**feature, "weight": 4.319, "category": "CAFE"},
+                    {**feature, "weight": 12.5, "category": None},
+                ],
+            }
+        )
+
+        assert profile.features == (
+            TasteFeature("COZY", Layer.IMPORTANCE, True, 4.319, "CAFE"),
+            TasteFeature("COZY", Layer.IMPORTANCE, True, 12.5),
+        )
 
     @pytest.mark.parametrize(
         ("feature", "error"),
@@ -70,8 +88,13 @@ class TestReadProfile:
             ({"code": {"x": 1}}, TypeError),
             ({"weight": [1]}, TypeError),
             ({"weight": True}, TypeError),
-            ({"weight": 4}, ValueError),
+            ({"weight": "2"}, TypeError),
             ({"weight": 0}, ValueError),
+            ({"weight": -1.5}, ValueError),
+            ({"weight": float("nan")}, ValueError),
+            ({"weight": float("inf")}, ValueError),
+            ({"category": "PUB"}, ValueError),
+            ({"category": ["CAFE"]}, TypeError),
             ({"like": "false"}, TypeError),
             ({"layer": "unknown"}, ValueError),
         ],
@@ -129,7 +152,8 @@ class TestReadStored:
         )
 
         assert profile.user_id == ""
-        assert profile.features == (TasteFeature("QUIET", Layer.AXIS, True, 2),)
+        # 옛 정수 세기와 category가 없는 옛 원소(전체 취향)도 읽는다
+        assert profile.features == (TasteFeature("QUIET", Layer.AXIS, True, 2, None),)
         assert [(t.text, t.like, t.usable) for t in profile.free_texts] == [
             ("창가 자리", True, True),
             ("비싼 곳", False, False),
@@ -203,3 +227,37 @@ class TestSelectTastes:
     def test_other_requests_keep_all(self, request_codes: list[str]) -> None:
         """취향고르기_요청이중요기준이나시설뿐이면_취향을모두남긴다"""
         assert select_tastes(FEATURES, request_codes) == FEATURES
+
+
+class TestSelectCategory:
+    """업종별 취향 고르기"""
+
+    TASTES = (
+        TasteFeature("QUIET", Layer.AXIS, True, 0.66),
+        TasteFeature("QUIET", Layer.AXIS, True, 3.66, "CAFE"),
+        TasteFeature("LIVELY", Layer.AXIS, True, 2.34, "BAR"),
+        TasteFeature("VALUE_FOR_MONEY", Layer.IMPORTANCE, True, 2.5, "BAR"),
+    )
+
+    def test_request_category_uses_that_category(self) -> None:
+        """취향고르기_요청업종의취향이있으면_그업종취향만쓴다"""
+        selected = select_tastes(self.TASTES, [], category_group="BAR")
+
+        assert selected == self.TASTES[2:]
+
+    def test_request_category_without_its_tastes_uses_overall(self) -> None:
+        """취향고르기_요청업종의취향이없으면_전체취향을쓴다"""
+        selected = select_tastes(self.TASTES, [], category_group="RESTAURANT")
+
+        assert selected == self.TASTES[:1]
+
+    def test_request_without_category_uses_overall(self) -> None:
+        """취향고르기_요청에업종이없으면_전체취향을쓴다"""
+        assert select_tastes(self.TASTES, []) == self.TASTES[:1]
+
+    def test_old_features_without_category_serve_every_category(self) -> None:
+        """취향고르기_category가없는옛취향만있으면_어느업종요청에도그것을쓴다"""
+        selected = select_tastes(FEATURES, ["PURPOSE_DATE"], category_group="CAFE")
+
+        assert "QUIET" in codes(selected)
+        assert "PURPOSE_GROUP" not in codes(selected)

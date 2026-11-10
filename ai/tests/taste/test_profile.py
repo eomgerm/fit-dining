@@ -1,6 +1,12 @@
 import pytest
 
-from fit_ai.taste.profile import build_profile, compute_features, onboarding_rows
+from fit_ai.match.conditions import CATEGORY_NAMES
+from fit_ai.taste.profile import (
+    CATEGORIES,
+    build_profile,
+    compute_features,
+    onboarding_rows,
+)
 
 T0 = "2026-10-22T10:00:00+09:00"
 
@@ -23,13 +29,42 @@ def free_text(code, direction=1, **kw):
     return row | {"created_at": T0} | kw
 
 
-def feat(code, like, weight):
+def day(d):
+    return f"2026-10-{d:02d}T10:00:00+09:00"
+
+
+def feat(code, like, weight, category=None):
     layer = {"QUIET": "axis", "LIVELY": "axis", "FOOD_SPICY": "food"}.get(code)
     layer = layer or ("purpose" if code.startswith("PURPOSE_") else "importance")
-    return {"code": code, "layer": layer, "like": like, "weight": weight}
+    return {
+        "code": code,
+        "layer": layer,
+        "like": like,
+        "weight": weight,
+        "category": category,
+    }
+
+
+def w(after, revisit=False):
+    """뒤에 쓴 리뷰가 `after`건인 근거 하나의 무게(spec 3단계)."""
+    return 0.5 ** (after / 10) * (1.5 if revisit else 1)
+
+
+def strengths(features, category=None):
+    """한 업종(None이면 전체)의 {(코드, 좋아함): 세기}."""
+    return {
+        (f["code"], f["like"]): f["weight"]
+        for f in features
+        if f["category"] == category
+    }
+
+
+def approx(expected):
+    return pytest.approx(expected, abs=1e-3)
 
 
 def test_onboarding_pole_dislikes_opposite_pole():
+    # 온보딩만 한 회원은 지금과 같다. 세기는 1이고 업종별 취향은 없다
     rows = onboarding_rows("u1", ["QUIET", "PURPOSE_WORK"], T0)
     assert compute_features(rows) == [
         feat("QUIET", True, 1),
@@ -43,14 +78,56 @@ def test_unchosen_tags_are_not_dislikes():
     assert all(f["like"] for f in compute_features(rows))
 
 
-def test_reviews_at_many_places_cap_weight_at_3():
+def test_tag_at_4_places_is_stronger_than_at_1_place_without_cap():
+    rows = [review("VALUE_FOR_MONEY", p) for p in "abcd"] + [review("COZY", "e")]
+    assert strengths(compute_features(rows)) == {
+        ("COZY", True): 1,
+        ("VALUE_FOR_MONEY", True): 4,
+    }
+
+
+def test_reviews_at_many_places_add_up_past_old_cap_3():
+    # 온보딩 근거는 뒤에 리뷰 4건이 쌓여 w(4)다
     rows = onboarding_rows("u1", ["QUIET"], T0) + [review("QUIET", p) for p in "abcd"]
-    assert compute_features(rows) == [feat("QUIET", True, 3), feat("LIVELY", False, 3)]
+    assert strengths(compute_features(rows)) == approx(
+        {("QUIET", True): w(4) + 4, ("LIVELY", False): w(4) + 4}
+    )
+
+
+def test_old_evidence_weighs_half_after_10_more_reviews():
+    rows = [review("VALUE_FOR_MONEY", "a", day(1))]
+    rows += [review("COZY", str(d), day(d)) for d in range(2, 12)]
+    assert strengths(compute_features(rows))[("VALUE_FOR_MONEY", True)] == 0.5
+
+
+def test_onboarding_answer_is_older_than_every_review():
+    # 온보딩에서 골랐지만 그 뒤 리뷰 10곳에서 한 번도 고르지 않았다
+    rows = onboarding_rows("u1", ["VALUE_FOR_MONEY"], T0)
+    rows += [review("COZY", str(d), day(d)) for d in range(1, 11)]
+    assert strengths(compute_features(rows))[("VALUE_FOR_MONEY", True)] == 0.5
+
+
+def test_older_review_of_same_place_is_not_counted_as_later_review():
+    # 장소 b의 리뷰 2건 중 최신 1건만 뒤에 쓴 리뷰로 센다
+    rows = [review("VALUE_FOR_MONEY", "a", day(1))]
+    rows += [review("COZY", "b", day(2)), review("COZY", "b", day(3))]
+    assert strengths(compute_features(rows))[("VALUE_FOR_MONEY", True)] == approx(w(1))
+
+
+def test_revisit_review_weighs_more_than_plain_review():
+    rows = [review("COZY", "a", revisit_intent=True), review("VALUE_FOR_MONEY", "b")]
+    assert strengths(compute_features(rows)) == {
+        ("COZY", True): 1.5,
+        ("VALUE_FOR_MONEY", True): 1,
+    }
 
 
 def test_same_place_counts_latest_review_only():
     rows = [review("QUIET", "a", f"2026-10-2{d}T10:00:00+09:00") for d in range(5)]
-    assert compute_features(rows) == [feat("QUIET", True, 1), feat("LIVELY", False, 1)]
+    assert strengths(compute_features(rows)) == {
+        ("QUIET", True): 1,
+        ("LIVELY", False): 1,
+    }
 
 
 def test_latest_review_is_chosen_by_time_not_string():
@@ -59,7 +136,10 @@ def test_latest_review_is_chosen_by_time_not_string():
         review("QUIET", "a", "2026-10-22T10:00:00+09:00"),
         review("LIVELY", "a", "2026-10-22T02:00:00+00:00"),
     ]
-    assert compute_features(rows) == [feat("QUIET", False, 1), feat("LIVELY", True, 1)]
+    assert strengths(compute_features(rows)) == {
+        ("QUIET", False): 1,
+        ("LIVELY", True): 1,
+    }
 
 
 def test_opposite_reviews_lower_strength_without_flipping_onboarding_pole():
@@ -68,9 +148,20 @@ def test_opposite_reviews_lower_strength_without_flipping_onboarding_pole():
 
 
 def test_opposite_reviews_at_3_places_and_majority_flip_onboarding_pole():
-    # 조용 1 − 활기 3 = −2. 반대 평가가 3곳이고 과반이라 활기로 바꾼다(PRD FR-14)
+    # 조용 1곳 대 활기 3곳. 반대 평가가 3곳이고 과반이라 활기로 바꾼다(PRD FR-14).
+    # 세기는 활기 3 − 온보딩 조용 w(3)이다
     rows = onboarding_rows("u1", ["QUIET"], T0) + [review("LIVELY", p) for p in "abc"]
-    assert compute_features(rows) == [feat("QUIET", False, 2), feat("LIVELY", True, 2)]
+    assert strengths(compute_features(rows)) == approx(
+        {("QUIET", False): 3 - w(3), ("LIVELY", True): 3 - w(3)}
+    )
+
+
+def test_heavy_opposite_reviews_at_2_places_do_not_flip():
+    # 방향은 무게가 아니라 장소 수로 정한다. 재방문 리뷰 2곳은 무게가 커도 바꾸지 못한다
+    rows = onboarding_rows("u1", ["QUIET"], T0) + [
+        review("LIVELY", p, revisit_intent=True) for p in "ab"
+    ]
+    assert compute_features(rows) == []
 
 
 def test_opposite_reviews_at_one_place_do_not_flip():
@@ -89,7 +180,10 @@ def test_opposite_reviews_at_3_places_without_majority_do_not_flip():
         + [review("QUIET", p) for p in "ab"]
         + [review("LIVELY", p) for p in "cde"]
     )
-    assert compute_features(rows) == [feat("QUIET", True, 1), feat("LIVELY", False, 1)]
+    quiet = 2 * w(5) + 2 - 3
+    assert strengths(compute_features(rows)) == approx(
+        {("QUIET", True): quiet, ("LIVELY", False): quiet}
+    )
 
 
 def test_opposite_free_text_does_not_count_as_opposite_place():
@@ -128,12 +222,66 @@ def test_importance_and_purpose_never_become_dislikes():
 def test_sample_7_reviews_add_to_onboarding():
     rows = onboarding_rows("u1", ["QUIET", "PURPOSE_WORK"], T0)
     rows += [review("QUIET", p) for p in "abcd"] + [review("SHORT_WAIT", "e")]
-    assert compute_features(rows) == [
-        feat("QUIET", True, 3),
-        feat("LIVELY", False, 3),
-        feat("SHORT_WAIT", True, 1),
-        feat("PURPOSE_WORK", True, 1),
-    ]
+    assert strengths(compute_features(rows)) == approx(
+        {
+            ("QUIET", True): w(5) + 4,
+            ("LIVELY", False): w(5) + 4,
+            ("SHORT_WAIT", True): 1,
+            ("PURPOSE_WORK", True): w(5),
+        }
+    )
+
+
+def test_category_tastes_keep_noise_of_each_category_apart():
+    # 온보딩 조용, 카페 3곳 조용, 술집 3곳 활기. 온보딩 근거는 w(6)이다
+    rows = onboarding_rows("u1", ["QUIET"], T0)
+    rows += [review("QUIET", p, category="카페") for p in "abc"]
+    rows += [review("LIVELY", p, category="술집") for p in "def"]
+    features = compute_features(rows)
+    # 전체 취향은 서로 지워서 온보딩 몫만 남는다
+    overall = {("QUIET", True): w(6), ("LIVELY", False): w(6)}
+    assert strengths(features) == approx(overall)
+    assert strengths(features, "CAFE") == approx(
+        {("QUIET", True): w(6) + 3, ("LIVELY", False): w(6) + 3}
+    )
+    # 술집 안에서 반대 근거가 3곳이고 과반이라 활기로 바꾼다
+    assert strengths(features, "BAR") == approx(
+        {("QUIET", False): 3 - w(6), ("LIVELY", True): 3 - w(6)}
+    )
+    # 식당 리뷰 근거가 없어서 전체 취향을 쓴다
+    assert strengths(features, "RESTAURANT") == approx(overall)
+
+
+def test_category_noise_flips_only_with_3_places_in_that_category():
+    # 활기 3곳은 전체로는 방향을 바꾸지만 술집 안에서는 2곳뿐이다
+    rows = onboarding_rows("u1", ["QUIET"], T0)
+    rows += [review("LIVELY", p, category="술집") for p in "ab"]
+    rows += [review("LIVELY", "c", category="카페")]
+    features = compute_features(rows)
+    assert ("LIVELY", True) in strengths(features)
+    assert strengths(features, "BAR") == {}
+
+
+def test_one_way_tastes_mix_other_category_reviews_at_half():
+    rows = [review("VALUE_FOR_MONEY", p, category="식당") for p in "abcd"]
+    rows += [review("VALUE_FOR_MONEY", "e", category="카페")]
+    features = compute_features(rows)
+    assert [
+        strengths(features, c)[("VALUE_FOR_MONEY", True)]
+        for c in (None, "RESTAURANT", "CAFE", "BAR")
+    ] == [5, 4.5, 3, 2.5]
+
+
+def test_onboarding_counts_fully_in_every_category():
+    rows = onboarding_rows("u1", ["PURPOSE_WORK"], T0)
+    rows += [review("COZY", "a", category="카페")]
+    features = compute_features(rows)
+    for category in CATEGORIES.values():
+        assert strengths(features, category)[("PURPOSE_WORK", True)] == approx(w(1))
+
+
+def test_category_codes_are_request_category_codes():
+    assert set(CATEGORIES.values()) == set(CATEGORY_NAMES)
 
 
 @pytest.mark.parametrize("codes", [["FOOD_SPICY"], ["UNKNOWN"], ["QUIET", "LIVELY"]])
@@ -170,7 +318,7 @@ def test_profile_header_and_failed_interpretation_keeps_no_sentence():
     rows = onboarding_rows("u6", ["LIVELY"], T0)
     text = "프로젝트 끝나고 시끌벅적하게 한잔하는 곳"
     profile = build_profile("u6", rows, original_text=text)
-    assert profile["schema"] == "taste-profile/v0"
+    assert profile["schema"] == "taste-profile/v1"
     assert profile["user_id"] == "u6"
     assert profile["original_text"] == text
     assert profile["embedding"] == {

@@ -18,7 +18,7 @@ from pydantic import AwareDatetime, Field
 from fit_ai import embedding
 from fit_ai.features import FEATURES
 from fit_ai.taste.direct_input import MAX_CHIPS, MAX_LABEL
-from fit_ai.taste.profile import Row, compute_features, onboarding_rows
+from fit_ai.taste.profile import CATEGORIES, Row, compute_features, onboarding_rows
 from server.common import Body, Dependencies, log
 
 # BE 온보딩 태그 → 코드표 코드. 태그 이름을 통일하기 전까지 AI 경계에서 바꾼다
@@ -61,13 +61,15 @@ class ReviewEvidence(Body):
     """리뷰 이유 태그 하나. `code`는 사용자 쪽 코드로 바꿔서 받는다(리뷰 D-36).
 
     같은 장소 최신 1건을 시각으로 고르므로 `created_at`은 시간대가 있어야 한다.
+    `revisit_intent`는 그 리뷰의 재방문 의사이고 근거 무게를 높이는 데만 쓴다.
     """
 
     place_id: int
     review_id: int
-    category: str
+    category: Literal[tuple(CATEGORIES)]
     code: Literal[tuple(FEATURES)]
     created_at: AwareDatetime
+    revisit_intent: bool
 
 
 class RefreshBody(ProfileBody):
@@ -75,10 +77,13 @@ class RefreshBody(ProfileBody):
 
 
 class FeatureBody(Body):
+    """취향 하나. `category`가 null이면 전체 취향, 아니면 그 업종의 취향이다."""
+
     code: str
     layer: str
     like: bool
-    weight: int
+    weight: float
+    category: str | None
 
 
 class RefreshResponse(Body):
@@ -126,6 +131,7 @@ def to_rows(body: ProfileBody, reviews: Sequence[ReviewEvidence] = ()) -> list[R
             place_id=str(r.place_id),
             review_id=str(r.review_id),
             category=r.category,
+            revisit_intent=r.revisit_intent,
             created_at=r.created_at.isoformat(),
         )
         for r in reviews
