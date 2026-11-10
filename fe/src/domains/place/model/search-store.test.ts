@@ -258,7 +258,8 @@ describe("createSearchStore", () => {
     const { store } = setup();
     const here = { lat: 37.5, lng: 127.03 };
     store.setLocation({ status: "ok", here });
-    store.markOpenLocationChecked();
+    store.finishInitialView();
+    store.noticeLocation("denied");
     store.addEntry({
       id: "a",
       kind: "new",
@@ -279,7 +280,8 @@ describe("createSearchStore", () => {
       selectedPlaceId: undefined,
       regionLocked: false,
       location: { status: "ok", here },
-      openLocationChecked: true,
+      initialView: "done",
+      locationNotice: "denied",
       epoch: 1,
     });
     expect(store.getSnapshot().latestCards.size).toBe(0);
@@ -372,6 +374,46 @@ describe("createSearchStore", () => {
     unsubscribe();
     store.select(1);
     expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it("처음 이동은 pending에서 시작해 한 번만 applying이 되고, done 뒤에는 되돌아가지 않는다(spec 62번)", () => {
+    const { store } = setup();
+    expect(store.getSnapshot().initialView).toBe("pending");
+
+    expect(store.startInitialView()).toBe(true);
+    expect(store.getSnapshot().initialView).toBe("applying");
+    // 다른 화면은 같은 이동을 다시 가져가지 않는다
+    expect(store.startInitialView()).toBe(false);
+
+    store.finishInitialView();
+    expect(store.getSnapshot().initialView).toBe("done");
+    expect(store.startInitialView()).toBe(false);
+    expect(store.getSnapshot().initialView).toBe("done");
+  });
+
+  it("남은 처음 이동은 시작하지 않고도 끝낼 수 있다", () => {
+    const { store } = setup();
+
+    store.finishInitialView();
+
+    expect(store.getSnapshot().initialView).toBe("done");
+    expect(store.startInitialView()).toBe(false);
+  });
+
+  it("위치 알림은 한 번만 가져갈 수 있다(spec 63번)", () => {
+    const { store } = setup();
+    expect(store.takeLocationNotice()).toBeUndefined();
+
+    store.noticeLocation("failed");
+
+    expect(store.getSnapshot().locationNotice).toBe("failed");
+    expect(store.takeLocationNotice()).toBe("failed");
+    expect(store.takeLocationNotice()).toBeUndefined();
+    expect(store.getSnapshot().locationNotice).toBeUndefined();
+  });
+
+  it("store마다 페이지 세션이 하나다", () => {
+    expect(setup().store.pageSession).not.toBe(setup().store.pageSession);
   });
 
   it("바뀌지 않은 상태는 같은 스냅숏을 돌려준다", () => {

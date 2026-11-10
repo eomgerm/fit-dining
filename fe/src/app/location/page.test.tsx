@@ -66,7 +66,7 @@ it.each(["success", "denied", "unavailable", "timeout"])(
     expect(mocks.position).toHaveBeenCalledTimes(1);
     expect(mocks.position.mock.calls[0][2]).toEqual({
       timeout: 10_000,
-      maximumAge: 30_000,
+      maximumAge: 300_000,
     });
     expect(mocks.replace).not.toHaveBeenCalled();
     await act(async () => {

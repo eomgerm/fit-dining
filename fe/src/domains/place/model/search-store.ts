@@ -14,6 +14,13 @@ import type { LocationState } from "./search-request";
 
 export type EntryKind = "new" | "followUp" | "region";
 
+// 앱을 연 뒤 처음 얻은 위치로 지도를 한 번 옮기는 일의 상태(spec 62번). pending이면 아직 옮기지 않았고,
+// applying이면 한 화면이 옮기는 중이며, done이면 다시 옮기지 않는다
+export type InitialView = "pending" | "applying" | "done";
+
+// 앱을 열 때의 위치 조회 결과 중 화면이 알려야 하는 것(spec 63번)
+export type LocationNotice = "denied" | "failed";
+
 // 요청 기록(5-07)의 한 줄. 지금 thread에서 성공한 첫 페이지 요청 하나다
 export type HistoryEntry = {
   id: string;
@@ -46,8 +53,9 @@ export type SearchState = {
   regionLocked: boolean;
   // 상세 화면이 핏 점수와 추천 이유를 꺼내 쓴다
   latestCards: ReadonlyMap<number, PlaceCard>;
-  // 화면을 열 때의 위치 권한 확인을 이번 페이지 세션에 이미 했는지. 상세에서 돌아와도 다시 하지 않는다
-  openLocationChecked: boolean;
+  initialView: InitialView;
+  // 아직 아무 화면도 띄우지 않은 위치 알림. 지금 보이는 화면이 한 번 가져가 띄운다
+  locationNotice?: LocationNotice;
   // 로그인 세션이 바뀌어 처음으로 되돌린 횟수. 그 전에 시작한 요청의 응답은 버린다(search-thread D-6)
   epoch: number;
 };
@@ -93,7 +101,7 @@ export function createSearchStore(now: () => number = Date.now) {
     location: { status: "idle" },
     regionLocked: false,
     latestCards: new Map(),
-    openLocationChecked: false,
+    initialView: "pending",
     epoch: 0,
   };
   const listeners = new Set<() => void>();
@@ -111,6 +119,9 @@ export function createSearchStore(now: () => number = Date.now) {
 
   return {
     getSnapshot: () => state,
+
+    // 이 store가 사는 동안이 페이지 세션 하나다. 앱을 열 때의 위치 조회를 페이지 세션에 한 번만 하는 데 쓴다
+    pageSession: {},
 
     subscribe(listener: () => void) {
       listeners.add(listener);
@@ -191,11 +202,29 @@ export function createSearchStore(now: () => number = Date.now) {
       update({ regionLocked: true });
     },
 
-    markOpenLocationChecked() {
-      update({ openLocationChecked: true });
+    // 처음 이동을 이 화면이 가져간다. 이미 다른 화면이 가져갔거나 끝났으면 false다
+    startInitialView() {
+      if (state.initialView !== "pending") return false;
+      update({ initialView: "applying" });
+      return true;
     },
 
-    // 로그인 세션이 바뀌면 처음 화면으로 되돌린다. 현재 위치와 위치 권한 확인은 기기의 것이라 남긴다
+    // 처음 이동이 끝났거나 더 할 필요가 없다(위치를 못 얻음, "내 위치", 사용자가 지도를 움직임, 지도 실패)
+    finishInitialView() {
+      if (state.initialView !== "done") update({ initialView: "done" });
+    },
+
+    noticeLocation(notice: LocationNotice) {
+      update({ locationNotice: notice });
+    },
+
+    takeLocationNotice() {
+      const notice = state.locationNotice;
+      if (notice) update({ locationNotice: undefined });
+      return notice;
+    },
+
+    // 로그인 세션이 바뀌면 처음 화면으로 되돌린다. 현재 위치, 처음 이동, 위치 알림은 기기의 것이라 남긴다
     reset() {
       update({
         threadId: undefined,

@@ -1,12 +1,8 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { useEffect, useEffectEvent } from "react";
-
-import { useToast } from "@/shared/ui/overlay/toast";
 
 import { placeQueries } from "../api/place-queries";
 import { filterNearby, orderNearby, YEOKSAM_STATION } from "../model/nearby";
 import { searchStore, type HistoryEntry } from "../model/search-store";
-import { LOCATION_FAILED_MESSAGE, locateDevice } from "./locate-device";
 import { useSearchStore } from "./use-search-store";
 
 const NO_ENTRY: HistoryEntry = {
@@ -34,13 +30,12 @@ export function usePastResults() {
 }
 
 // 한 요청 기록 항목의 결과. 첫 페이지는 기록에 넣기 전에(다시 연 thread면 저장한 응답으로) 캐시에 받아 두었으므로
-// 여기서는 캐시를 읽고, loadMore일 때만 다음 페이지를 새로 받는다. 근처 응답이면 위치를 얻은 뒤 반경으로 거른다
+// 여기서는 캐시를 읽고, loadMore일 때만 다음 페이지를 새로 받는다. 근처 응답이면 위치가 있을 때 반경으로 거른다
 function useEntryResults(
   target: HistoryEntry | undefined,
   { loadMore: canLoadMore }: { loadMore: boolean },
 ) {
-  const { location } = useSearchStore();
-  const toast = useToast();
+  const { location, initialView } = useSearchStore();
   const entry = target ?? NO_ENTRY;
   const query = useInfiniteQuery({
     ...placeQueries.search(entry.id, entry.request),
@@ -64,19 +59,9 @@ function useEntryResults(
     });
   }
 
-  // 근처 응답을 받았는데 아직 위치를 시도한 적이 없으면 위치를 요청한다
-  const shouldLocate = nearby && location.status === "idle";
-  const locate = useEffectEvent(() => {
-    void locateDevice().then((here) => {
-      if (!here) toast(LOCATION_FAILED_MESSAGE);
-    });
-  });
-  useEffect(() => {
-    if (shouldLocate) locate();
-  }, [shouldLocate]);
-
-  const locating =
-    nearby && (location.status === "idle" || location.status === "pending");
+  // 근처 응답을 받아도 위치를 요청하지 않는다. 앱을 열 때의 위치 결정과 처음 이동이 끝나기 전까지만 기다리고,
+  // 그 뒤에도 위치가 없으면 거르지 않고 보인다(spec 41번)
+  const locating = nearby && initialView !== "done";
   // 점수가 없는 근처 응답은 기준 지점에서 가까운 순이다. 위치가 있으면 그 위치, 없으면 역삼역이 기준이다
   const origin = location.status === "ok" ? location.here : YEOKSAM_STATION;
   const nearbyCards = orderNearby(

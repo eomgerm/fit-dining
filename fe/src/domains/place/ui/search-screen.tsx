@@ -34,7 +34,6 @@ import {
 } from "../model/bookmark";
 import type {
   CategoryGroup,
-  LatLng,
   PlaceCard,
   PlaceSearchRequest,
 } from "../model/place-types";
@@ -56,10 +55,10 @@ import { FollowUpInput } from "./follow-up-input";
 import { HistoryTimeline } from "./history-timeline";
 import { isOfflineError, LoadFailed } from "./load-failed";
 import {
+  initialLocation,
   LOCATION_DENIED_MESSAGE,
   LOCATION_FAILED_MESSAGE,
-  locateDevice,
-  locateIfGranted,
+  locateFromButton,
 } from "./locate-device";
 import { LoginPrompt, SAVED_LOGIN_MESSAGE } from "./login-prompt";
 import { NearbyCarousel } from "./nearby-carousel";
@@ -101,7 +100,14 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
   const savedCategory = parseCategory(params.get("category"));
   const queryClient = useQueryClient();
   const toast = useToast();
-  const { threadId, entries, selectedPlaceId, epoch } = useSearchStore();
+  const {
+    threadId,
+    entries,
+    selectedPlaceId,
+    epoch,
+    initialView,
+    locationNotice,
+  } = useSearchStore();
   const results = useViewingResults();
   const { viewing } = results;
   const pastResults = usePastResults();
@@ -127,8 +133,6 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
   const searchGeneration = useRef(0);
   // 받는 중인 첫 페이지의 쿼리 키. 검색을 버리면 그 요청을 끊는다
   const pendingKey = useRef<QueryKey | undefined>(undefined);
-  // 지도를 마지막으로 옮겨 준 기기 위치. 새 위치를 얻을 때만 지도를 옮긴다
-  const centeredOn = useRef<LatLng | undefined>(undefined);
   // "내 위치"를 눌러 위치를 찾고 지도를 옮기는 중. 버튼 아이콘이 파란색이다(D-100)
   const [locating, setLocating] = useState(false);
   // 화면 키보드 높이. 바닥의 검색창·후속 입력창만 그만큼 올린다
@@ -220,29 +224,29 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
     ? selectedPlaceId
     : nearby.cards[0]?.place.id;
 
-  // 권한이 이미 허용이면 화면을 열 때 묻지 않고 위치를 받는다
-  const locateOnOpen = useEffectEvent(() => {
-    void locateIfGranted().then((result) => {
-      if (result === "denied") toast(LOCATION_DENIED_MESSAGE);
-      if (result === "failed") toast(LOCATION_FAILED_MESSAGE);
-    });
-  });
+  // 앱을 열 때의 위치 결정은 페이지 세션에 한 번이고, 다시 들어온 화면은 같은 결과를 기다린다(spec 40번)
   useEffect(() => {
-    locateOnOpen();
+    void initialLocation();
   }, []);
 
-  // 위치를 얻으면(화면을 열 때, "내 위치", 근처 응답) 지도를 그 위치로 옮긴다. 이동을 마치면 파란색을 끈다.
-  // "내 위치"로 얻은 위치면(파란색인 동안) 확대 정도도 첫 화면과 같게 맞춘다(D-104)
-  const moveToHere = useEffectEvent((coord: LatLng) => {
-    void mapRef.current
-      ?.panTo(coord, { resetZoom: locating })
-      .then(() => setLocating(false));
+  // 앱을 연 뒤 처음 얻은 위치로 지도를 한 번만 옮긴다. 확대 정도는 그대로다. here가 바뀐 것만으로는 옮기지 않고,
+  // 이미 다른 화면이 옮기는 중이거나 끝났으면(버튼, 사용자가 지도를 움직임) 옮기지 않는다(spec 62번)
+  useEffect(() => {
+    if (initialView !== "pending" || !mapReady || !here) return;
+    if (!searchStore.startInitialView()) return;
+    const move = mapRef.current?.panTo(here) ?? Promise.resolve();
+    void move.then(() => searchStore.finishInitialView());
+  }, [initialView, mapReady, here]);
+
+  // 처음 조회의 알림은 지금 보이는 화면이 한 번 가져가 띄운다. 숨겨진 화면은 Effect가 돌지 않는다(spec 63번)
+  const showLocationNotice = useEffectEvent(() => {
+    const notice = searchStore.takeLocationNotice();
+    if (notice === "denied") toast(LOCATION_DENIED_MESSAGE);
+    if (notice === "failed") toast(LOCATION_FAILED_MESSAGE);
   });
   useEffect(() => {
-    if (!mapReady || !here || centeredOn.current === here) return;
-    centeredOn.current = here;
-    moveToHere(here);
-  }, [mapReady, here]);
+    if (locationNotice) showLocationNotice();
+  }, [locationNotice]);
 
   // 다른 화면으로 가면(Next가 이 화면을 숨기면) 찾는 중 표시를 끈다
   useEffect(() => () => setLocating(false), []);
@@ -454,14 +458,19 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
     bookmarks.login(savedPlacesHref(savedView ? savedCategory : undefined));
   }
 
-  // 찾는 중에 다시 누르면 무시한다. 위치를 얻으면 위의 Effect가 지도를 옮긴 뒤 파란색을 끈다
+  // 찾는 중에 다시 누르면 무시한다. 남은 처음 이동을 대신하고, 얻은 위치로 확대 정도를 첫 화면과 같게 맞추며
+  // 옮긴 뒤 파란색을 끈다(D-100, D-104). 실패 알림은 누를 때마다 띄운다
   async function handleMyLocation() {
     if (locating) return;
     setLocating(true);
-    if (!(await locateDevice())) {
+    const found = await locateFromButton();
+    if (!found) {
       setLocating(false);
       toast(LOCATION_FAILED_MESSAGE);
+      return;
     }
+    await mapRef.current?.panTo(found, { resetZoom: true });
+    setLocating(false);
   }
 
   const savedItems =
@@ -520,12 +529,18 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
         className={
           map.full ? "absolute inset-0" : "absolute inset-x-0 top-0 h-1/2"
         }
+        rememberView
         pins={map.pins}
         selectedId={map.selectedId}
         myLocation={here}
         onPinClick={map.onPinClick}
-        onUserMove={() => setMapMoved(true)}
+        onUserMove={() => {
+          setMapMoved(true);
+          // 사용자가 지도를 움직이면 남은 처음 이동은 하지 않는다(spec 62번)
+          searchStore.finishInitialView();
+        }}
         onReadyChange={setMapReady}
+        onUnavailable={searchStore.finishInitialView}
       />
 
       {/* 저장한 장소 화면에는 [뒤로]와 "내 위치"만 있다(D-12) */}

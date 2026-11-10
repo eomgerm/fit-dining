@@ -13,6 +13,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import { Activity } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createQueryClient } from "@/shared/api/query-client";
@@ -155,6 +156,25 @@ function renderScreen() {
   );
 }
 
+// 다른 화면으로 가면 Next가 이 화면을 숨겨 두었다가(Effect 정리) 돌아오면 다시 보인다. 그 숨김을 흉내 낸다
+function renderHideableScreen() {
+  const client = createQueryClient();
+  const ui = (mode: "visible" | "hidden") => (
+    <QueryClientProvider client={client}>
+      <ToastProvider>
+        <Activity mode={mode}>
+          <SearchScreen bookmarks={guest} />
+        </Activity>
+      </ToastProvider>
+    </QueryClientProvider>
+  );
+  const { rerender } = render(ui("visible"));
+  return {
+    hide: () => rerender(ui("hidden")),
+    show: () => rerender(ui("visible")),
+  };
+}
+
 const mapState = () =>
   document.querySelector("[data-map-state]")?.getAttribute("data-map-state");
 
@@ -231,6 +251,8 @@ function stubNaverMaps({ Marker }: { Marker?: unknown } = {}) {
     lng: () => lng,
   });
   const created: {
+    // 지도를 만들 때 넘긴 처음 중심과 확대 정도
+    options: { center: { lat(): number; lng(): number }; zoom: number };
     setSize: ReturnType<typeof vi.fn>;
     panTo: ReturnType<typeof vi.fn>;
     morph: ReturnType<typeof vi.fn>;
@@ -239,7 +261,13 @@ function stubNaverMaps({ Marker }: { Marker?: unknown } = {}) {
   }[] = [];
   const maps = {
     Map: class {
-      constructor() {
+      constructor(
+        _: unknown,
+        readonly options: {
+          center: { lat(): number; lng(): number };
+          zoom: number;
+        },
+      ) {
         created.push(this);
       }
       getBounds = () => ({
@@ -255,7 +283,14 @@ function stubNaverMaps({ Marker }: { Marker?: unknown } = {}) {
       setSize = vi.fn();
       destroy() {}
     },
-    LatLng: class {},
+    LatLng: class {
+      constructor(
+        readonly latValue: number,
+        readonly lngValue: number,
+      ) {}
+      lat = () => this.latValue;
+      lng = () => this.lngValue;
+    },
     Size: class {
       constructor(
         readonly width: number,
@@ -343,13 +378,34 @@ function stubNearbyItems(items: PlaceCard[]) {
 const nearbyList = () =>
   screen.findByRole("region", { name: "주변 추천 장소" });
 
-function stubGeolocationDenied() {
-  vi.stubGlobal("navigator", {
-    geolocation: {
-      getCurrentPosition: (_: PositionCallback, error: PositionErrorCallback) =>
-        error({ code: 1 } as GeolocationPositionError),
+const HERE = { lat: 37.5, lng: 127.03 };
+
+// 권한은 허용이고 위치 조회는 테스트가 끝낼 때까지 기다린다. 부른 순서대로 끝낸다
+function stubLocationLater() {
+  const pending: { success: PositionCallback; error: PositionErrorCallback }[] =
+    [];
+  const getCurrentPosition = vi.fn(
+    (success: PositionCallback, error: PositionErrorCallback) => {
+      pending.push({ success, error });
     },
+  );
+  vi.stubGlobal("navigator", {
+    geolocation: { getCurrentPosition },
+    permissions: { query: async () => ({ state: "granted" }) },
   });
+  return {
+    getCurrentPosition,
+    succeed: () =>
+      act(async () =>
+        pending.shift()!.success({
+          coords: { latitude: HERE.lat, longitude: HERE.lng },
+        } as GeolocationPosition),
+      ),
+    fail: () =>
+      act(async () =>
+        pending.shift()!.error({ code: 1 } as GeolocationPositionError),
+      ),
+  };
 }
 
 describe("SearchScreen", () => {
@@ -377,10 +433,13 @@ describe("SearchScreen", () => {
       ]);
     });
 
-    it("위치를 얻지 못한 뒤에는 '새 검색' 뒤에도 첫 페이지 요청에 현재 지도 영역을 담는다", async () => {
-      stubGeolocationDenied();
+    it("위치를 얻지 못한 뒤에는(앱을 열 때 권한 거부 포함) '새 검색' 뒤에도 첫 페이지 요청에 현재 지도 영역을 담는다", async () => {
+      stubLocation({ permission: "denied" });
       renderScreen();
       await waitFor(() => expect(mapState()).toBe("ready"));
+      await waitFor(() =>
+        expect(stores.current.getSnapshot().location.status).toBe("failed"),
+      );
       await newSearch("근처 카페");
       await screen.findByText(
         "위치를 확인할 수 없어 지역 기준으로 보여 드려요",
@@ -390,9 +449,11 @@ describe("SearchScreen", () => {
       await newSearch("역삼 카페");
       await followUp("더 조용하게");
 
-      expect(searchBodies[0].mapBounds).toBeUndefined();
-      expect(searchBodies[1].mapBounds).toEqual(BOUNDS);
-      expect(searchBodies[2].mapBounds).toEqual(BOUNDS);
+      expect(searchBodies.map((body) => body.mapBounds)).toEqual([
+        BOUNDS,
+        BOUNDS,
+        BOUNDS,
+      ]);
     });
 
     it("'이 지역에서 검색'은 지금 보는 요청을 지도 영역과 다시 보내고, '새 검색' 전까지 후속 조건에도 담는다", async () => {
@@ -485,6 +546,297 @@ describe("SearchScreen", () => {
       });
     });
 
+    describe("지도 시작 화면 (D-108)", () => {
+      const startView = () => {
+        const { center, zoom } = map.created[0].options;
+        return { lat: center.lat(), lng: center.lng(), zoom };
+      };
+      const savedView = () => localStorage.getItem("fd.map.view.v1");
+
+      it("저장된 화면에서 시작하고, 멈출 때마다(지도를 만든 뒤 처음 멈춤은 빼고) 그 화면을 저장한다", async () => {
+        localStorage.setItem(
+          "fd.map.view.v1",
+          JSON.stringify({ lat: 36.35, lng: 127.34, zoom: 13 }),
+        );
+        renderScreen();
+        await waitFor(() => expect(mapState()).toBe("ready"));
+        expect(startView()).toEqual({ lat: 36.35, lng: 127.34, zoom: 13 });
+
+        const created = map.created[0];
+        created.getCenter.mockReturnValue({ lat: () => 37.4, lng: () => 127 });
+        created.getZoom.mockReturnValue(16);
+        map.fire("idle");
+        expect(JSON.parse(savedView()!)).toEqual({
+          lat: 36.35,
+          lng: 127.34,
+          zoom: 13,
+        });
+
+        map.fire("idle");
+        expect(JSON.parse(savedView()!)).toEqual({
+          lat: 37.4,
+          lng: 127,
+          zoom: 16,
+        });
+        // 지도 화면 말고는 기기 위치를 담은 키가 없다
+        expect(Object.keys(localStorage)).toEqual(["fd.map.view.v1"]);
+        // 로그인 세션이 바뀌어도 지우지 않는다
+        act(() => stores.current.reset());
+        expect(JSON.parse(savedView()!)).toEqual({
+          lat: 37.4,
+          lng: 127,
+          zoom: 16,
+        });
+      });
+
+      it.each([
+        ["저장값이 없으면", undefined],
+        ["저장값이 깨졌으면", '{"lat":37.5,"lng":127}'],
+      ])("%s 기본 화면(SSAFY 서울캠퍼스)에서 시작한다", async (_, raw) => {
+        if (raw) localStorage.setItem("fd.map.view.v1", raw);
+        renderScreen();
+        await waitFor(() => expect(mapState()).toBe("ready"));
+
+        expect(startView()).toEqual({ lat: 37.5013, lng: 127.0396, zoom: 15 });
+      });
+
+      it("기기 저장소가 예외를 던져도 기본 화면으로 그리고 멈춰도 오류가 없다", async () => {
+        vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+          throw new Error("blocked");
+        });
+        const setItem = vi
+          .spyOn(Storage.prototype, "setItem")
+          .mockImplementation(() => {
+            throw new Error("blocked");
+          });
+        try {
+          renderScreen();
+          await waitFor(() => expect(mapState()).toBe("ready"));
+          expect(startView()).toEqual({
+            lat: 37.5013,
+            lng: 127.0396,
+            zoom: 15,
+          });
+
+          map.fire("idle");
+          map.fire("idle");
+          expect(setItem).toHaveBeenCalled();
+          expect(mapState()).toBe("ready");
+        } finally {
+          vi.restoreAllMocks();
+        }
+      });
+    });
+
+    describe("처음 이동 (D-108)", () => {
+      const initialView = () => stores.current.getSnapshot().initialView;
+
+      it("위치가 지도 준비보다 먼저 끝나도 그 위치로 한 번만 옮기고, 다시 마운트하거나 로그인 세션이 바뀌어도 다시 옮기지 않는다", async () => {
+        stubLocation({ permission: "granted", position: HERE });
+        renderScreen();
+        await waitFor(() => expect(mapState()).toBe("ready"));
+        await waitFor(() =>
+          expect(map.created[0].panTo).toHaveBeenCalledTimes(1),
+        );
+        expect(map.created[0].morph).not.toHaveBeenCalled();
+        expect(initialView()).toBe("applying");
+        map.fire("idle");
+        await waitFor(() => expect(initialView()).toBe("done"));
+
+        // here가 store에 남은 채 화면을 다시 마운트한다
+        cleanup();
+        renderScreen();
+        await waitFor(() => expect(mapState()).toBe("ready"));
+        act(() => stores.current.reset());
+        await act(async () => {});
+        expect(map.created[1].panTo).not.toHaveBeenCalled();
+        expect(stores.current.getSnapshot().location).toEqual({
+          status: "ok",
+          here: HERE,
+        });
+      });
+
+      it("위치가 지도 준비보다 늦게 끝나도 한 번만 옮기고 확대 정도는 그대로다", async () => {
+        const device = stubLocationLater();
+        renderScreen();
+        await waitFor(() => expect(mapState()).toBe("ready"));
+        await waitFor(() =>
+          expect(device.getCurrentPosition).toHaveBeenCalled(),
+        );
+        expect(map.created[0].panTo).not.toHaveBeenCalled();
+
+        await device.succeed();
+
+        await waitFor(() =>
+          expect(map.created[0].panTo).toHaveBeenCalledTimes(1),
+        );
+        const [coord] = map.created[0].panTo.mock.calls[0];
+        expect({ lat: coord.lat(), lng: coord.lng() }).toEqual(HERE);
+        expect(map.created[0].morph).not.toHaveBeenCalled();
+        map.fire("idle");
+        await waitFor(() => expect(initialView()).toBe("done"));
+        expect(map.created[0].panTo).toHaveBeenCalledTimes(1);
+      });
+
+      it("처음 이동 중에 화면을 숨겼다 다시 보여도 다시 옮기지 않는다", async () => {
+        const device = stubLocationLater();
+        const view = renderHideableScreen();
+        await waitFor(() => expect(mapState()).toBe("ready"));
+        await waitFor(() =>
+          expect(device.getCurrentPosition).toHaveBeenCalled(),
+        );
+        await device.succeed();
+        await waitFor(() =>
+          expect(map.created[0].panTo).toHaveBeenCalledTimes(1),
+        );
+
+        view.hide();
+        view.show();
+        await act(async () => {});
+
+        expect(map.created[0].panTo).toHaveBeenCalledTimes(1);
+        expect(map.created).toHaveLength(1);
+        map.fire("idle");
+        await waitFor(() => expect(initialView()).toBe("done"));
+      });
+
+      it("위치를 기다리는 동안 '내 위치'를 누르면 위치 조회 1회, 이동 1회(확대 정도 15)이고 처음 이동은 하지 않는다", async () => {
+        const device = stubLocationLater();
+        renderScreen();
+        await waitFor(() => expect(mapState()).toBe("ready"));
+        await waitFor(() =>
+          expect(device.getCurrentPosition).toHaveBeenCalled(),
+        );
+
+        const locationButton = screen.getByRole("button", { name: "내 위치" });
+        // 앱을 열 때의 위치 요청에는 색이 바뀌지 않고, 그 조회 중에 누르면 그 순간부터 파란색이다
+        expect(locationButton.getAttribute("aria-busy")).toBe("false");
+        fireEvent.click(locationButton);
+        expect(locationButton.getAttribute("aria-busy")).toBe("true");
+        expect(initialView()).toBe("done");
+        await device.succeed();
+
+        await waitFor(() =>
+          expect(map.created[0].morph).toHaveBeenCalledWith(
+            expect.anything(),
+            15,
+          ),
+        );
+        expect(map.created[0].morph).toHaveBeenCalledTimes(1);
+        expect(map.created[0].panTo).not.toHaveBeenCalled();
+        expect(device.getCurrentPosition).toHaveBeenCalledTimes(1);
+      });
+
+      it("위치를 기다리는 동안 지도를 끌면 처음 이동이 취소되고, 늦게 온 위치는 내 위치 점으로만 남는다", async () => {
+        const device = stubLocationLater();
+        renderScreen();
+        await waitFor(() => expect(mapState()).toBe("ready"));
+        await waitFor(() =>
+          expect(device.getCurrentPosition).toHaveBeenCalled(),
+        );
+
+        map.fire("dragend");
+        expect(initialView()).toBe("done");
+        await device.succeed();
+
+        expect(stores.current.getSnapshot().location).toEqual({
+          status: "ok",
+          here: HERE,
+        });
+        await act(async () => {});
+        expect(map.created[0].panTo).not.toHaveBeenCalled();
+        expect(map.created[0].morph).not.toHaveBeenCalled();
+      });
+
+      it("위치가 늦게 오면 그때 그 위치 기준으로 주변 카드를 다시 거른다", async () => {
+        const device = stubLocationLater();
+        renderScreen();
+        const list = await nearbyList();
+        await waitFor(() =>
+          expect(within(list).getByText(/· 역삼역 \d+m$/)).toBeTruthy(),
+        );
+
+        await device.succeed();
+
+        await waitFor(() =>
+          expect(within(list).getByText(/· 0m$/)).toBeTruthy(),
+        );
+        expect(within(list).queryByText(/역삼역/)).toBeNull();
+      });
+
+      it("처음 이동으로는 결과 화면의 '이 지역에서 검색' 버튼이 나타나지 않는다", async () => {
+        const device = stubLocationLater();
+        renderScreen();
+        await waitFor(() => expect(mapState()).toBe("ready"));
+        await waitFor(() =>
+          expect(device.getCurrentPosition).toHaveBeenCalled(),
+        );
+        await newSearch("역삼 카페");
+
+        await device.succeed();
+        await waitFor(() => expect(map.created[0].panTo).toHaveBeenCalled());
+        map.fire("idle");
+
+        expect(regionButton()).toBeNull();
+      });
+
+      it("근처 응답에서 '위치를 확인하는 중'은 처음 이동이 끝나기 전에만 보이고, 끝나면 위치로 거른 결과가 보인다", async () => {
+        const device = stubLocationLater();
+        renderScreen();
+        await waitFor(() => expect(mapState()).toBe("ready"));
+        await waitFor(() =>
+          expect(device.getCurrentPosition).toHaveBeenCalled(),
+        );
+        fireEvent.change(screen.getByRole("textbox", { name: "장소 검색" }), {
+          target: { value: "근처 카페" },
+        });
+        fireEvent.submit(screen.getByRole("search"));
+
+        expect(await screen.findByText("위치를 확인하는 중")).toBeTruthy();
+
+        await device.succeed();
+        map.fire("idle");
+        const list = await screen.findByRole("list", { name: "추천 장소" });
+        await waitFor(() =>
+          expect(within(list).getAllByRole("listitem")).toHaveLength(1),
+        );
+        expect(screen.queryByText("위치를 확인하는 중")).toBeNull();
+      });
+    });
+
+    describe("위치 알림 (D-108)", () => {
+      it("처음 조회를 시작한 화면이 숨겨져도 알림은 보이는 화면에서 한 번만 뜬다", async () => {
+        const device = stubLocationLater();
+        const view = renderHideableScreen();
+        await waitFor(() =>
+          expect(device.getCurrentPosition).toHaveBeenCalled(),
+        );
+
+        view.hide();
+        await device.fail();
+        expect(screen.queryByText("위치를 확인할 수 없어요")).toBeNull();
+
+        view.show();
+        expect(await screen.findByText("위치를 확인할 수 없어요")).toBeTruthy();
+        view.hide();
+        view.show();
+        await act(async () => {});
+        expect(screen.getAllByText("위치를 확인할 수 없어요")).toHaveLength(1);
+        expect(stores.current.getSnapshot().locationNotice).toBeUndefined();
+      });
+
+      it("'내 위치' 버튼 실패 알림은 처음 조회 알림과 따로 누를 때마다 뜬다", async () => {
+        stubLocation({ permission: "denied" });
+        renderScreen();
+        await waitFor(() => expect(mapState()).toBe("ready"));
+        expect(await screen.findByText(/위치 권한이 꺼져 있어요/)).toBeTruthy();
+
+        fireEvent.click(screen.getByRole("button", { name: "내 위치" }));
+
+        expect(await screen.findByText("위치를 확인할 수 없어요")).toBeTruthy();
+      });
+    });
+
     describe("첫 화면", () => {
       it("위치 권한이 이미 허용이면 열 때 위치를 받아 지도를 그 위치로 옮기고, 그 위치 기준 주변 카드를 보인다", async () => {
         const getCurrentPosition = stubLocation({
@@ -531,7 +883,7 @@ describe("SearchScreen", () => {
           expect(getCurrentPosition).toHaveBeenCalledWith(
             expect.any(Function),
             expect.any(Function),
-            expect.objectContaining({ maximumAge: 30_000 }),
+            expect.objectContaining({ maximumAge: 300_000 }),
           );
 
           map.fire("idle");
@@ -673,6 +1025,23 @@ describe("SearchScreen", () => {
   });
 
   describe("지도를 쓸 수 없을 때", () => {
+    it("지도가 없으면 처음 이동을 끝내고, 늦게 온 위치는 store에만 둔다", async () => {
+      const device = stubLocationLater();
+      renderScreen();
+      await waitFor(() => expect(mapState()).toBe("empty"));
+      await waitFor(() =>
+        expect(stores.current.getSnapshot().initialView).toBe("done"),
+      );
+      await waitFor(() => expect(device.getCurrentPosition).toHaveBeenCalled());
+
+      await device.succeed();
+
+      expect(stores.current.getSnapshot().location).toEqual({
+        status: "ok",
+        here: HERE,
+      });
+    });
+
     // 인증 실패 알림은 모듈에 남으므로 그 테스트보다 먼저 둔다
     it("지도 SDK가 핀을 만들다 던지면(인증 실패 직후) 지도 영역이 비고 카드 목록은 동작한다", async () => {
       config.value = { env: "dev", naverMapClientId: "key" };
@@ -944,8 +1313,10 @@ describe("SearchScreen", () => {
   });
 
   describe("근처 검색", () => {
+    // 권한은 허용이라 앱을 열 때 위치를 받는다. denied면 위치를 얻지 못한다
     function stubGeolocation(result: { lat: number; lng: number } | "denied") {
       vi.stubGlobal("navigator", {
+        permissions: { query: async () => ({ state: "granted" }) },
         geolocation: {
           getCurrentPosition: (
             success: PositionCallback,
@@ -1040,6 +1411,28 @@ describe("SearchScreen", () => {
         expect(within(list).getAllByRole("listitem")).toHaveLength(3),
       );
       expect(rankedNames(list)).toEqual(["장소 1", "장소 3", "장소 2"]);
+    });
+
+    it("위치 권한이 정해지지 않아 위치가 없으면 근처 응답을 받아도 위치를 묻지 않고, 안내 없이 거르지 않고 역삼역에서 가까운 순으로 보인다", async () => {
+      stubUnscoredNearby();
+      const getCurrentPosition = stubLocation({ permission: "prompt" });
+      renderScreen();
+      await waitFor(() =>
+        expect(stores.current.getSnapshot().initialView).toBe("done"),
+      );
+
+      const list = await newSearch("근처 카페");
+
+      await waitFor(() =>
+        expect(within(list).getAllByRole("listitem")).toHaveLength(3),
+      );
+      expect(rankedNames(list)).toEqual(["장소 2", "장소 3", "장소 1"]);
+      expect(
+        screen.queryByText("위치를 확인할 수 없어 지역 기준으로 보여 드려요"),
+      ).toBeNull();
+      expect(screen.queryByText("위치를 확인하는 중")).toBeNull();
+      expect(getCurrentPosition).not.toHaveBeenCalled();
+      expect(stores.current.getSnapshot().location).toEqual({ status: "idle" });
     });
 
     it("위치를 얻지 못해도 점수가 없는 근처 결과는 역삼역에서 가까운 순이다", async () => {

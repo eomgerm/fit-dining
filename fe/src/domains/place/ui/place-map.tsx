@@ -12,8 +12,9 @@ import {
 import { cn } from "@/shared/lib/cn";
 import { loadRuntimeConfig } from "@/shared/lib/runtime-config";
 
-import { YEOKSAM_STATION } from "../model/nearby";
+import { DEFAULT_VIEW, type MapView } from "../model/map-view";
 import type { LatLng, MapBounds } from "../model/place-types";
+import { readMapView, writeMapView } from "./map-view-storage";
 
 // 네이버 지도 웹 SDK(JavaScript v3)에서 쓰는 부분만 적은 타입
 type NaverLatLng = { lat(): number; lng(): number };
@@ -51,9 +52,8 @@ declare global {
   }
 }
 
-// 역삼역. 결과에 맞춰 화면을 옮기지 않으므로(fitBounds 없음) 처음 중심이다
-const DEFAULT_CENTER = YEOKSAM_STATION;
-const DEFAULT_ZOOM = 15;
+// 첫 화면의 확대 정도. "내 위치"도 이 정도로 맞춘다(D-104)
+const DEFAULT_ZOOM = DEFAULT_VIEW.zoom;
 const PIN_SIZE = 28;
 const SELECTED_PIN_SIZE = 40;
 const LOCATION_PIN_SIZE = 32;
@@ -164,13 +164,17 @@ type PlaceMapProps = {
   pins: MapPin[];
   selectedId?: number;
   myLocation?: LatLng;
-  // 처음 중심. 없으면 역삼역이다
+  // 처음 중심(정보 탭의 위치 지도). 없으면 기본 화면이다
   center?: LatLng;
+  // 검색 지도. 마지막으로 본 화면을 기기에 저장해 두고 다음에 만들 때 그 화면에서 시작한다(spec 61번)
+  rememberView?: boolean;
   onPinClick: (id: number) => void;
   // 사용자가 지도를 끌거나 확대·축소했을 때. panTo 같은 코드의 이동으로는 부르지 않는다
   onUserMove?: () => void;
   // 지도가 그려졌는지. 지도 위 버튼("이 지역에서 검색", "내 위치")을 이것으로 보인다
   onReadyChange?: (ready: boolean) => void;
+  // 지도를 쓸 수 없게 됐을 때(키 없음, 인증 실패, 지도를 없앰). 처음 이동을 끝내는 데 쓴다(spec 62번)
+  onUnavailable?: () => void;
   className?: string;
 };
 
@@ -182,9 +186,11 @@ export function PlaceMap({
   selectedId,
   myLocation,
   center,
+  rememberView = false,
   onPinClick,
   onUserMove,
   onReadyChange,
+  onUnavailable,
   className,
 }: PlaceMapProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -193,14 +199,20 @@ export function PlaceMap({
   const [failed, setFailed] = useState(false);
   // 만든 지도. 화면이 숨겨져도 남겨 두었다가 다시 보일 때 그대로 쓴다
   const kept = useRef<{ naver: NaverMaps; map: NaverMap }>(undefined);
-  // 처음 중심은 지도를 만들 때 한 번만 쓴다
-  const initialCenter = useRef(center ?? DEFAULT_CENTER);
+  // 처음 화면은 지도를 만들 때 한 번만 정한다. 기기 저장소는 브라우저에서만 읽는다
+  const initialCenter = useRef(center);
+  const remembers = useRef(rememberView);
   const markersRef = useRef(
     new Map<number, { marker: NaverMarker; mark?: PinMark; zIndex: number }>(),
   );
   // 인증이 실패하면 SDK 내부 값이 비어 어떤 호출이든 던지므로, 그 뒤에는 SDK를 부르지 않는다
   const active = failed ? undefined : loaded;
   const ready = Boolean(active);
+  // 정리(cleanup) 중에도 지금의 콜백을 부르도록 둔다
+  const unavailable = useRef(onUnavailable);
+  useEffect(() => {
+    unavailable.current = onUnavailable;
+  });
 
   useEffect(() => {
     const container = containerRef.current;
@@ -217,12 +229,12 @@ export function PlaceMap({
         .then((naver) => {
           if (cancelled || !container) return;
           if (authFailed) throw new Error("지도 인증에 실패했습니다");
+          const start: MapView = initialCenter.current
+            ? { ...initialCenter.current, zoom: DEFAULT_ZOOM }
+            : (remembers.current && readMapView()) || DEFAULT_VIEW;
           const map = new naver.Map(container, {
-            center: new naver.LatLng(
-              initialCenter.current.lat,
-              initialCenter.current.lng,
-            ),
-            zoom: DEFAULT_ZOOM,
+            center: new naver.LatLng(start.lat, start.lng),
+            zoom: start.zoom,
           });
           kept.current = { naver, map };
           setLoaded(kept.current);
@@ -241,12 +253,17 @@ export function PlaceMap({
       const map = kept.current?.map;
       kept.current = undefined;
       ignoreSdkError(() => map?.destroy());
+      if (map) unavailable.current?.();
     };
   }, []);
 
   useEffect(() => {
     onReadyChange?.(ready);
   }, [ready, onReadyChange]);
+
+  useEffect(() => {
+    if (failed) unavailable.current?.();
+  }, [failed]);
 
   // 인증 실패 알림보다 먼저 SDK가 던지는 경우도 지도를 비운다. 실패 알림처럼 렌더링 뒤에 바꾼다
   const guard = useEffectEvent((call: () => void) => {
@@ -273,6 +290,8 @@ export function PlaceMap({
   const handleUserMove = useEffectEvent(() => onUserMove?.());
   // 코드가 확대 정도를 바꾸는 중인지(D-104). 그 움직임이 멈출 때(idle)까지 zoom_changed를 사용자 조작으로 세지 않는다
   const zoomingByCode = useRef(false);
+  // 처음 멈춤을 이미 지난 지도. 화면이 숨었다 다시 보여도 지도는 그대로라 다시 세지 않는다
+  const settledOnce = useRef(new WeakSet<NaverMap>());
   useEffect(() => {
     if (!active) return;
     const { naver, map } = active;
@@ -286,6 +305,20 @@ export function PlaceMap({
         }),
         naver.Event.addListener(map, "idle", () => {
           zoomingByCode.current = false;
+          // 지도를 만든 뒤 처음 멈춤은 저장된 화면 그대로이므로 쓰지 않는다(spec 61번)
+          if (!settledOnce.current.has(map)) {
+            settledOnce.current.add(map);
+            return;
+          }
+          if (!remembers.current) return;
+          guard(() => {
+            const center = map.getCenter();
+            writeMapView({
+              lat: center.lat(),
+              lng: center.lng(),
+              zoom: map.getZoom(),
+            });
+          });
         }),
       );
     });
