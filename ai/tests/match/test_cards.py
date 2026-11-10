@@ -29,11 +29,12 @@ def item(
     *,
     request: bool = True,
     like: bool = True,
+    weight: int = 1,
     evidence_count: int = 0,
     from_reviews: bool = True,
 ) -> ItemScore:
     """조건 점수 하나. 기본은 리뷰로 판정한 요청 조각이다."""
-    return ItemScore(code, request, like, 1, value, evidence_count, from_reviews)
+    return ItemScore(code, request, like, weight, value, evidence_count, from_reviews)
 
 
 def scored(
@@ -138,6 +139,70 @@ class TestLabels:
         card = build_card(scored(place=make_place({"QUIET": evidence(1)})))
 
         assert card.labels == ("조용해요", "카페")
+
+    def test_matched_before_place_features(self) -> None:
+        """특징라벨_맞은조건이있으면_장소특징보다먼저쓴다"""
+        place = make_place({"PURPOSE_TALK": evidence(9), "COZY": evidence(8)})
+
+        card = build_card(scored(item("PURPOSE_WORK", 0.8), place=place))
+
+        assert card.labels == ("작업하기 좋아요", "대화하기 좋아요")
+
+    def test_request_by_score(self) -> None:
+        """특징라벨_맞은요청이여럿이면_조건점수가높은순서다"""
+        card = build_card(
+            scored(
+                item("QUIET", 0.75),
+                item("COZY", 0.95),
+                item("PURPOSE_WORK", 0.9),
+            )
+        )
+
+        assert card.labels == ("아늑해요", "작업하기 좋아요")
+
+    def test_request_then_taste_by_weight(self) -> None:
+        """특징라벨_요청다음취향이고_취향은세기가같으면조건점수순서다"""
+        card = build_card(
+            scored(
+                item("QUIET", 0.7),
+                item("COZY", 0.99, request=False, weight=1),
+                item("PURPOSE_WORK", 0.75, request=False, weight=3),
+                item("PURPOSE_TALK", 0.8, request=False, weight=3),
+            )
+        )
+
+        assert card.labels == ("조용해요", "대화하기 좋아요")
+
+    def test_unmatched_and_disliked_not_used(self) -> None:
+        """특징라벨_기준미만이거나싫어하는취향은_맞은조건으로쓰지않는다"""
+        card = build_card(
+            scored(
+                item("PURPOSE_WORK", MATCHED_SCORE - 0.01),
+                item("LIVELY", 0.9, request=False, like=False),
+            )
+        )
+
+        assert card.labels == ("카페", "강남역")
+
+    def test_matched_not_repeated_in_place_features(self) -> None:
+        """특징라벨_맞은조건이장소특징에도있으면_한번만쓴다"""
+        place = make_place({"QUIET": evidence(9), "COZY": evidence(3)})
+
+        card = build_card(scored(item("QUIET", 0.9), place=place))
+
+        assert card.labels == ("조용해요", "아늑해요")
+
+    def test_matched_labels_equal_matched_score_items(self) -> None:
+        """특징라벨_맞은조건태그는_matched인근거항목과문구가같다"""
+        place = make_place({"COZY": evidence(8)})
+
+        card = build_card(
+            scored(item("FOOD_WESTERN", 1.0, from_reviews=False), place=place)
+        )
+
+        matched = {i.label for i in card.score_items if i.matched}
+        assert card.labels == ("양식이에요", "아늑해요")
+        assert [label in matched for label in card.labels] == [True, False]
 
 
 def test_card_without_score() -> None:

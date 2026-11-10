@@ -96,7 +96,7 @@ class Card:
     Attributes:
         place_id: 장소 id
         score: 핏 점수. 0~100 정수다. 판정할 요청 조각도 취향도 없으면 None이다.
-        labels: 카드에 보이는 장소 특징 2개
+        labels: 카드 태그 2개. 이번 검색에서 맞은 조건이 먼저다.
         reasons: 추천 이유. 근거가 충분한 조건이 없으면 비어 있다.
         score_items: 핏 점수를 이루는 항목. 요청 조각과 좋아하는 취향마다 1개다.
         caution: 주의점. MVP는 넣지 않아 None이다.
@@ -128,7 +128,7 @@ def build_card(scored: PlaceScore) -> Card:
     return Card(
         place_id=place.place_id,
         score=scored.score,
-        labels=_labels(place),
+        labels=_labels(place, shown),
         reasons=_reasons(shown),
         score_items=tuple(_score_item(item) for item in shown),
     )
@@ -170,12 +170,46 @@ def _reason_title(item: ItemScore) -> str:
     return label
 
 
-def _labels(place: Place) -> tuple[str, ...]:
-    """근거가 많은 특징 2개. 부정이 긍정보다 많거나 같은 특징은 넣지 않는다."""
+def _labels(place: Place, items: list[ItemScore]) -> tuple[str, ...]:
+    """카드 태그 2개. 이번 검색에서 맞은 조건을 먼저 쓰고, 모자라면 장소 특징으로 채운다.
+
+    맞은 조건은 조건 점수가 `MATCHED_SCORE` 이상인 항목이다. 요청 조각을 조건 점수 순으로,
+    그다음 좋아하는 취향을 세기 순으로 놓는다. 문구는 근거 항목의 `label`과 같아서, FE는
+    `matched`인 근거 항목과 문구가 같은 태그에만 강조색을 칠한다(docs/comparison/api.md).
+
+    Args:
+        place: 장소
+        items: 카드에 보이는 근거 항목. 요청 조각과 좋아하는 취향이다.
+
+    Returns:
+        태그 문구. `LABEL_COUNT`개이고, 채울 것이 모자라면 더 적다.
+    """
+    matched = [item for item in items if item.value >= MATCHED_SCORE]
+    requested = sorted(
+        (item for item in matched if item.request), key=lambda item: -item.value
+    )
+    # 세기가 같으면 조건 점수가 높은 쪽이 먼저다.
+    tastes = sorted(
+        (item for item in matched if not item.request),
+        key=lambda item: (-item.weight, -item.value),
+    )
+    codes = [item.code for item in requested + tastes]
+    labels = [SCORE_LABELS[code] for code in codes[:LABEL_COUNT]]
+    if len(labels) < LABEL_COUNT:
+        labels += _place_labels(place, set(codes))
+    return tuple(labels[:LABEL_COUNT])
+
+
+def _place_labels(place: Place, chosen: set[str]) -> list[str]:
+    """근거가 많은 장소 특징, 그다음 업종과 역 이름. 이미 고른 조건은 뺀다.
+
+    부정이 긍정보다 많거나 같은 특징은 넣지 않는다.
+    """
     candidates = [
         condition_id
         for condition_id in CONDITIONS
-        if place.evidence(condition_id).pos > place.evidence(condition_id).neg
+        if condition_id not in chosen
+        and place.evidence(condition_id).pos > place.evidence(condition_id).neg
     ]
     # 근거가 충분한 특징 먼저, 그 안에서는 긍정 리뷰가 많은 순서다.
     # 같으면 조건 목록 순서다.
@@ -186,11 +220,11 @@ def _labels(place: Place) -> tuple[str, ...]:
         )
     )
     labels = [CONDITIONS[condition_id].label for condition_id in candidates]
-    # 근거 있는 특징이 2개보다 적으면 업종과 역 이름으로 채운다.
+    # 근거 있는 특징이 모자라면 업종과 역 이름으로 채운다.
     for filler in (
         CATEGORY_NAMES.get(place.info.category_group),
         STATION_NAMES.get(place.info.station),
     ):
         if filler is not None:
             labels.append(filler)
-    return tuple(labels[:LABEL_COUNT])
+    return labels
