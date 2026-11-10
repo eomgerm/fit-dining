@@ -8,6 +8,8 @@ import jakarta.validation.constraints.Size;
 import java.util.List;
 import kr.co.fitdining.api.auth.ports.AuthUseCases;
 import kr.co.fitdining.api.place.dto.PlaceDetailResponse;
+import kr.co.fitdining.api.place.dto.PlaceNearbyRequest;
+import kr.co.fitdining.api.place.dto.PlaceRegionSearchRequest;
 import kr.co.fitdining.api.place.dto.PlaceSearchRequest;
 import kr.co.fitdining.api.place.dto.PlaceSearchResponse;
 import kr.co.fitdining.api.place.dto.PlaceSuggestResponse;
@@ -74,7 +76,48 @@ public class PlaceController {
 	@PostMapping("/search")
 	public ResponseEntity<PlaceSearchResponse> search(@Valid @RequestBody PlaceSearchRequest request,
 			@AuthenticationPrincipal AuthUseCases.Identity identity) {
-		PlaceSearchResult result = placeService.search(request, identity == null ? null : identity.userId());
+		return respond(placeService.search(request, userId(identity)));
+	}
+
+	/**
+	 * 홈 주변 카드. 지도 영역 안 장소를 10곳까지 준다(place-ai-search D-18). 인증, 응답, {@code X-Fallback}은
+	 * {@link #search}와 같다.
+	 *
+	 * <p>오류: {@code mapBounds}가 없거나 네 값 중 하나라도 없거나, 유한하지 않거나, 위도·경도 범위 밖이거나, 남서쪽이 북동쪽보다
+	 * 작지 않거나, 정의되지 않은 속성({@code query} 포함)이 있거나, {@code preferences}가 가입의 검증에 맞지 않으면 400.
+	 *
+	 * @param request 지도 영역과 비회원 답변
+	 * @param identity 선택적인 세션 또는 Bearer 인증 주체. 비회원은 null이다.
+	 * @return 주변 카드. {@code nearby}이고 커서가 없다.
+	 */
+	@PostMapping("/nearby")
+	public ResponseEntity<PlaceSearchResponse> nearby(@Valid @RequestBody PlaceNearbyRequest request,
+			@AuthenticationPrincipal AuthUseCases.Identity identity) {
+		return respond(placeService.nearby(request, userId(identity)));
+	}
+
+	/**
+	 * "이 지역에서 검색". 보던 결과의 조건을 지도 영역 안에서 다시 찾는다(place-ai-search D-18). 인증, 응답,
+	 * {@code X-Fallback}, {@code cursor}는 {@link #search}와 같다.
+	 *
+	 * <p>오류: {@code query}가 비었거나 공백뿐이거나 200자를 넘거나, {@code mapBounds}가 {@link #nearby}의 검증에 맞지 않거나,
+	 * {@code conditions}가 JSON 객체가 아니거나, 정의되지 않은 속성({@code previousConditions} 포함)이 있으면 400.
+	 *
+	 * @param request 보던 문장과 조건, 지도 영역
+	 * @param identity 선택적인 세션 또는 Bearer 인증 주체. 비회원은 null이다.
+	 * @return 추천 결과
+	 */
+	@PostMapping("/search/region")
+	public ResponseEntity<PlaceSearchResponse> region(@Valid @RequestBody PlaceRegionSearchRequest request,
+			@AuthenticationPrincipal AuthUseCases.Identity identity) {
+		return respond(placeService.region(request, userId(identity)));
+	}
+
+	private static String userId(AuthUseCases.Identity identity) {
+		return identity == null ? null : identity.userId();
+	}
+
+	private static ResponseEntity<PlaceSearchResponse> respond(PlaceSearchResult result) {
 		ResponseEntity.BodyBuilder response = ResponseEntity.ok();
 		if (result.fallback() != null) {
 			response.header(FALLBACK_HEADER, result.fallback());

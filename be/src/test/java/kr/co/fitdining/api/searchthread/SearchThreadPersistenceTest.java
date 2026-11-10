@@ -308,6 +308,27 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 		}
 
 		@Test
+		@DisplayName("추가_새모양region요청은_해석하지않고그대로저장한다")
+		void put_regionRequestShape_storedAsIs() throws Exception {
+			String token = signIn(0);
+			String thread = threadId();
+			String first = turnId();
+			String second = turnId();
+			put(token, thread, first, newTurn(first, AT, "강남역 파스타"));
+			// "이 지역에서 검색"의 새 요청 모양(place-ai-search D-18). previousConditions 대신 conditions를 담는다
+			String request = "{\"query\":\"강남역 파스타\",\"conditions\":{\"text\":\"강남역 파스타\",\"station\":null},"
+					+ "\"mapBounds\":{\"swLat\":37.50,\"swLng\":127.04,\"neLat\":37.51,\"neLng\":127.06}}";
+			String body = "{\"id\":\"" + second + "\",\"kind\":\"region\",\"baseId\":\"" + first + "\",\"at\":" + (AT + 1)
+					+ ",\"request\":" + request + ",\"response\":{\"items\":[],\"totalCount\":0,\"conditions\":{}}}";
+
+			assertThat(put(token, thread, second, body).statusCode()).isEqualTo(204);
+
+			JsonNode stored = getThread(token, thread).get("turns").get(1);
+			assertThat(stored.get("kind").asString()).isEqualTo("region");
+			assertThat(stored.get("request")).isEqualTo(mapper.readTree(request));
+		}
+
+		@Test
 		@DisplayName("추가_turn이많아도_제한없이모두저장한다")
 		void put_manyTurns_noLimit() throws Exception {
 			String token = signIn(0);

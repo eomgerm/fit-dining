@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -31,6 +32,8 @@ import kr.co.fitdining.api.place.dto.PlaceSummary.CategoryGroup;
 import kr.co.fitdining.api.place.dto.PlaceSummary.Station;
 import kr.co.fitdining.api.place.engine.AiSearchClient;
 import kr.co.fitdining.api.place.engine.CatalogPlaceSearchEngine;
+import kr.co.fitdining.api.place.engine.SearchPurpose;
+import kr.co.fitdining.api.place.dto.PlaceSearchRequest.MapBounds;
 import kr.co.fitdining.api.place.exception.PlaceSearchUnavailableException;
 import kr.co.fitdining.api.place.keyword.PlaceKeywordHit;
 import kr.co.fitdining.api.place.keyword.PlaceKeywordSearch;
@@ -287,6 +290,96 @@ class PlaceControllerMockDisabledTest {
 		mockMvc.perform(request).andExpect(status().is(status));
 
 		assertThat(output.getAll()).doesNotContain(SECRET);
+	}
+
+	private static final String AREA = "{\"swLat\":37.49,\"swLng\":127.02,\"neLat\":37.51,\"neLng\":127.05}";
+
+	private static MockHttpServletRequestBuilder nearby(String body) {
+		return post("/api/v1/places/nearby").contentType(MediaType.APPLICATION_JSON).content(body);
+	}
+
+	private static MockHttpServletRequestBuilder region(String body) {
+		return post("/api/v1/places/search/region").contentType(MediaType.APPLICATION_JSON).content(body);
+	}
+
+	@Test
+	@DisplayName("주변_DB모드에서_NEARBY목적과상수문장과영역으로AI를부른다")
+	void nearby_dbMode_callsAiWithNearbyPurpose() throws Exception {
+		when(aiClient.search(any(), any(), any())).thenReturn(Optional.empty());
+		when(catalog.cardsWithin(any(), anyInt())).thenReturn(List.of());
+
+		mockMvc.perform(nearby("{\"mapBounds\":" + AREA + ",\"preferences\":{\"mood\":\"QUIET\"}}"))
+				.andExpect(status().isOk());
+
+		verify(aiClient).search(eq(SearchPurpose.NEARBY), argThat(request -> SearchPurpose.NEARBY_QUERY.equals(request.query())
+				&& request.mapBounds().equals(new MapBounds(37.49, 127.02, 37.51, 127.05)) && request.cursor() == null
+				&& request.previousConditions() == null && request.preferences() != null), eq(null));
+	}
+
+	@Test
+	@DisplayName("이지역에서검색_DB모드에서_REGION목적과보던조건으로AI를부른다")
+	void region_dbMode_callsAiWithRegionPurpose() throws Exception {
+		when(aiClient.search(any(), any(), any())).thenReturn(Optional.empty());
+		when(catalog.cardsWithin(any(), anyInt())).thenReturn(List.of());
+
+		mockMvc.perform(region("{\"query\":\"강남역 파스타\",\"conditions\":{\"text\":\"t\"},\"mapBounds\":" + AREA + "}"))
+				.andExpect(status().isOk());
+
+		verify(aiClient).search(eq(SearchPurpose.REGION), argThat(request -> "강남역 파스타".equals(request.query())
+				&& Map.of("text", "t").equals(request.previousConditions())
+				&& request.mapBounds().equals(new MapBounds(37.49, 127.02, 37.51, 127.05))), eq(null));
+	}
+
+	@Test
+	@DisplayName("주변_AI를쓸수없으면_영역안장소를nearby로주고AI_UNAVAILABLE헤더다")
+	void nearby_aiUnavailable_areaFallback() throws Exception {
+		when(aiClient.search(any(), any(), any())).thenReturn(Optional.empty());
+		when(catalog.cardsWithin(new MapBounds(37.49, 127.02, 37.51, 127.05), 10)).thenReturn(List.of(card()));
+
+		mockMvc.perform(nearby("{\"mapBounds\":" + AREA + "}"))
+				.andExpect(status().isOk())
+				.andExpect(header().string("X-Fallback", "AI_UNAVAILABLE"))
+				.andExpect(jsonPath("$.nearby").value(true))
+				.andExpect(jsonPath("$.conditions").isEmpty())
+				.andExpect(jsonPath("$.items[0].place.id").value(7));
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = {"\"abc\"", "\"\""})
+	@DisplayName("이지역에서검색_DB모드에서cursor가있으면_AI를부르지않고400이다")
+	void region_dbModeCursor_badRequestWithoutAi(String cursor) throws Exception {
+		mockMvc.perform(region("{\"query\":\"파스타\",\"mapBounds\":" + AREA + ",\"cursor\":" + cursor + "}"))
+				.andExpect(status().isBadRequest());
+		verifyNoInteractions(aiClient);
+	}
+
+	@Test
+	@DisplayName("이지역에서검색_cursor가null이면_커서없음이다")
+	void region_nullCursor_searches() throws Exception {
+		when(aiClient.search(any(), any(), any())).thenReturn(Optional.empty());
+		when(catalog.cardsWithin(any(), anyInt())).thenReturn(List.of());
+
+		mockMvc.perform(region("{\"query\":\"파스타\",\"mapBounds\":" + AREA + ",\"cursor\":null}"))
+				.andExpect(status().isOk());
+	}
+
+	@Test
+	@DisplayName("주변과이지역에서검색_요청이잘못되면_AI를부르지않는다")
+	void areaRequests_badRequest_noAi() throws Exception {
+		mockMvc.perform(nearby("{\"mapBounds\":{\"swLat\":37.51,\"swLng\":127.02,\"neLat\":37.49,\"neLng\":127.05}}"))
+				.andExpect(status().isBadRequest());
+		mockMvc.perform(region("{\"query\":\"파스타\"}")).andExpect(status().isBadRequest());
+		verifyNoInteractions(aiClient);
+	}
+
+	@Test
+	@DisplayName("주변과이지역에서검색_영역대체의카탈로그DB오류는_503이다")
+	void areaRequests_catalogError_serviceUnavailable() throws Exception {
+		when(aiClient.search(any(), any(), any())).thenReturn(Optional.empty());
+		when(catalog.cardsWithin(any(), anyInt())).thenThrow(new DataAccessResourceFailureException("db"));
+
+		expectUnavailable(nearby("{\"mapBounds\":" + AREA + "}"));
+		expectUnavailable(region("{\"query\":\"파스타\",\"mapBounds\":" + AREA + "}"));
 	}
 
 	private static PlaceCard card() {
