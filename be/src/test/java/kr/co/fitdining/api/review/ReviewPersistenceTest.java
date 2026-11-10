@@ -159,6 +159,8 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 	@Autowired
 	AuthUseCases auth;
 
+    @Autowired org.springframework.session.FindByIndexNameSessionRepository<?> sessionRepository;
+
 	@Autowired
 	PasswordHasher passwords;
 
@@ -203,14 +205,13 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 		app.update("delete from review_reason_tags");
 		app.update("delete from reviews");
 		app.update("delete from places where naver_place_id like ?", USER_PREFIX + "%");
-		app.update("delete from auth_refresh_tokens where user_id like ?", USER_PREFIX + "%");
 		app.update("delete from auth_users where id like ?", USER_PREFIX + "%");
 		app.update("delete from auth_login_attempts where address = ?", CLIENT_ADDRESS);
 	}
 
 	/** {@link #createUsers}가 만든 n번째 사용자로 로그인한 AT */
 	private String login(int user) {
-		return auth.login(USER_PREFIX + user + "@example.com", PASSWORD, CLIENT_ADDRESS).accessToken();
+		return kr.co.fitdining.api.support.SessionTestSupport.persist(sessionRepository, auth.login(USER_PREFIX + user + "@example.com", PASSWORD, CLIENT_ADDRESS).identity());
 	}
 
 	/** 작성자 n명을 만든다. 같은 장소·같은 날 리뷰는 사람마다 하나라 페이지 시험에 여러 명이 필요하다. */
@@ -225,7 +226,7 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 	}
 
 	private void withdrawAccount(String userId) {
-		userService.withdraw(userId, new AuthUseCases.Identity(userId, null, null, 0, 0));
+		userService.withdraw(userId, new AuthUseCases.Identity(userId, null, 0));
 	}
 
 	/** 시계 기준 KST 오늘 방문, 모든 업종에 노출되는 좋았어요 태그 하나 */
@@ -1540,15 +1541,13 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 
 		private HttpResponse<String> send(String method, String path, String token, String body) throws Exception {
 			HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path));
-			if (token != null) {
-				builder.header("Authorization", "Bearer " + token);
-			}
 			if (body != null) {
 				builder.header("Content-Type", "application/json");
 			}
 			builder.method(method, body == null ? HttpRequest.BodyPublishers.noBody()
 					: HttpRequest.BodyPublishers.ofString(body));
-			return client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+			kr.co.fitdining.api.support.SessionTestSupport.csrf(builder, client, port, token);
+        return client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
 		}
 
 		private static String json(String visitedAt, String description) {
@@ -1581,7 +1580,7 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 		}
 
 		@Test
-		@DisplayName("목록_로그인하면내리뷰에mine이붙고_틀린토큰은401이다")
+		@DisplayName("목록_세션이면내리뷰에mine이붙고_무효쿠키는비회원이다")
 		void list_withToken_marksMine() throws Exception {
 			createUsers(1);
 			String token = login(0);
@@ -1595,7 +1594,7 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 			assertThat(signedIn.get("nickname").asString()).isEqualTo("리뷰테스트0");
 			assertThat(signedIn.get("visitedAt").asString()).isEqualTo("2026-10-18");
 			assertThat(anonymous.get("mine").asBoolean()).isFalse();
-			assertThat(send("GET", path, "forged", null).statusCode()).isEqualTo(401);
+			assertThat(send("GET", path, "forged", null).statusCode()).isEqualTo(200);
 		}
 
 		@Test

@@ -11,10 +11,16 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 @ConditionalOnWebApplication
 public class AccountSessions {
     private final FindByIndexNameSessionRepository<?> sessions;
-    public AccountSessions(FindByIndexNameSessionRepository<?> sessions) { this.sessions = sessions; }
+    private final kr.co.fitdining.api.auth.repository.AuthSecurityEventRepository events;
+    private final java.time.Clock clock;
+    public AccountSessions(FindByIndexNameSessionRepository<?> sessions,
+            kr.co.fitdining.api.auth.repository.AuthSecurityEventRepository events, java.time.Clock clock) {
+        this.sessions = sessions; this.events = events; this.clock = clock;
+    }
     public void invalidateAfterCommit(String userId) {
         if (!TransactionSynchronizationManager.isActualTransactionActive())
             throw new IllegalStateException("Account session invalidation requires a transaction");
+        events.save(kr.co.fitdining.api.auth.domain.AuthSecurityEvent.login(userId, clock.instant(), "SESSIONS_REVOKED"));
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override public void afterCommit() {
                 sessions.findByPrincipalName(userId).keySet().forEach(sessions::deleteById);

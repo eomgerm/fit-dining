@@ -2,7 +2,6 @@ package kr.co.fitdining.api.place;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasSize;
-import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -13,7 +12,6 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.stream.Stream;
-import kr.co.fitdining.api.auth.domain.AuthFailure;
 import kr.co.fitdining.api.auth.ports.AuthUseCases;
 import kr.co.fitdining.api.place.engine.MockPlaceSearchEngine;
 import org.junit.jupiter.api.DisplayName;
@@ -66,15 +64,15 @@ class PlaceAreaSearchControllerTest {
 	AuthUseCases auth;
 
 	static MockHttpServletRequestBuilder nearby(String body) {
-		return post("/api/v1/places/nearby").contentType(MediaType.APPLICATION_JSON).content(body);
+		return post("/api/v1/places/nearby").with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).contentType(MediaType.APPLICATION_JSON).content(body);
 	}
 
 	static MockHttpServletRequestBuilder region(String body) {
-		return post("/api/v1/places/search/region").contentType(MediaType.APPLICATION_JSON).content(body);
+		return post("/api/v1/places/search/region").with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).contentType(MediaType.APPLICATION_JSON).content(body);
 	}
 
 	static MockHttpServletRequestBuilder search(String body) {
-		return post("/api/v1/places/search").contentType(MediaType.APPLICATION_JSON).content(body);
+		return post("/api/v1/places/search").with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).contentType(MediaType.APPLICATION_JSON).content(body);
 	}
 
 	/** 지도 영역 검증에 걸리는 값(AC-29) */
@@ -213,27 +211,13 @@ class PlaceAreaSearchControllerTest {
 		}
 
 		@Test
-		@DisplayName("주변과이지역에서검색_잘못된토큰이면_본문이틀려도401이먼저다")
-		void areaRequests_badTokenAndBadBody_unauthorizedFirst() throws Exception {
-			when(auth.authenticate("bad")).thenThrow(new AuthFailure("invalid"));
+		@DisplayName("Authorization is ignored and request bodies are validated")
+		void areaRequests_ignoredAuthorization_validatesBody() throws Exception {
 
-			mockMvc.perform(nearby("{}").header("Authorization", "Bearer bad")).andExpect(status().isUnauthorized());
-			mockMvc.perform(region("{}").header("Authorization", "Bearer bad")).andExpect(status().isUnauthorized());
+			mockMvc.perform(nearby("{}").header("Authorization", "Bearer bad")).andExpect(status().isBadRequest());
+			mockMvc.perform(region("{}").header("Authorization", "Bearer bad")).andExpect(status().isBadRequest());
 			mockMvc.perform(nearby(nearbyBody(ALL)).header("Authorization", "Basic x"))
-					.andExpect(status().isUnauthorized());
-		}
-
-		@Test
-		@DisplayName("주변과이지역에서검색_만료된토큰은_401이고만료type이다")
-		void areaRequests_expiredToken_expiredType() throws Exception {
-			when(auth.authenticate("old")).thenThrow(AuthFailure.accessExpired());
-
-			for (MockHttpServletRequestBuilder request : new MockHttpServletRequestBuilder[] {
-					nearby(nearbyBody(ALL)), region(regionBody(ALL))}) {
-				mockMvc.perform(request.header("Authorization", "Bearer old"))
-						.andExpect(status().isUnauthorized())
-						.andExpect(jsonPath("$.type").value("urn:fitdining:auth:access-token-expired"));
-			}
+					.andExpect(status().isOk());
 		}
 	}
 
@@ -302,9 +286,8 @@ class PlaceAreaSearchControllerTest {
 	class Logging {
 
 		@Test
-		@DisplayName("주변과이지역에서검색_정상과400과401뒤_로그에입력값과좌표가없다")
+		@DisplayName("Successful and invalid requests do not log input or coordinates")
 		void areaRequests_anyOutcome_doesNotLogInput(CapturedOutput output) throws Exception {
-			when(auth.authenticate("bad")).thenThrow(new AuthFailure("invalid"));
 			String preferences = "\"preferences\":{\"tastes\":[{\"polarity\":\"LIKE\",\"label\":\"" + LOG_SECRET + "\"}]}";
 
 			mockMvc.perform(nearby("{\"mapBounds\":" + SECRET_BOUNDS + "," + preferences + "}"))
@@ -316,7 +299,7 @@ class PlaceAreaSearchControllerTest {
 			mockMvc.perform(nearby("{\"mapBounds\":" + SECRET_BOUNDS + ",\"lat\":" + SECRET_LAT + "}"))
 					.andExpect(status().isBadRequest());
 			mockMvc.perform(region("{\"query\":\"" + LOG_SECRET + "\",\"mapBounds\":" + SECRET_BOUNDS + "}")
-					.header("Authorization", "Bearer bad")).andExpect(status().isUnauthorized());
+					.header("Authorization", "Bearer bad")).andExpect(status().isOk());
 
 			assertThat(output.getAll()).doesNotContain(LOG_SECRET).doesNotContain(SECRET_LAT).doesNotContain(SECRET_LNG);
 		}

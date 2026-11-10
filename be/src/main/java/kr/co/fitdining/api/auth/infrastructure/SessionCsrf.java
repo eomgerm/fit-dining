@@ -10,7 +10,7 @@ import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-/** Opt-in only: the current chain continues to disable CSRF. */
+/** Cookie CSRF for browser writes, including anonymous requests. */
 public final class SessionCsrf {
     private SessionCsrf() { }
 
@@ -24,7 +24,7 @@ public final class SessionCsrf {
         http.csrf(csrf -> csrf.csrfTokenRepository(repository(secure)).spa());
     }
 
-    /** Install after CsrfFilter when opting in; does not create a session. */
+    /** Materialize the bootstrap token after CsrfFilter without creating a session. */
     public static final class CookieFilter extends OncePerRequestFilter {
         @Override
         protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)

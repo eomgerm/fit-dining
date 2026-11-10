@@ -51,7 +51,7 @@
 | `S3_ACCESS_KEY` | app, local | O | 환경 전용 키 |
 | `S3_SECRET_KEY` | app, local | O | 비밀 |
 | `S3_PATH_STYLE` | app | O | `true`. Garage는 path-style을 쓴다 |
-| `JWT_SECRET` | app | O | 비밀. 서명 방식은 BE 팀이 정한다 |
+| `JWT_SECRET` | app | O | 비밀. 소셜 쿠키 서명 키이며 이메일 인증번호 HMAC에도 사용한다. AT·RT 인증 토큰은 발급하지 않는다 |
 | `AUTH_FRONTEND_ORIGIN` | app | O | 인증 API(`/api/auth/**`)의 POST가 우리 화면에서 온 것인지 가르는 기준 출처(CSRF 방어). 브라우저가 붙이는 `Origin` 헤더와 정확히 같아야 하므로 경로와 끝 `/` 없이 `https://호스트`만 쓴다. prod는 `https://<PROD_HOST>`, dev는 `https://<DEV_HOST>`이고 둘 다 443이라 포트를 붙이지 않는다. 환경마다 달라 기본값이 없고, 값이 형식에 맞지 않으면 BE가 기동을 거부한다(BE 계약 #8). 로컬 개발은 이 계약 밖이고 `be/.env`에서 `http://localhost:3000`을 쓴다 |
 | `AUTH_COOKIE_SECURE` | app | O | RT 쿠키의 `Secure` 속성 여부(`true` 또는 `false`). dev와 prod 서버는 Caddy 뒤 HTTPS라 둘 다 `true`다. 로컬(`http://localhost`)만 `false`다. 기본값이 없고 `true`·`false`가 아닌 값은 BE가 기동을 거부한다(BE 계약 #8, 쿠키는 #21) |
 | `SPRING_MAIL_HOST` | app | X | 이메일 가입 인증번호를 보내는 SMTP 호스트. Gmail은 `smtp.gmail.com`. **prod는 필수**이고 없으면 BE가 기동을 거부한다. dev·local은 키를 넣지 않으면 메일을 보내지 않고 인증번호를 BE 로그에 남긴다(로그 발송기). 값을 넣으면 아래 `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD`, `AUTH_MAIL_FROM`도 모두 있어야 하고, 하나라도 비었거나 `REPLACE_ME`면 BE가 기동을 거부한다 |

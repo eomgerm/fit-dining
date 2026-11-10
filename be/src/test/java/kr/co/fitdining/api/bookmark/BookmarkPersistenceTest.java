@@ -135,7 +135,6 @@ class BookmarkPersistenceTest extends PostgresTestSupport {
 		JdbcTemplate app = new JdbcTemplate(appSource());
 		app.update("delete from bookmarks");
 		app.update("delete from places where naver_place_id like ?", USER_PREFIX + "%");
-		app.update("delete from auth_refresh_tokens where user_id like ?", USER_PREFIX + "%");
 		app.update("delete from auth_users where id like ?", USER_PREFIX + "%");
 	}
 
@@ -153,7 +152,7 @@ class BookmarkPersistenceTest extends PostgresTestSupport {
 	}
 
 	private void withdraw(String userId) {
-		userService.withdraw(userId, new AuthUseCases.Identity(userId, null, null, 0, 0));
+		userService.withdraw(userId, new AuthUseCases.Identity(userId, null, 0));
 	}
 
 	private static PlaceDetailResponse detail(long id) {

@@ -54,7 +54,7 @@ class SecurityHttpTests {
     @Test
     void anonymousPost_withoutCsrf_preservesBodyAndInterceptorHeaders_withoutSession() throws Exception {
         when(analysis.analyze(anyString(), anyString())).thenReturn(List.of());
-        MvcResult result = mvc.perform(post("/api/v1/onboarding/taste-analysis").secure(true)
+        MvcResult result = mvc.perform(post("/api/v1/onboarding/taste-analysis").with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).secure(true)
                         .header("Origin", "http://localhost:3000")
                         .contentType("application/json").content("{\"text\":\"empty\"}"))
                 .andExpect(status().isOk())
@@ -69,7 +69,7 @@ class SecurityHttpTests {
     void defaultLoginAndLogout_areNotProvided() throws Exception {
         assertUnchangedSecurityResponse(mvc.perform(get("/login"))
                 .andExpect(status().isUnauthorized()).andReturn());
-        assertUnchangedSecurityResponse(mvc.perform(post("/logout"))
+        assertUnchangedSecurityResponse(mvc.perform(post("/logout").with(kr.co.fitdining.api.support.SessionTestSupport.csrf()))
                 .andExpect(status().isUnauthorized()).andReturn());
     }
 

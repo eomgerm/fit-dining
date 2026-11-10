@@ -19,7 +19,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 2. AI 검색 API는 `ai/docs/comparison/api.md`(초안 v0.5)의 모양을 따른다. 비회원 취향 `tasteProfile`은 온보딩 답 모양이고, 모양이 틀리면 AI는 취향 없이 정렬하고 `TASTE_INVALID`를 담는다(D-4). 요청에 모르는 속성이 있으면 400이고, 응답의 `items`는 `score` 내림차순이며 일반 20개·근처 100개까지다(D-2).
 3. AI 주소 설정 `fitdining.ai.base-url`(환경변수 `MODAL_BASE_URL`, 코드 기본값 `http://localhost:8000`)과 `fitdining.ai.modal-key`·`modal-secret`은 온보딩 취향 연결(S15P31A302-129)이 이미 쓰고 있다. 환경변수를 빈 문자열로 주면 주소가 빈다(D-3).
 4. 회원 취향(`user_preferences.features`)은 -129가 가입 때 저장하고 AI가 DB에서 직접 읽는다. 검색 쪽 BE는 회원 id만 넘긴다(D-12).
-5. 액세스 토큰 확인(`AuthUseCases#authenticate`)은 DB를 보지 않고 서명과 만료만 본다. 만료면 `type`이 `urn:fitdining:auth:access-token-expired`인 `AuthFailure`(401)를 던진다(D-4).
+5. 검색은 선택적인 세션 인증 주체를 사용한다. Authorization 헤더는 무시하며 모든 검색 POST에는 CSRF 토큰이 필요하다(D-4).
 6. `migrate` 프로필은 웹 서버 없이 뜨고 인증 빈을 만들지 않는다. 지금 `PlaceController`는 이 프로필에서도 만들어진다(D-4).
 7. 이번 반복 전 FE는 검색 요청에 `preferences`와 토큰을 싣지 않았다(`fe/src/domains/place/model/search-request.ts`). 비회원 온보딩 답은 기기에 가입과 같은 모양으로 저장돼 있고, 읽을 때 지금 선택지에 맞지 않으면 지운다(`fe/src/domains/onboarding/model/storage.ts#readAnswers`)(D-4, D-16).
 8. FE의 API 요청은 기본 10초에 끊기고 요청마다 바꿀 수 있다(`fe/src/shared/api/client.ts`의 `timeoutMs`). 대체 결과가 화면에 닿으려면 BE가 FE보다 먼저 응답해야 한다(D-3).
@@ -27,7 +27,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 10. FE의 도메인끼리는 서로 import하지 않고 app 계층이 잇는다(`fe/eslint.config.mjs`). place 도메인은 auth와 onboarding을 import하지 않는다(D-16).
 11. AI 검색 API는 모르는 요청 속성을 400으로 막는다(`extra="forbid"`). `rulesOnly`와 `mapFirst`를 받는 AI(S15P31A302-196)가 배포되기 전에는 NEARBY·REGION 요청이 AI의 400을 받아 AC-7 ⑥으로 대체된다. 배포 순서는 AI → BE → FE이고 같은 배포 창이다(D-18).
 12. 이번 반복의 FE는 새 API를 부르지 않는다. 지금 FE와 배포 직후 남은 옛 FE 탭은 홈 주변 카드를 `/places/search` `{query: "근처 맛집"}`으로 보낸다(D-18).
-13. 비회원이 부를 수 있는 경로는 Security 설정의 허용 목록이 경로마다 정한다(`be/src/main/java/kr/co/fitdining/api/auth/infrastructure/SecurityConfiguration.java`). 지금 POST 목록에는 `/api/v1/places/search`만 있다. 장소 경로는 Origin 검사 대상이 아니다. `Authorization` 헤더가 없으면 세션 주체를 쓰고, 세션도 없으면 비회원이다(D-4, D-18).
+13. Security는 `/api/v1/places/search`, `/api/v1/places/nearby`, `/api/v1/places/search/region`의 비회원 POST를 허용한다. 세 경로 모두 CSRF 토큰이 필요하다. 장소 경로는 Origin 검사 대상이 아니며, Authorization은 무시하고 세션이 없으면 비회원이다(D-4, D-18).
 14. "근처 맛집"을 AI 규칙 해석(`interpret_by_rules`)에 넣으면 지역 HERE와 `nearby: true`가 나온다(2026-11-10 AI 코드에서 실행해 확인). 그래서 NEARBY는 LLM 없이도 지도 영역 안 근처 검색이 된다(D-8).
 
 ## Usage
@@ -41,7 +41,7 @@ curl -i -X POST http://localhost:8080/api/v1/places/nearby -H "Content-Type: app
   -d '{"mapBounds":{"swLat":37.49,"swLng":127.02,"neLat":37.51,"neLng":127.05}}'
 # 2) 회원의 자연어 검색. AI 요청에 회원 id가 실린다
 curl -i -X POST http://localhost:8080/api/v1/places/search -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $AT" -d '{"query":"역삼역 조용하게 대화하기 좋은 식당"}'
+  -b cookies.txt -H "X-XSRF-TOKEN: $XSRF" -d '{"query":"역삼역 조용하게 대화하기 좋은 식당"}'
 # 3) 비회원이 기기에 저장한 온보딩 답변을 싣는다. AI 요청의 tasteProfile로 넘어간다
 curl -i -X POST http://localhost:8080/api/v1/places/search -H "Content-Type: application/json" \
   -d '{"query":"데이트하기 좋은 카페","preferences":{"mood":"QUIET","purposes":["DATE"]}}'
@@ -59,8 +59,8 @@ AI 호출
 
 - [x] AC-1: 세 API(`/places/nearby`, `/places/search`, `/places/search/region`)에서 인증과 본문 검증을 통과하고 `cursor`가 없는 모든 추천 검색 요청은 요청마다 AI `POST {base-url}/v1/search`를 부른다(차단 중, 주소가 빈 경우, permit을 받지 못한 경우는 AC-13, AC-7, AC-28). 이전 요청의 결과를 다시 쓰지 않는다. `query`에 "근처"가 들어 있다는 이유로 AI 없이 응답하지 않는다. (D-2, D-8, D-9, D-18)
 - [x] AC-2: AI 요청 본문은 [AI 요청](#ai-요청) 표의 속성만 담는다. `query`, `previousConditions`, `mapBounds`, `rulesOnly`, `mapFirst`는 그 표의 목적별 규칙대로이고, `userId`와 `tasteProfile`은 세 목적 모두 AC-3의 경우에만 있다. `cursor`, `preferences`, `conditions`는 없다. `fitdining.ai.modal-key`·`modal-secret`이 비어 있지 않으면 각각 `Modal-Key`·`Modal-Secret` 헤더로 실린다. (D-2, D-3, D-4, D-5, D-18)
-- [x] AC-3: 인증 주체가 있으면(`Authorization: Bearer <AT>`가 유효하거나, 헤더 없이 로그인 세션이 있으면) AI 요청의 `userId`는 그 주체의 사용자 id이고, 본문에 `preferences`가 있어도 AI에 보내지 않는다(`tasteProfile` 없음). `Authorization` 헤더도 로그인 세션도 없으면 비회원이고 AI 요청에 `userId`가 없다. 비회원 요청에 `preferences`가 있으면 AI 요청의 `tasteProfile`은 그 `preferences`를 검증과 정리(AC-18)를 거친 값 그대로 담은 것이다. 속성 이름과 값은 같고, null인 `mood`와 칩의 null인 `code`는 빠지며, `priorities`·`purposes`·`tastes`는 비어 있어도 `[]`로 싣는다. `preferences`가 없으면 `tasteProfile`도 없다. (D-4, D-12)
-- [x] AC-4: `cursor`가 null이 아닌(빈 문자열 포함) 요청은 AI를 부르지 않고 400이다. `cursor`가 없거나 null이면 커서 없음이다. 이 판정은 DB 모드 엔진이 인증 뒤에 하므로 토큰이 무효면 401이 먼저이고, Mock 모드에는 적용되지 않는다. (D-10)
+- [x] AC-3: 세션 인증 주체가 있으면(Authorization 헤더는 무시한다) AI 요청의 `userId`는 그 주체의 사용자 id이고, 본문에 `preferences`가 있어도 AI에 보내지 않는다(`tasteProfile` 없음). 로그인 세션이 없으면 비회원이고 AI 요청에 `userId`가 없다. 비회원 요청에 `preferences`가 있으면 AI 요청의 `tasteProfile`은 그 `preferences`를 검증과 정리(AC-18)를 거친 값 그대로 담은 것이다. 속성 이름과 값은 같고, null인 `mood`와 칩의 null인 `code`는 빠지며, `priorities`·`purposes`·`tastes`는 비어 있어도 `[]`로 싣는다. `preferences`가 없으면 `tasteProfile`도 없다. (D-4, D-12)
+- [x] AC-4: DB 모드에서 `cursor`가 null이 아닌 요청(빈 문자열 포함)은 AI를 부르지 않고 400이다. Authorization은 무시하므로 이 헤더 때문에 401이 먼저 반환되지 않는다. Mock 모드에는 별도 커서 규칙이 적용된다. (D-10)
 
 AI 결과를 카드로
 
@@ -82,7 +82,7 @@ AI 실패와 대체
 
 취향과 인증
 
-- [x] AC-17: `Authorization` 헤더가 있는데(빈 값 포함) `Bearer `로 시작하지 않거나 토큰이 유효하지 않으면 401 ProblemDetail이고 AI를 부르지 않는다. 만료된 토큰이면 `type`이 `urn:fitdining:auth:access-token-expired`다. 비회원으로 계속하지 않는다. (D-4)
+- [x] AC-17: `Authorization` 헤더는 빈 값·잘못된 Bearer 값을 포함해 무시한다. 세션 쿠키가 있으면 회원, 없으면 비회원으로 검색하며 이 헤더만으로 401을 반환하거나 AI 호출을 막지 않는다. 상태 변경 요청에는 CSRF 토큰이 필요하다. (D-4)
 - [x] AC-18: `preferences`는 가입의 `preferences`와 같은 모양(`mood`, `priorities`, `purposes`, `tastes`)과 검증을 따른다. 검증에 맞지 않거나 모르는 속성이 있으면 회원이든 비회원이든 400이다. 예전 모양(문자열 목록)은 Mock 모드에서도 400이다. (D-4)
 - [x] AC-19: `migrate` 프로필이 인증 환경 변수 없이 뜨고 끝난다(인증을 붙인 뒤에도). (D-4)
 

@@ -6,28 +6,36 @@ import { authenticated } from "./authenticated";
 
 const mocks = vi.hoisted(() => ({
   restore: vi.fn(),
-  refresh: vi.fn(),
+  checkSession: vi.fn(),
   getSession: vi.fn(),
   clearSession: vi.fn(),
 }));
 vi.mock("@/domains/auth/api/auth-client", () => ({
-  ACCESS_TOKEN_EXPIRED_TYPE: "urn:fitdining:auth:access-token-expired",
   restore: mocks.restore,
-  refresh: mocks.refresh,
+  checkSession: mocks.checkSession,
   getSession: mocks.getSession,
   clearSession: mocks.clearSession,
 }));
 
 const expired = new ApiError("http", "x", {
   status: 401,
-  problem: { status: 401, type: "urn:fitdining:auth:access-token-expired" },
+  problem: { status: 401 },
 });
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.restore.mockResolvedValue({ accessToken: "old" });
-  mocks.getSession.mockReturnValue({ accessToken: "old" });
-  mocks.refresh.mockResolvedValue({ accessToken: "new" });
+  mocks.restore.mockResolvedValue({
+    nickname: "demo",
+    sessionExpiresAt: 2000000000,
+  });
+  mocks.getSession.mockReturnValue({
+    nickname: "demo",
+    sessionExpiresAt: 2000000000,
+  });
+  mocks.checkSession.mockResolvedValue({
+    nickname: "demo",
+    sessionExpiresAt: 2000000000,
+  });
 });
 
 describe("authenticated", () => {
@@ -38,7 +46,7 @@ describe("authenticated", () => {
     expect(send).toHaveBeenCalledWith(
       await mocks.restore.mock.results[0].value,
     );
-    expect(mocks.refresh).not.toHaveBeenCalled();
+    expect(mocks.checkSession).not.toHaveBeenCalled();
   });
 
   it("세션이 만료되면 재시도 없이 401을 돌려준다", async () => {
@@ -46,16 +54,19 @@ describe("authenticated", () => {
 
     await expect(authenticated(send)).rejects.toBe(expired);
     expect(send).toHaveBeenCalledTimes(1);
-    expect(mocks.refresh).not.toHaveBeenCalled();
+    expect(mocks.checkSession).not.toHaveBeenCalled();
   });
 
   it("동시에 인증 정보가 바뀌어도 실패한 요청을 재시도하지 않는다", async () => {
-    mocks.getSession.mockReturnValue({ accessToken: "other" });
+    mocks.getSession.mockReturnValue({
+      nickname: "demo",
+      sessionExpiresAt: 2000000000,
+    });
     const send = vi.fn().mockRejectedValueOnce(expired).mockResolvedValue("ok");
 
     await expect(authenticated(send)).rejects.toBe(expired);
     expect(send).toHaveBeenCalledTimes(1);
-    expect(mocks.refresh).not.toHaveBeenCalled();
+    expect(mocks.checkSession).not.toHaveBeenCalled();
   });
 
   it("만료가 아닌 401과 다른 오류는 갱신하지 않고 그대로 던진다", async () => {
@@ -68,7 +79,7 @@ describe("authenticated", () => {
     await expect(authenticated(() => Promise.reject(conflict))).rejects.toBe(
       conflict,
     );
-    expect(mocks.refresh).not.toHaveBeenCalled();
+    expect(mocks.checkSession).not.toHaveBeenCalled();
   });
 
   it("세션이 없으면 보내지 않고 인증 오류를 던진다", async () => {

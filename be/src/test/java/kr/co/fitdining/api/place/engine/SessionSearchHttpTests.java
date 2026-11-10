@@ -27,7 +27,7 @@ import org.springframework.web.client.RestClient;
 /** Session -> controller -> production engine -> actual AI request serialization. */
 @WebMvcTest(controllers = {AuthController.class, PlaceController.class}, properties = {
     "auth.cookie-secure=false", "auth.frontend-origin=http://localhost:3000", "place.mock.enabled=false"})
-@Import({SecurityConfiguration.class, AuthRefreshCookieWriter.class, PlaceService.class,
+@Import({SecurityConfiguration.class, LegacyRefreshCookieExpiry.class, PlaceService.class,
     CatalogPlaceSearchEngine.class, SessionSearchHttpTests.Config.class})
 @org.springframework.test.context.ActiveProfiles("session-search-test")
 class SessionSearchHttpTests {
@@ -52,9 +52,9 @@ class SessionSearchHttpTests {
     @org.junit.jupiter.api.BeforeEach void resetAi() { server.reset(); }
     @Test void sessionPrincipalReplacesBodyPreferencesInAiRequest() throws Exception {
         long now = System.currentTimeMillis() / 1000;
-        var identity = new AuthUseCases.Identity("session-user", "name", "family", now + 1800, now + 86400);
-        when(auth.login(any(), any(), any())).thenReturn(new AuthUseCases.Issued("at", "rt", identity));
-        var result = mvc.perform(post("/api/auth/login").header("Origin", "http://localhost:3000")
+        var identity = new AuthUseCases.Identity("session-user", "name", now + 86400);
+        when(auth.login(any(), any(), any())).thenReturn(new AuthUseCases.Issued(identity));
+        var result = mvc.perform(post("/api/auth/login").with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).header("Origin", "http://localhost:3000")
             .contentType("application/json").content("{\"email\":\"a@example.com\",\"password\":\"password1\"}"))
             .andExpect(status().isOk()).andReturn();
         var session = (MockHttpSession) result.getRequest().getSession(false);
@@ -68,7 +68,6 @@ class SessionSearchHttpTests {
             .content("{\"query\":\"cafe\",\"preferences\":{\"mood\":\"LIVELY\"}}"))
             .andExpect(status().isOk());
         server.verify();
-        verify(auth, never()).authenticate(any());
     }
 
     static final String AREA = "{\"swLat\":37.49,\"swLng\":127.02,\"neLat\":37.51,\"neLng\":127.05}";
@@ -77,9 +76,9 @@ class SessionSearchHttpTests {
     /** 로그인해 세션과 CSRF 쿠키를 받는다 */
     org.springframework.test.web.servlet.MvcResult login() throws Exception {
         long now = System.currentTimeMillis() / 1000;
-        var identity = new AuthUseCases.Identity("session-user", "name", "family", now + 1800, now + 86400);
-        when(auth.login(any(), any(), any())).thenReturn(new AuthUseCases.Issued("at", "rt", identity));
-        return mvc.perform(post("/api/auth/login").header("Origin", "http://localhost:3000")
+        var identity = new AuthUseCases.Identity("session-user", "name", now + 86400);
+        when(auth.login(any(), any(), any())).thenReturn(new AuthUseCases.Issued(identity));
+        return mvc.perform(post("/api/auth/login").with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).header("Origin", "http://localhost:3000")
             .contentType("application/json").content("{\"email\":\"a@example.com\",\"password\":\"password1\"}"))
             .andExpect(status().isOk()).andReturn();
     }
@@ -98,10 +97,10 @@ class SessionSearchHttpTests {
                     + "\"tastes\":[]}}", org.springframework.test.json.JsonCompareMode.STRICT))
             .andRespond(withSuccess(EMPTY_AI, MediaType.APPLICATION_JSON));
 
-        mvc.perform(post("/api/v1/places/nearby").contentType("application/json")
+        mvc.perform(post("/api/v1/places/nearby").with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).contentType("application/json")
             .content("{\"mapBounds\":" + AREA + ",\"preferences\":{\"mood\":\"QUIET\"}}"))
             .andExpect(status().isOk());
-        mvc.perform(post("/api/v1/places/search/region").contentType("application/json")
+        mvc.perform(post("/api/v1/places/search/region").with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).contentType("application/json")
             .content("{\"query\":\"pasta\",\"conditions\":{\"text\":\"t\"},\"mapBounds\":" + AREA
                 + ",\"preferences\":{\"mood\":\"QUIET\"}}"))
             .andExpect(status().isOk());
@@ -142,18 +141,19 @@ class SessionSearchHttpTests {
         server.verify();
     }
 
-    @Test void bearerUserIdAndInvalidBearerOnAreaRequests() throws Exception {
-        when(auth.authenticate("token")).thenReturn(new AuthUseCases.Identity("bearer-user", "n", "s", 0, 0));
-        when(auth.authenticate("bad")).thenThrow(new kr.co.fitdining.api.auth.domain.AuthFailure("invalid"));
-        server.expect(requestTo("http://ai.test/v1/search"))
-            .andExpect(org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath("$.userId")
-                .value("bearer-user"))
-            .andRespond(withSuccess(EMPTY_AI, MediaType.APPLICATION_JSON));
-
-        mvc.perform(post("/api/v1/places/nearby").header("Authorization", "Bearer token")
-            .contentType("application/json").content("{\"mapBounds\":" + AREA + "}")).andExpect(status().isOk());
-        mvc.perform(post("/api/v1/places/search/region").header("Authorization", "Bearer bad")
-            .contentType("application/json").content("{}")).andExpect(status().isUnauthorized());
+    @Test void authorizationIsIgnoredOnAreaRequests() throws Exception {
+        for (int i = 0; i < 2; i++) {
+            server.expect(requestTo("http://ai.test/v1/search"))
+                .andExpect(org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath("$.userId").doesNotExist())
+                .andRespond(withSuccess(EMPTY_AI, MediaType.APPLICATION_JSON));
+        }
+        mvc.perform(post("/api/v1/places/nearby").with(kr.co.fitdining.api.support.SessionTestSupport.csrf())
+            .header("Authorization", "Bearer token").contentType("application/json")
+            .content("{\"mapBounds\":" + AREA + "}")).andExpect(status().isOk());
+        mvc.perform(post("/api/v1/places/search/region").with(kr.co.fitdining.api.support.SessionTestSupport.csrf())
+            .header("Authorization", "Bearer bad").contentType("application/json")
+            .content("{\"query\":\"pasta\",\"mapBounds\":" + AREA + "}")).andExpect(status().isOk());
+        verifyNoInteractions(auth);
         server.verify();
     }
 }

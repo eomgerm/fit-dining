@@ -70,6 +70,8 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 	@Autowired
 	AuthUseCases auth;
 
+    @Autowired org.springframework.session.FindByIndexNameSessionRepository<?> sessionRepository;
+
 	@Autowired
 	PasswordHasher passwords;
 
@@ -95,7 +97,6 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 	void cleanUp() {
 		JdbcTemplate app = new JdbcTemplate(appSource());
 		app.update("delete from search_threads where user_id like ?", USER_PREFIX + "%");
-		app.update("delete from auth_refresh_tokens where user_id like ?", USER_PREFIX + "%");
 		app.update("delete from auth_users where id like ?", USER_PREFIX + "%");
 		app.update("delete from auth_login_attempts where address like ?", USER_PREFIX + "%");
 	}
@@ -105,12 +106,12 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 		users.save(new AuthUser(USER_PREFIX + n, USER_PREFIX + n + "@example.com", "기록테스트" + n,
 				passwords.hash(PASSWORD), Instant.parse("2026-10-20T00:00:00Z"), "2026-10-23"));
 		// 로그인 시도 제한은 주소별이라 로그인마다 다른 주소로 보낸다
-		return auth.login(USER_PREFIX + n + "@example.com", PASSWORD, USER_PREFIX + UUID.randomUUID()).accessToken();
+		return kr.co.fitdining.api.support.SessionTestSupport.persist(sessionRepository, auth.login(USER_PREFIX + n + "@example.com", PASSWORD, USER_PREFIX + UUID.randomUUID()).identity());
 	}
 
 	private void withdraw(int n) {
 		String userId = USER_PREFIX + n;
-		userService.withdraw(userId, new AuthUseCases.Identity(userId, null, null, 0, 0));
+		userService.withdraw(userId, new AuthUseCases.Identity(userId, null, 0));
 	}
 
 	private static String threadId() {
@@ -143,15 +144,14 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 
 	private HttpRequest request(String method, String path, String token, String body) {
 		HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path));
-		if (token != null) {
-			builder.header("Authorization", "Bearer " + token);
-		}
 		if (body != null) {
 			builder.header("Content-Type", "application/json");
 		}
 		if (method.equals("DELETE")) {
 			builder.header("Origin", origin);
 		}
+		try { kr.co.fitdining.api.support.SessionTestSupport.csrf(builder, client, port, token); }
+        catch (Exception failure) { throw new IllegalStateException(failure); }
 		return builder.method(method, body == null ? HttpRequest.BodyPublishers.noBody()
 				: HttpRequest.BodyPublishers.ofString(body)).build();
 	}
@@ -903,7 +903,7 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 			String id = turnId();
 			put(token, thread, id, newTurn(id, AT, "카페"));
 			HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + BASE))
-					.header("Authorization", "Bearer " + token).header("Origin", "https://evil.example")
+					.header("Cookie", token).header("Origin", "https://evil.example")
 					.DELETE().build();
 
 			HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
@@ -1011,7 +1011,6 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 			put(token, thread, first, newTurn(first, AT, "카페"));
 			put(token, thread, second, turn(second, "followUp", first, AT, "조건"));
 			// 리프레시 토큰은 회원 FK에 CASCADE가 없어 먼저 지운다
-			jdbc.update("delete from auth_refresh_tokens where user_id = ?", USER_PREFIX + 0);
 
 			jdbc.update("delete from auth_users where id = ?", USER_PREFIX + 0);
 

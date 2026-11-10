@@ -118,7 +118,6 @@ auth:
     from-name: 핏다이닝
   cleanup:
     interval: PT10M
-    token-retention: P7D
     event-retention: P90D
     attempt-retention: PT15M
     # 이메일별 1시간 발송 제한을 세려면 1시간보다 길어야 한다

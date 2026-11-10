@@ -64,7 +64,7 @@ const signedIn: WithOptionalSession = (send) => send();
 const authenticated: WithSession = (send) => send();
 const http = (status: number) => new ApiError("http", "", { status });
 
-function mount(accessToken: WithSession = authenticated) {
+function mount(withSession: WithSession = authenticated) {
   const onEdit = vi.fn();
   const onSignIn = vi.fn();
   const client = new QueryClient({
@@ -76,7 +76,7 @@ function mount(accessToken: WithSession = authenticated) {
         <ReviewSection
           placeId={3}
           withOptionalSession={signedIn}
-          authenticated={accessToken}
+          authenticated={withSession}
           onEdit={onEdit}
           onSignIn={onSignIn}
         />

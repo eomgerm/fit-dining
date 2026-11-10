@@ -7,10 +7,8 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-/** Events have no FK to refresh tokens so evidence survives token cleanup. */
+/** Login audit and historical security evidence share the retention policy. */
 public interface AuthSecurityEventRepository extends JpaRepository<AuthSecurityEvent, Long> {
-    long countByFamilyId(String familyId);
-
     @Modifying
     @Query(value = "delete from auth_security_events where id in (select id from auth_security_events "
             + "where created_at < :cutoff order by created_at, id limit :batch)", nativeQuery = true)

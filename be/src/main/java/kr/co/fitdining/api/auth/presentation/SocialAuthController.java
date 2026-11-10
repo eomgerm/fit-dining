@@ -34,7 +34,6 @@ public class SocialAuthController {
     private final AuthSettings settings;
     private final SocialAccounts accounts;
     private final AuthTransactions transactions;
-    private final AuthRefreshCookieWriter cookies;
     private final SessionLogin sessions;
     private static final SecureRandom RANDOM = new SecureRandom();
 
@@ -68,10 +67,12 @@ public class SocialAuthController {
         @RequestParam(required = false) String error, HttpServletRequest request, HttpServletResponse response) {
         response.addHeader(HttpHeaders.SET_COOKIE, cookie("fitdining_oauth", "", false, 0).toString());
         String from = "login";
+        boolean failureAuditAllowed = false;
         try {
             String[] payload = tokens.decode(cookie, "oauth_state", 4);
             from = "signup".equals(payload[3]) ? "signup" : "login";
             if (!transactions.recordAttempt(request.getRemoteAddr(), "login")) throw new AuthFailure("Limited", 429);
+            failureAuditAllowed = true;
             if (!provider.equals(payload[0]) || state == null
                 || !MessageDigest.isEqual(payload[1].getBytes(StandardCharsets.UTF_8),
                         state.getBytes(StandardCharsets.UTF_8))
@@ -82,14 +83,18 @@ public class SocialAuthController {
             String subject = client.exchange(providers.get(provider), code, state, payload[2], callback(provider));
             var issued = accounts.existing(provider, subject);
             if (issued != null) {
-                cookies.issued(issued, response);
                 sessions.establish(issued.identity(), request, response);
+                LoginSuccessAudit.record(() -> transactions.audit(issued.identity().userId(), "LOGIN_SUCCESS"));
                 return redirect("/");
             }
 
             response.addHeader(HttpHeaders.SET_COOKIE, cookie("fitdining_social", tokens.encode("social_signup", provider, subject), true, 600).toString());
             return redirect("/signup/social");
         } catch (Exception failure) {
+            try { if (failureAuditAllowed) transactions.audit(null, "LOGIN_FAILURE"); }
+            catch (RuntimeException auditFailure) {
+                log.warn("Social login audit failed: reason={}", auditFailure.getClass().getSimpleName());
+            }
             log.warn("Social callback failed: reason={}", failure.getClass().getSimpleName());
             return failed(from);
         }
@@ -102,9 +107,9 @@ public class SocialAuthController {
         if (!transactions.recordAttempt(request.getRemoteAddr(), "signup")) throw new AuthFailure("Limited", 429);
         var issued = accounts.signup(identity[0], identity[1], body.preferences());
         response.addHeader(HttpHeaders.SET_COOKIE, cookie("fitdining_social", "", true, 0).toString());
-        var tokenResponse = cookies.issued(issued, response);
         sessions.establish(issued.identity(), request, response);
-        return ResponseEntity.status(201).body(tokenResponse);
+        LoginSuccessAudit.record(() -> transactions.audit(issued.identity().userId(), "LOGIN_SUCCESS"));
+        return ResponseEntity.status(201).body(AuthController.sessionResponse(issued));
     }
 
     private String callback(String provider) {

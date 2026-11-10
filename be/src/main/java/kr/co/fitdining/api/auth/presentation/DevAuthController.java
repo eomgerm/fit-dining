@@ -16,7 +16,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProp
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.web.bind.annotation.*;
 
-/** Development-only passwordless token issuance, guarded by the server development key. */
+/** Development-only passwordless session login, guarded by the server development key. */
 @RestController
 @ConditionalOnWebApplication
 @ConditionalOnBooleanProperty(name = "auth.simple.enabled")
@@ -25,7 +25,6 @@ public class DevAuthController {
     private final AuthSettings settings;
     private final AuthUserRepository users;
     private final AuthTransactions transactions;
-    private final AuthRefreshCookieWriter cookies;
     private final kr.co.fitdining.api.auth.infrastructure.SessionLogin sessions;
 
     /** @param email optional existing account email; absent selects the configured demo account */
@@ -40,8 +39,8 @@ public class DevAuthController {
         String email = body == null || body.email() == null ? settings.demoEmail() : AuthService.normalizeEmail(body.email());
         var issued = transactions.login(users.findByEmail(email)
                 .orElseThrow(() -> new AuthFailure("계정을 찾을 수 없습니다.", 404)));
-        var tokenResponse = cookies.issued(issued, response);
         sessions.establish(issued.identity(), request, response);
-        return tokenResponse;
+        LoginSuccessAudit.record(() -> transactions.audit(issued.identity().userId(), "LOGIN_SUCCESS"));
+        return AuthController.sessionResponse(issued);
     }
 }

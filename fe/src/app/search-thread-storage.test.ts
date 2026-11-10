@@ -11,7 +11,7 @@ const auth = vi.hoisted(() => ({
   session: null as AuthSession | null,
   listeners: new Set<() => void>(),
   restore: vi.fn<() => Promise<AuthSession>>(),
-  refresh: vi.fn<() => Promise<AuthSession>>(),
+  checkSession: vi.fn<() => Promise<AuthSession>>(),
   clearSession: vi.fn(),
 }));
 
@@ -21,10 +21,9 @@ function setSession(session: AuthSession | null) {
 }
 
 vi.mock("@/domains/auth/api/auth-client", () => ({
-  ACCESS_TOKEN_EXPIRED_TYPE: "urn:fitdining:auth:access-token-expired",
   getSession: () => auth.session,
   restore: () => auth.restore(),
-  refresh: () => auth.refresh(),
+  checkSession: () => auth.checkSession(),
   clearSession: () => {
     auth.clearSession();
     setSession(null);
@@ -46,8 +45,6 @@ let ApiError: typeof ApiErrorClass;
 
 const unauthorized = (type?: string) =>
   new ApiError("http", "x", { status: 401, problem: { status: 401, type } });
-
-const EXPIRED = "urn:fitdining:auth:access-token-expired";
 
 function turn(id: string, kind: ThreadTurn["kind"] = "new", baseId?: string) {
   return {
@@ -132,13 +129,13 @@ beforeEach(async () => {
   auth.session = null;
   auth.listeners.clear();
   auth.clearSession.mockReset();
-  auth.refresh.mockReset().mockImplementation(async () => {
+  auth.checkSession.mockReset().mockImplementation(async () => {
     setSession(null);
     throw unauthorized();
   });
   auth.restore
     .mockReset()
-    .mockImplementation(async () => auth.session ?? auth.refresh());
+    .mockImplementation(async () => auth.session ?? auth.checkSession());
   localStorage.clear();
   stubFetch();
 });
@@ -414,8 +411,8 @@ describe("회원", () => {
   });
 
   it("세션 만료 401이면 다른 계정으로 재시도하지 않는다", async () => {
-    responder = () => problem(401, EXPIRED);
-    auth.refresh.mockImplementation(async () => {
+    responder = () => problem(401);
+    auth.checkSession.mockImplementation(async () => {
       setSession(session("u2"));
       return auth.session!;
     });
@@ -432,11 +429,11 @@ describe("회원", () => {
     responder = () => {
       if (first) {
         first = false;
-        return problem(401, EXPIRED);
+        return problem(401);
       }
       return new Response(null, { status: 204 });
     };
-    auth.refresh.mockImplementation(async () => {
+    auth.checkSession.mockImplementation(async () => {
       setSession(session("u1", "s1"));
       return auth.session!;
     });

@@ -61,7 +61,7 @@ public class ReviewController {
 	 *
 	 * @param placeId 장소 id
 	 * @param cursor 다음 페이지 요청일 때, 직전 응답의 {@code nextCursor}
-	 * @param identity 선택적인 세션 또는 Bearer 인증 주체. 비회원은 null이다.
+	 * @param identity 선택적인 세션 인증 주체. 비회원은 null이다.
 	 * @return 리뷰 목록. 리뷰 수는 첫 페이지에만 있다.
 	 */
 	@GetMapping("/places/{placeId}/reviews")
@@ -75,13 +75,13 @@ public class ReviewController {
 	 * 로그인한 사용자의 리뷰를 등록한다(D-15, D-40).
 	 *
 	 * <p>오류: 본문을 읽을 수 없거나 정의되지 않은 속성이 있으면 400. {@code placeId}가 양의 정수가 아니면 400.
-	 * {@code Authorization} 헤더가 없거나 토큰이 유효하지 않으면 401(만료면 {@code type}이
-	 * {@code urn:fitdining:auth:access-token-expired}). 인증 뒤 필드 형식, 방문일 범위, 태그 규칙이 틀리면 400.
+	 * 인증 세션이 없으면 401, CSRF 토큰이 없거나 잘못되면 403이다.
+	 * 인증 뒤 필드 형식, 방문일 범위, 태그 규칙이 틀리면 400이다.
 	 * 없는 장소면 404. 사진이 있는데 사진 저장소가 없으면 503, 쓸 수 없는 사진이면 400({@code type}
 	 * {@code urn:fitdining:review:invalid-photo}). 같은 장소에 같은 방문일로 이미 썼으면 409.
 	 *
 	 * @param placeId 장소 id
-	 * @param identity 세션 또는 Bearer로 인증한 주체
+	 * @param identity 세션으로 인증한 주체
 	 * @param request 등록 요청
 	 * @return 등록된 리뷰 id
 	 */

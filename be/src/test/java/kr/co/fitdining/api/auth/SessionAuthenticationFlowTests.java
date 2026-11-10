@@ -40,7 +40,9 @@ class SessionAuthenticationFlowTests extends PostgresTestSupport {
     HttpResponse<String> request(String method, String path, String body, String cookies, String csrf) throws Exception {
         var builder = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
                 .header("Origin", "http://localhost:3000").header("X-Forwarded-For", address);
-        if (cookies != null) builder.header("Cookie", cookies);
+        if (csrf == null && !java.util.Set.of("GET", "HEAD", "OPTIONS").contains(method))
+            kr.co.fitdining.api.support.SessionTestSupport.csrf(builder, client, port, cookies);
+        else if (cookies != null) builder.header("Cookie", cookies);
         if (csrf != null) builder.header("X-XSRF-TOKEN", csrf);
         if (body != null) builder.header("Content-Type", "application/json");
         return client.send(builder.method(method, body == null ? HttpRequest.BodyPublishers.noBody()
@@ -65,6 +67,29 @@ class SessionAuthenticationFlowTests extends PostgresTestSupport {
         assertEquals(200, me.statusCode(), me.body());
         assertEquals(userId, mapper.readTree(me.body()).get("userId").asString());
     }
+    @Autowired org.springframework.data.redis.core.StringRedisTemplate sessionStrings;
+    @Value("${spring.session.data.redis.namespace}") String sessionNamespace;
+
+    @Test void legacySessionJsonStillAuthenticatesMe() throws Exception {
+        var result = signup(newName());
+        String userId = mapper.readTree(result.body()).get("userId").asString();
+        long expires = mapper.readTree(result.body()).get("sessionExpiresAt").asLong();
+        String cookie = cookie(result, "fitdining_session");
+        String id = new String(java.util.Base64.getDecoder().decode(cookie.substring("fitdining_session=".length())),
+                java.nio.charset.StandardCharsets.UTF_8);
+        String key = sessionNamespace + ":sessions:" + id;
+        String attribute = "sessionAttr:SPRING_SECURITY_CONTEXT";
+        String json = (String) sessionStrings.opsForHash().get(key, attribute);
+        assertNotNull(json);
+        json = json.replace("\"sessionExpiresAt\":" + expires,
+                "\"sessionId\":\"old-family\",\"accessExpiresAt\":100,\"sessionExpiresAt\":" + expires);
+        assertTrue(json.contains("old-family"));
+        sessionStrings.opsForHash().put(key, attribute, json);
+        var me = request("GET", "/api/auth/me", null, cookie, null);
+        assertEquals(200, me.statusCode(), me.body());
+        assertEquals(userId, mapper.readTree(me.body()).get("userId").asString());
+    }
+
     @Test void signupIssuesRedisSession() throws Exception {
         var result = signup(newName());
         assertSessionMe(result, mapper.readTree(result.body()).get("userId").asString());
@@ -91,12 +116,16 @@ class SessionAuthenticationFlowTests extends PostgresTestSupport {
         assertEquals(201, result.statusCode(), result.body());
         assertSessionMe(result, mapper.readTree(result.body()).get("userId").asString());
     }
-    @Test void logoutRevokesBothSessionAndRefreshToken() throws Exception {
+    @Test void logoutRevokesSessionAndClearsLegacyCookie() throws Exception {
         var result = signup(newName());
-        String session = cookie(result, "fitdining_session"), refresh = cookie(result, "fitdining_rt");
-        assertEquals(204, request("POST", "/api/auth/logout", null, session + "; " + refresh, null).statusCode());
+        String session = cookie(result, "fitdining_session");
+        var logout = request("POST", "/api/auth/logout", null, session, null);
+        assertEquals(204, logout.statusCode(), logout.body());
+        assertTrue(cookie(logout, "fitdining_rt").equals("fitdining_rt="));
+        String userId = mapper.readTree(result.body()).get("userId").asString();
+        assertEquals(1, new JdbcTemplate(appSource()).queryForObject(
+                "select count(*) from auth_security_events where user_id=? and type='LOGOUT'", Integer.class, userId));
         assertEquals(401, request("GET", "/api/auth/me", null, session, null).statusCode());
-        assertEquals(401, request("POST", "/api/auth/refresh", null, refresh, null).statusCode());
     }
     @Test void withdrawalRevokesEveryRedisSessionForThatUser() throws Exception {
         String name = newName();
@@ -114,9 +143,11 @@ class SessionAuthenticationFlowTests extends PostgresTestSupport {
         var withdrawal = request("DELETE", "/api/v1/users/" + userId, null, firstSession + "; " + csrfCookie,
                 csrfCookie.substring("XSRF-TOKEN=".length()));
         assertEquals(204, withdrawal.statusCode(), withdrawal.body());
+        assertEquals(1, new JdbcTemplate(appSource()).queryForObject(
+                "select count(*) from auth_security_events where user_id=? and type='SESSIONS_REVOKED'", Integer.class, userId));
         assertEquals(401, request("GET", "/api/auth/me", null, firstSession, null).statusCode());
         assertEquals(401, request("GET", "/api/auth/me", null, secondSession, null).statusCode());
-        assertEquals(401, request("GET", "/api/auth/protected", null, secondSession, null).statusCode());
+        assertEquals(401, request("GET", "/api/auth/me", null, secondSession, null).statusCode());
     }
     @Test void anonymousPublicGetAndPostNeverIssueSessionCookies() throws Exception {
         String[] gets = {"/api/v1/places/suggest?q=cafe", "/api/v1/places/1", "/api/v1/places/ids", "/api/v1/places/1/reviews"};
@@ -140,9 +171,9 @@ class SessionAuthenticationFlowTests extends PostgresTestSupport {
         long expiry = mapper.readTree(result.body()).get("sessionExpiresAt").asLong() * 1000L;
         try {
             doReturn(expiry - 1).when(clock).millis();
-            assertEquals(200, request("GET", "/api/auth/protected", null, session, null).statusCode());
+            assertEquals(200, request("GET", "/api/auth/me", null, session, null).statusCode());
             doReturn(expiry).when(clock).millis();
-            assertEquals(401, request("GET", "/api/auth/protected", null, session, null).statusCode());
+            assertEquals(401, request("GET", "/api/auth/me", null, session, null).statusCode());
             assertEquals(401, request("GET", "/api/auth/me", null, session, null).statusCode());
         } finally { doCallRealMethod().when(clock).millis(); }
     }

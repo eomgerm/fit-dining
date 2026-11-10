@@ -13,12 +13,9 @@ const load = () => {
   vi.resetModules();
   return import("./auth-client");
 };
-const value = (token = "at-1", expires = Date.now() / 1000 + 1800) => ({
+const value = () => ({
   userId: "user-1",
-  accessToken: token,
   nickname: "demo",
-  sessionId: "sid-1",
-  accessExpiresAt: expires,
   sessionExpiresAt: Date.now() / 1000 + 86400,
 });
 const json = (data: unknown, status = 200) =>
@@ -115,11 +112,11 @@ test("endSession clears the session and notifies other tabs", async () => {
 
 // 여러 화면의 동시 세션 확인 요청은 GET /me 한 번으로 합친다
 test("simultaneous checks share one me request", async () => {
-  let refreshes = 0;
+  let checks = 0;
   const env = environment(async (url) => {
     if (url.endsWith("/me")) {
-      refreshes++;
-      return json(value("at-2"));
+      checks++;
+      return json(value());
     }
     return json(value());
   });
@@ -129,7 +126,7 @@ test("simultaneous checks share one me request", async () => {
       auth.checkSession(),
       auth.checkSession(),
     ]);
-    assert.equal(refreshes, 1);
+    assert.equal(checks, 1);
     assert.equal(first, second);
     assert.equal(auth.getSession()?.userId, "user-1");
   } finally {
@@ -142,8 +139,8 @@ test("logout uses its session cookie and clears memory", async () => {
   const env = environment(async (url, options) => {
     const path = new URL(url, "http://localhost:3000").pathname;
     calls.push(path);
-    if (url.endsWith("/login")) return json(value("old", 0));
-    if (url.endsWith("/me")) return json(value("new"));
+    if (url.endsWith("/login")) return json(value());
+    if (url.endsWith("/me")) return json(value());
     assert.equal(new Headers(options.headers).has("Authorization"), false);
     assert.equal(options.credentials, "include");
     return new Response(null, { status: 204 });
@@ -162,7 +159,7 @@ test("logout uses its session cookie and clears memory", async () => {
   }
 });
 
-test("logout without a memory session does not refresh", async () => {
+test("logout without a memory session does not restore", async () => {
   const calls: string[] = [];
   const env = environment(async (url) => {
     calls.push(url);
@@ -181,7 +178,7 @@ test("logout without a memory session does not refresh", async () => {
 test("failed logout clears stale local session on unauthorized", async () => {
   const env = environment(async (url) =>
     url.endsWith("/login")
-      ? json(value("old", 0))
+      ? json(value())
       : json({ status: 401, detail: "expired" }, 401),
   );
   try {
@@ -194,7 +191,7 @@ test("failed logout clears stale local session on unauthorized", async () => {
   }
 });
 
-test("signup normalizes inputs, stores nickname and broadcasts under cookie lock", async () => {
+test("signup normalizes inputs, stores nickname and broadcasts the cookie change", async () => {
   const env = environment(async (url, options) => {
     assert.equal(url, "/api/auth/signup");
     assert.equal(options.credentials, "include");
@@ -249,7 +246,7 @@ test("signup failure preserves current session and does not broadcast", async ()
   }
 });
 
-test("missing browser locks fails before sending credentials", async () => {
+test("login works when Web Locks is unavailable", async () => {
   let calls = 0;
   const env = environment(async () => {
     calls++;
@@ -257,10 +254,8 @@ test("missing browser locks fails before sending credentials", async () => {
   }, false);
   try {
     const auth = await load();
-    await assert.rejects(auth.login("demo", "password"), {
-      status: 0,
-    });
-    assert.equal(calls, 0);
+    await auth.login("demo", "password");
+    assert.equal(calls, 1);
   } finally {
     env.reset();
   }
@@ -273,7 +268,7 @@ test("social signup saves session and broadcasts the cookie change", async () =>
     assert.deepEqual(JSON.parse(options.body as string), {
       agreements: { ageOver14: true, terms: true, privacy: true },
     });
-    return json(value("social-at"), 201);
+    return json(value(), 201);
   });
   try {
     const auth = await load();

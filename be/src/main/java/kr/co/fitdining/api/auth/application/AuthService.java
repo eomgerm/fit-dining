@@ -6,7 +6,6 @@ import kr.co.fitdining.api.auth.domain.AuthFailure;
 import kr.co.fitdining.api.auth.domain.AuthUser;
 import kr.co.fitdining.api.auth.ports.AuthUseCases;
 import kr.co.fitdining.api.auth.ports.PasswordHasher;
-import kr.co.fitdining.api.auth.ports.TokenCodec;
 import kr.co.fitdining.api.auth.repository.AuthUserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
@@ -21,7 +20,6 @@ public class AuthService implements AuthUseCases {
     private final kr.co.fitdining.api.onboarding.TasteProfileService tasteProfiles;
     private final AuthUserRepository users;
     private final PasswordHasher passwords;
-    private final TokenCodec codec;
     private final String authDummyHash;
     private final AuthPolicy policy;
     private final EmailVerifications verifications;
@@ -33,38 +31,23 @@ public class AuthService implements AuthUseCases {
             throw new AuthFailure("입력 형식을 확인해주세요.", 400);
         }
         if (!transactions.recordAttempt(address, "login")) throw new AuthFailure("잠시 후 다시 시도해주세요.", 429);
-        AuthUser user = users.findByEmail(normalizeEmail(email)).orElse(null);
-        if (user == null && !policy.compareDummyPassword()) throw new AuthFailure("인증을 확인해주세요.");
-        boolean matches = passwords.matches(password, user == null ? authDummyHash : user.getPasswordHash());
-        if (user == null || !matches) throw new AuthFailure("인증을 확인해주세요.");
-        return transactions.login(user);
-    }
-
-    @Override
-    public Issued refresh(String value) {
-        TokenCodec.Claims claims = codec.decode(value, "refresh");
-        AuthTransactions.Rotation result = transactions.rotate(claims);
-        if (result.failure() != null) {
-            transactions.revokeReused(claims);
-            throw result.failure();
+        try {
+            AuthUser user = users.findByEmail(normalizeEmail(email)).orElse(null);
+            if (user == null && !policy.compareDummyPassword()) throw new AuthFailure("인증을 확인해주세요.");
+            boolean matches = passwords.matches(password, user == null ? authDummyHash : user.getPasswordHash());
+            if (user == null || !matches || user.getDeletedAt() != null) throw new AuthFailure("인증을 확인해주세요.");
+            return transactions.login(user);
+        } catch (AuthFailure rejected) {
+            if (rejected.status() == 401) transactions.audit(null, "LOGIN_FAILURE");
+            throw rejected;
         }
-        return result.issued();
-    }
-
-    /** Stateless verification deliberately performs no repository access or transaction. */
-    @Override
-    public Identity authenticate(String value) {
-        TokenCodec.Claims claims = codec.decode(value, "access");
-        return new Identity(claims.userId(), null, null, claims.expiresAt(), 0);
     }
 
     @Override
-    public void logout(String value) {
-        TokenCodec.Claims claims;
-        try { claims = codec.decode(value, "refresh"); }
-        catch (AuthFailure invalid) { return; }
-        transactions.logout(claims);
-    }
+    public void logout(String userId) { if (userId != null) transactions.audit(userId, "LOGOUT"); }
+
+    @Override
+    public void sessionEstablished(String userId) { transactions.audit(userId, "LOGIN_SUCCESS"); }
 
     @Override
     public Profile me(String userId) {

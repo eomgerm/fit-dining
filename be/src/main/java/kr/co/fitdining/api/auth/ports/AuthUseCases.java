@@ -6,26 +6,14 @@ public interface AuthUseCases {
      * @param email account name
      * @param password supplied password, never persisted
      * @param clientAddress direct peer address used for rate limiting
-     * @return issued access and refresh tokens
+     * @return new session identity
      * @throws kr.co.fitdining.api.auth.domain.AuthFailure when credentials or rate limit reject login
      */
     Issued login(String email, String password, String clientAddress);
-    /**
-     * @param refreshToken serialized refresh JWT
-     * @return newly issued tokens in the same family
-     * @throws kr.co.fitdining.api.auth.domain.AuthFailure for invalid, expired or reused RT
-     */
-    Issued refresh(String refreshToken);
-    /**
-     * @param accessToken serialized access JWT
-     * @return identity from verified claims, without database access
-     * @throws kr.co.fitdining.api.auth.domain.AuthFailure if verification fails
-     */
-    Identity authenticate(String accessToken);
-    /**
-     * @param refreshToken cookie JWT; absent or invalid values are ignored
-     */
-    void logout(String refreshToken);
+    /** Records logout; the HTTP boundary invalidates the current session. */
+    void logout(String userId);
+    /** Records success only after the HTTP session has been established. */
+    void sessionEstablished(String userId);
     /** @param userId verified subject @return current account information */
     Profile me(String userId);
     /**
@@ -47,18 +35,10 @@ public interface AuthUseCases {
     /** @param nickname public name @param email account email */
     record Profile(String nickname, String email) {}
 
-    /**
-     * @param userId user identifier
-     * @param nickname public account name
-     * @param sessionId RT family identifier; legacy API field name is preserved
-     * @param accessExpiresAt AT expiry in epoch seconds
-     * @param sessionExpiresAt absolute RT family expiry in epoch seconds
-     */
-    record Identity(String userId, String nickname, String sessionId, long accessExpiresAt, long sessionExpiresAt) implements java.security.Principal { @com.fasterxml.jackson.annotation.JsonIgnore public String getName() { return userId; } }
-    /**
-     * @param accessToken signed access JWT, never persisted
-     * @param refreshToken signed refresh JWT, returned only via HttpOnly cookie
-     * @param identity identity with both expiry values
-     */
-    record Issued(String accessToken, String refreshToken, Identity identity) {}
+    /** Session principal; old deployments may have persisted additional token fields. */
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
+    record Identity(String userId, String nickname, long sessionExpiresAt) implements java.security.Principal {
+        @com.fasterxml.jackson.annotation.JsonIgnore public String getName() { return userId; }
+    }
+    record Issued(Identity identity) {}
 }

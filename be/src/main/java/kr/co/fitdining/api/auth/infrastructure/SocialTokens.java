@@ -11,7 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.stereotype.Component;
 
-/** Short-lived signed cookie payloads with token types isolated from access and refresh tokens. */
+/** Short-lived signed OAuth state and social signup cookie payloads. */
 @Component
 @ConditionalOnWebApplication
 @RequiredArgsConstructor
@@ -24,7 +24,7 @@ public class SocialTokens {
                 .map(v -> Base64.getUrlEncoder().withoutPadding().encodeToString(v.getBytes(StandardCharsets.UTF_8)))
                 .collect(Collectors.joining("."));
         long now = clock.instant().getEpochSecond();
-        return codec.encode(new TokenCodec.Token(payload, null, type, now, now + 600));
+        return codec.encode(new TokenCodec.Token(payload, type, now, now + 600));
     }
 
     public String[] decode(String token, String type, int count) {

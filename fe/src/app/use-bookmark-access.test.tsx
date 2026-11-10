@@ -11,13 +11,13 @@ import { createQueryClient } from "@/shared/api/query-client";
 
 import { useBookmarkAccess } from "./use-bookmark-access";
 
-type Session = { userId: string; accessToken: string };
+type Session = { userId: string; nickname: string; sessionExpiresAt: number };
 
 const auth = vi.hoisted(() => ({
   session: null as Session | null,
   listeners: new Set<() => void>(),
   restore: vi.fn(),
-  refresh: vi.fn(),
+  checkSession: vi.fn(),
   clearSession: vi.fn(),
 }));
 function setSession(next: Session | null) {
@@ -25,14 +25,13 @@ function setSession(next: Session | null) {
   auth.listeners.forEach((listener) => listener());
 }
 vi.mock("@/domains/auth/api/auth-client", () => ({
-  ACCESS_TOKEN_EXPIRED_TYPE: "urn:fitdining:auth:access-token-expired",
   getSession: () => auth.session,
   subscribe: (listener: () => void) => {
     auth.listeners.add(listener);
     return () => auth.listeners.delete(listener);
   },
   restore: auth.restore,
-  refresh: auth.refresh,
+  checkSession: auth.checkSession,
   clearSession: auth.clearSession,
 }));
 const push = vi.fn();
@@ -41,7 +40,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
 const expired = () =>
   new ApiError("http", "만료", {
     status: 401,
-    problem: { status: 401, type: "urn:fitdining:auth:access-token-expired" },
+    problem: { status: 401 },
   });
 
 let queryClient = createQueryClient();
@@ -68,7 +67,11 @@ afterEach(() => {
 
 describe("로그인 상태", () => {
   it("세션이 있으면 그 사용자다", async () => {
-    auth.session = { userId: "a", accessToken: "t1" };
+    auth.session = {
+      userId: "a",
+      nickname: "demo",
+      sessionExpiresAt: 2000000000,
+    };
     const { result } = renderAccess();
 
     expect(result.current.session).toEqual({ status: "user", userId: "a" });
@@ -93,17 +96,33 @@ describe("로그인 상태", () => {
     await act(async () => vi.advanceTimersByTimeAsync(1));
     expect(result.current.session).toEqual({ status: "guest" });
 
-    act(() => setSession({ userId: "a", accessToken: "t1" }));
+    act(() =>
+      setSession({
+        userId: "a",
+        nickname: "demo",
+        sessionExpiresAt: 2000000000,
+      }),
+    );
     expect(result.current.session).toEqual({ status: "user", userId: "a" });
   });
 
   it("계정이 바뀌면 이전 계정의 북마크 캐시를 지운다", async () => {
-    auth.session = { userId: "a", accessToken: "t1" };
+    auth.session = {
+      userId: "a",
+      nickname: "demo",
+      sessionExpiresAt: 2000000000,
+    };
     renderAccess();
     queryClient.setQueryData(bookmarkKeys.status("a", 1), { bookmarked: true });
     queryClient.setQueryData([...bookmarkKeys.lists("a"), 1], []);
 
-    act(() => setSession({ userId: "b", accessToken: "t2" }));
+    act(() =>
+      setSession({
+        userId: "b",
+        nickname: "demo",
+        sessionExpiresAt: 2000000000,
+      }),
+    );
 
     expect(
       queryClient.getQueryData(bookmarkKeys.status("a", 1)),
@@ -114,7 +133,11 @@ describe("로그인 상태", () => {
   });
 
   it("세션 종료는 인증 모듈의 clearSession이고, [로그인]은 돌아올 주소를 남기고 로그인 화면으로 간다", async () => {
-    auth.session = { userId: "a", accessToken: "t1" };
+    auth.session = {
+      userId: "a",
+      nickname: "demo",
+      sessionExpiresAt: 2000000000,
+    };
     const { result } = renderAccess();
 
     result.current.endSession();
@@ -130,7 +153,11 @@ describe("로그인 상태", () => {
 
 describe("누른 계정의 세션에서만 보내기", () => {
   it("지금 세션이 누른 계정이면 토큰 인자 없이 보낸다", async () => {
-    auth.session = { userId: "a", accessToken: "t1" };
+    auth.session = {
+      userId: "a",
+      nickname: "demo",
+      sessionExpiresAt: 2000000000,
+    };
     const { result } = renderAccess();
     const request = vi.fn(async () => "sent");
 
@@ -138,7 +165,11 @@ describe("누른 계정의 세션에서만 보내기", () => {
   });
 
   it("로그인 정보가 없거나 다른 계정이면 보내지 않는다", async () => {
-    auth.session = { userId: "b", accessToken: "t2" };
+    auth.session = {
+      userId: "b",
+      nickname: "demo",
+      sessionExpiresAt: 2000000000,
+    };
     const { result } = renderAccess();
     const request = vi.fn(async () => "sent");
 
@@ -150,14 +181,22 @@ describe("누른 계정의 세션에서만 보내기", () => {
       BookmarkAccountChanged,
     );
     expect(request).not.toHaveBeenCalled();
-    expect(auth.refresh).not.toHaveBeenCalled();
+    expect(auth.checkSession).not.toHaveBeenCalled();
   });
 
   it("복원을 기다리는 사이 계정이 바뀌면 보내지 않는다", async () => {
-    auth.session = { userId: "a", accessToken: "t1" };
+    auth.session = {
+      userId: "a",
+      nickname: "demo",
+      sessionExpiresAt: 2000000000,
+    };
     // 복원이 돌려준 세션이 그사이 바뀐 경우(다른 계정으로 갔다가 같은 계정으로 다시 로그인)
     auth.restore.mockImplementation(async () => {
-      auth.session = { userId: "b", accessToken: "stale" };
+      auth.session = {
+        userId: "b",
+        nickname: "demo",
+        sessionExpiresAt: 2000000000,
+      };
       return auth.session;
     });
     const { result } = renderAccess();
@@ -170,9 +209,17 @@ describe("누른 계정의 세션에서만 보내기", () => {
   });
 
   it("세션이 만료되면 다른 계정으로 다시 보내지 않는다", async () => {
-    auth.session = { userId: "a", accessToken: "t1" };
-    auth.refresh.mockImplementation(async () => {
-      auth.session = { userId: "b", accessToken: "t2" };
+    auth.session = {
+      userId: "a",
+      nickname: "demo",
+      sessionExpiresAt: 2000000000,
+    };
+    auth.checkSession.mockImplementation(async () => {
+      auth.session = {
+        userId: "b",
+        nickname: "demo",
+        sessionExpiresAt: 2000000000,
+      };
       return auth.session;
     });
     const { result } = renderAccess();
@@ -187,9 +234,17 @@ describe("누른 계정의 세션에서만 보내기", () => {
   });
 
   it("같은 계정이어도 만료된 요청을 다시 보내지 않는다", async () => {
-    auth.session = { userId: "a", accessToken: "t1" };
-    auth.refresh.mockImplementation(async () => {
-      auth.session = { userId: "a", accessToken: "t2" };
+    auth.session = {
+      userId: "a",
+      nickname: "demo",
+      sessionExpiresAt: 2000000000,
+    };
+    auth.checkSession.mockImplementation(async () => {
+      auth.session = {
+        userId: "a",
+        nickname: "demo",
+        sessionExpiresAt: 2000000000,
+      };
       return auth.session;
     });
     const { result } = renderAccess();

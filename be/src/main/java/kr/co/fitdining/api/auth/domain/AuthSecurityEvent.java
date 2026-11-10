@@ -20,14 +20,20 @@ public class AuthSecurityEvent {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    @Column(nullable = false)
     private String familyId;
+    private String userId;
     @Column(nullable = false)
     private Instant createdAt;
     @Column(nullable = false)
     private String type;
     @Column(nullable = false)
     private int reuseCount;
+
+    public static AuthSecurityEvent login(String userId, Instant now, String type) {
+        var event = new AuthSecurityEvent(null, now, type, 0);
+        event.userId = userId;
+        return event;
+    }
 
     public AuthSecurityEvent(String familyId, Instant createdAt, String type, int reuseCount) {
         this.familyId = familyId;

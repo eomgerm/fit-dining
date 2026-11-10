@@ -39,7 +39,7 @@ class PreferencesFlowTests extends PostgresTestSupport {
         var signup = request("POST", "/api/auth/signup", signupBody(name, ""), null);
         assertEquals(201, signup.statusCode(), signup.body());
         var session = mapper.readTree(signup.body());
-        String user = session.get("userId").asString(), token = session.get("accessToken").asString();
+        String user = session.get("userId").asString(), token = kr.co.fitdining.api.support.SessionTestSupport.cookie(signup);
         String path = "/api/v1/users/" + user;
         var read = request("GET", path, null, token);
         assertEquals(200, read.statusCode(), read.body());
@@ -51,7 +51,7 @@ class PreferencesFlowTests extends PostgresTestSupport {
         assertEquals(401, request("GET", path, null, null).statusCode());
         assertEquals(403, request("GET", "/api/v1/users/other", null, token).statusCode());
         assertEquals(204, request("DELETE", path, null, token).statusCode());
-        assertEquals(404, request("GET", path, null, token).statusCode());
+        assertEquals(401, request("GET", path, null, token).statusCode());
     }
     @ParameterizedTest @ValueSource(strings = {"google", "kakao", "naver"})
     void profile_socialProvider(String provider) throws Exception {
@@ -61,14 +61,14 @@ class PreferencesFlowTests extends PostgresTestSupport {
         String user = session.get("userId").asString();
         jdbc.update("insert into auth_social_accounts(provider, provider_user_id, user_id, created_at) values (?, ?, ?, now())",
                 provider, id(), user);
-        var read = request("GET", "/api/v1/users/" + user, null, session.get("accessToken").asString());
+        var read = request("GET", "/api/v1/users/" + user, null, kr.co.fitdining.api.support.SessionTestSupport.cookie(signup));
         assertEquals(200, read.statusCode(), read.body());
         assertEquals(provider, mapper.readTree(read.body()).get("loginMethod").asString());
     }
     HttpResponse<String> request(String method, String path, String body, String token) throws Exception {
         var builder = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
                 .header("Origin", "http://localhost:3000");
-        if (token != null) builder.header("Authorization", "Bearer " + token);
+        kr.co.fitdining.api.support.SessionTestSupport.csrf(builder, client, port, token);
         if (body != null) builder.header("Content-Type", "application/json");
         return client.send(builder.method(method, body == null ? HttpRequest.BodyPublishers.noBody()
                 : HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofString());
@@ -81,9 +81,7 @@ class PreferencesFlowTests extends PostgresTestSupport {
                 """), null);
         assertEquals(201, response.statusCode(), response.body());
         var session = mapper.readTree(response.body());
-        String user = session.get("userId").asString(), token = session.get("accessToken").asString();
-        var claims = mapper.readTree(new String(Base64.getUrlDecoder().decode(token.split("\\.")[1]), StandardCharsets.UTF_8));
-        assertEquals(user, claims.get("sub").asString());
+        String user = session.get("userId").asString(), token = kr.co.fitdining.api.support.SessionTestSupport.cookie(response);
         jdbc.update("update user_preferences set tastes = jsonb_set(tastes, '{0,vector}', '[0.5]') where user_id=?", user);
         var read = request("GET", "/api/v1/users/" + user + "/preferences", null, token);
         assertEquals(200, read.statusCode(), read.body());
@@ -101,7 +99,7 @@ class PreferencesFlowTests extends PostgresTestSupport {
         assertEquals(201, response.statusCode(), response.body());
         var session = mapper.readTree(response.body());
         assertEquals(404, request("GET", "/api/v1/users/" + session.get("userId").asString() + "/preferences", null,
-                session.get("accessToken").asString()).statusCode());
+                kr.co.fitdining.api.support.SessionTestSupport.cookie(response)).statusCode());
     }
     @ParameterizedTest
     @ValueSource(strings = {
@@ -133,27 +131,21 @@ class PreferencesFlowTests extends PostgresTestSupport {
         var signup = request("POST", "/api/auth/signup", body, null);
         assertEquals(201, signup.statusCode(), signup.body());
         var session = mapper.readTree(signup.body());
-        String user = session.get("userId").asString(), at = session.get("accessToken").asString();
-        String rt = signup.headers().allValues("set-cookie").stream().filter(value -> value.startsWith("fitdining_rt=")).findFirst().orElseThrow().split(";", 2)[0];
+        String user = session.get("userId").asString(), at = kr.co.fitdining.api.support.SessionTestSupport.cookie(signup);
         String credentials = "{\"email\":\"" + name + "@example.com\",\"password\":\"password123\"}";
         assertEquals(200, request("POST", "/api/auth/login", credentials, null).statusCode());
         assertEquals(403, request("DELETE", "/api/v1/users/other", null, at).statusCode());
         var wrongOrigin = client.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/users/" + user))
-                .header("Origin", "https://other.example").header("Authorization", "Bearer " + at).DELETE().build(), HttpResponse.BodyHandlers.ofString());
+                .header("Origin", "https://other.example").header("Cookie", at).DELETE().build(), HttpResponse.BodyHandlers.ofString());
         assertEquals(403, wrongOrigin.statusCode());
         var withdrawn = request("DELETE", "/api/v1/users/" + user, null, at);
         assertEquals(204, withdrawn.statusCode(), withdrawn.body());
-        String cookie = withdrawn.headers().allValues("set-cookie").stream().filter(value -> value.startsWith("fitdining_rt=")).findFirst().orElseThrow();
-        assertTrue(cookie.contains("Max-Age=0") && cookie.contains("Path=/api/auth") && cookie.contains("HttpOnly") && cookie.contains("SameSite=Strict"));
         assertNotNull(jdbc.queryForObject("select deleted_at from auth_users where id = ?", Timestamp.class, user));
         assertEquals(0, jdbc.queryForObject("select count(*) from user_preferences where user_id = ?", Integer.class, user));
-        assertEquals(0, jdbc.queryForObject("select count(*) from auth_refresh_tokens where user_id = ? and revoked_at is null", Integer.class, user));
-        assertEquals(204, request("DELETE", "/api/v1/users/" + user, null, at).statusCode());
-        assertEquals(404, request("GET", "/api/v1/users/" + user + "/preferences", null, at).statusCode());
+        assertEquals(401, request("DELETE", "/api/v1/users/" + user, null, at).statusCode());
+        assertEquals(401, request("GET", "/api/v1/users/" + user + "/preferences", null, at).statusCode());
         assertEquals(401, request("POST", "/api/auth/login", credentials, null).statusCode());
-        var refresh = client.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/auth/refresh"))
-                .header("Origin", "http://localhost:3000").header("Cookie", rt).POST(HttpRequest.BodyPublishers.noBody()).build(), HttpResponse.BodyHandlers.ofString());
-        assertEquals(401, refresh.statusCode());
+
         // 인증 토큰은 1회용이라 재가입에는 새로 인증한 토큰을 쓴다.
         var again = request("POST", "/api/auth/signup", signupBody(name, ",\"preferences\":{\"mood\":\"QUIET\"}"), null);
         assertEquals(201, again.statusCode(), again.body());
@@ -183,9 +175,9 @@ class PreferencesFlowTests extends PostgresTestSupport {
         var signup = request("POST", "/api/auth/signup", signupBody(id(), ""), null);
         assertEquals(201, signup.statusCode(), signup.body());
         var session = mapper.readTree(signup.body());
-        String user = session.get("userId").asString(), token = session.get("accessToken").asString();
+        String user = session.get("userId").asString(), token = kr.co.fitdining.api.support.SessionTestSupport.cookie(signup);
         var origin = client.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/users/" + user))
-                .header("Authorization", "Bearer " + token).DELETE().build(), HttpResponse.BodyHandlers.ofString());
+                .header("Cookie", token).DELETE().build(), HttpResponse.BodyHandlers.ofString());
         assertEquals(403, origin.statusCode());
         assertEquals("허용되지 않은 요청 출처입니다.", mapper.readTree(origin.body()).get("detail").asString());
         var owner = request("GET", "/api/v1/users/other/preferences", null, token);
@@ -197,9 +189,11 @@ class PreferencesFlowTests extends PostgresTestSupport {
     void preferences_invalidLabels_returnsLocaleIndependentReasons(String locale) throws Exception {
         for (String label : List.of("", "a".repeat(21))) {
             String body = signupBody(id(), ",\"preferences\":{\"tastes\":[{\"polarity\":\"LIKE\",\"label\":\"" + label + "\"}]}");
-            var response = client.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/auth/signup"))
+            var builder = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/auth/signup"))
                     .header("Origin", "http://localhost:3000").header("Accept-Language", locale)
-                    .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofString());
+                    .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body));
+            kr.co.fitdining.api.support.SessionTestSupport.csrf(builder, client, port, null);
+            var response = client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
             assertEquals(400, response.statusCode(), response.body());
             var errors = mapper.readTree(response.body()).get("errors");
             assertFalse(errors.isEmpty());
@@ -210,26 +204,5 @@ class PreferencesFlowTests extends PostgresTestSupport {
         }
     }
 
-    @ParameterizedTest @ValueSource(strings = {"LOGOUT", "REFRESH_REUSE"})
-    @DisplayName("탈퇴_이미 폐기된 RT 존재_기존 사유와 시각 유지 및 활성 RT 폐기")
-    void withdraw_previouslyRevokedToken_preservesHistoryAndRevokesActiveTokens(String reason) throws Exception {
-        String name = id();
-        var signup = request("POST", "/api/auth/signup", signupBody(name, ""), null);
-        assertEquals(201, signup.statusCode(), signup.body());
-        var session = mapper.readTree(signup.body());
-        String user = session.get("userId").asString(), family = session.get("sessionId").asString();
-        String at = session.get("accessToken").asString();
-        jdbc.update("update auth_refresh_tokens set revoked_at = created_at, revoke_reason = ? where family_id = ?", reason, family);
-        var previous = jdbc.queryForMap("select revoked_at, revoke_reason from auth_refresh_tokens where family_id = ?", family);
-        String credentials = "{\"email\":\"" + name + "@example.com\",\"password\":\"password123\"}";
-        var login = request("POST", "/api/auth/login", credentials, null);
-        assertEquals(200, login.statusCode(), login.body());
-        assertEquals(1, jdbc.queryForObject("select count(*) from auth_refresh_tokens where user_id = ? and revoked_at is null", Integer.class, user));
-        assertEquals(204, request("DELETE", "/api/v1/users/" + user, null, at).statusCode());
-        assertEquals(0, jdbc.queryForObject("select count(*) from auth_refresh_tokens where user_id = ? and revoked_at is null", Integer.class, user));
-        assertEquals(previous, jdbc.queryForMap("select revoked_at, revoke_reason from auth_refresh_tokens where family_id = ?", family));
-        assertEquals(1, jdbc.queryForObject("select count(*) from auth_refresh_tokens where user_id = ? and revoke_reason = 'WITHDRAWN'", Integer.class, user));
-        assertEquals(204, request("DELETE", "/api/v1/users/" + user, null, at).statusCode());
-        assertEquals(previous, jdbc.queryForMap("select revoked_at, revoke_reason from auth_refresh_tokens where family_id = ?", family));
-    }
+
 }

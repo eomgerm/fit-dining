@@ -144,7 +144,7 @@ class PlaceControllerPassThroughTest {
 	@Test
 	@DisplayName("추천검색_엔진의반환값을_그대로응답한다")
 	void search_fakeEngine_returnsEngineValueAsIs() throws Exception {
-		mockMvc.perform(post("/api/v1/places/search").contentType(MediaType.APPLICATION_JSON)
+		mockMvc.perform(post("/api/v1/places/search").with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).contentType(MediaType.APPLICATION_JSON)
 						.content("{\"query\":\"아무거나\",\"cursor\":\"엔진만 아는 값\"}"))
 				.andExpect(status().isOk())
 				.andExpect(content().json(jsonMapper.writeValueAsString(SEARCH), JsonCompareMode.STRICT));
@@ -156,7 +156,7 @@ class PlaceControllerPassThroughTest {
 	void search_engineFallback_sentAsHeader() throws Exception {
 		fakeEngine.fallback = "PREVIOUS_INVALID,TASTE_INVALID";
 		try {
-			mockMvc.perform(post("/api/v1/places/search").contentType(MediaType.APPLICATION_JSON)
+			mockMvc.perform(post("/api/v1/places/search").with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).contentType(MediaType.APPLICATION_JSON)
 							.content("{\"query\":\"아무거나\"}"))
 					.andExpect(status().isOk())
 					.andExpect(header().string("X-Fallback", "PREVIOUS_INVALID,TASTE_INVALID"));
@@ -168,7 +168,7 @@ class PlaceControllerPassThroughTest {
 	@Test
 	@DisplayName("추천검색_엔진의X-Fallback값이없으면_헤더가없다")
 	void search_noEngineFallback_noHeader() throws Exception {
-		mockMvc.perform(post("/api/v1/places/search").contentType(MediaType.APPLICATION_JSON)
+		mockMvc.perform(post("/api/v1/places/search").with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).contentType(MediaType.APPLICATION_JSON)
 						.content("{\"query\":\"아무거나\"}"))
 				.andExpect(status().isOk())
 				.andExpect(header().doesNotExist("X-Fallback"));
@@ -177,15 +177,14 @@ class PlaceControllerPassThroughTest {
 	@Test
 	@DisplayName("추천검색_유효한토큰이면_그사용자id만엔진에넘기고preferences는요청에남는다")
 	void search_validToken_passesTokenUserIdOnly() throws Exception {
-		when(auth.authenticate("token")).thenReturn(new AuthUseCases.Identity("user-1", "닉", "s", 0, 0));
 
-		mockMvc.perform(post("/api/v1/places/search").contentType(MediaType.APPLICATION_JSON)
-						.header("Authorization", "Bearer token")
+		mockMvc.perform(post("/api/v1/places/search").with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).contentType(MediaType.APPLICATION_JSON)
+						.with(kr.co.fitdining.api.support.SessionTestSupport.session("user-1"))
 						.content("{\"query\":\"아무거나\",\"preferences\":{\"mood\":\"QUIET\"}}"))
 				.andExpect(status().isOk());
 		assertThat(fakeEngine.lastUserId).isEqualTo("user-1");
 
-		mockMvc.perform(post("/api/v1/places/search").contentType(MediaType.APPLICATION_JSON)
+		mockMvc.perform(post("/api/v1/places/search").with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).contentType(MediaType.APPLICATION_JSON)
 						.content("{\"query\":\"아무거나\",\"preferences\":{\"mood\":\"QUIET\"}}"))
 				.andExpect(status().isOk());
 		assertThat(fakeEngine.lastUserId).isNull();

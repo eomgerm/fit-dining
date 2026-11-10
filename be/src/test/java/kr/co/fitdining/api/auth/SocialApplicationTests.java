@@ -79,10 +79,8 @@ class SocialApplicationTests extends PostgresTestSupport {
         var session = accounts.signup("kakao", subject);
         assertNull(auth.me(session.identity().userId()).email());
         assertEquals(session.identity().userId(), accounts.signup("kakao", subject).identity().userId());
-        var rotated = auth.refresh(session.refreshToken());
-        assertEquals(session.identity().userId(), rotated.identity().userId());
-        auth.logout(rotated.refreshToken());
-        assertThrows(AuthFailure.class, () -> auth.refresh(rotated.refreshToken()));
+        auth.logout(session.identity().userId());
+        assertEquals(session.identity().userId(), accounts.existing("kakao", subject).identity().userId());
     }
 
     @Test
@@ -124,7 +122,7 @@ class SocialApplicationTests extends PostgresTestSupport {
             for (int i = 0; i < 2; i++) {
                 String subject = UUID.randomUUID().toString();
                 tasks.add(executor.submit(() -> mvc.perform(
-                    MockMvcRequestBuilders.post("/api/auth/social/signup")
+                    MockMvcRequestBuilders.post("/api/auth/social/signup").with(kr.co.fitdining.api.support.SessionTestSupport.csrf())
                     .header("Origin", "http://localhost:3000").contentType("application/json")
                     .content("{\"agreements\":{\"ageOver14\":true,\"terms\":true,\"privacy\":true}}")
                     .cookie(new Cookie("fitdining_social", tokens.encode("social_signup", "google", subject))))

@@ -37,7 +37,7 @@ class PlaceAiStartupTest {
 			mockMvc.perform(get("/actuator/health/readiness"))
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.status").value("UP"));
-			mockMvc.perform(post("/api/v1/places/search").contentType(MediaType.APPLICATION_JSON)
+			mockMvc.perform(post("/api/v1/places/search").with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).contentType(MediaType.APPLICATION_JSON)
 							.content("{\"query\":\"근처 맛집\"}"))
 					.andExpect(status().isOk())
 					.andExpect(header().string("X-Fallback", "AI_UNAVAILABLE"));

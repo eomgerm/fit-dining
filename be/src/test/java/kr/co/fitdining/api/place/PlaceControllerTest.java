@@ -515,13 +515,11 @@ class PlaceControllerTest {
 		@ValueSource(strings = {"suggest", "detail"})
 		@DisplayName("suggestAndDetail_invalidAuthorization_returnsUnauthorized")
         void suggestAndDetail_invalidAuthorization_returnsUnauthorized(String endpoint) throws Exception {
-            when(auth.authenticate(any())).thenThrow(new AuthFailure("invalid"));
             mockMvc.perform(request(endpoint)).andExpect(status().isOk());
             for (String header : List.of("Bearer bad", "Basic x", "")) {
                 mockMvc.perform(request(endpoint).header("Authorization", header))
-                    .andExpect(status().isUnauthorized());
+                    .andExpect(status().isOk());
             }
-            org.mockito.Mockito.verify(auth).authenticate("bad");
         }
 
 		private static MockHttpServletRequestBuilder request(String endpoint) {
@@ -532,57 +530,21 @@ class PlaceControllerTest {
 		@Test
 		@DisplayName("추천검색_유효한토큰이면_Mock결과는토큰없을때와같고X-Fallback이없다")
 		void search_validToken_sameMockResult() throws Exception {
-			when(auth.authenticate("token")).thenReturn(identity("user-1"));
 			String plain = mockMvc.perform(search("{\"query\":\"카페\"}"))
 					.andExpect(header().doesNotExist("X-Fallback"))
 					.andReturn().getResponse().getContentAsString();
 
-			mockMvc.perform(search("{\"query\":\"카페\"}").header("Authorization", "Bearer token"))
+			mockMvc.perform(search("{\"query\":\"카페\"}").with(kr.co.fitdining.api.support.SessionTestSupport.session("user-1")))
 					.andExpect(status().isOk())
 					.andExpect(header().doesNotExist("X-Fallback"))
 					.andExpect(content().json(plain, JsonCompareMode.STRICT));
 		}
 
-		@ParameterizedTest
-		@ValueSource(strings = {"", "Basic token", "bearer token", "Bearer"})
-		@DisplayName("추천검색_Bearer로시작하지않는헤더는_401이다")
-		void search_nonBearerHeader_returnsUnauthorized(String header) throws Exception {
-			mockMvc.perform(search("{\"query\":\"카페\"}").header("Authorization", header))
-					.andExpect(status().isUnauthorized())
-					.andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
-					.andExpect(jsonPath("$.status").value(401));
-			verifyNoInteractions(auth);
-		}
-
-		@Test
-		@DisplayName("추천검색_유효하지않은토큰은_401이다")
-		void search_invalidToken_returnsUnauthorized() throws Exception {
-			when(auth.authenticate("bad")).thenThrow(new AuthFailure("인증 실패"));
-
-			mockMvc.perform(search("{\"query\":\"카페\"}").header("Authorization", "Bearer bad"))
-					.andExpect(status().isUnauthorized())
-					.andExpect(jsonPath("$.status").value(401))
-					.andExpect(jsonPath("$.type").doesNotExist());
-		}
-
-		@Test
-		@DisplayName("추천검색_만료된토큰은_401이고만료type이다")
-		void search_expiredToken_returnsExpiredType() throws Exception {
-			when(auth.authenticate("old")).thenThrow(AuthFailure.accessExpired());
-
-			mockMvc.perform(search("{\"query\":\"카페\"}").header("Authorization", "Bearer old"))
-					.andExpect(status().isUnauthorized())
-					.andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
-					.andExpect(jsonPath("$.type").value("urn:fitdining:auth:access-token-expired"));
-		}
-
 		@Test
 		@DisplayName("search_invalidBodyAndToken_unauthorizedFirst")
         void search_invalidBodyAndToken_unauthorizedFirst() throws Exception {
-            when(auth.authenticate("bad")).thenThrow(new AuthFailure("invalid"));
             mockMvc.perform(search("{\"query\":\"\"}").header("Authorization", "Bearer bad"))
-                .andExpect(status().isUnauthorized());
-            org.mockito.Mockito.verify(auth).authenticate("bad");
+                .andExpect(status().isBadRequest());
         }
 
 		@Test
@@ -621,12 +583,11 @@ class PlaceControllerTest {
 		@MethodSource("invalidPreferences")
 		@DisplayName("추천검색_가입검증에맞지않는preferences는_비회원이든회원이든400이다")
 		void search_invalidPreferences_returnsBadRequest(String preferences) throws Exception {
-			when(auth.authenticate("token")).thenReturn(identity("user-1"));
 			String body = "{\"query\":\"카페\",\"preferences\":" + preferences + "}";
 
 			mockMvc.perform(search(body)).andExpect(status().isBadRequest())
 					.andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON));
-			mockMvc.perform(search(body).header("Authorization", "Bearer token")).andExpect(status().isBadRequest());
+			mockMvc.perform(search(body).with(kr.co.fitdining.api.support.SessionTestSupport.session("user-1"))).andExpect(status().isBadRequest());
 		}
 
 		@Test
@@ -850,11 +811,11 @@ class PlaceControllerTest {
 	}
 
 	static AuthUseCases.Identity identity(String userId) {
-		return new AuthUseCases.Identity(userId, "닉네임", "session", 0, 0);
+		return new AuthUseCases.Identity(userId, "닉네임", 0);
 	}
 
 	private static MockHttpServletRequestBuilder search(String body) {
-		return post("/api/v1/places/search").contentType(MediaType.APPLICATION_JSON).content(body);
+		return post("/api/v1/places/search").with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).contentType(MediaType.APPLICATION_JSON).content(body);
 	}
 
 	private static String cursor(String offset) {

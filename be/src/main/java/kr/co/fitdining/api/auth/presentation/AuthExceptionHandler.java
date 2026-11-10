@@ -28,8 +28,6 @@ public class AuthExceptionHandler {
     private final Environment environment;
     @ExceptionHandler(AuthFailure.class)
     public ResponseEntity<ProblemDetail> auth(AuthFailure failure, HttpServletRequest request, HttpServletResponse response) {
-        if (request.getRequestURI().endsWith("/refresh") && failure.status() == 401)
-            AuthController.clearCookie(response, Boolean.parseBoolean(environment.getRequiredProperty("auth.cookie-secure")));
         if (failure.status() == 429) response.setHeader("Retry-After", Long.toString(failure.retryAfterSeconds()));
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatusCode.valueOf(failure.status()),
                 switch (failure.status()) {

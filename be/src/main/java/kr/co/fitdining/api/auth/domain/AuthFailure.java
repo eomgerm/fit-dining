@@ -3,7 +3,6 @@ package kr.co.fitdining.api.auth.domain;
 import java.net.URI;
 
 public class AuthFailure extends RuntimeException {
-    public static final URI ACCESS_TOKEN_EXPIRED = URI.create("urn:fitdining:auth:access-token-expired");
     /** 기본 시도 제한 창(15분). 429 응답의 Retry-After 기본값이다. */
     public static final long DEFAULT_RETRY_AFTER_SECONDS = 900;
     private final int status;
@@ -22,9 +21,6 @@ public class AuthFailure extends RuntimeException {
      */
     public AuthFailure(String message, int status, URI type, long retryAfterSeconds) {
         super(message); this.status = status; this.type = type; this.retryAfterSeconds = Math.max(1, retryAfterSeconds);
-    }
-    public static AuthFailure accessExpired() {
-        return new AuthFailure("인증 토큰이 만료되었습니다.", 401, ACCESS_TOKEN_EXPIRED);
     }
     public int status() { return status; }
     public URI type() { return type; }

@@ -36,6 +36,12 @@ class SocialDevelopSyncTests extends PostgresTestSupport {
     @Autowired SocialTokens tokens;
     @Autowired JdbcTemplate jdbc;
     @Autowired MockMvc mvc;
+    @Autowired org.springframework.session.FindByIndexNameSessionRepository<?> sessionRepository;
+    private Cookie sessionCookie(String userId) {
+        var identity = new AuthUseCases.Identity(userId, "name", java.time.Instant.now().getEpochSecond() + 86400);
+        String value = kr.co.fitdining.api.support.SessionTestSupport.persist(sessionRepository, identity);
+        return new Cookie("fitdining_session", value.substring("fitdining_session=".length()));
+    }
     @MockitoBean SocialProviderClient client;
 
     @Test
@@ -44,11 +50,10 @@ class SocialDevelopSyncTests extends PostgresTestSupport {
         String subject = UUID.randomUUID().toString();
         var old = accounts.signup("google", subject);
         String user = old.identity().userId();
-        mvc.perform(delete("/api/v1/users/" + user).header("Origin", "http://localhost:3000")
-                .header("Authorization", "Bearer " + old.accessToken()))
-                .andExpect(status().isNoContent()).andExpect(cookie().maxAge("fitdining_rt", 0));
+        mvc.perform(delete("/api/v1/users/" + user).with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).header("Origin", "http://localhost:3000")
+                .cookie(sessionCookie(user)))
+                .andExpect(status().isNoContent());
         assertEquals(0, jdbc.queryForObject("select count(*) from auth_social_accounts where user_id=?", Integer.class, user));
-        assertThrows(AuthFailure.class, () -> auth.refresh(old.refreshToken()));
         when(client.exchange(any(), any(), any(), any(), any())).thenReturn(subject);
         mvc.perform(get("/api/auth/oauth/google/callback").param("code", "code").param("state", "state")
                 .cookie(new Cookie("fitdining_oauth", tokens.encode("oauth_state", "google", "state", "verifier", "login"))))
@@ -58,7 +63,7 @@ class SocialDevelopSyncTests extends PostgresTestSupport {
         mvc.perform(get("/api/auth/oauth/google/callback").param("code", "code").param("state", "state")
                 .cookie(new Cookie("fitdining_oauth", tokens.encode("oauth_state", "google", "state", "verifier", "login"))))
                 .andExpect(status().isFound()).andExpect(header().string("Location", "/"))
-                .andExpect(cookie().exists("fitdining_rt"));
+                .andExpect(cookie().exists("fitdining_session"));
         assertEquals(fresh.identity().userId(), accounts.existing("google", subject).identity().userId());
     }
 
@@ -83,7 +88,7 @@ class SocialDevelopSyncTests extends PostgresTestSupport {
         String subject = UUID.randomUUID().toString();
         String nickname = "취향" + subject.substring(0, 8);
         String preferences = include ? ",\"preferences\":{\"mood\":\"QUIET\",\"priorities\":[\"SPACIOUS\"],\"purposes\":[\"SOLO\"],\"tastes\":[{\"polarity\":\"LIKE\",\"label\":\"국물\"}]}" : "";
-        var response = mvc.perform(post("/api/auth/social/signup").header("Origin", "http://localhost:3000")
+        var response = mvc.perform(post("/api/auth/social/signup").with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).header("Origin", "http://localhost:3000")
                 .contentType("application/json").content(body(nickname, preferences))
                 .cookie(new Cookie("fitdining_social", tokens.encode("social_signup", "google", subject))))
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.userId").isNotEmpty())
@@ -93,8 +98,8 @@ class SocialDevelopSyncTests extends PostgresTestSupport {
         assertEquals(include ? 1 : 0, jdbc.queryForObject("select count(*) from user_preferences where user_id=?", Integer.class, user));
         if (include) {
             assertEquals("QUIET", jdbc.queryForObject("select mood from user_preferences where user_id=?", String.class, user));
-            mvc.perform(delete("/api/v1/users/" + user).header("Origin", "http://localhost:3000")
-                    .header("Authorization", "Bearer " + accounts.existing("google", subject).accessToken()))
+            mvc.perform(delete("/api/v1/users/" + user).with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).header("Origin", "http://localhost:3000")
+                    .cookie(sessionCookie(user)))
                     .andExpect(status().isNoContent());
             assertEquals(0, jdbc.queryForObject("select count(*) from user_preferences where user_id=?", Integer.class, user));
         }
@@ -105,7 +110,7 @@ class SocialDevelopSyncTests extends PostgresTestSupport {
     @DisplayName("소셜가입_잘못된 취향_400 및 계정 생성 방지")
     void signup_invalidPreferences_rejectsBeforeCreation(String preferences) throws Exception {
         String subject = UUID.randomUUID().toString();
-        mvc.perform(post("/api/auth/social/signup").header("Origin", "http://localhost:3000")
+        mvc.perform(post("/api/auth/social/signup").with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).header("Origin", "http://localhost:3000")
                 .contentType("application/json").content(body("검증취향", ",\"preferences\":" + preferences))
                 .cookie(new Cookie("fitdining_social", tokens.encode("social_signup", "google", subject))))
                 .andExpect(status().isBadRequest());

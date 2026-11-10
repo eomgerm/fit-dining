@@ -16,10 +16,9 @@ class SimpleAuthUnitTests {
     @Test @DisplayName("간소 시도 기록_이메일 및 소셜 공통_저장소 호출 없음")
     void recordAttempt_simple_neverTouchesRepository() {
         var attempts = mock(AuthLoginAttemptRepository.class);
-        var transactions = new AuthTransactions(attempts, mock(AuthRefreshTokenRepository.class),
-                mock(AuthSecurityEventRepository.class), mock(AuthUserRepository.class),
+        var transactions = new AuthTransactions(attempts, mock(AuthSecurityEventRepository.class), mock(AuthUserRepository.class),
                 mock(AuthEmailVerificationRepository.class),
-                mock(kr.co.fitdining.api.user.UserPreferencesRepository.class), mock(TokenCodec.class),
+                mock(kr.co.fitdining.api.user.UserPreferencesRepository.class),
                 java.time.Clock.systemUTC(), new SimpleAuthPolicy(true));
         assertTrue(transactions.recordAttempt("ip", "login"));
         assertTrue(transactions.recordAttempt("ip", "signup"));
@@ -31,7 +30,7 @@ class SimpleAuthUnitTests {
         when(transactions.recordAttempt("ip", "login")).thenReturn(true);
         var passwords = mock(PasswordHasher.class);
         var service = new AuthService(transactions, mock(kr.co.fitdining.api.onboarding.TasteProfileService.class), mock(AuthUserRepository.class), passwords,
-                mock(TokenCodec.class), "", new SimpleAuthPolicy(true), mock(EmailVerifications.class));
+                "", new SimpleAuthPolicy(true), mock(EmailVerifications.class));
         assertThrows(AuthFailure.class, () -> service.login("missing@example.com", "password1", "ip"));
         verifyNoInteractions(passwords);
     }

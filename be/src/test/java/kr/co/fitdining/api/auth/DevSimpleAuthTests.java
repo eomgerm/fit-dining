@@ -24,7 +24,7 @@ class DevSimpleAuthTests extends PostgresTestSupport {
 
     @Test @DisplayName("dev 간소 로그인_Origin 없음_403")
     void login_withoutOrigin_forbidden() throws Exception {
-        mvc.perform(post("/api/auth/login").contentType("application/json")
+        mvc.perform(post("/api/auth/login").with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).contentType("application/json")
                 .content("{\"email\":\"dev-server@fitdining.local\",\"password\":\"password1\"}"))
                 .andExpect(status().isForbidden());
     }
@@ -34,13 +34,10 @@ class DevSimpleAuthTests extends PostgresTestSupport {
         var response = mvc.perform(post("/api/auth/dev/token")
                 .header("X-Dev-Key", "12345678901234567890123456789012"))
                 .andExpect(status().isOk())
-                .andExpect(cookie().httpOnly("fitdining_rt", true))
+                .andExpect(cookie().httpOnly("fitdining_session", true))
                 .andReturn().getResponse();
-        String body = response.getContentAsString();
         mvc.perform(get("/api/auth/me").cookie(response.getCookie("fitdining_session")))
                 .andExpect(status().isOk());
-        String token = new tools.jackson.databind.ObjectMapper().readTree(body).get("accessToken").asString();
-        mvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + token)).andExpect(status().isOk());
     }
 
     @Test @DisplayName("dev 개발 토큰_틀린 키_403")

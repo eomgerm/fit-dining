@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 로그인한 사용자의 장소 북마크 API(bookmark D-4). 사용자는 세션 또는 Bearer 인증 주체로 정하고, 처리는 {@link BookmarkService}에
+ * 로그인한 사용자의 장소 북마크 API(bookmark D-4). 사용자는 세션 인증 주체로 정하고, 처리는 {@link BookmarkService}에
  * 맡긴다. 오류는 {@code BookmarkExceptionHandler}가 ProblemDetail로 바꾼다.
  *
  * <p>Security 필터에서 인증한 뒤 {@code placeId}가 양의 정수가 아니면 400이다. 리뷰 컨트롤러처럼 클래스에 {@code @Validated}를

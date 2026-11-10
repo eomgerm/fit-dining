@@ -21,7 +21,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Stream;
-import kr.co.fitdining.api.auth.domain.AuthFailure;
 import kr.co.fitdining.api.place.catalog.PlaceCatalog;
 import kr.co.fitdining.api.place.dto.OpenStatus;
 import kr.co.fitdining.api.place.dto.PlaceCard;
@@ -210,25 +209,21 @@ class PlaceControllerMockDisabledTest {
 	}
 
 	@Test
-	@DisplayName("추천검색_cursor와무효한토큰이함께오면_401이먼저이고AI를부르지않는다")
-	void search_cursorAndInvalidToken_unauthorizedFirst() throws Exception {
-		when(auth.authenticate("bad")).thenThrow(new AuthFailure("x"));
+	@DisplayName("Authorization is ignored before cursor validation")
+	void search_cursorAndIgnoredAuthorization_badRequest() throws Exception {
 
 		mockMvc.perform(search("{\"query\":\"카페\",\"cursor\":\"abc\"}").header("Authorization", "Bearer bad"))
-				.andExpect(status().isUnauthorized());
-		mockMvc.perform(search("{\"query\":\"카페\"}").header("Authorization", "Basic x"))
-				.andExpect(status().isUnauthorized());
+				.andExpect(status().isBadRequest());
 		verifyNoInteractions(aiClient);
 	}
 
 	@Test
-	@DisplayName("추천검색_유효한토큰이면_토큰의사용자id로AI를부른다")
-	void search_validToken_callsAiWithTokenUserId() throws Exception {
-		when(auth.authenticate("token")).thenReturn(new AuthUseCases.Identity("user-1", "닉", "s", 0, 0));
+	@DisplayName("Session principal supplies the AI user id")
+	void search_session_callsAiWithSessionUserId() throws Exception {
 		when(aiClient.search(any(), any(), any())).thenReturn(Optional.empty());
 		when(keywordSearch.search(any(), anyInt(), anyInt())).thenReturn(List.of());
 
-		mockMvc.perform(search("{\"query\":\"카페\"}").header("Authorization", "Bearer token"))
+		mockMvc.perform(search("{\"query\":\"카페\"}").with(kr.co.fitdining.api.support.SessionTestSupport.session("user-1")))
 				.andExpect(status().isOk());
 
 		verify(aiClient).search(any(), any(), eq("user-1"));
@@ -244,17 +239,6 @@ class PlaceControllerMockDisabledTest {
 		expectUnavailable(search("{\"query\":\"카페\"}"));
 	}
 
-	@Test
-	@DisplayName("suggestAndDetail_badAuthorization_rejected")
-    void suggestAndDetail_badAuthorization_rejected() throws Exception {
-        when(auth.authenticate("bad")).thenThrow(new kr.co.fitdining.api.auth.domain.AuthFailure("invalid"));
-        mockMvc.perform(get("/api/v1/places/suggest").param("q", "cafe").header("Authorization", "Bearer bad"))
-            .andExpect(status().isUnauthorized());
-        mockMvc.perform(get("/api/v1/places/{id}", 7).header("Authorization", "garbage"))
-            .andExpect(status().isUnauthorized());
-        verifyNoInteractions(aiClient, catalog, keywordSearch);
-    }
-
 	private static final String SECRET = "비밀표식9c41";
 
 	static Stream<Arguments> requestsWithSecret() {
@@ -264,7 +248,6 @@ class PlaceControllerMockDisabledTest {
 				Arguments.of("AI 성공", search(body), 200),
 				Arguments.of("대체", search(body), 200),
 				Arguments.of("cursor 400", search(body.substring(0, body.length() - 1) + ",\"cursor\":\"" + SECRET + "\"}"), 400),
-				Arguments.of("401", search(body).header("Authorization", "Bearer " + SECRET), 401),
 				Arguments.of("503", search(body), 503));
 	}
 
@@ -273,7 +256,6 @@ class PlaceControllerMockDisabledTest {
 	@DisplayName("추천검색_어떤결과든_로그에입력값과AI문구가없다")
 	void search_anyOutcome_doesNotLogInput(String scenario, MockHttpServletRequestBuilder request, int status,
 			CapturedOutput output) throws Exception {
-		when(auth.authenticate(any())).thenThrow(new AuthFailure(SECRET));
 		when(keywordSearch.search(any(), anyInt(), anyInt())).thenReturn(List.of(new PlaceKeywordHit(PLACE, null, true)));
 		when(catalog.cards(any())).thenReturn(List.of(card()));
 		switch (scenario) {
@@ -295,11 +277,11 @@ class PlaceControllerMockDisabledTest {
 	private static final String AREA = "{\"swLat\":37.49,\"swLng\":127.02,\"neLat\":37.51,\"neLng\":127.05}";
 
 	private static MockHttpServletRequestBuilder nearby(String body) {
-		return post("/api/v1/places/nearby").contentType(MediaType.APPLICATION_JSON).content(body);
+		return post("/api/v1/places/nearby").with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).contentType(MediaType.APPLICATION_JSON).content(body);
 	}
 
 	private static MockHttpServletRequestBuilder region(String body) {
-		return post("/api/v1/places/search/region").contentType(MediaType.APPLICATION_JSON).content(body);
+		return post("/api/v1/places/search/region").with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).contentType(MediaType.APPLICATION_JSON).content(body);
 	}
 
 	@Test
@@ -392,7 +374,7 @@ class PlaceControllerMockDisabledTest {
 	}
 
 	private static MockHttpServletRequestBuilder search(String body) {
-		return post("/api/v1/places/search").contentType(MediaType.APPLICATION_JSON).content(body);
+		return post("/api/v1/places/search").with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).contentType(MediaType.APPLICATION_JSON).content(body);
 	}
 
 	private static PlaceDetailResponse detail() {

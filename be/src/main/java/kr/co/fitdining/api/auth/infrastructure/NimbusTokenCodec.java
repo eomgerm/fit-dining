@@ -39,27 +39,28 @@ public final class NimbusTokenCodec implements TokenCodec {
                     : OAuth2TokenValidatorResult.failure(new OAuth2Error("invalid_token"))));
     }
     @Override public String encode(Token token) {
+        if (!List.of("oauth_state", "social_signup").contains(token.type())) throw invalid();
         var claims = JwtClaimsSet.builder().issuer(ISSUER).audience(List.of(AUDIENCE))
                 .subject(token.userId())
                 .claim("token_type", token.type()).issuedAt(Instant.ofEpochSecond(token.createdAt()))
                 .expiresAt(Instant.ofEpochSecond(token.expiresAt()));
-        if ("refresh".equals(token.type())) claims.id(token.jti());
         return encoder.encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims.build())).getTokenValue();
     }
     @Override public Claims decode(String value, String expectedType) {
+        if (!List.of("oauth_state", "social_signup").contains(expectedType)) throw invalid();
         if (value == null || value.isBlank() || value.length() > 8192) throw invalid();
         try {
             Jwt jwt = decoder.decode(value);
             String type = jwt.getClaimAsString("token_type");
             long now = clock.instant().getEpochSecond();
-            if (!expectedType.equals(type) || blank(jwt.getSubject()) || ("refresh".equals(type) && blank(jwt.getId()))
+            if (!expectedType.equals(type) || blank(jwt.getSubject())
                     || jwt.getIssuedAt() == null || jwt.getExpiresAt() == null
                     || jwt.getIssuedAt().getEpochSecond() > now
                     || !jwt.getExpiresAt().isAfter(jwt.getIssuedAt())
                     || (jwt.getNotBefore() != null && jwt.getNotBefore().getEpochSecond() > now)) throw invalid();
             if (jwt.getExpiresAt().getEpochSecond() <= now)
-                throw expectedType.equals("access") ? AuthFailure.accessExpired() : new AuthFailure("토큰이 만료되었습니다.");
-            return new Claims(jwt.getSubject(), jwt.getId(), type, jwt.getExpiresAt().getEpochSecond());
+                throw new AuthFailure("토큰이 만료되었습니다.");
+            return new Claims(jwt.getSubject(), type, jwt.getExpiresAt().getEpochSecond());
         } catch (AuthFailure e) { throw e; }
         catch (RuntimeException e) { throw invalid(); }
     }

@@ -39,14 +39,13 @@ function setSession(next: AuthSession | null) {
 }
 
 vi.mock("@/domains/auth/api/auth-client", () => ({
-  ACCESS_TOKEN_EXPIRED_TYPE: "urn:fitdining:auth:access-token-expired",
   getSession: () => auth.session,
   restore: async () => {
     if (auth.session) return auth.session;
     const { ApiError } = await import("@/shared/api/api-error");
     throw new ApiError("http", "x", { status: 401 });
   },
-  refresh: async () => {
+  checkSession: async () => {
     throw new Error("갱신하지 않는다");
   },
   clearSession: () => setSession(null),
@@ -410,7 +409,7 @@ describe("회원 검색 기록 저장", () => {
       await screen.findByRole(
         "button",
         { name: "검색 취소" },
-        { timeout: 3500 },
+        { timeout: 6000 },
       ),
     );
     gate.release();

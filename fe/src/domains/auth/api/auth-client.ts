@@ -59,16 +59,6 @@ export function endSession() {
   channel?.postMessage("session-changed");
 }
 
-async function browserLock<T>(work: () => Promise<T>) {
-  connectChannel();
-  if (!navigator.locks)
-    throw new AuthError(
-      "http",
-      "인증에는 Web Locks를 지원하는 브라우저와 HTTPS 또는 localhost가 필요합니다.",
-      { status: 0 },
-    );
-  return navigator.locks.request("fitdining-auth-cookie", work);
-}
 // 응답 본문과 응답의 Date(서버 시각, ms. 없으면 NaN)를 돌려준다
 async function exchange<T>(
   path: string,
@@ -108,7 +98,6 @@ async function send<T>(path: string, options: RequestInit = {}): Promise<T> {
 // 세션을 받아 메모리에 두고 로그인 표시를 남긴다. 표시 수명은 기기 시계가 아니라 서버 시각으로 잰다
 async function startSession(path: string, options: RequestInit) {
   const { body: next, serverNow } = await exchange<AuthSession>(path, options);
-  // Keep only the session contract, even while BE still returns legacy fields.
   const current: AuthSession = {
     userId: next.userId,
     nickname: next.nickname,
@@ -123,15 +112,14 @@ async function startSession(path: string, options: RequestInit) {
   return current;
 }
 export async function login(email: string, password: string) {
-  return browserLock(async () => {
-    const next = await startSession("/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
-    });
-    channel?.postMessage("session-changed");
-    return next;
+  connectChannel();
+  const next = await startSession("/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
   });
+  channel?.postMessage("session-changed");
+  return next;
 }
 export type SignupRequest = {
   preferences?: SignupPreferences;
@@ -150,7 +138,7 @@ export type EmailVerificationConfirmed = {
   verificationToken: string;
   expiresAt: string;
 };
-// 가입 전 이메일 소유 확인. 쿠키를 다루지 않아 브라우저 잠금 없이 보낸다
+// 가입 전 이메일 소유 확인.
 export async function requestEmailVerification(email: string) {
   return send<EmailVerificationRequested>("/email-verifications", {
     method: "POST",
@@ -166,39 +154,37 @@ export async function confirmEmailVerification(email: string, code: string) {
   });
 }
 export async function signup(body: SignupRequest) {
-  return browserLock(async () => {
-    const next = await startSession("/signup", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...body,
-        email: body.email.trim().toLowerCase(),
-        nickname: body.nickname.trim(),
-      }),
-    });
-    channel?.postMessage("session-changed");
-    return next;
+  connectChannel();
+  const next = await startSession("/signup", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      ...body,
+      email: body.email.trim().toLowerCase(),
+      nickname: body.nickname.trim(),
+    }),
   });
+  channel?.postMessage("session-changed");
+  return next;
 }
 export async function socialSignup(
   body: Pick<SignupRequest, "agreements" | "preferences">,
 ) {
-  return browserLock(async () => {
-    const next = await startSession("/social/signup", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        agreements: body.agreements,
-        ...(body.preferences ? { preferences: body.preferences } : {}),
-      }),
-    });
-    channel?.postMessage("session-changed");
-    return next;
+  connectChannel();
+  const next = await startSession("/social/signup", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      agreements: body.agreements,
+      ...(body.preferences ? { preferences: body.preferences } : {}),
+    }),
   });
+  channel?.postMessage("session-changed");
+  return next;
 }
 export function checkSession(): Promise<AuthSession> {
   if (!pendingRestore) {
-    // 다른 탭이 잠금을 쥐어 기다리는 사이 누른 소셜 버튼의 표시도 남도록 잠금 전에 읽는다
+    // 요청 중 다른 탭에서 바뀐 로그인 표시를 지우지 않도록 전송 전에 읽는다
     const marksAtSend = signedInMarks();
     const checking = check().finally(() => {
       if (pendingRestore === checking) pendingRestore = null;
@@ -246,21 +232,20 @@ export async function restore() {
   return session ?? checkSession();
 }
 export async function logout() {
-  return browserLock(async () => {
-    try {
-      await send<void>("/logout", {
-        method: "POST",
-      });
+  connectChannel();
+  try {
+    await send<void>("/logout", {
+      method: "POST",
+    });
+    update(null);
+    clearSignedIn();
+    channel?.postMessage("session-changed");
+  } catch (error) {
+    if (error instanceof AuthError && error.status === 401) {
       update(null);
       clearSignedIn();
       channel?.postMessage("session-changed");
-    } catch (error) {
-      if (error instanceof AuthError && error.status === 401) {
-        update(null);
-        clearSignedIn();
-        channel?.postMessage("session-changed");
-      }
-      throw error;
     }
-  });
+    throw error;
+  }
 }

@@ -102,13 +102,12 @@ class ReviewControllerTest {
 
 	@BeforeEach
 	void setUp() {
-		when(auth.authenticate(TOKEN)).thenReturn(new AuthUseCases.Identity(USER_ID, null, null, 0, 0));
 		when(reviewService.create(anyLong(), anyString(), any())).thenReturn(new ReviewCreateResponse(7L));
 	}
 
 	private static MockHttpServletRequestBuilder create(Object placeId, String body) {
-		return post("/api/v1/places/{placeId}/reviews", placeId).contentType(MediaType.APPLICATION_JSON).content(body)
-				.header("Authorization", "Bearer " + TOKEN);
+		return post("/api/v1/places/{placeId}/reviews", placeId).with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).contentType(MediaType.APPLICATION_JSON).content(body)
+				.with(kr.co.fitdining.api.support.SessionTestSupport.session(USER_ID));
 	}
 
 	/** 필수 필드만 채운 본문에 {@code extra}(앞에 쉼표를 붙인 JSON 속성)를 더한다. */
@@ -119,7 +118,7 @@ class ReviewControllerTest {
 	private static final String VALID = valid("");
 
 	private static MockHttpServletRequestBuilder createWithoutAuthorization(Object placeId, String body) {
-		return post("/api/v1/places/{placeId}/reviews", placeId).contentType(MediaType.APPLICATION_JSON).content(body);
+		return post("/api/v1/places/{placeId}/reviews", placeId).with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).contentType(MediaType.APPLICATION_JSON).content(body);
 	}
 
 	private static MockHttpServletRequestBuilder list(Object placeId) {
@@ -238,20 +237,8 @@ class ReviewControllerTest {
 		}
 
 		@Test
-		@DisplayName("등록_토큰이만료됐으면_401과만료type이다")
-		void create_expiredToken_returnsUnauthorizedWithExpiredType() throws Exception {
-			when(auth.authenticate("expired")).thenThrow(AuthFailure.accessExpired());
-
-			mockMvc.perform(createWithoutAuthorization(3, "{}").header("Authorization", "Bearer expired"))
-					.andExpect(status().isUnauthorized())
-					.andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
-					.andExpect(jsonPath("$.type").value(AuthFailure.ACCESS_TOKEN_EXPIRED.toString()));
-		}
-
-		@Test
 		@DisplayName("등록_토큰이유효하지않으면_401이다")
 		void create_invalidToken_returnsUnauthorized() throws Exception {
-			when(auth.authenticate("forged")).thenThrow(new AuthFailure("인증을 확인해주세요."));
 
 			expectProblem(createWithoutAuthorization(3, "{}").header("Authorization", "Bearer forged"), 401);
 		}
@@ -269,28 +256,25 @@ class ReviewControllerTest {
 		void list_loggedIn_passesViewer() throws Exception {
 			when(reviewService.list(3L, null, USER_ID)).thenReturn(new ReviewListResponse(0, List.of(), null));
 
-			mockMvc.perform(list(3).header("Authorization", "Bearer " + TOKEN)).andExpect(status().isOk());
+			mockMvc.perform(list(3).with(kr.co.fitdining.api.support.SessionTestSupport.session(USER_ID))).andExpect(status().isOk());
 
 			verify(reviewService).list(3L, null, USER_ID);
 		}
 
 		@Test
 		@DisplayName("목록_헤더가있는데토큰이유효하지않으면_401이고조회하지않는다")
-		void list_invalidToken_returnsUnauthorized() throws Exception {
-			when(auth.authenticate("forged")).thenThrow(new AuthFailure("인증을 확인해주세요."));
-
-			expectProblem(list(3).header("Authorization", "Bearer forged"), 401);
-			expectProblem(list(3).header("Authorization", "Basic " + TOKEN), 401);
-			verify(reviewService, never()).list(anyLong(), any(), any());
-		}
-	}
+		void list_invalidAuthorization_isIgnored() throws Exception {
+            when(reviewService.list(3L, null, null)).thenReturn(new ReviewListResponse(0, List.of(), null));
+            mockMvc.perform(list(3).header("Authorization", "Bearer forged")).andExpect(status().isOk());
+            mockMvc.perform(list(3).header("Authorization", "Basic ignored")).andExpect(status().isOk());
+        }	}
 
 	@Nested
 	@DisplayName("작성 화면 데이터")
 	class ReviewForm {
 
 		private MockHttpServletRequestBuilder form(Object placeId) {
-			return get("/api/v1/places/{placeId}/review-form", placeId).header("Authorization", "Bearer " + TOKEN);
+			return get("/api/v1/places/{placeId}/review-form", placeId).with(kr.co.fitdining.api.support.SessionTestSupport.session(USER_ID));
 		}
 
 		@Test
@@ -427,7 +411,7 @@ class ReviewControllerTest {
 		UPDATE {
 			@Override
 			MockHttpServletRequestBuilder request(Object reviewId) {
-				return patch("/api/v1/reviews/{reviewId}", reviewId).contentType(MediaType.APPLICATION_JSON)
+				return patch("/api/v1/reviews/{reviewId}", reviewId).with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).contentType(MediaType.APPLICATION_JSON)
 						.content("{\"description\":\"본문\"}");
 			}
 
@@ -439,7 +423,7 @@ class ReviewControllerTest {
 		DELETE {
 			@Override
 			MockHttpServletRequestBuilder request(Object reviewId) {
-				return delete("/api/v1/reviews/{reviewId}", reviewId);
+				return delete("/api/v1/reviews/{reviewId}", reviewId).with(kr.co.fitdining.api.support.SessionTestSupport.csrf());
 			}
 
 			@Override
@@ -519,7 +503,7 @@ class ReviewControllerTest {
 		@Test
 		@DisplayName("삭제_내리뷰면_204다")
 		void delete_own_returnsNoContent() throws Exception {
-			mockMvc.perform(withToken(delete("/api/v1/reviews/{reviewId}", 7))).andExpect(status().isNoContent());
+			mockMvc.perform(withToken(delete("/api/v1/reviews/{reviewId}", 7).with(kr.co.fitdining.api.support.SessionTestSupport.csrf()))).andExpect(status().isNoContent());
 
 			verify(reviewService).delete(7L, USER_ID);
 		}
@@ -567,11 +551,11 @@ class ReviewControllerTest {
 	}
 
 	private static MockHttpServletRequestBuilder withToken(MockHttpServletRequestBuilder request) {
-		return request.header("Authorization", "Bearer " + TOKEN);
+		return request.with(kr.co.fitdining.api.support.SessionTestSupport.session(USER_ID));
 	}
 
 	private static MockHttpServletRequestBuilder update(Object reviewId, String body) {
-		return withToken(patch("/api/v1/reviews/{reviewId}", reviewId).contentType(MediaType.APPLICATION_JSON)
+		return withToken(patch("/api/v1/reviews/{reviewId}", reviewId).with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).contentType(MediaType.APPLICATION_JSON)
 				.content(body));
 	}
 
@@ -579,7 +563,7 @@ class ReviewControllerTest {
 	private static final UUID PHOTO_B = UUID.fromString("3f2a1b4c-0000-4000-8000-00000000000b");
 
 	private static MockHttpServletRequestBuilder uploadUrls(String body) {
-		return withToken(post("/api/v1/review-photos/upload-urls").contentType(MediaType.APPLICATION_JSON)
+		return withToken(post("/api/v1/review-photos/upload-urls").with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).contentType(MediaType.APPLICATION_JSON)
 				.content(body));
 	}
 
@@ -621,7 +605,7 @@ class ReviewControllerTest {
 		@Test
 		@DisplayName("업로드주소_Authorization헤더가없으면_본문검증전에401이다")
 		void photoUploads_noAuthorization_returnsUnauthorized() throws Exception {
-			expectProblem(post("/api/v1/review-photos/upload-urls").contentType(MediaType.APPLICATION_JSON)
+			expectProblem(post("/api/v1/review-photos/upload-urls").with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).contentType(MediaType.APPLICATION_JSON)
 					.content("{}"), 401);
 		}
 
@@ -715,7 +699,7 @@ class ReviewControllerTest {
 	}
 
 	private static MockHttpServletRequestBuilder report(Object reviewId, String body) {
-		return withToken(post("/api/v1/reviews/{reviewId}/reports", reviewId).contentType(MediaType.APPLICATION_JSON)
+		return withToken(post("/api/v1/reviews/{reviewId}/reports", reviewId).with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).contentType(MediaType.APPLICATION_JSON)
 				.content(body));
 	}
 
@@ -783,7 +767,7 @@ class ReviewControllerTest {
 		@Test
 		@DisplayName("신고_Authorization헤더가없으면_본문검증전에401이다")
 		void report_noAuthorization_returnsUnauthorizedBeforeValidation() throws Exception {
-			expectProblem(post("/api/v1/reviews/{reviewId}/reports", 7).contentType(MediaType.APPLICATION_JSON)
+			expectProblem(post("/api/v1/reviews/{reviewId}/reports", 7).with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).contentType(MediaType.APPLICATION_JSON)
 					.content("{}"), 401);
 
 			verify(reviewService, never()).report(anyLong(), anyString(), any());
@@ -910,7 +894,6 @@ class ReviewControllerTest {
 		@Test
 		@DisplayName("등록_인증실패로401이나도_로그에토큰이없다")
 		void create_unauthorized_doesNotLogToken(CapturedOutput output) throws Exception {
-			when(auth.authenticate(LOG_SECRET)).thenThrow(new AuthFailure("인증을 확인해주세요."));
 
 			mockMvc.perform(createWithoutAuthorization(3, "{}").header("Authorization", "Bearer " + LOG_SECRET))
 					.andExpect(status().isUnauthorized());

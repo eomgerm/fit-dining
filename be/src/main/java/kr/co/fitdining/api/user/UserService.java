@@ -2,7 +2,6 @@ package kr.co.fitdining.api.user;
 
 import java.time.Clock;
 import kr.co.fitdining.api.auth.repository.AuthUserRepository;
-import kr.co.fitdining.api.auth.repository.AuthRefreshTokenRepository;
 import kr.co.fitdining.api.auth.ports.AuthUseCases.Identity;
 import kr.co.fitdining.api.searchthread.SearchThreadService;
 import org.springframework.http.HttpStatus;
@@ -12,12 +11,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.transaction.annotation.Transactional;
 
-/** Serializes withdrawal with login and refresh through the account row lock. */
+/** Serializes withdrawal with login through the account row lock. */
 @Service @ConditionalOnWebApplication @RequiredArgsConstructor
 public class UserService {
     private final AuthUserRepository users;
     private final UserPreferencesRepository preferences;
-    private final AuthRefreshTokenRepository tokens;
     private final Clock clock;
     private final kr.co.fitdining.api.auth.repository.AuthSocialAccountRepository socialAccounts;
     private final SearchThreadService searchThreads;
@@ -56,7 +54,6 @@ public class UserService {
             preferences.deleteById(userId);
             // Search history holds copies of the query, taste tags and map area (search-thread D-13)
             searchThreads.deleteAll(userId);
-            tokens.revokeUser(userId, now);
         });
     }
 }

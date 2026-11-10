@@ -20,6 +20,6 @@ class LocalKeylessSimpleAuthTests extends PostgresTestSupport {
     @Test @DisplayName("로컬 개발 토큰_키 미설정 및 헤더 없음_200")
     void devToken_unconfiguredKeyWithoutHeader_succeeds() throws Exception {
         mvc.perform(post("/api/auth/dev/token")).andExpect(status().isOk())
-                .andExpect(cookie().httpOnly("fitdining_rt", true));
+                .andExpect(cookie().httpOnly("fitdining_session", true));
     }
 }

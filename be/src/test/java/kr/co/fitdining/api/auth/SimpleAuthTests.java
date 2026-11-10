@@ -36,32 +36,10 @@ class SimpleAuthTests extends PostgresTestSupport {
         assertEquals(before, jdbc.queryForObject("select count(*) from auth_login_attempts", Integer.class));
     }
 
-    @Test @DisplayName("간소 갱신_사용한 RT 재사용_같은 family 유지 및 이벤트 없음")
-    void refresh_reused_keepsFamilyWithoutEvents() {
-        var first = auth.login(settings.demoEmail(), settings.demoPassword(), "simple-refresh");
-        var second = auth.refresh(first.refreshToken());
-        var third = auth.refresh(first.refreshToken());
-        assertEquals(first.identity().sessionId(), second.identity().sessionId());
-        assertEquals(first.identity().sessionId(), third.identity().sessionId());
-        JdbcTemplate jdbc = new JdbcTemplate(appSource());
-        assertEquals(0, jdbc.queryForObject("select count(*) from auth_security_events where family_id = ?", Integer.class, first.identity().sessionId()));
-        assertEquals(0, jdbc.queryForObject("select count(*) from auth_refresh_tokens where family_id = ? and revoked_at is not null", Integer.class, first.identity().sessionId()));
-    }
-
-    @Test @DisplayName("간소 로그아웃_이전 RT와 새 RT_모두 거부")
-    void logout_family_rejectsAllTokens() {
-        var first = auth.login(settings.demoEmail(), settings.demoPassword(), "simple-logout");
-        var second = auth.refresh(first.refreshToken());
-        auth.logout(second.refreshToken());
-        assertThrows(AuthFailure.class, () -> auth.refresh(first.refreshToken()));
-        assertThrows(AuthFailure.class, () -> auth.refresh(second.refreshToken()));
-    }
-
-    @Test @DisplayName("간소 토큰_발급_12시간 AT와 30일 세션")
-    void login_tokens_haveSimpleLifetimes() {
+    @Test @DisplayName("간소 로그인_발급_30일 절대 세션")
+    void login_session_hasSimpleLifetime() {
         var issued = auth.login(settings.demoEmail(), settings.demoPassword(), "simple-ttl");
         long now = java.time.Instant.now().getEpochSecond();
-        assertTrue(Math.abs(issued.identity().accessExpiresAt() - now - 43200) <= 2);
         assertTrue(Math.abs(issued.identity().sessionExpiresAt() - now - 2592000) <= 2);
         assertInstanceOf(SimpleAuthPolicy.class, policy);
         assertEquals("", authDummyHash);
@@ -71,13 +49,10 @@ class SimpleAuthTests extends PostgresTestSupport {
     @Test @DisplayName("개발 토큰_올바른 키와 본문 없음_쿠키와 보호 API 성공")
     void devToken_validKey_returnsUsableToken() throws Exception {
         var response = mvc.perform(post("/api/auth/dev/token").header("X-Dev-Key", "test-dev-key"))
-                .andExpect(status().isOk()).andExpect(cookie().httpOnly("fitdining_rt", true))
+                .andExpect(status().isOk()).andExpect(cookie().httpOnly("fitdining_session", true))
                 .andReturn().getResponse();
-        String body = response.getContentAsString();
         mvc.perform(get("/api/auth/me").cookie(response.getCookie("fitdining_session")))
                 .andExpect(status().isOk());
-        String token = new tools.jackson.databind.ObjectMapper().readTree(body).get("accessToken").asString();
-        mvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + token)).andExpect(status().isOk());
     }
 
     @Test @DisplayName("개발 토큰_틀린 키 또는 누락_403")
@@ -88,7 +63,7 @@ class SimpleAuthTests extends PostgresTestSupport {
 
     @Test @DisplayName("로컬 로그인_Origin 없음_성공")
     void login_localWithoutOrigin_succeeds() throws Exception {
-        mvc.perform(post("/api/auth/login").contentType("application/json")
+        mvc.perform(post("/api/auth/login").with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).contentType("application/json")
                 .content("{\"email\":\"dev@fitdining.local\",\"password\":\"fitdining-dev1\"}"))
                 .andExpect(status().isOk());
     }

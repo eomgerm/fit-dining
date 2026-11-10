@@ -12,8 +12,6 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.*;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.context.*;
 import org.springframework.security.web.csrf.CsrfFilter;
@@ -29,9 +27,6 @@ public class SecurityConfiguration {
     }
     static String path(HttpServletRequest request) {
         return request.getRequestURI().substring(request.getContextPath().length());
-    }
-    static boolean changing(HttpServletRequest request) {
-        return Set.of("POST", "PUT", "PATCH", "DELETE").contains(request.getMethod());
     }
     static void failure(AuthExceptionHandler errors, JsonMapper mapper, AuthFailure failure,
             HttpServletRequest request, HttpServletResponse response) throws java.io.IOException {
@@ -60,8 +55,7 @@ public class SecurityConfiguration {
         if (problem.getProperties() != null) body.putAll(problem.getProperties());
         mapper.writeValue(response.getOutputStream(), body);
     }
-    @Bean SecurityFilterChain securityFilterChain(HttpSecurity http, org.springframework.beans.factory.ObjectProvider<AuthUseCases> auth,
-            org.springframework.beans.factory.ObjectProvider<AuthPolicy> policies,
+    @Bean SecurityFilterChain securityFilterChain(HttpSecurity http, org.springframework.beans.factory.ObjectProvider<AuthPolicy> policies,
             org.springframework.beans.factory.ObjectProvider<Clock> clocks,
             org.springframework.core.env.Environment environment, JsonMapper mapper) throws Exception {
         var policy = policies.getIfAvailable(StrictAuthPolicy::new);
@@ -82,36 +76,21 @@ public class SecurityConfiguration {
                             && Set.of("POST", "DELETE").contains(request.getMethod())
                             && !origin.equals(request.getHeader("Origin")))
                         throw new AuthFailure("Origin rejected.", 403);
-                    String header = request.getHeader("Authorization");
-                    if (header != null) {
-                        SecurityContextHolder.setContext(SecurityContextHolder.createEmptyContext());
-                        if (!header.startsWith("Bearer ")) throw new AuthFailure("Authentication required.");
-                        var identity = auth.getObject().authenticate(header.substring(7));
-                        SecurityContextHolder.getContext().setAuthentication(
-                            UsernamePasswordAuthenticationToken.authenticated(identity, null, java.util.List.of()));
-                    }
                 } catch (AuthFailure rejected) {
                     failure(errors, mapper, rejected, request, response);
-                    return;
-                } catch (org.springframework.dao.DataAccessException | org.springframework.transaction.TransactionException unavailable) {
-                    writeProblem(mapper, errors.unavailable(unavailable).getBody(), request, response);
                     return;
                 }
                 chain.doFilter(request, response);
             }
         }, SecurityContextHolderFilter.class);
         http.csrf(config -> config.csrfTokenRepository(SessionCsrf.repository(secure)).spa()
-            .requireCsrfProtectionMatcher(request -> {
-                var authentication = SecurityContextHolder.getContext().getAuthentication();
-                return changing(request) && request.getHeader("Authorization") == null && authentication != null
-                    && authentication.isAuthenticated() && !Set.of("/api/auth/refresh", "/api/auth/logout").contains(path(request));
-            }));
+            .ignoringRequestMatchers("/api/auth/dev/token"));
         http.addFilterAfter(new SessionCsrf.CookieFilter(), CsrfFilter.class);
         return http.authorizeHttpRequests(authorize -> authorize
             .dispatcherTypeMatchers(jakarta.servlet.DispatcherType.ERROR).permitAll()
             // Boot's exposure configuration decides which actuator handlers exist; others remain 404.
             .requestMatchers("/actuator/**", "/healthz", "/api/v1/version").permitAll()
-            .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/auth/login", "/api/auth/signup", "/api/auth/refresh",
+            .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/auth/login", "/api/auth/signup",
                 "/api/auth/logout", "/api/auth/dev/token", "/api/auth/email-verifications", "/api/auth/email-verifications/confirm",
                 "/api/auth/social/signup", "/api/v1/places/search", "/api/v1/places/nearby", "/api/v1/places/search/region",
                 "/api/v1/onboarding/taste-analysis").permitAll()

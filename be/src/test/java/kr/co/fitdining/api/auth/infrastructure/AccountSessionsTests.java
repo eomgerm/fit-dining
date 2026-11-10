@@ -12,7 +12,7 @@ class AccountSessionsTests {
     @Test @SuppressWarnings({"rawtypes", "unchecked"})
     void redisIsUntouchedUntilDatabaseCommit() {
         var repository = mock(FindByIndexNameSessionRepository.class);
-        var hook = new AccountSessions(repository);
+        var hook = new AccountSessions(repository, mock(kr.co.fitdining.api.auth.repository.AuthSecurityEventRepository.class), java.time.Clock.systemUTC());
         assertThatThrownBy(() -> hook.invalidateAfterCommit("user")).isInstanceOf(IllegalStateException.class);
         TransactionSynchronizationManager.initSynchronization();
         TransactionSynchronizationManager.setActualTransactionActive(true);
@@ -34,7 +34,7 @@ class AccountSessionsTests {
         TransactionSynchronizationManager.initSynchronization();
         TransactionSynchronizationManager.setActualTransactionActive(true);
         try {
-            new AccountSessions(repository).invalidateAfterCommit("user");
+            new AccountSessions(repository, mock(kr.co.fitdining.api.auth.repository.AuthSecurityEventRepository.class), java.time.Clock.systemUTC()).invalidateAfterCommit("user");
             TransactionSynchronizationManager.getSynchronizations().forEach(sync -> sync.afterCompletion(1));
             verifyNoInteractions(repository);
         } finally {

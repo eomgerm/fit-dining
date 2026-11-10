@@ -6,14 +6,11 @@ import java.time.Instant;
 import java.util.UUID;
 import kr.co.fitdining.api.auth.domain.AuthFailure;
 import kr.co.fitdining.api.auth.domain.AuthLoginAttempt;
-import kr.co.fitdining.api.auth.domain.AuthRefreshToken;
 import kr.co.fitdining.api.auth.domain.AuthSecurityEvent;
 import kr.co.fitdining.api.auth.domain.AuthUser;
 import kr.co.fitdining.api.auth.ports.AuthUseCases.Identity;
 import kr.co.fitdining.api.auth.ports.AuthUseCases.Issued;
-import kr.co.fitdining.api.auth.ports.TokenCodec;
 import kr.co.fitdining.api.auth.repository.AuthLoginAttemptRepository;
-import kr.co.fitdining.api.auth.repository.AuthRefreshTokenRepository;
 import kr.co.fitdining.api.auth.repository.AuthSecurityEventRepository;
 import kr.co.fitdining.api.auth.repository.AuthUserRepository;
 import lombok.RequiredArgsConstructor;
@@ -27,19 +24,17 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class AuthTransactions {
     private final AuthLoginAttemptRepository attempts;
-    private final AuthRefreshTokenRepository refreshTokens;
     private final AuthSecurityEventRepository events;
     private final AuthUserRepository users;
     private final kr.co.fitdining.api.auth.repository.AuthEmailVerificationRepository verifications;
     private final kr.co.fitdining.api.user.UserPreferencesRepository preferences;
-    private final TokenCodec codec;
     private final Clock clock;
     private final AuthPolicy policy;
     @org.springframework.beans.factory.annotation.Value("${auth.terms-version}")
     private String termsVersion;
 
     /**
-     * Consumes the email verification token, then saves the account and initial RT atomically,
+     * Consumes the email verification token, then saves the account atomically,
      * after transaction-free hashing. A concurrent request with the same token updates zero rows and rolls back.
      * @param verificationTokenHash hash checked by {@link EmailVerifications#requireToken}
      */
@@ -67,56 +62,17 @@ public class AuthTransactions {
         return true;
     }
 
-    /** Creates one refresh family and persists its first RT only. */
+    /** Creates the identity and absolute expiry for a new session. */
     @Transactional
     public Issued login(AuthUser user) {
         user = activeUser(user.getId());
-        Instant now = clock.instant();
-        return issue(user.getId(), user.getNickname(), UUID.randomUUID().toString(), now.plusSeconds(policy.sessionSeconds()), now);
+        return new Issued(new Identity(user.getId(), user.getNickname(),
+                clock.instant().getEpochSecond() + policy.sessionSeconds()));
     }
 
-    /**
-     * Returns reuse as a value so the RT row lock is released before acquiring a family lock.
-     * @param claims verified refresh claims
-     * @return issued tokens or a generic authentication failure
-     */
     @Transactional
-    public Rotation rotate(TokenCodec.Claims claims) {
-        AuthUser user = activeUser(claims.userId());
-        AuthRefreshToken token = refreshTokens.lockByJti(claims.jti()).orElseThrow(AuthTransactions::invalid);
-        if (!token.getUserId().equals(claims.userId())
-                || token.getExpiresAt().getEpochSecond() != claims.expiresAt()) throw invalid();
-        Instant now = clock.instant();
-        if ((policy.rejectRefreshReuse() && token.getUsedAt() != null) || token.getRevokedAt() != null) {
-            return new Rotation(null, invalid());
-        }
-        if (!token.getExpiresAt().isAfter(now)) throw invalid();
-        token.markUsed(now);
-        return new Rotation(issue(token.getUserId(), user.getNickname(), token.getFamilyId(), token.getExpiresAt(), now), null);
-    }
-
-    /**
-     * Records a previously verified replay in its own transaction, after rotate released its row lock.
-     * Family serialization makes revocation and the event counter atomic across different old RTs.
-     * @param claims refresh claims already checked against the locked RT by rotate
-     */
-    @Transactional
-    public void revokeReused(TokenCodec.Claims claims) {
-        if (!policy.rejectRefreshReuse()) return;
-        Instant now = clock.instant();
-        AuthRefreshToken token = refreshTokens.findById(claims.jti()).orElseThrow(AuthTransactions::invalid);
-        String family = token.getFamilyId();
-        revokeFamily(family, claims.userId(), now, "REFRESH_REUSE");
-        int count = Math.toIntExact(events.countByFamilyId(family) + 1);
-        events.save(new AuthSecurityEvent(family, now,
-                count >= 3 ? "ATTACK_DETECTED" : "REFRESH_REUSE", count));
-    }
-
-    /** Revokes the cookie RT's family; issued ATs remain valid until expiry. */
-    @Transactional
-    public void logout(TokenCodec.Claims claims) {
-        refreshTokens.findById(claims.jti()).filter(t -> t.getUserId().equals(claims.userId()))
-                .ifPresent(t -> revokeFamily(t.getFamilyId(), t.getUserId(), clock.instant(), "LOGOUT"));
+    public void audit(String userId, String type) {
+        events.save(AuthSecurityEvent.login(userId, clock.instant(), type));
     }
 
     /** Inserts a missing demo account; a concurrent unique conflict is handled outside the transaction. */
@@ -134,36 +90,10 @@ public class AuthTransactions {
     @Transactional(readOnly = true)
     public boolean demoUserExists(String email) { return users.findByEmail(email).isPresent(); }
 
-    private void revokeFamily(String family, String user, Instant now, String reason) {
-        // Never enter while holding a presented-RT lock: every revoker takes the family lock first.
-        refreshTokens.lockFamily(family);
-        do {
-            refreshTokens.revokeFamily(family, user, now, reason);
-            // A concurrent rotation can insert a successor while the bulk update waits on its parent.
-            // Recheck with a fresh READ COMMITTED snapshot before considering revocation complete.
-        } while (refreshTokens.existsByFamilyIdAndUserIdAndRevokedAtIsNull(family, user));
-    }
-
-    private Issued issue(String user, String nickname, String family, Instant familyExpiry, Instant now) {
-        long created = now.getEpochSecond();
-        long expiry = familyExpiry.getEpochSecond();
-        long accessExpiry = Math.min(created + policy.accessSeconds(), expiry);
-        String jti = UUID.randomUUID().toString();
-        refreshTokens.save(new AuthRefreshToken(jti, family, user, now, familyExpiry));
-        String at = codec.encode(new TokenCodec.Token(user, null, "access", created, accessExpiry));
-        String rt = codec.encode(new TokenCodec.Token(user, jti, "refresh", created, expiry));
-        return new Issued(at, rt, new Identity(user, nickname, family, accessExpiry, expiry));
-    }
-
     private AuthUser activeUser(String id) {
         return users.lockById(id).filter(user -> user.getDeletedAt() == null).orElseThrow(AuthTransactions::invalid);
     }
 
     private static AuthFailure invalid() { return new AuthFailure("인증을 확인해주세요."); }
 
-    /**
-     * @param issued new tokens, absent when rejected
-     * @param failure generic failure, absent on success
-     */
-    public record Rotation(Issued issued, AuthFailure failure) {}
 }

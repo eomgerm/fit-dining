@@ -10,14 +10,13 @@ import type { ApiError as ApiErrorClass } from "@/shared/api/api-error";
 const auth = vi.hoisted(() => ({
   session: null as AuthSession | null,
   restore: vi.fn<() => Promise<AuthSession>>(),
-  refresh: vi.fn<() => Promise<AuthSession>>(),
+  checkSession: vi.fn<() => Promise<AuthSession>>(),
 }));
 
 vi.mock("@/domains/auth/api/auth-client", () => ({
-  ACCESS_TOKEN_EXPIRED_TYPE: "urn:fitdining:auth:access-token-expired",
   getSession: () => auth.session,
   restore: () => auth.restore(),
-  refresh: () => auth.refresh(),
+  checkSession: () => auth.checkSession(),
   clearSession: () => {
     auth.session = null;
   },
@@ -73,7 +72,7 @@ beforeEach(async () => {
     if (auth.session) return auth.session;
     throw new ApiError("http", "x", { status: 401 });
   });
-  auth.refresh.mockReset();
+  auth.checkSession.mockReset();
   localStorage.clear();
   fetchMock = vi.fn<typeof fetch>(async () => Response.json(searchResponse));
   vi.stubGlobal("fetch", fetchMock);
@@ -144,15 +143,12 @@ describe("검색 요청에 싣는 값", () => {
 
   it("회원 세션이 만료돼 401이면 재시도 없이 비회원으로 전환한다", async () => {
     auth.session = session("user-1");
-    auth.refresh.mockImplementation(async () => {
+    auth.checkSession.mockImplementation(async () => {
       auth.session = session("user-1");
       return auth.session;
     });
     fetchMock.mockResolvedValueOnce(
-      Response.json(
-        { status: 401, type: "urn:fitdining:auth:access-token-expired" },
-        { status: 401 },
-      ),
+      Response.json({ status: 401 }, { status: 401 }),
     );
     const { placeQueries, queryClient } = await load();
 
@@ -162,7 +158,7 @@ describe("검색 요청에 싣는 값", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(sent(0).token).toBe(null);
-    expect(auth.refresh).not.toHaveBeenCalled();
+    expect(auth.checkSession).not.toHaveBeenCalled();
   });
 
   it("검색과 다음 페이지도 같은 규칙으로 싣고, 캐시의 요청에는 preferences가 없다", async () => {

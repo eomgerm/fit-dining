@@ -4,11 +4,7 @@ package kr.co.fitdining.api.auth.ports;
 public interface AuthPolicy {
     /** @return whether attempts must be persisted and limited */
     boolean limitAttempts();
-    /** @return whether a used refresh token triggers family revocation */
-    boolean rejectRefreshReuse();
-    /** @return access token lifetime in seconds */
-    long accessSeconds();
-    /** @return absolute refresh family lifetime in seconds */
+    /** @return absolute session lifetime in seconds */
     long sessionSeconds();
     /** @return HTTP session idle lifetime in seconds */
     long sessionIdleSeconds();

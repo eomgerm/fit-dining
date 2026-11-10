@@ -42,7 +42,7 @@ import org.springframework.web.util.UriUtils;
     "auth.cookie-secure=false", "auth.frontend-origin=http://localhost:3000"
 })
 @Import({
-    AuthRefreshCookieWriter.class, kr.co.fitdining.api.auth.infrastructure.SecurityConfiguration.class, SocialHttpTests.Configuration.class
+    LegacyRefreshCookieExpiry.class, kr.co.fitdining.api.auth.infrastructure.SecurityConfiguration.class, SocialHttpTests.Configuration.class
 })
 @ExtendWith(OutputCaptureExtension.class)
 class SocialHttpTests {
@@ -72,10 +72,78 @@ class SocialHttpTests {
     @MockitoBean SocialProviderClient client;
     @MockitoBean SocialAccounts accounts;
     @MockitoBean AuthTransactions transactions;
+    @MockitoSpyBean SessionLogin sessions;
 
     @BeforeEach
     void allow() {
         when(transactions.recordAttempt(any(), any())).thenReturn(true);
+    }
+
+    @Test
+    void missingOrInvalidStateCookieDoesNotWriteFailureAudit() throws Exception {
+        mvc.perform(get("/api/auth/oauth/google/callback").param("code", "code").param("state", "state"))
+            .andExpect(status().isFound());
+        mvc.perform(get("/api/auth/oauth/google/callback").param("code", "code").param("state", "state")
+            .cookie(new Cookie("fitdining_oauth", "invalid"))).andExpect(status().isFound());
+        verify(transactions, never()).recordAttempt(any(), any());
+        verify(transactions, never()).audit(any(), any());
+    }
+    @Test
+    void rateLimitedCallbackDoesNotWriteFailureAudit() throws Exception {
+        when(transactions.recordAttempt(any(), any())).thenReturn(false);
+        mvc.perform(get("/api/auth/oauth/google/callback").param("code", "code").param("state", "state")
+            .cookie(new Cookie("fitdining_oauth", tokens.encode("oauth_state", "google", "state", "verifier", "login"))))
+            .andExpect(status().isFound());
+        verify(transactions, never()).audit(any(), any());
+    }
+    @Test
+    void failedSessionCreationRecordsOnlyFailureAfterBoundedCallback() throws Exception {
+        when(client.exchange(any(), any(), any(), any(), any())).thenReturn("subject");
+        when(accounts.existing(any(), any())).thenReturn(issued());
+        doThrow(new org.springframework.dao.DataAccessResourceFailureException("session unavailable"))
+            .when(sessions).establish(any(), any(), any());
+        mvc.perform(get("/api/auth/oauth/google/callback").param("code", "code").param("state", "state")
+            .cookie(new Cookie("fitdining_oauth", tokens.encode("oauth_state", "google", "state", "verifier", "login"))))
+            .andExpect(status().isFound()).andExpect(header().string("Location", "/login?error=social"));
+        verify(transactions).audit(null, "LOGIN_FAILURE");
+        verify(transactions, never()).audit(any(), eq("LOGIN_SUCCESS"));
+    }
+    @Test
+    void successAuditFollowsSessionCreation() throws Exception {
+        when(client.exchange(any(), any(), any(), any(), any())).thenReturn("subject");
+        when(accounts.existing(any(), any())).thenReturn(issued());
+        mvc.perform(get("/api/auth/oauth/google/callback").param("code", "code").param("state", "state")
+            .cookie(new Cookie("fitdining_oauth", tokens.encode("oauth_state", "google", "state", "verifier", "login"))))
+            .andExpect(status().isFound()).andExpect(header().string("Location", "/"));
+        var order = inOrder(sessions, transactions);
+        order.verify(sessions).establish(any(), any(), any());
+        order.verify(transactions).audit("id", "LOGIN_SUCCESS");
+        verify(transactions, never()).audit(any(), eq("LOGIN_FAILURE"));
+    }
+
+    @Test
+    void failedSuccessAuditKeepsSocialCallbackAndSessionSuccessful(CapturedOutput output) throws Exception {
+        String sensitive = "audit-secret-email@example.com audit-secret-password audit-private-session-id";
+        when(client.exchange(any(), any(), any(), any(), any())).thenReturn("subject");
+        when(accounts.existing(any(), any())).thenReturn(issued());
+        doThrow(new org.springframework.dao.DataAccessResourceFailureException(sensitive))
+            .when(transactions).audit("id", "LOGIN_SUCCESS");
+        var result = mvc.perform(get("/api/auth/oauth/google/callback").param("code", "code").param("state", "state")
+            .cookie(new Cookie("fitdining_oauth", tokens.encode("oauth_state", "google", "state", "verifier", "login"))))
+            .andExpect(status().isFound()).andExpect(header().string("Location", "/")).andReturn();
+        var session = (org.springframework.mock.web.MockHttpSession) result.getRequest().getSession(false);
+        assertNotNull(session);
+        assertFalse(session.isInvalid());
+        when(auth.me("id")).thenReturn(new AuthUseCases.Profile("nickname", "a@example.com"));
+        mvc.perform(get("/api/auth/me").session(session)).andExpect(status().isOk())
+            .andExpect(jsonPath("$.userId").value("id"));
+        verify(transactions).audit("id", "LOGIN_SUCCESS");
+        verify(transactions, never()).audit(any(), eq("LOGIN_FAILURE"));
+        assertTrue(output.getAll().contains("Login success audit failed: reason=DataAccessResourceFailureException"));
+        for (String secret : new String[]{"audit-secret-email@example.com", "audit-secret-password", "audit-private-session-id"})
+            assertFalse(output.getAll().contains(secret));
+        String warning = output.getAll().lines().filter(line -> line.contains("Login success audit failed")).findFirst().orElseThrow();
+        assertFalse(warning.substring(warning.indexOf("Login success audit failed")).contains(session.getId()));
     }
 
     @Test
@@ -139,7 +207,7 @@ class SocialHttpTests {
 
     AuthUseCases.Issued issued() {
         long now = Clock.systemUTC().instant().getEpochSecond();
-        return new AuthUseCases.Issued("at", "rt", new AuthUseCases.Identity("id", "nickname", "family", now + 1800, now + 86400));
+        return new AuthUseCases.Issued(new AuthUseCases.Identity("id", "nickname", now + 86400));
     }
 
     @Test
@@ -149,7 +217,7 @@ class SocialHttpTests {
         when(accounts.existing(any(), any())).thenReturn(issued());
         mvc.perform(get("/api/auth/oauth/google/callback").param("code", "code").param("state", "state")
             .cookie(new Cookie("fitdining_oauth", tokens.encode("oauth_state", "google", "state", "verifier", "login"))))
-            .andExpect(status().isFound()).andExpect(header().string("Location", "/")).andExpect(cookie().value("fitdining_rt", "rt"));
+            .andExpect(status().isFound()).andExpect(header().string("Location", "/")).andExpect(cookie().doesNotExist("fitdining_rt"));
     }
 
     String body = "{\"nickname\":\"새닉네임\",\"agreements\":{\"ageOver14\":true,\"terms\":true,\"privacy\":true}}";
@@ -157,28 +225,28 @@ class SocialHttpTests {
     @DisplayName("소셜가입_정상 요청_201 토큰과 쿠키 삭제")
     void signup_valid_issuesTokens() throws Exception {
         when(accounts.signup(any(), any(), any())).thenReturn(issued());
-        mvc.perform(post("/api/auth/social/signup").header("Origin", "http://localhost:3000").contentType("application/json").content(body.replace("\"nickname\":\"새닉네임\",", ""))
+        mvc.perform(post("/api/auth/social/signup").with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).header("Origin", "http://localhost:3000").contentType("application/json").content(body.replace("\"nickname\":\"새닉네임\",", ""))
             .cookie(new Cookie("fitdining_social", tokens.encode("social_signup", "google", "subject"))))
-            .andExpect(status().isCreated()).andExpect(jsonPath("$.userId").value("id")).andExpect(jsonPath("$.accessToken").value("at")).andExpect(cookie().maxAge("fitdining_social", 0));
+            .andExpect(status().isCreated()).andExpect(jsonPath("$.userId").value("id")).andExpect(jsonPath("$.accessToken").doesNotExist()).andExpect(cookie().maxAge("fitdining_social", 0));
     }
 
     @Test
     @DisplayName("소셜가입_쿠키 없음_401")
     void signup_missingCookie_rejects() throws Exception {
-        mvc.perform(post("/api/auth/social/signup").header("Origin", "http://localhost:3000").contentType("application/json").content(body)).andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/auth/social/signup").with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).header("Origin", "http://localhost:3000").contentType("application/json").content(body)).andExpect(status().isUnauthorized());
     }
 
     @Test
     @DisplayName("소셜가입_다른 출처_403")
     void signup_untrustedOrigin_rejects() throws Exception {
-        mvc.perform(post("/api/auth/social/signup").header("Origin", "http://evil.example").contentType("application/json").content(body)).andExpect(status().isForbidden());
+        mvc.perform(post("/api/auth/social/signup").with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).header("Origin", "http://evil.example").contentType("application/json").content(body)).andExpect(status().isForbidden());
     }
 
     @Test
     @DisplayName("소셜가입_기존 닉네임 입력은 무시")
     void signup_legacyNickname_isIgnored() throws Exception {
         when(accounts.signup(any(), any(), any())).thenReturn(issued());
-        mvc.perform(post("/api/auth/social/signup").header("Origin", "http://localhost:3000")
+        mvc.perform(post("/api/auth/social/signup").with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).header("Origin", "http://localhost:3000")
             .contentType("application/json").content(body.replace("새닉네임", "a"))
             .cookie(new Cookie("fitdining_social", tokens.encode("social_signup", "google", "subject"))))
             .andExpect(status().isCreated());
@@ -187,7 +255,7 @@ class SocialHttpTests {
     @Test
     @DisplayName("소셜가입_약관 미동의_400 약관 오류")
     void signup_unacceptedTerms_returnsAgreementError() throws Exception {
-        mvc.perform(post("/api/auth/social/signup").header("Origin", "http://localhost:3000")
+        mvc.perform(post("/api/auth/social/signup").with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).header("Origin", "http://localhost:3000")
             .contentType("application/json").content(body.replace("\"terms\":true", "\"terms\":false"))
             .cookie(new Cookie("fitdining_social", tokens.encode("social_signup", "google", "subject"))))
             .andExpect(status().isBadRequest())
@@ -199,7 +267,7 @@ class SocialHttpTests {
     @DisplayName("소셜가입_시도 제한_429")
     void signup_limited_returnsRetryAfter() throws Exception {
         when(transactions.recordAttempt(any(), any())).thenReturn(false);
-        mvc.perform(post("/api/auth/social/signup").header("Origin", "http://localhost:3000").contentType("application/json").content(body)
+        mvc.perform(post("/api/auth/social/signup").with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).header("Origin", "http://localhost:3000").contentType("application/json").content(body)
             .cookie(new Cookie("fitdining_social", tokens.encode("social_signup", "google", "subject"))))
             .andExpect(status().isTooManyRequests()).andExpect(header().string("Retry-After", "900"));
     }
@@ -216,16 +284,15 @@ class SocialHttpTests {
             token = new SocialTokens(new NimbusTokenCodec(new byte[32], old), old).encode("social_signup", "google", "subject");
         }
 
-        mvc.perform(post("/api/auth/social/signup").header("Origin", "http://localhost:3000").contentType("application/json").content(body)
+        mvc.perform(post("/api/auth/social/signup").with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).header("Origin", "http://localhost:3000").contentType("application/json").content(body)
             .cookie(new Cookie("fitdining_social", token))).andExpect(status().isUnauthorized());
     }
 
     @Test
     @DisplayName("프로필_소셜 사용자_이메일 필드 생략")
     void me_socialUser_omitsEmail() throws Exception {
-        when(auth.authenticate(any())).thenReturn(issued().identity());
         when(auth.me(any())).thenReturn(new AuthUseCases.Profile("social", null));
-        mvc.perform(get("/api/auth/me").header("Authorization", "Bearer at")).andExpect(status().isOk()).andExpect(jsonPath("$.email").doesNotExist());
+        mvc.perform(get("/api/auth/me").with(kr.co.fitdining.api.support.SessionTestSupport.session("id"))).andExpect(status().isOk()).andExpect(jsonPath("$.email").doesNotExist());
     }
 
     @ParameterizedTest

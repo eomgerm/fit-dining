@@ -58,6 +58,27 @@ class SocialInfrastructureTests {
         assertThrows(AuthFailure.class, () -> later.decode(token, "oauth_state", 4));
     }
 
+    @ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({"oauth_state,iss", "oauth_state,aud", "oauth_state,iat",
+        "social_signup,iss", "social_signup,aud", "social_signup,iat"})
+    void signedCookiesRejectWrongIssuerAudienceAndFutureIssuedAt(String type, String field) throws Exception {
+        Clock clock = Clock.fixed(Instant.parse("2026-10-26T00:00:00Z"), ZoneOffset.UTC);
+        var tokens = new SocialTokens(new NimbusTokenCodec(new byte[32], clock), clock);
+        String token = type.equals("oauth_state") ? tokens.encode(type, "google", "state", "verifier", "login")
+            : tokens.encode(type, "google", "subject");
+        var parsed = com.nimbusds.jwt.SignedJWT.parse(token);
+        var claims = new com.nimbusds.jwt.JWTClaimsSet.Builder(parsed.getJWTClaimsSet());
+        switch (field) {
+            case "iss" -> claims.issuer("other");
+            case "aud" -> claims.audience("other");
+            case "iat" -> claims.issueTime(Date.from(clock.instant().plusSeconds(1)));
+            default -> throw new AssertionError(field);
+        }
+        var signed = new com.nimbusds.jwt.SignedJWT(parsed.getHeader(), claims.build());
+        signed.sign(new com.nimbusds.jose.crypto.MACSigner(new byte[32]));
+        assertThrows(AuthFailure.class, () -> tokens.decode(signed.serialize(), type, type.equals("oauth_state") ? 4 : 2));
+    }
+
     static Stream<Arguments> profiles() {
         return Stream.of(
             Arguments.of("google", "{\"sub\":\"g-id\"}", "g-id"),

@@ -72,15 +72,17 @@ class RedisSessionTests extends PostgresTestSupport {
     }
 
     @Test
-    void anonymousGetAndPostDoNotCreateSessionOrEnableCsrf() throws Exception {
+    void anonymousGetAndCsrfProtectedPostDoNotCreateSession() throws Exception {
         var client = HttpClient.newHttpClient();
         var get = client.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/healthz")).GET().build(),
                 HttpResponse.BodyHandlers.ofString());
         assertThat(get.statusCode()).isEqualTo(200);
         assertThat(get.headers().allValues("set-cookie")).noneMatch(cookie -> cookie.startsWith("fitdining_session="));
-        var post = client.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/places/search"))
+        var builder = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/places/search"))
                 .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString("{\"query\":\"salad\"}")).build(), HttpResponse.BodyHandlers.ofString());
+                .POST(HttpRequest.BodyPublishers.ofString("{\"query\":\"salad\"}"));
+        kr.co.fitdining.api.support.SessionTestSupport.csrf(builder, client, port, null);
+        var post = client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
         assertThat(post.statusCode()).isEqualTo(200);
         assertThat(post.headers().allValues("set-cookie")).noneMatch(cookie -> cookie.startsWith("fitdining_session="));
     }

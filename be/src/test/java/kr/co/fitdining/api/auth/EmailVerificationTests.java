@@ -320,6 +320,7 @@ class EmailVerificationTests extends PostgresTestSupport {
         var builder = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
                 .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body));
         if (origin != null) builder.header("Origin", origin);
+        kr.co.fitdining.api.support.SessionTestSupport.csrf(builder, client, port, null);
         return client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
     }
 

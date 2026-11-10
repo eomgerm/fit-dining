@@ -49,11 +49,23 @@ class SessionInfrastructureTests {
 
     @Test
     void productionIdentityRoundTripsAndIndexesByUserId() {
-        var identity = new kr.co.fitdining.api.auth.ports.AuthUseCases.Identity("user-42", "name", "family", 100, 200);
+        var identity = new kr.co.fitdining.api.auth.ports.AuthUseCases.Identity("user-42", "name", 200);
         var context = new SecurityContextImpl(UsernamePasswordAuthenticationToken.authenticated(identity, null, List.of()));
         var serializer = new SessionConfiguration().springSessionDefaultRedisSerializer();
         var restored = (SecurityContextImpl) serializer.deserialize(serializer.serialize(context));
         assertThat(restored.getAuthentication().getName()).isEqualTo("user-42");
+        assertThat(restored.getAuthentication().getPrincipal()).isEqualTo(identity);
+    }
+
+    @Test
+    void legacyPrincipalFieldsAreIgnoredInSecurityContextJson() {
+        var identity = new kr.co.fitdining.api.auth.ports.AuthUseCases.Identity("legacy-user", "name", 200);
+        var context = new SecurityContextImpl(UsernamePasswordAuthenticationToken.authenticated(identity, null, List.of()));
+        var serializer = new SessionConfiguration().springSessionDefaultRedisSerializer();
+        String json = new String(serializer.serialize(context), java.nio.charset.StandardCharsets.UTF_8)
+            .replace("\"sessionExpiresAt\":200", "\"sessionId\":\"old-family\",\"accessExpiresAt\":100,\"sessionExpiresAt\":200");
+        assertThat(json).contains("old-family");
+        var restored = (SecurityContextImpl) serializer.deserialize(json.getBytes(java.nio.charset.StandardCharsets.UTF_8));
         assertThat(restored.getAuthentication().getPrincipal()).isEqualTo(identity);
     }
 

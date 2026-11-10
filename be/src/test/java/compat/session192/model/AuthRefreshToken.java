@@ -1,4 +1,6 @@
-package kr.co.fitdining.api.auth.domain;
+package compat.session192.model;
+
+// Snapshot of the 192 entity mapping at bab48a5; outside application entity scanning.
 
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
