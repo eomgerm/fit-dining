@@ -96,8 +96,14 @@ class AiSearchClientBudgetTest {
 
 	/** 상한만큼 검색을 AI 응답 대기 상태로 만든다. 서버는 {@code release}가 열릴 때까지 응답하지 않는다. */
 	List<Future<Boolean>> fill(AiSearchClient client, ExecutorService pool) throws InterruptedException {
+		return fill(client, pool, SearchPurpose.SEARCH);
+	}
+
+	/** 상한만큼의 검색을 주어진 목적으로 AI 응답 대기 상태로 만든다. */
+	List<Future<Boolean>> fill(AiSearchClient client, ExecutorService pool, SearchPurpose purpose)
+			throws InterruptedException {
 		List<Future<Boolean>> waiting = IntStream.range(0, AiSearchClient.MAX_IN_FLIGHT)
-				.mapToObj(i -> pool.submit(() -> client.search(SearchPurpose.SEARCH, request(), null).isPresent()))
+				.mapToObj(i -> pool.submit(() -> client.search(purpose, request(), null).isPresent()))
 				.toList();
 		long deadline = System.nanoTime() + Duration.ofSeconds(5).toNanos();
 		while (calls.get() < AiSearchClient.MAX_IN_FLIGHT && System.nanoTime() < deadline) {
@@ -312,6 +318,33 @@ class AiSearchClientBudgetTest {
 		assertThat(client.search(SearchPurpose.SEARCH, request(), null)).isPresent();
 		assertThat(output.getAll()).contains("WARN").contains("in-flight limit reached")
 				.doesNotContain("circuit opened").doesNotContain(SECRET);
+	}
+
+	@Test
+	@DisplayName("상한_NEARBY가permit을다쓰면_SEARCH와REGION도호출하지않고fallback한다")
+	void inFlight_limitHeldByNearby_otherPurposesFallBack() throws Exception {
+		CountDownLatch release = new CountDownLatch(1);
+		handler = (exchange, call) -> {
+			release.await();
+			respond(exchange, 200, OK);
+		};
+		AiSearchClient client = client(timing(Duration.ofSeconds(10)));
+		ExecutorService pool = Executors.newFixedThreadPool(AiSearchClient.MAX_IN_FLIGHT);
+		try {
+			List<Future<Boolean>> waiting = fill(client, pool, SearchPurpose.NEARBY);
+
+			assertThat(client.search(SearchPurpose.SEARCH, request(), null)).isEmpty();
+			assertThat(client.search(SearchPurpose.REGION, request(), null)).isEmpty();
+			assertThat(calls).hasValue(AiSearchClient.MAX_IN_FLIGHT);
+
+			release.countDown();
+			for (Future<Boolean> search : waiting) {
+				assertThat(search.get()).isTrue();
+			}
+		} finally {
+			release.countDown();
+			pool.shutdownNow();
+		}
 	}
 
 	@Test

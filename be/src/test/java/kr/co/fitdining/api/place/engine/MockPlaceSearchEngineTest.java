@@ -315,7 +315,7 @@ class MockPlaceSearchEngineTest {
 
 		@Test
 		@DisplayName("REGION_영역안장소를20곳씩나누고다음페이지도같은영역에서센다")
-		void region_pagesWithinArea() {
+		void region_twoPages_withinArea() {
 			PlaceSearchResponse first = region(WEST, null, null);
 			PlaceSearchResponse second = region(WEST, null, first.nextCursor());
 
@@ -335,7 +335,7 @@ class MockPlaceSearchEngineTest {
 
 		@Test
 		@DisplayName("REGION_받은조건을돌려주고nearby와변경요약이없다")
-		void region_echoesConditionsWithoutSummary() {
+		void region_conditions_echoedWithoutSummary() {
 			Map<String, Object> conditions = new HashMap<>();
 			conditions.put("text", "강남역 파스타");
 			conditions.put("unset", null);

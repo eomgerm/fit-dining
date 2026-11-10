@@ -96,7 +96,7 @@ public class JdbcPlaceCatalog implements PlaceCatalog {
 	private static final String HOURS_BY_IDS_SQL = """
 			SELECT place_id, day_of_week, open_time, close_time, closed, breaks, last_orders
 			FROM place_hours WHERE place_id IN (:ids)""";
-	// 좌표와 개수는 바인딩한다. 경계도 영역 안이다(BETWEEN)
+	/** 지도 영역 안 장소의 앞 n곳. 좌표와 개수는 바인딩한다. 경계도 영역 안이다(BETWEEN). */
 	private static final String AREA_PLACE_IDS = """
 			SELECT place_id FROM places
 			WHERE lat BETWEEN :swLat AND :neLat AND lng BETWEEN :swLng AND :neLng

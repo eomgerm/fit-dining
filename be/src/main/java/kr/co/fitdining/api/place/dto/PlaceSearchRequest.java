@@ -10,8 +10,8 @@ import kr.co.fitdining.api.user.Preferences;
  * 추천 검색 요청({@code POST /api/v1/places/search}). 기기 위치 좌표는 어떤 필드에도 담지 않는다.
  *
  * @param query 사용자가 입력한 문장. 1~200자다.
- * @param preferences 비회원이 기기에 저장한 온보딩 답변. 가입과 같은 모양과 검증을 따른다. 지금은 검증만 하고 엔진에
- *        넘기지 않는다(place-ai-search D-4).
+ * @param preferences 비회원이 기기에 저장한 온보딩 답변. 가입과 같은 모양과 검증을 따른다. 비회원이면 AI 요청의
+ *        {@code tasteProfile}로 넘기고, 회원이면 검증만 하고 쓰지 않는다(place-ai-search D-4).
  * @param previousConditions 후속 조건일 때, 기준 요청의 응답 {@code conditions}를 그대로 돌려보낸 값.
  *        BE는 내용을 해석하지 않는다. 새 검색이면 없다.
  * @param mapBounds 검색 대상 지역(지도 영역). 사용자의 위치는 아니지만 대략의 위치로 서버에 가므로 로그에 남기지 않는다.

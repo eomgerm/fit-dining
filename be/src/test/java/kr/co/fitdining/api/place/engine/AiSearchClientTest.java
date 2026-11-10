@@ -219,6 +219,19 @@ class AiSearchClientTest {
 		}
 
 		@Test
+		@DisplayName("AI요청_NEARBY는_요청에조건이있어도previousConditions를보내지않는다")
+		void request_nearbyWithConditions_omitsPrevious() {
+			server.expect(requestTo(URL))
+					.andExpect(content().json("""
+							{"query":"근처 맛집","mapBounds":{"swLat":37.49,"swLng":127.02,"neLat":37.51,"neLng":127.05},
+							 "rulesOnly":true}""", JsonCompareMode.STRICT))
+					.andRespond(withSuccess(OK, MediaType.APPLICATION_JSON));
+
+			client().search(SearchPurpose.NEARBY, new PlaceSearchRequest("카페", null, Map.of("text", "이전"), AREA,
+					null), null);
+		}
+
+		@Test
 		@DisplayName("AI요청_REGION은_조건을previousConditions로영역과mapFirst와함께보낸다")
 		void request_region_sendsConditionsAsPreviousWithMapFirst() {
 			Map<String, Object> conditions = new LinkedHashMap<>();

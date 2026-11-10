@@ -86,8 +86,11 @@ class PlaceAreaSearchControllerTest {
 				Arguments.of("한 값 null", "{\"swLat\":37.49,\"swLng\":127.02,\"neLat\":37.51,\"neLng\":null}"),
 				Arguments.of("무한대", "{\"swLat\":37.49,\"swLng\":127.02,\"neLat\":1e400,\"neLng\":127.06}"),
 				Arguments.of("위도 범위 밖", "{\"swLat\":-90.5,\"swLng\":127.02,\"neLat\":37.51,\"neLng\":127.06}"),
+				Arguments.of("위도 상한 밖", "{\"swLat\":37.49,\"swLng\":127.02,\"neLat\":90.5,\"neLng\":127.06}"),
+				Arguments.of("경도 하한 밖", "{\"swLat\":37.49,\"swLng\":-180.5,\"neLat\":37.51,\"neLng\":127.06}"),
 				Arguments.of("경도 범위 밖", "{\"swLat\":37.49,\"swLng\":127.02,\"neLat\":37.51,\"neLng\":180.5}"),
 				Arguments.of("위도 같음", "{\"swLat\":37.5,\"swLng\":127.02,\"neLat\":37.5,\"neLng\":127.06}"),
+				Arguments.of("경도 같음", "{\"swLat\":37.49,\"swLng\":127.04,\"neLat\":37.51,\"neLng\":127.04}"),
 				Arguments.of("경도 뒤집힘", "{\"swLat\":37.49,\"swLng\":127.06,\"neLat\":37.51,\"neLng\":127.02}"),
 				Arguments.of("문자열 좌표", "{\"swLat\":\"북쪽\",\"swLng\":127.02,\"neLat\":37.51,\"neLng\":127.06}"));
 	}
@@ -240,7 +243,7 @@ class PlaceAreaSearchControllerTest {
 
 		@Test
 		@DisplayName("주변_영역안점수상위10곳을nearby로주고X-Fallback이없다")
-		void nearby_topTenNearby() throws Exception {
+		void nearby_wholeArea_topTenNearby() throws Exception {
 			mockMvc.perform(nearby(nearbyBody(ALL)))
 					.andExpect(status().isOk())
 					.andExpect(header().doesNotExist("X-Fallback"))
@@ -261,7 +264,7 @@ class PlaceAreaSearchControllerTest {
 
 		@Test
 		@DisplayName("이지역에서검색_다음페이지도같은영역에서이어지고받은조건을돌려준다")
-		void region_nextPageWithinArea() throws Exception {
+		void region_cursor_nextPageWithinArea() throws Exception {
 			String first = mockMvc.perform(region("{\"query\":\"파스타\",\"conditions\":{\"text\":\"t\"},\"mapBounds\":"
 							+ WEST + "}"))
 					.andExpect(status().isOk())
