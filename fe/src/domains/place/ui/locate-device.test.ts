@@ -5,6 +5,7 @@ import {
   initialLocation,
   locateDevice,
   locateFromButton,
+  stopInitialMoveByUser,
 } from "./locate-device";
 
 // 테스트마다 새 store(새 페이지 세션)를 쓴다
@@ -242,7 +243,7 @@ describe('"내 위치" 버튼과 처음 조회 (AC-49, AC-50)', () => {
     const initial = initialLocation();
     device.grantPermission();
     await settle();
-    stores.current.finishInitialView();
+    stopInitialMoveByUser();
     device.succeed();
 
     await initial;
@@ -250,15 +251,31 @@ describe('"내 위치" 버튼과 처음 조회 (AC-49, AC-50)', () => {
     expect(snapshot().initialView).toBe("done");
   });
 
-  it("처음 이동이 끝난 뒤 권한 확인이 끝나면 새로 위치를 조회하지 않는다", async () => {
+  it("사용자가 지도를 움직여 처음 이동이 끝난 뒤 권한 확인이 끝나면 새로 위치를 조회하지 않는다", async () => {
     const device = stubDevice("granted");
     const initial = initialLocation();
-    stores.current.finishInitialView();
+    stopInitialMoveByUser();
+    expect(snapshot().initialView).toBe("done");
     device.grantPermission();
     await initial;
 
     expect(device.getCurrentPosition).not.toHaveBeenCalled();
     expect(snapshot().location).toEqual({ status: "idle" });
+  });
+
+  it("지도가 실패해 처음 이동이 끝난 뒤 권한 확인이 끝나면 위치는 받아 둔다(지도는 옮기지 않는다)", async () => {
+    const device = stubDevice("granted");
+    const initial = initialLocation();
+    // 지도 키가 없거나 인증이 실패해 PlaceMap이 처음 이동을 끝낸다
+    stores.current.finishInitialView();
+    device.grantPermission();
+    await settle();
+    device.succeed();
+
+    expect(await initial).toEqual({ status: "located", here: HERE });
+    expect(device.getCurrentPosition).toHaveBeenCalledTimes(1);
+    expect(snapshot().location).toEqual({ status: "ok", here: HERE });
+    expect(snapshot().initialView).toBe("done");
   });
 
   it("이미 위치가 정해진 뒤 늦게 끝난 처음 조회가 실패여도 그 위치를 failed로 덮지 않고 알리지 않는다", async () => {

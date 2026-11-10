@@ -59,6 +59,7 @@ import {
   LOCATION_DENIED_MESSAGE,
   LOCATION_FAILED_MESSAGE,
   locateFromButton,
+  stopInitialMoveByUser,
 } from "./locate-device";
 import { LoginPrompt, SAVED_LOGIN_MESSAGE } from "./login-prompt";
 import { NearbyCarousel } from "./nearby-carousel";
@@ -537,7 +538,7 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
         onUserMove={() => {
           setMapMoved(true);
           // 사용자가 지도를 움직이면 남은 처음 이동은 하지 않는다(spec 62번)
-          searchStore.finishInitialView();
+          stopInitialMoveByUser();
         }}
         onReadyChange={setMapReady}
         onUnavailable={searchStore.finishInitialView}

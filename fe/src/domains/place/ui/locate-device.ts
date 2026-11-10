@@ -19,6 +19,8 @@ type Session = {
   inFlight?: Promise<LatLng>;
   // "내 위치"가 처음 조회를 대신했는지. 그러면 처음 조회는 알리지 않는다(버튼이 알린다)
   buttonTookOver: boolean;
+  // 사용자가 지도를 움직여 처음 이동을 끝냈는지
+  userMovedMap: boolean;
 };
 
 const sessions = new WeakMap<object, Session>();
@@ -27,7 +29,7 @@ function pageSessionState() {
   const key = searchStore.pageSession;
   let current = sessions.get(key);
   if (!current) {
-    current = { buttonTookOver: false };
+    current = { buttonTookOver: false, userMovedMap: false };
     sessions.set(key, current);
   }
   return current;
@@ -74,6 +76,12 @@ export function locateFromButton() {
   return locateDevice();
 }
 
+// 사용자가 지도를 끌거나 확대·축소했다. 남은 처음 이동을 하지 않고, 아직 시작하지 않은 처음 조회도 하지 않는다(spec 62번)
+export function stopInitialMoveByUser() {
+  pageSessionState().userMovedMap = true;
+  searchStore.finishInitialView();
+}
+
 async function geolocationPermission() {
   try {
     const { state } = await navigator.permissions.query({
@@ -110,10 +118,11 @@ async function decideInitialLocation(): Promise<InitialLocation> {
   const permission = await geolocationPermission();
   if (permission === "denied") return { status: "denied" };
   if (permission !== "granted") return { status: "unavailable" };
-  const { initialView, location } = searchStore.getSnapshot();
-  const { inFlight } = pageSessionState();
-  // 처음 이동이 이미 끝났으면 새로 조회하지 않는다. 진행 중인 버튼 조회가 있으면 그 결과를 기다린다
-  if (initialView === "done" && !inFlight) {
+  const { location } = searchStore.getSnapshot();
+  const { inFlight, buttonTookOver, userMovedMap } = pageSessionState();
+  // 버튼이 대신했거나 사용자가 지도를 움직였으면 새로 조회하지 않는다. 진행 중인 버튼 조회가 있으면 그 결과를 기다린다.
+  // 지도가 실패해 처음 이동이 끝났으면 위치는 받는다(지도는 옮기지 않는다)
+  if ((buttonTookOver || userMovedMap) && !inFlight) {
     return location.status === "ok"
       ? { status: "located", here: location.here }
       : { status: "unavailable" };
