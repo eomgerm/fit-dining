@@ -72,7 +72,7 @@ class SocialNicknamesTests {
         var profiles = mock(kr.co.fitdining.api.onboarding.TasteProfileService.class);
         var answers = new kr.co.fitdining.api.user.Preferences(null, null, null, null);
         var features = new kr.co.fitdining.api.onboarding.TasteProfileService.Profile(
-                java.util.List.of(new kr.co.fitdining.api.user.TasteFeature("QUIET", "axis", true, 1)), java.util.List.of());
+                java.util.List.of(new kr.co.fitdining.api.user.TasteFeature("QUIET", "axis", true, 1, null)), java.util.List.of());
         when(profiles.compute(answers)).thenReturn(features);
         when(names.next(0)).thenReturn("first");
         when(names.next(1)).thenReturn("second");

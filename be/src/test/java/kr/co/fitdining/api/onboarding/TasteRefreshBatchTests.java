@@ -25,7 +25,7 @@ class TasteRefreshBatchTests extends PostgresTestSupport {
     static final Instant T0 = Instant.parse("2026-10-01T00:00:00Z");
     /** jsonb text form: keys come back ordered by length, then name. */
     static final String OLD = "[{\"code\": \"COZY\", \"like\": true, \"layer\": \"importance\", \"weight\": 1}]";
-    static final List<TasteFeature> NEW = List.of(new TasteFeature("QUIET", "axis", true, 2));
+    static final List<TasteFeature> NEW = List.of(new TasteFeature("QUIET", "axis", true, 4.319, "CAFE"));
     JdbcTemplate jdbc = new JdbcTemplate(appSource());
     AiTasteClient client = mock(AiTasteClient.class);
     /** Same as the app's spring.jackson.deserialization.fail-on-unknown-properties. */
@@ -74,21 +74,23 @@ class TasteRefreshBatchTests extends PostgresTestSupport {
                 PREFIX + "a");
         long cafe = review("a", 900001, "2026-10-23T03:00:00Z", "QUIET_GOOD", "SHORT_WAIT_BAD");
         long noisy = review("a", 900002, "2026-10-24T03:00:00Z", "LIVELY_BAD");
+        jdbc.update("update reviews set revisit_intent = true where review_id = ?", noisy);
         long deleted = review("a", 900001, "2026-10-25T03:00:00Z", "LIVELY_GOOD");
         jdbc.update("update reviews set deleted_at = now() where review_id = ?", deleted);
 
         batch.run();
 
         assertEquals(List.of(
-                new ReviewEvidence(900001, cafe, "카페", "QUIET", Instant.parse("2026-10-23T03:00:00Z")),
-                new ReviewEvidence(900001, cafe, "카페", "SHORT_WAIT", Instant.parse("2026-10-23T03:00:00Z")),
-                new ReviewEvidence(900002, noisy, "식당", "QUIET", Instant.parse("2026-10-24T03:00:00Z"))),
+                new ReviewEvidence(900001, cafe, "카페", "QUIET", Instant.parse("2026-10-23T03:00:00Z"), false),
+                new ReviewEvidence(900001, cafe, "카페", "SHORT_WAIT", Instant.parse("2026-10-23T03:00:00Z"), false),
+                new ReviewEvidence(900002, noisy, "식당", "QUIET", Instant.parse("2026-10-24T03:00:00Z"), true)),
                 sent.get(Priority.VALUE));
         assertEquals(new Preferences(Preferences.Mood.QUIET, List.of(Priority.VALUE),
                 List.of(Preferences.Purpose.WORK_STUDY), List.of(
                         new Preferences.TasteChip(Preferences.Polarity.DISLIKE, "매운맛", "FOOD_SPICY"),
                         new Preferences.TasteChip(Preferences.Polarity.LIKE, "국물"))), asked.get(Priority.VALUE));
-        assertEquals("[{\"code\": \"QUIET\", \"like\": true, \"layer\": \"axis\", \"weight\": 2}]", features("a"));
+        assertEquals("[{\"code\": \"QUIET\", \"like\": true, \"layer\": \"axis\", \"weight\": 4.319, "
+                + "\"category\": \"CAFE\"}]", features("a"));
         assertEquals(Timestamp.from(T0), jdbc.queryForObject(
                 "select updated_at from user_preferences where user_id = ?", Timestamp.class, PREFIX + "a"));
         assertNotNull(refreshedAt("a"));

@@ -24,7 +24,7 @@ class TasteProfileServiceTests {
         verifyNoInteractions(client);
     }
     @Test void success_returnsAiProfile() {
-        var profile = new TasteProfileService.Profile(List.of(new TasteFeature("QUIET", "axis", true, 1)),
+        var profile = new TasteProfileService.Profile(List.of(new TasteFeature("QUIET", "axis", true, 1, null)),
                 List.of(StoredTasteChip.of(chips.tastes().getFirst(), new float[] {0.1f})));
         when(client.profile(chips)).thenReturn(profile);
         assertSame(profile, new TasteProfileService(client, true).compute(chips));

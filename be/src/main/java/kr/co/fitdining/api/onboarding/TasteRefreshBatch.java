@@ -103,7 +103,8 @@ public class TasteRefreshBatch {
         // Reviews excluded from analysis must drop out too (taste-profile spec 2). When -56 adds the column, filter
         // here and count the exclusion time in the targets query like deleted_at.
         return jdbc.sql("""
-                select r.place_id, r.review_id, r.created_at, p.category_group, t.feature_code, t.sentiment
+                select r.place_id, r.review_id, r.created_at, r.revisit_intent, p.category_group, t.feature_code,
+                       t.sentiment
                 from reviews r
                 join review_reason_tags rt on rt.review_id = r.review_id
                 join reason_tags t on t.code = rt.code
@@ -114,7 +115,7 @@ public class TasteRefreshBatch {
                         CATEGORIES.get(rs.getString("category_group")),
                         ReasonTagRule.userFeatureCode(rs.getString("feature_code"),
                                 Sentiment.valueOf(rs.getString("sentiment"))),
-                        rs.getTimestamp("created_at").toInstant())).list();
+                        rs.getTimestamp("created_at").toInstant(), rs.getBoolean("revisit_intent"))).list();
     }
 
     private static List<String> names(Array array) throws SQLException {

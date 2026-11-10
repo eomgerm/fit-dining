@@ -91,7 +91,7 @@ public class AiTasteClient {
 
     private static List<TasteFeature> features(ProfileResponse response) {
         return response.features().stream()
-                .map(f -> new TasteFeature(f.code(), f.layer(), f.like(), f.weight())).toList();
+                .map(f -> new TasteFeature(f.code(), f.layer(), f.like(), f.weight(), f.category())).toList();
     }
 
     private <T> T checked(T response) {
@@ -103,8 +103,10 @@ public class AiTasteClient {
     /**
      * One review reason tag (taste-profile spec, refresh API).
      * @param category 식당, 카페 or 술집 @param code user-side feature code @param createdAt review creation time
+     * @param revisitIntent the review's revisit intent; it only makes that review's evidence weigh more
      */
-    public record ReviewEvidence(long placeId, long reviewId, String category, String code, Instant createdAt) {}
+    public record ReviewEvidence(long placeId, long reviewId, String category, String code, Instant createdAt,
+            boolean revisitIntent) {}
     private record RefreshRequest(Preferences.Mood mood, List<Preferences.Priority> priorities,
             List<Preferences.Purpose> purposes, List<TasteChip> tastes, List<ReviewEvidence> reviews) {}
 
@@ -112,6 +114,7 @@ public class AiTasteClient {
             String model) {}
     public record Feature(@NotBlank @Pattern(regexp = "^[A-Z][A-Z0-9_]{0,63}$") String code,
             @NotNull @Pattern(regexp = "axis|importance|purpose|food") String layer, @NotNull Boolean like,
-            @NotNull @Min(1) @Max(3) Integer weight) {}
+            @NotNull @DecimalMin(value = "0", inclusive = false) Double weight,
+            @Pattern(regexp = "RESTAURANT|CAFE|BAR") String category) {}
     public record ProfileResponse(@NotNull List<@NotNull @Valid Feature> features, List<float[]> vectors) {}
 }

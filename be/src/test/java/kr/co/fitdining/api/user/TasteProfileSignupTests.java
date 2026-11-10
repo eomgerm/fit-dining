@@ -26,7 +26,7 @@ class TasteProfileSignupTests extends PostgresTestSupport {
             List.of(new Preferences.TasteChip(Preferences.Polarity.LIKE, "quiet", "QUIET"),
                     new Preferences.TasteChip(Preferences.Polarity.LIKE, "soup", null)));
     final float[] vector = new float[1024];
-    final List<TasteFeature> features = List.of(new TasteFeature("QUIET", "axis", true, 1));
+    final List<TasteFeature> features = List.of(new TasteFeature("QUIET", "axis", true, 1, null));
     final TasteProfileService.Profile profile = new TasteProfileService.Profile(features, List.of(
             StoredTasteChip.of(answers.tastes().get(0), null), StoredTasteChip.of(answers.tastes().get(1), vector)));
 

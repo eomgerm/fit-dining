@@ -78,20 +78,25 @@ class AiTasteAnalyzerTests {
                 .andExpect(content().json("""
                 {"mood":"QUIET","priorities":["VALUE"],"purposes":[],"tastes":[],
                 "reviews":[{"placeId":1,"reviewId":10,"category":"카페","code":"QUIET",
-                "createdAt":"2026-10-23T03:00:00Z"}]}
+                "createdAt":"2026-10-23T03:00:00Z","revisitIntent":true}]}
                 """, true)).andRespond(withSuccess("""
-                {"features":[{"code":"QUIET","layer":"axis","like":true,"weight":2}]}
+                {"features":[{"code":"QUIET","layer":"axis","like":true,"weight":4.319,"category":null},
+                {"code":"QUIET","layer":"axis","like":true,"weight":4.319,"category":"CAFE"}]}
                 """, MediaType.APPLICATION_JSON));
         var features = client.refresh(
                 new Preferences(Preferences.Mood.QUIET, List.of(Preferences.Priority.VALUE), null, null),
                 List.of(new AiTasteClient.ReviewEvidence(1, 10, "카페", "QUIET",
-                        java.time.Instant.parse("2026-10-23T03:00:00Z"))));
-        assertEquals(List.of(new kr.co.fitdining.api.user.TasteFeature("QUIET", "axis", true, 2)), features);
+                        java.time.Instant.parse("2026-10-23T03:00:00Z"), true)));
+        assertEquals(List.of(new kr.co.fitdining.api.user.TasteFeature("QUIET", "axis", true, 4.319, null),
+                new kr.co.fitdining.api.user.TasteFeature("QUIET", "axis", true, 4.319, "CAFE")), features);
     }
-    @Test void refresh_invalidResponse_throws() {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"\"weight\":0", "\"weight\":-1.5",
+            "\"weight\":2,\"category\":\"PUB\""})
+    void refresh_invalidResponse_throws(String field) {
         server.expect(anything()).andRespond(withSuccess("""
-                {"features":[{"code":"QUIET","layer":"axis","like":true,"weight":4}]}
-                """, MediaType.APPLICATION_JSON));
+                {"features":[{"code":"QUIET","layer":"axis","like":true,%s}]}
+                """.formatted(field), MediaType.APPLICATION_JSON));
         assertThrows(RuntimeException.class,
                 () -> client.refresh(new Preferences(null, null, null, null), List.of()));
     }
