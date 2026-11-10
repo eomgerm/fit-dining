@@ -300,9 +300,11 @@ function stubNaverMaps({ Marker }: { Marker?: unknown } = {}) {
         fromOffsetToCoord: ({ x, y }: { x: number; y: number }) =>
           latLng(38 - y / 1000, 127 + x / 1000),
       });
-      fitBounds = vi.fn(() => {
-        if (fit.zoom === this.getZoom()) return;
-        this.getZoom.mockReturnValue(fit.zoom);
+      // 문서대로 부드러운 이동 없이 그 자리에서 중심과 확대 정도를 바꾸고, 옵션의 maxZoom을 넘지 않는다
+      fitBounds = vi.fn((_: unknown, options?: { maxZoom?: number }) => {
+        const zoom = Math.min(fit.zoom, options?.maxZoom ?? Infinity);
+        if (zoom === this.getZoom()) return;
+        this.getZoom.mockReturnValue(zoom);
         emit(this, "zoom_changed");
       });
       setZoom = vi.fn((zoom: number) => {
@@ -962,6 +964,7 @@ describe("SearchScreen", () => {
             right: 40,
             bottom: 480 + 40,
             left: 40,
+            maxZoom: 17,
           });
           expect(created.panTo).not.toHaveBeenCalled();
         });
@@ -1110,20 +1113,37 @@ describe("SearchScreen", () => {
           expect(regionButton()).toBeTruthy();
         });
 
-        it("fitBounds 뒤 확대 정도가 17보다 크면 17로 낮추고 그 확대·축소로도 버튼이 나타나지 않는다", async () => {
+        it("핀이 가까워 더 확대될 자리여도 fitBounds의 maxZoom으로 확대 정도는 17이고, 따로 setZoom을 부르지 않는다", async () => {
           map.fit.zoom = 19;
           renderScreen();
           await waitFor(() => expect(mapState()).toBe("ready"));
 
           await newSearch("역삼 카페");
-          map.fire("idle");
 
           const [created] = map.created;
-          expect(created.setZoom).toHaveBeenCalledExactlyOnceWith(17);
+          expect(created.getZoom.mock.results.at(-1)?.value).toBe(17);
+          expect(created.setZoom).not.toHaveBeenCalled();
           expect(regionButton()).toBeNull();
           map.fire("idle");
           map.fire("zoom_changed");
           expect(regionButton()).toBeTruthy();
+        });
+
+        it("맞춤 이동이 멈추기 전에 '내 위치'로 옮겨도 그 이동 뒤에 확대 정도를 바꾸지 않는다", async () => {
+          stubLocation({ position: HERE });
+          map.fit.zoom = 19;
+          renderScreen();
+          await waitFor(() => expect(mapState()).toBe("ready"));
+          await newSearch("역삼 카페");
+          const [created] = map.created;
+
+          fireEvent.click(screen.getByRole("button", { name: "내 위치" }));
+          await waitFor(() =>
+            expect(created.morph).toHaveBeenCalledWith(expect.anything(), 15),
+          );
+          map.fire("idle");
+
+          expect(created.setZoom).not.toHaveBeenCalled();
         });
       });
     });

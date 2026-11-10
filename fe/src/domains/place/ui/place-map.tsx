@@ -27,11 +27,17 @@ type NaverMap = {
   getProjection(): { fromOffsetToCoord(offset: unknown): NaverLatLng };
   panTo(coord: NaverLatLng): void;
   morph(coord: NaverLatLng, zoom: number): void;
+  // 여백(px)과 최대 확대 정도. 부드러운 이동 없이 바로 옮긴다(FitBoundsOptions)
   fitBounds(
     bounds: unknown,
-    margin: { top: number; right: number; bottom: number; left: number },
+    options: {
+      top: number;
+      right: number;
+      bottom: number;
+      left: number;
+      maxZoom: number;
+    },
   ): void;
-  setZoom(zoom: number): void;
   setSize(size: unknown): void;
   destroy(): void;
 };
@@ -72,7 +78,7 @@ const PAN_SETTLE_MS = 1500;
 const SAME_CENTER_DEG = 0.00001;
 // 결과 맞춤 이동(fitBounds)의 네 방향 여백에 더하는 값. 선택된 핀 크기다(spec 69번)
 const FIT_MARGIN = SELECTED_PIN_SIZE;
-// 결과 맞춤 이동 뒤 확대 정도 상한. 가까운 몇 곳만 있을 때 과하게 확대하지 않는다
+// 결과 맞춤 이동의 확대 정도 상한(fitBounds의 maxZoom). 가까운 몇 곳만 있을 때 과하게 확대하지 않는다
 const FIT_MAX_ZOOM = 17;
 
 let scriptPromise: Promise<NaverMaps> | undefined;
@@ -308,12 +314,7 @@ export function PlaceMap({
     return () => observer.disconnect();
   }, [active]);
 
-  // 결과 맞춤 이동이 멈추기를 기다리는 중이면 그 기다림을 끝낸다. 다른 이동이 시작되면 그 이동의 몫이다
-  const cancelFitSettle = useRef<() => void>(undefined);
-  const handleUserMove = useEffectEvent(() => {
-    cancelFitSettle.current?.();
-    onUserMove?.();
-  });
+  const handleUserMove = useEffectEvent(() => onUserMove?.());
   // 코드가 확대 정도를 바꾸는 중인지(D-104). 그 움직임이 멈출 때(idle)까지 zoom_changed를 사용자 조작으로 세지 않는다
   const zoomingByCode = useRef(false);
   // 처음 멈춤을 이미 지난 지도. 화면이 숨었다 다시 보여도 지도는 그대로라 다시 세지 않는다
@@ -435,12 +436,6 @@ export function PlaceMap({
     const overlapOf = (rect: DOMRect | undefined, coverTop?: number) =>
       rect && coverTop !== undefined ? Math.max(rect.bottom - coverTop, 0) : 0;
     const safeTop = () => safeTopRef.current?.offsetHeight ?? 0;
-    // 확대 정도가 상한보다 크면 낮춘다. 이 확대·축소도 코드가 한 것이라 다음 멈춤까지 세지 않는다
-    const capZoom = (map: NaverMap) => {
-      if (map.getZoom() <= FIT_MAX_ZOOM) return;
-      zoomingByCode.current = true;
-      map.setZoom(FIT_MAX_ZOOM);
-    };
 
     const handle: PlaceMapHandle = {
       getBounds() {
@@ -476,7 +471,6 @@ export function PlaceMap({
       },
       fitTo(points, coverTop) {
         if (!active) return false;
-        cancelFitSettle.current?.();
         const plan = fitPlan(points);
         if (plan.kind === "none") return false;
         if (plan.kind === "pan") {
@@ -499,6 +493,7 @@ export function PlaceMap({
               right: FIT_MARGIN,
               bottom: overlapOf(rect, coverTop) + FIT_MARGIN,
               left: FIT_MARGIN,
+              maxZoom: FIT_MAX_ZOOM,
             },
           );
           const center = map.getCenter();
@@ -506,29 +501,9 @@ export function PlaceMap({
             map.getZoom() !== before.zoom ||
             Math.abs(center.lat() - before.center.lat()) > SAME_CENTER_DEG ||
             Math.abs(center.lng() - before.center.lng()) > SAME_CENTER_DEG;
-          if (!moved) {
-            // 움직이지 않았으면 멈춤 알림이 오지 않으므로 표시를 바로 지운다(다음 사용자 확대·축소를 놓치지 않게)
-            zoomingByCode.current = false;
-            capZoom(map);
-            return true;
-          }
-          // 멈춘 뒤 상한을 맞춘다. 알림이 오지 않아도 기다림이 남지 않게 한다
-          // listener와 timer는 아래에서 만든 뒤에만 불린다
-          const stop = () => {
-            clearTimeout(timer);
-            ignoreSdkError(() => naver.Event.removeListener(listener));
-            cancelFitSettle.current = undefined;
-          };
-          const settle = (byTimer: boolean) => {
-            stop();
-            if (byTimer) zoomingByCode.current = false;
-            ignoreSdkError(() => capZoom(map));
-          };
-          const listener = naver.Event.addListener(map, "idle", () =>
-            settle(false),
-          );
-          const timer = setTimeout(() => settle(true), PAN_SETTLE_MS);
-          cancelFitSettle.current = stop;
+          // fitBounds는 부드러운 이동 없이 그 자리에서 바뀐다(SDK 문서. 부드러운 이동은 panToBounds다).
+          // 움직였으면 멈춤(idle)에서 표시가 지워지고, 움직이지 않았으면 멈춤 알림이 없으니 바로 지운다
+          if (!moved) zoomingByCode.current = false;
         } catch {
           zoomingByCode.current = false;
         }
@@ -536,7 +511,6 @@ export function PlaceMap({
       },
       panTo({ lat, lng }, { resetZoom = false } = {}) {
         if (!active) return Promise.resolve();
-        cancelFitSettle.current?.();
         const { naver, map } = active;
         return new Promise<void>((resolve) => {
           let listener: unknown;
