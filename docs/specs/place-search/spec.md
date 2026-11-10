@@ -14,7 +14,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 ### BE 요청과 검증
 
 1. 장소 `id`는 정수다. BE는 `long`, JSON은 숫자, FE는 `number`다. 값은 JavaScript의 안전한 정수 범위(2^53 - 1) 안이라고 가정한다(D-64).
-2. `mapBounds`는 `{swLat, swLng, neLat, neLng}`이고 하위 필드는 `Double`이다. BE는 내용을 검증하지 않고, 빠지거나 `null`인 하위 필드도 그대로 엔진에 넘긴다(D-64).
+2. `mapBounds`는 `{swLat, swLng, neLat, neLng}`이고 하위 필드는 `Double`이다. BE는 내용을 검증하지 않고, 빠지거나 `null`인 하위 필드도 그대로 엔진에 넘긴다(D-64). 이 규칙은 `/places/search`의 것이다. `/places/nearby`와 `/places/search/region`은 네 값이 모두 있어야 하고 검증한다(place-ai-search AC-29).
 3. `q`와 `query`는 `@NotBlank`와 `@Size(max = 200)`(UTF-16 문자 수)로 검증하고, 어기면 400이다. `q`는 파라미터 어노테이션만으로 Spring MVC 내장 메서드 검증을 받고(컨트롤러 클래스에 `@Validated`를 붙이지 않는다), `query`는 `@Valid @RequestBody PlaceSearchRequest`로 검증한다. `q` 누락도 400이다. 상한 200은 이 spec이 정하는 임시 값이다(D-10, D-64, D-59).
 4. 존재하지 않는 `id`는 404, 경로의 `id`가 정수가 아니면 400이다. `PlaceService`가 `findPlace`의 빈 값을 404 예외로 바꾸는 것은 AC-14의 "가공"이 아니다(D-10, D-62, D-64, D-56).
 5. `spring-boot-starter-validation`은 사용자가 `be/build.gradle`에 추가한다. 구현은 의존성이 들어온 것을 확인하고 시작하며 그 밖의 `build.gradle` 변경은 하지 않는다. 형식 검증(400)은 요청이 컨트롤러에 들어오기 전에 일어나므로 엔진 유무 확인(503)보다 먼저다. AC-14는 엔진 반환값을 가공하지 않는다는 뜻이며 요청 검증을 막지 않는다(D-55, D-10, D-62).
@@ -31,9 +31,9 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 13. Mock 스위치는 환경변수 `PLACE_MOCK_ENABLED`(속성 `place.mock.enabled`, 코드 기본값 꺼짐)이고 local과 dev에서만 켠다. `be/.env.example`에 `PLACE_MOCK_ENABLED=true`로 넣는다. `docs/infra/contracts/env.md`와 `infra/` 아래 파일은 고치지 않고, 계약 등록은 인프라 담당에게 알린다(D-63).
 14. Mock은 `classpath:mock/places.json`을 Spring의 JSON 매퍼로 읽는다. 파일은 `{"places": [{"card": PlaceCard, "detail": PlaceDetailResponse}]}` 형태로 DTO 필드와 정확히 맞추고(전역 알 수 없는 속성 거부를 받는다), `card.place`와 `detail.place`는 같은 값이다. 장소는 30~40곳이고 `id`는 파일에 1부터 차례로 적는다. 파일은 정제한 네이버 수집 데이터로 생성 스크립트가 만들고(규칙은 place-catalog spec의 "적재·mock 변형 규칙"), 사진은 원본 URL이며 없으면 FE가 자리표시 그라데이션을 그린다(D-63, D-64, D-60, place-catalog#D-19).
 15. Mock은 요청 헤더 `X-Mock-Scenario`를 현재 요청(`RequestContextHolder`)에서 읽는다. `PlaceSearchEngine`의 메서드 인자에는 시나리오를 넣지 않는다. 헤더는 검색에만 적용되고 알 수 없는 값은 정상 결과다(D-63, D-62).
-16. Mock 검색은 질의, `mapBounds`, `preferences`를 무시하고 모든 장소를 `score` 내림차순(같으면 파일 순서)으로 돌려준다. `totalCount`는 장소 수다. 질의에 "근처"가 부분 문자열로 있으면 `nearby: true`, 전체 항목, 커서 없음이다. 헤더 `empty`이면 `items: []`, `totalCount: 0`, `emptyReason`이 있고, `empty`와 "근처"가 함께 있으면 `empty`가 이기고 `nearby`는 false다(D-63, D-52).
-17. Mock의 `conditions`는 `previousConditions`가 있으면(`null`이 아니면, 빈 객체 `{}`도 포함) 그대로, 없으면 `{}`다. `previousConditions`가 있으면 `changeSummary`는 "요청하신 조건을 반영했어요"이고 없으면 생략한다(D-63, D-50).
-18. Mock의 `cursor`는 십진수 오프셋 문자열의 base64url 인코딩(패딩 없음)이다. 빈 문자열은 없는 것(첫 페이지)으로 본다. 패딩이 있거나 base64url이 아니거나, 풀어낸 값이 `0` 또는 `[1-9][0-9]*` 형식의 `int`가 아니면 400이다. 오프셋이 장소 수 이상이면 빈 페이지이고 `nextCursor`와 `emptyReason`이 없다. `cursor`가 있으면 항목을 고를 때 `query`, `mapBounds`, 헤더, "근처"를 무시하고 오프셋만 따른다. 커서 응답은 `nearby: false`, `totalCount`는 장소 수, `emptyReason`과 `changeSummary`는 없고 `conditions`는 17번을 따른다. FE는 커서 응답의 `totalCount`, `conditions`, `changeSummary`를 쓰지 않는다(D-50, D-63).
+16. Mock의 `/places/search`는 질의, `mapBounds`, `preferences`를 무시하고 모든 장소를 `score` 내림차순(같으면 파일 순서)으로 돌려준다. `totalCount`는 장소 수다. 질의에 "근처"가 있어도 결과는 같고 `nearby`는 false다. 헤더 `empty`이면 `items: []`, `totalCount: 0`, `emptyReason`이 있다. Mock의 `/places/nearby`와 `/places/search/region`은 같은 순서에서 지도 영역 안 장소만 고르고, 규칙은 place-ai-search AC-33이다(D-63, place-ai-search#D-18).
+17. Mock의 `conditions`는 `previousConditions`가 있으면(`null`이 아니면, 빈 객체 `{}`도 포함) 그대로, 없으면 `{}`다. `previousConditions`가 있으면 `changeSummary`는 "요청하신 조건을 반영했어요"이고 없으면 생략한다(D-63, D-50). 이 규칙은 `/places/search`의 것이다. Mock `/places/search/region`의 `conditions`는 받은 `conditions`이고 `changeSummary`는 없으며, `/places/nearby`는 `conditions: {}`다(place-ai-search AC-33).
+18. Mock의 `cursor`는 십진수 오프셋 문자열의 base64url 인코딩(패딩 없음)이다. 빈 문자열은 없는 것(첫 페이지)으로 본다. 패딩이 있거나 base64url이 아니거나, 풀어낸 값이 `0` 또는 `[1-9][0-9]*` 형식의 `int`가 아니면 400이다. 오프셋이 장소 수 이상이면 빈 페이지이고 `nextCursor`와 `emptyReason`이 없다. `/places/search`에서 `cursor`가 있으면 항목을 고를 때 `query`, `mapBounds`, 헤더를 무시하고 오프셋만 따른다. `/places/search/region`의 `cursor`는 같은 형식이고, 그 요청의 `mapBounds`로 거른 목록에서 오프셋을 센다. REGION 응답의 `totalCount`, `conditions`, 빈 페이지 기준은 이 문단이 아니라 place-ai-search AC-33을 따른다. `/places/search`의 커서 응답은 `nearby: false`, `totalCount`는 장소 수, `emptyReason`과 `changeSummary`는 없고 `conditions`는 17번을 따른다. FE는 커서 응답의 `totalCount`, `conditions`, `changeSummary`를 쓰지 않는다(D-50, D-63).
 19. Mock 자동완성은 "이름 접두 일치"(이름이 `q`와 같거나 `q`로 시작) 장소를 먼저, 그다음 "포함 일치"(이름이나 메뉴 이름에 `q`가 들어 있거나, `q`가 업종 한글 이름(식당, 카페, 술집)이나 코드의 부분 문자열인) 장소를 담는다. 각 단계 안은 파일 순서이고 장소 항목은 최대 5개다. 매칭은 `q`의 앞뒤 공백을 제거하고 대소문자를 구분하지 않는다. 역 이름은 매칭하지 않는다. 이름으로 일치하지 않고 메뉴 이름으로만 일치한 항목은 `matchedMenu`에 파일 순서상 첫 번째로 일치한 메뉴 이름을 담는다. 이름으로 일치한 항목에는 담지 않는다(D-63, D-64). 이 규칙은 Mock 엔진의 것이다. `place.mock.enabled`가 꺼졌거나 없을 때(DB 모드)의 자동완성은 이 규칙이 아니라 `docs/specs/place-lookup-db/spec.md`의 키워드 매칭 규칙(단어 단위 AND, 위치 매칭, 한글 조합)을 따른다.
 20. 자동완성의 `ACTION` 항목(`label` "이 조건으로 추천받기")은 항상 포함된다. 이름 접두 일치가 있으면 맨 뒤, 없으면 맨 위다. `PLACE` 항목에는 `label`이 없다(D-63, D-64). DB 모드에서는 "이름 접두 일치"가 키워드 매칭의 순위 0(이름이 입력 전체로 시작)이다(`docs/specs/place-lookup-db/spec.md`).
 21. Mock의 영업 상태(`openStatus`)는 요청 시각(`Asia/Seoul`)과 그 장소의 `hours`로 place-catalog spec의 "영업 상태 규칙"대로 계산한다. 구간은 모두 시작 포함, 끝 제외이고, 어제 영업의 자정 넘은 부분과 다음 날로 이어지는 영업(24시간)을 한 구간으로 본다. 영업 구간 밖이면 `CLOSED`이되 오늘이 정보 없음이거나, 오늘이 영업일이고 오늘 첫 구간 시작 전인데 어제가 정보 없음이면 `UNKNOWN`(오늘이 휴무일이면 어제와 상관없이 `CLOSED`), 브레이크(하루에 여럿일 수 있다) 안이면 `BREAK`, 구간 끝 60분 전부터 끝 전이면 `CLOSING_SOON`, 그 밖에는 `OPEN`이다. 브레이크 시작 전은 `CLOSING_SOON`으로 보지 않는다. `places.json`의 `openStatus`는 `UNKNOWN`으로 적어 두고 응답할 때 계산값으로 바꾼다(카드와 상세 모두). 시각은 주입한 `java.time.Clock`으로 읽어 테스트에서 고정할 수 있게 한다(없으면 `Asia/Seoul` 시스템 시계)(D-64).
@@ -108,7 +108,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 - [x] AC-1: `GET /api/v1/places/suggest`는 `q`(1자 이상)에 대해 장소 후보(`type: PLACE`)와 "이 조건으로 추천받기"(`type: ACTION`)를 돌려준다. 장소 이름이 `q`와 같거나 `q`로 시작하는 후보가 있으면 그 장소가 맨 위이고, 없으면 `ACTION`이 맨 위다(메뉴, 업종 일치는 순서에 영향을 주지 않는다). 메뉴 이름으로 일치한 후보는 `matchedMenu`에 그 메뉴 이름을 담는다. (D-32, D-63, D-64) Mock 모드의 기준이다. DB 모드의 기준은 `docs/specs/place-lookup-db/spec.md`의 AC-1~AC-8이다.
 - [x] AC-2: `POST /api/v1/places/search`에 헤더 없이 일반 질의를 보내면 항목 20개, `totalCount`, `nextCursor`가 온다. 그 커서로 다시 보내면 나머지 항목이 오고 `nextCursor`가 없다. 두 페이지의 항목은 겹치지 않는다. Mock 모드 기준이며, DB 모드의 페이지와 커서는 place-ai-search를 따른다. (D-50, D-63, D-64)
 - [x] AC-3: 헤더 `X-Mock-Scenario: empty`로 검색하면 200이고 `items`는 비어 있으며 `totalCount`는 0이고 `emptyReason`에 원인과 수정 제안이 있다. (D-10, D-63)
-- [x] AC-4: 질의에 "근처"가 있으면 `nearby: true`이고 `nextCursor`가 없으며, Mock 모드에서 항목은 후보 전체(최대 100)를 `score` 내림차순으로 담는다. DB 모드에서 AI를 쓸 수 없어 대체할 때는 카탈로그 전체(상한 없음)를 `place_id` 오름차순으로 담고 `score`가 없다(place-lookup-db AC-17, AC-18). AI가 응답하면 AI 결과를 쓴다(place-ai-search). (D-63, D-52)
+- [ ] AC-4: 주변 결과는 `POST /api/v1/places/nearby`가 준다. 응답은 `nextCursor`가 없고 항목은 10곳까지다. `nearby`는 Mock과 대체 결과에서 true이고, AI 성공 응답에서는 AI 값 그대로다(place-ai-search AC-32). Mock 모드에서 항목은 지도 영역 안 장소를 `score` 내림차순으로 앞 10곳 담는다. DB 모드에서는 AI 결과를 카탈로그로 확인한 뒤 앞 10곳이고, AI를 쓸 수 없어 대체할 때는 지도 영역 안 장소를 `place_id` 오름차순으로 10곳 담고 `score`가 없다(place-ai-search AC-9, AC-32, AC-33). `/places/search`는 질의에 "근처"가 있어도 Mock 모드에서 다른 질의와 같은 결과(`nearby: false`, 20곳씩 페이지)를 준다. (D-63, place-ai-search#D-18)
 - [x] AC-5: 요청에 `previousConditions`를 넣으면 Mock 응답의 `conditions`가 그 값을 그대로 담고 `changeSummary`가 있다. 넣지 않으면 `conditions`는 `{}`이고 `changeSummary`가 없다. BE는 `conditions`의 내부를 해석하지 않는다. (D-50, D-63, D-64)
 - [x] AC-6: 임의의 검색 응답에서 모든 `score`는 0 이상 100 이하의 정수, `labels`는 2개(Mock 기준. DB 모드의 대체 결과는 `score`가 없고 `labels`가 비어 있을 수 있다, place-ai-search), `scoreItems`의 `evidenceCount`는 0 이상의 정수이고 `openStatus`는 정의된 값 중 하나다. FE는 점수를 정수 그대로 `%` 없이 표시한다. (D-41, D-64)
 - [x] AC-7: 요청 본문에 정의되지 않은 속성(예: `lat`, `lng`)이 있으면 400 ProblemDetail이고, 정의된 필드만 있는 요청은 정상 처리된다. (D-10, D-41)
@@ -215,10 +215,12 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 |---|---|---|
 | `GET /api/v1/places/suggest` | 쿼리 `q` (1~200자) | `PlaceSuggestResponse[]` |
 | `POST /api/v1/places/search` | `PlaceSearchRequest` | `PlaceSearchResponse` |
+| `POST /api/v1/places/nearby` | `{mapBounds, preferences?}` (홈 주변 카드, place-ai-search D-18) | `PlaceSearchResponse` (항목 10곳까지) |
+| `POST /api/v1/places/search/region` | `{query, conditions?, mapBounds, preferences?, cursor?}` ("이 지역에서 검색", place-ai-search D-18) | `PlaceSearchResponse` |
 | `GET /api/v1/places/{id}` | 경로 `id` | `PlaceDetailResponse` |
 | `GET /api/v1/places/ids` | 없음 | 열 수 있는 장소 id 오름차순 `Long[]`(장소 sitemap, D-107) |
 
-요청 헤더 `X-Mock-Scenario: empty`는 Mock 구현만 읽는다.
+요청 헤더 `X-Mock-Scenario: empty`는 Mock 구현만 읽는다. 두 새 API의 요청 모양, `mapBounds` 검증, AI 요청, 대체 결과는 place-ai-search spec이 정한다(AC-29~AC-36).
 
 ```java
 // 계층: PlaceController → PlaceService(404 판단) → PlaceSearchEngine(503을 던짐) (D-56)
@@ -228,6 +230,7 @@ public class InvalidCursorException extends RuntimeException {}
 
 // PlaceSearchEngine: 교체 지점. 구현이 바뀌면 시그니처도 바뀔 수 있다(D-62).
 // place-ai-search가 search를 바꿨다: 회원 id를 받고, 응답과 대체 이유를 담은 PlaceSearchResult를 돌려준다.
+// place-ai-search D-18: search가 목적(NEARBY, SEARCH, REGION)도 받는다. 시그니처 모양은 재량이다.
 public interface PlaceSearchEngine {
     List<PlaceSuggestResponse> suggest(String q);
     PlaceSearchResult search(PlaceSearchRequest request, String userId);

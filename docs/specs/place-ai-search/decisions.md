@@ -4,7 +4,7 @@ Glossary: none · ADRs: none
 
 ## D-1 범위
 - Status: settled
-- Decision: 이번 반복은 BE와 FE를 함께 한다. BE는 DB 모드 엔진의 추천 검색을 AI 검색 API로 바꾸고, 카드 조립, AI 실패 시 대체와 `X-Fallback`, 차단기, 선택 로그인, 비회원 답변 전달, AI가 읽는 뷰를 만든다. FE는 검색 요청에 토큰이나 비회원 답변을 싣고, 검색만 타임아웃을 늘리고, `X-Fallback`을 읽는다(D-16). Mock 엔진과 `PLACE_MOCK_ENABLED`는 그대로이고 AI 동작은 가짜 AI 서버 테스트로 확인한다. 범위 밖 목록은 spec.md Out of scope.
+- Decision: 이번 반복은 BE와 FE를 함께 한다. BE는 DB 모드 엔진의 추천 검색을 AI 검색 API로 바꾸고, 카드 조립, AI 실패 시 대체와 `X-Fallback`, 차단기, 선택 로그인, 비회원 답변 전달, AI가 읽는 뷰를 만든다. FE는 검색 요청에 토큰이나 비회원 답변을 싣고, 검색만 타임아웃을 늘리고, `X-Fallback`을 읽는다(D-16). `PLACE_MOCK_ENABLED`의 뜻은 그대로이고, Mock 엔진은 AI를 부르지 않으며 바뀌는 것은 목적별 응답(D-18)뿐이다. AI 동작은 가짜 AI 서버 테스트로 확인한다. 범위 밖 목록은 spec.md Out of scope.
 - Rejected: Mock 엔진도 AI를 부르고 `mock/places.json`으로 카드 채우기 → AI 예시 장소와 BE Mock의 id가 맞지 않아 연결이 어렵고, Mock을 쓸 거면 AI가 필요 없다. FE는 다음 반복으로 미루기(처음 범위) → FE가 토큰과 답변을 싣지 않으면 BE 연동이 늘 비회원·취향 없음으로만 돌고, BE 예산을 12초로 되돌릴 수 없다.
 
 ## D-2 AI 파트와의 경계
@@ -21,7 +21,7 @@ Glossary: none · ADRs: none
 ## D-4 취향과 인증
 - Status: provisional
 - Decision: 검색은 로그인을 선택으로 받는다. 회원이면 회원 id만 AI에 보내고, 비회원은 가입과 같은 모양의 온보딩 답변(`preferences`)을 보낼 수 있으며 BE는 그 답변을 AI의 `tasteProfile`로 그대로 넘긴다. 잘못된 토큰은 401, 잘못된 답변은 400이다. place-search#D-33을 대신한다. 규칙은 spec.md "취향과 인증"과 AC-3·17·18·19.
-- Default: AI의 비회원 답변 입구는 온보딩 답 모양(`mood`, `priorities`, `purposes`, `tastes`)으로 고쳐져 develop에 머지됐다(`ai/docs/comparison/api.md` v0.5, 1111ea3). 그 모양이 BE `Preferences`와 같아 BE는 고치지 않고 넘긴다. 칩의 문장 벡터(`vector`)는 붙이지 않는다. 회원 행에도 지금 벡터가 없고, AI는 벡터 없는 코드 없는 칩을 보관만 하고 정렬에 쓰지 않는다. 본문이 틀리고 토큰도 무효면 401보다 400이 먼저 나가는 것, 만료 토큰으로 연 홈 화면이 401이 되는 것(FE의 토큰 갱신 후 재요청에 맡김), 토큰 확인이 DB를 보지 않아 탈퇴한 회원의 토큰도 회원으로 통과하는 것(취향이 지워져 AI가 취향 없이 처리)은 감수한다. FE가 기기 답변을 읽을 때 지금 선택지에 없는 값이면 지우고, 칩 `code`가 BE 규칙에 맞지 않으면 답 없이 보내므로(D-16) 400은 드물다.
+- Default: AI의 비회원 답변 입구는 온보딩 답 모양(`mood`, `priorities`, `purposes`, `tastes`)으로 고쳐져 develop에 머지됐다(`ai/docs/comparison/api.md` v0.5, 1111ea3). 그 모양이 BE `Preferences`와 같아 BE는 고치지 않고 넘긴다. 칩의 문장 벡터(`vector`)는 붙이지 않는다. 회원 행에도 지금 벡터가 없고, AI는 벡터 없는 코드 없는 칩을 보관만 하고 정렬에 쓰지 않는다. 회원은 Bearer 토큰이나 로그인 세션으로 확인하고, 인증은 Security 필터가 먼저 해서 본문이 틀리고 토큰도 무효면 400보다 401이 먼저 나가는 것(S15P31A302-191 이후), 만료 토큰으로 연 홈 화면이 401이 되는 것(FE의 토큰 갱신 후 재요청에 맡김), 토큰 확인이 DB를 보지 않아 탈퇴한 회원의 토큰도 회원으로 통과하는 것(취향이 지워져 AI가 취향 없이 처리)은 감수한다. FE가 기기 답변을 읽을 때 지금 선택지에 없는 값이면 지우고, 칩 `code`가 BE 규칙에 맞지 않으면 답 없이 보내므로(D-16) 400은 드물다.
 - Rejected: JWT를 읽지 않고 `preferences`를 태그 코드 목록으로 받기(place-search#D-33) → 회원 취향은 AI가 DB에서 읽고, 비회원은 기기에 온보딩 답변만 있다. 토큰이 잘못되면 비회원으로 계속 → 로그인한 사람이 조용히 취향 없는 결과를 받는다. BE가 `/v1/taste/profile`로 `features`를 만들어 넘기기 → AI의 값을 AI에 중계할 뿐이다. FE가 `features`를 만들어 저장 → FE가 AI 코드표를 알아야 한다. BE나 FE가 칩 벡터를 만들어 붙이기 → 회원도 벡터가 없어 비회원만 다르게 정렬되고, 인코더 호출이 하나 더 는다. 틀린 답변은 버리고 검색 계속 → FE가 이미 틀린 값을 걸러 보내지 않아 얻는 것이 적다.
 
 ## D-5 AI 결과를 카드로 만들기
@@ -31,9 +31,10 @@ Glossary: none · ADRs: none
 
 ## D-6 AI 실패 시 대체
 - Status: provisional
-- Decision: AI 실패 시 오류 대신 평소 모양의 대체 결과(홈 요청은 카탈로그 전체, 그 밖은 키워드 검색)를 준다. 규칙은 spec.md "대체 결과"와 AC-7·9~12.
-- Default: `emptyReason`은 원인 "지금은 가게 이름, 메뉴, 업종, 역 이름으로만 찾을 수 있어요", 제안 "가게 이름이나 메뉴 이름으로 다시 검색해 보세요"이다. FE·기획과 문구를 맞추면 바꾼다. 키워드 검색은 모든 단어를 담은 장소만 찾아 문장 검색은 장애 동안 자주 빈 결과가 되는 것, 대체된 후속 검색이 조건 이어짐에서 빠지고 검색 기록에 대체 표시가 남지 않는 것은 감수한다. 홈 대체 결과는 FE가 헤더를 읽어 다시 받는다(D-16). DB 장애는 AI 장애가 아니어서 지금처럼 503이다.
-- Rejected: 503 오류 화면 → AI 장애가 곧 검색 불가가 되고 인프라 설계 §11.2가 키워드 대체를 요구한다. BE가 대체 결과에 점수를 매기기 → 리뷰 근거가 없는 숫자다. 문장에 "근처"가 들어 있으면 카탈로그 전체 → "강남역 근처 카페"가 역과 업종을 무시한 근처 결과가 된다. `mapBounds`가 있으면 홈 요청이 아님 → 위치를 못 얻은 사용자의 홈이 대체 때 늘 빈 결과가 된다.
+- Decision: AI 실패 시 오류 대신 평소 모양의 대체 결과를 API의 목적(D-18)별로 준다. SEARCH(`/places/search`)는 `query`의 키워드 검색 결과 앞 20곳이고 지도 영역으로 거르지 않는다. NEARBY(`/places/nearby`)와 REGION(`/places/search/region`)은 지도 영역 안(경계 포함) 장소를 `place_id` 오름차순으로 NEARBY 10곳, REGION 20곳 주고, 응답 `conditions`는 `{}`, `nearby`는 NEARBY true·REGION false다. 영역 안 장소는 카탈로그에서 영역과 개수로 걸러 읽는다(전체를 읽어 메모리에서 거르지 않는다). 규칙은 spec.md "대체 결과"와 AC-7·9~12.
+- Default: SEARCH 대체가 비면 `emptyReason`은 원인 "지금은 가게 이름, 메뉴, 업종, 역 이름으로만 찾을 수 있어요", 제안 "가게 이름이나 메뉴 이름으로 다시 검색해 보세요"이다. NEARBY·REGION 대체가 비면 원인 "이 지역에는 아직 보여 드릴 장소가 없어요", 제안 "지도를 옮기거나 넓혀서 다시 찾아 보세요"이다. FE·기획과 문구를 맞추면 바꾼다. 키워드 검색은 모든 단어를 담은 장소만 찾아 문장 검색은 장애 동안 자주 빈 결과가 되는 것, 대체된 후속 검색이 조건 이어짐에서 빠지고 검색 기록에 대체 표시가 남지 않는 것, REGION 대체가 검색 조건 없이 영역만으로 고르는 것은 감수한다. 홈 대체 결과는 FE가 헤더를 읽어 다시 받는다(D-16). DB 장애는 AI 장애가 아니어서 지금처럼 503이다.
+- Rejected: 503 오류 화면 → AI 장애가 곧 검색 불가가 되고 인프라 설계 §11.2가 키워드 대체를 요구한다. BE가 대체 결과에 점수를 매기기 → 리뷰 근거가 없는 숫자다. SEARCH 대체도 지도 영역으로 거르기(이전 규칙) → 구로 화면에서 "강남역 파스타"를 찾으면 강남 키워드 결과가 구로 영역에 지워져 0곳이 된다. `query`가 "근처 맛집"이면 홈으로 보고 카탈로그 전체(이전 규칙) → 목적을 API로 받으므로 문자열로 홈을 가릴 필요가 없다(옛 FE와의 차이는 D-18). 문장에 "근처"가 들어 있으면 카탈로그 전체 → "강남역 근처 카페"가 역과 업종을 무시한 근처 결과가 된다. 영역 안 장소를 상한 없이 모두 주기(이전 홈 대체) → 홈은 10곳만 쓰고 넓은 영역이면 응답이 커진다. 카탈로그 전체를 읽어 메모리에서 거르기(`nearbyCandidates()`) → AI 장애 동안 홈·region 요청마다 모든 장소와 영업시간을 읽고, 장소는 지역별로 계속 늘어난다.
+- Reuse: `be/src/main/java/kr/co/fitdining/api/place/catalog/PlaceCatalog.java#PlaceCatalog` (modify) — 영역 안 장소를 `place_id` 오름차순으로 n곳 읽는 조회를 더하고(Postgres 구현 포함) 기존 기능은 그대로 둔다 · `be/src/main/java/kr/co/fitdining/api/place/keyword/PlaceKeywordSearch.java#PlaceKeywordSearch` (reuse) — SEARCH 대체 결과를 얻는다
 
 ## D-7 `X-Fallback` 헤더
 - Status: settled
@@ -42,8 +43,8 @@ Glossary: none · ADRs: none
 
 ## D-8 모든 추천 검색은 AI로
 - Status: settled
-- Decision: DB 모드에서는 홈 화면의 고정 문장 "근처 맛집"을 포함해 모든 첫 페이지 검색을 AI로 보낸다. place-lookup-db#D-13("근처"만 카탈로그 전체, 나머지는 503)을 대신한다.
-- Rejected: 문장이 정확히 "근처 맛집"이면 AI 없이 처리 → 홈 카드에도 AI의 라벨과 점수가 필요하다. "근처"가 들어간 문장은 AI 없이 처리 → "강남역 근처 조용한 카페"도 해석되지 않는다.
+- Decision: DB 모드에서는 세 API(nearby, search, region, D-18)의 모든 첫 페이지 검색을 AI로 보낸다. 홈 주변 카드는 `/places/nearby`로 오고, BE가 AI에 BE 상수 `query: "근처 맛집"`과 `mapBounds`, `rulesOnly: true`를 보내 AI가 LLM 없이 규칙으로 해석한다. place-lookup-db#D-13("근처"만 카탈로그 전체, 나머지는 503)을 대신한다.
+- Rejected: 문장이 정확히 "근처 맛집"이면 AI 없이 처리 → 홈 카드에도 AI의 라벨과 점수가 필요하다. "근처"가 들어간 문장은 AI 없이 처리 → "강남역 근처 조용한 카페"도 해석되지 않는다. 홈 요청도 LLM으로 해석(이전 동작) → "근처 맛집"은 늘 같은 문장이라 규칙 해석과 결과가 같고 LLM 약 1.7초만 더한다. FE가 `query: "근처 맛집"`을 보내기(이전 계약) → 문자열이 FE·BE 계약이 되고 BE가 문자열 비교로 홈을 가려야 한다.
 
 ## D-9 결과 캐시는 두지 않는다
 - Status: provisional
@@ -53,12 +54,12 @@ Glossary: none · ADRs: none
 
 ## D-10 다음 페이지
 - Status: settled
-- Decision: 요청의 `cursor`와 응답의 `nextCursor` 필드는 남긴다(Mock이 쓴다). DB 모드 응답에는 `nextCursor`가 없고, `cursor`가 오면 400이다. FE의 다음 페이지 동작은 바꾸지 않는다(타임아웃과 인증은 D-16).
+- Decision: search와 region 요청의 `cursor`와 응답의 `nextCursor` 필드는 남긴다(Mock이 쓴다). nearby에는 `cursor`가 없다. DB 모드 응답에는 `nextCursor`가 없고, `cursor`가 오면 400이다. FE의 다음 페이지 동작은 바꾸지 않는다(타임아웃과 인증은 D-16).
 - Rejected: 두 필드를 없애기 → Mock의 페이지 나눔과 FE 코드를 함께 바꿔야 한다.
 
 ## D-11 절대 일어나면 안 되는 일
 - Status: settled
-- Decision: 회원 id는 검증된 토큰에서만 꺼낸다. 한 사람의 결과가 다른 사람에게 가지 않는다. 없는 장소 id를 다른 장소로 채우지 않는다. 검색 문장, 답변, AI 본문을 로그에 남기지 않는다(place-search#D-20을 넓힌다). AI 실패는 대체 결과와 `X-Fallback`으로 준다. 카드 순서는 AI 순서다. spec.md AC-5·7·20·21.
+- Decision: 회원 id는 검증된 토큰이나 로그인 세션의 인증 주체에서만 꺼낸다. 한 사람의 결과가 다른 사람에게 가지 않는다. 없는 장소 id를 다른 장소로 채우지 않는다. 검색 문장, 답변, 지도 영역(`mapBounds`, 대략의 위치다), 조건(`previousConditions`, `conditions`), AI 본문을 로그에 남기지 않는다(place-search#D-20을 넓힌다). AI 실패는 대체 결과와 `X-Fallback`으로 준다. 카드 순서는 AI 순서다. 목적(D-18)별로는 nearby가 10곳을 넘거나, 대체·Mock의 영역 결과에 영역 밖 장소가 있거나, AI 본문에 목적과 다른 플래그가 실리거나, SEARCH 대체가 지도 영역으로 걸러지는 일이 없다. spec.md AC-5·7·10·20·21·34~36.
 
 ## D-12 회원 취향은 가입 때 저장된 값을 쓴다
 - Status: settled
@@ -90,3 +91,9 @@ Glossary: none · ADRs: none
 - Decision: BE 컨테이너 하나에서 AI 응답을 기다리는 검색은 동시에 8개까지이고, 넘는 검색은 12초 예산 안에서 semaphore permit 반납을 잠깐 기다렸다가(기다린 순서대로) 그래도 받지 못하면 대체한다. 인프라 설계 §11.2 "호출 방어"가 BE→AI 호출에 동시성 상한을 요구한다. 상한을 넘은 대체는 AI 장애가 아니라서 차단기에 세지 않는다. 규칙은 spec.md AC-28.
 - Default: 8은 AI 컨테이너 하나가 받는 검색 수(`MAX_CONCURRENT_REQUESTS` 기본 8)와 같은 임시값이다. 그보다 많이 보내도 AI가 503 `BUSY`를 줄 뿐이다. AI 컨테이너가 늘거나 AI 값이 바뀌면 함께 맞춘다. Blue/Green이 겹치는 동안은 두 컨테이너가 각각 8개라 AI가 `BUSY`를 줄 수 있고, 그때는 재시도 뒤 대체한다. permit 대기는 최대 2초인 임시값이다. 검색 하나가 3~4초 걸려 permit이 모두 쓰이는 동안에도 0.4초에 하나꼴로 반납되고, AI가 응답하지 않을 때도 요청 thread가 묶이는 시간은 2초로 끝난다. BE가 AI 호출 시간을 잰 뒤 다시 정한다.
 - Rejected: 상한 없이 AI의 `BUSY`에만 맡기기 → AI가 연결을 받고 응답하지 않으면 차단이 시작되기 전까지 검색마다 BE 요청 스레드가 12초씩 묶여 리뷰·로그인 같은 다른 API까지 느려질 수 있다. 예산 밖에서 permit 반납을 기다리기 → FE 15초를 넘길 수 있다. 기다리지 않고 바로 대체(처음 값) → 앞 검색이 곧 끝나도 9번째 사람은 키워드 결과를 받는다. 3~4초 안에 9명이 검색하면 1명이 대체된다. 상한을 넘은 대체를 차단기 실패로 세기 → 사용자가 몰린 것만으로 모두가 30초 동안 대체 결과를 받는다.
+
+## D-18 검색 API를 목적별로 나눈다
+- Status: settled
+- Decision: 추천 검색을 목적 셋으로 나눈다. NEARBY는 새 `POST /api/v1/places/nearby`(홈 주변 카드), SEARCH는 기존 `POST /api/v1/places/search`(옛 요청 모양과 검증 그대로), REGION은 새 `POST /api/v1/places/search/region`("이 지역에서 검색", `preferences`도 받는다)이다. 두 새 API는 `mapBounds`가 필수이고 엄격히 검증하며 비회원도 부를 수 있다. 엔진과 AI 클라이언트가 목적을 받아 NEARBY에 `rulesOnly`, REGION에 `mapFirst`를 싣는다. NEARBY 응답은 10곳까지다. Mock도 목적별로 응답한다. 검색 기록 형식은 바꾸지 않는다. 규칙은 spec.md "`POST /api/v1/places/nearby`, `POST /api/v1/places/search/region`", "AI 요청"과 AC-29~36.
+- Rejected: `/places/search` 하나에서 "근처 맛집" 문자열과 `previousConditions`로 목적을 짐작(이전 계약) → AI가 "이 지역에서 검색"을 후속 검색과 구분하지 못해 지도를 옮겨도 이전 지역 결과가 나오고, 홈 판단이 문자열 비교에 묶인다. `HOME_QUERY` 호환 분기를 남기기 → DB 모드에서는 옛 FE 탭의 홈 요청과 AI 장애가 겹칠 때만 차이가 나고(홈 대체가 "근처 맛집" 키워드 검색이 되어 대개 0곳) AI → BE → FE가 같은 배포 창이라 감수한다. Mock의 "근처" 분기를 FE 전환까지 남기기 → Mock 모드(local, dev)에서는 이 BE가 들어간 뒤 FE가 `/places/nearby`로 바꿀 때(S15P31A302-204)까지 홈 카드 요청이 점수 상위 20곳만 받아 1km 필터 뒤 카드가 줄지만, 오류는 없고 FE 이슈들과 함께 머지되므로 감수한다. region에 `preferences` 없음(설계 초안) → 비회원 FE가 AC-26대로 실으면 모르는 속성으로 400이다. `/places/search`의 `mapBounds`도 검증 → 옛 FE 요청과 지도 SDK 실패 때 검색이 깨진다. 유한·SW<NE만 검사 → AI가 범위 밖 좌표를 거부해 대체로 끝나므로 BE가 먼저 400을 준다. FE나 BE가 `conditions`에서 지역을 지우기 → 조건 구조는 AI만 알고 FE·BE에는 불투명한 값이다. NEARBY 10곳을 카탈로그 확인 전에 자르기 → 카탈로그에 없는 id가 있으면 10곳보다 적어진다. BE가 AI 성공 결과를 지도 영역으로 다시 거르기 → 거르는 일은 AI가 한다.
+- Reuse: `be/src/main/java/kr/co/fitdining/api/place/PlaceController.java#PlaceController` (modify) — nearby·region을 더하고 search·자동완성·상세·ids는 그대로 둔다 · `be/src/main/java/kr/co/fitdining/api/place/engine/PlaceSearchEngine.java#PlaceSearchEngine` (modify) — 검색이 목적을 받는다 · `be/src/main/java/kr/co/fitdining/api/place/engine/AiSearchClient.java#AiSearchClient` (modify) — 본문에 목적별 플래그만 더하고 예산·재시도·차단기·permit은 그대로 둔다 · `be/src/main/java/kr/co/fitdining/api/place/engine/CatalogPlaceSearchEngine.java#CatalogPlaceSearchEngine` (modify) — `HOME_QUERY` 비교를 없애고 목적별 대체(D-6)와 NEARBY 10곳을 둔다 · `be/src/main/java/kr/co/fitdining/api/place/engine/MockPlaceSearchEngine.java#MockPlaceSearchEngine` (modify) — 목적별 응답을 두고 "근처" 판단을 없앤다 · `be/src/main/java/kr/co/fitdining/api/place/dto/PlaceSearchRequest.java#PlaceSearchRequest` (modify) — 필드와 검증은 그대로, 주석만 지도 영역이 대략의 위치로 서버에 간다고 고친다 · `be/src/main/java/kr/co/fitdining/api/searchthread/TurnFormat.java#TurnFormat` (reuse) — region의 새 요청 모양도 바꾸지 않고 저장한다 · `be/src/main/java/kr/co/fitdining/api/auth/infrastructure/SecurityConfiguration.java#SecurityConfiguration` (modify) — 비회원 허용 POST 목록에 두 새 경로만 더한다
