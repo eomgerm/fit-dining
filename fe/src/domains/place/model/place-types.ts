@@ -77,6 +77,17 @@ export type PlaceSearchRequest = {
   cursor?: string;
 };
 
+// "이 지역에서 검색"(POST /places/search/region). BE는 conditions를 선택으로 받지만 FE는 늘 보낸다(D-109)
+export type RegionSearchRequest = {
+  query: string;
+  conditions: SearchConditions;
+  mapBounds: MapBounds;
+  cursor?: string;
+};
+
+// 요청 기록 항목의 실행 요청. 항목 종류(new·followUp, region)가 API를 고른다
+export type SearchRequest = PlaceSearchRequest | RegionSearchRequest;
+
 // 비회원이 기기에 저장한 온보딩 답. 가입의 preferences와 같은 모양이다
 export type SearchPreferences = {
   mood: string | null;

@@ -14,6 +14,7 @@ import { loadRuntimeConfig } from "@/shared/lib/runtime-config";
 
 import { DEFAULT_VIEW, type MapView } from "../model/map-view";
 import type { LatLng, MapBounds } from "../model/place-types";
+import { fitPlan, visibleBand } from "../model/visible-area";
 import { readMapView, writeMapView } from "./map-view-storage";
 
 // 네이버 지도 웹 SDK(JavaScript v3)에서 쓰는 부분만 적은 타입
@@ -22,8 +23,15 @@ type NaverMap = {
   getBounds(): { getSW(): NaverLatLng; getNE(): NaverLatLng };
   getCenter(): NaverLatLng;
   getZoom(): number;
+  // 지도 컨테이너 기준 화면 좌표(px)를 위경도로 바꾼다
+  getProjection(): { fromOffsetToCoord(offset: unknown): NaverLatLng };
   panTo(coord: NaverLatLng): void;
   morph(coord: NaverLatLng, zoom: number): void;
+  fitBounds(
+    bounds: unknown,
+    margin: { top: number; right: number; bottom: number; left: number },
+  ): void;
+  setZoom(zoom: number): void;
   setSize(size: unknown): void;
   destroy(): void;
 };
@@ -36,6 +44,7 @@ type NaverMarker = {
 type NaverMaps = {
   Map: new (element: HTMLElement, options: object) => NaverMap;
   LatLng: new (lat: number, lng: number) => NaverLatLng;
+  LatLngBounds: new (sw: NaverLatLng, ne: NaverLatLng) => unknown;
   Marker: new (options: object) => NaverMarker;
   Size: new (width: number, height: number) => unknown;
   Point: new (x: number, y: number) => unknown;
@@ -61,6 +70,10 @@ const LOCATION_PIN_SIZE = 32;
 const PAN_SETTLE_MS = 1500;
 // 이만큼 가까우면 이미 그 위치다(위도·경도 차이, 약 1m)
 const SAME_CENTER_DEG = 0.00001;
+// 결과 맞춤 이동(fitBounds)의 네 방향 여백에 더하는 값. 선택된 핀 크기다(spec 69번)
+const FIT_MARGIN = SELECTED_PIN_SIZE;
+// 결과 맞춤 이동 뒤 확대 정도 상한. 가까운 몇 곳만 있을 때 과하게 확대하지 않는다
+const FIT_MAX_ZOOM = 17;
 
 let scriptPromise: Promise<NaverMaps> | undefined;
 let authFailed = false;
@@ -154,6 +167,13 @@ export type MapPin = LatLng & { id: number; mark?: PinMark };
 export type PlaceMapHandle = {
   // 지도가 없으면 undefined
   getBounds(): MapBounds | undefined;
+  // 사용자에게 보이는 지도 영역(spec 65번). coverTop은 지도 아래쪽을 덮는 UI의 위 끝(화면 좌표 px)이고,
+  // 지도 위쪽 safe-area와 그 UI가 겹친 높이를 뺀 띠를 위경도로 바꾼다. 띠가 너무 작거나 변환이 실패하면
+  // getBounds() 전체, 지도가 없으면 undefined
+  visibleBounds(coverTop?: number): MapBounds | undefined;
+  // 결과 맞춤 이동(spec 69번). 2곳 이상이면 fitBounds(확대 정도 상한 17), 1곳이면 panTo, 0곳이면 없음.
+  // 코드 이동이라 사용자 이동으로 세지 않는다. 지도를 옮기기 시작했으면 true
+  fitTo(points: LatLng[], coverTop?: number): boolean;
   // 지도가 그 위치로 이동을 마치면 끝난다. resetZoom이면 확대 정도도 처음 화면과 같게 맞추며
   // 함께 움직인다(D-104). 이미 그 위치(와 확대 정도)이거나 지도가 없으면 바로 끝난다
   panTo(coord: LatLng, options?: { resetZoom?: boolean }): Promise<void>;
@@ -195,6 +215,7 @@ export function PlaceMap({
 }: PlaceMapProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const safeTopRef = useRef<HTMLDivElement>(null);
   const [loaded, setLoaded] = useState<{ naver: NaverMaps; map: NaverMap }>();
   const [failed, setFailed] = useState(false);
   // 만든 지도. 화면이 숨겨져도 남겨 두었다가 다시 보일 때 그대로 쓴다
@@ -287,7 +308,12 @@ export function PlaceMap({
     return () => observer.disconnect();
   }, [active]);
 
-  const handleUserMove = useEffectEvent(() => onUserMove?.());
+  // 결과 맞춤 이동이 멈추기를 기다리는 중이면 그 기다림을 끝낸다. 다른 이동이 시작되면 그 이동의 몫이다
+  const cancelFitSettle = useRef<() => void>(undefined);
+  const handleUserMove = useEffectEvent(() => {
+    cancelFitSettle.current?.();
+    onUserMove?.();
+  });
   // 코드가 확대 정도를 바꾸는 중인지(D-104). 그 움직임이 멈출 때(idle)까지 zoom_changed를 사용자 조작으로 세지 않는다
   const zoomingByCode = useRef(false);
   // 처음 멈춤을 이미 지난 지도. 화면이 숨었다 다시 보여도 지도는 그대로라 다시 세지 않는다
@@ -398,23 +424,119 @@ export function PlaceMap({
     return () => ignoreSdkError(() => marker?.setMap(null));
   }, [active, myLocation]);
 
-  useImperativeHandle(
-    ref,
-    () => ({
+  useImperativeHandle(ref, () => {
+    const toBounds = (sw: NaverLatLng, ne: NaverLatLng): MapBounds => ({
+      swLat: sw.lat(),
+      swLng: sw.lng(),
+      neLat: ne.lat(),
+      neLng: ne.lng(),
+    });
+    // 지도 아래 끝에서 덮는 UI 위 끝까지(겹치지 않으면 0)
+    const overlapOf = (rect: DOMRect | undefined, coverTop?: number) =>
+      rect && coverTop !== undefined ? Math.max(rect.bottom - coverTop, 0) : 0;
+    const safeTop = () => safeTopRef.current?.offsetHeight ?? 0;
+    // 확대 정도가 상한보다 크면 낮춘다. 이 확대·축소도 코드가 한 것이라 다음 멈춤까지 세지 않는다
+    const capZoom = (map: NaverMap) => {
+      if (map.getZoom() <= FIT_MAX_ZOOM) return;
+      zoomingByCode.current = true;
+      map.setZoom(FIT_MAX_ZOOM);
+    };
+
+    const handle: PlaceMapHandle = {
       getBounds() {
         if (!active) return;
         const bounds = active.map.getBounds();
-        const sw = bounds.getSW();
-        const ne = bounds.getNE();
-        return {
-          swLat: sw.lat(),
-          swLng: sw.lng(),
-          neLat: ne.lat(),
-          neLng: ne.lng(),
-        };
+        return toBounds(bounds.getSW(), bounds.getNE());
+      },
+      visibleBounds(coverTop) {
+        if (!active) return;
+        const { naver, map } = active;
+        try {
+          const rect = wrapperRef.current?.getBoundingClientRect();
+          const band =
+            rect &&
+            visibleBand({
+              height: rect.height,
+              top: safeTop(),
+              bottomOverlap: overlapOf(rect, coverTop),
+            });
+          if (rect && band) {
+            const projection = map.getProjection();
+            return toBounds(
+              projection.fromOffsetToCoord(new naver.Point(0, band.bottom)),
+              projection.fromOffsetToCoord(
+                new naver.Point(rect.width, band.top),
+              ),
+            );
+          }
+        } catch {
+          // 변환이 실패하면 지도 전체 영역으로 대신한다
+        }
+        return handle.getBounds();
+      },
+      fitTo(points, coverTop) {
+        if (!active) return false;
+        cancelFitSettle.current?.();
+        const plan = fitPlan(points);
+        if (plan.kind === "none") return false;
+        if (plan.kind === "pan") {
+          void handle.panTo(plan.to);
+          return true;
+        }
+        const { naver, map } = active;
+        try {
+          const before = { center: map.getCenter(), zoom: map.getZoom() };
+          const rect = wrapperRef.current?.getBoundingClientRect();
+          // fitBounds가 일으키는 zoom_changed를 사용자 조작으로 세지 않는다
+          zoomingByCode.current = true;
+          map.fitBounds(
+            new naver.LatLngBounds(
+              new naver.LatLng(plan.sw.lat, plan.sw.lng),
+              new naver.LatLng(plan.ne.lat, plan.ne.lng),
+            ),
+            {
+              top: safeTop() + FIT_MARGIN,
+              right: FIT_MARGIN,
+              bottom: overlapOf(rect, coverTop) + FIT_MARGIN,
+              left: FIT_MARGIN,
+            },
+          );
+          const center = map.getCenter();
+          const moved =
+            map.getZoom() !== before.zoom ||
+            Math.abs(center.lat() - before.center.lat()) > SAME_CENTER_DEG ||
+            Math.abs(center.lng() - before.center.lng()) > SAME_CENTER_DEG;
+          if (!moved) {
+            // 움직이지 않았으면 멈춤 알림이 오지 않으므로 표시를 바로 지운다(다음 사용자 확대·축소를 놓치지 않게)
+            zoomingByCode.current = false;
+            capZoom(map);
+            return true;
+          }
+          // 멈춘 뒤 상한을 맞춘다. 알림이 오지 않아도 기다림이 남지 않게 한다
+          // listener와 timer는 아래에서 만든 뒤에만 불린다
+          const stop = () => {
+            clearTimeout(timer);
+            ignoreSdkError(() => naver.Event.removeListener(listener));
+            cancelFitSettle.current = undefined;
+          };
+          const settle = (byTimer: boolean) => {
+            stop();
+            if (byTimer) zoomingByCode.current = false;
+            ignoreSdkError(() => capZoom(map));
+          };
+          const listener = naver.Event.addListener(map, "idle", () =>
+            settle(false),
+          );
+          const timer = setTimeout(() => settle(true), PAN_SETTLE_MS);
+          cancelFitSettle.current = stop;
+        } catch {
+          zoomingByCode.current = false;
+        }
+        return true;
       },
       panTo({ lat, lng }, { resetZoom = false } = {}) {
         if (!active) return Promise.resolve();
+        cancelFitSettle.current?.();
         const { naver, map } = active;
         return new Promise<void>((resolve) => {
           let listener: unknown;
@@ -449,9 +571,9 @@ export function PlaceMap({
           }
         });
       },
-    }),
-    [active],
-  );
+    };
+    return handle;
+  }, [active]);
 
   // SDK가 지도 컨테이너에 position: relative를 직접 넣으므로, 배치는 바깥 div가 맡고
   // SDK에는 바깥을 꽉 채우는 안쪽 div를 넘긴다. SDK 로고·축척의 z-index는 isolate로 지도 안에 가둔다
@@ -468,6 +590,12 @@ export function PlaceMap({
       )}
     >
       <div ref={containerRef} className="size-full" />
+      {/* 위쪽 safe-area 높이를 재는 빈 상자(보이는 영역과 맞춤 이동 여백에 쓴다) */}
+      <div
+        ref={safeTopRef}
+        aria-hidden
+        className="pointer-events-none invisible absolute top-0 pt-safe-0"
+      />
     </div>
   );
 }

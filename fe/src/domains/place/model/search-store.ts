@@ -2,11 +2,15 @@ import { CATEGORY_LABELS } from "./place-labels";
 import type {
   CategoryGroup,
   PlaceCard,
-  PlaceSearchRequest,
   PlaceSearchResponse,
   SearchConditions,
+  SearchRequest,
 } from "./place-types";
-import type { LocationState } from "./search-request";
+import {
+  runnableRequest,
+  type LocationState,
+  type StoredSearchRequest,
+} from "./search-request";
 
 // 서버가 모르는 검색 화면 상태. 검색 응답(페이지와 커서)은 TanStack Query 캐시에 항목 id별로 있고,
 // 여기에는 지금 thread의 요청 기록 메타 정보와 화면 상태만 둔다. 메모리에만 있어 재로드하면 사라진다.
@@ -25,10 +29,11 @@ export type LocationNotice = "denied" | "failed";
 export type HistoryEntry = {
   id: string;
   kind: EntryKind;
-  // 기록에 보이는 입력 문장
+  // 기록에 보이는 입력 문장. "이 지역에서 검색"은 이 문장을 query로 보낸다
   sentence: string;
-  // 첫 페이지 요청 본문. 다음 페이지와 "이 지역에서 검색"이 이것을 다시 보낸다
-  request: PlaceSearchRequest;
+  // 실행 요청(첫 페이지 요청 본문). 다음 페이지와 "이 조건으로 다시 검색"이 다시 보내고 후속 조건이 영역을 잇는다.
+  // 다시 연 thread의 region 기록이 실행 불가면 없다(spec 67번)
+  request?: SearchRequest;
   // 첫 페이지 응답의 conditions. 이 항목을 기준으로 한 후속 조건이 돌려보낸다
   conditions: SearchConditions;
   totalCount: number;
@@ -49,8 +54,6 @@ export type SearchState = {
   pastId?: string;
   selectedPlaceId?: number;
   location: LocationState;
-  // "이 지역에서 검색"을 누른 뒤 "새 검색" 전까지 켜져 있다
-  regionLocked: boolean;
   // 상세 화면이 핏 점수와 추천 이유를 꺼내 쓴다
   latestCards: ReadonlyMap<number, PlaceCard>;
   initialView: InitialView;
@@ -64,27 +67,35 @@ type AddEntryInput = {
   id: string;
   kind: EntryKind;
   baseId?: string;
-  request: PlaceSearchRequest;
+  request: SearchRequest;
   response: PlaceSearchResponse;
 };
 
-// 다시 여는 thread의 요청. 시각은 그때 값이다
-type RestoredEntryInput = AddEntryInput & { at: number };
+// 다시 여는 thread의 요청. 시각은 그때 값이고 요청은 저장된 모양 그대로다
+type RestoredEntryInput = Omit<AddEntryInput, "request"> & {
+  at: number;
+  request: StoredSearchRequest;
+};
 
 // "이 지역에서 검색"도 기준 요청의 문장을 그대로 다시 보내므로 문장은 늘 요청의 query다
 function toEntry({
   id,
   kind,
   baseId,
+  sentence,
   request,
   response,
   at,
-}: RestoredEntryInput): HistoryEntry {
+}: Omit<AddEntryInput, "request"> & {
+  at: number;
+  sentence: string;
+  request: SearchRequest | undefined;
+}): HistoryEntry {
   const entry: HistoryEntry = {
     id,
     kind,
-    sentence: request.query,
-    request,
+    sentence,
+    ...(request && { request }),
     conditions: response.conditions,
     totalCount: response.totalCount,
     at,
@@ -99,7 +110,6 @@ export function createSearchStore(now: () => number = Date.now) {
   let state: SearchState = {
     entries: [],
     location: { status: "idle" },
-    regionLocked: false,
     latestCards: new Map(),
     initialView: "pending",
     epoch: 0,
@@ -132,7 +142,11 @@ export function createSearchStore(now: () => number = Date.now) {
 
     // 지금 thread 끝에 쌓는다. thread가 없으면(첫 화면의 새 검색) 새 thread를 연다
     addEntry(input: AddEntryInput) {
-      const entry = toEntry({ ...input, at: now() });
+      const entry = toEntry({
+        ...input,
+        sentence: input.request.query,
+        at: now(),
+      });
       update({
         threadId: state.threadId ?? nextThreadId(),
         entries: [...state.entries, entry],
@@ -144,9 +158,16 @@ export function createSearchStore(now: () => number = Date.now) {
       return entry;
     },
 
-    // 최근 검색에서 고른 thread로 바꾼다. 마지막 요청이 지금 보는 요청이 된다
+    // 최근 검색에서 고른 thread로 바꾼다. 마지막 요청이 지금 보는 요청이 된다.
+    // 저장된 요청은 바꾸지 않고 실행 요청으로 옮겨 둔다(spec 67번)
     openThread(threadId: string, turns: RestoredEntryInput[]) {
-      const entries = turns.map(toEntry);
+      const entries = turns.map((turn) =>
+        toEntry({
+          ...turn,
+          sentence: turn.request.query,
+          request: runnableRequest(turn),
+        }),
+      );
       const last = turns[turns.length - 1];
       update({
         threadId,
@@ -154,7 +175,6 @@ export function createSearchStore(now: () => number = Date.now) {
         viewingId: last?.id,
         pastId: undefined,
         selectedPlaceId: undefined,
-        regionLocked: false,
         latestCards: last ? withCards(last.response.items) : state.latestCards,
       });
     },
@@ -186,7 +206,6 @@ export function createSearchStore(now: () => number = Date.now) {
         viewingId: undefined,
         pastId: undefined,
         selectedPlaceId: undefined,
-        regionLocked: false,
       });
     },
 
@@ -196,10 +215,6 @@ export function createSearchStore(now: () => number = Date.now) {
 
     setLocation(location: LocationState) {
       update({ location });
-    },
-
-    lockRegion() {
-      update({ regionLocked: true });
     },
 
     // 처음 이동을 이 화면이 가져간다. 이미 다른 화면이 가져갔거나 끝났으면 false다
@@ -232,7 +247,6 @@ export function createSearchStore(now: () => number = Date.now) {
         viewingId: undefined,
         pastId: undefined,
         selectedPlaceId: undefined,
-        regionLocked: false,
         latestCards: new Map(),
         epoch: state.epoch + 1,
       });

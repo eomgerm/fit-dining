@@ -589,6 +589,51 @@ describe("회원 최근 검색 시트", () => {
     );
   });
 
+  it("옛 모양 region 기록이 든 회원 thread를 열어도 저장 요청을 보내지 않고, 이어 검색해도 서버의 그 기록은 그대로다 (place-search AC-59)", async () => {
+    const bounds = { swLat: 37.49, swLng: 127.02, neLat: 37.51, neLng: 127.05 };
+    const legacy = turn("entry-a2", 2_000, "강남역 파스타", {
+      kind: "region",
+      baseId: "entry-a1",
+      request: {
+        query: "강남역 파스타",
+        previousConditions: { area: "강남역" },
+        mapBounds: bounds,
+      },
+      response: {
+        conditions: { menu: "파스타" },
+        nearby: false,
+        totalCount: 1,
+        items: [card(7)],
+      },
+    });
+    seedThread("u1", "thread-a", [
+      turn("entry-a1", 1_000, "강남역 파스타"),
+      legacy,
+    ]);
+    renderApp();
+    await firstScreen();
+
+    const sheet = await openRecent();
+    await waitFor(() => expect(rowsOf(sheet)).toHaveLength(1));
+    fireEvent.click(rowOf(sheet, "강남역 파스타"));
+    await waitFor(() => expect(screen.getByText("장소 7")).toBeTruthy());
+    expect(server.searches).toHaveLength(0);
+    expect(server.puts).toHaveLength(0);
+
+    // region 기록을 기준으로 한 후속은 응답 conditions와 저장된 영역을 잇는다
+    await followUp("조용한 곳");
+    expect(server.searches).toEqual([
+      {
+        query: "조용한 곳",
+        previousConditions: { menu: "파스타" },
+        mapBounds: bounds,
+      },
+    ]);
+    await waitFor(() => expect(server.puts).toHaveLength(1));
+    expect(server.puts[0].body).toMatchObject({ kind: "followUp" });
+    expect(threadsOf("u1")[0].turns[1]).toEqual(legacy);
+  });
+
   it("받지 못하면 지금 결과를 두고 그 줄에서 다시 시도할 수 있다", async () => {
     seedThread("u1", "thread-a", [turn("entry-a1", 1_000, "강남 술집")]);
     let fail = true;

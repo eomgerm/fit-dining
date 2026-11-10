@@ -80,8 +80,9 @@ function card(id: number): PlaceCard {
   };
 }
 
-// 사용자가 보낸 검색 요청 본문. 첫 화면 주변 카드 요청은 nearbyBodies에 따로 모은다
+// 사용자가 보낸 검색 요청 본문과 주소(같은 순서). 첫 화면 주변 카드 요청은 nearbyBodies에 따로 모은다
 let searchBodies: Record<string, unknown>[];
+let searchUrls: string[];
 let nearbyBodies: Record<string, unknown>[];
 // 켜면 그 응답에 X-Fallback: AI_UNAVAILABLE을 붙인다(BE가 AI 대신 키워드로 찾은 결과)
 let aiFallback: { nearby: boolean; search: boolean };
@@ -92,6 +93,7 @@ const fallbackHeaders = (on: boolean) =>
 // 첫 요청은 conditions {area: "역삼"}, 후속 조건이면 changeSummary가 있다. "없는"이 들어가면 빈 결과다
 function stubApi() {
   searchBodies = [];
+  searchUrls = [];
   nearbyBodies = [];
   aiFallback = { nearby: false, search: false };
   vi.stubGlobal(
@@ -100,7 +102,11 @@ function stubApi() {
       const url = String(input);
       if (url.startsWith("/api/v1/places/suggest")) return Response.json([]);
       const body = JSON.parse(String(init?.body));
-      (body.query === NEARBY_QUERY ? nearbyBodies : searchBodies).push(body);
+      if (body.query === NEARBY_QUERY) nearbyBodies.push(body);
+      else {
+        searchBodies.push(body);
+        searchUrls.push(url);
+      }
       const followUp = body.previousConditions !== undefined;
       if (body.query.includes("근처")) {
         // 1번은 역삼역 바로 앞, 3번은 약 2km 떨어진 곳
@@ -256,9 +262,18 @@ function stubNaverMaps({ Marker }: { Marker?: unknown } = {}) {
     setSize: ReturnType<typeof vi.fn>;
     panTo: ReturnType<typeof vi.fn>;
     morph: ReturnType<typeof vi.fn>;
+    fitBounds: ReturnType<typeof vi.fn>;
+    setZoom: ReturnType<typeof vi.fn>;
     getCenter: ReturnType<typeof vi.fn>;
     getZoom: ReturnType<typeof vi.fn>;
   }[] = [];
+  // 지도에 건 이벤트를 지금 바로 부른다(SDK가 확대 정도를 바꾸면 그 자리에서 zoom_changed를 알린다)
+  const emit = (target: unknown, name: string) =>
+    listeners
+      .filter((entry) => entry.name === name && entry.target === target)
+      .forEach(({ listener }) => listener());
+  // fitBounds 뒤의 확대 정도. 테스트가 바꿔 "움직이지 않음"(15)이나 "너무 확대됨"(19)을 흉내 낸다
+  const fit = { zoom: 16 };
   const maps = {
     Map: class {
       constructor(
@@ -280,6 +295,20 @@ function stubNaverMaps({ Marker }: { Marker?: unknown } = {}) {
       getZoom = vi.fn(() => 15);
       panTo = vi.fn();
       morph = vi.fn();
+      // 지도 컨테이너 기준 화면 좌표(px)를 위경도로 바꾼다. 아래로 1000px마다 위도 1도, 오른쪽으로 1000px마다 경도 1도
+      getProjection = () => ({
+        fromOffsetToCoord: ({ x, y }: { x: number; y: number }) =>
+          latLng(38 - y / 1000, 127 + x / 1000),
+      });
+      fitBounds = vi.fn(() => {
+        if (fit.zoom === this.getZoom()) return;
+        this.getZoom.mockReturnValue(fit.zoom);
+        emit(this, "zoom_changed");
+      });
+      setZoom = vi.fn((zoom: number) => {
+        this.getZoom.mockReturnValue(zoom);
+        emit(this, "zoom_changed");
+      });
       setSize = vi.fn();
       destroy() {}
     },
@@ -291,13 +320,24 @@ function stubNaverMaps({ Marker }: { Marker?: unknown } = {}) {
       lat = () => this.latValue;
       lng = () => this.lngValue;
     },
+    LatLngBounds: class {
+      constructor(
+        readonly sw: { lat(): number; lng(): number },
+        readonly ne: { lat(): number; lng(): number },
+      ) {}
+    },
     Size: class {
       constructor(
         readonly width: number,
         readonly height: number,
       ) {}
     },
-    Point: class {},
+    Point: class {
+      constructor(
+        readonly x: number,
+        readonly y: number,
+      ) {}
+    },
     Marker:
       Marker ??
       class {
@@ -327,7 +367,7 @@ function stubNaverMaps({ Marker }: { Marker?: unknown } = {}) {
         )
         .forEach(({ listener }) => listener()),
     );
-  return { created, fire };
+  return { created, fire, fit };
 }
 
 // 화면을 열 때 보는 위치 권한과 기기 위치. permission이 없으면 Permissions API가 없는 브라우저다
@@ -420,70 +460,672 @@ describe("SearchScreen", () => {
       map = stubNaverMaps();
     });
 
-    it("평소 첫 페이지 요청에는 지도 영역을 담지 않는다", async () => {
-      renderScreen();
-      await waitFor(() => expect(mapState()).toBe("ready"));
+    describe("검색 지역과 결과 맞춤 이동 (S15P31A302-203)", () => {
+      // 화면 배치 흉내. 지도와 화면은 높이 800·폭 400이고 첫 화면 아래 묶음의 위 끝은 500이다.
+      // 키보드가 열려 위로 들린 검색창은 위 끝이 100이다(묶음 크기에는 들지 않는다)
+      function stubLayout() {
+        const rect = (top: number, height: number) =>
+          ({
+            top,
+            bottom: top + height,
+            height,
+            left: 0,
+            right: 400,
+            width: 400,
+            x: 0,
+            y: top,
+            toJSON() {},
+          }) as DOMRect;
+        vi.spyOn(
+          HTMLElement.prototype,
+          "getBoundingClientRect",
+        ).mockImplementation(function (this: HTMLElement) {
+          if (this.hasAttribute("data-map-state") || this.tagName === "MAIN") {
+            return rect(0, 800);
+          }
+          if (this.getAttribute("role") === "search") return rect(100, 60);
+          if (
+            this.className.includes("bottom-0") &&
+            this.querySelector('[role="search"]')
+          ) {
+            return rect(500, 300);
+          }
+          return rect(0, 0);
+        });
+      }
+      // 첫 화면: 지도 800에서 아래 묶음과 겹친 300을 뺀 띠(0~500)
+      const HOME_AREA = {
+        swLat: 38 - 500 / 1000,
+        swLng: 127,
+        neLat: 38,
+        neLng: 127 + 400 / 1000,
+      };
+      // 결과 화면: 중간 패널 위 끝(320) 위의 띠(0~320)
+      const PANEL_AREA = {
+        swLat: 38 - 320 / 1000,
+        swLng: 127,
+        neLat: 38,
+        neLng: 127 + 400 / 1000,
+      };
+      const REGION_URL = "/api/v1/places/search/region";
+      const SEARCH_URL = "/api/v1/places/search";
+      const GUEST_THREADS = "fit-dining:guest-search-threads";
 
-      await newSearch("역삼 카페");
-      await followUp("더 조용하게");
+      afterEach(() => {
+        vi.restoreAllMocks();
+      });
 
-      expect(searchBodies.map((body) => body.mapBounds)).toEqual([
-        undefined,
-        undefined,
-      ]);
-    });
+      async function regionSearch() {
+        map.fire("dragend");
+        fireEvent.click(
+          await screen.findByRole("button", { name: "이 지역에서 검색" }),
+        );
+        const count = stores.current.getSnapshot().entries.length;
+        await waitFor(() =>
+          expect(stores.current.getSnapshot().entries.length).toBe(count + 1),
+        );
+      }
 
-    it("위치를 얻지 못한 뒤에는(앱을 열 때 권한 거부 포함) '새 검색' 뒤에도 첫 페이지 요청에 현재 지도 영역을 담는다", async () => {
-      stubLocation({ permission: "denied" });
-      renderScreen();
-      await waitFor(() => expect(mapState()).toBe("ready"));
-      await waitFor(() =>
-        expect(stores.current.getSnapshot().location.status).toBe("failed"),
-      );
-      await newSearch("근처 카페");
-      await screen.findByText(
-        "위치를 확인할 수 없어 지역 기준으로 보여 드려요",
-      );
+      // 재로드 뒤처럼 기기에 저장된 thread 하나를 최근 검색에서 연다
+      async function openStoredThread(turns: object[]) {
+        localStorage.setItem(
+          GUEST_THREADS,
+          JSON.stringify([{ id: "thread-old", turns }]),
+        );
+        renderScreen();
+        await waitFor(() => expect(mapState()).toBe("ready"));
+        fireEvent.click(screen.getByRole("button", { name: "최근 검색" }));
+        const sheet = await screen.findByRole("dialog", { name: "최근 검색" });
+        const row = within(
+          within(sheet).getByRole("list", { name: "최근 검색 목록" }),
+        )
+          .getAllByRole("button")
+          .find((button) => !button.hasAttribute("aria-label"))!;
+        fireEvent.click(row);
+        await waitFor(() =>
+          expect(stores.current.getSnapshot().threadId).toBe("thread-old"),
+        );
+      }
 
-      fireEvent.click(screen.getByRole("button", { name: "새 검색" }));
-      await newSearch("역삼 카페");
-      await followUp("더 조용하게");
+      const firstPage = (conditions: object, count = 1) => ({
+        conditions,
+        nearby: false,
+        totalCount: count,
+        items: count ? [card(7)] : [],
+      });
 
-      expect(searchBodies.map((body) => body.mapBounds)).toEqual([
-        BOUNDS,
-        BOUNDS,
-        BOUNDS,
-      ]);
-    });
-
-    it("'이 지역에서 검색'은 지금 보는 요청을 지도 영역과 다시 보내고, '새 검색' 전까지 후속 조건에도 담는다", async () => {
-      renderScreen();
-      await waitFor(() => expect(mapState()).toBe("ready"));
-      await newSearch("역삼 카페");
-
-      map.fire("dragend");
-      fireEvent.click(
-        await screen.findByRole("button", { name: "이 지역에서 검색" }),
-      );
-      await waitFor(() =>
-        expect(stores.current.getSnapshot().entries).toHaveLength(2),
-      );
-      expect(stores.current.getSnapshot().entries[1].sentence).toBe(
-        "역삼 카페",
-      );
-      await followUp("더 조용하게");
-      fireEvent.click(screen.getByRole("button", { name: "새 검색" }));
-      await newSearch("강남 술집");
-
-      expect(searchBodies.slice(1)).toEqual([
-        { query: "역삼 카페", mapBounds: BOUNDS },
+      // 새 검색 a, region b, 후속 c. b의 요청은 테스트가 정한다(옛 모양, 영역 없음 등)
+      const storedTurns = (regionRequest: object) => [
         {
-          query: "더 조용하게",
-          previousConditions: { area: "역삼" },
-          mapBounds: BOUNDS,
+          id: "a",
+          kind: "new",
+          at: 100,
+          request: { query: "강남역 파스타", mapBounds: BOUNDS },
+          response: firstPage({ area: "강남역" }),
         },
-        { query: "강남 술집" },
-      ]);
+        {
+          id: "b",
+          kind: "region",
+          baseId: "a",
+          at: 200,
+          request: regionRequest,
+          response: firstPage({ menu: "파스타" }),
+        },
+        {
+          id: "c",
+          kind: "followUp",
+          baseId: "a",
+          at: 300,
+          request: {
+            query: "조용한 곳",
+            previousConditions: { area: "강남역" },
+            mapBounds: BOUNDS,
+          },
+          response: firstPage({ area: "강남역", quiet: true }),
+        },
+      ];
+
+      async function openPastOf(index: number) {
+        const history = await openHistory();
+        fireEvent.click(
+          within(history).getAllByRole("button", { name: "결과 보기" })[index],
+        );
+        return pastView();
+      }
+
+      it.each([
+        ["granted", { permission: "granted", position: HERE }],
+        ["denied", { permission: "denied" }],
+        ["prompt", { permission: "prompt" }],
+      ] as const)(
+        "위치 권한이 %s여도 새 검색은 보내는 순간 보이는 영역을 담고 '새 검색' 뒤에도 같다 (AC-53)",
+        async (permission, location) => {
+          stubLocation(location);
+          stubLayout();
+          renderScreen();
+          await waitFor(() => expect(mapState()).toBe("ready"));
+          if (permission === "granted") {
+            await waitFor(() =>
+              expect(map.created[0].panTo).toHaveBeenCalled(),
+            );
+            map.fire("idle");
+          }
+          await waitFor(() =>
+            expect(stores.current.getSnapshot().initialView).toBe("done"),
+          );
+
+          await newSearch("역삼 카페");
+          fireEvent.click(screen.getByRole("button", { name: "새 검색" }));
+          await newSearch("강남 술집");
+
+          expect(searchBodies.map((body) => body.mapBounds)).toEqual([
+            HOME_AREA,
+            HOME_AREA,
+          ]);
+        },
+      );
+
+      it("키보드로 검색창이 위로 들려 있어도(검색창 위 끝 100) 아래 묶음 위 끝으로 잰 입력 전 화면의 영역이다 (AC-53, AC-54)", async () => {
+        stubLayout();
+        renderScreen();
+        await waitFor(() => expect(mapState()).toBe("ready"));
+        const input = screen.getByRole("textbox", { name: "장소 검색" });
+
+        fireEvent.focus(input);
+        fireEvent.change(input, { target: { value: "역삼 카페" } });
+        fireEvent.submit(screen.getByRole("search"));
+        await screen.findByRole("list", { name: "추천 장소" });
+
+        expect(searchBodies[0].mapBounds).toEqual(HOME_AREA);
+      });
+
+      it("화면 좌표를 위경도로 바꾸다 SDK가 던지면 지도 전체 영역을 담는다 (AC-54)", async () => {
+        stubLayout();
+        renderScreen();
+        await waitFor(() => expect(mapState()).toBe("ready"));
+        Object.assign(map.created[0], {
+          getProjection: () => {
+            throw new Error("변환 실패");
+          },
+        });
+
+        await newSearch("역삼 카페");
+
+        expect(searchBodies[0].mapBounds).toEqual(BOUNDS);
+      });
+
+      it("배치를 잴 수 없으면(보이는 띠가 너무 작음) 지도 전체 영역을 담는다 (AC-54)", async () => {
+        renderScreen();
+        await waitFor(() => expect(mapState()).toBe("ready"));
+
+        await newSearch("역삼 카페");
+
+        expect(searchBodies[0].mapBounds).toEqual(BOUNDS);
+      });
+
+      it("후속 조건은 지도를 옮겨도 기준 항목의 영역을 잇고, region 항목이 기준이면 그 영역이다 (AC-55)", async () => {
+        stubLayout();
+        renderScreen();
+        await waitFor(() => expect(mapState()).toBe("ready"));
+        await newSearch("역삼 카페");
+
+        map.fire("dragend");
+        await followUp("더 조용하게");
+        await regionSearch();
+        await followUp("카페 말고 식당");
+
+        expect(searchBodies.map((body) => body.mapBounds)).toEqual([
+          HOME_AREA,
+          HOME_AREA,
+          PANEL_AREA,
+          PANEL_AREA,
+        ]);
+        expect(searchUrls).toEqual([
+          SEARCH_URL,
+          SEARCH_URL,
+          REGION_URL,
+          SEARCH_URL,
+        ]);
+      });
+
+      it("'이 지역에서 검색'은 region API로 보던 항목의 문장과 conditions, 패널 위로 보이는 영역을 보내고 previousConditions는 없다 (AC-56)", async () => {
+        stubLayout();
+        renderScreen();
+        await waitFor(() => expect(mapState()).toBe("ready"));
+        await newSearch("역삼 카페");
+        await followUp("더 조용하게");
+
+        await regionSearch();
+
+        expect(searchUrls.at(-1)).toBe(REGION_URL);
+        expect(searchBodies.at(-1)).toEqual({
+          query: "더 조용하게",
+          conditions: { area: "역삼", quiet: true },
+          mapBounds: PANEL_AREA,
+        });
+        const entries = stores.current.getSnapshot().entries;
+        expect(entries.at(-1)).toMatchObject({
+          kind: "region",
+          sentence: "더 조용하게",
+        });
+        // 쿼리 키는 항목 id 그대로다
+        const saved = JSON.parse(localStorage.getItem(GUEST_THREADS)!);
+        expect(saved[0].turns.at(-1).request).toEqual(searchBodies.at(-1));
+      });
+
+      it("region의 다음 페이지와 실패 뒤 재시도도 region API로 같은 본문을 보낸다 (AC-56)", async () => {
+        const original = globalThis.fetch;
+        let failRegion = true;
+        vi.stubGlobal(
+          "fetch",
+          vi.fn<typeof fetch>(async (input, init) => {
+            const url = String(input);
+            if (url === REGION_URL) {
+              const body = JSON.parse(String(init?.body));
+              searchBodies.push(body);
+              searchUrls.push(url);
+              if (failRegion) {
+                failRegion = false;
+                return Response.json({ status: 400 }, { status: 400 });
+              }
+              return Response.json({
+                conditions: {},
+                nearby: false,
+                totalCount: 3,
+                items: body.cursor ? [card(3)] : [card(1), card(2)],
+                ...(!body.cursor && { nextCursor: "Mg" }),
+              } satisfies PlaceSearchResponse);
+            }
+            return original(input, init);
+          }),
+        );
+        vi.stubGlobal(
+          "IntersectionObserver",
+          class {
+            constructor(
+              private readonly callback: (
+                entries: { isIntersecting: boolean }[],
+              ) => void,
+            ) {}
+            observe() {
+              this.callback([{ isIntersecting: true }]);
+            }
+            disconnect() {}
+          },
+        );
+        renderScreen();
+        await waitFor(() => expect(mapState()).toBe("ready"));
+        await newSearch("역삼 카페");
+
+        map.fire("dragend");
+        fireEvent.click(
+          await screen.findByRole("button", { name: "이 지역에서 검색" }),
+        );
+        fireEvent.click(
+          await screen.findByRole("button", { name: "다시 시도" }),
+        );
+        await waitFor(() =>
+          expect(searchBodies.filter((body) => body.cursor)).toHaveLength(1),
+        );
+
+        // 맞춤 이동은 첫 새 검색의 한 번뿐이다(region과 다음 페이지는 옮기지 않는다)
+        expect(map.created[0].fitBounds).toHaveBeenCalledTimes(1);
+        const region = {
+          query: "역삼 카페",
+          conditions: { area: "역삼" },
+          mapBounds: BOUNDS,
+        };
+        expect(searchUrls.slice(1)).toEqual([
+          REGION_URL,
+          REGION_URL,
+          REGION_URL,
+        ]);
+        expect(searchBodies.slice(1)).toEqual([
+          region,
+          region,
+          { ...region, cursor: "Mg" },
+        ]);
+      });
+
+      it("region 기록을 다시 검색하면 새 모양은 저장된 본문을, 옛 모양은 previousConditions 없이 응답 conditions를 region API로 보내고 저장된 기록은 그대로다 (AC-39, AC-57, AC-59)", async () => {
+        const legacy = {
+          query: "강남역 파스타",
+          previousConditions: { area: "강남역" },
+          mapBounds: BOUNDS,
+        };
+        await openStoredThread(storedTurns(legacy));
+        expect(searchBodies).toHaveLength(0);
+
+        const past = await openPastOf(1);
+        fireEvent.click(
+          within(past).getByRole("button", { name: "이 조건으로 다시 검색" }),
+        );
+        await waitFor(() => expect(searchBodies).toHaveLength(1));
+
+        expect(searchUrls).toEqual([REGION_URL]);
+        expect(searchBodies[0]).toEqual({
+          query: "강남역 파스타",
+          conditions: { menu: "파스타" },
+          mapBounds: BOUNDS,
+        });
+        await waitFor(() =>
+          expect(stores.current.getSnapshot().entries).toHaveLength(4),
+        );
+        const saved = JSON.parse(localStorage.getItem(GUEST_THREADS)!);
+        expect(saved[0].turns.slice(0, 3)).toEqual(storedTurns(legacy));
+        expect(saved[0].turns[3].request).toEqual(searchBodies[0]);
+      });
+
+      it.each([
+        ["저장된 conditions", { a: 1 }, { a: 1 }],
+        ["conditions가 null이면 응답 conditions", null, { menu: "파스타" }],
+      ])(
+        "새 모양 region 기록을 다시 검색하면 %s로 region API를 부른다 (AC-57)",
+        async (_, conditions, sent) => {
+          await openStoredThread(
+            storedTurns({
+              query: "강남역 파스타",
+              conditions,
+              mapBounds: BOUNDS,
+            }),
+          );
+
+          const past = await openPastOf(1);
+          fireEvent.click(
+            within(past).getByRole("button", { name: "이 조건으로 다시 검색" }),
+          );
+          await waitFor(() => expect(searchBodies).toHaveLength(1));
+
+          expect(searchUrls).toEqual([REGION_URL]);
+          expect(searchBodies[0]).toEqual({
+            query: "강남역 파스타",
+            conditions: sent,
+            mapBounds: BOUNDS,
+          });
+        },
+      );
+
+      it("new 기록을 다시 검색하면 저장된 본문 그대로 /places/search로 간다 (AC-39, AC-57)", async () => {
+        await openStoredThread(storedTurns({ query: "x", mapBounds: BOUNDS }));
+
+        const past = await openPastOf(0);
+        fireEvent.click(
+          within(past).getByRole("button", { name: "이 조건으로 다시 검색" }),
+        );
+        await waitFor(() => expect(searchBodies).toHaveLength(1));
+
+        expect(searchUrls).toEqual([SEARCH_URL]);
+        expect(searchBodies[0]).toEqual({
+          query: "강남역 파스타",
+          mapBounds: BOUNDS,
+        });
+      });
+
+      it("영역이 없는 region 기록은 결과가 보이고, 다시 검색은 HTTP 없이 안내만 띄우며, 그 기록에서 이 지역에서 검색과 영역 없는 후속 조건은 된다 (AC-58)", async () => {
+        stubLayout();
+        await openStoredThread(
+          storedTurns({ query: "강남역 파스타", previousConditions: {} }),
+        );
+
+        const past = await openPastOf(1);
+        expect(within(past).getByText("장소 7")).toBeTruthy();
+        fireEvent.click(
+          within(past).getByRole("button", { name: "이 조건으로 다시 검색" }),
+        );
+
+        expect(await screen.findByText("다시 검색할 수 없어요")).toBeTruthy();
+        expect(searchBodies).toHaveLength(0);
+        expect(screen.getByRole("region", { name: "과거 결과" })).toBeTruthy();
+
+        fireEvent.click(screen.getByRole("button", { name: "현재 검색으로" }));
+        const history = await screen.findByRole("list", { name: "요청 기록" });
+        fireEvent.click(
+          within(history).getAllByRole("button", {
+            name: "여기서 이어 검색",
+          })[1],
+        );
+        await followUp("조용한 곳");
+        expect(searchBodies[0]).toEqual({
+          query: "조용한 곳",
+          previousConditions: { menu: "파스타" },
+        });
+
+        const reopened = await openHistory();
+        fireEvent.click(
+          within(reopened).getAllByRole("button", {
+            name: "여기서 이어 검색",
+          })[1],
+        );
+        await regionSearch();
+        expect(searchUrls.at(-1)).toBe(REGION_URL);
+        expect(searchBodies.at(-1)).toEqual({
+          query: "강남역 파스타",
+          conditions: { menu: "파스타" },
+          mapBounds: PANEL_AREA,
+        });
+      });
+
+      it("thread를 열면 검색 HTTP, 지도 이동, 저장소 쓰기가 없다 (AC-59)", async () => {
+        const setItem = vi.spyOn(Storage.prototype, "setItem");
+        await openStoredThread(storedTurns({ query: "강남역 파스타" }));
+        await act(async () => {});
+
+        expect(searchBodies).toHaveLength(0);
+        const [created] = map.created;
+        expect(created.panTo).not.toHaveBeenCalled();
+        expect(created.fitBounds).not.toHaveBeenCalled();
+        expect(created.morph).not.toHaveBeenCalled();
+        expect(
+          setItem.mock.calls.filter(([key]) => key === GUEST_THREADS),
+        ).toHaveLength(1);
+      });
+
+      it("AI 대체 결과의 안내는 region 항목이면 지도 안 문구, 새 검색이면 지금 문구다(과거 결과 화면도) (AC-60)", async () => {
+        aiFallback.search = true;
+        const REGION_NOTICE =
+          "지도 안의 장소만 보여드려요. 검색 조건은 적용되지 않았어요";
+        const SEARCH_NOTICE =
+          "지금은 AI 추천을 쓸 수 없어 가게 이름·메뉴로 찾았어요";
+        renderScreen();
+        await waitFor(() => expect(mapState()).toBe("ready"));
+        await newSearch("역삼 카페");
+        expect(screen.getByText(SEARCH_NOTICE)).toBeTruthy();
+
+        await regionSearch();
+        expect(await screen.findByText(REGION_NOTICE)).toBeTruthy();
+        expect(screen.queryByText(SEARCH_NOTICE)).toBeNull();
+
+        await followUp("더 조용하게");
+        const past = await openPastOf(1);
+        expect(within(past).getByText(REGION_NOTICE)).toBeTruthy();
+      });
+
+      describe("결과 맞춤 이동 (AC-61, AC-62)", () => {
+        it("새 검색의 첫 페이지(2곳)에 fitBounds를 한 번 부르고 여백은 패널과 겹친 높이 + 40, 위 safe-area + 40, 옆 40이다", async () => {
+          stubLayout();
+          renderScreen();
+          await waitFor(() => expect(mapState()).toBe("ready"));
+
+          await newSearch("역삼 카페");
+
+          const [created] = map.created;
+          expect(created.fitBounds).toHaveBeenCalledTimes(1);
+          const [bounds, margin] = created.fitBounds.mock.calls[0];
+          expect([
+            bounds.sw.lat(),
+            bounds.sw.lng(),
+            bounds.ne.lat(),
+            bounds.ne.lng(),
+          ]).toEqual([37.5, 127.03, 37.5, 127.03]);
+          expect(margin).toEqual({
+            top: 40,
+            right: 40,
+            bottom: 480 + 40,
+            left: 40,
+          });
+          expect(created.panTo).not.toHaveBeenCalled();
+        });
+
+        it("1곳이면 확대 정도 그대로 panTo, 0곳·region·다음 결과 보기·이어 검색에서는 맞춤 이동이 없다", async () => {
+          renderScreen();
+          await waitFor(() => expect(mapState()).toBe("ready"));
+          await newSearch("역삼 카페");
+          const [created] = map.created;
+
+          await followUp("더 조용하게");
+          expect(created.fitBounds).toHaveBeenCalledTimes(1);
+          expect(created.panTo).toHaveBeenCalledTimes(1);
+          expect(created.setZoom).not.toHaveBeenCalled();
+
+          await regionSearch();
+          const history = await openHistory();
+          fireEvent.click(
+            within(history).getAllByRole("button", { name: "결과 보기" })[0],
+          );
+          await pastView();
+          fireEvent.click(
+            screen.getByRole("button", { name: "현재 검색으로" }),
+          );
+          const again = await screen.findByRole("list", { name: "요청 기록" });
+          fireEvent.click(
+            within(again).getAllByRole("button", {
+              name: "여기서 이어 검색",
+            })[0],
+          );
+          await act(async () => {});
+          expect(created.fitBounds).toHaveBeenCalledTimes(1);
+          expect(created.panTo).toHaveBeenCalledTimes(1);
+
+          sendFollowUp("없는 조건");
+          await screen.findByText("찾지 못했어요");
+          expect(created.fitBounds).toHaveBeenCalledTimes(1);
+          expect(created.panTo).toHaveBeenCalledTimes(1);
+        });
+
+        it("재시도와 '이 조건으로 다시 검색'도 맞춤 이동한다", async () => {
+          const original = globalThis.fetch;
+          let fail = true;
+          vi.stubGlobal(
+            "fetch",
+            vi.fn<typeof fetch>(async (input, init) => {
+              const body = init?.body ? JSON.parse(String(init.body)) : {};
+              if (body.query === "역삼 카페" && fail) {
+                fail = false;
+                return Response.json({ status: 400 }, { status: 400 });
+              }
+              return original(input, init);
+            }),
+          );
+          renderScreen();
+          await waitFor(() => expect(mapState()).toBe("ready"));
+          fireEvent.change(screen.getByRole("textbox", { name: "장소 검색" }), {
+            target: { value: "역삼 카페" },
+          });
+          fireEvent.submit(screen.getByRole("search"));
+          fireEvent.click(
+            await screen.findByRole("button", { name: "다시 시도" }),
+          );
+          await screen.findByRole("list", { name: "추천 장소" });
+          const [created] = map.created;
+          expect(created.fitBounds).toHaveBeenCalledTimes(1);
+
+          await followUp("더 조용하게");
+          const past = await openPastOf(0);
+          fireEvent.click(
+            within(past).getByRole("button", { name: "이 조건으로 다시 검색" }),
+          );
+          await waitFor(() =>
+            expect(created.fitBounds).toHaveBeenCalledTimes(2),
+          );
+        });
+
+        it("근처 응답이 위치를 확인하는 중이면 맞춤 이동이 없고 끝난 뒤에도 그 결과로는 없으며, 처음 이동은 그대로다", async () => {
+          const device = stubLocationLater();
+          renderScreen();
+          await waitFor(() => expect(mapState()).toBe("ready"));
+          await waitFor(() =>
+            expect(device.getCurrentPosition).toHaveBeenCalled(),
+          );
+          fireEvent.change(screen.getByRole("textbox", { name: "장소 검색" }), {
+            target: { value: "근처 카페" },
+          });
+          fireEvent.submit(screen.getByRole("search"));
+          expect(await screen.findByText("위치를 확인하는 중")).toBeTruthy();
+
+          await device.succeed();
+          const [created] = map.created;
+          await waitFor(() => expect(created.panTo).toHaveBeenCalledTimes(1));
+          map.fire("idle");
+          await waitFor(() =>
+            expect(stores.current.getSnapshot().initialView).toBe("done"),
+          );
+          expect(created.fitBounds).not.toHaveBeenCalled();
+        });
+
+        it("처음 이동이 남은 채 맞춤 이동하면 처음 이동은 하지 않고, 늦게 온 위치는 내 위치로만 남는다 (AC-32, AC-48)", async () => {
+          const device = stubLocationLater();
+          renderScreen();
+          await waitFor(() => expect(mapState()).toBe("ready"));
+          await waitFor(() =>
+            expect(device.getCurrentPosition).toHaveBeenCalled(),
+          );
+
+          await newSearch("역삼 카페");
+          expect(stores.current.getSnapshot().initialView).toBe("done");
+          await device.succeed();
+          await act(async () => {});
+
+          const [created] = map.created;
+          expect(created.fitBounds).toHaveBeenCalledTimes(1);
+          expect(created.panTo).not.toHaveBeenCalled();
+          expect(stores.current.getSnapshot().location).toEqual({
+            status: "ok",
+            here: HERE,
+          });
+        });
+
+        it("맞춤 이동의 확대·축소로는 '이 지역에서 검색'이 나타나지 않고, 그 뒤 사용자가 확대·축소하면 나타난다", async () => {
+          renderScreen();
+          await waitFor(() => expect(mapState()).toBe("ready"));
+
+          await newSearch("역삼 카페");
+          expect(regionButton()).toBeNull();
+          map.fire("idle");
+          expect(regionButton()).toBeNull();
+
+          map.fire("zoom_changed");
+          expect(regionButton()).toBeTruthy();
+        });
+
+        it("맞춤 이동이 지도를 움직이지 않았으면 바로 다음 사용자 확대·축소로 나타난다", async () => {
+          map.fit.zoom = 15;
+          renderScreen();
+          await waitFor(() => expect(mapState()).toBe("ready"));
+
+          await newSearch("역삼 카페");
+          expect(map.created[0].fitBounds).toHaveBeenCalledTimes(1);
+          expect(regionButton()).toBeNull();
+
+          map.fire("zoom_changed");
+          expect(regionButton()).toBeTruthy();
+        });
+
+        it("fitBounds 뒤 확대 정도가 17보다 크면 17로 낮추고 그 확대·축소로도 버튼이 나타나지 않는다", async () => {
+          map.fit.zoom = 19;
+          renderScreen();
+          await waitFor(() => expect(mapState()).toBe("ready"));
+
+          await newSearch("역삼 카페");
+          map.fire("idle");
+
+          const [created] = map.created;
+          expect(created.setZoom).toHaveBeenCalledExactlyOnceWith(17);
+          expect(regionButton()).toBeNull();
+          map.fire("idle");
+          map.fire("zoom_changed");
+          expect(regionButton()).toBeTruthy();
+        });
+      });
     });
 
     describe("'이 지역에서 검색' 버튼", () => {
@@ -494,6 +1136,8 @@ describe("SearchScreen", () => {
           await waitFor(() => expect(mapState()).toBe("ready"));
           await newSearch("역삼 카페");
           expect(regionButton()).toBeNull();
+          // 결과 맞춤 이동이 멈춘 뒤의 사용자 조작이다(spec 69번)
+          map.fire("idle");
 
           map.fire(event);
 
@@ -822,7 +1466,12 @@ describe("SearchScreen", () => {
         await waitFor(() =>
           expect(device.getCurrentPosition).toHaveBeenCalled(),
         );
-        await newSearch("역삼 카페");
+        // 결과가 0곳이라 결과 맞춤 이동이 없어 처음 이동이 남는다(spec 69번)
+        fireEvent.change(screen.getByRole("textbox", { name: "장소 검색" }), {
+          target: { value: "없는 가게" },
+        });
+        fireEvent.submit(screen.getByRole("search"));
+        await screen.findByText("찾지 못했어요");
 
         await device.succeed();
         await waitFor(() => expect(map.created[0].panTo).toHaveBeenCalled());

@@ -13,7 +13,9 @@ export function useStoredCard(placeId: number) {
   const source = entries.find(({ id }) => id === (pastId ?? viewingId));
   const sourceCard = source
     ? queryClient
-        .getQueryData(placeQueries.search(source.id, source.request).queryKey)
+        .getQueryData(
+          placeQueries.search(source.id, source.kind, source.request).queryKey,
+        )
         ?.pages.flatMap(({ items }) => items)
         .find(({ place }) => place.id === placeId)
     : undefined;

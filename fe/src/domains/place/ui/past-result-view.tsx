@@ -82,6 +82,7 @@ export function PastResultView({
         </p>
         <div className="flex min-h-0 flex-1 pb-panel-4 flex-col gap-3 overflow-y-auto px-5">
           <PanelResults
+            kind={past.kind}
             searching={false}
             firstPage={firstPage}
             cards={cards}

@@ -1,11 +1,17 @@
 import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 
-import type { PlaceSearchRequest } from "../model/place-types";
+import type {
+  PlaceSearchRequest,
+  RegionSearchRequest,
+  SearchRequest,
+} from "../model/place-types";
 import { nearbyRequest, nextPageRequest } from "../model/search-request";
+import type { EntryKind } from "../model/search-store";
 import {
   getPlace,
   isAiFallback,
   searchPlaces,
+  searchRegion,
   suggestPlaces,
   type SearchExtras,
 } from "./place-api";
@@ -33,18 +39,28 @@ export const placeQueries = {
     }),
 
   // 요청 기록 항목마다 무한 쿼리 하나. "결과 보기"와 상세에서 돌아오기가 네트워크 없이 캐시로 동작하도록
-  // 지우지도, 다시 받지도 않는다. 다음 페이지는 첫 요청 본문에 cursor만 더해 보낸다
-  search: (entryId: string, request: PlaceSearchRequest) =>
+  // 지우지도, 다시 받지도 않는다. 다음 페이지는 첫 요청 본문에 cursor만 더해 보낸다.
+  // API는 항목 종류로 고른다. region은 /places/search/region, 나머지는 /places/search다(D-109).
+  // 요청이 없으면 실행 불가 기록이라 HTTP 없이 실패한다
+  search: (
+    entryId: string,
+    kind: EntryKind,
+    request: SearchRequest | undefined,
+  ) =>
     infiniteQueryOptions({
       queryKey: ["places", "search", entryId],
-      queryFn: ({ pageParam, signal }) =>
-        searchAccess((extras) =>
-          searchPlaces(
-            pageParam ? nextPageRequest(request, pageParam) : request,
-            signal,
-            extras,
-          ),
-        ),
+      queryFn: ({ pageParam, signal }) => {
+        if (!request) {
+          return Promise.reject(new Error("다시 검색할 수 없는 기록입니다"));
+        }
+        const body = pageParam ? nextPageRequest(request, pageParam) : request;
+        // 요청 모양은 항목 종류와 짝이다(region 항목만 RegionSearchRequest를 만든다)
+        return searchAccess((extras) =>
+          kind === "region"
+            ? searchRegion(body as RegionSearchRequest, signal, extras)
+            : searchPlaces(body as PlaceSearchRequest, signal, extras),
+        );
+      },
       initialPageParam: undefined as string | undefined,
       getNextPageParam: (lastPage) => lastPage.nextCursor,
       staleTime: Infinity,

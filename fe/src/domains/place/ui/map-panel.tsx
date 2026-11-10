@@ -10,6 +10,12 @@ export type PanelState = "middle" | "full" | "history";
 // 중간 높이에서 패널 위 끝. 지도 영역 높이의 비율(%)
 const MIDDLE_TOP_PERCENT = 40;
 
+// 패널이 지금 어느 상태든, 중간 상태일 때 패널 위 끝의 화면 좌표(px). 패널 영역(지도 화면 전체) 기준이다.
+// 지도와 겹친 높이를 잴 때 쓴다(place-search spec 65번)
+export function middlePanelTop(area: { top: number; height: number }) {
+  return area.top + (area.height * MIDDLE_TOP_PERCENT) / 100;
+}
+
 // 손잡이를 이만큼 끌면 상태를 바꾼다
 const DRAG_THRESHOLD_PX = 30;
 

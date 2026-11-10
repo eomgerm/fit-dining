@@ -224,7 +224,7 @@ describe("createSearchStore", () => {
     expect(store.getSnapshot().entries.map(({ id }) => id)).toEqual(["a", "b"]);
   });
 
-  it("'새 검색'은 지금 thread를 닫아 기록, 보는 요청, 선택, 지역 고정을 비우고 다음 새 검색은 새 thread를 연다", () => {
+  it("'새 검색'은 지금 thread를 닫아 기록, 보는 요청, 선택을 비우고 다음 새 검색은 새 thread를 연다", () => {
     const { store } = setup();
     store.addEntry({
       id: "a",
@@ -234,7 +234,6 @@ describe("createSearchStore", () => {
     });
     const first = store.getSnapshot().threadId;
     store.select(1);
-    store.lockRegion();
 
     store.startNewSearch();
 
@@ -243,8 +242,8 @@ describe("createSearchStore", () => {
       entries: [],
       viewingId: undefined,
       selectedPlaceId: undefined,
-      regionLocked: false,
     });
+    expect(store.getSnapshot()).not.toHaveProperty("regionLocked");
     store.addEntry({
       id: "b",
       kind: "new",
@@ -268,7 +267,6 @@ describe("createSearchStore", () => {
     });
     store.openPast("a");
     store.select(1);
-    store.lockRegion();
 
     store.reset();
 
@@ -278,7 +276,6 @@ describe("createSearchStore", () => {
       viewingId: undefined,
       pastId: undefined,
       selectedPlaceId: undefined,
-      regionLocked: false,
       location: { status: "ok", here },
       initialView: "done",
       locationNotice: "denied",
@@ -289,7 +286,6 @@ describe("createSearchStore", () => {
 
   it("다시 연 thread는 그때 시각의 요청들을 기록으로 두고 마지막 요청을 지금 보는 요청으로 둔다", () => {
     const { store } = setup();
-    store.lockRegion();
 
     store.openThread("thread-old", [
       {
@@ -312,7 +308,6 @@ describe("createSearchStore", () => {
     expect(store.getSnapshot()).toMatchObject({
       threadId: "thread-old",
       viewingId: "b",
-      regionLocked: false,
     });
     expect(
       store.getSnapshot().entries.map(({ sentence, at }) => [sentence, at]),
@@ -320,6 +315,59 @@ describe("createSearchStore", () => {
       ["역삼 카페", 100],
       ["더 조용하게", 200],
     ]);
+  });
+
+  it("다시 연 thread의 기록은 저장값을 바꾸지 않고 실행 요청으로 바꾸며, 실행 불가 region 기록은 요청 없이 문장과 결과만 둔다(spec 67번)", () => {
+    const { store } = setup();
+    const legacy = {
+      query: "강남역 파스타",
+      previousConditions: { area: "강남역" },
+      mapBounds: BOUNDS,
+    };
+    const broken = { query: "역삼 카페", previousConditions: {} };
+    const turns = [
+      {
+        id: "a",
+        kind: "new" as const,
+        at: 100,
+        request: { query: "강남역 파스타", mapBounds: BOUNDS },
+        response: response({ conditions: { area: "강남역" } }),
+      },
+      {
+        id: "b",
+        kind: "region" as const,
+        baseId: "a",
+        at: 200,
+        request: legacy,
+        response: response({ conditions: { menu: "파스타" } }),
+      },
+      {
+        id: "c",
+        kind: "region" as const,
+        baseId: "a",
+        at: 300,
+        request: broken,
+        response: response({ conditions: {} }),
+      },
+    ];
+    const saved = JSON.stringify(turns);
+
+    store.openThread("thread-old", turns);
+
+    const [a, b, c] = store.getSnapshot().entries;
+    expect(a.request).toEqual({ query: "강남역 파스타", mapBounds: BOUNDS });
+    expect(b.request).toEqual({
+      query: "강남역 파스타",
+      conditions: { menu: "파스타" },
+      mapBounds: BOUNDS,
+    });
+    expect(c).toMatchObject({
+      kind: "region",
+      sentence: "역삼 카페",
+      conditions: {},
+    });
+    expect(c.request).toBeUndefined();
+    expect(JSON.stringify(turns)).toBe(saved);
   });
 
   it("과거 결과 화면은 지금 보는 요청을 바꾸지 않고, 새 요청이 쌓이면 닫힌다", () => {

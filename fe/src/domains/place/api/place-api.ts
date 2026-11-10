@@ -5,6 +5,7 @@ import type {
   PlaceSearchRequest,
   PlaceSearchResponse,
   PlaceSuggestion,
+  RegionSearchRequest,
   SearchPreferences,
 } from "../model/place-types";
 
@@ -35,13 +36,31 @@ export function suggestPlaces(q: string, signal?: AbortSignal) {
   });
 }
 
-export async function searchPlaces(
+export function searchPlaces(
   body: PlaceSearchRequest,
+  signal?: AbortSignal,
+  extras?: SearchExtras,
+) {
+  return postSearch("/v1/places/search", body, signal, extras);
+}
+
+// "이 지역에서 검색". 비회원 답, 시간 초과, X-Fallback 처리는 검색과 같다(D-109)
+export function searchRegion(
+  body: RegionSearchRequest,
+  signal?: AbortSignal,
+  extras?: SearchExtras,
+) {
+  return postSearch("/v1/places/search/region", body, signal, extras);
+}
+
+async function postSearch(
+  path: string,
+  body: PlaceSearchRequest | RegionSearchRequest,
   signal?: AbortSignal,
   { preferences }: SearchExtras = {},
 ) {
   const { data, headers } = await requestWithHeaders<PlaceSearchResponse>(
-    "/v1/places/search",
+    path,
     {
       method: "POST",
       body: preferences ? { ...body, preferences } : body,

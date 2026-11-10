@@ -5,13 +5,13 @@ import {
   newSearchRequest,
   nextPageRequest,
   regionRequest,
-  shouldSendMapBounds,
 } from "../model/search-request";
 import { createSearchStore } from "../model/search-store";
 import {
   getPlace,
   isAiFallback,
   searchPlaces,
+  searchRegion,
   showsAiFallback,
   suggestPlaces,
 } from "./place-api";
@@ -157,26 +157,75 @@ describe("searchPlaces", () => {
     expect(showsAiFallback(undefined)).toBe(false);
   });
 
-  it("기기 위치를 얻었어도 어떤 검색 요청 본문에도 그 좌표가 없다", async () => {
+  it("기기 위치를 얻었어도 어떤 검색 요청 본문에도 그 좌표가 없다(region과 다음 페이지 포함)", async () => {
     const store = createSearchStore();
     const here = { lat: 37.501234, lng: 127.039876 };
     store.setLocation({ status: "ok", here });
-    const { regionLocked, location } = store.getSnapshot();
     const bounds = { swLat: 37.49, swLng: 127.02, neLat: 37.51, neLng: 127.04 };
-    // 위치를 얻은 상태에서는 지도 영역도 담지 않는다
-    expect(shouldSendMapBounds({ regionLocked, location })).toBe(false);
 
-    const first = newSearchRequest("근처 카페");
+    const first = newSearchRequest("근처 카페", bounds);
+    const region = regionRequest(
+      { sentence: first.query, conditions: searchResponse.conditions },
+      bounds,
+    );
     await searchPlaces(first);
     await searchPlaces(nextPageRequest(first, "MjA"));
-    await searchPlaces(followUpRequest("더 조용하게", searchResponse));
-    await searchPlaces(regionRequest(first, bounds));
+    await searchPlaces(
+      followUpRequest("더 조용하게", { ...searchResponse, request: first }),
+    );
+    await searchRegion(region);
+    await searchRegion(nextPageRequest(region, "MjA"));
 
-    for (let call = 0; call < 4; call++) {
+    for (let call = 0; call < 5; call++) {
       const body = sentBody(call);
       expect(body).not.toContain(String(here.lat));
       expect(body).not.toContain(String(here.lng));
       expect(body).not.toMatch(/"(lat|lng|latitude|longitude)"/);
     }
+  });
+});
+
+describe("searchRegion", () => {
+  const region = {
+    query: "역삼 카페",
+    conditions: { area: "역삼" },
+    mapBounds: { swLat: 37.49, swLng: 127.02, neLat: 37.51, neLng: 127.04 },
+  };
+
+  it("POST /api/v1/places/search/region으로 본문을 보내고 previousConditions는 없다", async () => {
+    await expect(searchRegion(region)).resolves.toEqual(searchResponse);
+
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/places/search/region");
+    expect(fetchMock.mock.calls[0][1]?.method).toBe("POST");
+    expect(JSON.parse(sentBody())).toEqual(region);
+  });
+
+  it("검색처럼 15초를 기다리고 비회원 답을 본문의 preferences로 싣는다", async () => {
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    const preferences = {
+      mood: null,
+      priorities: [],
+      purposes: [],
+      tastes: [],
+    };
+
+    await searchRegion(region);
+    await searchRegion(region, undefined, { preferences });
+
+    expect(timeout.mock.calls.map(([ms]) => ms)).toEqual([15_000, 15_000]);
+    expect(sentHeaders(0).has("Authorization")).toBe(false);
+    expect(JSON.parse(sentBody(0))).toEqual(region);
+    expect(JSON.parse(sentBody(1))).toEqual({ ...region, preferences });
+    timeout.mockRestore();
+  });
+
+  it("X-Fallback의 AI_UNAVAILABLE을 대체 결과로 읽는다", async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json(searchResponse, {
+        headers: { "X-Fallback": "AI_UNAVAILABLE" },
+      }),
+    );
+
+    expect(isAiFallback(await searchRegion(region))).toBe(true);
   });
 });

@@ -26,16 +26,26 @@ import type {
   PlaceCard as PlaceCardData,
   PlaceSearchResponse,
 } from "../model/place-types";
+import type { EntryKind } from "../model/search-store";
 import { MapPanel, type PanelState } from "./map-panel";
 import { PlaceCard, PlaceCardSkeleton } from "./place-card";
 import { SearchSteps } from "./search-steps";
 import { keyboardLift } from "./use-keyboard-inset";
 
-// BE가 AI 대신 키워드로 찾은 결과에 카드가 있을 때 카드 위에 띄운다(place-ai-search AC-27)
-export function AiFallbackNote({ className }: { className?: string }) {
+// BE가 AI 대신 찾은 결과에 카드가 있을 때 카드 위에 띄운다(place-ai-search AC-27).
+// "이 지역에서 검색"의 대체 결과는 지도 영역 안 장소라 문구가 다르다(spec 68번)
+export function AiFallbackNote({
+  kind,
+  className,
+}: {
+  kind?: EntryKind;
+  className?: string;
+}) {
   return (
     <Note className={className}>
-      지금은 AI 추천을 쓸 수 없어 가게 이름·메뉴로 찾았어요
+      {kind === "region"
+        ? "지도 안의 장소만 보여드려요. 검색 조건은 적용되지 않았어요"
+        : "지금은 AI 추천을 쓸 수 없어 가게 이름·메뉴로 찾았어요"}
     </Note>
   );
 }
@@ -47,6 +57,8 @@ const SUPPORTED_AREAS = "강남역·역삼역·선릉역";
 const LIST_CLASS = "-mx-2 flex flex-col gap-2.5";
 
 type ResultPanelProps = {
+  // 보이는 결과의 요청 종류. AI 대체 안내 문구를 고른다
+  kind?: EntryKind;
   state: PanelState;
   onStateChange: (state: PanelState) => void;
   // 지금 보이는 문장. 검색 중이면 보낸 문장, 아니면 지금 보는 요청의 문장
@@ -82,6 +94,7 @@ type ResultPanelProps = {
 
 // 지도 위에 늘 떠 있는 결과 패널. 중간(5-04)과 전체(5-05) 두 상태다. 모달이 아니라 BottomSheet를 쓰지 않는다
 export function ResultPanel({
+  kind,
   state,
   onStateChange,
   sentence,
@@ -178,6 +191,7 @@ export function ResultPanel({
           )}
           {failure || (
             <PanelResults
+              kind={kind}
               searching={searching}
               onCancelSearch={onCancelSearch}
               firstPage={firstPage}
@@ -200,6 +214,7 @@ export function ResultPanel({
 
 // 결과 목록. 과거 결과 화면도 다음 페이지 없이 같은 목록을 쓴다
 export function PanelResults({
+  kind,
   searching,
   onCancelSearch,
   firstPage,
@@ -215,6 +230,7 @@ export function PanelResults({
 }: Partial<Pick<ResultPanelProps, "onCancelSearch">> &
   Pick<
     ResultPanelProps,
+    | "kind"
     | "searching"
     | "firstPage"
     | "cards"
@@ -264,7 +280,7 @@ export function PanelResults({
 
   return (
     <>
-      {showsAiFallback(firstPage) && <AiFallbackNote />}
+      {showsAiFallback(firstPage) && <AiFallbackNote kind={kind} />}
       {unfilteredNearby && (
         <Note>위치를 확인할 수 없어 지역 기준으로 보여 드려요</Note>
       )}

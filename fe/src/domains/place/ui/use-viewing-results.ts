@@ -38,7 +38,7 @@ function useEntryResults(
   const { location, initialView } = useSearchStore();
   const entry = target ?? NO_ENTRY;
   const query = useInfiniteQuery({
-    ...placeQueries.search(entry.id, entry.request),
+    ...placeQueries.search(entry.id, entry.kind, entry.request),
     enabled: Boolean(target),
   });
 

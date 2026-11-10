@@ -32,16 +32,17 @@ import {
   savedPlacesHref,
   type BookmarkAccess,
 } from "../model/bookmark";
+import { filterNearby } from "../model/nearby";
 import type {
   CategoryGroup,
   PlaceCard,
-  PlaceSearchRequest,
+  PlaceSearchResponse,
+  SearchRequest,
 } from "../model/place-types";
 import {
   followUpRequest,
   newSearchRequest,
   regionRequest,
-  shouldSendMapBounds,
 } from "../model/search-request";
 import {
   followUpChips,
@@ -67,7 +68,7 @@ import { PastResultView } from "./past-result-view";
 import { placeCardElementId } from "./place-card";
 import { PlaceMap, type PlaceMapHandle } from "./place-map";
 import { RecentSearchSheet } from "./recent-search-sheet";
-import type { PanelState } from "./map-panel";
+import { middlePanelTop, type PanelState } from "./map-panel";
 import { AiFallbackNote, ResultPanel } from "./result-panel";
 import { savedCardElementId, SavedPlacesView } from "./saved-places";
 import { savedViewState, type SavedPanelState } from "./saved-view-state";
@@ -82,8 +83,11 @@ import { usePastResults, useViewingResults } from "./use-viewing-results";
 type SearchInput = {
   kind: EntryKind;
   baseId?: string;
-  request: PlaceSearchRequest;
+  request: SearchRequest;
 };
+
+// 실행 불가인 region 기록의 "이 조건으로 다시 검색"(spec 67번)
+const REPEAT_UNAVAILABLE_MESSAGE = "다시 검색할 수 없어요";
 
 type SearchScreenProps = {
   // 저장한 장소의 인증. 인증 도메인을 쓰는 app이 넘긴다
@@ -116,6 +120,10 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
   const here = useHere();
 
   const mapRef = useRef<PlaceMapHandle>(null);
+  // 지도 화면 전체. 결과 패널 위치(중간 상태)의 기준이다
+  const mainRef = useRef<HTMLElement>(null);
+  // 첫 화면 아래에 쌓은 묶음("내 위치", 안내, 주변 카드, 검색창)
+  const bottomStackRef = useRef<HTMLDivElement>(null);
   const followUpRef = useRef<HTMLInputElement>(null);
   const [mapReady, setMapReady] = useState(false);
   // 상세에 다녀와 저장한 장소 화면으로 다시 그려졌으면, 들어오기 전 메인의 패널 상태로 시작한다
@@ -166,7 +174,7 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
       const startEpoch = searchStore.getSnapshot().epoch;
       const target = beginSave(threadAuth);
       const id = nextEntryId();
-      const options = placeQueries.search(id, request);
+      const options = placeQueries.search(id, kind, request);
       pendingKey.current = options.queryKey;
       try {
         const data = await queryClient.fetchInfiniteQuery(options);
@@ -204,6 +212,8 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
             threadAuth,
           );
         }
+        // 새 검색과 후속 검색(재시도, 다시 검색 포함)의 받은 결과에 지도를 맞춘다. region은 옮기지 않는다
+        if (kind !== "region") fitToResults(response);
       } catch (error) {
         queryClient.removeQueries({ queryKey: options.queryKey, exact: true });
         throw error;
@@ -275,34 +285,62 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
     search.mutate(input);
   }
 
-  // 지역을 고정했거나 위치를 얻지 못한 것이 확인됐을 때만 지도 영역을 담는다
-  function firstPageBounds() {
-    return shouldSendMapBounds(searchStore.getSnapshot())
-      ? mapRef.current?.getBounds()
-      : undefined;
+  // 결과 패널(중간 상태)의 위 끝. 결과 화면에서 지도를 덮는 UI다(spec 65번)
+  function panelCoverTop() {
+    const rect = mainRef.current?.getBoundingClientRect();
+    return rect && middlePanelTop(rect);
   }
 
+  // 첫 화면 아래 묶음의 위 끝. 키보드로 올라간 검색창과 자동완성 후보는 묶음 크기에 들지 않는다
+  function homeCoverTop() {
+    return bottomStackRef.current?.getBoundingClientRect().top;
+  }
+
+  // 받은 첫 페이지의 화면 핀으로 지도를 맞춘다(spec 69번). 근처 응답이 위치를 확인하는 중이면 옮기지 않고,
+  // 옮기기 시작했으면 남은 처음 이동은 하지 않는다
+  function fitToResults(response: PlaceSearchResponse) {
+    const { location, initialView } = searchStore.getSnapshot();
+    if (response.nearby && initialView !== "done") return;
+    const cards =
+      response.nearby && location.status === "ok"
+        ? filterNearby(response.items, location.here)
+        : response.items;
+    const moved = mapRef.current?.fitTo(
+      cards.map(({ place }) => place),
+      panelCoverTop(),
+    );
+    if (moved) searchStore.finishInitialView();
+  }
+
+  // 새 검색은 보내는 순간 보이는 지도 영역을 담는다(spec 64번)
   function handleNewSearch(input: string) {
-    run({ kind: "new", request: newSearchRequest(input, firstPageBounds()) });
+    run({
+      kind: "new",
+      request: newSearchRequest(
+        input,
+        mapRef.current?.visibleBounds(homeCoverTop()),
+      ),
+    });
   }
 
+  // 후속 조건은 지금 지도가 아니라 기준 항목의 영역을 잇는다
   function handleFollowUp(input: string) {
     if (!viewing) return;
     run({
       kind: "followUp",
       baseId: viewing.id,
-      request: followUpRequest(input, viewing, firstPageBounds()),
+      request: followUpRequest(input, viewing),
     });
   }
 
+  // "이 지역에서 검색"은 결과 패널 위로 보이는 영역으로 region API를 부른다(spec 66번)
   function handleRegionSearch() {
-    const bounds = mapRef.current?.getBounds();
+    const bounds = mapRef.current?.visibleBounds(panelCoverTop());
     if (!viewing || !bounds) return;
-    searchStore.lockRegion();
     run({
       kind: "region",
       baseId: viewing.id,
-      request: regionRequest(viewing.request, bounds),
+      request: regionRequest(viewing, bounds),
     });
   }
 
@@ -359,9 +397,14 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
     setPanel("history");
   }
 
-  // 그 요청 본문을 그대로 같은 종류와 기준 요청으로 다시 보낸다. 지금 thread 끝에 쌓인다
+  // 그 요청 본문을 그대로 같은 종류와 기준 요청으로 다시 보낸다. 지금 thread 끝에 쌓인다.
+  // 실행 불가인 region 기록은 HTTP 없이 알리고 과거 결과 화면은 그대로 둔다(spec 67번)
   function handleRepeatPast() {
     if (!past) return;
+    if (!past.request) {
+      toast(REPEAT_UNAVAILABLE_MESSAGE);
+      return;
+    }
     searchStore.closePast();
     run({ kind: past.kind, baseId: past.baseId, request: past.request });
   }
@@ -374,7 +417,7 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
     setRecentOpen(false);
     abandonSearch();
     for (const turn of thread.turns) {
-      const { queryKey } = placeQueries.search(turn.id, turn.request);
+      const { queryKey } = placeQueries.search(turn.id, turn.kind, undefined);
       if (!queryClient.getQueryData(queryKey)) {
         queryClient.setQueryData(queryKey, {
           pages: [turn.response],
@@ -518,6 +561,7 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
 
   return (
     <main
+      ref={mainRef}
       style={{ "--keyboard-inset": `${keyboardInset}px` } as CSSProperties}
       data-keyboard-open={keyboardInset > 0 || undefined}
       className="relative h-viewport overflow-hidden"
@@ -610,6 +654,7 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
         />
       ) : showPanel ? (
         <ResultPanel
+          kind={viewing?.kind}
           state={panel}
           onStateChange={setPanel}
           // 첫 요청 문장. 검색 중이면 보낸 요청의 기준 요청에서 찾고, 새 검색이면 보낸 문장이다(D-97)
@@ -674,7 +719,10 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
             </div>
           )}
           {/* 아래부터 검색창, 주변 카드, "내 위치" 순서로 쌓는다(와이어프레임 Start) */}
-          <div className="absolute inset-x-0 bottom-0 flex flex-col gap-3 pb-safe-4">
+          <div
+            ref={bottomStackRef}
+            className="absolute inset-x-0 bottom-0 flex flex-col gap-3 pb-safe-4"
+          >
             {myLocationButton && !nearbyOffline && (
               <div className="flex justify-end px-4">{myLocationButton}</div>
             )}

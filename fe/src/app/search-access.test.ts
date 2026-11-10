@@ -168,7 +168,7 @@ describe("검색 요청에 싣는 값", () => {
     );
     const { placeQueries, queryClient } = await load();
     const request = { query: "역삼 카페" };
-    const options = placeQueries.search("entry-1", request);
+    const options = placeQueries.search("entry-1", "new", request);
 
     await queryClient.fetchInfiniteQuery(options);
     await new InfiniteQueryObserver(queryClient, options).fetchNextPage();

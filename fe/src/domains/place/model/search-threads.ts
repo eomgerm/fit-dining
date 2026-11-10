@@ -1,4 +1,5 @@
-import type { PlaceSearchRequest, PlaceSearchResponse } from "./place-types";
+import type { PlaceSearchResponse } from "./place-types";
+import type { StoredSearchRequest } from "./search-request";
 import { formatClock, type EntryKind } from "./search-store";
 
 // 검색 thread. LLM 대화처럼 새 검색 하나가 thread 하나를 시작하고, 그 뒤의 후속 조건,
@@ -11,8 +12,9 @@ export type ThreadTurn = {
   // 후속 조건과 "이 지역에서 검색"의 기준 요청
   baseId?: string;
   at: number;
-  // 첫 페이지 요청 본문. "이 조건으로 다시 검색"이 그대로 다시 보낸다
-  request: PlaceSearchRequest;
+  // 첫 페이지 요청 본문. 저장된 값은 다시 쓰지 않고 읽을 때 실행 요청으로 바꾼다(runnableRequest, spec 67번).
+  // 형식 검사는 query만 보므로 region은 옛 모양 {query, previousConditions?, mapBounds?}도 있다
+  request: StoredSearchRequest;
   // 첫 페이지 응답. 다시 열 때 다음 페이지를 부르지 않도록 커서는 두지 않는다
   response: PlaceSearchResponse;
 };
