@@ -374,12 +374,17 @@ class PlaceControllerMockDisabledTest {
 
 	@Test
 	@DisplayName("주변과이지역에서검색_영역대체의카탈로그DB오류는_503이다")
-	void areaRequests_catalogError_serviceUnavailable() throws Exception {
+	void areaRequests_catalogError_serviceUnavailable(CapturedOutput output) throws Exception {
 		when(aiClient.search(any(), any(), any())).thenReturn(Optional.empty());
 		when(catalog.cardsWithin(any(), anyInt())).thenThrow(new DataAccessResourceFailureException("db"));
+		String secretArea = "{\"swLat\":37.4987654321,\"swLng\":127.0123456789,\"neLat\":37.51,\"neLng\":127.06}";
 
-		expectUnavailable(nearby("{\"mapBounds\":" + AREA + "}"));
-		expectUnavailable(region("{\"query\":\"파스타\",\"mapBounds\":" + AREA + "}"));
+		expectUnavailable(nearby("{\"mapBounds\":" + secretArea + "}"));
+		expectUnavailable(region("{\"query\":\"비밀표식3b7a\",\"conditions\":{\"text\":\"비밀표식3b7a\"},"
+				+ "\"mapBounds\":" + secretArea + "}"));
+
+		assertThat(output.getAll()).doesNotContain("37.4987654321").doesNotContain("127.0123456789")
+				.doesNotContain("비밀표식3b7a");
 	}
 
 	private static PlaceCard card() {

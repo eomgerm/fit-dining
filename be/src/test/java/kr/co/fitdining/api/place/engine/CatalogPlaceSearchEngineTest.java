@@ -553,6 +553,20 @@ class CatalogPlaceSearchEngineTest {
 			assertThat(output.getAll()).doesNotContain(SECRET);
 		}
 
+		@ParameterizedTest
+		@EnumSource(value = SearchPurpose.class, names = {"NEARBY", "REGION"})
+		@DisplayName("대체_영역요청의좌표와조건은_로그에없다")
+		void fallback_areaInput_notLogged(SearchPurpose purpose, CapturedOutput output) {
+			when(aiClient.search(any(), any(), any())).thenThrow(new IllegalStateException(SECRET));
+			when(catalog.cardsWithin(any(), anyInt())).thenReturn(List.of());
+
+			engine.search(purpose, new PlaceSearchRequest(SECRET, null, Map.of("text", SECRET),
+					new MapBounds(37.4987654321, 127.0123456789, 37.5123456789, 127.0587654321), null), null);
+
+			assertThat(output.getAll()).doesNotContain(SECRET).doesNotContain("37.4987654321")
+					.doesNotContain("127.0123456789");
+		}
+
 		void unavailable() {
 			when(aiClient.search(any(), any(), any())).thenReturn(Optional.empty());
 		}
