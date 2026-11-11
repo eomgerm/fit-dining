@@ -169,7 +169,7 @@ describe("모임 만들기", () => {
       target: { value: "2026-11-14" },
     });
     fireEvent.change(time, { target: { value: "19:00" } });
-    fireEvent.click(screen.getByRole("button", { name: "날짜 지우기" }));
+    fireEvent.click(screen.getByRole("button", { name: "날짜와 시간 지우기" }));
     expect(screen.getByLabelText("모임 시각")).toHaveProperty("value", "");
     expect(screen.getByLabelText("모임 시각")).toHaveProperty("disabled", true);
   });

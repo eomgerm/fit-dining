@@ -51,7 +51,7 @@ export function Stepper({
       <output
         aria-live="polite"
         className={cn(
-          "min-w-11 text-center",
+          "min-w-11 px-1 text-center",
           value === null ? "text-body-sm text-ink-muted" : "text-title-md",
         )}
       >

@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState, useSyncExternalStore, type ReactNode } from "react";
 
 import { isApiError } from "@/shared/api/api-error";
 import { Button } from "@/shared/ui/button/button";
 import { Chip } from "@/shared/ui/button/chip";
 import { IconButton } from "@/shared/ui/button/icon-button";
+import { TextButton } from "@/shared/ui/button/text-button";
 import { PickerField } from "@/shared/ui/form/picker-field";
 import { Stepper } from "@/shared/ui/form/stepper";
 import { CalendarIcon } from "@/shared/ui/icon/icons/calendar";
@@ -35,6 +36,18 @@ import {
 } from "../model/meetup";
 import { formatDate, formatTime, selectableRange } from "../model/meetup-date";
 import { AreaField } from "./area-field";
+
+const subscribeNothing = () => () => {};
+
+// 지금 시각은 브라우저에서만 읽는다. 미리 렌더링에서는 null이다. 분 단위 값을 돌려줘 다시 그릴 때마다 같은 값이다
+function useClientNow(now: () => Date) {
+  const minute = useSyncExternalStore(
+    subscribeNothing,
+    () => Math.floor(now().getTime() / 60_000),
+    () => null,
+  );
+  return minute === null ? null : new Date(minute * 60_000);
+}
 
 function Optional() {
   return <span className="font-normal text-ink-subtle">선택</span>;
@@ -67,10 +80,11 @@ export function MeetupCreateForm({
   const toast = useToast();
   const update = (patch: Partial<CreateForm>) =>
     setForm((current) => ({ ...current, ...patch }));
-  const today = now();
-  const range = selectableRange(today);
-  const pastTime = isPastTime(form, today);
-  const submittable = canSubmit(form, today) && !create.isPending;
+  const today = useClientNow(now);
+  const range = today ? selectableRange(today) : undefined;
+  const pastTime = today !== null && isPastTime(form, today);
+  const submittable =
+    today !== null && canSubmit(form, today) && !create.isPending;
 
   const submit = () => {
     if (!submittable) return;
@@ -134,9 +148,21 @@ export function MeetupCreateForm({
         </div>
 
         <div className="flex flex-col gap-2">
-          <FieldLabel>
-            언제 모이나요 <Optional />
-          </FieldLabel>
+          {/* 날짜 칸이 반 폭이라 칸 안에 지우기를 두면 "11월 14일 (토)"가 잘린다 */}
+          <div className="-my-3 flex min-h-11 items-center justify-between">
+            <FieldLabel>
+              언제 모이나요 <Optional />
+            </FieldLabel>
+            {form.date && (
+              <TextButton
+                variant="muted"
+                aria-label="날짜와 시간 지우기"
+                onClick={() => update({ date: undefined, time: undefined })}
+              >
+                지우기
+              </TextButton>
+            )}
+          </div>
           <div className="grid grid-cols-2 gap-2">
             <PickerField
               type="date"
@@ -145,9 +171,8 @@ export function MeetupCreateForm({
               display={form.date && formatDate(form.date)}
               placeholder="날짜"
               icon={<CalendarIcon size="md" />}
-              min={range.min}
-              max={range.max}
-              clearLabel="날짜 지우기"
+              min={range?.min}
+              max={range?.max}
               onChange={(date) =>
                 update(date ? { date } : { date: undefined, time: undefined })
               }
@@ -160,7 +185,6 @@ export function MeetupCreateForm({
               placeholder="시간"
               icon={<ClockIcon size="md" />}
               disabled={!form.date}
-              clearLabel="시간 지우기"
               onChange={(time) => update({ time: time || undefined })}
             />
           </div>
