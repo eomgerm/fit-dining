@@ -1,6 +1,6 @@
 # 사용자 취향 분석 베이스라인 (taste-profile)
 
-Status: draft · Jira: S15P31A302-39 · 관련: S15P31A302-40(가게 특징 분석), S15P31A302-41(취향-가게 비교), S15P31A302-20(취향 보정), S15P31A302-164(취향 갱신 API), S15P31A302-229(리뷰 본문과 맛)
+Status: draft · Jira: S15P31A302-39 · 관련: S15P31A302-40(가게 특징 분석), S15P31A302-41(취향-가게 비교), S15P31A302-20(취향 보정), S15P31A302-164(취향 갱신 API), S15P31A302-229(리뷰 본문과 맛), S15P31A302-230(취향 묶음)
 
 PRD·기술 설계와 다르면 PRD를 따른다. 확장 코드와 코드 문구는 출시 지역 데이터(2026-10-23 수집)로 다시 정했다. 근거 무게가 절반이 되는 리뷰 수 10건처럼 검증 전 초기값은 본문에 시작값이라고 적었다.
 
@@ -219,7 +219,8 @@ BE `TasteAnalyzer`가 직접 입력마다 AI API를 한 번 부른다(`ai/server
 ```json
 {"tastes": [{"polarity": "LIKE", "label": "조용하고 차분한 곳", "code": "QUIET"},
             {"polarity": "DISLIKE", "label": "매운 음식", "code": "FOOD_SPICY"}],
- "model": "gpt-6-luna"}
+ "model": "gpt-6-luna",
+ "vectors": [null, null]}
 ```
 
 | 응답 필드 | 뜻 |
@@ -229,6 +230,7 @@ BE `TasteAnalyzer`가 직접 입력마다 AI API를 한 번 부른다(`ai/server
 | `tastes[].label` | 코드가 있으면 코드표 `label`, 없으면 `positive_text`. BE 상한에 맞춰 공백을 하나로 줄이고 UTF-16 20단위로 자른다 |
 | `tastes[].code` | 코드표 코드 또는 `null`. BE가 칩과 함께 저장한다(profile-storage spec 열린 문제 6) |
 | `model` | 해석한 LLM |
+| `vectors` | `tastes`와 같은 순서. 코드 없는 `LIKE` 칩만 1024차원 질의 벡터가 있고 나머지는 `null`이다. 비회원 기기가 칩과 함께 저장했다가 검색 요청에 실어 취향 묶음 재료로 쓴다(4단계 "취향 묶음"). 임베딩이 실패하거나 설정이 없으면 `null`이고 칩은 그대로 준다. BE는 벡터를 칩의 `vector`로 붙여 FE에 준다 |
 
 오류는 BE 컨벤션의 ProblemDetail(`application/problem+json`, `code` 필드)이다. 입력 원문은 응답과 로그에 넣지 않고, 로그에는 칩 수와 걸린 시간만 남긴다.
 
@@ -381,6 +383,33 @@ BE가 해석을 마칠 때마다 `taste_input_logs`에 한 줄을 남긴다(V15)
 - 요청에 업종이 있고 그 업종의 취향이 있으면 그것을, 아니면 전체 취향을 쓴다. `category`가 없는 옛 원소는 전체 취향이다
 - 요청에 목적이나 인원이 있으면 방문 목적(`purpose`)을 빼고, 소음 조건이 있으면 소음 취향과 소음 비선호를 뺀다(PRD AC-28, AC-30)
 - 요청에 음식 종류가 있거나 메뉴로 걸렀으면 음식 종류 취향을 뺀다. 맛 취향은 같은 맛을 요청했을 때만 뺀다(맛마다 따로)
+- 취향 묶음도 같은 방식으로 업종을 고르고, 요청 문구와 겹치는 묶음을 뺀다(아래)
+
+### 취향 묶음
+
+코드표에 없는 취향("창가 자리가 있는 곳", "브런치가 맛있었다")은 같은 취향끼리 묶어 업종마다 3개를 고른다(취향 보정 설계 4단계, S15P31A302-230). 검색은 남은 묶음마다 대표 문구를 장소 페르소나와 견줘 취향 점수에 넣는다(`ai/docs/comparison/spec.md` 4.3).
+
+| 항목 | 규칙 |
+|---|---|
+| 재료 | 코드 없는 좋아함 칩 중 벡터가 있는 것과, 리뷰 본문 추출 항목 중 코드가 없고 좋았다는(`direction` 1) 취향(`kind` taste) 문장. 방문 맥락 칸은 "부모님과 함께 방문했다"처럼 사실이 대부분이라 뺀다. "맛있다" 같은 범용 품질은 kind가 quality라 빠진다 |
+| 묶기 | Ward 방식(가까운 것부터 차례로 합치는 계층 묶기, scipy)으로 묶고 거리 0.90에서 멈춘다 |
+| 대표 문구 | 묶음 안에서 다른 문구들과의 유사도 합이 가장 큰 문구. 평균 벡터는 튀는 문구에 끌려 쓰지 않는다 |
+| 세기 | 재료마다 (3단계 무게 × 업종 배수)를 더한 값. 업종 배수는 그 업종 리뷰 1, 다른 업종 리뷰 0.5, 리뷰가 아닌 근거 1이다. 전체 묶음은 모두 1이다 |
+| 업종 | 리뷰 재료가 있으면 전체와 업종 3개를 내고, 없으면 전체만 낸다. 재료가 같아 묶음과 대표는 업종마다 같고 세기만 다르다 |
+| 고르기 | 묶음이 3개보다 많으면 세기에 비례해 3개를 무작위로 뽑는다(PinnerSage, KDD 2020). 씨앗은 그 업종 재료의 (문구, 무게) 쌍을 정렬해 이은 문자열이라 근거가 같으면 늘 같은 3개다. 그래서 가장 센 묶음이 빠질 수도 있다 |
+| 겹침 | 검색 때 대표 문구와 요청의 코드 없는 조건 문구(취향형, 시설형) 중 하나라도 코사인 유사도가 0.62 이상이면 그 검색에서 뺀다. 요청이 그 취향을 이미 말했다는 뜻이라 빠진 자리는 채우지 않는다 |
+| 비회원 | 기기가 저장한 칩 벡터로 검색할 때마다 같은 계산을 한다. 근거가 같아 결과가 흔들리지 않는다 |
+
+기준값 두 개는 "같은 취향인가"를 매긴 문구 쌍으로 따로 맞췄다(2026-11-11). 문구는 온보딩 "~곳" 문구 90개(실제 회원 문구를 볼 수 없어 Codex가 지은 것)와 대전 리뷰 추출 문장 300개다. 유사도 구간마다 고르게 뽑은 311쌍에 Codex(`gpt-6.1-sol`)가 순서를 바꿔 두 번 정답을 매겼고 99%가 같았다. 방문 맥락 문장이 낀 쌍을 빼면 172쌍(같은 취향 37)이다.
+
+| 기준값 | 값 | 그렇다고 본 것 중 맞음(정밀도) | 정답 중 찾음(재현율) |
+|---|---|---|---|
+| 겹침(코사인) | 0.62 | 0.83 | 0.78 |
+| Ward 멈춤 | 0.90 | 0.68 | 0.86 |
+
+Ward는 묶음이 커질수록 같은 거리에서도 높이가 커진다. 그래서 쌍마다 다른 문구 6~18개를 섞은 회원 한 명분 묶음을 20번 만들어 같은 묶음에 드는지를 봤다. 같은 취향 쌍이 37개뿐이라 표본이 작다. 방문 맥락 문장까지 넣으면 겹침 기준값이 정답과 맞는 정도(F1)가 0.81에서 0.56으로 떨어진다.
+
+묶음은 04:00 갱신 때마다 다시 계산하고, 리뷰 문장도 그때 임베딩한다. 임베딩이 실패하면 코드 취향만 새로 쓰고 묶음은 이전 값을 둔다(6단계 "프로필 갱신 API", profile-storage D-22). 기존 회원은 배포 때 한 번 모두 다시 계산한다(V34).
 
 ## 5단계. 비교할 수 있는 형태로 바꾸기
 
@@ -469,7 +498,7 @@ BE가 해석을 마칠 때마다 `taste_input_logs`에 한 줄을 남긴다(V15)
 
 | 필드 | 내용 |
 |---|---|
-| `features` | `{code, layer, like, weight, category}`. 좋아함과 싫어함을 `like`로 구분해 한 목록에 둔다. `weight`는 0보다 큰 실수(3단계 세기)다. `category`가 null이면 전체 취향, 아니면 그 업종의 취향(4단계)이다. v0은 `weight`가 1~3 정수였고 `category`가 없었다 |
+| `features` | `{code, layer, like, weight, category}`. 좋아함과 싫어함을 `like`로 구분해 한 목록에 둔다. `weight`는 0보다 큰 실수(3단계 세기)다. `category`가 null이면 전체 취향, 아니면 그 업종의 취향(4단계)이다. v0은 `weight`가 1~3 정수였고 `category`가 없었다. 취향 묶음은 `{code: null, layer: null, like: true, weight, category, text, vector}`이다(4단계 "취향 묶음"). `text`는 대표 문구, `vector`는 그 질의 벡터이고, 읽는 쪽은 `code`가 null이면 묶음으로 본다 |
 | `free_texts` | `{text, like, vector}`. 벡터가 없는 문장(`vector: null`)은 보관만 한다 |
 | `evidence` | 2단계의 장부 행 |
 | `embedding` | 모델, 리비전, 취향 쪽 인코딩 방식 |
@@ -478,7 +507,7 @@ BE가 해석을 마칠 때마다 `taste_input_logs`에 한 줄을 남긴다(V15)
 
 ### 프로필 계산 API
 
-BE가 온보딩 취향을 저장할 때 AI API(`ai/server/taste_profile.py`)를 한 번 불러 `features`와 칩 벡터를 받고, `user_preferences.features`와 `tastes[].vector`에 저장한다. 3단계 계산을 하고 GMS는 쓰지 않는다. 코드 없는 `LIKE` 칩의 `label`은 `fit_ai.embedding.encode_queries`(질의, `query: `)로 인코딩하고 서버에서는 Modal `/embed`를 부른다. BE는 Modal 키를 갖지 않는다(S15P31A302-166).
+BE가 온보딩 취향을 저장할 때 AI API(`ai/server/taste_profile.py`)를 한 번 불러 `features`와 칩 벡터를 받고, `user_preferences.features`와 `tastes[].vector`에 저장한다. 3단계 계산을 하고 GMS는 쓰지 않는다. 칩 벡터를 먼저 만들어 취향 묶음 재료로 쓴다(4단계). 코드 없는 `LIKE` 칩의 `label`은 `fit_ai.embedding.encode_queries`(질의, `query: `)로 인코딩하고 서버에서는 Modal `/embed`를 부른다. BE는 Modal 키를 갖지 않는다(S15P31A302-166).
 
 `POST /v1/taste/profile`
 
@@ -498,11 +527,11 @@ BE가 온보딩 취향을 저장할 때 AI API(`ai/server/taste_profile.py`)를 
 |---|---|
 | `mood` | BE `Preferences.Mood`. 없으면 `null`이나 생략 |
 | `priorities`, `purposes` | BE `Preferences.Priority`, `Purpose` 이름. 생략하면 빈 목록 |
-| `tastes` | 해석 API가 준 칩 `{polarity, label, code}`, 10개까지. `label`은 1~20자. 칩 상한으로 막아 범용 임베딩 통로가 되지 않게 한다. 다른 속성(`vector` 등)은 받지 않는다. `code`는 없으면 `null`이나 생략. `code`가 있는 칩만 계산에 쓴다. `LIKE`는 +1, `DISLIKE`는 −1 |
+| `tastes` | 해석 API가 준 칩 `{polarity, label, code}`, 10개까지. `label`은 1~20자. 칩 상한으로 막아 범용 임베딩 통로가 되지 않게 한다. `vector`(1024차원)는 받지만 이 API는 쓰지 않고 직접 만든다. `code`는 없으면 `null`이나 생략. `code`가 있는 칩만 계산에 쓴다. `LIKE`는 +1, `DISLIKE`는 −1 |
 
 BE 태그 이름은 코드표와 달라서(profile-storage 문제 8) 이 API에서 바꾼다. `SPACIOUS` → `SPACIOUS_SEATING`, `VALUE` → `VALUE_FOR_MONEY`, `CONVERSATION` → `PURPOSE_TALK`, `SOLO` → `PURPOSE_SOLO`, `DATE` → `PURPOSE_DATE`, `GATHERING` → `PURPOSE_GROUP`, `WORK_STUDY` → `PURPOSE_WORK`이고 나머지는 같다.
 
-응답 `200`: `{"features": [{"code": "QUIET", "layer": "axis", "like": true, "weight": 1.0, "category": null}, ...], "vectors": [null, [...1024개]]}`. `features`는 근거가 없으면 빈 목록이다. `vectors`는 요청 `tastes`와 같은 순서이고, 코드 없는 `LIKE` 칩만 벡터가 있고 나머지는 `null`이다.
+응답 `200`: `{"features": [{"code": "QUIET", "layer": "axis", "like": true, "weight": 1.0, "category": null}, ...], "vectors": [null, [...1024개]]}`. `features`는 근거가 없으면 빈 목록이다. 벡터가 생긴 코드 없는 `LIKE` 칩은 `features`에 취향 묶음 원소로도 들어간다. 임베딩이 실패하면 묶음 없이 준다. `vectors`는 요청 `tastes`와 같은 순서이고, 코드 없는 `LIKE` 칩만 벡터가 있고 나머지는 `null`이다.
 
 임베딩은 `features`를 막지 않는다. `EMBED_*` 설정이 없거나 Modal 호출이 실패하면 벡터 자리를 `null`로 두고 `200`을 준다. Modal은 단계(연결·읽기)마다 1초만 기다리고 실패해도 다시 부르지 않는다(최악 2초쯤). BE 타임아웃(3초) 안에 `features`를 돌려주기 위해서다. 받은 벡터가 1024차원이 아니거나 유한한 수가 아니어도 벡터만 `null`로 둔다. 콜드 스타트(17~85초)에 걸리면 벡터가 빠지고, 빈 벡터는 `ai/scripts/backfill_taste_vectors.py`로 채운다. BE는 `vectors`가 없는 응답도 받아 벡터 없이 저장한다.
 
@@ -515,7 +544,7 @@ BE 태그 이름은 코드표와 달라서(profile-storage 문제 8) 이 API에�
 
 ### 프로필 갱신 API
 
-04:00 배치(S15P31A302-165)가 회원마다 저장된 온보딩·직접 입력 칩과 리뷰 근거를 보내 `features`를 다시 받는다(profile-storage D-9). 계산 API처럼 3단계 계산만 하고 GMS와 임베딩은 쓰지 않는다. 지운 리뷰, 분석 제외된 리뷰, 탈퇴한 회원은 배치가 거른다(2단계 경계).
+04:00 배치(S15P31A302-165)가 회원마다 저장된 온보딩·직접 입력 칩(저장된 벡터 포함)과 리뷰 근거를 보내 `features`를 다시 받는다(profile-storage D-9). 3단계 계산과 취향 묶음 계산을 하고 GMS는 쓰지 않는다. 취향 묶음 재료인 리뷰 문장은 이때마다 임베딩 앱으로 벡터를 만든다. 04:00의 첫 호출은 임베딩 앱이 콜드 스타트라 단계마다 90초까지 기다린다. 지운 리뷰, 분석 제외된 리뷰, 탈퇴한 회원은 배치가 거른다(2단계 경계).
 
 `POST /v1/taste/refresh`
 
@@ -533,7 +562,7 @@ BE 태그 이름은 코드표와 달라서(profile-storage 문제 8) 이 API에�
 
 | 필드 | 뜻 |
 |---|---|
-| `mood`, `priorities`, `purposes`, `tastes` | 계산 API와 같다 |
+| `mood`, `priorities`, `purposes`, `tastes` | 계산 API와 같다. 다만 `tastes[].vector`는 BE가 저장한 칩 벡터를 그대로 쓴다. 벡터가 없는 코드 없는 `LIKE` 칩은 리뷰 문장과 함께 임베딩한다 |
 | `reviews` | 리뷰 이유 태그 하나마다 한 원소. 생략하면 빈 목록 |
 | `reviews[].placeId`, `reviewId` | BE `places.place_id`, 리뷰 id(숫자) |
 | `reviews[].category` | 장소 업종(식당, 카페, 술집). 다른 값이면 400이다 |
@@ -542,9 +571,9 @@ BE 태그 이름은 코드표와 달라서(profile-storage 문제 8) 이 API에�
 | `reviews[].revisitIntent` | 그 리뷰의 재방문 의사(`reviews.revisit_intent`). 필수다. 근거 무게만 1.5배로 한다 |
 | `bodies` | 리뷰 본문 추출 결과. 리뷰 하나마다 한 원소. 생략하면 빈 목록 |
 | `bodies[].placeId`, `reviewId`, `category`, `createdAt`, `revisitIntent` | `reviews[]`와 같다 |
-| `bodies[].items` | 그 리뷰의 추출 항목 `[{code, direction, liked, kind, text}]`(아래 "본문 추출 API"의 항목에서 `slot`, `quote`를 뺀 것). 코드는 2단계 본문 규칙대로 센다. 코드 없는 항목(`text`, `kind`)은 아직 계산에 쓰지 않는다 |
+| `bodies[].items` | 그 리뷰의 추출 항목 `[{slot, code, direction, liked, kind, text}]`(아래 "본문 추출 API"의 항목에서 `quote`를 뺀 것). 코드는 2단계 본문 규칙대로 세고, 코드 없는 항목은 4단계 "취향 묶음" 재료 규칙대로 고른다 |
 
-이유 태그는 모두 +1로 기록한다. 리뷰 근거가 있으면 응답 `features`에 업종별 취향(4단계)이 함께 온다. 응답은 `features`만 있고 `vectors`는 없다(칩 벡터는 가입 때 저장한 것을 그대로 쓴다). 오류는 계산 API와 같고, 로그에는 리뷰 수와 특징 개수만 남긴다. 리뷰 없이 보내면 계산 API와 같은 `features`다. 샘플 사용자 7번 요청이 `profiles.json`과 같은 `features`를 내는지, 1~6번이 계산 API와 같은 결과를 내는지 같은 테스트 파일이 확인한다.
+이유 태그는 모두 +1로 기록한다. 리뷰 근거가 있으면 응답 `features`에 업종별 취향(4단계)이 함께 온다. 응답은 `{"features": [...], "embeddingFailed": false}`이고 `vectors`는 없다(칩 벡터는 가입 때 저장한 것을 그대로 쓴다). `embeddingFailed`가 참이면 리뷰 문장을 임베딩하지 못해 `features`에 묶음 원소가 없다. BE는 저장된 묶음을 그대로 두고 갱신 시각을 올리지 않는다(profile-storage D-22). 오류는 계산 API와 같고, 로그에는 리뷰 수와 특징 개수만 남긴다. 리뷰 없이 보내면 계산 API와 같은 `features`다. 샘플 사용자 7번 요청이 `profiles.json`과 같은 `features`를 내는지, 1~6번이 계산 API와 같은 결과를 내는지 같은 테스트 파일이 확인한다.
 
 ### 본문 추출 API
 
@@ -614,7 +643,7 @@ ai/
 └─ tests/
 ```
 
-- uv 프로젝트이고 의존성은 `sentence-transformers`, `numpy`, `httpx`, `psycopg`, 서버용 `fastapi`, 개발용 `pytest`, `ruff`, `uvicorn`, `modal`, `pgserver`다. ruff는 lefthook pre-commit에서 스테이징한 `ai/` 파일에 돈다
+- uv 프로젝트이고 의존성은 `sentence-transformers`, `numpy`, `scipy`(취향 묶음의 Ward 묶기), `httpx`, `psycopg`, 서버용 `fastapi`, 개발용 `pytest`, `ruff`, `uvicorn`, `modal`, `pgserver`다. ruff는 lefthook pre-commit에서 스테이징한 `ai/` 파일에 돈다
 - torch는 기본으로 PyPI 빌드를 쓴다. GPU 서버(CUDA 12.8 드라이버)에서는 `uv sync --extra cu128`, CPU 전용 빌드는 `uv sync --extra cpu`로 고른다
 - 40은 `place/`, 41은 `match/`를 쓴다. 41은 `taste` 내부를 가져다 쓰지 않고 프로필 JSON만 읽는다
 - 코드표는 지금 Python 모듈이다. BE·FE가 같은 목록을 읽어야 할 때(공용 특징 코드 목록, 리뷰 spec D-16) JSON으로 옮긴다

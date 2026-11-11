@@ -11,7 +11,7 @@
 - mood: QUIET, LIVELY (선택)
 - priorities: SPACIOUS, SHORT_WAIT, GENEROUS_PORTION, PRETTY_SPACE, VIEW_OUTDOOR, COZY, VALUE
 - purposes: CONVERSATION, SOLO, DATE, GATHERING, WORK_STUDY
-- tastes: `{ polarity: LIKE | DISLIKE, label }`, 최대 10개, 라벨은 공백 제거 후 1~20자, 제어 문자 거부
+- tastes: `{ polarity: LIKE | DISLIKE, label, code, vector }`, 최대 10개, 라벨은 공백 제거 후 1~20자, 제어 문자 거부. `vector`는 있으면 1024개 수다. 해석 API가 코드 없는 좋아함 칩에 준 벡터이고 비회원 검색의 취향 묶음 재료다(taste-profile spec 4단계). 회원 가입 때는 받아도 쓰지 않는다
 
 배열 중복을 제거하며 잘못된 값은 400 `errors[].field`의 `preferences.*`로 안내한다.
 취향 내용은 로그에 남기지 않는다.
@@ -25,7 +25,7 @@ V1은 유지한다. V2는 `auth_users.deleted_at`과 활성 이메일·소문자
 
 ## 취향 분석
 
-공개 `POST /api/v1/onboarding/taste-analysis`는 `{ "text": "..." }`를 받아 `{ "tastes": [...] }`를 반환한다.
+공개 `POST /api/v1/onboarding/taste-analysis`는 `{ "text": "..." }`를 받아 `{ "tastes": [...] }`를 반환한다. 코드 없는 좋아함 칩에는 `vector`가 붙을 수 있다. 직접 입력 기록(`taste_input_logs`)에는 벡터를 빼고 칩만 남긴다.
 Origin은 `AUTH_FRONTEND_ORIGIN`과 같아야 한다. 공백 제거 후 1~100자이며 실패·3초 타임아웃은 일반 문구의 503이다.
 주소(`getRemoteAddr`)별 15분에 30회, 초과는 429다. 고정 창과 주소만 메모리에 저장한다.
 

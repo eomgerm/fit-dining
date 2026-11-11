@@ -59,7 +59,7 @@ AI 호출
 
 - [x] AC-1: 세 API(`/places/nearby`, `/places/search`, `/places/search/region`)에서 인증과 본문 검증을 통과하고 `cursor`가 없는 모든 추천 검색 요청은 요청마다 AI `POST {base-url}/v1/search`를 부른다(차단 중, 주소가 빈 경우, permit을 받지 못한 경우는 AC-13, AC-7, AC-28). 이전 요청의 결과를 다시 쓰지 않는다. `query`에 "근처"가 들어 있다는 이유로 AI 없이 응답하지 않는다. (D-2, D-8, D-9, D-18)
 - [x] AC-2: AI 요청 본문은 [AI 요청](#ai-요청) 표의 속성만 담는다. `query`, `previousConditions`, `mapBounds`, `rulesOnly`, `mapFirst`는 그 표의 목적별 규칙대로이고, `userId`와 `tasteProfile`은 세 목적 모두 AC-3의 경우에만 있다. `cursor`, `preferences`, `conditions`는 없다. `fitdining.ai.modal-key`·`modal-secret`이 비어 있지 않으면 각각 `Modal-Key`·`Modal-Secret` 헤더로 실린다. (D-2, D-3, D-4, D-5, D-18)
-- [x] AC-3: 세션 인증 주체가 있으면(Authorization 헤더는 무시한다) AI 요청의 `userId`는 그 주체의 사용자 id이고, 본문에 `preferences`가 있어도 AI에 보내지 않는다(`tasteProfile` 없음). 로그인 세션이 없으면 비회원이고 AI 요청에 `userId`가 없다. 비회원 요청에 `preferences`가 있으면 AI 요청의 `tasteProfile`은 그 `preferences`를 검증과 정리(AC-18)를 거친 값 그대로 담은 것이다. 속성 이름과 값은 같고, null인 `mood`와 칩의 null인 `code`는 빠지며, `priorities`·`purposes`·`tastes`는 비어 있어도 `[]`로 싣는다. `preferences`가 없으면 `tasteProfile`도 없다. (D-4, D-12)
+- [x] AC-3: 세션 인증 주체가 있으면(Authorization 헤더는 무시한다) AI 요청의 `userId`는 그 주체의 사용자 id이고, 본문에 `preferences`가 있어도 AI에 보내지 않는다(`tasteProfile` 없음). 로그인 세션이 없으면 비회원이고 AI 요청에 `userId`가 없다. 비회원 요청에 `preferences`가 있으면 AI 요청의 `tasteProfile`은 그 `preferences`를 검증과 정리(AC-18)를 거친 값 그대로 담은 것이다. 속성 이름과 값은 같고, null인 `mood`와 칩의 null인 `code`·`vector`는 빠지며(칩 벡터가 있으면 그대로 싣는다, S15P31A302-230), `priorities`·`purposes`·`tastes`는 비어 있어도 `[]`로 싣는다. `preferences`가 없으면 `tasteProfile`도 없다. (D-4, D-12)
 - [x] AC-4: DB 모드에서 `cursor`가 null이 아닌 요청(빈 문자열 포함)은 AI를 부르지 않고 400이다. Authorization은 무시하므로 이 헤더 때문에 401이 먼저 반환되지 않는다. Mock 모드에는 별도 커서 규칙이 적용된다. (D-10)
 
 AI 결과를 카드로
