@@ -36,6 +36,16 @@ class AuthTextTests {
     void normalize_omittedInput_keepsNull() { assertNull(AuthText.strip(null)); }
 
     @Test
+    void email_minimumDomain_accepted() {
+        assertTrue(SignupValue.Validator.valid("email", "a@b.c"));
+    }
+
+    @ParameterizedTest @ValueSource(strings = {"a@b", "a@b..c", "a@.b", "a b@c.d", "a@b. c"})
+    void email_invalidDomainOrWhitespace_rejected(String email) {
+        assertFalse(SignupValue.Validator.valid("email", email));
+    }
+
+    @Test
     void email_maximumLength_accepts254Rejects255() {
         String email = "a".repeat(242) + "@example.com";
         assertTrue(SignupValue.Validator.valid("email", email));

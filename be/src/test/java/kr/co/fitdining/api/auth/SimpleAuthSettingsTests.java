@@ -6,6 +6,18 @@ import org.junit.jupiter.api.*;
 import org.springframework.mock.env.MockEnvironment;
 
 class SimpleAuthSettingsTests {
+    @Test
+    void settings_equalKeyContents_equalAndRedacted() {
+        var first = AuthSettings.load(environment());
+        var second = AuthSettings.load(environment());
+        assertNotSame(first.signingKey(), second.signingKey());
+        assertEquals(first, second);
+        assertEquals(first.hashCode(), second.hashCode());
+        second.signingKey()[0] ^= 1;
+        assertNotEquals(first, second);
+        assertEquals("AuthSettings[redacted]", first.toString());
+    }
+
     MockEnvironment serverEnvironment(String key) {
         return environment().withProperty("APP_ENV", "dev")
                 .withProperty("auth.simple.dev-key", key)

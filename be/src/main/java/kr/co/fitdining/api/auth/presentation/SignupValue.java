@@ -31,7 +31,7 @@ public @interface SignupValue {
         public static boolean valid(String field, String value) {
             if (value == null) return false;
             return switch (field) {
-                case "email" -> value.length() <= 254 && value.matches("(?U)[^\\s@]+@[^\\s@.]+(?:\\.[^\\s@.]+)+");
+                case "email" -> value.length() <= 254 && value.matches("(?U)[^\\s@]++@[^\\s@.]++(?:\\.[^\\s@.]++)++");
                 case "password" -> value.codePointCount(0, value.length()) >= 8
                         && value.getBytes(StandardCharsets.UTF_8).length <= 72
                         && value.matches("(?s).*[a-zA-Z].*") && value.matches("(?s).*[0-9].*");

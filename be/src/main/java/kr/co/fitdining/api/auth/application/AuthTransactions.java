@@ -50,7 +50,7 @@ public class AuthTransactions {
             boolean marketing) {
         Instant now = clock.instant();
         if (verifications.consume(verificationTokenHash, email, now) != 1)
-            throw kr.co.fitdining.api.auth.domain.EmailVerificationFailure.required();
+            throw kr.co.fitdining.api.auth.domain.EmailVerificationFailure.verificationRequired();
         AuthUser created = new AuthUser(UUID.randomUUID().toString(), email, nickname, hash, now, termsVersion);
         created.markEmailVerified(now);
         created.changeContactEmail(email, now);

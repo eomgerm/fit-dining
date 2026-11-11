@@ -105,14 +105,14 @@ public class EmailVerifications {
      * @throws AuthFailure 토큰이 없거나 만료·사용됨·다른 이메일이면 400 verification-required
      */
     public String requireToken(String email, String token) {
-        if (token == null || token.isBlank() || token.length() > MAX_TOKEN_LENGTH) throw EmailVerificationFailure.required();
+        if (token == null || token.isBlank() || token.length() > MAX_TOKEN_LENGTH) throw EmailVerificationFailure.verificationRequired();
         String hash = tokenHash(token);
         Instant now = clock.instant();
         boolean usable = verifications.findByTokenHash(hash)
                 .filter(found -> found.getEmail().equals(email) && found.getConsumedAt() == null
                         && found.getTokenExpiresAt() != null && found.getTokenExpiresAt().isAfter(now))
                 .isPresent();
-        if (!usable) throw EmailVerificationFailure.required();
+        if (!usable) throw EmailVerificationFailure.verificationRequired();
         return hash;
     }
 

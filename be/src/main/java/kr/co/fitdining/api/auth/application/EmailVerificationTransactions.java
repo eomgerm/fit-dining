@@ -114,10 +114,10 @@ public class EmailVerificationTransactions {
     public Confirmation confirm(String email, String codeHash, String tokenHash) {
         Instant now = clock.instant();
         var found = verifications.findTopByEmailOrderByCreatedAtDescIdDesc(email);
-        if (found.isEmpty()) return Confirmation.failed(EmailVerificationFailure.expired());
+        if (found.isEmpty()) return Confirmation.failed(EmailVerificationFailure.codeExpired());
         AuthEmailVerification verification = found.get();
         if (verification.getVerifiedAt() != null || !verification.getExpiresAt().isAfter(now))
-            return Confirmation.failed(EmailVerificationFailure.expired());
+            return Confirmation.failed(EmailVerificationFailure.codeExpired());
         if (verification.attemptsExhausted()) return Confirmation.failed(EmailVerificationFailure.attemptsExceeded());
         if (!MessageDigest.isEqual(verification.getCodeHash().getBytes(StandardCharsets.US_ASCII),
                 codeHash.getBytes(StandardCharsets.US_ASCII))) {

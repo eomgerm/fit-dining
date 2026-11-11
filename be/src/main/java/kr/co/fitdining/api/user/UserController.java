@@ -3,6 +3,8 @@ package kr.co.fitdining.api.user;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 
 import java.time.Instant;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import kr.co.fitdining.api.auth.ports.AuthUseCases.Identity;
 import lombok.RequiredArgsConstructor;
@@ -54,9 +56,11 @@ public class UserController {
     public PreferencesResponse preferences(@PathVariable String userId,
             @AuthenticationPrincipal Identity identity) {
         UserPreferences value = service.preferences(userId, identity);
-        return new PreferencesResponse(value.getMood(), value.getPriorities(), value.getPurposes(),
+        return new PreferencesResponse(value.getMood(),
+                value.getPriorities() == null ? null : Collections.unmodifiableList(Arrays.asList(value.getPriorities())),
+                value.getPurposes() == null ? null : Collections.unmodifiableList(Arrays.asList(value.getPurposes())),
                 value.getTastes().stream().map(StoredTasteChip::chip).toList(), value.getUpdatedAt());
     }
     /** @param mood optional atmosphere @param priorities criteria @param purposes purposes @param tastes tastes @param updatedAt last change */
-    public record PreferencesResponse(String mood, String[] priorities, String[] purposes, List<Preferences.TasteChip> tastes, Instant updatedAt) {}
+    public record PreferencesResponse(String mood, List<String> priorities, List<String> purposes, List<Preferences.TasteChip> tastes, Instant updatedAt) {}
 }

@@ -4,7 +4,9 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
 import java.util.Base64;
+import java.util.Objects;
 import java.util.Set;
 import org.springframework.core.env.Environment;
 
@@ -59,6 +61,7 @@ public record AuthSettings(byte[] signingKey, String origin, boolean cookieSecur
         if (simple) {
             if (email == null || email.isBlank()) email = "dev@fitdining.local";
             if (nickname == null || nickname.isBlank()) nickname = "개발자";
+            // Demo default for simple local mode only; the validation below rejects missing passwords on servers.
             if (local && (password == null || password.isBlank())) password = "fitdining-dev1";
             if (!local && (password == null || password.isBlank() || password.equals("REPLACE_ME")))
                 throw new IllegalArgumentException("AUTH_DEMO_PASSWORD is required for simple authentication on servers");
@@ -82,6 +85,24 @@ public record AuthSettings(byte[] signingKey, String origin, boolean cookieSecur
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 is required for the local signing key", e);
         }
+    }
+
+    @Override public boolean equals(Object other) {
+        if (this == other) return true;
+        if (!(other instanceof AuthSettings that)) return false;
+        return Arrays.equals(signingKey, that.signingKey)
+                && Objects.equals(origin, that.origin)
+                && cookieSecure == that.cookieSecure
+                && Objects.equals(demoEmail, that.demoEmail)
+                && Objects.equals(demoPassword, that.demoPassword)
+                && Objects.equals(demoNickname, that.demoNickname)
+                && simpleEnabled == that.simpleEnabled
+                && Objects.equals(devKey, that.devKey);
+    }
+
+    @Override public int hashCode() {
+        return 31 * Objects.hash(origin, cookieSecure, demoEmail, demoPassword, demoNickname, simpleEnabled, devKey)
+                + Arrays.hashCode(signingKey);
     }
 
     /** Prevents accidental credential disclosure through record-generated logging. */
