@@ -223,6 +223,14 @@ class TestPhraseAndAvoid:
         assert card.reasons[0].title == "책 읽기 좋은 곳에 맞아요"
         assert card.reasons[0].tags[0].label == "책 읽기 좋은 곳"
 
+    def test_phrase_item_label(self) -> None:
+        """카드_맞은코드없는조건문구는_문구그대로태그가된다"""
+        reading = ItemScore(None, True, True, 1, 0.9, 0, False, "책 읽기 좋은 곳")
+
+        card = build_card(scored(reading, item("QUIET", 0.8)))
+
+        assert card.labels == ("책 읽기 좋은 곳", "조용해요")
+
     def test_avoided_request_hidden(self) -> None:
         """카드_피해달라는요청은_점수에만들어가고항목과이유에넣지않는다"""
         card = build_card(

@@ -14,7 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * AI가 읽는 뷰 {@code ai_place_personas}(V25)의 모양을 앱 계정으로 확인한다. 만족한 손님 페르소나만, 장소 프로필이 있는 장소만
+ * AI가 읽는 뷰 {@code ai_place_personas}(V26)의 모양을 앱 계정으로 확인한다. 만족한 손님 페르소나만, 장소 프로필이 있는 장소만
  * 든다(ai/docs/comparison/spec.md 4.2, 4.3).
  */
 class AiPlacePersonasViewTest extends PostgresTestSupport {

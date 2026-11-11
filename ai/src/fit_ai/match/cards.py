@@ -201,10 +201,11 @@ def _labels(place: Place, items: list[ItemScore]) -> tuple[str, ...]:
         (item for item in matched if not item.request),
         key=lambda item: (-item.weight, -item.value),
     )
-    codes = [item.code for item in requested + tastes]
-    labels = [SCORE_LABELS[code] for code in codes[:LABEL_COUNT]]
+    chosen = requested + tastes
+    # 코드 없는 조건 문구 항목은 문구를 태그로 쓴다(근거 항목 `label`과 같다)
+    labels = [_label(item) for item in chosen[:LABEL_COUNT]]
     if len(labels) < LABEL_COUNT:
-        labels += _place_labels(place, set(codes))
+        labels += _place_labels(place, {i.code for i in chosen if i.code is not None})
     return tuple(labels[:LABEL_COUNT])
 
 

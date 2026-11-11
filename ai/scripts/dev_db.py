@@ -128,7 +128,7 @@ CREATE TABLE user_preferences (
 );
 """
 """개발 DB 스키마. 뷰는 BE 마이그레이션 V12·V17~V19의 `ai_place_search`와 같은 컬럼이다. Mock
-장소에는 페르소나가 없어 `ai_place_personas`(V25)는 같은 컬럼의 빈 뷰다. 가까운
+장소에는 페르소나가 없어 `ai_place_personas`(V26)는 같은 컬럼의 빈 뷰다. 가까운
 역(`place_subway`), 영업시간(`place_hour`), 메뉴(`place_menu`)는 BE `place_subways`,
 `place_hours`, `place_menus`(V7)처럼 따로 두고 뷰에서 모은다. 가게 가격(`place_profile.price`)은
 장소 분석 적재가 프로필 쪽에 넣는다고 가정한 자리다. `user_preferences`는 BE 마이그레이션 V2·V6의 컬럼 중 AI가 읽는 것과 온보딩 원본만
