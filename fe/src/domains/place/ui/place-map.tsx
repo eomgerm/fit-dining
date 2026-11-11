@@ -23,8 +23,12 @@ type NaverMap = {
   getBounds(): { getSW(): NaverLatLng; getNE(): NaverLatLng };
   getCenter(): NaverLatLng;
   getZoom(): number;
-  // 지도 컨테이너 기준 화면 좌표(px)를 위경도로 바꾼다
-  getProjection(): { fromOffsetToCoord(offset: unknown): NaverLatLng };
+  // offset(px)과 위경도를 서로 바꾼다. offset은 지도 컨테이너가 아니라 끌 때 함께 움직이는 pane 기준이고,
+  // 그 원점은 확대 정도가 바뀔 때만 다시 잡힌다(끌기나 panTo 뒤에는 옮기기 전 화면의 왼쪽 위다)
+  getProjection(): {
+    fromOffsetToCoord(offset: unknown): NaverLatLng;
+    fromCoordToOffset(coord: NaverLatLng): { x: number; y: number };
+  };
   panTo(coord: NaverLatLng): void;
   morph(coord: NaverLatLng, zoom: number): void;
   // 여백(px)과 최대 확대 정도. 부드러운 이동 없이 바로 옮긴다(FitBoundsOptions)
@@ -494,11 +498,18 @@ export function PlaceMap({
             });
           if (rect && band) {
             const projection = map.getProjection();
-            return toBounds(
-              projection.fromOffsetToCoord(new naver.Point(0, band.bottom)),
+            // 컨테이너 좌표를 offset으로 옮기려고 지금 화면 왼쪽 위(getBounds()의 북서 모서리)의 offset을 더한다
+            const bounds = map.getBounds();
+            const origin = projection.fromCoordToOffset(
+              new naver.LatLng(bounds.getNE().lat(), bounds.getSW().lng()),
+            );
+            const toCoord = (x: number, y: number) =>
               projection.fromOffsetToCoord(
-                new naver.Point(rect.width, band.top),
-              ),
+                new naver.Point(origin.x + x, origin.y + y),
+              );
+            return toBounds(
+              toCoord(0, band.bottom),
+              toCoord(rect.width, band.top),
             );
           }
         } catch {

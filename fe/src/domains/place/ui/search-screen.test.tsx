@@ -481,19 +481,20 @@ describe("SearchScreen", () => {
           return rect(0, 0);
         });
       }
-      // 첫 화면: 지도 800에서 아래 묶음과 겹친 300을 뺀 띠(0~500)
+      // 첫 화면: 지도 800에서 아래 묶음과 겹친 300을 뺀 띠(0~500). 가짜 지도는 화면 왼쪽 위가 getBounds()의
+      // 북서 모서리(37.51, 127.02)이고 아래로 1000px마다 위도 1도, 오른쪽으로 1000px마다 경도 1도다
       const HOME_AREA = {
-        swLat: 38 - 500 / 1000,
-        swLng: 127,
-        neLat: 38,
-        neLng: 127 + 400 / 1000,
+        swLat: 37.01,
+        swLng: 127.02,
+        neLat: 37.51,
+        neLng: 127.42,
       };
       // 결과 화면: 중간 패널 위 끝(320) 위의 띠(0~320)
       const PANEL_AREA = {
-        swLat: 38 - 320 / 1000,
-        swLng: 127,
-        neLat: 38,
-        neLng: 127 + 400 / 1000,
+        swLat: 37.19,
+        swLng: 127.02,
+        neLat: 37.51,
+        neLng: 127.42,
       };
       const REGION_URL = "/api/v1/places/search/region";
       const SEARCH_URL = "/api/v1/places/search";
@@ -703,6 +704,75 @@ describe("SearchScreen", () => {
         // 쿼리 키는 항목 id 그대로다
         const saved = JSON.parse(localStorage.getItem(GUEST_THREADS)!);
         expect(saved[0].turns.at(-1).request).toEqual(searchBodies.at(-1));
+      });
+
+      describe("끌기·panTo처럼 확대 정도가 그대로인 이동 뒤의 보이는 영역 (AC-53, AC-56, AC-70)", () => {
+        // 옮긴 뒤 화면. 왼쪽 위가 (37.53, 127.06)이다. 가짜 지도의 offset 원점은 확대 정도가 바뀔 때만 다시 잡혀
+        // 옮기기 전 화면에 남는다(실제 SDK의 pane처럼)
+        const MOVED = {
+          swLat: 37.52,
+          swLng: 127.06,
+          neLat: 37.53,
+          neLng: 127.08,
+        };
+        // MOVED의 왼쪽 위에서 잰 띠. 검색 요청의 영역은 정규화하지 않아 부동소수점 끝자리까지는 보지 않는다
+        // (홈 요청은 0.001도 격자로 정규화해 같은 값이다)
+        const movedBand = (bottom: number) => ({
+          swLat: expect.closeTo(37.53 - bottom / 1000, 6),
+          swLng: expect.closeTo(127.06, 6),
+          neLat: expect.closeTo(37.53, 6),
+          neLng: expect.closeTo(127.46, 6),
+        });
+
+        it("처음 이동(panTo) 뒤 처음 홈 요청은 옮긴 화면의 띠 영역이다 (AC-70)", async () => {
+          const device = stubLocationLater();
+          stubLayout();
+          renderScreen();
+          await mapReady();
+          await waitFor(() =>
+            expect(device.getCurrentPosition).toHaveBeenCalled(),
+          );
+
+          await device.succeed();
+          await waitFor(() => expect(map.created[0].panTo).toHaveBeenCalled());
+          map.view.bounds = MOVED;
+          map.fire("idle");
+
+          await nearbyList();
+          expect(nearbyBodies).toEqual([{ mapBounds: movedBand(500) }]);
+        });
+
+        it("결과 화면에서 끈 뒤 '이 지역에서 검색'은 끈 화면의 패널 위 띠 영역이다 (AC-56)", async () => {
+          stubLayout();
+          renderScreen();
+          await mapReady();
+          await newSearch("역삼 카페");
+
+          map.view.bounds = MOVED;
+          await regionSearch();
+
+          expect(searchUrls.at(-1)).toBe(REGION_URL);
+          expect(searchBodies.at(-1)?.mapBounds).toEqual(movedBand(320));
+        });
+
+        it("홈에서 카드를 눌러 지도를 옮긴 뒤 새 검색은 옮긴 화면의 띠 영역이다 (AC-53)", async () => {
+          stubLayout();
+          renderScreen();
+          await mapReady();
+          const list = await nearbyList();
+
+          fireEvent.click(
+            within(list)
+              .getAllByRole("button")
+              .filter((button) => button.hasAttribute("aria-pressed"))[1],
+          );
+          expect(map.created[0].panTo).toHaveBeenCalled();
+          map.view.bounds = MOVED;
+          map.fire("idle");
+          await newSearch("역삼 카페");
+
+          expect(searchBodies.at(-1)?.mapBounds).toEqual(movedBand(500));
+        });
       });
 
       it("region의 다음 페이지와 실패 뒤 재시도도 region API로 같은 본문을 보낸다 (AC-56)", async () => {
@@ -2169,15 +2239,16 @@ describe("SearchScreen", () => {
           sizes.notify(400, 800);
 
           await nearbyList();
-          // 돌아온 화면의 위 끝(600)으로 잰 띠 영역 하나로만 받는다(fake 지도는 아래로 1000px마다 위도 1도라 swLat이 37.4)
+          // 돌아온 화면의 위 끝(600)으로 잰 띠 영역 하나로만 받는다. 크기 적용 뒤 화면(AREA_B)의 왼쪽 위
+          // (37.53, 127.06)에서 가짜 지도는 아래로 1000px마다 위도 1도라 swLat이 36.93
           expect(nearbyBodies).toEqual([
             { mapBounds: BOUNDS },
             {
               mapBounds: {
-                swLat: expect.closeTo(37.4, 3),
-                swLng: expect.closeTo(127, 3),
-                neLat: expect.closeTo(38, 3),
-                neLng: expect.closeTo(127.4, 3),
+                swLat: expect.closeTo(36.93, 3),
+                swLng: expect.closeTo(127.06, 3),
+                neLat: expect.closeTo(37.53, 3),
+                neLng: expect.closeTo(127.46, 3),
               },
             },
           ]);

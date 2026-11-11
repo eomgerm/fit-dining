@@ -42,6 +42,13 @@ export function stubNaverMaps({ Marker }: { Marker?: unknown } = {}) {
   const view: { bounds: Bounds; afterSize?: Bounds } = { bounds: BOUNDS };
   // fitBounds 뒤의 확대 정도. 테스트가 바꿔 "움직이지 않음"(15)이나 "너무 확대됨"(19)을 흉내 낸다
   const fit = { zoom: 16 };
+  // 세계 좌표(px). 오른쪽으로 1000px마다 경도 1도, 아래로 1000px마다 위도 1도다
+  const worldOf = (lat: number, lng: number) => ({
+    x: (lng - 127) * 1000,
+    y: (38 - lat) * 1000,
+  });
+  // 지금 화면 왼쪽 위(getBounds()의 북서 모서리)의 세계 좌표
+  const topLeft = () => worldOf(view.bounds.neLat, view.bounds.swLng);
   const maps = {
     Map: class {
       constructor(
@@ -63,20 +70,29 @@ export function stubNaverMaps({ Marker }: { Marker?: unknown } = {}) {
       getZoom = vi.fn(() => 15);
       panTo = vi.fn();
       morph = vi.fn();
-      // 지도 컨테이너 기준 화면 좌표(px)를 위경도로 바꾼다. 아래로 1000px마다 위도 1도, 오른쪽으로 1000px마다 경도 1도
+      // offset 원점의 세계 좌표. 실제 SDK처럼 offset은 지도 컨테이너가 아니라 끌 때 함께 움직이는 pane 기준이고,
+      // 그 원점은 지도를 만들 때와 확대 정도가 바뀔 때만 그때 화면 왼쪽 위로 다시 잡힌다. 그래서 끌기나 panTo
+      // (테스트가 view.bounds를 바꿈) 뒤에는 offset (0, 0)이 옮기기 전 화면의 왼쪽 위다
+      pane = topLeft();
       getProjection = () => ({
         fromOffsetToCoord: ({ x, y }: { x: number; y: number }) =>
-          latLng(38 - y / 1000, 127 + x / 1000),
+          latLng(38 - (this.pane.y + y) / 1000, 127 + (this.pane.x + x) / 1000),
+        fromCoordToOffset: (coord: { lat(): number; lng(): number }) => {
+          const world = worldOf(coord.lat(), coord.lng());
+          return { x: world.x - this.pane.x, y: world.y - this.pane.y };
+        },
       });
       // 문서대로 부드러운 이동 없이 그 자리에서 중심과 확대 정도를 바꾸고, 옵션의 maxZoom을 넘지 않는다
       fitBounds = vi.fn((_: unknown, options?: { maxZoom?: number }) => {
         const zoom = Math.min(fit.zoom, options?.maxZoom ?? Infinity);
         if (zoom === this.getZoom()) return;
         this.getZoom.mockReturnValue(zoom);
+        this.pane = topLeft();
         emit(this, "zoom_changed");
       });
       setZoom = vi.fn((zoom: number) => {
         this.getZoom.mockReturnValue(zoom);
+        this.pane = topLeft();
         emit(this, "zoom_changed");
       });
       setSize = vi.fn(() => {
