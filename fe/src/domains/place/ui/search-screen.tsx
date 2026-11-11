@@ -37,7 +37,6 @@ import {
 } from "../model/bookmark";
 import type {
   CategoryGroup,
-  MapBounds,
   PlaceCard,
   PlaceSearchResponse,
   SearchRequest,
@@ -98,12 +97,6 @@ const REPEAT_UNAVAILABLE_MESSAGE = "다시 검색할 수 없어요";
 const MAP_FAILED_TITLE = "지도를 불러오지 못했어요";
 const MAP_FAILED_DESCRIPTION =
   "주변 추천을 보려면 지도가 필요해요. 아래 검색창으로 장소를 직접 찾아볼 수 있어요.";
-
-const sameBounds = (a: MapBounds, b: MapBounds) =>
-  a.swLat === b.swLat &&
-  a.swLng === b.swLng &&
-  a.neLat === b.neLat &&
-  a.neLng === b.neLng;
 
 // 홈 진입 판정에 쓰는 화면 종류(spec 73번). 결과·과거 결과나 저장한 장소를 보다가 홈이 되는 것만 진입이다
 type ScreenKind = "home" | "results" | "searching" | "saved";
@@ -172,11 +165,6 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
   const [invalidArea, setInvalidArea] = useState(false);
   // 사용자가 지도를 끌거나 확대·축소한 뒤 아직 멈추지 않았다. 그 사이에는 홈 영역을 확정하지 않는다(spec 70번)
   const [userMoving, setUserMoving] = useState(false);
-  // 홈에서 사용자 이동이나 "내 위치" 이동이 있었는지와, 홈 "이 지역에서 검색" 버튼을 보일지(spec 74번)
-  const [homeMoved, setHomeMoved] = useState(false);
-  const [homeButton, setHomeButton] = useState(false);
-  // "내 위치"가 지도를 옮기는 중. 그 이동이 멈추면(idle) 홈에서 옮긴 것으로 센다
-  const myLocationMoving = useRef(false);
   // 확정 중인 홈 진입 번호. 같은 진입을 두 번 재지 않는다
   const confirmingEntry = useRef<number | undefined>(undefined);
   // 확정 시도 번호. 홈을 떠나면 올려, 기다리던 확정의 결과를 버린다
@@ -283,8 +271,6 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
       (lastScreen === "results" || lastScreen === "saved")
     ) {
       setEntryFrom(home.entry);
-      setHomeMoved(false);
-      setHomeButton(false);
     }
   }
   // 세션 변경(reset)이 같은 때 번호를 올렸으면 그것으로 진입이 반영된 것이라 한 번이다(spec 73번)
@@ -340,9 +326,7 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
         setInvalidArea(true);
         return;
       }
-      searchStore.setHomeBounds(entry, area, coverTop);
-      setHomeMoved(false);
-      setHomeButton(false);
+      searchStore.setHomeBounds(entry, area);
     });
   });
   const homeReady =
@@ -389,8 +373,6 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
     setRecentOpen(false);
     setPanel("middle");
     // store가 홈 영역을 비웠으므로(reset) 홈이 보이면 지금 화면으로 다시 확정한다(spec 73번)
-    setHomeMoved(false);
-    setHomeButton(false);
     setInvalidArea(false);
   });
   const seenEpoch = useRef(epoch);
@@ -620,7 +602,7 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
   // 찾는 중에 다시 누르면 무시한다. 남은 처음 이동을 대신하고, 얻은 위치로 확대 정도를 첫 화면과 같게 맞추며
   // 옮긴 뒤 파란색을 끈다(D-100, D-104). 실패 알림은 누를 때마다 띄운다
   // 처음 이동이 남아 있으면 버튼이 가져가고, 이동이 끝나거나 위치를 못 얻은 뒤에 끝낸다(spec 70번).
-  // 홈에서는 지도만 옮기고 카드는 다시 받지 않는다. 지도가 실제로 움직였으면 "이 지역에서 검색"을 판정한다(spec 74번)
+  // 홈에서는 지도만 옮기고 카드는 다시 받지 않는다(spec 74번)
   async function handleMyLocation() {
     if (locating) return;
     setLocating(true);
@@ -631,48 +613,15 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
       toast(LOCATION_FAILED_MESSAGE);
       return;
     }
-    myLocationMoving.current = true;
     await mapRef.current?.panTo(found, { resetZoom: true });
-    myLocationMoving.current = false;
     searchStore.finishInitialView("button");
     setLocating(false);
   }
 
-  // 지도가 멈췄다. 홈에서 옮긴 적이 있으면 확정 때의 덮는 UI 위 끝으로 지금 영역을 재서 홈 영역과 다르면
-  // "이 지역에서 검색"을 보인다. 판정은 멈출 때만 한다(spec 74번)
+  // 지도가 멈췄다. 사용자 이동이 끝났으니 홈 영역을 확정할 수 있고, 유효하지 않아 막힌 확정은 다시 잰다(spec 70번, 71번)
   function handleMapIdle() {
     setUserMoving(false);
     if (invalidArea) setInvalidArea(false);
-    const movedByMyLocation = myLocationMoving.current;
-    if (movedByMyLocation) {
-      myLocationMoving.current = false;
-      if (homeVisible) setHomeMoved(true);
-    }
-    if (!homeVisible || !home.bounds || !(homeMoved || movedByMyLocation)) {
-      return;
-    }
-    const current = mapRef.current?.visibleBounds(home.coverTop);
-    setHomeButton(
-      current !== undefined &&
-        !sameBounds(normalizeBounds(current), home.bounds),
-    );
-  }
-
-  // 홈 "이 지역에서 검색". 확정 때의 덮는 UI 위 끝으로 지금 영역을 재서 새 홈 영역으로 삼고, 선택은 첫 카드로 되돌린다
-  function handleHomeRegionSearch() {
-    const current = mapRef.current?.visibleBounds(home.coverTop);
-    if (!current) return;
-    const area = normalizeBounds(current);
-    setHomeMoved(false);
-    setHomeButton(false);
-    if (!isValidBounds(area)) {
-      // 요청하지 않고 지도 실패 안내를 보인다. 영역을 비워 다음 멈춤에서 다시 잰 영역으로 확정한다(spec 71번)
-      searchStore.beginHomeEntry();
-      setInvalidArea(true);
-      return;
-    }
-    searchStore.setHomeBounds(home.entry, area, home.coverTop);
-    searchStore.select(undefined);
   }
 
   const savedItems =
@@ -740,7 +689,6 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
         onUserMove={() => {
           setMapMoved(true);
           setUserMoving(true);
-          if (homeVisible) setHomeMoved(true);
           // 사용자가 지도를 움직이면 남은 처음 이동은 하지 않는다(spec 62번)
           stopInitialMoveByUser();
         }}
@@ -777,23 +725,6 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
                 variant="outline"
                 size="sm"
                 onClick={handleRegionSearch}
-                className="absolute top-safe-4 left-1/2 -translate-x-1/2"
-              >
-                <RefreshIcon size="sm" className="mr-1" />이 지역에서 검색
-              </Button>
-            )}
-
-          {/* 홈의 "이 지역에서 검색". 결과 화면의 버튼과 같은 자리·모양이다(spec 74번) */}
-          {mapReady &&
-            homeVisible &&
-            homeButton &&
-            homeArea &&
-            !homeUnavailable &&
-            !nearbyOffline && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleHomeRegionSearch}
                 className="absolute top-safe-4 left-1/2 -translate-x-1/2"
               >
                 <RefreshIcon size="sm" className="mr-1" />이 지역에서 검색

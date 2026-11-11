@@ -208,7 +208,7 @@ type PlaceMapProps = {
   onPinClick: (id: number) => void;
   // 사용자가 지도를 끌거나 확대·축소했을 때. panTo 같은 코드의 이동으로는 부르지 않는다
   onUserMove?: () => void;
-  // 지도가 멈췄을 때(idle). 홈의 "이 지역에서 검색" 판정에 쓴다(spec 74번)
+  // 지도가 멈췄을 때(idle). 홈 영역 확정을 다시 시작하는 데 쓴다(spec 70번, 71번)
   onIdle?: () => void;
   // 지도가 그려졌는지. 지도 위 버튼("이 지역에서 검색", "내 위치")을 이것으로 보인다
   onReadyChange?: (ready: boolean) => void;

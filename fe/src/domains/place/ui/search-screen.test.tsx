@@ -2088,12 +2088,19 @@ describe("SearchScreen", () => {
           sizes.notify(400, 800);
 
           await nearbyList();
-          // 돌아온 화면의 위 끝(600)으로 잰 띠 영역 하나로만 받는다
-          expect(homeArea().coverTop).toBe(600);
+          // 돌아온 화면의 위 끝(600)으로 잰 띠 영역 하나로만 받는다(fake 지도는 아래로 1000px마다 위도 1도라 swLat이 37.4)
           expect(nearbyBodies).toEqual([
             { mapBounds: BOUNDS },
-            { mapBounds: homeArea().bounds },
+            {
+              mapBounds: {
+                swLat: expect.closeTo(37.4, 3),
+                swLng: expect.closeTo(127, 3),
+                neLat: expect.closeTo(38, 3),
+                neLng: expect.closeTo(127.4, 3),
+              },
+            },
           ]);
+          expect(homeArea().bounds).toEqual(nearbyBodies[1].mapBounds);
         });
 
         it("크기 적용을 기다리는 사이 화면이 없어지면 영역 없이 끝나 요청하지 않는다 (AC-70)", async () => {
@@ -2236,214 +2243,56 @@ describe("SearchScreen", () => {
         });
       });
 
-      describe("홈 '이 지역에서 검색' (AC-71)", () => {
-        it("카드를 넘겨 지도가 옮겨져도 보이지 않고, 끌어서 영역이 달라지면 멈출 때 보이며, 같은 격자로 돌아오면 숨는다", async () => {
+      describe("홈에는 '이 지역에서 검색'이 없다 (AC-71)", () => {
+        it("카드를 넘기고 끌거나 확대·축소해 멈춘 뒤에도 버튼이 없고, 카드·선택·홈 영역이 그대로이며 nearby 요청이 없다", async () => {
+          const pins = stubMapWithPins();
           renderScreen();
           await mapReady();
           const list = await nearbyList();
+          const pinCount = pins.count();
 
           fireEvent.click(cardButtons(list)[1]);
           map.view.bounds = AREA_B;
           map.fire("idle");
           expect(regionButton()).toBeNull();
 
-          // 멈추기 전에는 판정하지 않는다
-          map.fire("dragend");
-          expect(regionButton()).toBeNull();
-          map.fire("idle");
-          expect(regionButton()).toBeTruthy();
-
-          dragTo({ ...BOUNDS, swLat: BOUNDS.swLat + 0.0001 });
-          expect(regionButton()).toBeNull();
-          // 끌기와 카드 panTo는 홈 영역을 바꾸지 않는다
-          expect(homeArea().bounds).toEqual(BOUNDS);
-          expect(nearbyBodies).toHaveLength(1);
-        });
-
-        it("누르면 그 영역으로 한 번 받아 새 홈 영역이 되고, 받기 전에는 이전 카드·핀 없이 skeleton이며 선택은 첫 카드로 돌아가고, 그 뒤 카드 panTo로는 다시 보이지 않는다", async () => {
-          const pins = stubMapWithPins();
-          renderScreen();
-          await mapReady();
-          const list = await nearbyList();
-          fireEvent.click(cardButtons(list)[1]);
           dragTo(AREA_B);
-
-          fireEvent.click(regionButton()!);
-
-          expect(skeleton()).toBeTruthy();
-          expect(pins.count()).toBe(0);
           expect(regionButton()).toBeNull();
-          const next = await nearbyList();
-          expect(nearbyBodies).toEqual([
-            { mapBounds: BOUNDS },
-            { mapBounds: AREA_B },
-          ]);
-          expect(homeArea().bounds).toEqual(AREA_B);
-          expect(cardButtons(next)[0].getAttribute("aria-pressed")).toBe(
+
+          map.fire("zoom_changed");
+          map.view.bounds = { ...AREA_B, swLat: AREA_B.swLat + 0.01 };
+          map.fire("idle");
+          expect(regionButton()).toBeNull();
+
+          expect(skeleton()).toBeNull();
+          expect(pins.count()).toBe(pinCount);
+          expect(cardButtons(list)[1].getAttribute("aria-pressed")).toBe(
             "true",
           );
-
-          fireEvent.click(cardButtons(next)[1]);
-          map.view.bounds = BOUNDS;
-          map.fire("idle");
-          expect(regionButton()).toBeNull();
-        });
-
-        it("누르는 순간 다시 잰 영역이 유효하지 않으면 요청 없이 지도 실패 안내를 보이고, 다음 멈춤에서 다시 잰 영역이 유효하면 그 영역으로 받는다 (AC-65, AC-73)", async () => {
-          renderScreen();
-          await mapReady();
-          await nearbyList();
-          dragTo(AREA_B);
-          // 멈춘 뒤 영역이 유효하지 않게 바뀌었다(경도의 SW가 NE보다 크다)
-          map.view.bounds = {
-            swLat: 37.49,
-            swLng: 127.05,
-            neLat: 37.51,
-            neLng: 127.02,
-          };
-
-          fireEvent.click(regionButton()!);
-
-          expect(await screen.findByText(MAP_FAILED)).toBeTruthy();
-          expect(regionButton()).toBeNull();
-          expect(nearbyBodies).toHaveLength(1);
-
-          dragTo(AREA_B);
-
-          await nearbyList();
-          expect(screen.queryByText(MAP_FAILED)).toBeNull();
-          expect(nearbyBodies).toEqual([
-            { mapBounds: BOUNDS },
-            { mapBounds: AREA_B },
-          ]);
-          expect(homeArea().bounds).toEqual(AREA_B);
-        });
-
-        it("영역을 확정하기 전에는 끌어서 멈춰도 보이지 않는다", async () => {
-          controlResize();
-          renderScreen();
-          await mapReady();
-          await nearbyList();
-          await newSearch("역삼 카페");
-          // 홈 진입의 확정이 크기 적용을 기다린다
-          resizeMapElement(400, 800);
-          fireEvent.click(screen.getByRole("button", { name: "새 검색" }));
+          expect(homeArea().bounds).toEqual(BOUNDS);
           await act(async () => {});
-          expect(homeArea().bounds).toBeUndefined();
-
-          dragTo(AREA_B);
-
-          expect(regionButton()).toBeNull();
-          expect(skeleton()).toBeTruthy();
+          expect(nearbyBodies).toEqual([{ mapBounds: BOUNDS }]);
         });
 
-        it("보이던 중 지도가 실패하면 숨는다", async () => {
-          let broken = false;
-          map = stubNaverMaps({
-            Marker: class {
-              setMap() {}
-              setZIndex() {}
-              setIcon() {
-                // 인증 실패 직후처럼 SDK 호출이 던진다
-                if (broken) throw new TypeError("Cannot read properties");
-              }
-            },
-          });
-          renderScreen();
-          await mapReady();
-          const list = await nearbyList();
-          dragTo(AREA_B);
-          expect(regionButton()).toBeTruthy();
-
-          broken = true;
-          fireEvent.click(cardButtons(list)[1]);
-
-          expect(await screen.findByText(MAP_FAILED)).toBeTruthy();
-          expect(regionButton()).toBeNull();
-        });
-
-        it("연결 오류 전체 안내 중에는 끌어서 영역이 달라져도 보이지 않는다", async () => {
-          renderScreen();
-          await mapReady();
-          await nearbyList();
-          const original = globalThis.fetch;
-          vi.stubGlobal(
-            "fetch",
-            vi.fn<typeof fetch>((input, init) =>
-              String(input) === "/api/v1/places/nearby"
-                ? Promise.reject(new TypeError("Failed to fetch"))
-                : original(input, init),
-            ),
-          );
-          dragTo(AREA_B);
-          fireEvent.click(regionButton()!);
-          expect(
-            await screen.findByText("인터넷에 연결되어 있지 않아요"),
-          ).toBeTruthy();
-
-          dragTo({ ...AREA_B, swLat: 37.51 });
-
-          expect(regionButton()).toBeNull();
-        });
-
-        it("홈 진입 때 옮긴 적이 있다는 표시를 지워, 그 뒤 카드 panTo만으로는 보이지 않는다", async () => {
-          renderScreen();
-          await mapReady();
-          await nearbyList();
-          dragTo(AREA_B);
-          expect(regionButton()).toBeTruthy();
-          await newSearch("역삼 카페");
-
-          fireEvent.click(screen.getByRole("button", { name: "새 검색" }));
-          const list = await nearbyList();
-          expect(regionButton()).toBeNull();
-          expect(homeArea().bounds).toEqual(AREA_B);
-
-          fireEvent.click(cardButtons(list)[1]);
-          map.view.bounds = BOUNDS;
-          map.fire("idle");
-          expect(regionButton()).toBeNull();
-        });
-
-        it("'내 위치'를 누르면 지도만 옮기고 카드는 그대로이며 요청이 없고, 실제로 움직여 영역이 달라졌으면 멈출 때 보인다 (AC-45)", async () => {
+        it("'내 위치'로 지도가 실제로 옮겨져 영역이 달라져도 버튼이 없고, 카드는 그대로이며 nearby 요청이 없다 (AC-45)", async () => {
           stubLocation({ permission: "prompt", position: HERE });
           renderScreen();
           await mapReady();
-          await nearbyList();
+          const list = await nearbyList();
 
           fireEvent.click(screen.getByRole("button", { name: "내 위치" }));
           await waitFor(() => expect(map.created[0].morph).toHaveBeenCalled());
           map.view.bounds = AREA_B;
           map.fire("idle");
 
-          expect(regionButton()).toBeTruthy();
-          expect(
-            screen.getByRole("region", { name: "주변 추천 장소" }),
-          ).toBeTruthy();
-          expect(nearbyBodies).toHaveLength(1);
-          expect(homeArea().bounds).toEqual(BOUNDS);
-        });
-
-        it("'내 위치'로 지도가 움직이지 않았으면 그 뒤 멈춤에도 보이지 않는다", async () => {
-          stubLocation({ permission: "prompt", position: HERE });
-          renderScreen();
-          await mapReady();
-          await nearbyList();
-          // 이미 내 위치이고 확대 정도가 15다
-          map.created[0].getCenter.mockReturnValue({
-            lat: () => HERE.lat,
-            lng: () => HERE.lng,
-          });
-          const button = screen.getByRole("button", { name: "내 위치" });
-
-          fireEvent.click(button);
-          await waitFor(() =>
-            expect(button.getAttribute("aria-busy")).toBe("false"),
-          );
-          map.view.bounds = AREA_B;
-          map.fire("idle");
-
           expect(regionButton()).toBeNull();
+          expect(skeleton()).toBeNull();
+          expect(screen.getByRole("region", { name: "주변 추천 장소" })).toBe(
+            list,
+          );
+          expect(homeArea().bounds).toEqual(BOUNDS);
+          await act(async () => {});
+          expect(nearbyBodies).toEqual([{ mapBounds: BOUNDS }]);
         });
       });
 

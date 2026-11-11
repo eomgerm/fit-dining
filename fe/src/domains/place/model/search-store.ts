@@ -27,12 +27,11 @@ export type InitialView = "pending" | "applying" | "done";
 // user는 사용자의 끌기·확대·축소, fit은 결과 맞춤 이동, map은 지도 실패다
 export type InitialViewEnd = "initial" | "button" | "user" | "fit" | "map";
 
-// 홈 주변 카드의 영역(spec 72번, 73번). entry는 홈 진입 번호이고, bounds는 그 진입에서 확정한 정규화 영역,
-// coverTop은 그때 잰 덮는 UI의 위 끝(화면 좌표)이다. 확정 전에는 bounds가 없다
+// 홈 주변 카드의 영역(spec 72번, 73번). entry는 홈 진입 번호이고, bounds는 그 진입에서 확정한 정규화 영역이다.
+// 확정 전에는 bounds가 없다
 export type HomeArea = {
   entry: number;
   bounds?: MapBounds;
-  coverTop?: number;
 };
 
 // 앱을 열 때의 위치 조회 결과 중 화면이 알려야 하는 것(spec 63번)
@@ -265,13 +264,9 @@ export function createSearchStore(now: () => number = Date.now) {
     },
 
     // 지금 홈 진입의 영역을 확정한다. 지난 진입의 늦은 결과는 버린다(spec 72번)
-    setHomeBounds(
-      entry: number,
-      bounds: MapBounds,
-      coverTop: number | undefined,
-    ) {
+    setHomeBounds(entry: number, bounds: MapBounds) {
       if (entry !== state.home.entry) return;
-      update({ home: { entry, bounds, coverTop } });
+      update({ home: { entry, bounds } });
     },
 
     noticeLocation(notice: LocationNotice) {

@@ -497,12 +497,8 @@ describe("createSearchStore", () => {
     const { store } = setup();
     const area = { swLat: 37.49, swLng: 127.02, neLat: 37.51, neLng: 127.05 };
     const first = store.getSnapshot().home.entry;
-    store.setHomeBounds(first, area, 700);
-    expect(store.getSnapshot().home).toEqual({
-      entry: first,
-      bounds: area,
-      coverTop: 700,
-    });
+    store.setHomeBounds(first, area);
+    expect(store.getSnapshot().home).toEqual({ entry: first, bounds: area });
 
     store.beginHomeEntry();
     const second = store.getSnapshot().home.entry;
@@ -510,20 +506,17 @@ describe("createSearchStore", () => {
     expect(store.getSnapshot().home.bounds).toBeUndefined();
 
     // 지난 진입의 늦은 확정은 버린다
-    store.setHomeBounds(first, area, 700);
+    store.setHomeBounds(first, area);
     expect(store.getSnapshot().home.bounds).toBeUndefined();
-    store.setHomeBounds(second, area, 640);
-    expect(store.getSnapshot().home).toMatchObject({
-      bounds: area,
-      coverTop: 640,
-    });
+    store.setHomeBounds(second, area);
+    expect(store.getSnapshot().home).toEqual({ entry: second, bounds: area });
   });
 
   it("로그인 세션이 바뀌면 홈 영역을 비우고 진입 번호를 올린다(spec 73번)", () => {
     const { store } = setup();
     const area = { swLat: 37.49, swLng: 127.02, neLat: 37.51, neLng: 127.05 };
     const entry = store.getSnapshot().home.entry;
-    store.setHomeBounds(entry, area, 700);
+    store.setHomeBounds(entry, area);
 
     store.reset();
 
