@@ -20,7 +20,16 @@ type PickerFieldProps = {
 };
 
 // 기기의 날짜·시간 고르기를 여는 칸. 보이지 않는 기본 입력을 칸 위에 덮어 누르면 기기 고르기가 열리고,
-// 칸에는 쓰는 쪽이 만든 글자("11월 14일 (토)", "저녁 7:00")를 보인다
+// 칸에는 쓰는 쪽이 만든 글자("11월 14일 (토)", "저녁 7:00")를 보인다.
+// 데스크톱 크롬은 입력 오른쪽의 달력 아이콘을 눌러야만 고르기를 열어, 칸 어디를 눌러도 열리게 showPicker를 부른다
+function openPicker(input: HTMLInputElement) {
+  try {
+    input.showPicker?.();
+  } catch {
+    // 지원하지 않거나 막힌 브라우저는 기본 동작을 그대로 둔다
+  }
+}
+
 export function PickerField({
   type,
   label,
@@ -62,6 +71,7 @@ export function PickerField({
         max={max}
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
+        onClick={(event) => openPicker(event.currentTarget)}
         className="absolute inset-0 size-full cursor-pointer opacity-0 disabled:cursor-default"
       />
     </div>
