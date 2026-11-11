@@ -28,13 +28,19 @@ class SocialInfrastructureTests {
         Clock clock = Clock.systemUTC();
         var tokens = new SocialTokens(new NimbusTokenCodec(new byte[32], clock), clock);
         String legacy = tokens.encode("social_signup", "kakao", "subject");
-        assertArrayEquals(new String[]{"kakao", "subject", ""}, tokens.decode(legacy, "social_signup", 3));
-        assertThrows(AuthFailure.class, () -> tokens.decode(legacy + "x", "social_signup", 3));
+        assertEquals("Invalid cookie payload",
+                assertThrows(AuthFailure.class, () -> tokens.decode(legacy, "social_signup", 3)).getMessage());
+        for (String email : List.of("", "person@example.com")) {
+            assertArrayEquals(new String[]{"kakao", "subject", email},
+                    tokens.decode(tokens.encode("social_signup", "kakao", "subject", email), "social_signup", 3));
+        }
+        String valid = tokens.encode("social_signup", "kakao", "subject", "person@example.com");
+        assertThrows(AuthFailure.class, () -> tokens.decode(valid + "x", "social_signup", 3));
         assertThrows(AuthFailure.class, () -> tokens.decode(tokens.encode("social_signup", "kakao"), "social_signup", 3));
         assertThrows(AuthFailure.class, () -> tokens.decode(tokens.encode("social_signup", "kakao", "subject", "", "extra"), "social_signup", 3));
         assertThrows(AuthFailure.class, () -> tokens.decode(tokens.encode("oauth_state", "kakao", "subject"), "social_signup", 3));
         var expired = new SocialTokens(new NimbusTokenCodec(new byte[32], Clock.offset(clock, Duration.ofMinutes(11))), clock);
-        assertThrows(AuthFailure.class, () -> expired.decode(legacy, "social_signup", 3));
+        assertThrows(AuthFailure.class, () -> expired.decode(valid, "social_signup", 3));
     }
 
     @Test

@@ -50,19 +50,30 @@ class ContactEmailTests extends PostgresTestSupport {
         return new Cookie("fitdining_session", value.substring("fitdining_session=".length()));
     }
 
-    @Test void legacyCookieCanInspectAndSignupWithVerifiedContactEmail() throws Exception {
+    @Test void legacyCookieCannotInspectOrSignupEvenWithVerifiedContactEmail() throws Exception {
         String legacy = tokens.encode("social_signup", "google", UUID.randomUUID().toString());
         var cookie = new Cookie("fitdining_social", legacy);
-        mvc.perform(get("/api/auth/social/signup").cookie(cookie)).andExpect(status().isOk())
-                .andExpect(jsonPath("$.email").isEmpty());
+        mvc.perform(get("/api/auth/social/signup").cookie(cookie)).andExpect(status().isUnauthorized())
+                .andExpect(content().contentTypeCompatibleWith("application/problem+json"))
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.type").doesNotExist())
+                .andExpect(jsonPath("$.title").value("Unauthorized"))
+                .andExpect(jsonPath("$.status").value(401))
+                .andExpect(jsonPath("$.detail").value("인증을 확인해주세요."));
         mvc.perform(post("/api/auth/social/signup").cookie(cookie).with(SessionTestSupport.csrf())
                 .header("Origin", "http://localhost:3000").contentType("application/json").content(body("")))
-                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.type").value(EmailVerificationFailure.REQUIRED.toString()));
+                .andExpect(status().isUnauthorized());
         String email = email();
         mvc.perform(post("/api/auth/social/signup").cookie(cookie).with(SessionTestSupport.csrf())
                 .header("Origin", "http://localhost:3000").contentType("application/json")
                 .content(body(",\"contactEmail\":\"" + email + "\",\"verificationToken\":\"" + verifiedToken(email) + "\"")))
-                .andExpect(status().isCreated());
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentTypeCompatibleWith("application/problem+json"))
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.type").doesNotExist())
+                .andExpect(jsonPath("$.title").value("Unauthorized"))
+                .andExpect(jsonPath("$.status").value(401))
+                .andExpect(jsonPath("$.detail").value("인증을 확인해주세요."));
     }
 
     @Test void malformedContactEmailIsAFieldErrorBeforeVerification() throws Exception {

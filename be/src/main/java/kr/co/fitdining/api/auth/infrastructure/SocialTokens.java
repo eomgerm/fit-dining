@@ -29,9 +29,6 @@ public class SocialTokens {
 
     public String[] decode(String token, String type, int count) {
         String[] fields = codec.decode(token, type).userId().split("\\.", -1);
-        if ("social_signup".equals(type) && count == 3 && fields.length == 2) {
-            fields = new String[]{fields[0], fields[1], ""};
-        }
         if (fields.length != count) throw new AuthFailure("Invalid cookie payload");
         return Arrays.stream(fields)
                 .map(v -> new String(Base64.getUrlDecoder().decode(v), StandardCharsets.UTF_8))
