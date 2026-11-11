@@ -319,7 +319,7 @@ FE 홈 주변 카드 (D-111)
   searchStore 처음 이동      : initialView에 더해 처음 이동을 "내 위치"가 가졌는지와, done이 사용자 이동으로 생겼는지 (이름은 재량, 70번)
   PlaceMap 핸들 (메서드 이름은 재량)
     크기가 SDK에 적용된 뒤의 보이는 영역(덮는 UI의 위 끝) → Promise<MapBounds | undefined>   (72번)
-    지도가 멈췄을 때(idle) 알리는 콜백                                                         (74번)
+    지도가 멈췄을 때(idle) 알리는 콜백                                                         (70번, 71번)
 ```
 
 설정:
