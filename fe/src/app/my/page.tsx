@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { getSession, logout, subscribe } from "@/domains/auth/api/auth-client";
 import {
   getUserProfile,
+  updateContactEmail,
+  updateMarketingConsent,
   withdraw,
   type UserProfile,
 } from "@/domains/auth/api/user-profile";
@@ -20,6 +22,17 @@ import { ConfirmDialog } from "@/shared/ui/overlay/confirm-dialog";
 import { useToast } from "@/shared/ui/overlay/toast";
 import { Screen } from "@/shared/ui/layout/screen";
 import { TopBar } from "@/shared/ui/layout/top-bar";
+import {
+  EmailVerification,
+  type VerifiedEmail,
+} from "@/domains/auth/ui/email-verification";
+import { BottomSheet } from "@/shared/ui/overlay/bottom-sheet";
+import { Checkbox } from "@/shared/ui/form/checkbox";
+import {
+  validationFieldError,
+  VERIFICATION_REQUIRED_TYPE,
+} from "@/domains/auth/api/signup-error";
+import { signupMessages } from "@/domains/auth/model/signup";
 const loginMessages = {
   email: "이메일로 로그인했어요",
   kakao: "카카오 계정으로 로그인했어요",
@@ -33,6 +46,75 @@ export default function MyPage() {
   const [error, setError] = useState("");
   const [dialog, setDialog] = useState<"logout" | "withdraw" | null>(null);
   const [busy, setBusy] = useState(false);
+  const [contactOpen, setContactOpen] = useState(false);
+  const [verified, setVerified] = useState<VerifiedEmail | null>(null);
+  const [saving, setSaving] = useState(false);
+  const saveLock = useRef(false);
+  const [contactError, setContactError] = useState("");
+  const [contactReset, setContactReset] = useState(0);
+  const [contactFieldError, setContactFieldError] = useState<string>();
+  const [contactDraft, setContactDraft] = useState<string>();
+  async function saveContact() {
+    if (!verified || saveLock.current) return;
+    saveLock.current = true;
+    setSaving(true);
+    setContactError("");
+    setContactFieldError(undefined);
+    try {
+      await updateContactEmail(verified.email, verified.token);
+      setProfile(
+        (previous) => previous && { ...previous, contactEmail: verified.email },
+      );
+      setContactOpen(false);
+      setVerified(null);
+      toast("연락받을 이메일을 저장했어요");
+    } catch (cause) {
+      const fieldError = validationFieldError(cause, "email");
+      if (
+        isApiError(cause) &&
+        cause.status === 400 &&
+        cause.problem?.type === VERIFICATION_REQUIRED_TYPE
+      ) {
+        setContactError(signupMessages.verificationInvalid);
+        setContactDraft(verified.email);
+        setVerified(null);
+        setContactReset((value) => value + 1);
+      } else if (fieldError) {
+        setContactFieldError(fieldError);
+        setContactDraft(verified.email);
+        setVerified(null);
+        setContactReset((value) => value + 1);
+      } else {
+        setContactError(
+          "연락받을 이메일을 저장하지 못했어요. 다시 시도해 주세요.",
+        );
+      }
+    } finally {
+      saveLock.current = false;
+      setSaving(false);
+    }
+  }
+  async function changeMarketing(agreed: boolean) {
+    if (saveLock.current) return;
+    saveLock.current = true;
+    setSaving(true);
+    try {
+      await updateMarketingConsent(agreed);
+      setProfile(
+        (previous) => previous && { ...previous, marketingAgreed: agreed },
+      );
+      toast(
+        agreed
+          ? "마케팅 정보 수신에 동의했어요"
+          : "마케팅 정보 수신 동의를 철회했어요",
+      );
+    } catch {
+      toast("수신 동의를 변경하지 못했어요. 다시 시도해 주세요.");
+    } finally {
+      saveLock.current = false;
+      setSaving(false);
+    }
+  }
   // 로그아웃·탈퇴 중에는 세션이 비어도 /login으로 보내지 않는다(성공하면 /로 간다)
   const loggingOut = useRef(false);
   const withdrawing = useRef(false);
@@ -148,6 +230,41 @@ export default function MyPage() {
               </p>
             </div>
           </div>
+          <section
+            aria-label="연락처 및 수신 동의"
+            className="flex flex-col gap-3 border-t-8 border-line px-5 py-4"
+          >
+            <h2 className="text-title-sm">연락받을 이메일</h2>
+            <p className="text-body-md break-all">
+              {profile.contactEmail || "연락받을 이메일을 등록해 주세요"}
+            </p>
+            <Button
+              variant="outline"
+              size="md"
+              disabled={saving || busy}
+              onClick={() => {
+                setVerified(null);
+                setContactError("");
+                setContactFieldError(undefined);
+                setContactDraft(undefined);
+                setContactReset((value) => value + 1);
+                setContactOpen(true);
+              }}
+            >
+              {profile.contactEmail ? "이메일 변경" : "이메일 등록"}
+            </Button>
+            <Checkbox
+              checked={profile.marketingAgreed ?? false}
+              disabled={saving || busy}
+              onCheckedChange={changeMarketing}
+            >
+              마케팅 정보 수신 동의 (선택)
+            </Checkbox>
+            <p className="text-caption-md text-ink-muted">
+              이벤트·혜택 안내를 이메일로 받아요. 동의하지 않아도 서비스를
+              이용할 수 있어요.
+            </p>
+          </section>
           <nav aria-label="내 정보 메뉴" className="border-t-8 border-line">
             {[
               "저장한 장소",
@@ -179,6 +296,40 @@ export default function MyPage() {
           </nav>
         </>
       )}
+      <BottomSheet
+        title="연락받을 이메일 등록·변경"
+        open={contactOpen}
+        onOpenChange={(value) => {
+          if (!saving) setContactOpen(value);
+        }}
+      >
+        {contactOpen && (
+          <EmailVerification
+            key={contactReset}
+            purpose="contact"
+            initialEmail={contactDraft ?? profile?.contactEmail ?? ""}
+            error={contactFieldError}
+            busy={saving}
+            onVerified={(value) => {
+              setVerified(value);
+              setContactFieldError(undefined);
+              if (value) setContactError("");
+            }}
+          />
+        )}
+        {contactError && (
+          <p role="alert" className="mt-2 text-caption-md text-danger">
+            {contactError}
+          </p>
+        )}
+        <Button
+          className="mt-5 w-full"
+          disabled={!verified || saving}
+          onClick={saveContact}
+        >
+          {saving ? "저장 중" : "이메일 저장"}
+        </Button>
+      </BottomSheet>
       <ConfirmDialog
         open={dialog === "logout"}
         onOpenChange={(open) => {

@@ -22,6 +22,10 @@ import MyPage from "./page";
 const mocks = vi.hoisted(() => ({
   router: { replace: vi.fn(), back: vi.fn(), push: vi.fn(), refresh: vi.fn() },
   profile: vi.fn(),
+  contact: vi.fn(),
+  marketing: vi.fn(),
+  request: vi.fn(),
+  confirm: vi.fn(),
   logout: vi.fn(),
   withdraw: vi.fn(),
   toast: vi.fn(),
@@ -32,10 +36,14 @@ vi.mock("next/navigation", () => ({ useRouter: () => mocks.router }));
 vi.mock("@/shared/ui/overlay/toast", () => ({ useToast: () => mocks.toast }));
 vi.mock("@/domains/auth/api/user-profile", () => ({
   getUserProfile: mocks.profile,
+  updateContactEmail: mocks.contact,
+  updateMarketingConsent: mocks.marketing,
   withdraw: mocks.withdraw,
 }));
 vi.mock("@/domains/auth/api/auth-client", () => ({
   getSession: () => mocks.session,
+  requestEmailVerification: mocks.request,
+  confirmEmailVerification: mocks.confirm,
   logout: mocks.logout,
   subscribe: (listener: () => void) => {
     mocks.listener = listener;
@@ -56,6 +64,10 @@ beforeEach(() => {
   });
   mocks.logout.mockResolvedValue(undefined);
   mocks.withdraw.mockResolvedValue(undefined);
+  mocks.contact.mockResolvedValue(undefined);
+  mocks.marketing.mockResolvedValue(undefined);
+  mocks.request.mockResolvedValue({});
+  mocks.confirm.mockResolvedValue({ verificationToken: "contact-token" });
 });
 // 메뉴 버튼으로 확인 창을 열고 창을 돌려준다
 async function openDialog(menu: string) {
@@ -63,6 +75,277 @@ async function openDialog(menu: string) {
   return screen.findByRole("alertdialog");
 }
 afterEach(cleanup);
+async function verifyContact(email = "contact@example.com") {
+  fireEvent.change(screen.getByLabelText("이메일"), {
+    target: { value: email },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "인증번호 받기" }));
+  fireEvent.change(await screen.findByLabelText("인증번호"), {
+    target: { value: "123456" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "확인" }));
+  await screen.findByText("인증했어요.");
+}
+it("shows contact email field validation and permits correction", async () => {
+  mocks.contact.mockRejectedValueOnce(
+    new ApiError("http", "bad request", {
+      status: 400,
+      problem: {
+        status: 400,
+        errors: [
+          { field: "body", reason: "body error" },
+          { field: "email", reason: "연락용 이메일 형식을 확인해 주세요." },
+        ],
+      },
+    }),
+  );
+  render(<MyPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "이메일 등록" }));
+  await verifyContact();
+  fireEvent.click(screen.getByRole("button", { name: "이메일 저장" }));
+  expect(
+    await screen.findByText("연락용 이메일 형식을 확인해 주세요."),
+  ).toBeTruthy();
+  const email = screen.getByLabelText("이메일") as HTMLInputElement;
+  expect(email.getAttribute("aria-invalid")).toBe("true");
+  expect(email.readOnly).toBe(false);
+  expect(email.value).toBe("contact@example.com");
+  expect(
+    screen
+      .getByRole("button", { name: "이메일 저장" })
+      .hasAttribute("disabled"),
+  ).toBe(true);
+  expect(screen.queryByText("body error")).toBeNull();
+  await verifyContact("fixed@example.com");
+  expect(screen.queryByText("연락용 이메일 형식을 확인해 주세요.")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "이메일 저장" }));
+  await waitFor(() =>
+    expect(mocks.contact).toHaveBeenNthCalledWith(
+      2,
+      "fixed@example.com",
+      "contact-token",
+    ),
+  );
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+});
+it.each(["body", "agreed"])(
+  "shows a generic contact save error for %s without resetting verification",
+  async (field) => {
+    mocks.contact.mockRejectedValueOnce(
+      new ApiError("http", "bad request", {
+        status: 400,
+        problem: {
+          status: 400,
+          errors: [{ field, reason: "raw validation error" }],
+        },
+      }),
+    );
+    render(<MyPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "이메일 등록" }));
+    await verifyContact();
+    fireEvent.click(screen.getByRole("button", { name: "이메일 저장" }));
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "연락받을 이메일을 저장하지 못했어요. 다시 시도해 주세요.",
+    );
+    expect(screen.queryByText("raw validation error")).toBeNull();
+    expect(screen.getByText("인증했어요.")).toBeTruthy();
+    expect((screen.getByLabelText("이메일") as HTMLInputElement).readOnly).toBe(
+      true,
+    );
+  },
+);
+it.each(["agreed", "body"])(
+  "keeps marketing validation failures in a toast (%s)",
+  async (field) => {
+    mocks.marketing.mockRejectedValueOnce(
+      new ApiError("http", "bad request", {
+        status: 400,
+        problem: {
+          status: 400,
+          errors: [{ field, reason: "raw marketing error" }],
+        },
+      }),
+    );
+    render(<MyPage />);
+    const checkbox = await screen.findByRole("checkbox", {
+      name: "마케팅 정보 수신 동의 (선택)",
+    });
+    fireEvent.click(checkbox);
+    await waitFor(() =>
+      expect(mocks.toast).toHaveBeenCalledWith(
+        "수신 동의를 변경하지 못했어요. 다시 시도해 주세요.",
+      ),
+    );
+    expect(checkbox.getAttribute("aria-checked")).toBe("false");
+    expect(screen.queryByText("raw marketing error")).toBeNull();
+  },
+);
+it("changes an existing contact email only after verification and saving", async () => {
+  mocks.profile.mockResolvedValue({
+    userId: "u1",
+    nickname: "name",
+    loginMethod: "google",
+    contactEmail: "old@example.com",
+    marketingAgreed: false,
+  });
+  render(<MyPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "이메일 변경" }));
+  expect((screen.getByLabelText("이메일") as HTMLInputElement).value).toBe(
+    "old@example.com",
+  );
+  expect(
+    screen
+      .getByRole("button", { name: "이메일 저장" })
+      .hasAttribute("disabled"),
+  ).toBe(true);
+  await verifyContact("changed@example.com");
+  fireEvent.click(screen.getByRole("button", { name: "이메일 저장" }));
+  await waitFor(() =>
+    expect(mocks.contact).toHaveBeenCalledWith(
+      "changed@example.com",
+      "contact-token",
+    ),
+  );
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(screen.getByText("changed@example.com")).toBeTruthy();
+  expect(screen.queryByText("old@example.com")).toBeNull();
+});
+it("requires verification again and clears the token error after successful verification", async () => {
+  mocks.contact.mockRejectedValueOnce(
+    new ApiError("http", "invalid", {
+      status: 400,
+      problem: {
+        status: 400,
+        type: "urn:fitdining:auth:verification-required",
+      },
+    }),
+  );
+  render(<MyPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "이메일 등록" }));
+  await verifyContact();
+  fireEvent.click(screen.getByRole("button", { name: "이메일 저장" }));
+  expect((await screen.findByRole("alert")).textContent).toBe(
+    "이메일 인증이 만료됐어요. 다시 인증해 주세요.",
+  );
+  expect(
+    screen
+      .getByRole("button", { name: "이메일 저장" })
+      .hasAttribute("disabled"),
+  ).toBe(true);
+  expect((screen.getByLabelText("이메일") as HTMLInputElement).readOnly).toBe(
+    false,
+  );
+  expect(screen.queryByText("인증했어요.")).toBeNull();
+  await verifyContact();
+  expect(screen.queryByRole("alert")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "이메일 저장" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(mocks.request).toHaveBeenCalledTimes(2);
+  expect(mocks.contact).toHaveBeenCalledTimes(2);
+});
+it.each([
+  new ApiError("network", "서버에 연결하지 못했습니다"),
+  new ApiError("http", "server", { status: 503 }),
+])(
+  "retains verification after a temporary contact save failure: %s",
+  async (cause) => {
+    mocks.contact.mockRejectedValueOnce(cause);
+    render(<MyPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "이메일 등록" }));
+    await verifyContact();
+    fireEvent.click(screen.getByRole("button", { name: "이메일 저장" }));
+    expect((await screen.findByRole("alert")).textContent).toBeTruthy();
+    expect(screen.getByText("인증했어요.")).toBeTruthy();
+    expect((screen.getByLabelText("이메일") as HTMLInputElement).readOnly).toBe(
+      true,
+    );
+    expect(
+      screen
+        .getByRole("button", { name: "이메일 저장" })
+        .hasAttribute("disabled"),
+    ).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "이메일 저장" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(mocks.request).toHaveBeenCalledTimes(1);
+    expect(mocks.contact).toHaveBeenNthCalledWith(
+      2,
+      "contact@example.com",
+      "contact-token",
+    );
+  },
+);
+it("clears a general save error only after re-verification succeeds", async () => {
+  mocks.contact.mockRejectedValueOnce(
+    new ApiError("http", "server", { status: 503 }),
+  );
+  render(<MyPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "이메일 등록" }));
+  await verifyContact();
+  fireEvent.click(screen.getByRole("button", { name: "이메일 저장" }));
+  const message = "연락받을 이메일을 저장하지 못했어요. 다시 시도해 주세요.";
+  expect(await screen.findByText(message)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "이메일 바꾸기" }));
+  expect(screen.getByText(message)).toBeTruthy();
+  await verifyContact("changed@example.com");
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(
+    screen
+      .getByRole("button", { name: "이메일 저장" })
+      .hasAttribute("disabled"),
+  ).toBe(false);
+  expect(mocks.contact).toHaveBeenCalledTimes(1);
+});
+it("registers a missing contact email after verification", async () => {
+  render(<MyPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "이메일 등록" }));
+  expect(screen.getByText("연락받을 이메일을 등록해 주세요")).toBeTruthy();
+  fireEvent.change(screen.getByLabelText("이메일"), {
+    target: { value: "contact@example.com" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "인증번호 받기" }));
+  fireEvent.change(await screen.findByLabelText("인증번호"), {
+    target: { value: "123456" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "확인" }));
+  await screen.findByText("인증했어요.");
+  fireEvent.click(screen.getByRole("button", { name: "이메일 저장" }));
+  await waitFor(() =>
+    expect(mocks.contact).toHaveBeenCalledWith(
+      "contact@example.com",
+      "contact-token",
+    ),
+  );
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(screen.getByText("contact@example.com")).toBeTruthy();
+  expect(mocks.request).toHaveBeenCalledWith("contact@example.com", "contact");
+});
+it("shows contact email and updates marketing consent only after success", async () => {
+  mocks.profile.mockResolvedValue({
+    userId: "u1",
+    nickname: "name",
+    loginMethod: "google",
+    contactEmail: "saved@example.com",
+    marketingAgreed: true,
+  });
+  render(<MyPage />);
+  expect(await screen.findByText("saved@example.com")).toBeTruthy();
+  const toggle = screen.getByRole("checkbox", {
+    name: "마케팅 정보 수신 동의 (선택)",
+  });
+  fireEvent.click(toggle);
+  await waitFor(() => expect(mocks.marketing).toHaveBeenCalledWith(false));
+  await waitFor(() =>
+    expect(toggle.getAttribute("aria-checked")).toBe("false"),
+  );
+  mocks.marketing.mockRejectedValueOnce(new Error("failed"));
+  fireEvent.click(toggle);
+  await waitFor(() =>
+    expect(mocks.toast).toHaveBeenCalledWith(
+      "수신 동의를 변경하지 못했어요. 다시 시도해 주세요.",
+    ),
+  );
+  expect(toggle.getAttribute("aria-checked")).toBe("false");
+});
 it.each([
   ["email", "이메일로 로그인했어요"],
   ["kakao", "카카오 계정으로 로그인했어요"],

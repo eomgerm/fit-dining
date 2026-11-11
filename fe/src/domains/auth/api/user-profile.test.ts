@@ -1,6 +1,11 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { ApiError } from "@/shared/api/api-error";
-import { getUserProfile, withdraw } from "./user-profile";
+import {
+  getUserProfile,
+  withdraw,
+  updateContactEmail,
+  updateMarketingConsent,
+} from "./user-profile";
 const marks = vi.hoisted(() => ({
   clearSignedIn: vi.fn(),
   signedInMarks: vi.fn(),
@@ -26,6 +31,21 @@ it("sends an encoded owner id and session cookie", async () => {
   mocks.request.mockResolvedValue({ nickname: "name" });
   await getUserProfile();
   expect(mocks.request).toHaveBeenCalledWith("/v1/users/user%2Fid", {});
+});
+it("updates contact email and marketing consent through the authenticated client", async () => {
+  await updateContactEmail("contact@example.com", "token");
+  expect(mocks.request).toHaveBeenCalledWith(
+    "/v1/users/user%2Fid/contact-email",
+    {
+      method: "PUT",
+      body: { email: "contact@example.com", verificationToken: "token" },
+    },
+  );
+  await updateMarketingConsent(false);
+  expect(mocks.request).toHaveBeenCalledWith(
+    "/v1/users/user%2Fid/marketing-consent",
+    { method: "PUT", body: { agreed: false } },
+  );
 });
 it("does not retry an expired session", async () => {
   mocks.request

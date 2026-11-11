@@ -9,8 +9,46 @@ import {
 } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { SignupTerms } from "./signup-terms";
+import { useState } from "react";
+import type { Agreements } from "./signup-terms";
 
 afterEach(cleanup);
+it("전체 동의는 마케팅을 포함하고 마케팅만 해제해도 가입할 수 있다", () => {
+  const start = vi.fn();
+  function Form() {
+    const [agreements, setAgreements] = useState<Agreements>({
+      ageOver14: false,
+      terms: false,
+      privacy: false,
+      marketing: false,
+    });
+    return (
+      <SignupTerms
+        open
+        setOpen={vi.fn()}
+        busy={false}
+        agreements={agreements}
+        setAgreements={setAgreements}
+        start={start}
+      />
+    );
+  }
+  render(<Form />);
+  const all = screen.getByRole("checkbox", { name: "전체 동의" });
+  const marketing = screen.getByRole("checkbox", {
+    name: "선택마케팅 정보 수신",
+  });
+  const submit = screen.getByRole("button", { name: "동의하고 시작하기" });
+  fireEvent.click(all);
+  expect(all.getAttribute("aria-checked")).toBe("true");
+  expect(marketing.getAttribute("aria-checked")).toBe("true");
+  fireEvent.click(marketing);
+  expect(marketing.getAttribute("aria-checked")).toBe("false");
+  expect(all.getAttribute("aria-checked")).toBe("mixed");
+  expect(submit.hasAttribute("disabled")).toBe(false);
+  fireEvent.click(submit);
+  expect(start).toHaveBeenCalledOnce();
+});
 it("약관 보기는 시트 위 모달을 열고 닫으면 시트로 복귀한다", async () => {
   const error = vi.spyOn(console, "error");
   const warn = vi.spyOn(console, "warn");
@@ -44,8 +82,8 @@ it("약관 보기는 시트 위 모달을 열고 닫으면 시트로 복귀한�
         within(modal).queryByText("약관 본문은 준비 중이에요."),
       ).toBeNull();
       expect(
-        within(modal).getByText("2026-11-02").getAttribute("datetime"),
-      ).toBe("2026-11-02");
+        within(modal).getByText("2026-11-11").getAttribute("datetime"),
+      ).toBe("2026-11-11");
       expect(within(modal).getByRole("region").className).toContain(
         "overflow-y-auto",
       );

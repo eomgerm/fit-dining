@@ -8,11 +8,13 @@ export type Agreements = {
   ageOver14: boolean;
   terms: boolean;
   privacy: boolean;
+  marketing?: boolean;
 };
 const agreementLabels = {
   ageOver14: "만 14세 이상이에요",
   terms: "서비스 이용약관",
   privacy: "개인정보 수집·이용",
+  marketing: "마케팅 정보 수신",
 };
 export function SignupTerms({
   open,
@@ -29,7 +31,7 @@ export function SignupTerms({
   setAgreements: Dispatch<SetStateAction<Agreements>>;
   start: () => void;
 }) {
-  const allAgreed = Object.values(agreements).every(Boolean);
+  const allAgreed = requiredAgreed(agreements) && !!agreements.marketing;
   return (
     <BottomSheet
       title="약관에 동의하고 시작해요"
@@ -50,6 +52,7 @@ export function SignupTerms({
             ageOver14: checked,
             terms: checked,
             privacy: checked,
+            marketing: checked,
           })
         }
       >
@@ -60,7 +63,7 @@ export function SignupTerms({
         (field) => (
           <div key={field} className="flex items-center justify-between gap-2">
             <Checkbox
-              checked={agreements[field]}
+              checked={agreements[field] ?? false}
               disabled={busy}
               onCheckedChange={(checked) =>
                 setAgreements((previous) => ({
@@ -71,12 +74,12 @@ export function SignupTerms({
             >
               <span className="text-body-md">
                 <span className="mr-2 font-semibold text-primary-strong">
-                  필수
+                  {field === "marketing" ? "선택" : "필수"}
                 </span>
                 {agreementLabels[field]}
               </span>
             </Checkbox>
-            {field !== "ageOver14" && (
+            {(field === "terms" || field === "privacy") && (
               <TermsModal kind={field} disabled={busy}>
                 보기
               </TermsModal>
@@ -84,13 +87,21 @@ export function SignupTerms({
           </div>
         ),
       )}
+      <p className="mt-3 text-caption-md text-ink-muted">
+        마케팅 수신에 동의하면 연락용 이메일로 이벤트·혜택 안내를 보내요.
+        동의하지 않아도 서비스를 이용할 수 있어요.
+      </p>
       <Button
         className="mt-5 w-full"
-        disabled={!allAgreed || busy}
+        disabled={!requiredAgreed(agreements) || busy}
         onClick={start}
       >
         {busy ? "가입 중" : "동의하고 시작하기"}
       </Button>
     </BottomSheet>
   );
+}
+
+export function requiredAgreed(value: Agreements) {
+  return value.ageOver14 && value.terms && value.privacy;
 }

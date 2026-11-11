@@ -24,6 +24,62 @@ const json = (data: unknown, status = 200) =>
     headers: { "Content-Type": "application/json" },
   });
 
+test("social signup context and contact verification preserve the API contract", async () => {
+  const calls: { url: string; method?: string; body: unknown }[] = [];
+  const env = environment(async (url, options) => {
+    calls.push({
+      url,
+      method: options.method,
+      body: options.body ? JSON.parse(String(options.body)) : undefined,
+    });
+    if (options.method !== "POST")
+      return json({ provider: "google", email: null });
+    return json(url.endsWith("/social/signup") ? value() : {});
+  });
+  try {
+    const auth = await load();
+    assert.deepEqual(await auth.getSocialSignup(), {
+      provider: "google",
+      email: null,
+    });
+    await auth.requestEmailVerification(" Contact@Example.com ", "contact");
+    await auth.socialSignup({
+      contactEmail: " Contact@Example.com ",
+      verificationToken: "token",
+      agreements: {
+        ageOver14: true,
+        terms: true,
+        privacy: true,
+        marketing: false,
+      },
+    });
+    assert.deepEqual(calls, [
+      { url: "/api/auth/social/signup", method: undefined, body: undefined },
+      {
+        url: "/api/auth/email-verifications",
+        method: "POST",
+        body: { email: "contact@example.com", purpose: "contact" },
+      },
+      {
+        url: "/api/auth/social/signup",
+        method: "POST",
+        body: {
+          contactEmail: "contact@example.com",
+          verificationToken: "token",
+          agreements: {
+            ageOver14: true,
+            terms: true,
+            privacy: true,
+            marketing: false,
+          },
+        },
+      },
+    ]);
+  } finally {
+    env.reset();
+  }
+});
+
 function environment(
   mockFetch: (
     url: string,
@@ -313,7 +369,7 @@ test("email verification request and confirm send normalized email without cooki
     assert.deepEqual(calls, [
       {
         url: "/api/auth/email-verifications",
-        body: { email: "new@example.com" },
+        body: { email: "new@example.com", purpose: "signup" },
       },
       {
         url: "/api/auth/email-verifications/confirm",

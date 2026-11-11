@@ -23,6 +23,29 @@ afterEach(() => {
 });
 
 describe("request", () => {
+  it.each([
+    ["contact-email", "email"],
+    ["contact-email", "body"],
+    ["marketing-consent", "agreed"],
+    ["marketing-consent", "body"],
+  ])(
+    "preserves problem+json body errors for PUT %s (%s)",
+    async (endpoint, field) => {
+      const problem = {
+        status: 400,
+        errors: [{ field, reason: "invalid body" }],
+      };
+      stubFetch(
+        json(problem, {
+          status: 400,
+          headers: { "Content-Type": "application/problem+json" },
+        }),
+      );
+      await expect(
+        request(`/v1/users/user/${endpoint}`, { method: "PUT", body: {} }),
+      ).rejects.toMatchObject({ status: 400, problem });
+    },
+  );
   it("GET 요청을 /api 아래로 보내고 JSON 본문을 돌려준다", async () => {
     const fetchMock = stubFetch(json({ id: "p1" }));
 

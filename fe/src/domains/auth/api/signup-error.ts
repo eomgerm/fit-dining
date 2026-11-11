@@ -4,6 +4,30 @@ import { signupMessages, type SignupErrors } from "../model/signup";
 const AUTH_TYPE = "urn:fitdining:auth:";
 export const VERIFICATION_REQUIRED_TYPE = `${AUTH_TYPE}verification-required`;
 
+// 본문 전체(body) 오류와 다른 필드 오류는 입력칸에 표시하지 않는다.
+export function validationFieldError(
+  error: unknown,
+  field: string,
+): string | undefined {
+  if (
+    !(error instanceof ApiError) ||
+    error.status !== 400 ||
+    !Array.isArray(error.problem?.errors)
+  )
+    return;
+  for (const item of error.problem.errors) {
+    if (
+      item &&
+      typeof item === "object" &&
+      "field" in item &&
+      item.field === field &&
+      "reason" in item &&
+      typeof item.reason === "string"
+    )
+      return item.reason;
+  }
+}
+
 export function signupFailure(error: unknown): {
   fields: SignupErrors;
   message: string;
@@ -65,6 +89,8 @@ export function verificationFailure(error: unknown): string {
     return "인증하지 못했어요. 다시 시도해 주세요.";
   if (error.kind !== "http") return error.message;
   const type = error.problem?.type;
+  if (type === VERIFICATION_REQUIRED_TYPE)
+    return signupMessages.verificationInvalid;
   if (type === `${AUTH_TYPE}email-taken`) return signupMessages.emailRegistered;
   if (type === `${AUTH_TYPE}verification-code-mismatch`)
     return signupMessages.verificationMismatch;

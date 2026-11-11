@@ -4,6 +4,8 @@ import { authenticated } from "./authenticated";
 export type UserProfile = {
   userId: string;
   nickname: string;
+  contactEmail: string | null;
+  marketingAgreed: boolean;
   loginMethod: "email" | "google" | "kakao" | "naver";
 };
 const userPath = (userId: string) => `/v1/users/${encodeURIComponent(userId)}`;
@@ -18,4 +20,24 @@ export async function withdraw(): Promise<void> {
     request<void>(userPath(session.userId), { method: "DELETE" }),
   );
   endSession();
+}
+
+export function updateContactEmail(
+  email: string,
+  verificationToken: string,
+): Promise<void> {
+  return authenticated((session) =>
+    request<void>(`${userPath(session.userId)}/contact-email`, {
+      method: "PUT",
+      body: { email, verificationToken },
+    }),
+  );
+}
+export function updateMarketingConsent(agreed: boolean): Promise<void> {
+  return authenticated((session) =>
+    request<void>(`${userPath(session.userId)}/marketing-consent`, {
+      method: "PUT",
+      body: { agreed },
+    }),
+  );
 }

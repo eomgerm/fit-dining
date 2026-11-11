@@ -31,11 +31,11 @@ it("조 제목과 본문, 시행일을 표시한다", () => {
     screen.getByText(/장소 상세 화면의 내 리뷰에서 직접 삭제/),
   ).toBeTruthy();
   expect(
-    screen.getByText("이 약관은 2026년 11월 2일부터 시행합니다."),
+    screen.getByText("이 약관은 2026년 11월 11일부터 시행합니다."),
   ).toBeTruthy();
   expect(screen.queryByText("약관 본문은 준비 중이에요.")).toBeNull();
-  expect(screen.getByText("2026-11-02").getAttribute("datetime")).toBe(
-    "2026-11-02",
+  expect(screen.getByText("2026-11-11").getAttribute("datetime")).toBe(
+    "2026-11-11",
   );
 });
 

@@ -1,6 +1,28 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "@/shared/api/api-error";
-import { signupFailure, verificationFailure } from "./signup-error";
+import {
+  signupFailure,
+  verificationFailure,
+  validationFieldError,
+} from "./signup-error";
+
+it("reads only the requested validation field from a 400 errors array", () => {
+  const error = new ApiError("http", "invalid", {
+    status: 400,
+    problem: {
+      status: 400,
+      errors: [
+        null,
+        { field: "body", reason: "body error" },
+        { field: "contactEmail", reason: 5 },
+        { field: "contactEmail", reason: "email format" },
+      ],
+    },
+  });
+  expect(validationFieldError(error, "contactEmail")).toBe("email format");
+  expect(validationFieldError(error, "email")).toBeUndefined();
+  expect(validationFieldError(new Error("failed"), "email")).toBeUndefined();
+});
 
 describe("signup errors", () => {
   it.each(["email", "nickname"] as const)(

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import {
   cleanup,
+  act,
   fireEvent,
   render,
   screen,
@@ -76,6 +77,83 @@ function renderPage() {
     </ToastProvider>,
   );
 }
+it.each([
+  [429, "urn:fitdining:auth:rate-limited", "잠시 후 다시 시도해 주세요."],
+  [
+    503,
+    "urn:fitdining:auth:mail-unavailable",
+    "메일을 보내지 못했어요. 잠시 후 다시 시도해 주세요.",
+  ],
+  [
+    409,
+    "urn:fitdining:auth:email-taken",
+    "이미 가입한 이메일이에요. 로그인해 주세요.",
+  ],
+])(
+  "keeps request failure visible after blur (%s)",
+  async (status, type, message) => {
+    mocks.requestEmailVerification.mockRejectedValueOnce(
+      new ApiError("http", "failed", {
+        status: Number(status),
+        problem: { status: Number(status), type: String(type) },
+      }),
+    );
+    renderPage();
+    const email = screen.getByLabelText("이메일");
+    fireEvent.change(email, { target: { value: "new@example.com" } });
+    fireEvent.click(screen.getByRole("button", { name: "인증번호 받기" }));
+    expect(await screen.findByText(message)).toBeTruthy();
+    fireEvent.focus(email);
+    fireEvent.blur(email);
+    expect(screen.getByText(message)).toBeTruthy();
+    fireEvent.change(email, { target: { value: "changed@example.com" } });
+    expect(screen.queryByText(message)).toBeNull();
+  },
+);
+it("preserves signup email id and marks the form busy while requesting and confirming", async () => {
+  let finishRequest!: () => void;
+  mocks.requestEmailVerification.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        finishRequest = resolve;
+      }),
+  );
+  renderPage();
+  const email = screen.getByLabelText("이메일");
+  const form = email.closest("form")!;
+  expect(email.id).toBe("signup-email");
+  fireEvent.change(email, { target: { value: "new@example.com" } });
+  fireEvent.click(screen.getByRole("button", { name: "인증번호 받기" }));
+  expect(form.getAttribute("aria-busy")).toBe("true");
+  await act(async () => finishRequest());
+  expect(form.getAttribute("aria-busy")).toBe("false");
+  let finishConfirm!: (value: { verificationToken: string }) => void;
+  mocks.confirmEmailVerification.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finishConfirm = resolve;
+      }),
+  );
+  fireEvent.change(screen.getByLabelText("인증번호"), {
+    target: { value: "123456" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "확인" }));
+  expect(form.getAttribute("aria-busy")).toBe("true");
+  await act(async () => finishConfirm({ verificationToken: "token" }));
+  expect(form.getAttribute("aria-busy")).toBe("false");
+  expect(
+    screen.getByRole("button", { name: "이메일 바꾸기" }).className,
+  ).toContain("text-ink-muted");
+});
+it("clears the parent verification-needed error after verification", async () => {
+  renderPage();
+  fireEvent.submit(screen.getByLabelText("이메일").closest("form")!);
+  // Start a new attempt after validation; a successful confirmation clears email errors.
+  await verifyEmail();
+  expect(screen.queryByText("이메일 형식을 확인해 주세요.")).toBeNull();
+  expect(screen.queryByText("이메일 인증을 해 주세요.")).toBeNull();
+  expect(screen.getByText("인증했어요.")).toBeTruthy();
+});
 async function verifyEmail(email = "new@example.com") {
   fireEvent.change(screen.getByLabelText("이메일"), {
     target: { value: email },
@@ -125,7 +203,12 @@ it("requires all agreements, submits once, and navigates to location guidance", 
     email: "new@example.com",
     password: "password1",
     nickname: "새이름",
-    agreements: { ageOver14: true, terms: true, privacy: true },
+    agreements: {
+      ageOver14: true,
+      terms: true,
+      privacy: true,
+      marketing: true,
+    },
     verificationToken: "verified-token",
   });
   complete();
@@ -186,6 +269,7 @@ it("인증 전에는 [다음]이 꺼져 있고 인증 뒤 이메일 칸을 잠�
   ).toBeTruthy();
   expect(mocks.requestEmailVerification).toHaveBeenCalledWith(
     "new@example.com",
+    "signup",
   );
   const code = screen.getByLabelText("인증번호") as HTMLInputElement;
   expect(code.inputMode).toBe("numeric");

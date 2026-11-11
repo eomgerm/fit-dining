@@ -126,7 +126,12 @@ export type SignupRequest = {
   email: string;
   password: string;
   nickname: string;
-  agreements: { ageOver14: boolean; terms: boolean; privacy: boolean };
+  agreements: {
+    ageOver14: boolean;
+    terms: boolean;
+    privacy: boolean;
+    marketing?: boolean;
+  };
   // 이메일 인증 확인으로 받은 1회용 토큰. 메모리에만 두고 storage에 저장하지 않는다
   verificationToken: string;
 };
@@ -139,11 +144,14 @@ export type EmailVerificationConfirmed = {
   expiresAt: string;
 };
 // 가입 전 이메일 소유 확인.
-export async function requestEmailVerification(email: string) {
+export async function requestEmailVerification(
+  email: string,
+  purpose: "signup" | "contact" = "signup",
+) {
   return send<EmailVerificationRequested>("/email-verifications", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: email.trim().toLowerCase() }),
+    body: JSON.stringify({ email: email.trim().toLowerCase(), purpose }),
   });
 }
 export async function confirmEmailVerification(email: string, code: string) {
@@ -168,7 +176,10 @@ export async function signup(body: SignupRequest) {
   return next;
 }
 export async function socialSignup(
-  body: Pick<SignupRequest, "agreements" | "preferences">,
+  body: Pick<SignupRequest, "agreements" | "preferences"> & {
+    contactEmail?: string;
+    verificationToken?: string;
+  },
 ) {
   connectChannel();
   const next = await startSession("/social/signup", {
@@ -176,6 +187,12 @@ export async function socialSignup(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       agreements: body.agreements,
+      ...(body.contactEmail
+        ? { contactEmail: body.contactEmail.trim().toLowerCase() }
+        : {}),
+      ...(body.verificationToken
+        ? { verificationToken: body.verificationToken }
+        : {}),
       ...(body.preferences ? { preferences: body.preferences } : {}),
     }),
   });
@@ -248,4 +265,10 @@ export async function logout() {
     }
     throw error;
   }
+}
+
+export function getSocialSignup() {
+  return send<{ provider: "kakao" | "naver" | "google"; email: string | null }>(
+    "/social/signup",
+  );
 }
