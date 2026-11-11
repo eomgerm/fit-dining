@@ -7,6 +7,7 @@ import { UsersIcon } from "@/shared/ui/icon/icons/users";
 import { ConfirmDialog } from "@/shared/ui/overlay/confirm-dialog";
 
 import type { MeetupProfile } from "../model/meetup";
+import { KeepWords } from "./keep-words";
 
 // 다른 브라우저에서 비회원 이름을 골랐을 때(참여자 3)
 export function ConfirmProfileDialog({
@@ -34,7 +35,9 @@ export function ConfirmProfileDialog({
           {profile?.name}님이 맞나요?
         </span>
       }
-      description={`맞으면 ${profile?.name ?? ""}님으로 들어가요.`}
+      description={
+        <KeepWords>맞으면 {profile?.name}님으로 들어가요.</KeepWords>
+      }
       secondaryAction={
         <Button variant="outline" size="md" onClick={onCancel}>
           아니에요
@@ -71,7 +74,12 @@ export function MemberProfileDialog({
       }}
       icon={<UserIcon />}
       title="로그인이 필요해요"
-      description={`${profile?.name ?? ""}님은 회원으로 참여했어요. 로그인하면 바로 들어갈 수 있어요.`}
+      description={
+        <KeepWords>
+          {profile?.name}님은 회원으로 참여했어요. 로그인하면 바로 들어갈 수
+          있어요.
+        </KeepWords>
+      }
       secondaryAction={
         <Button variant="outline" size="md" onClick={onCancel}>
           취소
@@ -106,7 +114,12 @@ export function JoinAgainDialog({
       }}
       icon={<UsersIcon />}
       title={`이미 ${count}명이 참여했어요`}
-      description="목록에 내 이름이 있다면 그 이름을 골라 주세요. 두 번 참여하면 추천이 달라질 수 있어요."
+      description={
+        <KeepWords>
+          목록에 내 이름이 있다면 그 이름을 골라 주세요. 두 번 참여하면 추천이
+          달라질 수 있어요.
+        </KeepWords>
+      }
       secondaryAction={
         <Button variant="outline" size="md" onClick={onPickName}>
           이름 고르기

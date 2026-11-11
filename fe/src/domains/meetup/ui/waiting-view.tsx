@@ -24,6 +24,7 @@ import {
   type MeetupSnapshot,
 } from "../model/meetup";
 import { tasteSummary } from "../model/taste";
+import { KeepWords } from "./keep-words";
 import { MeetupInfoCard, meetupTitle } from "./meetup-info-card";
 
 function FriendRow({
@@ -223,7 +224,12 @@ export function WaitingView({
         tone="danger"
         icon={<TrashIcon />}
         title={`'${removing?.name ?? ""}' 프로필을 지울까요?`}
-        description="이 이름으로 남긴 취향과 투표도 함께 지워져요. 실수로 두 번 만든 이름을 정리할 때 써요."
+        description={
+          <KeepWords>
+            이 이름으로 남긴 취향과 투표도 함께 지워져요. 실수로 두 번 만든
+            이름을 정리할 때 써요.
+          </KeepWords>
+        }
         secondaryAction={
           <Button
             variant="outline"
