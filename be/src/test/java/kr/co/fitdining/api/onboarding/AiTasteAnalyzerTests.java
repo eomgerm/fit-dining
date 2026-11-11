@@ -86,7 +86,7 @@ class AiTasteAnalyzerTests {
         var features = client.refresh(
                 new Preferences(Preferences.Mood.QUIET, List.of(Preferences.Priority.VALUE), null, null),
                 List.of(new AiTasteClient.ReviewEvidence(1, 10, "카페", "QUIET",
-                        java.time.Instant.parse("2026-10-23T03:00:00Z"), true)), List.of());
+                        java.time.Instant.parse("2026-10-23T03:00:00Z"), true)), List.of()).features();
         assertEquals(List.of(new kr.co.fitdining.api.user.TasteFeature("QUIET", "axis", true, 4.319, null),
                 new kr.co.fitdining.api.user.TasteFeature("QUIET", "axis", true, 4.319, "CAFE")), features);
     }
@@ -98,7 +98,44 @@ class AiTasteAnalyzerTests {
                 """)).andRespond(withSuccess("{\"features\":[]}", MediaType.APPLICATION_JSON));
         client.refresh(new Preferences(null, null, null, null), List.of(), List.of(new AiTasteClient.ReviewBody(1, 10,
                 "카페", java.time.Instant.parse("2026-10-23T03:00:00Z"), false,
-                List.of(new AiTasteClient.BodyItem("FOOD_SWEET", -1, 1, "taste", null)))));
+                List.of(new AiTasteClient.BodyItem("맛 성향", "FOOD_SWEET", -1, 1, "taste", null)))));
+    }
+    @Test @DisplayName("갱신_묶음 원소와 임베딩 실패 여부를 받음")
+    void refresh_readsBundlesAndEmbeddingFailure() {
+        server.expect(anything()).andRespond(withSuccess("""
+                {"features":[{"code":"QUIET","layer":"axis","like":true,"weight":1,"category":null},
+                {"code":null,"layer":null,"like":true,"weight":2.5,"category":"CAFE","text":"창가 자리",
+                "vector":%s}],"embeddingFailed":false}
+                """.formatted(vector(1024)), MediaType.APPLICATION_JSON));
+        var refreshed = client.refresh(new Preferences(null, null, null, null), List.of(), List.of());
+        var bundle = refreshed.features().get(1);
+        assertTrue(bundle.bundle());
+        assertEquals("창가 자리", bundle.text());
+        assertEquals(1024, bundle.vector().length);
+        assertFalse(refreshed.embeddingFailed());
+    }
+    @DisplayName("갱신_모양이 틀린 묶음_예외")
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {
+            "{\"code\":null,\"layer\":null,\"like\":true,\"weight\":1,\"text\":\"창가\",\"vector\":[0.5]}",
+            "{\"code\":null,\"layer\":null,\"like\":true,\"weight\":1,\"vector\":%s}",
+            "{\"code\":null,\"layer\":\"axis\",\"like\":true,\"weight\":1,\"text\":\"창가\",\"vector\":%s}",
+            "{\"code\":\"QUIET\",\"layer\":\"axis\",\"like\":true,\"weight\":1,\"text\":\"창가\"}"})
+    void refresh_malformedBundle_throws(String feature) {
+        server.expect(anything()).andRespond(withSuccess(
+                "{\"features\":[" + feature.formatted(vector(1024)) + "]}", MediaType.APPLICATION_JSON));
+        assertThrows(RuntimeException.class,
+                () -> client.refresh(new Preferences(null, null, null, null), List.of(), List.of()));
+    }
+    @Test @DisplayName("해석_코드 없는 좋아함 칩_벡터를 칩에 붙여 돌려줌")
+    void interpret_attachesVectorToUncodedLikeChip() {
+        server.expect(anything()).andRespond(withSuccess("""
+                {"tastes":[{"polarity":"LIKE","label":"quiet","code":"QUIET"},{"polarity":"LIKE","label":"창가"}],
+                "model":"m","vectors":[null,%s]}
+                """.formatted(vector(1024)), MediaType.APPLICATION_JSON));
+        var chips = client.interpret("sample").tastes();
+        assertNull(chips.get(0).vector());
+        assertEquals(1024, chips.get(1).vector().length);
     }
     @Test @DisplayName("추출_리뷰 본문을 보내고_요청 순서대로 항목을 받음")
     void extract_returnsItemsInRequestOrder() {

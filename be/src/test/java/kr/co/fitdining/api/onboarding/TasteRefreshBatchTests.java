@@ -45,6 +45,7 @@ class TasteRefreshBatchTests extends PostgresTestSupport {
     /** Review ids of each extraction call. */
     List<List<Long>> extractCalls = new ArrayList<>();
     boolean extractFails;
+    boolean embeddingFails;
     static final String SWEET = "달지 않아서 좋아요";
     static final ExtractedItem SWEET_ITEM = new ExtractedItem("맛 성향", SWEET, "FOOD_SWEET", -1, 1, "taste", null);
     /** Runs inside the fake AI call, i.e. while the batch is mid-run. */
@@ -74,7 +75,7 @@ class TasteRefreshBatchTests extends PostgresTestSupport {
             asked.put(priority, preferences);
             during.run();
             if (priority == Priority.VIEW_OUTDOOR) throw new IllegalStateException("AI down");
-            return priority == Priority.GENEROUS_PORTION ? List.of() : NEW;
+            return new AiTasteClient.Refreshed(priority == Priority.GENEROUS_PORTION ? List.of() : NEW, embeddingFails);
         });
     }
 
@@ -106,10 +107,15 @@ class TasteRefreshBatchTests extends PostgresTestSupport {
                 new ReviewEvidence(900001, cafe, "카페", "SHORT_WAIT", Instant.parse("2026-10-23T03:00:00Z"), false),
                 new ReviewEvidence(900002, noisy, "식당", "QUIET", Instant.parse("2026-10-24T03:00:00Z"), true)),
                 sent.get(Priority.VALUE));
+        Preferences asked = this.asked.get(Priority.VALUE);
         assertEquals(new Preferences(Preferences.Mood.QUIET, List.of(Priority.VALUE),
                 List.of(Preferences.Purpose.WORK_STUDY), List.of(
                         new Preferences.TasteChip(Preferences.Polarity.DISLIKE, "매운맛", "FOOD_SPICY"),
-                        new Preferences.TasteChip(Preferences.Polarity.LIKE, "국물"))), asked.get(Priority.VALUE));
+                        new Preferences.TasteChip(Preferences.Polarity.LIKE, "국물"))),
+                new Preferences(asked.mood(), asked.priorities(), asked.purposes(),
+                        asked.tastes().stream().map(Preferences.TasteChip::withoutVector).toList()));
+        // The stored chip vector goes along as taste-bundle material (taste-profile spec 4단계).
+        assertArrayEquals(new float[] {0.1f, 0.2f}, asked.tastes().get(1).vector());
         assertEquals("[{\"code\": \"QUIET\", \"like\": true, \"layer\": \"axis\", \"weight\": 4.319, "
                 + "\"category\": \"CAFE\"}]", features("a"));
         assertEquals(Timestamp.from(T0), jdbc.queryForObject(
@@ -117,10 +123,13 @@ class TasteRefreshBatchTests extends PostgresTestSupport {
         assertNotNull(refreshedAt("a"));
     }
 
-    @Test @DisplayName("갱신_대상_리뷰 있거나 features 빈 회원만이고 탈퇴 회원은 뺀다")
-    void targets_reviewersAndEmptyFeaturesOnly() {
+    // 한 번도 갱신하지 않은 회원도 대상이다(V34). 기존 회원에게 취향 묶음을 채우려고 넓혔다(profile-storage D-22).
+    @Test @DisplayName("갱신_대상_리뷰가 바뀌었거나 한 번도 갱신하지 않은 회원만이고 탈퇴 회원은 뺀다")
+    void targets_changedOrNeverRefreshedOnly() {
         user("empty", Priority.COZY, "[]");
         user("idle", Priority.SHORT_WAIT, OLD);
+        user("done", Priority.VIEW_OUTDOOR, OLD);
+        jdbc.update("update user_preferences set features_refreshed_at = now() where user_id = ?", PREFIX + "done");
         user("gone", Priority.GENEROUS_PORTION, "[]");
         review("gone", 900001, "2026-10-23T03:00:00Z", "QUIET_GOOD");
         jdbc.update("update auth_users set deleted_at = now() where id = ?", PREFIX + "gone");
@@ -130,9 +139,11 @@ class TasteRefreshBatchTests extends PostgresTestSupport {
 
         batch.run();
 
-        assertEquals(Map.of(Priority.COZY, List.of(), Priority.PRETTY_SPACE, List.of()), sent);
+        assertEquals(Map.of(Priority.COZY, List.of(), Priority.SHORT_WAIT, List.of(), Priority.PRETTY_SPACE, List.of()),
+                sent);
         assertNotEquals("[]", features("empty"));
-        assertEquals(OLD, features("idle"));
+        assertNotEquals(OLD, features("idle"));
+        assertEquals(OLD, features("done"));
         assertNotEquals(OLD, features("erased"));
     }
 
@@ -227,7 +238,7 @@ class TasteRefreshBatchTests extends PostgresTestSupport {
         assertEquals(Map.of("model", "test-model", "prompt_version", 2), jdbc.queryForMap(
                 "select model, prompt_version from review_extractions where review_id = ?", id));
         assertEquals(List.of(new ReviewBody(900001, id, "카페", Instant.parse("2026-10-23T03:00:00Z"), false,
-                List.of(new BodyItem("FOOD_SWEET", -1, 1, "taste", null)))), sentBodies.get(Priority.COZY));
+                List.of(new BodyItem("맛 성향", "FOOD_SWEET", -1, 1, "taste", null)))), sentBodies.get(Priority.COZY));
         assertNotNull(refreshedAt("taster"));
     }
 
@@ -292,9 +303,24 @@ class TasteRefreshBatchTests extends PostgresTestSupport {
         extractFails = false;
         batch.run();
         assertEquals(List.of(List.of(id), List.of(id), List.of(id)), extractCalls);
-        assertEquals(List.of(new BodyItem("FOOD_SWEET", -1, 1, "taste", null)),
+        assertEquals(List.of(new BodyItem("맛 성향", "FOOD_SWEET", -1, 1, "taste", null)),
                 sentBodies.get(Priority.COZY).getFirst().items());
         assertNotEquals(first, refreshedAt("editor"));
+    }
+
+    @Test @DisplayName("묶음_리뷰 문장 임베딩 실패_코드 취향만 바꾸고 저장된 묶음과 갱신 시각을 둔다")
+    void embeddingFailure_keepsStoredBundles() {
+        String stored = "[{\"code\": null, \"like\": true, \"text\": \"창가 자리\", \"layer\": null, "
+                + "\"weight\": 1.0, \"vector\": [0.5], \"category\": null}]";
+        user("bundled", Priority.COZY, stored);
+        review("bundled", 900001, "2026-10-23T03:00:00Z", "QUIET_GOOD");
+        embeddingFails = true;
+
+        batch.run();
+
+        assertEquals("[{\"code\": \"QUIET\", \"like\": true, \"layer\": \"axis\", \"weight\": 4.319, "
+                + "\"category\": \"CAFE\"}, " + stored.substring(1), features("bundled"));
+        assertNull(refreshedAt("bundled"));
     }
 
     void user(String id, Priority priority, String features) {

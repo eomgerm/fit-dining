@@ -3,6 +3,7 @@ package kr.co.fitdining.api.onboarding;
 import java.sql.Timestamp;
 import java.time.Instant;
 import kr.co.fitdining.api.onboarding.TasteAnalyzer.Interpretation;
+import kr.co.fitdining.api.user.Preferences.TasteChip;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import tools.jackson.databind.json.JsonMapper;
@@ -23,7 +24,9 @@ public class TasteInputLogs {
         jdbc.sql("insert into taste_input_logs(text, tastes, model, succeeded, created_at) "
                         + "values (:text, cast(:tastes as jsonb), :model, :succeeded, :at)")
                 .param("text", text)
-                .param("tastes", result == null ? null : json.writeValueAsString(result.tastes()))
+                // The log keeps the answer only ([{polarity, label, code}]); chip vectors stay out (V15)
+                .param("tastes", result == null ? null : json.writeValueAsString(
+                        result.tastes().stream().map(TasteChip::withoutVector).toList()))
                 .param("model", result == null ? null : result.model())
                 .param("succeeded", result != null)
                 .param("at", Timestamp.from(at))

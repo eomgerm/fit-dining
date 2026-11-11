@@ -15,6 +15,8 @@ public record StoredTasteChip(Preferences.Polarity polarity, String label, Strin
         return new StoredTasteChip(chip.polarity(), chip.label(), chip.code(), vector);
     }
     public Preferences.TasteChip chip() { return new Preferences.TasteChip(polarity, label, code); }
+    /** The chip with its stored vector, for the AI refresh that uses it as taste-bundle material. */
+    public Preferences.TasteChip chipWithVector() { return new Preferences.TasteChip(polarity, label, code, vector); }
     /** Whether this chip should carry a vector: a LIKE chip the code table does not cover. */
     public static boolean needsVector(Preferences.TasteChip chip) {
         return chip.code() == null && chip.polarity() == Preferences.Polarity.LIKE;

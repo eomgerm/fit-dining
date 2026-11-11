@@ -26,7 +26,8 @@ public class AiTasteClient {
     static final int VECTOR_DIMENSION = 1024;
     private final RestClient interpret;
     private final RestClient profile;
-    private final RestClient extract;
+    /** 04:00 batch calls (body extraction, refresh); they may wait for an LLM batch or an embedding cold start. */
+    private final RestClient batch;
     private final Validator validator;
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -36,19 +37,19 @@ public class AiTasteClient {
             @Value("${fitdining.ai.modal-secret:}") String secret,
             @Value("${fitdining.onboarding.timeout-ms:10000}") long interpretTimeout,
             @Value("${fitdining.ai.profile-timeout-ms:3000}") long profileTimeout,
-            @Value("${fitdining.ai.extract-timeout-ms:150000}") long extractTimeout) {
+            @Value("${fitdining.ai.batch-timeout-ms:150000}") long batchTimeout) {
         this(client(baseUrl, key, secret, interpretTimeout), client(baseUrl, key, secret, profileTimeout),
-                client(baseUrl, key, secret, extractTimeout), validator);
+                client(baseUrl, key, secret, batchTimeout), validator);
     }
 
     AiTasteClient(RestClient interpret, RestClient profile, Validator validator) {
         this(interpret, profile, profile, validator);
     }
 
-    AiTasteClient(RestClient interpret, RestClient profile, RestClient extract, Validator validator) {
+    AiTasteClient(RestClient interpret, RestClient profile, RestClient batch, Validator validator) {
         this.interpret = interpret;
         this.profile = profile;
-        this.extract = extract;
+        this.batch = batch;
         this.validator = validator;
     }
 
@@ -62,10 +63,25 @@ public class AiTasteClient {
         return builder.build();
     }
 
+    /**
+     * Chips for the onboarding text. A LIKE chip without a code carries its vector when the AI sent one, so a guest
+     * device can keep it (taste-profile spec 4단계). An AI without {@code vectors} yields chips without vectors.
+     * @throws IllegalStateException when the response breaks the contract
+     */
     public InterpretResponse interpret(String text) {
-        var response = interpret.post().uri("/v1/taste/interpret").contentType(MediaType.APPLICATION_JSON)
-                .body(Map.of("text", text)).retrieve().body(InterpretResponse.class);
-        return checked(response);
+        var response = checked(interpret.post().uri("/v1/taste/interpret").contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("text", text)).retrieve().body(InterpretResponse.class));
+        var chips = response.tastes();
+        var vectors = response.vectors();
+        if (vectors == null) return response;
+        if (vectors.size() != chips.size()
+                || vectors.stream().anyMatch(vector -> vector != null && vector.length != VECTOR_DIMENSION))
+            throw new IllegalStateException("Invalid AI response");
+        return new InterpretResponse(IntStream.range(0, chips.size()).mapToObj(i -> {
+            var chip = chips.get(i);
+            return StoredTasteChip.needsVector(chip) && vectors.get(i) != null
+                    ? new TasteChip(chip.polarity(), chip.label(), chip.code(), vectors.get(i)) : chip;
+        }).toList(), response.model(), null);
     }
 
     /**
@@ -83,16 +99,20 @@ public class AiTasteClient {
             throw new IllegalStateException("Invalid AI response");
         var tastes = IntStream.range(0, chips.size()).mapToObj(i -> StoredTasteChip.of(chips.get(i),
                 vectors != null && StoredTasteChip.needsVector(chips.get(i)) ? vectors.get(i) : null)).toList();
-        return new TasteProfileService.Profile(features(response), tastes);
+        return new TasteProfileService.Profile(features(response.features()), tastes);
     }
 
     /**
-     * 04:00 batch: stored answers plus current review evidence (reason tags and extracted body items); only features
-     * are recomputed.
+     * 04:00 batch: stored answers (chips with their stored vectors) plus current review evidence (reason tags and
+     * extracted body items); only features are recomputed.
+     * @return features and whether the AI failed to embed review phrases. On failure the features hold no bundles and
+     *     the caller keeps the stored ones (taste-profile spec 4단계)
      */
-    public List<TasteFeature> refresh(Preferences preferences, List<ReviewEvidence> reviews, List<ReviewBody> bodies) {
-        return features(post("/v1/taste/refresh", new RefreshRequest(preferences.mood(), preferences.priorities(),
-                preferences.purposes(), preferences.tastes(), reviews, bodies)));
+    public Refreshed refresh(Preferences preferences, List<ReviewEvidence> reviews, List<ReviewBody> bodies) {
+        var response = checked(batch.post().uri("/v1/taste/refresh").contentType(MediaType.APPLICATION_JSON)
+                .body(new RefreshRequest(preferences.mood(), preferences.priorities(), preferences.purposes(),
+                        preferences.tastes(), reviews, bodies)).retrieve().body(RefreshResponse.class));
+        return new Refreshed(features(response.features()), Boolean.TRUE.equals(response.embeddingFailed()));
     }
 
     /**
@@ -101,7 +121,7 @@ public class AiTasteClient {
      * @throws IllegalStateException when the response breaks the contract
      */
     public Extraction extract(List<ReviewText> reviews) {
-        var response = checked(extract.post().uri("/v1/reviews/extract").contentType(MediaType.APPLICATION_JSON)
+        var response = checked(batch.post().uri("/v1/reviews/extract").contentType(MediaType.APPLICATION_JSON)
                 .body(Map.of("reviews", reviews)).retrieve().body(Extraction.class));
         if (!response.results().stream().map(ExtractedReview::reviewId).toList()
                 .equals(reviews.stream().map(ReviewText::reviewId).toList())
@@ -115,9 +135,10 @@ public class AiTasteClient {
                 .body(body).retrieve().body(ProfileResponse.class));
     }
 
-    private static List<TasteFeature> features(ProfileResponse response) {
-        return response.features().stream()
-                .map(f -> new TasteFeature(f.code(), f.layer(), f.like(), f.weight(), f.category())).toList();
+    private static List<TasteFeature> features(List<Feature> features) {
+        if (!features.stream().allMatch(Feature::shaped)) throw new IllegalStateException("Invalid AI response");
+        return features.stream().map(f -> new TasteFeature(f.code(), f.layer(), f.like(), f.weight(), f.category(),
+                f.text(), f.vector())).toList();
     }
 
     private <T> T checked(T response) {
@@ -139,11 +160,16 @@ public class AiTasteClient {
      */
     public record ReviewBody(long placeId, long reviewId, String category, Instant createdAt, boolean revisitIntent,
             List<BodyItem> items) {}
-    /** @param liked flavor codes only @param kind taste, facility, quality or budget */
-    public record BodyItem(String code, int direction, Integer liked, String kind, String text) {}
+    /**
+     * @param slot extraction slot; the AI leaves the visit-context slot out of taste bundles
+     * @param liked flavor codes only @param kind taste, facility, quality or budget
+     */
+    public record BodyItem(String slot, String code, int direction, Integer liked, String kind, String text) {}
     private record RefreshRequest(Preferences.Mood mood, List<Preferences.Priority> priorities,
             List<Preferences.Purpose> purposes, List<TasteChip> tastes, List<ReviewEvidence> reviews,
             List<ReviewBody> bodies) {}
+    /** @param embeddingFailed true when the features hold no bundles because review phrases were not embedded */
+    public record Refreshed(List<TasteFeature> features, boolean embeddingFailed) {}
 
     /** Reviews per extraction call. Same as the AI extractor's batch size. */
     public static final int EXTRACT_BATCH = 10;
@@ -164,10 +190,21 @@ public class AiTasteClient {
     }
 
     public record InterpretResponse(@NotNull @Size(max = 10) List<@NotNull @Valid TasteChip> tastes,
-            String model) {}
-    public record Feature(@NotBlank @Pattern(regexp = "^[A-Z][A-Z0-9_]{0,63}$") String code,
-            @NotNull @Pattern(regexp = "axis|importance|purpose|food") String layer, @NotNull Boolean like,
+            String model, List<float[]> vectors) {}
+    /**
+     * A code feature, or a taste bundle when {@code code} is null: then {@code layer} is null, it is liked, and it
+     * carries the representative {@code text} and its 1024-dim {@code vector}.
+     */
+    public record Feature(@Pattern(regexp = "^[A-Z][A-Z0-9_]{0,63}$") String code,
+            @Pattern(regexp = "axis|importance|purpose|food") String layer, @NotNull Boolean like,
             @NotNull @DecimalMin(value = "0", inclusive = false) Double weight,
-            @Pattern(regexp = "RESTAURANT|CAFE|BAR") String category) {}
+            @Pattern(regexp = "RESTAURANT|CAFE|BAR") String category, @Size(max = 100) String text, float[] vector) {
+        boolean shaped() {
+            if (code != null) return layer != null && text == null && vector == null;
+            return layer == null && like && text != null && !text.isBlank() && vector != null
+                    && vector.length == VECTOR_DIMENSION;
+        }
+    }
     public record ProfileResponse(@NotNull List<@NotNull @Valid Feature> features, List<float[]> vectors) {}
+    public record RefreshResponse(@NotNull List<@NotNull @Valid Feature> features, Boolean embeddingFailed) {}
 }

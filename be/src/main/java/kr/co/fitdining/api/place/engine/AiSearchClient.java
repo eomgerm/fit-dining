@@ -229,7 +229,7 @@ public class AiSearchClient {
 		return MAPPER.writeValueAsBytes(body);
 	}
 
-	/** 비회원 답변을 그대로 옮긴다. null인 {@code mood}·{@code code}는 빼고 빈 목록은 그대로 둔다. */
+	/** 비회원 답변을 그대로 옮긴다. null인 {@code mood}·{@code code}·{@code vector}는 빼고 빈 목록은 그대로 둔다. */
 	private static Map<String, Object> tasteProfile(Preferences preferences) {
 		Map<String, Object> profile = new LinkedHashMap<>();
 		if (preferences.mood() != null) {
@@ -243,6 +243,10 @@ public class AiSearchClient {
 			taste.put("label", chip.label());
 			if (chip.code() != null) {
 				taste.put("code", chip.code());
+			}
+			// 기기가 저장한 코드 없는 좋아함 칩의 벡터. AI가 비회원 취향 묶음 재료로 쓴다(taste-profile spec 4단계)
+			if (chip.vector() != null) {
+				taste.put("vector", chip.vector());
 			}
 			return taste;
 		}).toList());

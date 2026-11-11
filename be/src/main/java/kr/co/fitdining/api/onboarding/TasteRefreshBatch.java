@@ -13,6 +13,7 @@ import kr.co.fitdining.api.review.tag.ReasonTag.Sentiment;
 import kr.co.fitdining.api.review.tag.ReasonTagRule;
 import kr.co.fitdining.api.user.Preferences;
 import kr.co.fitdining.api.user.StoredTasteChip;
+import kr.co.fitdining.api.user.TasteFeature;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,6 +37,7 @@ public class TasteRefreshBatch {
     private static final Logger log = LoggerFactory.getLogger(TasteRefreshBatch.class);
     private static final Map<String, String> CATEGORIES = Map.of("RESTAURANT", "식당", "CAFE", "카페", "BAR", "술집");
     private static final TypeReference<List<ExtractedItem>> ITEMS = new TypeReference<>() {};
+    private static final TypeReference<List<TasteFeature>> FEATURES = new TypeReference<>() {};
     /** A live review with a body whose extraction is missing or older than its last edit. */
     private static final String UNEXTRACTED = """
             r.deleted_at is null and nullif(btrim(r.description), '') is not null
@@ -51,10 +53,11 @@ public class TasteRefreshBatch {
     }
 
     /**
-     * Targets: active users who wrote, edited or deleted a review since their last refresh, or whose features are
-     * still empty from a failed onboarding call. A target's whole live history is sent; the AI keeps no state.
+     * Targets: active users who wrote, edited or deleted a review since their last refresh, or who were never refreshed
+     * (a failed onboarding call left empty features, or V34 cleared the time to fill taste bundles for everyone). A target's whole live history is sent; the AI keeps no state.
      * A user with a review still unextracted (AI failure, or GMS_ENABLED off so the AI answers 503) gets features but
-     * keeps the refresh time, so the next run picks them again. updated_at is left alone; it tracks the user's own answers (GET /preferences).
+     * keeps the refresh time, so the next run picks them again. So does a user whose review phrases the AI could not
+     * embed; their stored taste bundles stay as they were (taste-profile spec 4단계). updated_at is left alone; it tracks the user's own answers (GET /preferences).
      */
     // lockAtLeastFor keeps the other Blue/Green color from rerunning after an early finish.
     @Scheduled(cron = "0 0 4 * * *", zone = "Asia/Seoul")
@@ -68,13 +71,16 @@ public class TasteRefreshBatch {
         int failed = 0;
         for (var target : targets.entrySet()) {
             try {
-                var features = client.refresh(target.getValue(), evidence(target.getKey()), bodies(target.getKey()));
+                var refreshed = client.refresh(target.getValue(), evidence(target.getKey()), bodies(target.getKey()));
+                List<TasteFeature> features = refreshed.embeddingFailed()
+                        ? keepBundles(target.getKey(), refreshed.features()) : refreshed.features();
                 jdbc.sql("""
                         update user_preferences set features = cast(:features as jsonb),
                             features_refreshed_at = case when :pending then features_refreshed_at else :started end
                         where user_id = :id""")
                         .param("features", json.writeValueAsString(features)).param("started", started)
-                        .param("pending", pending(target.getKey())).param("id", target.getKey()).update();
+                        .param("pending", refreshed.embeddingFailed() || pending(target.getKey()))
+                        .param("id", target.getKey()).update();
             } catch (RuntimeException failure) {
                 failed++;
                 // Payloads and messages may contain answers, so only the type is logged.
@@ -120,6 +126,15 @@ public class TasteRefreshBatch {
         log.info("review_extract reviews={} failed={}", todo.size(), failed);
     }
 
+    /** New code features plus the bundles already stored, for a refresh whose bundles could not be recomputed. */
+    private List<TasteFeature> keepBundles(String userId, List<TasteFeature> fresh) {
+        String stored = jdbc.sql("select features::text from user_preferences where user_id = :id")
+                .param("id", userId).query(String.class).single();
+        var kept = new ArrayList<>(fresh.stream().filter(feature -> !feature.bundle()).toList());
+        kept.addAll(json.readValue(stored, FEATURES).stream().filter(TasteFeature::bundle).toList());
+        return kept;
+    }
+
     private boolean pending(String userId) {
         return Boolean.TRUE.equals(jdbc.sql("select exists (select 1 from reviews r "
                 + "left join review_extractions e on e.review_id = r.review_id where r.user_id = :id and "
@@ -133,7 +148,7 @@ public class TasteRefreshBatch {
                 select p.user_id, p.mood, p.priorities, p.purposes, p.tastes::text as tastes
                 from user_preferences p join auth_users u on u.id = p.user_id
                 where u.deleted_at is null
-                  and (p.features = '[]'::jsonb and p.features_refreshed_at is null
+                  and (p.features_refreshed_at is null
                        or exists (select 1 from reviews r where r.user_id = p.user_id
                                   and greatest(r.created_at, r.updated_at, r.deleted_at)
                                       > coalesce(p.features_refreshed_at, '-infinity')))
@@ -145,7 +160,7 @@ public class TasteRefreshBatch {
                         names(rs.getArray("priorities")).stream().map(Preferences.Priority::valueOf).toList(),
                         names(rs.getArray("purposes")).stream().map(Preferences.Purpose::valueOf).toList(),
                         json.readValue(rs.getString("tastes"), new TypeReference<List<StoredTasteChip>>() {})
-                                .stream().map(StoredTasteChip::chip).toList()));
+                                .stream().map(StoredTasteChip::chipWithVector).toList()));
             } catch (RuntimeException unreadable) {
                 // One bad row must not stop everyone else; the row keeps its features.
                 log.warn("taste_refresh_user_unreadable kind={}", unreadable.getClass().getSimpleName());
@@ -185,7 +200,8 @@ public class TasteRefreshBatch {
                 new ReviewBody(rs.getLong("place_id"), rs.getLong("review_id"),
                         CATEGORIES.get(rs.getString("category_group")), rs.getTimestamp("created_at").toInstant(),
                         rs.getBoolean("revisit_intent"), json.readValue(rs.getString("items"), ITEMS).stream()
-                        .map(i -> new BodyItem(i.code(), i.direction(), i.liked(), i.kind(), i.text())).toList()))
+                        .map(i -> new BodyItem(i.slot(), i.code(), i.direction(), i.liked(), i.kind(), i.text()))
+                        .toList()))
                 .list();
     }
 
