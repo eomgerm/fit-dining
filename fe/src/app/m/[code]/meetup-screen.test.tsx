@@ -27,6 +27,12 @@ const api = vi.hoisted(() => ({
   removeProfile: vi.fn(),
   startCalculation: vi.fn(),
   fetchResult: vi.fn(),
+  openPoll: vi.fn(),
+  vote: vi.fn(),
+  closePoll: vi.fn(),
+  reopenPoll: vi.fn(),
+  decide: vi.fn(),
+  cancelDecision: vi.fn(),
 }));
 vi.mock("@/domains/meetup/api/meetup-api", () => api);
 
@@ -515,5 +521,386 @@ describe("모임 정보 수정 버튼", () => {
     mount();
     expect(await screen.findByText("2명의 취향으로 추천했어요")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "모임 정보 수정" })).toBeNull();
+  });
+});
+
+const OPEN_POLL = {
+  state: "OPEN" as const,
+  anonymous: true,
+  tie: false,
+  reopenable: false,
+  candidates: [
+    { placeId: 10, votes: 1 },
+    { placeId: 11, votes: 0 },
+  ],
+  votedCount: 1,
+  notVotedCount: 1,
+};
+
+function conflict(type: string) {
+  return new ApiError("http", "conflict", {
+    status: 409,
+    problem: { type: `urn:fitdining:meetup:${type}`, status: 409 },
+  });
+}
+
+describe("투표와 정하기", () => {
+  it("모임장은 결과 카드에서 두 곳 이상을 골라 투표를 연다", async () => {
+    api.fetchSnapshot.mockResolvedValue(
+      hostSnapshot({
+        phase: "RESULT",
+        allowed: ["OPEN_POLL", "DECIDE", "EDIT_INFO", "REMOVE_PROFILE"],
+        calculation: SUCCEEDED,
+        resultCalculationId: 5,
+        profiles: snapshot().profiles.map((profile) => ({
+          ...profile,
+          reflected: true,
+        })),
+      }),
+    );
+    api.fetchResult.mockResolvedValue(RESULT);
+    api.openPoll.mockResolvedValue(undefined);
+    mount();
+    const boxes = await screen.findAllByRole("checkbox");
+    expect(boxes).toHaveLength(2);
+
+    fireEvent.click(boxes[0]);
+    expect(
+      await screen.findByText(/2곳 이상 골라야 투표를 열 수 있어요/),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "투표 열기" })).toHaveProperty(
+      "disabled",
+      true,
+    );
+
+    fireEvent.click(boxes[1]);
+    fireEvent.click(await screen.findByRole("button", { name: "투표 열기" }));
+    expect(await screen.findByText("후보 2곳으로 투표를 열어요")).toBeTruthy();
+    expect(screen.getByRole("switch").getAttribute("aria-checked")).toBe(
+      "true",
+    );
+    const buttons = screen.getAllByRole("button", { name: "투표 열기" });
+    fireEvent.click(buttons[buttons.length - 1]);
+    await waitFor(() =>
+      expect(api.openPoll).toHaveBeenCalledWith(CODE, {
+        placeIds: [10, 11],
+        anonymous: true,
+      }),
+    );
+  });
+
+  it("투표 열기 시트는 추천에 반영되지 않은 취향을 알린다", async () => {
+    api.fetchSnapshot.mockResolvedValue(
+      hostSnapshot({
+        phase: "RESULT",
+        allowed: ["OPEN_POLL", "DECIDE", "CALCULATE"],
+        calculation: { ...SUCCEEDED, outdated: true },
+        resultCalculationId: 5,
+      }),
+    );
+    api.fetchResult.mockResolvedValue(RESULT);
+    mount();
+    const boxes = await screen.findAllByRole("checkbox");
+    fireEvent.click(boxes[0]);
+    fireEvent.click(boxes[1]);
+    fireEvent.click(await screen.findByRole("button", { name: "투표 열기" }));
+    expect(
+      await screen.findByText(
+        /민지님, 하린님 취향은 아직 추천에 반영되지 않았어요/,
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getAllByRole("button", { name: "다시 추천받기" }).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("모임장은 카드에서 바로 정하기 전에 한 번 묻는다", async () => {
+    api.fetchSnapshot.mockResolvedValue(
+      hostSnapshot({
+        phase: "RESULT",
+        allowed: ["OPEN_POLL", "DECIDE"],
+        calculation: SUCCEEDED,
+        resultCalculationId: 5,
+      }),
+    );
+    api.fetchResult.mockResolvedValue(RESULT);
+    api.decide.mockResolvedValue(undefined);
+    mount();
+    fireEvent.click(
+      (await screen.findAllByRole("button", { name: "여기로 정하기" }))[0],
+    );
+    expect(await screen.findByText("숯불 마당으로 정할까요?")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "정하기" }));
+    await waitFor(() => expect(api.decide).toHaveBeenCalledWith(CODE, 10));
+  });
+
+  it("참여자는 익명 투표 화면에서 한 곳을 고르고, 마감돼 실패하면 선택을 되돌린다", async () => {
+    api.fetchSnapshot.mockResolvedValue(
+      resultSnapshot({
+        phase: "VOTING",
+        allowed: ["EDIT_TASTE", "VOTE"],
+        poll: { ...OPEN_POLL, hasVoted: false },
+      }),
+    );
+    api.fetchResult.mockResolvedValue(RESULT);
+    api.vote.mockRejectedValue(conflict("poll-closed"));
+    mount();
+    expect(await screen.findByText("익명 투표예요")).toBeTruthy();
+    expect(
+      screen.getByText("민지님이 후보 2곳으로 투표를 열었어요"),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        /2명 중 1명 투표했어요 · 누가 어디를 골랐는지는 보이지 않아요/,
+      ),
+    ).toBeTruthy();
+    const radios = await screen.findAllByRole("radio");
+    fireEvent.click(radios[1]);
+    expect(radios[1].getAttribute("aria-checked")).toBe("true");
+    await waitFor(() => expect(api.vote).toHaveBeenCalledWith(CODE, 11));
+    expect(
+      await screen.findByText("투표가 마감돼서 고른 곳을 바꾸지 못했어요"),
+    ).toBeTruthy();
+    await waitFor(() =>
+      expect(radios[1].getAttribute("aria-checked")).toBe("false"),
+    );
+  });
+
+  it.each([
+    ["열려 있으면", OPEN_POLL],
+    [
+      "동점으로 닫혀 모임장을 기다리는 동안에도",
+      { ...OPEN_POLL, state: "CLOSED" as const, tie: true, tieVotes: 1 },
+    ],
+  ])("투표가 %s 5초마다 스냅숏을 다시 받는다", async (_, poll) => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      api.fetchSnapshot.mockResolvedValue(
+        resultSnapshot({ phase: "VOTING", allowed: ["EDIT_TASTE"], poll }),
+      );
+      api.fetchResult.mockResolvedValue(RESULT);
+      mount();
+      expect(await screen.findByText("익명 투표예요")).toBeTruthy();
+      const before = api.fetchSnapshot.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(5000);
+      await waitFor(() =>
+        expect(api.fetchSnapshot.mock.calls.length).toBeGreaterThan(before),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("다른 브라우저로 고른 익명 투표 참여자에게는 투표했다는 것만 보인다", async () => {
+    api.fetchSnapshot.mockResolvedValue(
+      resultSnapshot({
+        phase: "VOTING",
+        allowed: ["EDIT_TASTE", "VOTE"],
+        poll: { ...OPEN_POLL, hasVoted: true },
+      }),
+    );
+    api.fetchResult.mockResolvedValue(RESULT);
+    mount();
+    expect(
+      await screen.findByText(/하린님은 이미 투표했어요. 익명이라 고른 곳은/),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getAllByRole("radio")
+        .every((radio) => radio.getAttribute("aria-checked") === "false"),
+    ).toBe(true);
+  });
+
+  it("이름이 보이는 투표는 고른 사람과 아직 투표하지 않은 사람을 보이고, 마감 전에 한 번 묻는다", async () => {
+    api.fetchSnapshot.mockResolvedValue(
+      hostSnapshot({
+        phase: "VOTING",
+        allowed: ["EDIT_DATE", "REMOVE_PROFILE", "CLOSE_POLL", "VOTE"],
+        calculation: SUCCEEDED,
+        resultCalculationId: 5,
+        poll: {
+          ...OPEN_POLL,
+          anonymous: false,
+          candidates: [
+            { placeId: 10, votes: 1, voters: [1] },
+            { placeId: 11, votes: 0, voters: [] },
+          ],
+          notVoted: [2],
+          myVote: 10,
+          hasVoted: true,
+        },
+      }),
+    );
+    api.fetchResult.mockResolvedValue(RESULT);
+    api.closePoll.mockResolvedValue(undefined);
+    mount();
+    expect(await screen.findByText("이름이 보이는 투표예요")).toBeTruthy();
+    expect(screen.getByText("아직 하린님이 투표하지 않았어요.")).toBeTruthy();
+    expect(screen.getByText("내가 고른 곳")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "투표 마감" }));
+    expect(
+      await screen.findByText("아직 1명이 투표하지 않았어요"),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("지금 마감하면 하린님은 투표할 수 없어요."),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "마감하기" }));
+    await waitFor(() => expect(api.closePoll).toHaveBeenCalledWith(CODE));
+  });
+
+  it("동점으로 닫히면 모임장에게 한 곳을 고르는 시트가 열리고, 투표를 계속할 수도 있다", async () => {
+    api.fetchSnapshot.mockResolvedValue(
+      hostSnapshot({
+        phase: "VOTING",
+        allowed: ["EDIT_DATE", "REMOVE_PROFILE", "DECIDE", "REOPEN_POLL"],
+        calculation: SUCCEEDED,
+        resultCalculationId: 5,
+        poll: {
+          ...OPEN_POLL,
+          state: "CLOSED",
+          tie: true,
+          tieVotes: 1,
+          reopenable: true,
+          candidates: [
+            { placeId: 10, votes: 1 },
+            { placeId: 11, votes: 1 },
+          ],
+          votedCount: 2,
+          notVotedCount: 0,
+        },
+      }),
+    );
+    api.fetchResult.mockResolvedValue(RESULT);
+    api.decide.mockResolvedValue(undefined);
+    api.reopenPoll.mockResolvedValue(undefined);
+    mount();
+    expect(await screen.findByText("2곳이 1표로 동점이에요")).toBeTruthy();
+    fireEvent.click(await screen.findByRole("radio", { name: "연기 한 점" }));
+    fireEvent.click(screen.getByRole("button", { name: "여기로 정하기" }));
+    await waitFor(() => expect(api.decide).toHaveBeenCalledWith(CODE, 11));
+    fireEvent.click(screen.getByRole("button", { name: "투표 계속하기" }));
+    await waitFor(() => expect(api.reopenPoll).toHaveBeenCalledWith(CODE));
+  });
+
+  it("동점으로 닫힌 동안 참여자는 모임장이 고르기를 기다린다", async () => {
+    api.fetchSnapshot.mockResolvedValue(
+      resultSnapshot({
+        phase: "VOTING",
+        allowed: ["EDIT_TASTE"],
+        poll: {
+          ...OPEN_POLL,
+          state: "CLOSED",
+          tie: true,
+          tieVotes: 1,
+          reopenable: true,
+          candidates: [
+            { placeId: 10, votes: 1 },
+            { placeId: 11, votes: 1 },
+          ],
+        },
+      }),
+    );
+    api.fetchResult.mockResolvedValue(RESULT);
+    mount();
+    expect(
+      await screen.findByText(
+        "2곳이 1표로 동점이에요. 민지님이 고르면 정해져요.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("투표 중에 추천 결과 보기로 결과 화면을 열고, 투표 화면으로 돌아온다", async () => {
+    api.fetchSnapshot.mockResolvedValue(
+      hostSnapshot({
+        phase: "VOTING",
+        allowed: ["EDIT_DATE", "CLOSE_POLL", "VOTE"],
+        calculation: SUCCEEDED,
+        resultCalculationId: 5,
+        poll: OPEN_POLL,
+      }),
+    );
+    api.fetchResult.mockResolvedValue(RESULT);
+    mount();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "추천 결과 보기" }),
+    );
+    expect(
+      await screen.findByText(/투표 중이에요 · 1명 투표했어요/),
+    ).toBeTruthy();
+    expect(screen.getAllByText("투표 후보")).toHaveLength(2);
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.getByRole("button", { name: "모임 정보 수정" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "투표 화면으로" }));
+    expect(await screen.findByText("익명 투표예요")).toBeTruthy();
+  });
+
+  it("프로필 없이 보면 표 수는 보이고 투표하려면 이름을 고르라고 안내한다", async () => {
+    api.fetchSnapshot.mockResolvedValue(
+      snapshot({ phase: "VOTING", poll: OPEN_POLL, resultCalculationId: 5 }),
+    );
+    api.fetchResult.mockResolvedValue(RESULT);
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "결과만 보기" }));
+    expect(
+      await screen.findByText("투표하려면 내 이름을 골라 주세요."),
+    ).toBeTruthy();
+    expect(screen.getByText("1표")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "내 이름 고르기" })).toBeTruthy();
+  });
+
+  it("정한 곳은 결과 맨 위에 보이고, 모임장은 바꾸거나 취소한다", async () => {
+    api.fetchSnapshot.mockResolvedValue(
+      hostSnapshot({
+        phase: "DECIDED",
+        allowed: ["CHANGE_DECISION", "CANCEL_DECISION", "EDIT_DATE"],
+        calculation: SUCCEEDED,
+        resultCalculationId: 5,
+        poll: { ...OPEN_POLL, state: "CLOSED", tie: true, tieVotes: 2 },
+        decision: { placeId: 10, method: "PICK", tieVotes: 2 },
+      }),
+    );
+    api.fetchResult.mockResolvedValue(RESULT);
+    api.cancelDecision.mockResolvedValue(undefined);
+    api.decide.mockResolvedValue(undefined);
+    mount();
+    expect(
+      await screen.findByText("2표씩 동점이라 민지님이 골랐어요"),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "숯불 마당에서 만나요. 모임 당일부터 방문 평가를 남길 수 있어요.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText("11월 14일 (토) 저녁 7시")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "다른 곳으로 바꾸기" }));
+    fireEvent.click(await screen.findByRole("radio", { name: "연기 한 점" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "연기 한 점으로 바꾸기" }),
+    );
+    await waitFor(() => expect(api.decide).toHaveBeenCalledWith(CODE, 11));
+
+    fireEvent.click(screen.getByRole("button", { name: "정하기 취소" }));
+    await waitFor(() => expect(api.cancelDecision).toHaveBeenCalledWith(CODE));
+  });
+
+  it("정한 곳이 있으면 내 취향을 고치기 전에 추천이 바뀌지 않는다고 알린다", async () => {
+    api.fetchSnapshot.mockResolvedValue(
+      resultSnapshot({
+        phase: "DECIDED",
+        decision: { placeId: 10, method: "DIRECT" },
+      }),
+    );
+    api.fetchResult.mockResolvedValue(RESULT);
+    mount();
+    expect(await screen.findByText("민지님이 정했어요")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "친구들 취향 보기" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "내 취향 수정" }),
+    );
+    expect(await screen.findByText("이미 정한 곳이 있어요")).toBeTruthy();
+    expect(mocks.push).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "수정하기" }));
+    expect(mocks.push).toHaveBeenCalledWith(`/m/${CODE}/taste`);
   });
 });

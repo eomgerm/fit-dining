@@ -6,6 +6,7 @@ import type {
   MeetupCreateResponse,
   MeetupSnapshot,
   MeetupUpdateRequest,
+  PollOpenRequest,
   ProfileCreateRequest,
   ProfileCreateResponse,
   Taste,
@@ -65,6 +66,42 @@ export function startCalculation(code: string) {
 // 마지막으로 성공한 계산의 결과(AC-19). 로그인 없이 받는다
 export function fetchResult(code: string, signal?: AbortSignal) {
   return request<MeetupResult>(`/v1/meetups/${code}/result`, { signal });
+}
+
+// 모임장이 결과 안의 2~5곳으로 투표를 연다(AC-36)
+export function openPoll(code: string, body: PollOpenRequest) {
+  return request<void>(`/v1/meetups/${code}/poll`, { method: "POST", body });
+}
+
+// 프로필이 있는 사람이 투표하거나 표를 바꾼다(AC-37). 로그인 없이 된다
+export function vote(code: string, placeId: number) {
+  return request<void>(`/v1/meetups/${code}/poll/votes/me`, {
+    method: "PUT",
+    body: { placeId },
+  });
+}
+
+// 마감한다. 가장 많은 곳이 하나면 정해지고, 동점이면 닫힌 채 모임장의 선택을 기다린다(AC-40)
+export function closePoll(code: string) {
+  return request<void>(`/v1/meetups/${code}/poll/close`, { method: "POST" });
+}
+
+// 동점으로 닫힌 투표를 다시 연다(AC-40)
+export function reopenPoll(code: string) {
+  return request<void>(`/v1/meetups/${code}/poll/reopen`, { method: "POST" });
+}
+
+// 정하거나 다른 곳으로 바꾼다(AC-41)
+export function decide(code: string, placeId: number) {
+  return request<void>(`/v1/meetups/${code}/decision`, {
+    method: "PUT",
+    body: { placeId },
+  });
+}
+
+// 정하기 취소(AC-41)
+export function cancelDecision(code: string) {
+  return request<void>(`/v1/meetups/${code}/decision`, { method: "DELETE" });
 }
 
 // 모임장만 다른 사람의 프로필을 지운다(AC-23)

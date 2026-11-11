@@ -110,7 +110,39 @@ export type MeetupSnapshot = {
   calculation?: MeetupCalculation;
   // 마지막으로 성공한 계산. 결과는 이 값이 바뀔 때만 다시 받는다(D-9)
   resultCalculationId?: number;
+  // 투표. 연 적이 없으면 없다
+  poll?: MeetupPoll;
+  // 정한 곳. 없으면 없다
+  decision?: MeetupDecision;
 };
+
+// 투표(AC-38, AC-39). 익명 투표에는 voters와 notVoted가 없고, myVote는 그 표를 던진 브라우저나 그 회원에게만 온다
+export type MeetupPoll = {
+  state: "OPEN" | "CLOSED";
+  anonymous: boolean;
+  // 동점으로 마감했는지와 그때 고정한 표 수(AC-40)
+  tie: boolean;
+  tieVotes?: number;
+  reopenable: boolean;
+  // 모임장이 고른 순서
+  candidates: { placeId: number; votes: number; voters?: number[] }[];
+  votedCount: number;
+  notVotedCount: number;
+  notVoted?: number[];
+  hasVoted?: boolean;
+  myVote?: number;
+};
+
+export type DecisionMethod = "VOTE" | "PICK" | "DIRECT";
+
+export type MeetupDecision = {
+  placeId: number;
+  method: DecisionMethod;
+  // 동점에서 고른 경우의 동점 표 수
+  tieVotes?: number;
+};
+
+export type PollOpenRequest = { placeIds: number[]; anonymous: boolean };
 
 export type MeetupCalculation = {
   id: number;
@@ -131,6 +163,8 @@ export type MeetupConflict =
   | "already-joined"
   | "host-profile"
   | "calculating"
+  | "poll-closed"
+  | "no-votes"
   | "phase";
 
 export const NAME_MAX = 10;
@@ -138,6 +172,9 @@ export const WANT_MENU_MAX = 20;
 export const PRICE_CAP_MIN = 5_000;
 export const PRICE_CAP_MAX = 100_000;
 export const PRICE_CAP_STEP = 1_000;
+// 투표 후보 수(AC-36)
+export const POLL_CANDIDATES_MIN = 2;
+export const POLL_CANDIDATES_MAX = 5;
 
 export const FOOD_TYPES: FoodType[] = [
   "KOREAN",

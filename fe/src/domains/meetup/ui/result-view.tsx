@@ -18,10 +18,13 @@ import { TopBar } from "@/shared/ui/layout/top-bar";
 
 import {
   hostProfile,
+  POLL_CANDIDATES_MAX,
+  POLL_CANDIDATES_MIN,
   type MeetupProfile,
   type MeetupSnapshot,
 } from "../model/meetup";
 import { formatClock } from "../model/meetup-date";
+import { toggleCandidate } from "../model/poll";
 import {
   conditionChips,
   type MeetupResult,
@@ -29,6 +32,13 @@ import {
 } from "../model/result";
 import { FriendsSheet } from "./friends-sheet";
 import { meetupTitle } from "./meetup-info-card";
+import {
+  CardActions,
+  ChangeDecisionSheet,
+  DecideDialog,
+  DecidedCard,
+  PollOpenSheet,
+} from "./poll-parts";
 import { ResultCard, type ResultCardParts } from "./result-card";
 
 // 결과 화면의 상태. 찾는 중과 불러오기 실패는 상태 모음 3이다
@@ -80,8 +90,9 @@ function outdatedText(profiles: MeetupProfile[]) {
   return `${late.map((profile) => `${profile.name}님`).join(", ")}이 방금 취향을 남겼어요`;
 }
 
-// 추천 결과(모임장 6, 참여자 7, AC-19 ~ AC-21, AC-30 ~ AC-32). 모임장에게만 다시 추천받기와 첫 줄 오른쪽의 모임 정보
-// "수정"이 있다. 투표·정하기는 그 기능의 단계에서 붙인다
+// 추천 결과(모임장 6, 참여자 7, AC-19 ~ AC-21, AC-30 ~ AC-32, AC-44, AC-45). 모임장에게만 다시 추천받기, 첫 줄
+// 오른쪽의 모임 정보 "수정", 카드의 투표에 올리기·여기로 정하기가 있다. 투표 중에는 투표 화면으로 가는 줄을, 정한 뒤에는
+// 맨 위에 정한 곳을 보인다
 export function ResultView({
   snapshot,
   result,
@@ -89,6 +100,7 @@ export function ResultView({
   parts,
   placeHref,
   calculating,
+  pollPending = false,
   onBack,
   onCalculate,
   onReload,
@@ -96,6 +108,10 @@ export function ResultView({
   onRemoveProfile,
   onPickName,
   onEditInfo,
+  onOpenPoll,
+  onDecide,
+  onCancelDecision,
+  onShowVote,
 }: {
   snapshot: MeetupSnapshot;
   result?: MeetupResult;
@@ -113,15 +129,37 @@ export function ResultView({
   // 프로필 없이 보는 사람이 이름을 고르러 간다
   onPickName?: () => void;
   onEditInfo?: () => void;
+  // 투표 열기·정하기·바꾸기·취소 요청이 처리 중인지
+  pollPending?: boolean;
+  // 성공하면 true다
+  onOpenPoll?: (placeIds: number[], anonymous: boolean) => Promise<boolean>;
+  onDecide?: (placeId: number) => Promise<boolean>;
+  onCancelDecision?: () => void;
+  // 투표 중에 투표 화면으로 돌아간다
+  onShowVote?: () => void;
 }) {
   const [friendsOpen, setFriendsOpen] = useState(false);
-  const { me, info, profiles, allowed, calculation } = snapshot;
+  const [selected, setSelected] = useState<number[]>([]);
+  const [pollOpen, setPollOpen] = useState(false);
+  const [deciding, setDeciding] = useState<MeetupResultItem>();
+  const [changing, setChanging] = useState(false);
+  const { me, info, profiles, allowed, calculation, poll, decision } = snapshot;
   const host = me.role === "HOST";
   const hostName = hostProfile(snapshot)?.name ?? info.hostNickname;
   const hostSubject = hostName ? `${hostName}님이` : "모임장이";
   const canCalculate = allowed.includes("CALCULATE");
   const canEditInfo =
     allowed.includes("EDIT_INFO") || allowed.includes("EDIT_DATE");
+  const canPoll = allowed.includes("OPEN_POLL") && !!onOpenPoll;
+  const canDecide =
+    snapshot.phase === "RESULT" && allowed.includes("DECIDE") && !!onDecide;
+  const candidateIds = new Set(poll?.candidates.map((c) => c.placeId));
+  const selectedItems = (result?.items ?? []).filter((item) =>
+    selected.includes(item.place.id),
+  );
+  const decidedItem = result?.items.find(
+    (item) => item.place.id === decision?.placeId,
+  );
 
   const body = () => {
     if (state === "finding") {
@@ -199,10 +237,59 @@ export function ResultView({
         profiles={profiles}
         href={placeHref(item.place.id)}
         parts={parts}
+        selected={selected.includes(item.place.id)}
+        badge={
+          snapshot.phase === "VOTING" &&
+          candidateIds.has(item.place.id) && (
+            <Tag variant="match">투표 후보</Tag>
+          )
+        }
+        footer={
+          <CardActions
+            selected={selected.includes(item.place.id)}
+            full={selected.length >= POLL_CANDIDATES_MAX}
+            canPoll={canPoll}
+            canDecide={canDecide}
+            onToggle={() =>
+              setSelected((current) => toggleCandidate(current, item.place.id))
+            }
+            onDecide={() => setDeciding(item)}
+          />
+        }
       />
+    );
+    const listed = result.items.filter(
+      (item) => item.place.id !== decision?.placeId,
     );
     return (
       <>
+        {decision && (
+          <DecidedCard
+            decision={decision}
+            poll={poll}
+            item={decidedItem}
+            info={info}
+            hostName={hostName}
+            href={placeHref(decision.placeId)}
+            canChange={allowed.includes("CHANGE_DECISION")}
+            canCancel={
+              allowed.includes("CANCEL_DECISION") && !!onCancelDecision
+            }
+            onChange={() => setChanging(true)}
+            onCancel={() => onCancelDecision?.()}
+          />
+        )}
+        {snapshot.phase === "VOTING" && poll && onShowVote && (
+          <div className="flex items-center gap-2 rounded-md bg-primary-soft py-1.5 pr-1.5 pl-3.5">
+            <span className="flex-1 text-label-md text-primary">
+              {poll.state === "OPEN" ? "투표 중이에요" : "투표를 마감했어요"} ·{" "}
+              {poll.votedCount}명 투표했어요
+            </span>
+            <Button size="sm" onClick={onShowVote}>
+              투표 화면으로
+            </Button>
+          </div>
+        )}
         <section className="flex flex-col gap-2">
           <div className="flex items-center gap-3">
             <div className="flex min-w-0 flex-1 flex-col gap-2">
@@ -278,14 +365,12 @@ export function ResultView({
           <>
             <ResultGroup
               title="모두에게 잘 맞는 곳"
-              items={result.items.filter((item) => item.group === "ALL_FIT")}
+              items={listed.filter((item) => item.group === "ALL_FIT")}
               render={card}
             />
             <ResultGroup
               title="취향이 조금 갈리는 곳"
-              items={result.items.filter(
-                (item) => item.group === "SOME_MISFIT",
-              )}
+              items={listed.filter((item) => item.group === "SOME_MISFIT")}
               render={card}
             />
           </>
@@ -322,6 +407,31 @@ export function ResultView({
           <Button onClick={onPickName}>내 이름 고르기</Button>
         </BottomBar>
       )}
+      {canPoll && selected.length > 0 && (
+        <BottomBar variant="divider">
+          {selected.length < POLL_CANDIDATES_MIN && (
+            <p className="text-caption-md text-ink-muted">
+              2곳 이상 골라야 투표를 열 수 있어요. 한 곳이면 카드에서 바로 정해
+              주세요.
+            </p>
+          )}
+          <div className="flex items-center gap-3">
+            <span className="text-body-sm text-ink-muted">
+              <span className="font-semibold text-primary">
+                {selected.length}곳
+              </span>{" "}
+              골랐어요
+            </span>
+            <Button
+              className="flex-1"
+              disabled={selected.length < POLL_CANDIDATES_MIN}
+              onClick={() => setPollOpen(true)}
+            >
+              투표 열기
+            </Button>
+          </div>
+        </BottomBar>
+      )}
       <FriendsSheet
         open={friendsOpen}
         onOpenChange={setFriendsOpen}
@@ -329,6 +439,45 @@ export function ResultView({
         onEditTaste={onEditTaste}
         onRemoveProfile={onRemoveProfile}
       />
+      {canPoll && (
+        <PollOpenSheet
+          open={pollOpen}
+          onOpenChange={setPollOpen}
+          items={selectedItems}
+          profiles={profiles}
+          canCalculate={canCalculate}
+          pending={pollPending}
+          onOpen={async (anonymous) => {
+            if (await onOpenPoll!(selected, anonymous)) setPollOpen(false);
+          }}
+          onCalculate={() => {
+            setPollOpen(false);
+            setSelected([]);
+            onCalculate();
+          }}
+        />
+      )}
+      <DecideDialog
+        item={deciding}
+        pending={pollPending}
+        onClose={() => setDeciding(undefined)}
+        onDecide={async (item) => {
+          if (await onDecide!(item.place.id)) setDeciding(undefined);
+        }}
+      />
+      {decision && result && (
+        <ChangeDecisionSheet
+          open={changing}
+          onOpenChange={setChanging}
+          decision={decision}
+          poll={poll}
+          items={result.items}
+          pending={pollPending}
+          onChange={async (item) => {
+            if (await onDecide?.(item.place.id)) setChanging(false);
+          }}
+        />
+      )}
     </Screen>
   );
 }

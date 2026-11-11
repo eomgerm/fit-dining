@@ -6,20 +6,27 @@ import type {
   MeetupConflict,
   MeetupCreateRequest,
   MeetupUpdateRequest,
+  PollOpenRequest,
   ProfileCreateRequest,
   Taste,
 } from "../model/meetup";
 import {
+  cancelDecision,
+  closePoll,
   createMeetup,
   createProfile,
+  decide,
   fetchResult,
   fetchSnapshot,
+  openPoll,
   removeProfile,
+  reopenPoll,
   searchAreas,
   selectProfile,
   startCalculation,
   updateMeetup,
   updateTaste,
+  vote,
 } from "./meetup-api";
 
 // 로그인을 확인하고 요청을 보내는 함수. 모임 도메인은 인증 도메인을 부를 수 없어 app이 만들어 넘긴다
@@ -37,6 +44,8 @@ export const meetupKeys = {
 
 // 계산 중에 스냅숏을 다시 받는 간격(D-10)
 export const CALCULATING_REFETCH_MS = 1000;
+// 투표 중에 스냅숏을 다시 받는 간격(D-21)
+export const VOTING_REFETCH_MS = 5000;
 
 export function useAreaSearch(query: string, withSession: WithSession) {
   return useQuery({
@@ -55,17 +64,20 @@ export function useCreateMeetup(withSession: WithSession) {
   });
 }
 
-// 화면에 들어올 때와 탭으로 돌아올 때 다시 받고, 계산 중에는 1초마다 다시 받는다(AC-31). 없는 코드(404)는 다시 묻지 않는다
+// 화면에 들어올 때와 탭으로 돌아올 때 다시 받고, 계산 중에는 1초, 투표 중에는 5초마다 다시 받는다(AC-31, AC-43).
+// 투표 중에는 동점으로 닫혀 모임장을 기다리는 동안도 받아, 다시 열거나 정한 것이 참여자에게 늦지 않게 한다
+// 없는 코드(404)는 다시 묻지 않는다
 export function useMeetupSnapshot(code: string) {
   return useQuery({
     queryKey: meetupKeys.snapshot(code),
     queryFn: ({ signal }) => fetchSnapshot(code, signal),
     retry: (count, error) =>
       !(isApiError(error) && error.status === 404) && count < 2,
-    refetchInterval: (query) =>
-      query.state.data?.calculation?.state === "RUNNING"
-        ? CALCULATING_REFETCH_MS
-        : false,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (data?.calculation?.state === "RUNNING") return CALCULATING_REFETCH_MS;
+      return data?.phase === "VOTING" ? VOTING_REFETCH_MS : false;
+    },
   });
 }
 
@@ -115,6 +127,30 @@ export function useUpdateMeetup(code: string) {
 
 export function useStartCalculation(code: string) {
   return useMeetupWrite<void, void>(code, () => startCalculation(code));
+}
+
+export function useOpenPoll(code: string) {
+  return useMeetupWrite(code, (body: PollOpenRequest) => openPoll(code, body));
+}
+
+export function useVote(code: string) {
+  return useMeetupWrite(code, (placeId: number) => vote(code, placeId));
+}
+
+export function useClosePoll(code: string) {
+  return useMeetupWrite<void, void>(code, () => closePoll(code));
+}
+
+export function useReopenPoll(code: string) {
+  return useMeetupWrite<void, void>(code, () => reopenPoll(code));
+}
+
+export function useDecide(code: string) {
+  return useMeetupWrite(code, (placeId: number) => decide(code, placeId));
+}
+
+export function useCancelDecision(code: string) {
+  return useMeetupWrite<void, void>(code, () => cancelDecision(code));
 }
 
 export function useRemoveProfile(code: string) {

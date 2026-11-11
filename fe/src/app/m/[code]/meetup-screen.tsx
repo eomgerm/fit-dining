@@ -6,11 +6,17 @@ import { useEffect, useState } from "react";
 import {
   conflictOf,
   isNotFound,
+  useCancelDecision,
+  useClosePoll,
+  useDecide,
   useMeetupResult,
   useMeetupSnapshot,
+  useOpenPoll,
   useRemoveProfile,
+  useReopenPoll,
   useSelectProfile,
   useStartCalculation,
+  useVote,
 } from "@/domains/meetup/api/queries";
 import {
   clearJustJoined,
@@ -29,12 +35,14 @@ import {
   JoinAgainDialog,
   MemberProfileDialog,
 } from "@/domains/meetup/ui/picker-dialogs";
+import { TasteAfterDecisionDialog } from "@/domains/meetup/ui/poll-parts";
 import { ProfilePicker } from "@/domains/meetup/ui/profile-picker";
 import type { ResultCardParts } from "@/domains/meetup/ui/result-card";
 import {
   ResultView,
   type ResultViewState,
 } from "@/domains/meetup/ui/result-view";
+import { VoteView } from "@/domains/meetup/ui/vote-view";
 import { WaitingView } from "@/domains/meetup/ui/waiting-view";
 import { FitScore } from "@/domains/place/ui/fit-score";
 import { PlacePhoto, RankBadge } from "@/domains/place/ui/place-parts";
@@ -55,6 +63,22 @@ const RESULT_PARTS: ResultCardParts = {
   rank: (rank) => <RankBadge rank={rank} />,
   score: (score) => <FitScore score={score} />,
 };
+
+// 투표와 정하기의 409를 짧게 알린다(AC-35). 스냅숏은 쓰기가 끝나면 다시 받는다
+function pollFailure(error: unknown, fallback: string) {
+  switch (conflictOf(error)) {
+    case "poll-closed":
+      return "투표가 마감돼서 고른 곳을 바꾸지 못했어요";
+    case "no-votes":
+      return "아직 아무도 투표하지 않아 마감할 수 없어요";
+    case "calculating":
+      return "지금 추천을 찾고 있어요. 끝난 뒤 다시 해 주세요";
+    case "phase":
+      return "모임 상태가 바뀌었어요. 바뀐 화면을 확인해 주세요";
+    default:
+      return fallback;
+  }
+}
 
 function LoadingScreen({
   failed,
@@ -130,6 +154,21 @@ function MeetupBody({
   const remove = useRemoveProfile(code);
   const calculation = useStartCalculation(code);
   const result = useMeetupResult(code, snapshot.resultCalculationId);
+  const openPoll = useOpenPoll(code);
+  const vote = useVote(code);
+  const closePoll = useClosePoll(code);
+  const reopenPoll = useReopenPoll(code);
+  const decide = useDecide(code);
+  const cancelDecision = useCancelDecision(code);
+  const pollPending =
+    openPoll.isPending ||
+    closePoll.isPending ||
+    reopenPoll.isPending ||
+    decide.isPending ||
+    cancelDecision.isPending;
+  // 투표 중에 결과 화면을 보는지. 모임 정보 "수정"은 결과 화면에만 있다(AC-30)
+  const [showResult, setShowResult] = useState(false);
+  const [tasteNotice, setTasteNotice] = useState(false);
   const [viewOnly, setViewOnly] = useState(false);
   const [confirming, setConfirming] = useState<MeetupProfile>();
   const [memberPicked, setMemberPicked] = useState<MeetupProfile>();
@@ -152,10 +191,23 @@ function MeetupBody({
     rememberLoginReturn(path);
     router.push("/login");
   };
-  const editTaste = () => {
+  const goEditTaste = () => {
     clearJustJoined(code);
     router.push(`${meetupHref(code)}/taste`);
   };
+  // 정한 곳이 있으면 추천이 바뀌지 않는다는 것을 먼저 알린다(AC-45)
+  const editTaste = () => {
+    if (snapshot.decision) setTasteNotice(true);
+    else goEditTaste();
+  };
+  const succeeded = <T,>(send: Promise<T>, fallback: string) =>
+    send.then(
+      () => true,
+      (error: unknown) => {
+        toast(pollFailure(error, fallback));
+        return false;
+      },
+    );
   const join = () => router.push(`${meetupHref(code)}/join`);
   const editInfo = () => router.push(`${meetupHref(code)}/edit`);
   const calculate = () =>
@@ -195,8 +247,76 @@ function MeetupBody({
         onRemoveProfile={removeProfile}
         onPickName={onPickName}
         onEditInfo={editInfo}
+        pollPending={pollPending}
+        onOpenPoll={(placeIds, anonymous) =>
+          succeeded(
+            openPoll.mutateAsync({ placeIds, anonymous }),
+            "투표를 열지 못했어요. 잠시 뒤 다시 시도해 주세요",
+          )
+        }
+        onDecide={(placeId) =>
+          succeeded(
+            decide.mutateAsync(placeId),
+            "정하지 못했어요. 잠시 뒤 다시 시도해 주세요",
+          )
+        }
+        onCancelDecision={() =>
+          succeeded(
+            cancelDecision.mutateAsync(),
+            "정하기를 취소하지 못했어요. 잠시 뒤 다시 시도해 주세요",
+          )
+        }
+        onShowVote={() => setShowResult(false)}
       />
     );
+  // 투표 중에는 투표 화면이 먼저다. 결과 화면은 "추천 결과 보기"로 연다
+  const voteView = (onPickName?: () => void) =>
+    snapshot.phase === "VOTING" &&
+    snapshot.poll &&
+    !showResult && (
+      <VoteView
+        snapshot={snapshot}
+        result={result.data}
+        parts={RESULT_PARTS}
+        placeHref={(placeId) => `/places/${placeId}?meetup=${code}`}
+        pending={pollPending}
+        onBack={host ? () => router.push("/") : undefined}
+        onVote={(placeId) =>
+          succeeded(
+            vote.mutateAsync(placeId),
+            "투표하지 못했어요. 잠시 뒤 다시 시도해 주세요",
+          )
+        }
+        onClose={() =>
+          succeeded(
+            closePoll.mutateAsync(),
+            "마감하지 못했어요. 잠시 뒤 다시 시도해 주세요",
+          )
+        }
+        onReopen={() =>
+          succeeded(
+            reopenPoll.mutateAsync(),
+            "투표를 다시 열지 못했어요. 잠시 뒤 다시 시도해 주세요",
+          )
+        }
+        onDecide={(placeId) =>
+          succeeded(
+            decide.mutateAsync(placeId),
+            "정하지 못했어요. 잠시 뒤 다시 시도해 주세요",
+          )
+        }
+        onShare={share}
+        onShowResult={() => setShowResult(true)}
+        onPickName={onPickName}
+      />
+    );
+  const tasteDialog = (
+    <TasteAfterDecisionDialog
+      open={tasteNotice}
+      onClose={() => setTasteNotice(false)}
+      onEdit={goEditTaste}
+    />
+  );
 
   if (snapshot.me.profileId) {
     if (snapshot.me.role !== "HOST" && justJoined) {
@@ -213,26 +333,30 @@ function MeetupBody({
       );
     }
     return (
-      resultView() ?? (
-        <WaitingView
-          snapshot={snapshot}
-          onBack={host ? () => router.push("/") : undefined}
-          onShare={share}
-          onCopy={copy}
-          onEditTaste={editTaste}
-          onRemoveProfile={removeProfile}
-          onCalculate={calculate}
-          calculating={calculation.isPending}
-          onEditInfo={editInfo}
-        />
-      )
+      <>
+        {voteView() || resultView() || (
+          <WaitingView
+            snapshot={snapshot}
+            onBack={host ? () => router.push("/") : undefined}
+            onShare={share}
+            onCopy={copy}
+            onEditTaste={editTaste}
+            onRemoveProfile={removeProfile}
+            onCalculate={calculate}
+            calculating={calculation.isPending}
+            onEditInfo={editInfo}
+          />
+        )}
+        {tasteDialog}
+      </>
     );
   }
 
   if (viewOnly) {
     const pickName = () => setViewOnly(false);
     return (
-      resultView(pickName) ?? (
+      voteView(pickName) ||
+      resultView(pickName) || (
         <WaitingView
           snapshot={snapshot}
           onShare={share}

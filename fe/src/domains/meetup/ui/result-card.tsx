@@ -38,19 +38,26 @@ const statusVariants = cva("font-semibold", {
   },
 });
 
-// 결과 카드(모임장 6, 참여자 7). 본문은 장소 상세를 연다. 투표에 올리기·여기로 정하기 영역은 투표 단계에서 붙인다(AC-32)
+// 결과 카드(모임장 6, 참여자 7). 본문은 장소 상세를 열고, 아래 동작 영역(footer)은 따로 눌린다(AC-32).
+// selected는 투표에 올린 카드, badge는 투표 중의 "투표 후보" 표시다
 export function ResultCard({
   item,
   info,
   profiles,
   href,
   parts,
+  selected = false,
+  badge,
+  footer,
 }: {
   item: MeetupResultItem;
   info: MeetupInfo;
   profiles: MeetupProfile[];
   href: string;
   parts: ResultCardParts;
+  selected?: boolean;
+  badge?: ReactNode;
+  footer?: ReactNode;
 }) {
   const fit = fitLine(item.fit, profiles);
   const status = item.openStatus && openStatusLabel(item.openStatus, info);
@@ -62,7 +69,12 @@ export function ResultCard({
   const facilities = facilityChips(item.facilities);
 
   return (
-    <article className="rounded-lg ring-1 ring-line ring-inset">
+    <article
+      className={cn(
+        "rounded-lg ring-inset",
+        selected ? "ring-2 ring-primary" : "ring-1 ring-line",
+      )}
+    >
       <Link
         href={href}
         className="flex flex-col gap-2.5 rounded-lg p-3.5 outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
@@ -107,8 +119,9 @@ export function ResultCard({
             </p>
           </div>
         </div>
-        {reasons.length + facilities.length > 0 && (
+        {reasons.length + facilities.length > 0 || badge ? (
           <div className="flex flex-wrap gap-1">
+            {badge}
             {reasons.map((reason) => (
               <Tag key={reason} variant="match">
                 {reason}
@@ -118,7 +131,7 @@ export function ResultCard({
               <Tag key={facility}>{facility}</Tag>
             ))}
           </div>
-        )}
+        ) : null}
         {item.menu && (
           <p className="text-caption-md text-ink-muted">
             대표 메뉴 <span className="text-ink">{menuText(item.menu)}</span>
@@ -131,6 +144,7 @@ export function ResultCard({
           </p>
         )}
       </Link>
+      {footer}
     </article>
   );
 }
