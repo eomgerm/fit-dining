@@ -238,10 +238,10 @@ class MeetupPersistenceTest extends PostgresTestSupport {
 		void snapshot_host_allowsHostActions() {
 			String code = create(LocalDate.of(2026, 11, 14), LocalTime.of(19, 0), "회식").code();
 
-			MeetupSnapshot snapshot = service.snapshot(code, HOST);
+			MeetupSnapshot snapshot = service.snapshot(code, HOST, null);
 
 			assertThat(snapshot.phase()).isEqualTo(MeetupPhase.WAITING);
-			assertThat(snapshot.me()).isEqualTo(new MeetupSnapshot.Me(MeetupRole.HOST, null, true));
+			assertThat(snapshot.me()).isEqualTo(new MeetupSnapshot.Me(MeetupRole.HOST, null, true, null));
 			assertThat(snapshot.allowed()).containsExactly(MeetupAction.EDIT_INFO, MeetupAction.REMOVE_PROFILE,
 					MeetupAction.CALCULATE, MeetupAction.JOIN);
 			assertThat(snapshot.info()).isEqualTo(new MeetupSnapshot.Info(
@@ -254,9 +254,9 @@ class MeetupPersistenceTest extends PostgresTestSupport {
 		void snapshot_otherUserOrAnonymous_viewer() {
 			String code = create(null, null, null).code();
 
-			assertThat(service.snapshot(code, GUEST).me()).isEqualTo(new MeetupSnapshot.Me(MeetupRole.VIEWER, null, true));
-			MeetupSnapshot anonymous = service.snapshot(code, null);
-			assertThat(anonymous.me()).isEqualTo(new MeetupSnapshot.Me(MeetupRole.VIEWER, null, false));
+			assertThat(service.snapshot(code, GUEST, null).me()).isEqualTo(new MeetupSnapshot.Me(MeetupRole.VIEWER, null, true, null));
+			MeetupSnapshot anonymous = service.snapshot(code, null, null);
+			assertThat(anonymous.me()).isEqualTo(new MeetupSnapshot.Me(MeetupRole.VIEWER, null, false, null));
 			assertThat(anonymous.allowed()).containsExactly(MeetupAction.JOIN);
 			assertThat(anonymous.info().expiresOn()).isEqualTo(LocalDate.of(2026, 11, 18));
 		}
@@ -264,9 +264,9 @@ class MeetupPersistenceTest extends PostgresTestSupport {
 		@Test
 		@DisplayName("스냅숏_없거나형식이틀린코드면_404다")
 		void snapshot_unknownCode_notFound() {
-			assertThatThrownBy(() -> service.snapshot("AAAAAAAAAAAAAAAAAAAAAA", null))
+			assertThatThrownBy(() -> service.snapshot("AAAAAAAAAAAAAAAAAAAAAA", null, null))
 					.isInstanceOf(MeetupNotFoundException.class);
-			assertThatThrownBy(() -> service.snapshot("../etc", null)).isInstanceOf(MeetupNotFoundException.class);
+			assertThatThrownBy(() -> service.snapshot("../etc", null, null)).isInstanceOf(MeetupNotFoundException.class);
 		}
 
 	}

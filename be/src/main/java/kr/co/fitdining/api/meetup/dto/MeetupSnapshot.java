@@ -8,10 +8,10 @@ import kr.co.fitdining.api.meetup.domain.MeetupCategory;
 import kr.co.fitdining.api.meetup.domain.MeetupPhase;
 import kr.co.fitdining.api.meetup.domain.MeetupQuestions;
 import kr.co.fitdining.api.meetup.domain.MeetupRole;
+import kr.co.fitdining.api.meetup.domain.Taste;
 
 /**
- * 모임의 지금 상태를 한 번에 주는 응답(D-9). 값이 없는 속성은 빠진다. 프로필, 계산, 투표, 정한 곳은 그 기능을 만들 때
- * 더한다.
+ * 모임의 지금 상태를 한 번에 주는 응답(D-9). 값이 없는 속성은 빠진다. 계산, 투표, 정한 곳은 그 기능을 만들 때 더한다.
  *
  * @param phase 저장한 상태
  * @param afterMeetup 모임 뒤인지
@@ -19,7 +19,8 @@ import kr.co.fitdining.api.meetup.domain.MeetupRole;
  * @param questions 질문지에 보일 질문
  * @param me 요청한 사람
  * @param allowed 지금 이 사람이 할 수 있는 동작
- * @param profiles 프로필 목록
+ * @param profiles 들어온 순서의 프로필 목록
+ * @param pendingCount 아직 취향을 남기지 않은 수. 인원을 정했고 남긴 수가 인원보다 적을 때만 있다.
  */
 public record MeetupSnapshot(
 		MeetupPhase phase,
@@ -28,7 +29,8 @@ public record MeetupSnapshot(
 		MeetupQuestions questions,
 		Me me,
 		List<MeetupAction> allowed,
-		List<Profile> profiles
+		List<Profile> profiles,
+		Integer pendingCount
 ) {
 
 	/**
@@ -56,8 +58,9 @@ public record MeetupSnapshot(
 	 * @param role 역할
 	 * @param profileId 내 프로필. 없으면 빠진다.
 	 * @param signedIn 로그인했는지
+	 * @param convertible 비회원 프로필을 로그인한 회원의 프로필로 바꿀 수 있을 때만 true로 있다(D-25).
 	 */
-	public record Me(MeetupRole role, Long profileId, boolean signedIn) {
+	public record Me(MeetupRole role, Long profileId, boolean signedIn, Boolean convertible) {
 	}
 
 	/**
@@ -66,8 +69,11 @@ public record MeetupSnapshot(
 	 * @param color 아바타 색(0~7)
 	 * @param member 회원 프로필인지
 	 * @param host 모임장의 프로필인지
+	 * @param taste 지금 보이는 질문의 답. 답이 하나도 없으면 빠진다.
+	 * @param reflected 마지막으로 성공한 추천에 이 취향이 들어갔는지. 추천이 없으면 false다.
 	 */
-	public record Profile(long id, String name, int color, boolean member, boolean host) {
+	public record Profile(long id, String name, int color, boolean member, boolean host, Taste taste,
+			boolean reflected) {
 	}
 
 }

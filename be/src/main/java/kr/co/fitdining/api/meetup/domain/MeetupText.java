@@ -1,5 +1,6 @@
 package kr.co.fitdining.api.meetup.domain;
 
+import java.text.Normalizer;
 import java.util.regex.Pattern;
 
 /**
@@ -25,6 +26,20 @@ public final class MeetupText {
 
 	public static int length(String text) {
 		return text.codePointCount(0, text.length());
+	}
+
+	/**
+	 * 프로필 이름. 앞뒤 공백을 지우고 NFC로 정규화한 값이고, 이 값 그대로 겹침을 본다(D-5).
+	 *
+	 * @return 정리한 이름. 비었거나 {@link MeetupLimits#NAME_MAX}자를 넘으면 null이다.
+	 */
+	public static String profileName(String raw) {
+		String trimmed = trimToNull(raw);
+		if (trimmed == null) {
+			return null;
+		}
+		String name = Normalizer.normalize(trimmed, Normalizer.Form.NFC);
+		return length(name) > MeetupLimits.NAME_MAX ? null : name;
 	}
 
 }

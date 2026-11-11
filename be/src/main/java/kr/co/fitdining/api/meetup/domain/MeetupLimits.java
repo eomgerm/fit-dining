@@ -1,5 +1,6 @@
 package kr.co.fitdining.api.meetup.domain;
 
+import java.time.Duration;
 import java.time.ZoneId;
 
 /**
@@ -27,6 +28,15 @@ public final class MeetupLimits {
 	/** 메뉴 하나 가격 상한(원)의 범위(AC-6). 단위는 화면의 입력 단위일 뿐 서버는 보지 않고, DB는 0보다 큰지만 본다(D-5). */
 	public static final int PRICE_CAP_MIN = 5_000;
 	public static final int PRICE_CAP_MAX = 100_000;
+
+	/** 한 모임의 프로필 수. 색(0~7)이 모임 안에서 유일해 DB도 이 수를 넘기지 않는다(D-4). */
+	public static final int PROFILE_MAX = 8;
+	public static final int NAME_MAX = 10;
+	public static final int WANT_MENU_MAX = 20;
+
+	/** 로그인 없는 쓰기 한도. 모임과 IP마다 이 구간에 이 횟수까지다(D-8). */
+	public static final int ANONYMOUS_WRITES = 120;
+	public static final Duration ANONYMOUS_WRITE_WINDOW = Duration.ofMinutes(15);
 
 	private MeetupLimits() {
 	}

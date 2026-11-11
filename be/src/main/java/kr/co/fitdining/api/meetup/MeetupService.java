@@ -19,9 +19,10 @@ import kr.co.fitdining.api.meetup.domain.MeetupCodes;
 import kr.co.fitdining.api.meetup.domain.MeetupLimits;
 import kr.co.fitdining.api.meetup.domain.MeetupPermissions;
 import kr.co.fitdining.api.meetup.domain.MeetupQuestions;
-import kr.co.fitdining.api.meetup.domain.MeetupRole;
 import kr.co.fitdining.api.meetup.domain.MeetupSchedule;
+import kr.co.fitdining.api.meetup.domain.MeetupTasteRules;
 import kr.co.fitdining.api.meetup.domain.MeetupText;
+import kr.co.fitdining.api.meetup.domain.Taste;
 import kr.co.fitdining.api.meetup.dto.MeetupAreasResponse;
 import kr.co.fitdining.api.meetup.dto.MeetupCreateRequest;
 import kr.co.fitdining.api.meetup.dto.MeetupCreateResponse;
@@ -29,6 +30,8 @@ import kr.co.fitdining.api.meetup.dto.MeetupSnapshot;
 import kr.co.fitdining.api.meetup.exception.InvalidMeetupException;
 import kr.co.fitdining.api.meetup.exception.MeetupNotFoundException;
 import kr.co.fitdining.api.meetup.store.Meetup;
+import kr.co.fitdining.api.meetup.store.MeetupProfile;
+import kr.co.fitdining.api.meetup.store.MeetupProfileRepository;
 import kr.co.fitdining.api.meetup.store.MeetupRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,15 +46,22 @@ public class MeetupService {
 	private static final DateTimeFormatter HH_MM = DateTimeFormatter.ofPattern("HH:mm");
 
 	private final MeetupRepository meetups;
+	private final MeetupProfileRepository profiles;
 	private final AuthUserRepository users;
 	private final MeetupPlaces places;
+	private final MeetupRequesters requesters;
+	private final MeetupQuestionSource questionSource;
 	private final Clock clock;
 
-	public MeetupService(MeetupRepository meetups, AuthUserRepository users, MeetupPlaces places,
+	public MeetupService(MeetupRepository meetups, MeetupProfileRepository profiles, AuthUserRepository users,
+			MeetupPlaces places, MeetupRequesters requesters, MeetupQuestionSource questionSource,
 			Optional<Clock> clock) {
 		this.meetups = meetups;
+		this.profiles = profiles;
 		this.users = users;
 		this.places = places;
+		this.requesters = requesters;
+		this.questionSource = questionSource;
 		this.clock = clock.orElseGet(() -> Clock.system(MeetupLimits.SEOUL));
 	}
 
@@ -77,7 +87,7 @@ public class MeetupService {
 		Meetup meetup = meetups.save(new Meetup(MeetupCodes.generate(), userId, area.kind(), area.name(), category,
 				request.date(), time, request.headcount(), description(request.description()),
 				MeetupSchedule.expiresAt(request.date(), now), now));
-		return new MeetupCreateResponse(meetup.getCode(), questions(meetup));
+		return new MeetupCreateResponse(meetup.getCode(), questionSource.questions(meetup));
 	}
 
 	/**
@@ -95,27 +105,47 @@ public class MeetupService {
 	}
 
 	/**
-	 * 모임의 지금 상태(AC-3, AC-4).
+	 * 모임의 지금 상태(AC-3, AC-4, AC-9). 프로필의 취향은 지금 보이는 질문의 답만 담는다.
 	 *
 	 * @param code 모임 코드
 	 * @param userId 로그인한 회원. 비회원이면 null이다.
+	 * @param cookieToken 모임 쿠키 값. 없으면 null이다.
 	 * @throws MeetupNotFoundException 없는 코드일 때
 	 */
 	@Transactional(readOnly = true)
-	public MeetupSnapshot snapshot(String code, String userId) {
+	public MeetupSnapshot snapshot(String code, String userId, String cookieToken) {
 		Meetup meetup = find(code);
-		MeetupRole role = userId != null && meetup.hostedBy(userId) ? MeetupRole.HOST : MeetupRole.VIEWER;
-		MeetupPermissions.Situation situation = new MeetupPermissions.Situation(meetup.getPhase(), role, false, false,
-				false, false, null, false, false);
+		List<MeetupProfile> joined = profiles.findByMeetupIdOrderByProfileId(meetup.getMeetupId());
+		MeetupRequesters.Requester requester = requesters.resolve(meetup, joined, userId, cookieToken);
+		MeetupQuestions questions = questionSource.questions(meetup);
+		MeetupPermissions.Situation situation = new MeetupPermissions.Situation(meetup.getPhase(), requester.role(),
+				requester.hasProfile(), false, false, false, null, false, requester.convertible());
 		MeetupSnapshot.Info info = new MeetupSnapshot.Info(
 				new MeetupSnapshot.Area(meetup.getAreaKind(), meetup.getAreaName()), meetup.getCategory(),
 				meetup.getMeetDate(), meetup.getMeetTime() == null ? null : meetup.getMeetTime().format(HH_MM),
 				meetup.getHeadcount(), meetup.getDescription(),
 				users.findById(meetup.getHostUserId()).map(AuthUser::getNickname).orElse(null),
 				MeetupSchedule.lastOpenDay(meetup.getExpiresAt()));
-		return new MeetupSnapshot(meetup.getPhase(), false, info, questions(meetup),
-				new MeetupSnapshot.Me(role, null, userId != null), List.copyOf(MeetupPermissions.allowed(situation)),
-				List.of());
+		MeetupSnapshot.Me me = new MeetupSnapshot.Me(requester.role(),
+				requester.hasProfile() ? requester.profile().getProfileId() : null, userId != null,
+				requester.convertible() ? Boolean.TRUE : null);
+		return new MeetupSnapshot(meetup.getPhase(), false, info, questions, me,
+				List.copyOf(MeetupPermissions.allowed(situation)),
+				joined.stream().map(profile -> profileView(meetup, profile, questions)).toList(),
+				pendingCount(meetup, joined));
+	}
+
+	private static MeetupSnapshot.Profile profileView(Meetup meetup, MeetupProfile profile,
+			MeetupQuestions questions) {
+		Taste taste = MeetupTasteRules.visibleOnly(profile.taste(), questions);
+		return new MeetupSnapshot.Profile(profile.getProfileId(), profile.getName(), profile.getColor(),
+				profile.member(), profile.ownedBy(meetup.getHostUserId()), taste.isEmpty() ? null : taste, false);
+	}
+
+	/** 인원을 정했고 남긴 수가 인원보다 적을 때만 남은 수를 준다(AC-29). */
+	private static Integer pendingCount(Meetup meetup, List<MeetupProfile> joined) {
+		Integer headcount = meetup.getHeadcount();
+		return headcount != null && joined.size() < headcount ? headcount - joined.size() : null;
 	}
 
 	private Meetup find(String code) {
@@ -123,11 +153,6 @@ public class MeetupService {
 			throw new MeetupNotFoundException();
 		}
 		return meetups.findByCode(code).orElseThrow(MeetupNotFoundException::new);
-	}
-
-	/** 모임 설명 해석과 가게 가격 확인은 추천 연동 단계에서 붙인다. 그 전에는 업종으로만 정한다(D-17). */
-	private static MeetupQuestions questions(Meetup meetup) {
-		return MeetupQuestions.of(meetup.getCategory(), false, false);
 	}
 
 	private MeetupArea selectableArea(MeetupCreateRequest.Area requested) {

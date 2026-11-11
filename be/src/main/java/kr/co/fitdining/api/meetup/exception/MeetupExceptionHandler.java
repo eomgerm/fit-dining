@@ -54,4 +54,30 @@ public class MeetupExceptionHandler {
 		return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "없거나 끝난 모임이에요.");
 	}
 
+	@ExceptionHandler(MeetupProfileNotFoundException.class)
+	public ProblemDetail handleProfileNotFound() {
+		return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "프로필을 찾을 수 없어요.");
+	}
+
+	@ExceptionHandler(MeetupForbiddenException.class)
+	public ProblemDetail handleForbidden() {
+		log.info("Rejected meetup request: reason=MeetupForbiddenException");
+		return ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, "이 모임에서 할 수 없는 동작이에요.");
+	}
+
+	/** 같은 409 안에서 FE가 안내를 고르도록 {@code type}을 붙인다(D-9). */
+	@ExceptionHandler(MeetupConflictException.class)
+	public ProblemDetail handleConflict(MeetupConflictException e) {
+		log.info("Rejected meetup request: reason={}", e.conflict());
+		ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.conflict().detail());
+		problem.setType(e.conflict().type());
+		return problem;
+	}
+
+	@ExceptionHandler(TooManyMeetupWritesException.class)
+	public ProblemDetail handleTooManyWrites() {
+		log.info("Rejected meetup request: reason=TooManyMeetupWritesException");
+		return ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, "잠시 뒤 다시 시도해 주세요.");
+	}
+
 }

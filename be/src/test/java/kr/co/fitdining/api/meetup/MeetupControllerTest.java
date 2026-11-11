@@ -5,21 +5,30 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import jakarta.servlet.http.Cookie;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
 import kr.co.fitdining.api.auth.ports.AuthUseCases;
 import kr.co.fitdining.api.meetup.domain.AreaKind;
+import kr.co.fitdining.api.meetup.domain.FoodType;
+import kr.co.fitdining.api.meetup.domain.Mood;
+import kr.co.fitdining.api.meetup.domain.Taste;
 import kr.co.fitdining.api.meetup.domain.MeetupAction;
 import kr.co.fitdining.api.meetup.domain.MeetupCategory;
 import kr.co.fitdining.api.meetup.domain.MeetupPhase;
@@ -29,6 +38,11 @@ import kr.co.fitdining.api.meetup.dto.MeetupAreasResponse;
 import kr.co.fitdining.api.meetup.dto.MeetupCreateRequest;
 import kr.co.fitdining.api.meetup.dto.MeetupCreateResponse;
 import kr.co.fitdining.api.meetup.dto.MeetupSnapshot;
+import kr.co.fitdining.api.meetup.dto.ProfileCreateRequest;
+import kr.co.fitdining.api.meetup.exception.MeetupConflictException;
+import kr.co.fitdining.api.meetup.exception.MeetupConflictException.Conflict;
+import kr.co.fitdining.api.meetup.exception.MeetupForbiddenException;
+import kr.co.fitdining.api.meetup.exception.TooManyMeetupWritesException;
 import kr.co.fitdining.api.meetup.exception.InvalidMeetupException;
 import kr.co.fitdining.api.meetup.exception.MeetupNotFoundException;
 import kr.co.fitdining.api.support.SessionTestSupport;
@@ -38,6 +52,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.system.CapturedOutput;
@@ -66,6 +81,12 @@ class MeetupControllerTest {
 
 	@MockitoBean
 	MeetupService meetupService;
+
+	@MockitoBean
+	MeetupProfileService profileService;
+
+	@MockitoBean
+	MeetupWriteLimiter writeLimiter;
 
 	@MockitoBean
 	AuthUseCases auth;
@@ -207,13 +228,14 @@ class MeetupControllerTest {
 		private final MeetupSnapshot waiting = new MeetupSnapshot(MeetupPhase.WAITING, false,
 				new MeetupSnapshot.Info(new MeetupSnapshot.Area(AreaKind.STATION, "선릉"), MeetupCategory.RESTAURANT,
 						null, null, null, null, "민재", LocalDate.of(2026, 11, 18)),
-				new MeetupQuestions(true, true, true, false), new MeetupSnapshot.Me(MeetupRole.VIEWER, null, false),
-				List.of(MeetupAction.JOIN), List.of());
+				new MeetupQuestions(true, true, true, false),
+				new MeetupSnapshot.Me(MeetupRole.VIEWER, null, false, null), List.of(MeetupAction.JOIN), List.of(),
+				null);
 
 		@Test
 		@DisplayName("스냅숏_로그인없이도_200이고값없는속성은빠진다")
 		void snapshot_anonymous_returnsWithoutNullFields() throws Exception {
-			when(meetupService.snapshot(eq(CODE), isNull())).thenReturn(waiting);
+			when(meetupService.snapshot(eq(CODE), isNull(), isNull())).thenReturn(waiting);
 
 			mockMvc.perform(get("/api/v1/meetups/{code}", CODE))
 					.andExpect(status().isOk())
@@ -231,7 +253,7 @@ class MeetupControllerTest {
 		@Test
 		@DisplayName("스냅숏_비회원이열어도_로그인세션을만들지않는다")
 		void snapshot_anonymous_createsNoSession() throws Exception {
-			when(meetupService.snapshot(eq(CODE), isNull())).thenReturn(waiting);
+			when(meetupService.snapshot(eq(CODE), isNull(), isNull())).thenReturn(waiting);
 
 			var result = mockMvc.perform(get("/api/v1/meetups/{code}", CODE)).andExpect(status().isOk()).andReturn();
 
@@ -243,18 +265,156 @@ class MeetupControllerTest {
 		@Test
 		@DisplayName("스냅숏_로그인했으면_회원id로묻는다")
 		void snapshot_signedIn_passesUserId() throws Exception {
-			when(meetupService.snapshot(CODE, USER_ID)).thenReturn(waiting);
+			when(meetupService.snapshot(CODE, USER_ID, null)).thenReturn(waiting);
 
 			mockMvc.perform(get("/api/v1/meetups/{code}", CODE).with(SessionTestSupport.session(USER_ID)))
 					.andExpect(status().isOk());
-			verify(meetupService).snapshot(CODE, USER_ID);
+			verify(meetupService).snapshot(CODE, USER_ID, null);
 		}
 
 		@Test
 		@DisplayName("스냅숏_없는코드면_404다")
 		void snapshot_unknownCode_returnsNotFound() throws Exception {
-			when(meetupService.snapshot(eq("unknown"), isNull())).thenThrow(new MeetupNotFoundException());
+			when(meetupService.snapshot(eq("unknown"), isNull(), isNull())).thenThrow(new MeetupNotFoundException());
 			expectProblem(get("/api/v1/meetups/{code}", "unknown"), 404);
+		}
+
+	}
+
+	@Nested
+	@DisplayName("프로필")
+	class Profiles {
+
+		private final MeetupProfileService.Joined joined = new MeetupProfileService.Joined(5L, "token-value",
+				Duration.ofDays(3));
+
+		private MockHttpServletRequestBuilder createProfile(String body) {
+			return post("/api/v1/meetups/{code}/profiles", CODE).with(SessionTestSupport.csrf())
+					.contentType(MediaType.APPLICATION_JSON).content(body);
+		}
+
+		private String meetupCookie(MockHttpServletRequestBuilder request) throws Exception {
+			return mockMvc.perform(request).andReturn().getResponse().getHeaders("Set-Cookie").stream()
+					.filter(cookie -> cookie.startsWith("fitdining_meetup=")).findFirst().orElse(null);
+		}
+
+		@Test
+		@DisplayName("프로필만들기_로그인없이도_201과모임쿠키를받고쓰기한도를센다")
+		void createProfile_anonymous_setsMeetupCookie() throws Exception {
+			when(profileService.create(eq(CODE), isNull(), any())).thenReturn(joined);
+			String body = "{\"name\":\"하린\",\"taste\":{\"mood\":\"QUIET\",\"likeFoods\":[\"KOREAN\"],\"noSpicy\":true}}";
+
+			mockMvc.perform(createProfile(body))
+					.andExpect(status().isCreated())
+					.andExpect(header().string("Cache-Control", "no-store"))
+					.andExpect(jsonPath("$.profileId").value(5));
+
+			assertThat(meetupCookie(createProfile(body))).startsWith("fitdining_meetup=token-value")
+					.contains("Path=/api/v1/meetups/" + CODE).contains("HttpOnly").contains("SameSite=Lax")
+					.contains("Max-Age=259200").doesNotContain("Secure");
+			verify(writeLimiter, times(2)).count(eq(CODE), anyString());
+			verify(profileService, times(2)).create(CODE, null, new ProfileCreateRequest("하린",
+					new Taste(Mood.QUIET, List.of(FoodType.KOREAN), null, true, null, null)));
+		}
+
+		@Test
+		@DisplayName("프로필만들기_로그인했으면_쓰기한도를세지않고회원id로만든다")
+		void createProfile_signedIn_skipsLimiter() throws Exception {
+			when(profileService.create(eq(CODE), eq(USER_ID), any())).thenReturn(joined);
+			mockMvc.perform(createProfile("{\"name\":\"민재\"}").with(SessionTestSupport.session(USER_ID)))
+					.andExpect(status().isCreated());
+			verify(writeLimiter, never()).count(anyString(), anyString());
+		}
+
+		@Test
+		@DisplayName("프로필만들기_쓰기한도를넘으면_429다")
+		void createProfile_overLimit_returnsTooManyRequests() throws Exception {
+			doThrow(new TooManyMeetupWritesException()).when(writeLimiter).count(anyString(), anyString());
+			expectProblem(createProfile("{\"name\":\"하린\"}"), 429);
+			verify(profileService, never()).create(anyString(), any(), any());
+		}
+
+		@Test
+		@DisplayName("프로필만들기_CSRF토큰이없으면_403이다")
+		void createProfile_withoutCsrf_returnsForbidden() throws Exception {
+			expectProblem(post("/api/v1/meetups/{code}/profiles", CODE).contentType(MediaType.APPLICATION_JSON)
+					.content("{\"name\":\"하린\"}"), 403);
+		}
+
+		@ParameterizedTest
+		@ValueSource(strings = {
+				"{}",
+				"{\"name\":\"하린\",\"color\":1}",
+				"{\"name\":\"하린\",\"taste\":{\"mood\":\"SILENT\"}}",
+				"{\"name\":\"하린\",\"taste\":{\"likeFoods\":[\"KOREAN\",\"PIZZA\"]}}",
+				"{\"name\":\"하린\",\"taste\":{\"priceCap\":\"만원\"}}",
+				"{\"name\":\"하린\",\"taste\":{\"spicy\":true}}"
+		})
+		@DisplayName("프로필만들기_형식이틀리거나모르는속성이있으면_400이다")
+		void createProfile_invalidShape_returnsBadRequest(String body) throws Exception {
+			expectProblem(createProfile(body), 400);
+			verify(profileService, never()).create(anyString(), any(), any());
+		}
+
+		@ParameterizedTest
+		@EnumSource(value = Conflict.class, names = {"NAME_TAKEN", "FULL", "ALREADY_JOINED"})
+		@DisplayName("프로필만들기_부딪히면_409와종류를받는다")
+		void createProfile_conflict_returnsType(Conflict conflict) throws Exception {
+			when(profileService.create(eq(CODE), isNull(), any())).thenThrow(new MeetupConflictException(conflict));
+			mockMvc.perform(createProfile("{\"name\":\"하린\"}"))
+					.andExpect(status().isConflict())
+					.andExpect(jsonPath("$.type").value(conflict.type().toString()));
+		}
+
+		@Test
+		@DisplayName("프로필고르기_비회원이면_204와모임쿠키를받는다")
+		void selectProfile_anonymous_setsMeetupCookie() throws Exception {
+			when(profileService.select(CODE, 7L, null)).thenReturn(joined);
+			assertThat(meetupCookie(post("/api/v1/meetups/{code}/profiles/{id}/session", CODE, 7)
+					.with(SessionTestSupport.csrf()))).startsWith("fitdining_meetup=token-value");
+		}
+
+		@Test
+		@DisplayName("프로필고르기_남의회원프로필이면_403이다")
+		void selectProfile_otherMember_returnsForbidden() throws Exception {
+			when(profileService.select(CODE, 7L, null)).thenThrow(new MeetupForbiddenException());
+			expectProblem(post("/api/v1/meetups/{code}/profiles/{id}/session", CODE, 7)
+					.with(SessionTestSupport.csrf()), 403);
+		}
+
+		@Test
+		@DisplayName("취향수정_모임쿠키를_서비스에넘긴다")
+		void updateTaste_passesMeetupCookie() throws Exception {
+			mockMvc.perform(put("/api/v1/meetups/{code}/profiles/me/taste", CODE).with(SessionTestSupport.csrf())
+							.cookie(new Cookie("fitdining_meetup", "cookie-value"))
+							.contentType(MediaType.APPLICATION_JSON).content("{\"mood\":\"LIVELY\"}"))
+					.andExpect(status().isNoContent());
+			verify(profileService).updateTaste(CODE, null, "cookie-value",
+					new Taste(Mood.LIVELY, null, null, null, null, null));
+		}
+
+		@Test
+		@DisplayName("스냅숏_모임쿠키를_서비스에넘긴다")
+		void snapshot_passesMeetupCookie() throws Exception {
+			mockMvc.perform(get("/api/v1/meetups/{code}", CODE).cookie(new Cookie("fitdining_meetup", "cookie-value")));
+			verify(meetupService).snapshot(CODE, null, "cookie-value");
+		}
+
+		@Test
+		@DisplayName("프로필지우기_로그인하지않으면_401이다")
+		void removeProfile_anonymous_returnsUnauthorized() throws Exception {
+			expectProblem(delete("/api/v1/meetups/{code}/profiles/{id}", CODE, 3).with(SessionTestSupport.csrf()), 401);
+			verify(profileService, never()).remove(anyString(), anyString(), org.mockito.ArgumentMatchers.anyLong());
+		}
+
+		@Test
+		@DisplayName("프로필지우기_모임장자신의프로필이면_409와종류를받는다")
+		void removeProfile_hostProfile_returnsConflict() throws Exception {
+			doThrow(new MeetupConflictException(Conflict.HOST_PROFILE)).when(profileService).remove(CODE, USER_ID, 3L);
+			mockMvc.perform(delete("/api/v1/meetups/{code}/profiles/{id}", CODE, 3).with(SessionTestSupport.csrf())
+							.with(SessionTestSupport.session(USER_ID)))
+					.andExpect(status().isConflict())
+					.andExpect(jsonPath("$.type").value("urn:fitdining:meetup:host-profile"));
 		}
 
 	}
@@ -269,6 +429,20 @@ class MeetupControllerTest {
 		void create_success_doesNotLogDescription(CapturedOutput output) throws Exception {
 			mockMvc.perform(create(valid(",\"description\":\"" + LOG_SECRET + "\""))).andExpect(status().isCreated());
 			assertThat(output.getAll()).doesNotContain(LOG_SECRET);
+		}
+
+		@Test
+		@DisplayName("프로필만들기_정상요청과409뒤에도_로그에이름과메뉴가없다")
+		void createProfile_doesNotLogNameOrTaste(CapturedOutput output) throws Exception {
+			when(profileService.create(eq(CODE), isNull(), any()))
+					.thenReturn(new MeetupProfileService.Joined(1L, "t", Duration.ofDays(1)))
+					.thenThrow(new MeetupConflictException(Conflict.NAME_TAKEN));
+			String body = "{\"name\":\"비밀이름임\",\"taste\":{\"wantMenu\":\"비밀메뉴곱창\"}}";
+			mockMvc.perform(post("/api/v1/meetups/{code}/profiles", CODE).with(SessionTestSupport.csrf())
+					.contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isCreated());
+			mockMvc.perform(post("/api/v1/meetups/{code}/profiles", CODE).with(SessionTestSupport.csrf())
+					.contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isConflict());
+			assertThat(output.getAll()).doesNotContain("비밀이름임").doesNotContain("비밀메뉴곱창");
 		}
 
 		@Test
