@@ -906,4 +906,38 @@ describe("저장한 장소 화면과 홈 주변 카드 (S15P31A302-204)", () => 
     await act(async () => {});
     expect(nearbyBodies).toHaveLength(1);
   });
+
+  it("결과를 보다가 저장한 장소 화면에서 지도를 끌고 돌아와도 '이 지역에서 검색'이 없고, 결과 화면에서 끌면 나타난다 (spec 39번)", async () => {
+    listReplies.push(list([item(3)]));
+    renderScreen();
+    await homeCards();
+    fireEvent.change(screen.getByRole("textbox", { name: "장소 검색" }), {
+      target: { value: "역삼 카페" },
+    });
+    fireEvent.submit(screen.getByRole("search"));
+    await waitFor(() => expect(searchCalls).toBe(1));
+    await act(async () =>
+      pendingSearch?.(Response.json({ ...nearby, nearby: false })),
+    );
+    await screen.findByRole("list", { name: "추천 장소" });
+    // 결과 맞춤 이동이 멈춘 뒤의 화면이다
+    map.fire("idle");
+    fireEvent.click(screen.getByRole("button", { name: "저장한 장소" }));
+    await savedList();
+
+    map.fire("dragend");
+    map.fire("idle");
+    fireEvent.click(screen.getByRole("button", { name: "뒤로" }));
+
+    await screen.findByRole("list", { name: "추천 장소" });
+    expect(
+      screen.queryByRole("button", { name: "이 지역에서 검색" }),
+    ).toBeNull();
+
+    map.fire("dragend");
+
+    expect(
+      screen.getByRole("button", { name: "이 지역에서 검색" }),
+    ).toBeTruthy();
+  });
 });

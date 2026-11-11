@@ -515,13 +515,17 @@ describe("SearchScreen", () => {
       }
 
       // 재로드 뒤처럼 기기에 저장된 thread 하나를 최근 검색에서 연다
-      async function openStoredThread(turns: object[]) {
+      async function openStoredThread(
+        turns: object[],
+        beforeOpen?: () => void,
+      ) {
         localStorage.setItem(
           GUEST_THREADS,
           JSON.stringify([{ id: "thread-old", turns }]),
         );
         renderScreen();
         await mapReady();
+        beforeOpen?.();
         fireEvent.click(screen.getByRole("button", { name: "최근 검색" }));
         const sheet = await screen.findByRole("dialog", { name: "최근 검색" });
         const row = within(
@@ -907,6 +911,27 @@ describe("SearchScreen", () => {
           setItem.mock.calls.filter(([key]) => key === GUEST_THREADS),
         ).toHaveLength(1);
       });
+
+      it.each(["dragend", "zoom_changed"])(
+        "홈에서 지도를 %s로 옮긴 뒤 최근 검색으로 thread를 열어도 '이 지역에서 검색'이 없고, 그 결과 화면에서 옮기면 나타난다 (spec 39번)",
+        async (event) => {
+          await openStoredThread(
+            storedTurns({ query: "강남역 파스타", mapBounds: BOUNDS }),
+            () => {
+              map.fire(event);
+              map.fire("idle");
+            },
+          );
+          await act(async () => {});
+
+          expect(stores.current.getSnapshot().entries).toHaveLength(3);
+          expect(regionButton()).toBeNull();
+
+          map.fire(event);
+
+          expect(regionButton()).toBeTruthy();
+        },
+      );
 
       it("AI 대체 결과의 안내는 region 항목이면 지도 안 문구, 새 검색이면 지금 문구다(과거 결과 화면도) (AC-60)", async () => {
         aiFallback.search = true;

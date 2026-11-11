@@ -687,7 +687,8 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
         myLocation={here}
         onPinClick={map.onPinClick}
         onUserMove={() => {
-          setMapMoved(true);
+          // 결과 화면의 "이 지역에서 검색"은 결과 화면에서 옮겼을 때만 보인다. 홈, 저장한 장소, 과거 결과, 검색 중에 옮긴 것은 세지 않는다(spec 39번)
+          if (viewing && !past && !searching && !savedView) setMapMoved(true);
           setUserMoving(true);
           // 사용자가 지도를 움직이면 남은 처음 이동은 하지 않는다(spec 62번)
           stopInitialMoveByUser();
