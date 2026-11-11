@@ -75,6 +75,30 @@ it.each([
   expect(readAnswers()).toBeUndefined();
   expect(localStorage.getItem(ANSWERS_KEY)).toBeNull();
 });
+it("코드 없는 좋아함 칩의 벡터를 함께 저장하고 읽는다", () => {
+  const withVector: OnboardingAnswers = {
+    ...answers,
+    tastes: [
+      { polarity: "LIKE", label: "창가 자리", vector: Array(1024).fill(0.5) },
+    ],
+  };
+  writeAnswers(withVector);
+  expect(readAnswers()).toEqual(withVector);
+});
+it.each([
+  [Array(3).fill(0.5)],
+  [[...Array(1023).fill(0.5), "x"]],
+  [[...Array(1023).fill(0.5), null]],
+])("모양이 틀린 칩 벡터가 있으면 저장값을 버린다", (vector) => {
+  localStorage.setItem(
+    ANSWERS_KEY,
+    JSON.stringify({
+      ...answers,
+      tastes: [{ polarity: "LIKE", label: "창가 자리", vector }],
+    }),
+  );
+  expect(readAnswers()).toBeUndefined();
+});
 // 서버(next.config의 / rewrite)가 읽도록 비회원 표시는 쿠키에 둔다
 it("비회원은 답변을 유지하고 쿠키에 표시를 남긴다", () => {
   writeAnswers(answers);

@@ -22,6 +22,8 @@ export type TasteChip = {
   polarity: "LIKE" | "DISLIKE";
   label: string;
   code?: string | null;
+  // 코드 없는 좋아함 칩의 문구 벡터(1024차원). 해석 API가 주고, 비회원 검색에 실어 취향 묶음 재료로 쓴다
+  vector?: number[] | null;
 };
 export type OnboardingAnswers = {
   mood: (typeof moods)[number]["id"] | null;

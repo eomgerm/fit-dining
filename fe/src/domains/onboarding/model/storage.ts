@@ -41,8 +41,9 @@ export function validAnswers(value: unknown): value is OnboardingAnswers {
       (taste) =>
         record(taste) &&
         Object.keys(taste).every((key) =>
-          ["polarity", "label", "code"].includes(key),
+          ["polarity", "label", "code", "vector"].includes(key),
         ) &&
+        validVector(taste.vector) &&
         (taste.polarity === "LIKE" || taste.polarity === "DISLIKE") &&
         (taste.code === undefined ||
           taste.code === null ||
@@ -52,6 +53,17 @@ export function validAnswers(value: unknown): value is OnboardingAnswers {
         taste.label.trim().length <= 20 &&
         !/\p{Cc}/u.test(taste.label.trim()),
     )
+  );
+}
+// BE Preferences.TasteChip의 vector 규칙(1024개 수). 틀린 값을 실으면 그 비회원의 검색이 400이다
+const VECTOR_SIZE = 1024;
+function validVector(value: unknown) {
+  return (
+    value === undefined ||
+    value === null ||
+    (Array.isArray(value) &&
+      value.length === VECTOR_SIZE &&
+      value.every((x) => typeof x === "number" && Number.isFinite(x)))
   );
 }
 export function clearAnswers() {

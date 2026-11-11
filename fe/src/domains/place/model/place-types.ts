@@ -102,6 +102,7 @@ export type SearchPreferences = {
     polarity: "LIKE" | "DISLIKE";
     label: string;
     code?: string | null;
+    vector?: number[] | null;
   }[];
 };
 
