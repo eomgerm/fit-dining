@@ -48,7 +48,7 @@ public class UserService {
         // consume clears the persistence context, so acquire the user after consuming the token.
         String hash = verifications.requireToken(email, token);
         if (emailVerifications.consume(hash, email, clock.instant()) != 1)
-            throw kr.co.fitdining.api.auth.domain.EmailVerificationFailure.required();
+            throw kr.co.fitdining.api.auth.domain.EmailVerificationFailure.verificationRequired();
         activeUser(userId).changeContactEmail(email, clock.instant());
     }
 

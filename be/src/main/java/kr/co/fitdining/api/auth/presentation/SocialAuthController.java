@@ -120,7 +120,7 @@ public class SocialAuthController {
         String hash = null;
         if (email == null || email.equals(identity[2])) email = identity[2];
         else hash = verifications.requireToken(email, body.verificationToken());
-        if (!SignupValue.Validator.valid("email", email)) throw EmailVerificationFailure.required();
+        if (!SignupValue.Validator.valid("email", email)) throw EmailVerificationFailure.verificationRequired();
         var issued = accounts.signup(identity[0], identity[1], body.preferences(), email, hash,
                 Boolean.TRUE.equals(body.agreements().marketing()));
         response.addHeader(HttpHeaders.SET_COOKIE, cookie("fitdining_social", "", true, 0).toString());

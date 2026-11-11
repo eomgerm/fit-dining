@@ -39,9 +39,9 @@ public class SocialAccountTransactions {
         Issued existing = existing(provider, subject);
         if (existing != null) return existing;
         if (users.existsByNickname(nickname)) throw new SignupConflict("nickname");
-        if (email == null) throw EmailVerificationFailure.required();
+        if (email == null) throw EmailVerificationFailure.verificationRequired();
         var now = clock.instant();
-        if (tokenHash != null && verifications.consume(tokenHash, email, now) != 1) throw EmailVerificationFailure.required();
+        if (tokenHash != null && verifications.consume(tokenHash, email, now) != 1) throw EmailVerificationFailure.verificationRequired();
         AuthUser created = new AuthUser(UUID.randomUUID().toString(), nickname, now, termsVersion);
         created.changeContactEmail(email, now);
         created.marketingConsent(marketing, now);
