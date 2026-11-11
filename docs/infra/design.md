@@ -840,7 +840,7 @@ AI API(`ai/server`, FastAPI)는 A의 컨테이너로 돈다. 임베딩 모델은
 
 **DB 읽기**
 
-- 읽기 전용 role `fit_prod_ai`, `fit_dev_ai`가 `DATABASE_URL`로 접속한다. 읽는 것은 뷰 `ai_place_search`, `ai_place_personas`(V26, 만족한 손님 페르소나)와 `user_preferences`뿐이다. 뷰는 소유자 권한으로 실행되므로 뷰 밑의 `places` 등과 인증 테이블은 읽지 못한다. 뷰는 BE 마이그레이션이 만들고 AI는 그 컬럼에만 의존한다. 읽을 객체를 늘리려면 BE·AI 팀과 정한 뒤 `grant-ai-read.sh`의 목록을 고치는 MR을 만든다.
+- 읽기 전용 role `fit_prod_ai`, `fit_dev_ai`가 `DATABASE_URL`로 접속한다. 읽는 것은 뷰 `ai_place_search`, `ai_place_personas`(V33, 만족한 손님 페르소나)와 `user_preferences`뿐이다. 뷰는 소유자 권한으로 실행되므로 뷰 밑의 `places` 등과 인증 테이블은 읽지 못한다. 뷰는 BE 마이그레이션이 만들고 AI는 그 컬럼에만 의존한다. 읽을 객체를 늘리려면 BE·AI 팀과 정한 뒤 `grant-ai-read.sh`의 목록을 고치는 MR을 만든다.
 - role당 접속 6개, 쿼리 10초, 트랜잭션은 기본이 읽기 전용이다. 컨테이너당 풀(`DB_POOL_SIZE`에 취향용 1개를 더한 값)은 이 상한 안에 둔다. Postgres `max_connections`는 60이다.
 - 마이그레이션이 뷰를 만든 뒤 `grant-ai-read.sh`를 다시 돌려야 읽힌다(기본 권한을 주지 않는다). AI를 켠 환경은 배포가 마이그레이션 뒤에 매번 돌린다(실패해도 경고만 한다).
 - 확인: 로컬 데이터 시험(`test-data.sh`의 `ai` 구역)에서 두 객체만 읽히고 뷰 밑의 테이블, 인증 테이블, 허용 목록 밖의 새 테이블은 읽히지 않으며 쓰기와 DDL이 막히고 다른 환경 DB에 접속하지 못함을 점검했다.

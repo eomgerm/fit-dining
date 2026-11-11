@@ -11,7 +11,7 @@ breaks}]`), `menus`(`place_menus`를 모은 `[{name, category, price, representa
 `price`(가게 가격), `lat`, `lng`, `facilities`, `food_type`, `analyzed_review_count`,
 `profile`, `summary_vector`에 의존한다. `price`는 장소 분석 적재가 채우기
 전까지 모두 NULL(모름)이다(docs/comparison/spec.md 4.2). 로컬 개발 DB(`scripts/dev_db.py`)는
-같은 컬럼의 뷰를 만든다. 페르소나 뷰는 BE 마이그레이션 V26이 `place_personas`에서 만족한 손님
+같은 컬럼의 뷰를 만든다. 페르소나 뷰는 BE 마이그레이션 V33가 `place_personas`에서 만족한 손님
 페르소나만 골라 만들고, AI는 `place_id`, `category_group`, `vector`에 의존한다. 취향 표 `user_preferences`의 `features`, `tastes`는 저장 설계
 (docs/specs/profile-storage/spec.md, BE 마이그레이션 V2·V6)를 따른다.
 """
