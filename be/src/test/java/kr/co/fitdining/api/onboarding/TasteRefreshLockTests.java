@@ -35,7 +35,7 @@ class TasteRefreshLockTests extends PostgresTestSupport {
                 + "terms_agreed_at, privacy_agreed_at, terms_version) values ('trl-a', 'trl-a@example.com', 'trla', "
                 + "'x', now(), now(), now(), now(), 'v1')");
         jdbc.update("insert into user_preferences(user_id, created_at, updated_at) values ('trl-a', now(), now())");
-        when(client.refresh(any(), any())).thenReturn(List.of());
+        when(client.refresh(any(), any(), any())).thenReturn(List.of());
     }
 
     @AfterEach void cleanUp() {
@@ -65,7 +65,7 @@ class TasteRefreshLockTests extends PostgresTestSupport {
             var batch = context.getBean(TasteRefreshBatch.class);
             batch.run();
             batch.run();
-            verify(client, times(1)).refresh(any(), any());
+            verify(client, times(1)).refresh(any(), any(), any());
         });
     }
 }

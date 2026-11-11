@@ -26,6 +26,7 @@ public class AiTasteClient {
     static final int VECTOR_DIMENSION = 1024;
     private final RestClient interpret;
     private final RestClient profile;
+    private final RestClient extract;
     private final Validator validator;
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -34,13 +35,20 @@ public class AiTasteClient {
             @Value("${fitdining.ai.modal-key:}") String key,
             @Value("${fitdining.ai.modal-secret:}") String secret,
             @Value("${fitdining.onboarding.timeout-ms:10000}") long interpretTimeout,
-            @Value("${fitdining.ai.profile-timeout-ms:3000}") long profileTimeout) {
-        this(client(baseUrl, key, secret, interpretTimeout), client(baseUrl, key, secret, profileTimeout), validator);
+            @Value("${fitdining.ai.profile-timeout-ms:3000}") long profileTimeout,
+            @Value("${fitdining.ai.extract-timeout-ms:150000}") long extractTimeout) {
+        this(client(baseUrl, key, secret, interpretTimeout), client(baseUrl, key, secret, profileTimeout),
+                client(baseUrl, key, secret, extractTimeout), validator);
     }
 
     AiTasteClient(RestClient interpret, RestClient profile, Validator validator) {
+        this(interpret, profile, profile, validator);
+    }
+
+    AiTasteClient(RestClient interpret, RestClient profile, RestClient extract, Validator validator) {
         this.interpret = interpret;
         this.profile = profile;
+        this.extract = extract;
         this.validator = validator;
     }
 
@@ -78,10 +86,28 @@ public class AiTasteClient {
         return new TasteProfileService.Profile(features(response), tastes);
     }
 
-    /** 04:00 batch: stored answers plus current review evidence; only features are recomputed. */
-    public List<TasteFeature> refresh(Preferences preferences, List<ReviewEvidence> reviews) {
+    /**
+     * 04:00 batch: stored answers plus current review evidence (reason tags and extracted body items); only features
+     * are recomputed.
+     */
+    public List<TasteFeature> refresh(Preferences preferences, List<ReviewEvidence> reviews, List<ReviewBody> bodies) {
         return features(post("/v1/taste/refresh", new RefreshRequest(preferences.mood(), preferences.priorities(),
-                preferences.purposes(), preferences.tastes(), reviews)));
+                preferences.purposes(), preferences.tastes(), reviews, bodies)));
+    }
+
+    /**
+     * Extracts review bodies, at most {@link #EXTRACT_BATCH} per call (one LLM call on the AI side).
+     * @return items per review, in request order
+     * @throws IllegalStateException when the response breaks the contract
+     */
+    public Extraction extract(List<ReviewText> reviews) {
+        var response = checked(extract.post().uri("/v1/reviews/extract").contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("reviews", reviews)).retrieve().body(Extraction.class));
+        if (!response.results().stream().map(ExtractedReview::reviewId).toList()
+                .equals(reviews.stream().map(ReviewText::reviewId).toList())
+                || !response.results().stream().flatMap(r -> r.items().stream()).allMatch(ExtractedItem::signed))
+            throw new IllegalStateException("Invalid AI response");
+        return response;
     }
 
     private ProfileResponse post(String uri, Object body) {
@@ -107,8 +133,35 @@ public class AiTasteClient {
      */
     public record ReviewEvidence(long placeId, long reviewId, String category, String code, Instant createdAt,
             boolean revisitIntent) {}
+    /**
+     * One review's extracted body items for the refresh (taste-profile spec 2단계). Same review fields as the tags.
+     * @param items stored items without slot and quote
+     */
+    public record ReviewBody(long placeId, long reviewId, String category, Instant createdAt, boolean revisitIntent,
+            List<BodyItem> items) {}
+    /** @param liked flavor codes only @param kind taste, facility, quality or budget */
+    public record BodyItem(String code, int direction, Integer liked, String kind, String text) {}
     private record RefreshRequest(Preferences.Mood mood, List<Preferences.Priority> priorities,
-            List<Preferences.Purpose> purposes, List<TasteChip> tastes, List<ReviewEvidence> reviews) {}
+            List<Preferences.Purpose> purposes, List<TasteChip> tastes, List<ReviewEvidence> reviews,
+            List<ReviewBody> bodies) {}
+
+    /** Reviews per extraction call. Same as the AI extractor's batch size. */
+    public static final int EXTRACT_BATCH = 10;
+    public record ReviewText(long reviewId, String body) {}
+    public record Extraction(@NotNull @Size(max = EXTRACT_BATCH) List<@NotNull @Valid ExtractedReview> results,
+            @NotBlank String model, @NotNull Integer promptVersion) {}
+    public record ExtractedReview(@NotNull Long reviewId, @NotNull List<@NotNull @Valid ExtractedItem> items) {}
+    /**
+     * One extracted item, stored as is. {@code direction} is 1 or -1 and means whether the flavor occurred for flavor
+     * codes; {@code liked} is 1, -1 or null.
+     */
+    public record ExtractedItem(@NotNull String slot, @NotNull String quote,
+            @Pattern(regexp = "^[A-Z][A-Z0-9_]{0,63}$") String code, @NotNull Integer direction, Integer liked,
+            @NotNull @Pattern(regexp = "taste|facility|quality|budget") String kind, String text) {
+        boolean signed() {
+            return Math.abs(direction) == 1 && (liked == null || Math.abs(liked) == 1);
+        }
+    }
 
     public record InterpretResponse(@NotNull @Size(max = 10) List<@NotNull @Valid TasteChip> tastes,
             String model) {}

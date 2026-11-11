@@ -137,3 +137,5 @@ fitdining:
     modal-secret: ${MODAL_SECRET:}
     profile-enabled: ${TASTE_PROFILE_ENABLED:false}
     profile-timeout-ms: 3000
+    # 04:00 배치의 리뷰 본문 추출 한 번(리뷰 10건, AI 쪽 GMS 60초 + 한 번 재시도)
+    extract-timeout-ms: 150000

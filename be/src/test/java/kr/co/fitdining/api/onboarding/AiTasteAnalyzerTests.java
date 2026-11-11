@@ -78,7 +78,7 @@ class AiTasteAnalyzerTests {
                 .andExpect(content().json("""
                 {"mood":"QUIET","priorities":["VALUE"],"purposes":[],"tastes":[],
                 "reviews":[{"placeId":1,"reviewId":10,"category":"카페","code":"QUIET",
-                "createdAt":"2026-10-23T03:00:00Z","revisitIntent":true}]}
+                "createdAt":"2026-10-23T03:00:00Z","revisitIntent":true}],"bodies":[]}
                 """, true)).andRespond(withSuccess("""
                 {"features":[{"code":"QUIET","layer":"axis","like":true,"weight":4.319,"category":null},
                 {"code":"QUIET","layer":"axis","like":true,"weight":4.319,"category":"CAFE"}]}
@@ -86,9 +86,48 @@ class AiTasteAnalyzerTests {
         var features = client.refresh(
                 new Preferences(Preferences.Mood.QUIET, List.of(Preferences.Priority.VALUE), null, null),
                 List.of(new AiTasteClient.ReviewEvidence(1, 10, "카페", "QUIET",
-                        java.time.Instant.parse("2026-10-23T03:00:00Z"), true)));
+                        java.time.Instant.parse("2026-10-23T03:00:00Z"), true)), List.of());
         assertEquals(List.of(new kr.co.fitdining.api.user.TasteFeature("QUIET", "axis", true, 4.319, null),
                 new kr.co.fitdining.api.user.TasteFeature("QUIET", "axis", true, 4.319, "CAFE")), features);
+    }
+    @Test @DisplayName("갱신_본문 추출 항목_구절 없이 리뷰마다 보냄")
+    void refresh_sendsBodyItems() {
+        server.expect(requestTo("http://ai.test/v1/taste/refresh")).andExpect(content().json("""
+                {"bodies":[{"placeId":1,"reviewId":10,"category":"카페","createdAt":"2026-10-23T03:00:00Z",
+                "revisitIntent":false,"items":[{"code":"FOOD_SWEET","direction":-1,"liked":1,"kind":"taste"}]}]}
+                """)).andRespond(withSuccess("{\"features\":[]}", MediaType.APPLICATION_JSON));
+        client.refresh(new Preferences(null, null, null, null), List.of(), List.of(new AiTasteClient.ReviewBody(1, 10,
+                "카페", java.time.Instant.parse("2026-10-23T03:00:00Z"), false,
+                List.of(new AiTasteClient.BodyItem("FOOD_SWEET", -1, 1, "taste", null)))));
+    }
+    @Test @DisplayName("추출_리뷰 본문을 보내고_요청 순서대로 항목을 받음")
+    void extract_returnsItemsInRequestOrder() {
+        server.expect(requestTo("http://ai.test/v1/reviews/extract")).andExpect(method(HttpMethod.POST))
+                .andExpect(content().json("""
+                {"reviews":[{"reviewId":7,"body":"달지 않아서 좋아요"},{"reviewId":3,"body":"그냥요"}]}
+                """, true)).andRespond(withSuccess("""
+                {"results":[{"reviewId":7,"items":[{"slot":"맛 성향","quote":"달지 않아서 좋아요","code":"FOOD_SWEET",
+                "direction":-1,"liked":1,"kind":"taste","text":null}]},{"reviewId":3,"items":[]}],
+                "model":"gpt-6-luna","promptVersion":2}
+                """, MediaType.APPLICATION_JSON));
+        var extraction = client.extract(List.of(new AiTasteClient.ReviewText(7, "달지 않아서 좋아요"),
+                new AiTasteClient.ReviewText(3, "그냥요")));
+        assertEquals(new AiTasteClient.ExtractedItem("맛 성향", "달지 않아서 좋아요", "FOOD_SWEET", -1, 1, "taste", null),
+                extraction.results().getFirst().items().getFirst());
+        assertEquals(List.of(), extraction.results().get(1).items());
+        assertEquals(2, extraction.promptVersion());
+    }
+    @DisplayName("추출_계약을 어긴 응답_예외")
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {
+            "[{\"reviewId\":3,\"items\":[]}]",
+            "[{\"reviewId\":7,\"items\":[{\"slot\":\"s\",\"quote\":\"q\",\"direction\":0,\"kind\":\"taste\"}]}]",
+            "[{\"reviewId\":7,\"items\":[{\"slot\":\"s\",\"quote\":\"q\",\"direction\":1,\"liked\":2,\"kind\":\"taste\"}]}]",
+            "[{\"reviewId\":7,\"items\":[{\"slot\":\"s\",\"quote\":\"q\",\"direction\":1,\"kind\":\"other\"}]}]"})
+    void extract_invalidResponse_throws(String results) {
+        server.expect(anything()).andRespond(withSuccess(
+                "{\"results\":" + results + ",\"model\":\"m\",\"promptVersion\":2}", MediaType.APPLICATION_JSON));
+        assertThrows(RuntimeException.class, () -> client.extract(List.of(new AiTasteClient.ReviewText(7, "본문"))));
     }
     @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.ValueSource(strings = {"\"weight\":0", "\"weight\":-1.5",
@@ -98,7 +137,7 @@ class AiTasteAnalyzerTests {
                 {"features":[{"code":"QUIET","layer":"axis","like":true,%s}]}
                 """.formatted(field), MediaType.APPLICATION_JSON));
         assertThrows(RuntimeException.class,
-                () -> client.refresh(new Preferences(null, null, null, null), List.of()));
+                () -> client.refresh(new Preferences(null, null, null, null), List.of(), List.of()));
     }
     @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
@@ -117,7 +156,7 @@ class AiTasteAnalyzerTests {
         try {
             var configured = new AiTasteClient(Validation.buildDefaultValidatorFactory().getValidator(),
                     "http://127.0.0.1:" + http.getAddress().getPort(), credentials ? "key" : "",
-                    credentials ? "secret" : "", 1000, 1000);
+                    credentials ? "secret" : "", 1000, 1000, 1000);
             assertEquals(List.of(), configured.interpret("sample").tastes());
             assertEquals(credentials ? "key" : null, headers.get().getFirst("Modal-Key"));
             assertEquals(credentials ? "secret" : null, headers.get().getFirst("Modal-Secret"));
@@ -133,7 +172,7 @@ class AiTasteAnalyzerTests {
         http.start();
         try {
             var configured = new AiTasteClient(Validation.buildDefaultValidatorFactory().getValidator(),
-                    "http://127.0.0.1:" + http.getAddress().getPort(), "", "", 1000, 50);
+                    "http://127.0.0.1:" + http.getAddress().getPort(), "", "", 1000, 50, 1000);
             var failure = assertThrows(org.springframework.web.client.ResourceAccessException.class,
                     () -> configured.profile(new Preferences(null, null, null, null)));
             assertInstanceOf(java.net.http.HttpTimeoutException.class, failure.getCause());

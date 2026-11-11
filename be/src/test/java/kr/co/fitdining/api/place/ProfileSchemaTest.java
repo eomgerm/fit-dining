@@ -98,9 +98,10 @@ class ProfileSchemaTest extends PostgresTestSupport {
 	}
 
 	@Test
-	@DisplayName("특징코드_AI코드표23개가_시드되어있다")
+	@DisplayName("특징코드_AI코드표31개가_시드되어있다")
 	void featureCodes_seededFromAiCodeTable() {
-		assertThat(jdbc.queryForObject("SELECT count(*) FROM feature_codes", Integer.class)).isEqualTo(23);
+		// V6의 23개에 V28이 맛 코드 8개를 더했다(taste-profile spec 2단계)
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM feature_codes", Integer.class)).isEqualTo(31);
 		// 문구 벡터는 L2 정규화해 넣었다
 		assertThat(jdbc.queryForObject("SELECT count(*) FROM feature_codes WHERE abs(vector_norm(vector) - 1) > 0.001",
 				Integer.class)).isZero();
