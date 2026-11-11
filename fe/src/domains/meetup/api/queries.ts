@@ -5,6 +5,7 @@ import { isApiError } from "@/shared/api/api-error";
 import type {
   MeetupConflict,
   MeetupCreateRequest,
+  MeetupUpdateRequest,
   ProfileCreateRequest,
   Taste,
 } from "../model/meetup";
@@ -17,6 +18,7 @@ import {
   searchAreas,
   selectProfile,
   startCalculation,
+  updateMeetup,
   updateTaste,
 } from "./meetup-api";
 
@@ -103,6 +105,12 @@ export function useSelectProfile(code: string) {
 
 export function useUpdateTaste(code: string) {
   return useMeetupWrite(code, (taste: Taste) => updateTaste(code, taste));
+}
+
+export function useUpdateMeetup(code: string) {
+  return useMeetupWrite(code, (body: MeetupUpdateRequest) =>
+    updateMeetup(code, body),
+  );
 }
 
 export function useStartCalculation(code: string) {

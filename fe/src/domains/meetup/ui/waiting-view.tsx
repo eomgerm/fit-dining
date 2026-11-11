@@ -90,7 +90,7 @@ function FriendRow({
 }
 
 // 대기 화면(모임장 5, 참여자 6). 모임 정보, 링크 보내기, 취향을 남긴 친구 목록이고 모임장에게는 추천받기가 있다
-// (AC-29, AC-34). 모임 정보 수정은 그 기능의 단계에서 붙인다
+// (AC-29, AC-34). 모임장에게는 모임 정보 오른쪽 위에 "수정"이 있다(AC-30)
 export function WaitingView({
   snapshot,
   onBack,
@@ -101,6 +101,7 @@ export function WaitingView({
   onPickName,
   onCalculate,
   calculating = false,
+  onEditInfo,
 }: {
   snapshot: MeetupSnapshot;
   onBack?: () => void;
@@ -113,11 +114,14 @@ export function WaitingView({
   onCalculate?: () => void;
   // 추천받기 요청이 처리 중인지
   calculating?: boolean;
+  onEditInfo?: () => void;
 }) {
   const [removing, setRemoving] = useState<MeetupProfile>();
   const { me, info, profiles, allowed } = snapshot;
   const host = me.role === "HOST";
   const hostName = hostProfile(snapshot)?.name ?? info.hostNickname;
+  const canEditInfo =
+    allowed.includes("EDIT_INFO") || allowed.includes("EDIT_DATE");
   const showOf =
     info.headcount !== undefined && profiles.length <= info.headcount;
 
@@ -143,7 +147,22 @@ export function WaitingView({
             </span>
           </p>
         )}
-        <MeetupInfoCard info={info} />
+        <MeetupInfoCard
+          info={info}
+          action={
+            canEditInfo &&
+            onEditInfo && (
+              <Button
+                variant="outline"
+                size="sm"
+                aria-label="모임 정보 수정"
+                onClick={onEditInfo}
+              >
+                수정
+              </Button>
+            )
+          }
+        />
 
         {host && (
           <section

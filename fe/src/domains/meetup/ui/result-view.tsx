@@ -80,8 +80,8 @@ function outdatedText(profiles: MeetupProfile[]) {
   return `${late.map((profile) => `${profile.name}님`).join(", ")}이 방금 취향을 남겼어요`;
 }
 
-// 추천 결과(모임장 6, 참여자 7, AC-19 ~ AC-21, AC-31, AC-32). 모임장에게만 다시 추천받기가 있다.
-// 모임 정보 수정과 투표·정하기는 그 기능의 단계에서 붙인다
+// 추천 결과(모임장 6, 참여자 7, AC-19 ~ AC-21, AC-30 ~ AC-32). 모임장에게만 다시 추천받기와 첫 줄 오른쪽의 모임 정보
+// "수정"이 있다. 투표·정하기는 그 기능의 단계에서 붙인다
 export function ResultView({
   snapshot,
   result,
@@ -95,6 +95,7 @@ export function ResultView({
   onEditTaste,
   onRemoveProfile,
   onPickName,
+  onEditInfo,
 }: {
   snapshot: MeetupSnapshot;
   result?: MeetupResult;
@@ -111,6 +112,7 @@ export function ResultView({
   onRemoveProfile: (profile: MeetupProfile) => void;
   // 프로필 없이 보는 사람이 이름을 고르러 간다
   onPickName?: () => void;
+  onEditInfo?: () => void;
 }) {
   const [friendsOpen, setFriendsOpen] = useState(false);
   const { me, info, profiles, allowed, calculation } = snapshot;
@@ -118,6 +120,8 @@ export function ResultView({
   const hostName = hostProfile(snapshot)?.name ?? info.hostNickname;
   const hostSubject = hostName ? `${hostName}님이` : "모임장이";
   const canCalculate = allowed.includes("CALCULATE");
+  const canEditInfo =
+    allowed.includes("EDIT_INFO") || allowed.includes("EDIT_DATE");
 
   const body = () => {
     if (state === "finding") {
@@ -200,13 +204,27 @@ export function ResultView({
     return (
       <>
         <section className="flex flex-col gap-2">
-          <p className="text-title-md text-ink">
-            {result.tasteCount}명의 취향으로 추천했어요
-          </p>
-          <div className="flex flex-wrap gap-1">
-            {chips.map((chip) => (
-              <Tag key={chip}>{chip}</Tag>
-            ))}
+          <div className="flex items-center gap-3">
+            <div className="flex min-w-0 flex-1 flex-col gap-2">
+              <p className="text-title-md text-ink">
+                {result.tasteCount}명의 취향으로 추천했어요
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {chips.map((chip) => (
+                  <Tag key={chip}>{chip}</Tag>
+                ))}
+              </div>
+            </div>
+            {canEditInfo && onEditInfo && (
+              <Button
+                variant="outline"
+                size="sm"
+                aria-label="모임 정보 수정"
+                onClick={onEditInfo}
+              >
+                수정
+              </Button>
+            )}
           </div>
           <div className="flex items-center justify-between">
             <p className="text-caption-sm text-ink-subtle">

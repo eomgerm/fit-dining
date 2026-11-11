@@ -5,6 +5,7 @@ import type {
   MeetupCreateRequest,
   MeetupCreateResponse,
   MeetupSnapshot,
+  MeetupUpdateRequest,
   ProfileCreateRequest,
   ProfileCreateResponse,
   Taste,
@@ -49,6 +50,11 @@ export function updateTaste(code: string, taste: Taste) {
     method: "PUT",
     body: taste,
   });
+}
+
+// 모임장이 모임 정보를 고친다(AC-22)
+export function updateMeetup(code: string, body: MeetupUpdateRequest) {
+  return request<void>(`/v1/meetups/${code}`, { method: "PATCH", body });
 }
 
 // 모임장이 추천받는다. 계산은 서버가 따로 하고 끝났는지는 스냅숏으로 안다(AC-15, D-10)

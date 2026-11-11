@@ -41,6 +41,16 @@ export type MeetupCreateRequest = {
 
 export type MeetupCreateResponse = { code: string; questions: MeetupQuestions };
 
+// 모임 정보 수정. 빠진 속성은 그대로 두고 null인 속성은 비운다(AC-22)
+export type MeetupUpdateRequest = {
+  area?: MeetupArea;
+  category?: MeetupCategory;
+  date?: string | null;
+  time?: string | null;
+  headcount?: number | null;
+  description?: string | null;
+};
+
 export type MeetupAreasResponse = { items: MeetupArea[] };
 
 export type MeetupInfo = {

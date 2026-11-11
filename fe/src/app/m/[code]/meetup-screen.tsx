@@ -157,6 +157,7 @@ function MeetupBody({
     router.push(`${meetupHref(code)}/taste`);
   };
   const join = () => router.push(`${meetupHref(code)}/join`);
+  const editInfo = () => router.push(`${meetupHref(code)}/edit`);
   const calculate = () =>
     calculation.mutate(undefined, {
       onError: (error) =>
@@ -193,6 +194,7 @@ function MeetupBody({
         onEditTaste={editTaste}
         onRemoveProfile={removeProfile}
         onPickName={onPickName}
+        onEditInfo={editInfo}
       />
     );
 
@@ -221,6 +223,7 @@ function MeetupBody({
           onRemoveProfile={removeProfile}
           onCalculate={calculate}
           calculating={calculation.isPending}
+          onEditInfo={editInfo}
         />
       )
     );

@@ -469,3 +469,51 @@ describe("추천받기와 결과", () => {
     expect(screen.getByRole("button", { name: "내 이름 고르기" })).toBeTruthy();
   });
 });
+
+describe("모임 정보 수정 버튼", () => {
+  it("모임장은 대기 화면 모임 정보의 수정으로 수정 화면을 연다", async () => {
+    api.fetchSnapshot.mockResolvedValue(hostSnapshot());
+    mount();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "모임 정보 수정" }),
+    );
+    expect(mocks.push).toHaveBeenCalledWith(`/m/${CODE}/edit`);
+  });
+
+  it("모임장은 결과 화면 첫 줄의 수정으로도 연다", async () => {
+    api.fetchSnapshot.mockResolvedValue(
+      hostSnapshot({
+        phase: "RESULT",
+        calculation: SUCCEEDED,
+        resultCalculationId: 5,
+      }),
+    );
+    api.fetchResult.mockResolvedValue(RESULT);
+    mount();
+    expect(await screen.findByText("2명의 취향으로 추천했어요")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "모임 정보 수정" }));
+    expect(mocks.push).toHaveBeenCalledWith(`/m/${CODE}/edit`);
+  });
+
+  it("날짜·시간만 고칠 수 있어도 수정이 보이고, 고칠 수 없는 사람에게는 없다", async () => {
+    api.fetchSnapshot.mockResolvedValue(
+      hostSnapshot({
+        phase: "VOTING",
+        allowed: ["EDIT_DATE"],
+        calculation: SUCCEEDED,
+        resultCalculationId: 5,
+      }),
+    );
+    api.fetchResult.mockResolvedValue(RESULT);
+    mount();
+    expect(
+      await screen.findByRole("button", { name: "모임 정보 수정" }),
+    ).toBeTruthy();
+    cleanup();
+
+    api.fetchSnapshot.mockResolvedValue(resultSnapshot());
+    mount();
+    expect(await screen.findByText("2명의 취향으로 추천했어요")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "모임 정보 수정" })).toBeNull();
+  });
+});
