@@ -236,18 +236,20 @@ run_ai_checks() {
   local m="$FIT_MIGRATOR_PASSWORD" a="$FIT_PROD_AI_PASSWORD" d="$FIT_DEV_AI_PASSWORD" p="$FIT_PROD_APP_PASSWORD"
   run_script ensure-databases.sh
   ok_if "AI role이 있어도 객체가 아직 없는 DB에서 ensure-databases.sh가 성공한다(마이그레이션 전)" "$(is "$rc" 0)"
-  # AI가 읽는 것은 뷰 ai_place_search와 user_preferences 둘뿐이다(마이그레이션이 만든다). 시험은 같은 이름으로 만든다
+  # AI가 읽는 것은 뷰 ai_place_search, ai_place_personas와 user_preferences뿐이다(마이그레이션이 만든다). 시험은 같은 이름으로 만든다
   pg_as fit_migrator "$m" fit_prod "CREATE TABLE places_t (id int PRIMARY KEY, name text); INSERT INTO places_t VALUES (1, 'a');
     CREATE VIEW ai_place_search AS SELECT id AS place_id, name FROM places_t;
+    CREATE VIEW ai_place_personas AS SELECT id AS place_id, name FROM places_t;
     CREATE TABLE user_preferences (user_id bigint, tastes jsonb, features jsonb); INSERT INTO user_preferences VALUES (1, '[]', '[]');
     CREATE TABLE auth_users_t (id int, email text); CREATE TABLE t_late (id int)" >/dev/null
   ok_if "마이그레이션이 만든 객체는 grant-ai-read.sh 전에는 AI role이 못 읽는다(기본 권한을 주지 않는다)" \
     "$(fails pg_as fit_prod_ai "$a" fit_prod 'SELECT * FROM ai_place_search')"
   run_script grant-ai-read.sh
   ok_if "grant-ai-read.sh가 성공한다" "$(is "$rc" 0)"
-  ok_if "grant-ai-read.sh가 준 객체 이름을 알려 준다(ai_place_search, user_preferences)" \
-    "$([ "$(has "$out" ai_place_search)$(has "$out" user_preferences)" = 11 ] && echo 1 || echo 0)"
+  ok_if "grant-ai-read.sh가 준 객체 이름을 알려 준다(ai_place_search, ai_place_personas, user_preferences)" \
+    "$([ "$(has "$out" ai_place_search)$(has "$out" ai_place_personas)$(has "$out" user_preferences)" = 111 ] && echo 1 || echo 0)"
   ok_if "AI role이 뷰 ai_place_search를 읽는다" "$(is "$(pg_as fit_prod_ai "$a" fit_prod 'SELECT count(*) FROM ai_place_search')" 1)"
+  ok_if "AI role이 뷰 ai_place_personas를 읽는다" "$(is "$(pg_as fit_prod_ai "$a" fit_prod 'SELECT count(*) FROM ai_place_personas')" 1)"
   ok_if "AI role이 user_preferences를 읽는다" "$(is "$(pg_as fit_prod_ai "$a" fit_prod 'SELECT count(*) FROM user_preferences')" 1)"
   ok_if "AI role은 뷰 밑의 테이블을 직접 읽지 못한다" "$(fails pg_as fit_prod_ai "$a" fit_prod 'SELECT * FROM places_t')"
   ok_if "AI role은 인증 같은 다른 테이블을 읽지 못한다" "$(fails pg_as fit_prod_ai "$a" fit_prod 'SELECT * FROM auth_users_t')"

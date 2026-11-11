@@ -9,7 +9,7 @@ set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 # 이름을 늘릴 때는 BE·AI 팀과 정한 읽기 계약이다. 새 객체가 AI에게 필요하면 이 목록을 고치는 MR을 만든다.
-AI_READ_OBJECTS="ai_place_search user_preferences"
+AI_READ_OBJECTS="ai_place_search ai_place_personas user_preferences"
 
 for env in prod dev; do
   granted="" skipped=""
