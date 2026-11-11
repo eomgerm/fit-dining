@@ -50,7 +50,7 @@ Origin 검사는 기존 인증·사용자·온보딩·검색 기록 경로의 PO
 
 ## 로그인 감사와 정리
 
-`V25__session_login_audit.sql`은 `auth_security_events`만 확장한다. 기존 행, family_id, reuse_count는 과거 증거로 보존한다. `auth_refresh_tokens` 테이블과 기존 행은 192 BE의 동시 운영·롤백을 위해 유지하며 새 코드는 사용하지 않는다.
+`V25__session_login_audit.sql`은 `auth_security_events`만 확장한다. 기존 행, family_id, reuse_count는 과거 증거로 보존한다. `auth_refresh_tokens` 테이블과 기존 행은 V25에서 192 BE의 동시 운영·롤백을 위해 유지했으며, contract 단계인 `V30__drop_auth_refresh_tokens.sql`에서 삭제했다. 인덱스도 함께 삭제하며 감사 이벤트의 기존 행과 값은 변경하지 않는다.
 
 V24(`V24__recompute_taste_features.sql`)는 `user_preferences`의 갱신 시각과 컬럼 설명만 변경한다. V25는 별도 테이블인 `auth_security_events`에 적용하므로 V24 뒤에 실행해도 충돌하지 않는다.
 
@@ -62,9 +62,11 @@ V24(`V24__recompute_taste_features.sql`)는 `user_preferences`의 갱신 시각�
 - 비밀번호, 세션 ID, 이메일 원문을 감사 기록에 저장하지 않는다. 보안 이벤트는 기존 90일 정책으로 정리한다.
 - 로그인 시도, 취향 입력 로그, 이메일 인증 기록 정리는 유지한다. RT 정리 작업은 제거했다.
 
-후속 릴리스(contract 단계)에서 192 인스턴스와 롤백 대상이 모두 사라진 것을 확인한 뒤 별도 마이그레이션으로 `auth_refresh_tokens`를 삭제한다. 이번 V25에는 DROP을 넣지 않는다. 삭제 전 `infra/backup/README.md`와 `pg-backup.sh`, `verify-dump.sh`, `restore-check.sh` 절차로 백업·복구 가능 여부를 확인한다.
+V30의 머지·배포 조건은 193(`a05ed87`)이 prod에 배포되고 192 인스턴스와 롤백 대상이 모두 사라진 것이다. V30 적용 후 192 BE는 `ddl-auto: validate`로 기동할 수 없다. 머지 직전에 develop의 마지막 마이그레이션 번호를 다시 확인한다.
 
-192 호환 근거: 웹 앱은 Flyway가 꺼져 있고 `ddl-auto: validate`로 기동한다. V25는 기존 컬럼 이름·타입을 바꾸지 않고 nullable 컬럼을 추가하며 family_id의 NOT NULL과 type CHECK를 완화한다. 192의 Hibernate validate는 매핑된 테이블·컬럼·타입을 검사하고 추가 컬럼·테이블과 완화된 nullability/CHECK를 거절하지 않는다. `compat/session192` 테스트는 bab48a5의 RT·보안 이벤트 엔티티 매핑으로 V25 DB의 validate 기동과 기존 로그인 경로의 비밀번호 확인·RT INSERT·과거 이벤트 INSERT를 확인한다. 193의 validate 기동은 RT 테이블이 남은 상태의 통합 테스트로 확인한다. 이 검증은 엔티티 매핑과 DB 동작의 호환 검증이며 192 배포 이미지 자체를 실행한 검증은 아니다.
+배포 전 덤프(`pg-backup.sh predeploy`)는 마이그레이션 전에 실행된다. 삭제 전 `infra/backup/README.md`와 `pg-backup.sh`, `verify-dump.sh`, `restore-check.sh` 절차로 백업·복구 가능 여부를 확인한다.
+
+192 매핑을 사용하던 `compat/session192` 호환 테스트는 V30의 테이블 삭제로 제거했다. 현재 BE의 통합 테스트는 Testcontainers에서 V1~V30 적용 후 `ddl-auto: validate` 기동을 확인하며, 별도 마이그레이션 검사는 과거 감사 이벤트 보존과 RT 테이블 삭제를 확인한다.
 
 ## 로컬 및 개발 로그인
 

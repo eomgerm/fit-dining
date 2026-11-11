@@ -323,7 +323,7 @@ class AuthServiceTests extends PostgresTestSupport {
     }
 
     @Test
-    void migrationPreservesLegacyEventsAndRefreshTable() throws Exception {
+    void migrationPreservesLegacyEventsAndDropsRefreshTable() throws Exception {
         try (var connection = DriverManager.getConnection(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
                 var statement = connection.createStatement()) {
             connection.setAutoCommit(false);
@@ -337,6 +337,7 @@ class AuthServiceTests extends PostgresTestSupport {
                     + "values ('old-jti','old-family','old-user',now(),now()+interval '1 day')");
                 statement.execute("insert into auth_security_events(family_id,created_at,type,reuse_count) values ('old-family',now(),'REFRESH_REUSE',2)");
                 statement.execute(java.nio.file.Files.readString(java.nio.file.Path.of("src/main/resources/db/migration/V25__session_login_audit.sql")));
+                statement.execute(java.nio.file.Files.readString(java.nio.file.Path.of("src/main/resources/db/migration/V30__drop_auth_refresh_tokens.sql")));
                 try (var rows = statement.executeQuery("select family_id,type,reuse_count,user_id from auth_security_events")) {
                     assertTrue(rows.next());
                     assertEquals("old-family", rows.getString(1));
@@ -345,12 +346,9 @@ class AuthServiceTests extends PostgresTestSupport {
                     assertNull(rows.getString(4));
                     assertFalse(rows.next());
                 }
-                try (var rows = statement.executeQuery("select user_id from auth_refresh_tokens where jti='old-jti'")) {
-                    assertTrue(rows.next()); assertEquals("old-user", rows.getString(1));
-                }
                 statement.execute("insert into auth_security_events(user_id,created_at,type,reuse_count) values (null,now(),'LOGIN_FAILURE',0)");
                 try (var rows = statement.executeQuery("select to_regclass('migration_audit_test.auth_refresh_tokens')")) {
-                    assertTrue(rows.next()); assertNotNull(rows.getString(1));
+                    assertTrue(rows.next()); assertNull(rows.getString(1));
                 }
             } finally { connection.rollback(); }
         }
