@@ -13,6 +13,7 @@ import pytest
 
 from fit_ai import embedding
 from fit_ai.match.candidates import (
+    Found,
     MapBounds,
     OpenHours,
     PlaceFilter,
@@ -515,3 +516,11 @@ class TestMockFile:
         assert ours == be, (
             "BE Mock이 바뀌었다. scripts/dev_db.py --json으로 예시 파일을 다시 만든다"
         )
+
+
+def test_no_personas(store: JsonPlaceStore) -> None:
+    """파일저장소_장소페르소나가없어_페르소나경로는비고페르소나항목은모두근거없음이다"""
+    assert store.find_by_personas(PlaceFilter(), (1.0, 0.0), (0.0, 1.0), 10) == Found(
+        ()
+    )
+    assert store.persona_items([(0.0, 1.0)], [1, 2], frozenset({"CAFE"})) == [{}]

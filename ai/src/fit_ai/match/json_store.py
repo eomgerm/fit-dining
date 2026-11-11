@@ -10,7 +10,7 @@
 
 import json
 import math
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from pathlib import Path
 from typing import Any, TypeGuard
 
@@ -93,6 +93,25 @@ class JsonPlaceStore:
                 continue
             candidates.append(Candidate(place, similarity))
         return Found(tuple(candidates), tuple(invalid))
+
+    def find_by_personas(
+        self,
+        place_filter: PlaceFilter,
+        query: Sequence[float],
+        phrase: Sequence[float],
+        k: int,
+    ) -> Found:
+        """장소 파일에는 장소 페르소나가 없어 페르소나 경로로 뽑는 후보가 없다."""
+        return Found(())
+
+    def persona_items(
+        self,
+        phrases: Sequence[Sequence[float]],
+        place_ids: Sequence[int],
+        scope: Collection[str],
+    ) -> list[dict[int, float]]:
+        """장소 파일에는 장소 페르소나가 없어 모든 장소가 판단할 근거 없음(0.5)이다."""
+        return [{} for _ in phrases]
 
     def places(self) -> tuple[Place, ...]:
         """점수 기준을 만들 장소 전체. 시작할 때 읽어 둔 것이다.

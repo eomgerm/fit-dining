@@ -19,6 +19,7 @@ from fit_ai.match.interpretation.segments import (
     MAX_SEGMENTS,
     Choice,
     Feature,
+    FeatureKind,
     FeatureText,
     Hours,
     Location,
@@ -202,7 +203,7 @@ class Conditions:
             )
             + tuple(
                 dict.fromkeys(
-                    Feature(f.text, f.value)
+                    Feature(f.text, f.value, kind=f.kind)
                     for f in features
                     if isinstance(f, FeatureText)
                     and f.want
@@ -228,6 +229,25 @@ class Conditions:
             self.flavors,
             self.facilities,
             self.party_size,
+        )
+
+    @property
+    def persona_phrases(self) -> tuple[str, ...]:
+        """장소 페르소나와 견줘 점수를 낼 코드 없는 조건 문구(취향형). 같은 문구는 한 번만
+        둔다(docs/comparison/spec.md 4.3)."""
+        return self._phrases(FeatureKind.TASTE)
+
+    @property
+    def route_phrases(self) -> tuple[str, ...]:
+        """페르소나 경로로 후보를 더 뽑을 코드 없는 조건 문구(취향형, 시설형).
+        docs/comparison/spec.md 4.2"""
+        return self._phrases(FeatureKind.TASTE, FeatureKind.FACILITY)
+
+    def _phrases(self, *kinds: FeatureKind) -> tuple[str, ...]:
+        return tuple(
+            dict.fromkeys(
+                f.value for f in self.features if f.code is None and f.kind in kinds
+            )
         )
 
     @property

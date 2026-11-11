@@ -22,6 +22,7 @@ from fit_ai import embedding
 from fit_ai.match.candidates import (
     CANDIDATE_K,
     GENERAL_K,
+    PERSONA_K,
     Area,
     Candidate,
     MapBounds,
@@ -32,6 +33,7 @@ from fit_ai.match.candidates import (
     RegionArea,
     StationArea,
     menu_key,
+    merge_found,
 )
 from fit_ai.match.cards import Card, build_card
 from fit_ai.match.conditions import (
@@ -46,6 +48,7 @@ from fit_ai.match.interpretation import (
     interpret,
     station_code,
 )
+from fit_ai.match.interpretation.codes import avoided_codes
 from fit_ai.match.interpretation.segments import (
     DAYS,
     Hours,
@@ -54,7 +57,7 @@ from fit_ai.match.interpretation.segments import (
     Menu,
     Price,
 )
-from fit_ai.match.scoring import baseline_for, scope_of, score_places
+from fit_ai.match.scoring import PhraseScores, baseline_for, scope_of, score_places
 from fit_ai.match.taste_select import TasteProfile, select_tastes
 
 FACILITY_PHRASES = {
@@ -64,6 +67,9 @@ FACILITY_PHRASES = {
     "RESERVATION": ("예약할 수 있는", "예약"),
 }
 """결과가 없을 때 문구에 쓰는 시설 말. (원인 문구, 제안 문구)다."""
+
+ROUTE_SEPARATOR = ", "
+"""페르소나 경로 질의에서 코드 없는 조건 문구를 잇는 말("책 읽기 좋은 곳, 콘센트 있는 곳")"""
 
 PRICE_MARGIN = 0.1
 """가격 거르기 여유 폭. 가게 가격이 요청 금액을 이 비율까지 넘어도 남긴다("2만원 이하"면
@@ -263,12 +269,25 @@ def search(
     # 거를 지역이 하나도 없으면 전국에서 찾는다(docs/comparison/spec.md 4.2).
     nationwide = not where.areas
 
+    # 코드 없는 조건 문구는 요청문과 같은 임베딩 호출로 벡터로 바꾼다. 페르소나 경로는 문구를
+    # 이어 붙인 한 질의로 찾고, 점수는 문구마다 따로 낸다(docs/comparison/spec.md 4.2, 4.3).
+    route = conditions.route_phrases
+    phrases = conditions.persona_phrases
     start = time.perf_counter()
-    query = _encode(conditions.embedding_text)
+    query, *rest = _encode(
+        [conditions.embedding_text, *([ROUTE_SEPARATOR.join(route)] if route else [])]
+        + list(phrases)
+    )
+    route_vector = rest.pop(0) if route else None
     embed_seconds = time.perf_counter() - start
 
     start = time.perf_counter()
-    found = store.find(_place_filter(conditions, where.areas), query, CANDIDATE_K)
+    place_filter = _place_filter(conditions, where.areas)
+    found = store.find(place_filter, query, CANDIDATE_K)
+    if route_vector is not None:
+        found = merge_found(
+            found, store.find_by_personas(place_filter, query, route_vector, PERSONA_K)
+        )
     trace = SearchTrace(
         embed_seconds, time.perf_counter() - start, len(found.candidates)
     )
@@ -280,7 +299,13 @@ def search(
             interpretation, (), reason, found.invalid, trace, where.kept, nationwide
         )
     start = time.perf_counter()
-    cards = _score_cards(found.candidates, conditions, request.taste, store)
+    cards = _score_cards(
+        found.candidates,
+        conditions,
+        request.taste,
+        store,
+        tuple(zip(phrases, rest, strict=True)),
+    )
     trace = replace(trace, score_seconds=time.perf_counter() - start)
     return SearchResult(
         interpretation, cards, None, found.invalid, trace, where.kept, nationwide
@@ -528,17 +553,18 @@ def _plain(text: str) -> str:
     return "".join(text.split())
 
 
-def _encode(text: str) -> list[float]:
-    """요청문을 공유 모듈 `fit_ai.embedding`으로 인코딩한다(서버에서는 Modal 원격 호출)."""
+def _encode(texts: list[str]) -> list[list[float]]:
+    """요청문과 문구를 공유 모듈 `fit_ai.embedding`으로 한 번에 인코딩한다(서버에서는 Modal
+    원격 호출 한 번)."""
     try:
-        [query] = embedding.encode_queries([text])
+        vectors = embedding.encode_queries(texts)
     except embedding.EmbeddingUnavailable as e:
         # 원격 실패는 메시지가 실패 종류(`HTTP 401` 등)뿐이라 그대로 남긴다.
         raise EmbeddingError(str(e)) from e
     except (RuntimeError, OSError, ValueError) as e:
         # 메시지에 요청문이 섞일 수 있어 종류만 남긴다.
         raise EmbeddingError(type(e).__name__) from e
-    return query
+    return vectors
 
 
 def open_hours(hours: Sequence[Hours]) -> OpenHours | None:
@@ -638,16 +664,36 @@ def _score_cards(
     conditions: Conditions,
     taste: TasteProfile | None,
     store: PlaceStore,
+    phrases: Sequence[tuple[str, Sequence[float]]] = (),
 ) -> tuple[Card, ...]:
     """⓪ 취향을 고르고 ② 점수를 내서 ③ 카드를 만든다. 점수순으로 돌려줄 수만큼 자른다.
 
+    Args:
+        candidates: 후보
+        conditions: 해석한 조건
+        taste: 취향. 없으면 None이다.
+        store: 장소 저장소
+        phrases: 점수에 넣을 코드 없는 조건 문구와 그 벡터
+
     Raises:
-        StoreError: 점수 기준을 만들 장소를 읽지 못했을 때
+        StoreError: 점수 기준이나 페르소나 항목을 읽지 못했을 때
     """
+    # 피해 달라는 맛("안 매운")은 요청이 정한 것이라 그 묶음의 취향도 뺀다.
+    avoided = avoided_codes((), conditions.flavors)
+    scope = scope_of(conditions.category_group, conditions.avoid_categories)
+    values = (
+        store.persona_items(
+            [vector for _, vector in phrases],
+            [c.place.place_id for c in candidates],
+            scope,
+        )
+        if phrases
+        else []
+    )
     tastes = (
         select_tastes(
             taste.features,
-            conditions.codes,
+            conditions.codes + avoided,
             menu_requested=bool(menu_terms(conditions.menus)),
             category_group=conditions.category_group,
         )
@@ -658,7 +704,12 @@ def _score_cards(
         candidates,
         conditions.codes,
         tastes,
-        scope_of(conditions.category_group, conditions.avoid_categories),
+        scope,
         baseline_for(store.places()),
+        avoid_codes=avoided,
+        phrases=tuple(
+            PhraseScores(phrase, v)
+            for (phrase, _), v in zip(phrases, values, strict=True)
+        ),
     )
     return tuple(build_card(s) for s in scored[:GENERAL_K])

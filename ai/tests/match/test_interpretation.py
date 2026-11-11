@@ -20,6 +20,7 @@ from fit_ai.match.interpretation import (
 from fit_ai.match.interpretation.segments import (
     Choice,
     Feature,
+    FeatureKind,
     Hours,
     Location,
     LocationKind,
@@ -586,6 +587,41 @@ class TestTurn:
         )
         assert conditions.codes == ("QUIET", "FOOD_KOREAN", "WIFI", "PURPOSE_GROUP")
 
+    def test_uncoded_feature_kinds(self, fake_gms: FakeGms) -> None:
+        """LLM해석_코드없는특징의종류를읽고_모르는종류는None이며문구는종류별로꺼낸다"""
+        fake_gms(
+            lambda messages: turn_answer(
+                features=[
+                    {
+                        "text": "책 읽을 만한",
+                        "value": "책 읽기 좋은 곳",
+                        "kind": "TASTE",
+                    },
+                    {"text": "충전", "value": "콘센트 있는 곳", "kind": "FACILITY"},
+                    {"text": "맛있는", "value": "맛있는 곳", "kind": "QUALITY"},
+                    {"text": "뷰", "value": "전망 좋은 곳", "kind": "VIEW"},
+                    {
+                        "text": "조용한",
+                        "value": "조용한 곳",
+                        "code": "QUIET",
+                        "kind": "TASTE",
+                    },
+                ],
+            )
+        )
+
+        conditions = interpret("책 읽을 만한 충전되는 맛있는 뷰 조용한 카페").conditions
+
+        assert conditions.features == (
+            Feature("조용한", "조용한 곳", "QUIET"),
+            Feature("책 읽을 만한", "책 읽기 좋은 곳", kind=FeatureKind.TASTE),
+            Feature("충전", "콘센트 있는 곳", kind=FeatureKind.FACILITY),
+            Feature("맛있는", "맛있는 곳", kind=FeatureKind.QUALITY),
+            Feature("뷰", "전망 좋은 곳"),
+        )
+        assert conditions.persona_phrases == ("책 읽기 좋은 곳",)
+        assert conditions.route_phrases == ("책 읽기 좋은 곳", "콘센트 있는 곳")
+
     def test_spellings(self, fake_gms: FakeGms) -> None:
         """LLM해석_메뉴의다른표기는_문자열만같은말없이세개까지읽는다"""
         fake_gms(
@@ -973,14 +1009,27 @@ class TestRuleSegments:
     @pytest.mark.parametrize(
         ("query", "features"),
         [
-            ("충전되는 카페", (Feature("충전", "콘센트"),)),
-            ("강아지랑 반려견 동반 카페", (Feature("반려견", "반려견"),)),
-            ("애기랑 갈 식당", (Feature("애기랑", "아이 동반"),)),
+            (
+                "충전되는 카페",
+                (Feature("충전", "콘센트 있는 곳", kind=FeatureKind.FACILITY),),
+            ),
+            (
+                "강아지랑 반려견 동반 카페",
+                (
+                    Feature(
+                        "반려견", "반려견과 갈 수 있는 곳", kind=FeatureKind.FACILITY
+                    ),
+                ),
+            ),
+            (
+                "애기랑 갈 식당",
+                (Feature("애기랑", "아이와 가기 좋은 곳", kind=FeatureKind.TASTE),),
+            ),
             ("베이커리룸 카페", ()),
         ],
     )
     def test_features(self, query: str, features: tuple[Feature, ...]) -> None:
-        """규칙해석_코드표에없는특징낱말이있으면_표준이름하나로둔다"""
+        """규칙해석_코드표에없는특징낱말이있으면_문구와종류하나로둔다"""
         assert interpret_by_rules(query).features == features
 
     @pytest.mark.parametrize(

@@ -41,6 +41,7 @@ MOCK_PLACES = REPO / "be/src/main/resources/mock/places.json"
 
 SCHEMA_SQL = """
 CREATE EXTENSION IF NOT EXISTS vector;
+DROP VIEW IF EXISTS ai_place_personas;
 DROP VIEW IF EXISTS ai_place_search;
 DROP TABLE IF EXISTS place_profile;
 DROP TABLE IF EXISTS place_subway;
@@ -113,6 +114,9 @@ SELECT p.id AS place_id, p.category_group, p.station, p.lat, p.lng, p.facilities
        p.pet_allowed, p.parking_free, p.corkage_allowed, pp.price,
        pp.analyzed_review_count, p.category
 FROM place p JOIN place_profile pp ON pp.place_id = p.id;
+CREATE VIEW ai_place_personas AS
+SELECT NULL::bigint AS place_id, NULL::text AS category_group, NULL::vector(1024) AS vector
+WHERE false;
 DROP TABLE IF EXISTS user_preferences;
 CREATE TABLE user_preferences (
   user_id text PRIMARY KEY,
@@ -123,7 +127,8 @@ CREATE TABLE user_preferences (
   features jsonb NOT NULL DEFAULT '[]'
 );
 """
-"""개발 DB 스키마. 뷰는 BE 마이그레이션 V12·V17~V19의 `ai_place_search`와 같은 컬럼이다. 가까운
+"""개발 DB 스키마. 뷰는 BE 마이그레이션 V12·V17~V19의 `ai_place_search`와 같은 컬럼이다. Mock
+장소에는 페르소나가 없어 `ai_place_personas`(V25)는 같은 컬럼의 빈 뷰다. 가까운
 역(`place_subway`), 영업시간(`place_hour`), 메뉴(`place_menu`)는 BE `place_subways`,
 `place_hours`, `place_menus`(V7)처럼 따로 두고 뷰에서 모은다. 가게 가격(`place_profile.price`)은
 장소 분석 적재가 프로필 쪽에 넣는다고 가정한 자리다. `user_preferences`는 BE 마이그레이션 V2·V6의 컬럼 중 AI가 읽는 것과 온보딩 원본만

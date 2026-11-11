@@ -16,6 +16,7 @@ from fit_ai.match.scoring import (
     UNKNOWN,
     Baseline,
     ItemScore,
+    PhraseScores,
     fit_score,
     scope_of,
     score_places,
@@ -200,6 +201,12 @@ class TestFitScore:
         """핏점수_요청조각도취향도없으면_None이다"""
         assert fit_score([]) is None
 
+    def test_avoided_request_flipped(self) -> None:
+        """핏점수_피해달라는요청은_1빼기조건점수로기하평균에넣는다"""
+        assert fit_score([item(0.9), item(0.8, like=False)]) == pytest.approx(
+            (0.9 * 0.2) ** 0.5
+        )
+
 
 class TestScorePlaces:
     """후보 순서"""
@@ -247,6 +254,42 @@ class TestScorePlaces:
             ("QUIET", True, True, 1),
             ("FAST_SERVING", True, True, 1),
             ("COZY", False, False, 2),
+        ]
+
+    def test_phrase_items(self) -> None:
+        """순서_코드없는조건문구는_장소의페르소나항목이고페르소나가없으면0점5다"""
+        candidates = [Candidate(p, 1.0) for p in QUIET_CAFES[:2]]
+        reading = PhraseScores("책 읽기 좋은 곳", {1: 0.9})
+
+        scored = score_places(
+            candidates, [], [], CAFE, Baseline(QUIET_CAFES), phrases=[reading]
+        )
+
+        assert [
+            (s.candidate.place.place_id, s.score, s.items[0].phrase) for s in scored
+        ] == [(1, 90, "책 읽기 좋은 곳"), (2, 50, "책 읽기 좋은 곳")]
+        assert scored[0].items[0].code is None
+        assert scored[0].items[0].request
+
+    def test_avoided_codes(self) -> None:
+        """순서_피해달라는코드는요청조각으로뒤집어넣고_그코드의취향은뺀다"""
+        tastes = [
+            TasteFeature("QUIET", Layer.AXIS, True, 1),
+            TasteFeature("COZY", Layer.IMPORTANCE, True, 1),
+        ]
+
+        [scored] = score_places(
+            [Candidate(QUIET_CAFES[5], 1.0)],
+            [],
+            tastes,
+            CAFE,
+            Baseline(QUIET_CAFES),
+            avoid_codes=["QUIET"],
+        )
+
+        assert [(i.code, i.request, i.like) for i in scored.items] == [
+            ("QUIET", True, False),
+            ("COZY", False, True),
         ]
 
     def test_no_items_no_score(self) -> None:

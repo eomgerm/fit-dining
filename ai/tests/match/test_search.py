@@ -1082,3 +1082,182 @@ class TestEmptyReason:
         assert reason.suggestion == (
             "강남역, 역삼역, 선릉역, 유성온천역, 구미역 근처에서 찾아 보세요"
         )
+
+
+class PersonaStore(FakeStore):
+    """페르소나 경로와 페르소나 항목도 정해 둔 값으로 답한다.
+
+    페르소나 경로는 `routed` 후보를 돌려준다. 페르소나 항목은 문구마다 `values`를 돌려준다.
+    점수 기준을 만들 장소 전체는 두 경로의 후보를 합친 것이다.
+    """
+
+    def __init__(
+        self,
+        routed: Sequence[Candidate] = (),
+        values: dict[int, float] | None = None,
+        **kwargs: object,
+    ) -> None:
+        super().__init__(**kwargs)  # type: ignore[arg-type]
+        self.routed = tuple(routed)
+        self.values = values or {}
+        self.route_calls: list[tuple[PlaceFilter, Sequence[float], int]] = []
+        self.item_calls: list[tuple[int, list[int], frozenset[str]]] = []
+
+    def places(self) -> tuple[Place, ...]:
+        seen = {c.place.place_id: c.place for c in self.candidates + self.routed}
+        return tuple(seen.values())
+
+    def find_by_personas(
+        self,
+        place_filter: PlaceFilter,
+        query: Sequence[float],
+        phrase: Sequence[float],
+        k: int,
+    ) -> Found:
+        self.route_calls.append((place_filter, phrase, k))
+        return Found(self.routed[:k])
+
+    def persona_items(
+        self,
+        phrases: Sequence[Sequence[float]],
+        place_ids: Sequence[int],
+        scope: frozenset[str],
+    ) -> list[dict[int, float]]:
+        self.item_calls.append((len(phrases), list(place_ids), frozenset(scope)))
+        return [dict(self.values) for _ in phrases]
+
+
+def phrase(value: str, kind: str) -> dict:
+    """LLM이 내는 코드 없는 특징"""
+    return {"text": value, "value": value, "code": None, "kind": kind}
+
+
+READING = phrase("책 읽기 좋은 곳", "TASTE")
+OUTLET = phrase("콘센트 있는 곳", "FACILITY")
+TASTY = phrase("맛있는 곳", "QUALITY")
+
+
+class TestPersonaConditions:
+    """코드 없는 조건 문구(페르소나 경로와 페르소나 항목)"""
+
+    def test_no_phrase_skips_personas(
+        self, fake_gms: FakeGms, encoder: list[list[str]]
+    ) -> None:
+        """검색_코드없는조건이없으면_요청문만인코딩하고페르소나를읽지않는다"""
+        fake_gms(answers())
+        store = PersonaStore()
+
+        run(store)
+
+        assert encoder == [["조용한 카페"]]
+        assert store.route_calls == []
+        assert store.item_calls == []
+
+    def test_taste_phrase_routes_and_scores(
+        self, fake_gms: FakeGms, encoder: list[list[str]]
+    ) -> None:
+        """검색_취향형문구가있으면_후보를더뽑고문구마다페르소나항목을요청점수에넣는다"""
+        fake_gms(answers(codes=[], features=[READING]))
+        extra = make_candidate(4, 0.1, quiet=0)
+        store = PersonaStore(
+            routed=(CANDIDATES[0], extra), values={1: 0.9, 2: 0.3, 4: 0.6}
+        )
+
+        result = run(store)
+
+        # 요청문, 페르소나 경로 질의, 점수용 문구를 한 번에 인코딩한다.
+        assert encoder == [["조용한 카페", "책 읽기 좋은 곳", "책 읽기 좋은 곳"]]
+        assert [k for _, _, k in store.route_calls] == [100]
+        # 페르소나 경로로 더 뽑은 4번도 점수를 받는다. 페르소나가 없는 3번은 0.5다.
+        assert store.item_calls == [(1, [1, 2, 3, 4], frozenset({"CAFE"}))]
+        assert scores(result) == [(1, 90), (4, 60), (3, 50), (2, 30)]
+        item = result.cards[0].score_items[0]
+        assert (item.condition_id, item.label, item.matched) == (
+            None,
+            "책 읽기 좋은 곳",
+            True,
+        )
+        assert result.cards[0].reasons[0].title == "책 읽기 좋은 곳에 맞아요"
+
+    def test_facility_phrase_routes_only(
+        self, fake_gms: FakeGms, encoder: list[list[str]]
+    ) -> None:
+        """검색_시설형문구는_후보뽑기에만쓰고점수에넣지않는다"""
+        fake_gms(answers(codes=[], features=[OUTLET]))
+        store = PersonaStore(routed=(make_candidate(4, 0.1, quiet=0),))
+
+        result = run(store)
+
+        assert encoder == [["조용한 카페", "콘센트 있는 곳"]]
+        assert len(store.route_calls) == 1
+        assert store.item_calls == []
+        # 판정할 조각이 없어 점수 없이 유사도 순서다.
+        assert scores(result) == [(1, None), (2, None), (3, None), (4, None)]
+
+    def test_quality_phrase_unused(
+        self, fake_gms: FakeGms, encoder: list[list[str]]
+    ) -> None:
+        """검색_품질형문구는_후보뽑기에도점수에도쓰지않는다"""
+        fake_gms(answers(features=[TASTY]))
+        store = PersonaStore()
+
+        run(store)
+
+        assert encoder == [["조용한 카페"]]
+        assert store.route_calls == []
+        assert store.item_calls == []
+
+    def test_route_joins_phrases(
+        self, fake_gms: FakeGms, encoder: list[list[str]]
+    ) -> None:
+        """검색_코드없는조건이여럿이면_페르소나경로는이어붙인한질의로찾는다"""
+        fake_gms(answers(codes=[], features=[READING, OUTLET]))
+        store = PersonaStore()
+
+        run(store)
+
+        assert encoder == [
+            ["조용한 카페", "책 읽기 좋은 곳, 콘센트 있는 곳", "책 읽기 좋은 곳"]
+        ]
+        assert [n for n, _, _ in store.item_calls] == [1]
+
+
+def spicy_candidate(place_id: int, spicy: int) -> Candidate:
+    """리뷰 100건 중 `spicy`건이 맵다고 한 강남역 식당 후보"""
+    place = Place(
+        place_id=place_id,
+        info=PlaceInfo(place_id, "RESTAURANT", "GANGNAM", {}, review_count=100),
+        summary=f"설명 {place_id}",
+        conditions={"FOOD_SPICY": ConditionEvidence(pos=spicy)},
+    )
+    return Candidate(place, 1.0 - place_id / 10)
+
+
+class TestAvoidFlavor:
+    """피해 달라는 맛"""
+
+    def test_not_spicy_ranks_mild_first(self, fake_gms: FakeGms) -> None:
+        """검색_안매운을찾으면_매운맛조건점수를뒤집어요청점수에넣고카드항목에는넣지않는다"""
+        fake_gms(
+            answers(
+                codes=[],
+                category_group="RESTAURANT",
+                flavors=[{"code": "SPICY", "want": False}],
+            )
+        )
+        store = FakeStore(
+            candidates=(
+                spicy_candidate(1, 60),
+                spicy_candidate(2, 5),
+                spicy_candidate(3, 30),
+            )
+        )
+        spicy_taste = TasteProfile(
+            "u1", (TasteFeature("FOOD_SPICY", Layer.FOOD, True, 3),), ()
+        )
+
+        result = run(store, taste=spicy_taste)
+
+        # 맵다는 리뷰가 적은 순서(2, 3, 1)다. 매운맛을 좋아하는 취향은 요청이 정해 빠진다.
+        assert [card.place_id for card in result.cards] == [2, 3, 1]
+        assert all(card.score_items == () for card in result.cards)

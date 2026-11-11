@@ -148,6 +148,19 @@ class Choice:
     want: bool = True
 
 
+class FeatureKind(StrEnum):
+    """코드표에 없는 특징의 종류. 쓰는 곳이 갈린다(docs/comparison/spec.md 4.1)."""
+
+    TASTE = "TASTE"
+    """분위기·목적·먹을거리처럼 장소 페르소나에 이야기가 많은 것("책 읽기 좋은 곳").
+    후보 뽑기와 점수에 쓴다."""
+    FACILITY = "FACILITY"
+    """있고 없음이 정해진 시설·사실("콘센트 있는 곳", "룸 있는 곳"). 장소 페르소나에 거의
+    나오지 않아 후보 뽑기에만 쓴다."""
+    QUALITY = "QUALITY"
+    """맛, 친절, 청결, 예산처럼 거의 모든 장소에 해당하는 것("맛있는 곳"). 쓰지 않는다."""
+
+
 @dataclass(frozen=True)
 class Feature:
     """장소 특징 하나. 원함만 받는다. 부정한 특징은 바라는 쪽으로 바꿔 둔다("시끄러운 곳
@@ -155,14 +168,18 @@ class Feature:
 
     Attributes:
         text: 사용자가 쓴 말("북적이는 데 말고")
-        value: 표준 이름("조용하고 차분한 곳", "콘센트")
+        value: 표준 이름. 코드표에 없는 특징은 "~곳" 문구다("조용하고 차분한 곳",
+            "콘센트 있는 곳").
         code: 공유 코드표의 성향 축·중요 기준·방문 목적 코드. 코드표에 없는 특징이면
             None이다.
+        kind: 코드표에 없는 특징의 종류. 코드 특징이거나 종류를 모르는 옛 조건이면 None이고
+            쓰지 않는다.
     """
 
     text: str
     value: str
     code: str | None = None
+    kind: FeatureKind | None = None
 
 
 @dataclass(frozen=True)
@@ -172,10 +189,12 @@ class FeatureText:
 
     Attributes:
         text: 사용자가 쓴 말("충전되는")
-        value: 표준 이름("콘센트")
+        value: "~곳" 문구("콘센트 있는 곳")
         want: 원하면 True, 피하면 False
+        kind: 종류. 모르면 None이다.
     """
 
     text: str
     value: str
     want: bool = True
+    kind: FeatureKind | None = None

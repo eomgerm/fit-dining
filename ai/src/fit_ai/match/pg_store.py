@@ -1,5 +1,5 @@
-"""장소·취향 저장소의 Postgres 구현. 장소는 뷰 `ai_place_search`, 취향은
-`user_preferences`를 읽는다.
+"""장소·취향 저장소의 Postgres 구현. 장소는 뷰 `ai_place_search`, 장소 페르소나는 뷰
+`ai_place_personas`, 취향은 `user_preferences`를 읽는다.
 
 장소는 거르기와 유사도 계산(pgvector `<=>`, 코사인 거리)을 SQL 한 번으로 한다. 장소가
 300곳 남짓이라 인덱스 없이 전부 계산해도 빠르고 결과가 정확하다. 장소 뷰는 BE
@@ -11,14 +11,15 @@ breaks}]`), `menus`(`place_menus`를 모은 `[{name, category, price, representa
 `price`(가게 가격), `lat`, `lng`, `facilities`, `food_type`, `analyzed_review_count`,
 `profile`, `summary_vector`에 의존한다. `price`는 장소 분석 적재가 채우기
 전까지 모두 NULL(모름)이다(docs/comparison/spec.md 4.2). 로컬 개발 DB(`scripts/dev_db.py`)는
-같은 컬럼의 뷰를 만든다. 취향 표 `user_preferences`의 `features`, `tastes`는 저장 설계
+같은 컬럼의 뷰를 만든다. 페르소나 뷰는 BE 마이그레이션 V25가 `place_personas`에서 만족한 손님
+페르소나만 골라 만들고, AI는 `place_id`, `category_group`, `vector`에 의존한다. 취향 표 `user_preferences`의 `features`, `tastes`는 저장 설계
 (docs/specs/profile-storage/spec.md, BE 마이그레이션 V2·V6)를 따른다.
 """
 
 import json
 import threading
 import time
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from typing import Any
 
 import psycopg
@@ -26,6 +27,7 @@ from psycopg_pool import ConnectionPool, PoolTimeout
 
 from fit_ai import embedding
 from fit_ai.match.candidates import (
+    REFERENCE_PLACES,
     Area,
     Candidate,
     Found,
@@ -38,18 +40,20 @@ from fit_ai.match.candidates import (
     StationArea,
     StoreError,
     VectorCounts,
+    persona_rank,
     read_details,
 )
 from fit_ai.match.interpretation.segments import DAYS
 from fit_ai.match.place import Place, PlaceInfo, read_facilities
 from fit_ai.match.taste_select import TasteProfile
 
-FIND_SQL = """
+_FIND_SELECT = """
 SELECT place_id, category_group, station, facilities, food_type, analyzed_review_count,
        profile #- '{summary,vector}' AS profile,
        1 - (summary_vector <=> %(query)s::vector) AS similarity
-FROM ai_place_search AS p
-WHERE summary_vector IS NOT NULL
+"""
+
+_FIND_WHERE = """WHERE summary_vector IS NOT NULL
   AND profile -> 'embedding' ->> 'model' = %(model)s
   AND profile -> 'embedding' ->> 'revision' = %(revision)s
   AND profile -> 'embedding' ->> 'prompt' = 'document'
@@ -155,9 +159,17 @@ WHERE summary_vector IS NOT NULL
         AND NOT coalesce(h.close > h.open, false)
     )
   )
-ORDER BY summary_vector <=> %(query)s::vector
+"""
+"""요약 경로와 페르소나 경로가 같이 쓰는 거르기 조건. 장소 뷰의 별칭은 `p`다."""
+
+FIND_SQL = (
+    _FIND_SELECT
+    + "FROM ai_place_search AS p\n"
+    + _FIND_WHERE
+    + """ORDER BY summary_vector <=> %(query)s::vector
 LIMIT %(k)s
 """
+)
 """거르기와 유사도 상위 k곳을 한 번에 뽑는다. 요약 벡터는 가져오지 않는다.
 
 지역은 JSON 목록(`_area_json`)으로 받아 그중 하나에 들면 남긴다. 지역 종류마다 드는 규칙은
@@ -179,6 +191,59 @@ FROM ai_place_search
 WHERE place_id = ANY(%(ids)s::bigint[])
 """
 """모임 계산이 후보마다 더 읽는 영업시간, 메뉴판, 가게 이름, 업종 이름"""
+
+PERSONA_FIND_SQL = (
+    _FIND_SELECT
+    + """FROM ai_place_search AS p
+CROSS JOIN LATERAL (
+  SELECT min(pe.vector <=> %(phrase)s::vector) AS persona_distance
+  FROM ai_place_personas AS pe
+  WHERE pe.place_id = p.place_id
+) AS persona
+"""
+    + _FIND_WHERE
+    + """  AND persona.persona_distance IS NOT NULL
+ORDER BY persona.persona_distance
+LIMIT %(k)s
+"""
+)
+"""페르소나 경로. `FIND_SQL`과 같이 거르고, 만족한 손님 페르소나와 문구의 거리 중 가장 가까운
+값으로 줄 세운다. 페르소나가 없는 장소는 들지 않는다. 유사도는 요약 유사도를 그대로 낸다.
+
+페르소나 거리는 거른 장소마다 `LATERAL`로 구한다. 페르소나 전체를 장소별로 먼저 모아 조인하면,
+플래너가 거른 장소 수를 1로 잘못 짐작해(프로필 JSON 조건) 중첩 반복을 골라 로컬 DB(장소
+4,300곳, 페르소나 17,298개)에서 1.2초가 넘게 걸렸다."""
+
+PERSONA_ITEMS_SQL = """
+WITH phrase AS MATERIALIZED (
+  SELECT ord, v::vector AS v
+  FROM unnest(%(phrases)s::text[]) WITH ORDINALITY AS t(v, ord)
+),
+reference AS (
+  SELECT place_id
+  FROM (
+    SELECT DISTINCT place_id
+    FROM ai_place_personas
+    WHERE category_group = ANY(%(scope)s::text[])
+  ) AS scoped
+  ORDER BY md5(place_id::text)
+  LIMIT %(reference)s
+),
+target AS (
+  SELECT place_id, true AS is_reference FROM reference
+  UNION ALL
+  SELECT place_id, false FROM unnest(%(place_ids)s::bigint[]) AS c(place_id)
+)
+SELECT t.is_reference, t.place_id, ph.ord, max(1 - (pe.vector <=> ph.v)) AS best
+FROM target AS t
+JOIN ai_place_personas AS pe ON pe.place_id = t.place_id
+CROSS JOIN phrase AS ph
+GROUP BY t.is_reference, t.place_id, ph.ord
+"""
+"""문구마다 기준 장소와 후보의 "가장 비슷한 페르소나 유사도"를 낸다. 기준 장소는 업종 범위
+안에서 페르소나가 있는 장소를 장소 id의 md5 순서로 `REFERENCE_PLACES`곳 고른다. 요청과
+상관없이 고정이고 저장할 필요가 없다. 문구 벡터는 글자로 받아 한 번만 벡터로 바꾼다
+(`MATERIALIZED`). 그러지 않으면 행마다 다시 바꿔 500곳 기준 400ms가 넘게 걸렸다."""
 
 PLACES_SQL = """
 SELECT place_id, category_group, station, facilities, food_type, analyzed_review_count,
@@ -245,37 +310,81 @@ class PgPlaceStore:
         Raises:
             StoreError: 저장소를 읽지 못했을 때
         """
+        return self._found(
+            self._fetch(FIND_SQL, _filter_params(place_filter, query, k))
+        )
+
+    def find_by_personas(
+        self,
+        place_filter: PlaceFilter,
+        query: Sequence[float],
+        phrase: Sequence[float],
+        k: int,
+    ) -> Found:
+        """조건에 맞는 장소 중 만족한 손님 페르소나가 문구와 가장 가까운 k곳을 뽑는다.
+
+        Args:
+            place_filter: 거르기 조건
+            query: 요청문 벡터(요약 유사도용)
+            phrase: 코드 없는 조건 문구를 이어 붙인 질의의 벡터
+            k: 뽑을 후보 수
+
+        Returns:
+            뽑은 후보. 요약 유사도 내림차순이다.
+
+        Raises:
+            StoreError: 저장소를 읽지 못했을 때
+        """
+        params = _filter_params(place_filter, query, k)
+        found = self._found(
+            self._fetch(PERSONA_FIND_SQL, {**params, "phrase": _vector_text(phrase)})
+        )
+        return Found(
+            tuple(sorted(found.candidates, key=lambda c: c.similarity, reverse=True)),
+            found.invalid,
+        )
+
+    def persona_items(
+        self,
+        phrases: Sequence[Sequence[float]],
+        place_ids: Sequence[int],
+        scope: Collection[str],
+    ) -> list[dict[int, float]]:
+        """문구마다 장소의 페르소나 항목(0~1)을 낸다.
+
+        Args:
+            phrases: 문구 벡터
+            place_ids: 값을 낼 장소
+            scope: 업종 범위
+
+        Returns:
+            문구마다 장소 id → 페르소나 항목. 페르소나가 없는 장소는 없다.
+
+        Raises:
+            StoreError: 저장소를 읽지 못했을 때
+        """
+        if not phrases or not place_ids:
+            return [{} for _ in phrases]
         rows = self._fetch(
-            FIND_SQL,
+            PERSONA_ITEMS_SQL,
             {
-                "query": _vector_text(query),
-                "model": embedding.MODEL_ID,
-                "revision": embedding.REVISION,
-                "category": place_filter.category_group,
-                "excluded": list(place_filter.excluded_categories),
-                "excluded_foods": list(place_filter.excluded_food_types),
-                "closed_day": place_filter.closed_day,
-                "overnight_day": place_filter.overnight_day,
-                "areas": json.dumps([_area_json(a) for a in place_filter.areas]),
-                "facilities": list(place_filter.facilities),
-                "min_price": place_filter.min_price,
-                "max_price": place_filter.max_price,
-                "hours": _hours_json(place_filter.hours),
-                "menus": json.dumps(
-                    [list(words) for words in place_filter.menus], ensure_ascii=False
-                ),
-                "k": k,
+                "phrases": [_vector_text(v) for v in phrases],
+                "scope": sorted(scope),
+                "reference": REFERENCE_PLACES,
+                "place_ids": list(place_ids),
             },
         )
-        candidates: list[Candidate] = []
-        invalid: list[int] = []
-        for *row, similarity in rows:
-            place = _place(row)
-            if place is None:
-                invalid.append(row[0])
-                continue
-            candidates.append(Candidate(place, float(similarity)))
-        return Found(tuple(candidates), tuple(invalid))
+        reference: list[list[float]] = [[] for _ in phrases]
+        best: list[dict[int, float]] = [{} for _ in phrases]
+        for is_reference, place_id, ord_, value in rows:
+            if is_reference:
+                reference[ord_ - 1].append(float(value))
+            else:
+                best[ord_ - 1][place_id] = float(value)
+        return [
+            {pid: persona_rank(sorted(ref), v) for pid, v in values.items()}
+            for ref, values in zip(reference, best, strict=True)
+        ]
 
     def places(self) -> tuple[Place, ...]:
         """점수 기준을 만들 장소 전체. 읽은 뒤 `PLACES_TTL_SECONDS` 동안 다시 쓴다.
@@ -348,6 +457,19 @@ class PgPlaceStore:
     def _fetch(self, sql: str, params: dict[str, Any]) -> list[tuple[Any, ...]]:
         return _fetch(self._pool, sql, params, "장소")
 
+    @staticmethod
+    def _found(rows: list[tuple[Any, ...]]) -> Found:
+        """후보 행을 읽는다. 프로필을 읽지 못한 장소는 빼고 id를 남긴다."""
+        candidates: list[Candidate] = []
+        invalid: list[int] = []
+        for *row, similarity in rows:
+            place = _place(row)
+            if place is None:
+                invalid.append(row[0])
+                continue
+            candidates.append(Candidate(place, float(similarity)))
+        return Found(tuple(candidates), tuple(invalid))
+
 
 class PgTasteStore:
     """`user_preferences`에서 회원 취향을 꺼낸다. 접속은 풀로 돌려 쓴다.
@@ -389,6 +511,31 @@ class PgTasteStore:
     def close(self) -> None:
         """접속 풀을 닫는다."""
         self._pool.close()
+
+
+def _filter_params(
+    place_filter: PlaceFilter, query: Sequence[float], k: int
+) -> dict[str, Any]:
+    """`FIND_SQL`과 `PERSONA_FIND_SQL`의 거르기 인자"""
+    return {
+        "query": _vector_text(query),
+        "model": embedding.MODEL_ID,
+        "revision": embedding.REVISION,
+        "category": place_filter.category_group,
+        "excluded": list(place_filter.excluded_categories),
+        "excluded_foods": list(place_filter.excluded_food_types),
+        "closed_day": place_filter.closed_day,
+        "overnight_day": place_filter.overnight_day,
+        "areas": json.dumps([_area_json(a) for a in place_filter.areas]),
+        "facilities": list(place_filter.facilities),
+        "min_price": place_filter.min_price,
+        "max_price": place_filter.max_price,
+        "hours": _hours_json(place_filter.hours),
+        "menus": json.dumps(
+            [list(words) for words in place_filter.menus], ensure_ascii=False
+        ),
+        "k": k,
+    }
 
 
 def _open_pool(dsn: str, size: int) -> ConnectionPool:

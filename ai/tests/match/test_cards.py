@@ -205,6 +205,34 @@ class TestLabels:
         assert [label in matched for label in card.labels] == [True, False]
 
 
+class TestPhraseAndAvoid:
+    """코드 없는 조건 문구와 피해 달라는 요청"""
+
+    def test_phrase_item(self) -> None:
+        """카드_코드없는조건문구는_문구를항목이름으로쓰고이유제목은맞아요꼴이다"""
+        reading = ItemScore(None, True, True, 1, 0.8, 0, False, "책 읽기 좋은 곳")
+
+        card = build_card(scored(reading))
+
+        [score_item] = card.score_items
+        assert (score_item.condition_id, score_item.label, score_item.matched) == (
+            None,
+            "책 읽기 좋은 곳",
+            True,
+        )
+        assert card.reasons[0].title == "책 읽기 좋은 곳에 맞아요"
+        assert card.reasons[0].tags[0].label == "책 읽기 좋은 곳"
+
+    def test_avoided_request_hidden(self) -> None:
+        """카드_피해달라는요청은_점수에만들어가고항목과이유에넣지않는다"""
+        card = build_card(
+            scored(item("QUIET", 0.8), item("FOOD_SPICY", 0.9, like=False))
+        )
+
+        assert [i.condition_id for i in card.score_items] == ["QUIET"]
+        assert [r.tags[0].label for r in card.reasons] == ["조용해요"]
+
+
 def test_card_without_score() -> None:
     """카드_판정할항목이없으면_점수와이유와항목없이채운라벨만있다"""
     card = build_card(scored(score=None))

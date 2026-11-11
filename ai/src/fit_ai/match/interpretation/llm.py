@@ -29,6 +29,7 @@ from fit_ai.match.interpretation.segments import (
     MAX_SEGMENTS,
     MAX_SPELLINGS,
     Feature,
+    FeatureKind,
     FeatureText,
     Hours,
     Location,
@@ -37,6 +38,9 @@ from fit_ai.match.interpretation.segments import (
     PlaceName,
     Price,
 )
+
+FEATURE_KINDS = frozenset(k.value for k in FeatureKind)
+"""LLM이 낼 수 있는 코드 없는 특징의 종류"""
 
 SLOTS = (
     "categories",
@@ -103,9 +107,18 @@ SYSTEM_PROMPT = f"""\
   - 이름 뒤에 "근처", "주변", "쪽", "앞"이 붙어도 kind는 이름을 따른다. "삼성역 근처"는 \
 STATION, "성수동 근처"는 AREA다.
   - walk_minutes는 "걸어서 5분", "도보 10분"의 분, exit는 "3번 출구"의 "3"이다. 없으면 null이다.
-- features: 장소 특징 [{{"text", "value", "code"}}]. 요청에 있는 특징을 빠짐없이 넣는다.
+- features: 장소 특징 [{{"text", "value", "code", "kind"}}]. 요청에 있는 특징을 빠짐없이 넣는다.
   - code는 아래 특징 코드표에서 고른다. 표현이 달라도 코드표 문구와 뜻이 같으면 그 코드다. \
-비슷하기만 하고 뜻이 다르거나 코드표에 없는 특징이면 null이고 value에 표준 이름을 쓴다("충전"은 "콘센트", "강아지랑"은 "반려견", 아이 동반, 룸).
+코드가 있으면 kind는 null이다.
+  - 비슷하기만 하고 뜻이 다르거나 코드표에 없는 특징이면 code는 null이다. value는 그 특징을 \
+"~곳"으로 끝나는 짧은 문구로 정리한 것이다("책 읽을 만한"은 "책 읽기 좋은 곳", "충전"은 \
+"콘센트 있는 곳", "강아지랑"은 "반려견과 갈 수 있는 곳"). kind는 그 문구의 종류다.
+    - TASTE: 손님이 그곳을 즐기는 방식. 분위기, 목적, 먹을거리다("책 읽기 좋은 곳", \
+"브런치 먹기 좋은 곳", "아이와 가기 좋은 곳").
+    - FACILITY: 있고 없음이 정해진 시설이나 사실이다("콘센트 있는 곳", "룸 있는 곳", \
+"창가 자리 있는 곳", "반려견과 갈 수 있는 곳").
+    - QUALITY: 거의 모든 가게가 내세우는 품질이나 예산이다("맛있는 곳", "친절한 곳", \
+"깨끗한 곳").
   - "모임", "회식"은 PURPOSE_GROUP, "혼자"는 PURPOSE_SOLO다.
   - "가성비"는 VALUE_FOR_MONEY다. 싼 곳을 찾는 말("저렴한", "싼", "비싸지 않은", 비싼 \
 곳을 빼 달라는 말)은 가성비가 아니라 price의 cheap이다. "가성비"라는 말이 없으면 \
@@ -185,6 +198,10 @@ embedding_text "웨이팅 없이 바로 들어가는 돈가스집"
 features [{{"text": "북적이는 데 말고", "value": "조용한 곳", "code": "QUIET"}}, \
 {{"text": "대화하기 좋은", "value": "대화하기 좋은 곳", "code": "PURPOSE_TALK"}}], \
 embedding_text "조용하고 대화하기 좋은 카페"
+- "조용하고 책 읽기 좋은 카페" → categories [{{"code": "CAFE", "want": true}}], \
+features [{{"text": "조용하고", "value": "조용한 곳", "code": "QUIET"}}, \
+{{"text": "책 읽기 좋은", "value": "책 읽기 좋은 곳", "code": null, "kind": "TASTE"}}], \
+embedding_text "조용하고 책 읽기 좋은 카페"
 - "건대잎구역 2번 출구 걸어서 3분 하이볼" → categories [{{"code": "BAR", "want": true}}], \
 locations [{{"text": "건대잎구역 2번 출구 걸어서 3분", "kind": "STATION", "value": "건대입구역", \
 "walk_minutes": 3, "exit": "2"}}], menus [{{"text": "하이볼", "value": "하이볼", "spellings": [], \
@@ -474,14 +491,21 @@ def _place_name(data: object) -> PlaceName | None:
 
 def _feature(data: dict) -> Feature | FeatureText | None:
     """LLM이 낸 특징을 읽는다. 특징 코드표의 코드가 있으면 코드 특징이고, 없으면 코드 없는
-    특징이다. 2차 꼴의 `want`가 거짓이면 피하는 특징이다."""
+    특징이다. 코드 없는 특징의 종류를 모르면 None이다. 2차 꼴의 `want`가 거짓이면 피하는
+    특징이다."""
     text = _segment(data.get("text"))
     if text is None:
         return None
     value = _segment(data.get("value")) or text
     if data.get("code") in FEATURE_CODES:
         return Feature(text, value, data["code"])
-    return FeatureText(text, value, data.get("want") is not False)
+    kind = data.get("kind")
+    return FeatureText(
+        text,
+        value,
+        data.get("want") is not False,
+        FeatureKind(kind) if kind in FEATURE_KINDS else None,
+    )
 
 
 def _items(data: object, read) -> tuple:

@@ -9,15 +9,19 @@
 - 시설("와이파이"): 장소 정보가 있음이면 1, 없음이면 0, 모르면 업종 범위에서 있는 곳의 비율이다.
 - 음식 종류("양식"): 장소의 음식 종류가 같으면 1, 다르면 0, 모르면 업종 범위에서 그 종류의
   비율이다.
+- 코드 없는 조건 문구("책 읽기 좋은 곳"): 그 장소의 만족한 손님 페르소나와 문구가 얼마나
+  비슷한지가 업종 범위의 기준 장소 중 몇 번째인지다(페르소나 항목). 값은 저장소가 낸다
+  (`candidates.PlaceStore.persona_items`).
 
-요청 점수는 요청 조건 점수의 기하평균(모두 원함), 취향 점수는 취향 세기로 낸 가중 평균이다.
-싫어하는 취향은 1 − 조건 점수로 넣는다. 맛 취향은 장소 업종에 장소 근거가 충분한 맛만 넣는다. 핏 점수는 요청 0.7, 취향 0.3으로 더한다. 점수를
+요청 점수는 요청 조건 점수의 기하평균, 취향 점수는 취향 세기로 낸 가중 평균이다. 피해 달라는
+요청("안 매운")과 싫어하는 취향은 1 − 조건 점수로 넣는다. 맛 취향은 장소 업종에 장소 근거가 충분한
+맛만 넣는다. 핏 점수는 요청 0.7, 취향 0.3으로 더한다. 점수를
 먼저 내고 그 점수로 순서를 정한다. 비교 대상은 그 검색의 후보가 아니라 업종 범위 안의 장소
 전체라서, 같은 장소와 같은 요청이면 늘 같은 점수다(docs/comparison/spec.md 4.3).
 """
 
 import math
-from collections.abc import Callable, Collection, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -62,22 +66,39 @@ class ItemScore:
     """조각 하나의 조건 점수.
 
     Attributes:
-        code: 조건 코드
+        code: 조건 코드. 코드 없는 조건 문구(페르소나 항목)면 None이다.
         request: 요청 조각이면 True, 취향이면 False다.
-        like: 좋아함이면 True, 싫어함이면 False다. 요청 조각은 True다.
+        like: 좋아함이면 True, 싫어함이면 False다. 요청 조각은 피해 달라는 맛("안 매운")만
+            False다.
         weight: 취향 세기(0보다 큰 수). 요청 조각은 1이다.
         value: 조건 점수(0~1). 싫어하는 취향도 뒤집기 전 값이다.
         evidence_count: 근거가 된 리뷰 수. 장소 정보로 판정했으면 0이다.
-        from_reviews: 리뷰로 판정했으면 True, 장소 정보로 판정했으면 False다.
+        from_reviews: 리뷰로 판정했으면 True, 장소 정보나 페르소나로 판정했으면 False다.
+        phrase: 코드 없는 조건 문구("책 읽기 좋은 곳"). 코드 조각이면 None이다.
     """
 
-    code: str
+    code: str | None
     request: bool
     like: bool
     weight: float
     value: float
     evidence_count: int
     from_reviews: bool
+    phrase: str | None = None
+
+
+@dataclass(frozen=True)
+class PhraseScores:
+    """코드 없는 조건 문구 하나의 페르소나 항목.
+
+    Attributes:
+        phrase: 문구("책 읽기 좋은 곳")
+        values: 장소 id마다 페르소나 항목(0~1). 장소 페르소나가 없는 장소는 없고, 그런
+            장소는 `UNKNOWN`이다.
+    """
+
+    phrase: str
+    values: Mapping[int, float]
 
 
 @dataclass(frozen=True)
@@ -267,6 +288,8 @@ def score_places(
     tastes: Sequence[TasteFeature],
     scope: frozenset[str],
     baseline: Baseline,
+    avoid_codes: Sequence[str] = (),
+    phrases: Sequence[PhraseScores] = (),
 ) -> list[PlaceScore]:
     """후보마다 핏 점수를 내고 점수 내림차순으로 놓는다.
 
@@ -279,23 +302,40 @@ def score_places(
             뺀다. 맛 취향은 후보 업종에 장소 근거가 충분할 때만 쓴다(`Baseline.flavor_scored`).
         scope: 업종 범위
         baseline: 조건 점수 기준
+        avoid_codes: 피해 달라는 요청의 코드("안 매운"은 `FOOD_SPICY`). 1 − 조건 점수로
+            요청 점수에 넣는다.
+        phrases: 코드 없는 조건 문구마다의 페르소나 항목. 요청 점수에 넣는다.
 
     Returns:
         핏 점수. 점수 내림차순이다.
     """
     codes = [code for code in dict.fromkeys(request_codes) if code in SCORE_LABELS]
+    avoided = [
+        code
+        for code in dict.fromkeys(avoid_codes)
+        if code in SCORE_LABELS and code not in codes
+    ]
     # 요청과 같은 코드인 취향은 같은 근거를 두 번 세지 않게 뺀다. 카드도 요청으로 한 번만 보인다.
-    tastes = [t for t in tastes if t.code in SCORE_LABELS and t.code not in codes]
+    tastes = [
+        t
+        for t in tastes
+        if t.code in SCORE_LABELS and t.code not in codes and t.code not in avoided
+    ]
     scored = []
     for candidate in candidates:
         place = candidate.place
-        items = tuple(
-            _item(place, code, True, True, 1, scope, baseline) for code in codes
-        ) + tuple(
-            _item(place, t.code, False, t.like, t.weight, scope, baseline)
-            for t in tastes
-            if t.code not in FLAVORS
-            or baseline.flavor_scored(place.info.category_group, t.code)
+        items = (
+            tuple(_item(place, code, True, True, 1, scope, baseline) for code in codes)
+            + tuple(
+                _item(place, code, True, False, 1, scope, baseline) for code in avoided
+            )
+            + tuple(_phrase_item(place, p) for p in phrases)
+            + tuple(
+                _item(place, t.code, False, t.like, t.weight, scope, baseline)
+                for t in tastes
+                if t.code not in FLAVORS
+                or baseline.flavor_scored(place.info.category_group, t.code)
+            )
         )
         fit = fit_score(items)
         scored.append(
@@ -308,9 +348,9 @@ def score_places(
 def fit_score(items: Sequence[ItemScore]) -> float | None:
     """조건 점수를 핏 점수(0~1)로 합친다.
 
-    요청 점수는 요청 조건 점수의 기하평균이다. 요청은 모두 원하는 것이라, 하나가 확실히 안
-    맞으면 크게 깎이고 근거가 약하면 조금 깎인다. 취향 점수는 취향 세기로 낸 가중 평균이고,
-    싫어하는 취향은 1 − 조건 점수다. 둘 다 있으면 요청 `REQUEST_WEIGHT`, 취향 나머지로
+    요청 점수는 요청 조건 점수의 기하평균이다. 요청은 이번에 직접 말한 것이라, 하나가 확실히
+    안 맞으면 크게 깎이고 근거가 약하면 조금 깎인다. 취향 점수는 취향 세기로 낸 가중 평균이다.
+    피해 달라는 요청과 싫어하는 취향은 1 − 조건 점수다. 둘 다 있으면 요청 `REQUEST_WEIGHT`, 취향 나머지로
     더하고, 한쪽만 있으면 그쪽만 쓴다.
 
     Args:
@@ -319,7 +359,11 @@ def fit_score(items: Sequence[ItemScore]) -> float | None:
     Returns:
         핏 점수. 요청 조각도 취향도 없으면 None이다.
     """
-    request = [max(i.value, MIN_CONDITION_SCORE) for i in items if i.request]
+    request = [
+        max(i.value if i.like else 1 - i.value, MIN_CONDITION_SCORE)
+        for i in items
+        if i.request
+    ]
     taste = [
         (i.weight, i.value if i.like else 1 - i.value) for i in items if not i.request
     ]
@@ -361,6 +405,19 @@ def _item(
         value=baseline.value(place, code, scope),
         evidence_count=place.evidence(code).pos if reviews else 0,
         from_reviews=reviews,
+    )
+
+
+def _phrase_item(place: Place, phrase: PhraseScores) -> ItemScore:
+    return ItemScore(
+        code=None,
+        request=True,
+        like=True,
+        weight=1,
+        value=phrase.values.get(place.place_id, UNKNOWN),
+        evidence_count=0,
+        from_reviews=False,
+        phrase=phrase.phrase,
     )
 
 

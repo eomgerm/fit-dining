@@ -22,6 +22,7 @@ from fit_ai.match.interpretation.request import (
 from fit_ai.match.interpretation.segments import (
     DAYS,
     MAX_SEGMENTS,
+    FeatureKind,
     FeatureText,
     Hours,
     Location,
@@ -147,22 +148,36 @@ MENU_WORDS = {
 ("초밥")으로 바꾼다. "고깃집"은 "고기"를 품지 않아 따로 둔다."""
 
 
+_OUTLET = "콘센트 있는 곳"
+_PET = "반려견과 갈 수 있는 곳"
+_KIDS = "아이와 가기 좋은 곳"
+_ROOM = "룸 있는 곳"
+
 FEATURE_WORDS = {
-    "콘센트": "콘센트",
-    "충전": "콘센트",
-    "반려견": "반려견",
-    "반려동물": "반려견",
-    "강아지": "반려견",
-    "애견": "반려견",
-    "아이랑": "아이 동반",
-    "아기랑": "아이 동반",
-    "애기랑": "아이 동반",
-    "룸 있": "룸",
-    "룸이": "룸",
-    "개별룸": "룸",
+    "콘센트": _OUTLET,
+    "충전": _OUTLET,
+    "반려견": _PET,
+    "반려동물": _PET,
+    "강아지": _PET,
+    "애견": _PET,
+    "아이랑": _KIDS,
+    "아기랑": _KIDS,
+    "애기랑": _KIDS,
+    "룸 있": _ROOM,
+    "룸이": _ROOM,
+    "개별룸": _ROOM,
 }
-"""규칙 해석에서 코드표에 없는 특징을 찾는 낱말과 표준 이름. "룸"은 "베이커리룸"처럼
+"""규칙 해석에서 코드표에 없는 특징을 찾는 낱말과 "~곳" 문구. "룸"은 "베이커리룸"처럼
 다른 말에 섞이므로 "룸 있", "룸이", "개별룸" 꼴로만 찾는다."""
+
+FEATURE_KINDS = {
+    _OUTLET: FeatureKind.FACILITY,
+    _PET: FeatureKind.FACILITY,
+    _KIDS: FeatureKind.TASTE,
+    _ROOM: FeatureKind.FACILITY,
+}
+"""`FEATURE_WORDS` 문구의 종류. 아이와 가는 것은 가족 손님 이야기가 장소 페르소나에 나와
+취향형으로 둔다."""
 
 
 HERE_WORDS = (*NEARBY_WORDS, "여기")
@@ -504,7 +519,12 @@ def _rule_features(query: str, negated: str) -> tuple[FeatureText, ...]:
     found: dict[str, FeatureText] = {}
     for word, value in FEATURE_WORDS.items():
         if word in query:
-            found.setdefault(value, FeatureText(word, value, want=word not in negated))
+            found.setdefault(
+                value,
+                FeatureText(
+                    word, value, want=word not in negated, kind=FEATURE_KINDS[value]
+                ),
+            )
     return tuple(found.values())
 
 

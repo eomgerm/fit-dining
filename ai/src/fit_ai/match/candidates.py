@@ -1,5 +1,7 @@
 """① 후보 뽑기. 거르기 조건에 맞는 장소 중 요청문과 가까운 순서로 고른다.
 
+요청에 코드 없는 조건 문구("책 읽기 좋은 곳")가 있으면, 그 문구와 비슷한 만족한 손님
+페르소나가 있는 장소도 더 뽑는다(페르소나 경로). 장소 요약에는 분위기나 목적 이야기가 없어서다.
 거르기와 유사도 계산은 장소 저장소가 한다. 여기에는 저장소가 지켜야 할 모양만 둔다.
 구현은 `pg_store.py`(Postgres)와, 실제 장소 DB가 생기기 전에 쓰는 `json_store.py`(JSON
 파일)다. 저장소는 ② 점수의 기준을 만들 장소 전체도 읽어 준다.
@@ -8,7 +10,8 @@
 
 import math
 import re
-from collections.abc import Sequence
+from bisect import bisect_left
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -18,6 +21,14 @@ CANDIDATE_K = 100
 """점수를 매길 후보 수. 거른 장소를 유사도 순서로 이만큼 뽑아 모두 점수를 매긴다. 조건은
 맞는데 요약이 덜 비슷한 곳이 점수를 받기 전에 잘리지 않게 넉넉히 둔다. 지금 데이터(300곳)는
 거르고 나면 대개 이보다 적다."""
+
+PERSONA_K = 100
+"""페르소나 경로로 더 뽑을 후보 수. 요약 경로(`CANDIDATE_K`)와 같다."""
+
+REFERENCE_PLACES = 500
+"""페르소나 항목을 낼 때 견주는 기준 장소 수. 업종 범위 안에서 페르소나가 있는 장소를 장소
+id의 해시 순서로 이만큼 고른다. 범위 안 전체와 견주면 prod에서 770ms, 500곳이면 27ms였고
+값의 평균 차이는 0.007이었다(2026-11-09, 취향 보정 설계 4단계)."""
 
 GENERAL_K = 20
 """돌려줄 카드 수. 점수순으로 자른다. 사용자 위치로 찾을 때도 같다."""
@@ -327,6 +338,35 @@ class VectorCounts:
     mismatched: int
 
 
+def merge_found(summary: Found, persona: Found) -> Found:
+    """요약 경로와 페르소나 경로의 후보를 합친다. 같은 장소는 한 번만 두고, 모두 요약
+    유사도 내림차순으로 놓는다."""
+    seen = {c.place.place_id for c in summary.candidates}
+    extra = tuple(c for c in persona.candidates if c.place.place_id not in seen)
+    return Found(
+        tuple(
+            sorted(summary.candidates + extra, key=lambda c: c.similarity, reverse=True)
+        ),
+        tuple(dict.fromkeys(summary.invalid + persona.invalid)),
+    )
+
+
+def persona_rank(reference: Sequence[float], best: float) -> float:
+    """기준 장소 중 가장 비슷한 값이 `best`보다 낮은 곳의 비율(0~1)이다. 기준 장소가 없으면
+    판단할 수 없어 0.5다.
+
+    Args:
+        reference: 기준 장소마다 문구와 가장 비슷한 페르소나의 유사도. 오름차순이다.
+        best: 그 장소의 값
+
+    Returns:
+        페르소나 항목
+    """
+    if not reference:
+        return 0.5
+    return bisect_left(reference, best) / len(reference)
+
+
 class StoreError(Exception):
     """장소·취향 저장소를 읽지 못했다. 접속 실패, 시간 초과, SQL 오류 등이다."""
 
@@ -346,6 +386,57 @@ class PlaceStore(Protocol):
 
         Returns:
             뽑은 후보
+
+        Raises:
+            StoreError: 저장소를 읽지 못했을 때
+        """
+        ...
+
+    def find_by_personas(
+        self,
+        place_filter: PlaceFilter,
+        query: Sequence[float],
+        phrase: Sequence[float],
+        k: int,
+    ) -> Found:
+        """조건에 맞는 장소 중 만족한 손님 페르소나가 문구와 가장 가까운 k곳을 뽑는다.
+
+        장소마다 페르소나와 문구의 유사도 중 가장 큰 값으로 줄 세운다. 페르소나가 없는
+        장소는 뽑지 않는다.
+
+        Args:
+            place_filter: 거르기 조건
+            query: 요청문 벡터. 후보의 `similarity`(요약 유사도)를 낼 때 쓴다.
+            phrase: 코드 없는 조건 문구를 이어 붙인 질의의 벡터
+            k: 뽑을 후보 수
+
+        Returns:
+            뽑은 후보. 요약 유사도 내림차순이다.
+
+        Raises:
+            StoreError: 저장소를 읽지 못했을 때
+        """
+        ...
+
+    def persona_items(
+        self,
+        phrases: Sequence[Sequence[float]],
+        place_ids: Sequence[int],
+        scope: Collection[str],
+    ) -> list[dict[int, float]]:
+        """문구마다 장소의 페르소나 항목(0~1)을 낸다.
+
+        장소마다 만족한 손님 페르소나와 문구의 유사도 중 가장 큰 값을 구하고, 업종 범위
+        안 기준 장소 `REFERENCE_PLACES`곳의 같은 값과 견준다(`persona_rank`). 기준 장소는
+        요청과 상관없이 고정이라 같은 장소, 같은 문구면 늘 같은 값이다.
+
+        Args:
+            phrases: 문구 벡터
+            place_ids: 값을 낼 장소
+            scope: 업종 범위(`scoring.scope_of`)
+
+        Returns:
+            문구마다 장소 id → 페르소나 항목. 페르소나가 없는 장소는 없다.
 
         Raises:
             StoreError: 저장소를 읽지 못했을 때

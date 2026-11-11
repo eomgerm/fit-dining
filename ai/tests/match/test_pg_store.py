@@ -217,6 +217,18 @@ AREA_CASES = [
 ]
 
 
+PHRASE = (0.0, 1.0)
+"""코드 없는 조건 문구 벡터"""
+
+# 장소별 만족한 손님 페르소나 벡터(뷰 ai_place_personas). 문구와의 유사도는 3번 1.0, 2번 0.8,
+# 1번 0.6(가장 가까운 것), 4번(술집) 0이다. 나머지는 페르소나가 없다.
+PERSONAS = {
+    1: [(0.8, 0.6), (1.0, 0.0)],
+    2: [(0.6, 0.8)],
+    3: [(0.0, 1.0), (1.0, 0.0)],
+    4: [(1.0, 0.0)],
+}
+
 QUIET_FEATURES = [
     {"code": "QUIET", "layer": "axis", "like": True, "weight": 1},
     {"code": "LIVELY", "layer": "axis", "like": False, "weight": 1},
@@ -291,6 +303,17 @@ def database(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
                     None if vector is None else f"[{vector[0]},{vector[1]}]",
                 ),
             )
+        conn.execute(
+            "CREATE TABLE ai_place_personas "
+            "(place_id bigint, category_group text, vector vector(2))"
+        )
+        categories = {row[0]: row[1] for row in ROWS}
+        for place_id, vectors in PERSONAS.items():
+            for x, y in vectors:
+                conn.execute(
+                    "INSERT INTO ai_place_personas VALUES (%s, %s, %s::vector)",
+                    (place_id, categories[place_id], f"[{x},{y}]"),
+                )
         # 저장 설계(V2·V6)의 user_preferences 중 AI가 읽는 컬럼과 온보딩 원본
         conn.execute(
             """
@@ -554,6 +577,71 @@ def test_non_bool_facility_is_unknown(store: PgPlaceStore, database: str) -> Non
             )
 
     assert found.candidates[0].place.info.facilities == {"PARKING": None}
+
+
+class TestPersonas:
+    """페르소나 경로와 페르소나 항목"""
+
+    def test_route_picks_by_persona_then_orders_by_summary(
+        self, store: PgPlaceStore
+    ) -> None:
+        """페르소나경로_페르소나가문구와가까운k곳을뽑고_요약유사도순서로준다"""
+        found = store.find_by_personas(
+            PlaceFilter(category_group="CAFE"), QUERY, PHRASE, 2
+        )
+
+        # 페르소나로는 3번, 2번이 가깝고 요약 유사도는 2번(0.8)이 3번(0.6)보다 높다.
+        assert [c.place.place_id for c in found.candidates] == [2, 3]
+        assert found.candidates[0].similarity == pytest.approx(0.8)
+
+    def test_route_keeps_filters(self, store: PgPlaceStore) -> None:
+        """페르소나경로_요약경로와같은거르기를지킨다"""
+        found = store.find_by_personas(YEOKSAM_CAFE, QUERY, PHRASE, 10)
+
+        assert [c.place.place_id for c in found.candidates] == [3]
+
+    def test_items_rank_against_reference(self, store: PgPlaceStore) -> None:
+        """페르소나항목_기준장소중몇곳보다높은지의비율이고_페르소나가없는장소는없다"""
+        [values] = store.persona_items([PHRASE], [1, 2, 3, 5], frozenset({"CAFE"}))
+
+        # 기준 장소는 카페 중 페르소나가 있는 1~3번이고 값은 0.6, 0.8, 1.0이다.
+        assert values == {
+            1: 0.0,
+            2: pytest.approx(1 / 3),
+            3: pytest.approx(2 / 3),
+        }
+
+    def test_items_reference_is_scope(self, store: PgPlaceStore) -> None:
+        """페르소나항목_기준장소는요청의업종범위에서고른다"""
+        [values] = store.persona_items([PHRASE], [1], frozenset({"BAR"}))
+
+        # 술집 기준 장소는 4번(0)뿐이라 1번(0.6)이 기준보다 높다.
+        assert values == {1: 1.0}
+
+    def test_items_reference_count_fixed_by_hash(
+        self, store: PgPlaceStore, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """페르소나항목_기준장소는장소id해시순서로정한수만쓴다"""
+        monkeypatch.setattr(pg_module, "REFERENCE_PLACES", 1)
+
+        [values] = store.persona_items([PHRASE], [1, 2, 3], frozenset({"CAFE"}))
+
+        # md5("1") < md5("2") < md5("3")라 기준 장소는 1번(0.6) 하나다.
+        assert values == {1: 0.0, 2: 1.0, 3: 1.0}
+
+    def test_items_per_phrase(self, store: PgPlaceStore) -> None:
+        """페르소나항목_문구마다따로낸다"""
+        first, second = store.persona_items(
+            [PHRASE, (1.0, 0.0)], [3], frozenset({"CAFE"})
+        )
+
+        assert first == {3: pytest.approx(2 / 3)}
+        # (1, 0)과는 1·3번이 1.0, 2번이 0.6이라 3번보다 낮은 기준 장소는 2번 하나다.
+        assert second == {3: pytest.approx(1 / 3)}
+
+    def test_items_without_places(self, store: PgPlaceStore) -> None:
+        """페르소나항목_장소가없으면_조회하지않고빈값이다"""
+        assert store.persona_items([PHRASE], [], frozenset({"CAFE"})) == [{}]
 
 
 def test_connection_failure() -> None:

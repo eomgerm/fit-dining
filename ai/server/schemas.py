@@ -25,6 +25,7 @@ from fit_ai.match.interpretation.segments import (
     MAX_SEGMENT_LENGTH,
     MAX_SEGMENTS,
     MAX_SPELLINGS,
+    FeatureKind,
     LocationKind,
 )
 from fit_ai.match.taste_select import MAX_FREE_TEXT_LENGTH
@@ -349,11 +350,13 @@ class FlavorChoiceBody(Body):
 
 
 class FeatureBody(Body):
-    """특징. 속성은 `segments.Feature`와 같다."""
+    """특징. 속성은 `segments.Feature`와 같다. `kind`는 코드 없는 특징에만 있고, 없으면
+    그 특징을 후보와 점수에 쓰지 않는다(이 속성이 없던 조건도 그대로 읽는다)."""
 
     text: Segment
     value: Segment
     code: Literal[FEATURE_CODES] | None = None
+    kind: FeatureKind | None = None
 
 
 class ConditionsBody(Body):

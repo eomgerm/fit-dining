@@ -42,7 +42,7 @@ class ScoreItem:
     """핏 점수를 이루는 항목 1개. BE의 `ScoreItem`에 조건 id를 더했다.
 
     Attributes:
-        condition_id: 조건 id. BE로는 보내지 않는다.
+        condition_id: 조건 id. 코드 없는 조건 문구면 None이다. BE로는 보내지 않는다.
         source: 근거 출처
         label: 항목 이름
         matched: 근거가 충분한지(조건 점수가 `MATCHED_SCORE` 이상). False면 확인할 근거가
@@ -50,7 +50,7 @@ class ScoreItem:
         evidence_count: 근거가 된 리뷰 수. 0 이상이다. 장소 정보로 판정했으면 0이다.
     """
 
-    condition_id: str
+    condition_id: str | None
     source: Source
     label: str
     matched: bool
@@ -114,8 +114,8 @@ def build_card(scored: PlaceScore) -> Card:
     """점수를 낸 후보 하나의 카드를 만든다.
 
     근거 항목은 점수를 낸 조각과 같다. 요청 조각, 그다음 좋아하는 취향이다. 싫어하는
-    취향은 점수에는 들어가지만 화면 문구가 정해질 때까지 항목에 넣지 않는다(2026-11-03
-    결정).
+    취향과 피해 달라는 요청("안 매운")은 점수에는 들어가지만 화면 문구가 정해질 때까지 항목에
+    넣지 않는다(2026-11-03 결정).
 
     Args:
         scored: ② 점수(`scoring.py`)가 낸 후보 하나의 핏 점수
@@ -124,7 +124,7 @@ def build_card(scored: PlaceScore) -> Card:
         카드
     """
     place = scored.candidate.place
-    shown = [item for item in scored.items if item.request or item.like]
+    shown = [item for item in scored.items if item.like]
     return Card(
         place_id=place.place_id,
         score=scored.score,
@@ -138,7 +138,7 @@ def _score_item(item: ItemScore) -> ScoreItem:
     return ScoreItem(
         condition_id=item.code,
         source=Source.REQUEST if item.request else Source.PREFERENCE,
-        label=SCORE_LABELS[item.code],
+        label=_label(item),
         matched=item.value >= MATCHED_SCORE,
         evidence_count=item.evidence_count,
     )
@@ -152,7 +152,7 @@ def _reasons(items: list[ItemScore]) -> tuple[Reason, ...]:
             tags=(
                 ReasonTag(
                     Source.REQUEST if item.request else Source.PREFERENCE,
-                    SCORE_LABELS[item.code],
+                    _label(item),
                 ),
             ),
         )
@@ -162,7 +162,15 @@ def _reasons(items: list[ItemScore]) -> tuple[Reason, ...]:
     return tuple(reasons[:MAX_REASONS])
 
 
+def _label(item: ItemScore) -> str:
+    """근거 항목 이름. 코드 조각은 코드 문구, 코드 없는 조건은 그 문구다."""
+    return SCORE_LABELS[item.code] if item.code is not None else item.phrase or ""
+
+
 def _reason_title(item: ItemScore) -> str:
+    if item.code is None:
+        # 장소 페르소나로 판정한 코드 없는 조건이다(docs/comparison/spec.md 4.4).
+        return f"{item.phrase}에 맞아요"
     label = SCORE_LABELS[item.code]
     if item.from_reviews:
         return f'리뷰에서 "{label}"라는 말이 많아요'

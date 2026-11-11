@@ -27,6 +27,8 @@ from fit_ai.match.cards import Card, Reason, ReasonTag, ScoreItem, Source
 from fit_ai.match.conditions import Layer
 from fit_ai.match.interpretation import Conditions, Interpretation
 from fit_ai.match.interpretation.segments import (
+    Feature,
+    FeatureKind,
     Hours,
     Location,
     LocationKind,
@@ -519,6 +521,22 @@ class TestSearch:
         post(client(), previousConditions=previous)
 
         assert searched.calls[0][0].previous == SEGMENT_CONDITIONS
+
+    def test_feature_kind_round_trip(self, searched: FakeSearch) -> None:
+        """검색_코드없는특징의종류는_조건에담아돌려주고이전조건에서다시읽는다"""
+        reading = Feature("책 읽을 만한", "책 읽기 좋은 곳", kind=FeatureKind.TASTE)
+        conditions = replace(CONDITIONS, features=(*CONDITIONS.features, reading))
+        searched.outcome = make_result(conditions=conditions)
+
+        data = post(client())
+        post(client(), previousConditions=data["conditions"])
+
+        assert data["conditions"]["features"][-1] == {
+            "text": "책 읽을 만한",
+            "value": "책 읽기 좋은 곳",
+            "kind": "TASTE",
+        }
+        assert searched.calls[1][0].previous == conditions
 
     def test_previous_v1_read(self, searched: FakeSearch) -> None:
         """검색_이전조건이1차모양이면_역을지역으로바꿔읽는다"""
