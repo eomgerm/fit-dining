@@ -9,6 +9,7 @@ import type {
   ProfileCreateResponse,
   Taste,
 } from "../model/meetup";
+import type { MeetupResult } from "../model/result";
 
 // 로그인한 회원만 모임을 만든다(AC-1)
 export function createMeetup(body: MeetupCreateRequest) {
@@ -48,6 +49,16 @@ export function updateTaste(code: string, taste: Taste) {
     method: "PUT",
     body: taste,
   });
+}
+
+// 모임장이 추천받는다. 계산은 서버가 따로 하고 끝났는지는 스냅숏으로 안다(AC-15, D-10)
+export function startCalculation(code: string) {
+  return request<void>(`/v1/meetups/${code}/calculations`, { method: "POST" });
+}
+
+// 마지막으로 성공한 계산의 결과(AC-19). 로그인 없이 받는다
+export function fetchResult(code: string, signal?: AbortSignal) {
+  return request<MeetupResult>(`/v1/meetups/${code}/result`, { signal });
 }
 
 // 모임장만 다른 사람의 프로필을 지운다(AC-23)

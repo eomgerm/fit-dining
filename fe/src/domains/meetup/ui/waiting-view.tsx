@@ -10,11 +10,9 @@ import { CopyIcon } from "@/shared/ui/icon/icons/copy";
 import { InfoIcon } from "@/shared/ui/icon/icons/info";
 import { MoreIcon } from "@/shared/ui/icon/icons/more";
 import { ShareIcon } from "@/shared/ui/icon/icons/share";
-import { TrashIcon } from "@/shared/ui/icon/icons/trash";
 import { BottomBar } from "@/shared/ui/layout/bottom-bar";
 import { Screen } from "@/shared/ui/layout/screen";
 import { TopBar } from "@/shared/ui/layout/top-bar";
-import { ConfirmDialog } from "@/shared/ui/overlay/confirm-dialog";
 import { Menu, MenuItem } from "@/shared/ui/overlay/menu";
 
 import {
@@ -24,8 +22,8 @@ import {
   type MeetupSnapshot,
 } from "../model/meetup";
 import { tasteSummary } from "../model/taste";
-import { KeepWords } from "./keep-words";
 import { MeetupInfoCard, meetupTitle } from "./meetup-info-card";
+import { RemoveProfileDialog } from "./remove-profile-dialog";
 
 function FriendRow({
   profile,
@@ -91,8 +89,8 @@ function FriendRow({
   );
 }
 
-// 대기 화면(모임장 5, 참여자 6). 모임 정보, 링크 보내기, 취향을 남긴 친구 목록이다(AC-29, AC-34).
-// 추천받기와 모임 정보 수정은 그 기능의 단계에서 붙인다
+// 대기 화면(모임장 5, 참여자 6). 모임 정보, 링크 보내기, 취향을 남긴 친구 목록이고 모임장에게는 추천받기가 있다
+// (AC-29, AC-34). 모임 정보 수정은 그 기능의 단계에서 붙인다
 export function WaitingView({
   snapshot,
   onBack,
@@ -101,6 +99,8 @@ export function WaitingView({
   onEditTaste,
   onRemoveProfile,
   onPickName,
+  onCalculate,
+  calculating = false,
 }: {
   snapshot: MeetupSnapshot;
   onBack?: () => void;
@@ -110,6 +110,9 @@ export function WaitingView({
   onRemoveProfile: (profile: MeetupProfile) => void;
   // 프로필 없이 보는 사람이 이름을 고르러 간다
   onPickName?: () => void;
+  onCalculate?: () => void;
+  // 추천받기 요청이 처리 중인지
+  calculating?: boolean;
 }) {
   const [removing, setRemoving] = useState<MeetupProfile>();
   const { me, info, profiles, allowed } = snapshot;
@@ -205,6 +208,16 @@ export function WaitingView({
           </ul>
         </section>
       </div>
+      {host && allowed.includes("CALCULATE") && onCalculate && (
+        <BottomBar>
+          <p className="text-center text-caption-sm text-ink-subtle">
+            다 모이지 않아도 추천받을 수 있어요
+          </p>
+          <Button disabled={calculating} onClick={onCalculate}>
+            추천받기
+          </Button>
+        </BottomBar>
+      )}
       {!host && (
         <BottomBar>
           {onPickName ? (
@@ -216,41 +229,10 @@ export function WaitingView({
           )}
         </BottomBar>
       )}
-      <ConfirmDialog
-        open={!!removing}
-        onOpenChange={(open) => {
-          if (!open) setRemoving(undefined);
-        }}
-        tone="danger"
-        icon={<TrashIcon />}
-        title={`'${removing?.name ?? ""}' 프로필을 지울까요?`}
-        description={
-          <KeepWords>
-            이 이름으로 남긴 취향과 투표도 함께 지워져요. 실수로 두 번 만든
-            이름을 정리할 때 써요.
-          </KeepWords>
-        }
-        secondaryAction={
-          <Button
-            variant="outline"
-            size="md"
-            onClick={() => setRemoving(undefined)}
-          >
-            취소
-          </Button>
-        }
-        action={
-          <Button
-            variant="danger"
-            size="md"
-            onClick={() => {
-              if (removing) onRemoveProfile(removing);
-              setRemoving(undefined);
-            }}
-          >
-            지우기
-          </Button>
-        }
+      <RemoveProfileDialog
+        profile={removing}
+        onClose={() => setRemoving(undefined)}
+        onRemove={onRemoveProfile}
       />
     </Screen>
   );

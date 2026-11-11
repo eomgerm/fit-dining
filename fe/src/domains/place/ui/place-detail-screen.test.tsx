@@ -17,7 +17,12 @@ import { ToastProvider } from "@/shared/ui/overlay/toast";
 
 import { placeQueries } from "../api/place-queries";
 import type { BookmarkAccess } from "../model/bookmark";
-import type { Menu, PlaceCard, PlaceDetail } from "../model/place-types";
+import type {
+  Menu,
+  PlaceCard,
+  PlaceDetail,
+  PlaceFit,
+} from "../model/place-types";
 import { createSearchStore, type SearchStore } from "../model/search-store";
 import {
   PlaceDetailScreen,
@@ -169,6 +174,7 @@ afterEach(() => {
 function renderDetail(
   slots?: PlaceDetailSlots,
   queryClient = createQueryClient(),
+  fit?: PlaceFit,
 ) {
   return render(
     <QueryClientProvider client={queryClient}>
@@ -176,6 +182,7 @@ function renderDetail(
         <PlaceDetailScreen
           placeId={placeId}
           fromSaved={false}
+          fit={fit}
           slots={slots}
           bookmarks={guest}
         />
@@ -264,6 +271,29 @@ describe("PlaceDetailScreen", () => {
     );
     const tip = await screen.findByRole("dialog", { name: "핏 점수 설명" });
     expect(within(tip).getByText(/0~100으로 나타낸 점수예요/)).toBeTruthy();
+  });
+
+  it("밖에서 점수와 추천 이유를 넘기면 검색 카드 대신 그것을 보인다(모임에서 연 상세)", async () => {
+    stores.current.recordCards([card]);
+    renderDetail(undefined, createQueryClient(), {
+      score: 72,
+      reasons: [{ title: "모임하기 좋다는 리뷰가 많아요", tags: [] }],
+    });
+
+    await screen.findByRole("heading", { name: "카페 온담" });
+    expect(screen.getByText("72")).toBeTruthy();
+    expect(screen.queryByText("84")).toBeNull();
+    expect(screen.getByText("모임하기 좋다는 리뷰가 많아요")).toBeTruthy();
+    expect(screen.queryByText("주말 오후에는 대기가 길어요")).toBeNull();
+  });
+
+  it("밖에서 넘긴 점수가 없으면 검색 카드가 있어도 핏 점수를 보이지 않는다", async () => {
+    stores.current.recordCards([card]);
+    renderDetail(undefined, createQueryClient(), { reasons: [] });
+
+    await screen.findByRole("heading", { name: "카페 온담" });
+    expect(screen.queryByText("핏 점수")).toBeNull();
+    expect(screen.queryByText("AI 추천 이유")).toBeNull();
   });
 
   it("상단 장소 태그는 검색 카드의 '내 취향' 근거와 같으면 주황, '요청' 근거와 같거나 카드가 없으면 회색이다", async () => {

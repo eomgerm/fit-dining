@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 
 import { authenticated } from "@/domains/auth/api/authenticated";
+import type { PlaceFit } from "@/domains/place/model/place-types";
 import { PlaceDetailScreen } from "@/domains/place/ui/place-detail-screen";
 import { reviewEditHref, reviewWriteHref } from "@/domains/review/model/review";
 import { ReviewEntryButton } from "@/domains/review/ui/review-entry-button";
@@ -16,9 +17,12 @@ import { withOptionalSession } from "./with-optional-session";
 export function PlaceDetailWithReviews({
   placeId,
   fromSaved,
+  fit,
 }: {
   placeId: number;
   fromSaved: boolean;
+  // 모임에서 열었을 때 모임 결과의 점수와 추천 이유
+  fit?: PlaceFit;
 }) {
   const router = useRouter();
   const bookmarks = useBookmarkAccess();
@@ -33,6 +37,7 @@ export function PlaceDetailWithReviews({
     <PlaceDetailScreen
       placeId={placeId}
       fromSaved={fromSaved}
+      fit={fit}
       bookmarks={bookmarks}
       slots={{
         homeReviews: (placeId, showReviews) => (

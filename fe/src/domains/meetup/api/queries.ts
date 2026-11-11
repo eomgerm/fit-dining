@@ -11,10 +11,12 @@ import type {
 import {
   createMeetup,
   createProfile,
+  fetchResult,
   fetchSnapshot,
   removeProfile,
   searchAreas,
   selectProfile,
+  startCalculation,
   updateTaste,
 } from "./meetup-api";
 
@@ -26,7 +28,13 @@ export const meetupKeys = {
   all: ["meetups"] as const,
   areas: (query: string) => [...meetupKeys.all, "areas", query] as const,
   snapshot: (code: string) => [...meetupKeys.all, code] as const,
+  // 결과는 계산마다 바뀌지 않아 스냅숏과 다른 키에 둔다. 스냅숏을 다시 받을 때 함께 다시 받지 않는다
+  result: (code: string, calculationId: number) =>
+    ["meetup-results", code, calculationId] as const,
 };
+
+// 계산 중에 스냅숏을 다시 받는 간격(D-10)
+export const CALCULATING_REFETCH_MS = 1000;
 
 export function useAreaSearch(query: string, withSession: WithSession) {
   return useQuery({
@@ -45,13 +53,27 @@ export function useCreateMeetup(withSession: WithSession) {
   });
 }
 
-// 화면에 들어올 때와 탭으로 돌아올 때 다시 받는다(AC-31). 없는 코드(404)는 다시 묻지 않는다
+// 화면에 들어올 때와 탭으로 돌아올 때 다시 받고, 계산 중에는 1초마다 다시 받는다(AC-31). 없는 코드(404)는 다시 묻지 않는다
 export function useMeetupSnapshot(code: string) {
   return useQuery({
     queryKey: meetupKeys.snapshot(code),
     queryFn: ({ signal }) => fetchSnapshot(code, signal),
     retry: (count, error) =>
       !(isApiError(error) && error.status === 404) && count < 2,
+    refetchInterval: (query) =>
+      query.state.data?.calculation?.state === "RUNNING"
+        ? CALCULATING_REFETCH_MS
+        : false,
+  });
+}
+
+// 마지막으로 성공한 계산의 결과. 그 계산 번호가 바뀔 때만 받는다(D-9)
+export function useMeetupResult(code: string, calculationId?: number) {
+  return useQuery({
+    queryKey: meetupKeys.result(code, calculationId ?? 0),
+    queryFn: ({ signal }) => fetchResult(code, signal),
+    enabled: calculationId !== undefined,
+    staleTime: Infinity,
   });
 }
 
@@ -81,6 +103,10 @@ export function useSelectProfile(code: string) {
 
 export function useUpdateTaste(code: string) {
   return useMeetupWrite(code, (taste: Taste) => updateTaste(code, taste));
+}
+
+export function useStartCalculation(code: string) {
+  return useMeetupWrite<void, void>(code, () => startCalculation(code));
 }
 
 export function useRemoveProfile(code: string) {

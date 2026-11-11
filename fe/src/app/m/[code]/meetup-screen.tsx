@@ -6,9 +6,11 @@ import { useEffect, useState } from "react";
 import {
   conflictOf,
   isNotFound,
+  useMeetupResult,
   useMeetupSnapshot,
   useRemoveProfile,
   useSelectProfile,
+  useStartCalculation,
 } from "@/domains/meetup/api/queries";
 import {
   clearJustJoined,
@@ -28,7 +30,14 @@ import {
   MemberProfileDialog,
 } from "@/domains/meetup/ui/picker-dialogs";
 import { ProfilePicker } from "@/domains/meetup/ui/profile-picker";
+import type { ResultCardParts } from "@/domains/meetup/ui/result-card";
+import {
+  ResultView,
+  type ResultViewState,
+} from "@/domains/meetup/ui/result-view";
 import { WaitingView } from "@/domains/meetup/ui/waiting-view";
+import { FitScore } from "@/domains/place/ui/fit-score";
+import { PlacePhoto, RankBadge } from "@/domains/place/ui/place-parts";
 import { isApiError } from "@/shared/api/api-error";
 import { copyLink, shareLink } from "@/shared/lib/share";
 import { Button } from "@/shared/ui/button/button";
@@ -37,6 +46,15 @@ import { TopBar } from "@/shared/ui/layout/top-bar";
 import { useToast } from "@/shared/ui/overlay/toast";
 
 import { rememberLoginReturn } from "../../login-return";
+
+// 결과 카드의 장소 사진, 순위 배지, 핏 점수는 장소 도메인의 부품이다(D-20)
+const RESULT_PARTS: ResultCardParts = {
+  photo: (src) => (
+    <PlacePhoto src={src} className="size-19 shrink-0 rounded-md" />
+  ),
+  rank: (rank) => <RankBadge rank={rank} />,
+  score: (score) => <FitScore score={score} />,
+};
 
 function LoadingScreen({
   failed,
@@ -67,7 +85,8 @@ function LoadingScreen({
 }
 
 // 모임 링크(/m/{code}). 스냅숏으로 화면을 정한다(AC-26). 프로필이 없으면 프로필 고르기, 모임장에게 프로필이 없으면
-// 질문지, 프로필이 있으면 대기 화면이다. view="profiles"(/m/{code}/profiles)는 프로필 고르기를 바로 연다
+// 질문지, 프로필이 있으면 대기 화면이나 결과 화면이다. 계산 중이면 누구에게나 찾는 중을 보인다(AC-31).
+// view="profiles"(/m/{code}/profiles)는 프로필 고르기를 바로 연다
 export function MeetupScreen({
   code,
   view,
@@ -109,6 +128,8 @@ function MeetupBody({
   const toast = useToast();
   const select = useSelectProfile(code);
   const remove = useRemoveProfile(code);
+  const calculation = useStartCalculation(code);
+  const result = useMeetupResult(code, snapshot.resultCalculationId);
   const [viewOnly, setViewOnly] = useState(false);
   const [confirming, setConfirming] = useState<MeetupProfile>();
   const [memberPicked, setMemberPicked] = useState<MeetupProfile>();
@@ -136,6 +157,44 @@ function MeetupBody({
     router.push(`${meetupHref(code)}/taste`);
   };
   const join = () => router.push(`${meetupHref(code)}/join`);
+  const calculate = () =>
+    calculation.mutate(undefined, {
+      onError: (error) =>
+        toast(
+          conflictOf(error) === "calculating"
+            ? "이미 추천을 찾고 있어요"
+            : "추천받지 못했어요. 잠시 뒤 다시 시도해 주세요",
+        ),
+    });
+  const removeProfile = (profile: MeetupProfile) =>
+    remove.mutate(profile.id, {
+      onSuccess: () => toast(`'${profile.name}' 프로필을 지웠어요`),
+      onError: (error) =>
+        toast(
+          conflictOf(error) === "host-profile"
+            ? "모임장 프로필은 지울 수 없어요"
+            : "프로필을 지우지 못했어요. 잠시 뒤 다시 시도해 주세요",
+        ),
+    });
+  const host = snapshot.me.role === "HOST";
+  const resultState = viewState(snapshot, host, result.data, result.isError);
+  const resultView = (onPickName?: () => void) =>
+    resultState && (
+      <ResultView
+        snapshot={snapshot}
+        result={result.data}
+        state={resultState}
+        parts={RESULT_PARTS}
+        placeHref={(placeId) => `/places/${placeId}?meetup=${code}`}
+        calculating={calculation.isPending}
+        onBack={host ? () => router.push("/") : undefined}
+        onCalculate={calculate}
+        onReload={() => result.refetch()}
+        onEditTaste={editTaste}
+        onRemoveProfile={removeProfile}
+        onPickName={onPickName}
+      />
+    );
 
   if (snapshot.me.profileId) {
     if (snapshot.me.role !== "HOST" && justJoined) {
@@ -144,7 +203,7 @@ function MeetupBody({
           snapshot={snapshot}
           onEditTaste={editTaste}
           onSignIn={() => signIn(meetupHref(code))}
-          onShowFriends={() => {
+          onContinue={() => {
             clearJustJoined(code);
             setJustJoined(false);
           }}
@@ -152,39 +211,34 @@ function MeetupBody({
       );
     }
     return (
-      <WaitingView
-        snapshot={snapshot}
-        onBack={
-          snapshot.me.role === "HOST" ? () => router.push("/") : undefined
-        }
-        onShare={share}
-        onCopy={copy}
-        onEditTaste={editTaste}
-        onRemoveProfile={(profile) =>
-          remove.mutate(profile.id, {
-            onSuccess: () => toast(`'${profile.name}' 프로필을 지웠어요`),
-            onError: (error) =>
-              toast(
-                conflictOf(error) === "host-profile"
-                  ? "모임장 프로필은 지울 수 없어요"
-                  : "프로필을 지우지 못했어요. 잠시 뒤 다시 시도해 주세요",
-              ),
-          })
-        }
-      />
+      resultView() ?? (
+        <WaitingView
+          snapshot={snapshot}
+          onBack={host ? () => router.push("/") : undefined}
+          onShare={share}
+          onCopy={copy}
+          onEditTaste={editTaste}
+          onRemoveProfile={removeProfile}
+          onCalculate={calculate}
+          calculating={calculation.isPending}
+        />
+      )
     );
   }
 
   if (viewOnly) {
+    const pickName = () => setViewOnly(false);
     return (
-      <WaitingView
-        snapshot={snapshot}
-        onShare={share}
-        onCopy={copy}
-        onEditTaste={editTaste}
-        onRemoveProfile={() => {}}
-        onPickName={() => setViewOnly(false)}
-      />
+      resultView(pickName) ?? (
+        <WaitingView
+          snapshot={snapshot}
+          onShare={share}
+          onCopy={copy}
+          onEditTaste={editTaste}
+          onRemoveProfile={() => {}}
+          onPickName={pickName}
+        />
+      )
     );
   }
 
@@ -237,4 +291,19 @@ function MeetupBody({
       />
     </>
   );
+}
+
+// 결과 화면을 열지와 그 상태. 결과도 계산도 없으면 undefined(대기 화면)다. 실패한 계산의 다시 시도는 모임장만 할 수
+// 있어, 결과가 없으면 참여자에게는 대기 화면을 그대로 보인다
+function viewState(
+  snapshot: MeetupSnapshot,
+  host: boolean,
+  result: unknown,
+  resultFailed: boolean,
+): ResultViewState | undefined {
+  const state = snapshot.calculation?.state;
+  if (state === "RUNNING") return "finding";
+  if (snapshot.resultCalculationId === undefined)
+    return state === "FAILED" && host ? "failed" : undefined;
+  return result || resultFailed ? "ready" : "loading";
 }

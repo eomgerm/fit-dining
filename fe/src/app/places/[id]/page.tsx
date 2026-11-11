@@ -11,6 +11,7 @@ import { SAVED_VIEW } from "@/domains/place/model/bookmark";
 import { parsePlaceId } from "@/domains/place/model/place-id";
 
 import { loadPlace } from "./load-place";
+import { MeetupPlaceDetail } from "./meetup-place-detail";
 import { PlaceDetailWithReviews } from "./place-detail-with-reviews";
 import { placeJsonLd, placeMetadata } from "./place-seo";
 
@@ -40,6 +41,7 @@ export default async function PlaceDetailPage({ params, searchParams }: Props) {
   const queryClient = new QueryClient();
   const loaded = place !== "failed";
   if (loaded) queryClient.setQueryData(placeQueries.detail(id).queryKey, place);
+  const { from, meetup } = await searchParams;
   return (
     <HydrationBoundary state={dehydrate(queryClient)}>
       {loaded && (
@@ -48,10 +50,11 @@ export default async function PlaceDetailPage({ params, searchParams }: Props) {
           dangerouslySetInnerHTML={{ __html: placeJsonLd(place) }}
         />
       )}
-      <PlaceDetailWithReviews
-        placeId={id}
-        fromSaved={(await searchParams).from === SAVED_VIEW}
-      />
+      {typeof meetup === "string" ? (
+        <MeetupPlaceDetail code={meetup} placeId={id} />
+      ) : (
+        <PlaceDetailWithReviews placeId={id} fromSaved={from === SAVED_VIEW} />
+      )}
     </HydrationBoundary>
   );
 }

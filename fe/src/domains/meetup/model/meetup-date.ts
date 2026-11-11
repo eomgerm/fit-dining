@@ -89,6 +89,32 @@ export function formatWhen(date: string, time?: string) {
   return `${formatDate(date)} ${period(hour)} ${h12}시${minutes}`;
 }
 
+// 결과 카드의 시각 "저녁 7시", "저녁 7시 30분"
+export function formatHour(time: string) {
+  const { hour, minute, h12 } = clock(time);
+  return `${period(hour)} ${h12}시${minute ? ` ${minute}분` : ""}`;
+}
+
+// 결과 조건 칩의 "금 저녁 7시"
+export function formatWeekdayHour(date: string, time: string) {
+  const { year, month, day } = parts(date);
+  const weekday =
+    WEEKDAYS[new Date(Date.UTC(year, month - 1, day)).getUTCDay()];
+  return `${weekday} ${formatHour(time)}`;
+}
+
+const kstClock = new Intl.DateTimeFormat("ko-KR", {
+  timeZone: "Asia/Seoul",
+  hour: "numeric",
+  minute: "2-digit",
+  hour12: true,
+});
+
+// 추천한 시각 "오후 6:12"
+export function formatClock(instant: string) {
+  return kstClock.format(new Date(instant));
+}
+
 // "11월 21일까지 열 수 있어요"
 export function formatExpiresOn(expiresOn: string) {
   const { month, day } = parts(expiresOn);

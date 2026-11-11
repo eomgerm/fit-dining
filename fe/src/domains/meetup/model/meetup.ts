@@ -88,12 +88,27 @@ export type MeetupSnapshot = {
     role: MeetupRole;
     profileId?: number;
     signedIn: boolean;
+    // 내 취향이 마지막 추천에 들어갔는지. 프로필이 있을 때만 온다
+    tasteReflected?: boolean;
     convertible?: boolean;
   };
   allowed: MeetupAction[];
   profiles: MeetupProfile[];
   // 인원을 정했고 남긴 수가 인원보다 적을 때만 온다
   pendingCount?: number;
+  // 가장 최근 계산. 추천받은 적이 없으면 없다
+  calculation?: MeetupCalculation;
+  // 마지막으로 성공한 계산. 결과는 이 값이 바뀔 때만 다시 받는다(D-9)
+  resultCalculationId?: number;
+};
+
+export type MeetupCalculation = {
+  id: number;
+  state: "RUNNING" | "SUCCEEDED" | "FAILED";
+  startedAt: string;
+  tasteCount: number;
+  // 마지막 성공 뒤에 취향이나 모임 정보가 바뀌었거나 그 계산의 프로필이 지워졌는지(AC-18)
+  outdated: boolean;
 };
 
 export type ProfileCreateRequest = { name: string; taste?: Taste };
@@ -101,7 +116,12 @@ export type ProfileCreateResponse = { profileId: number };
 
 // 409의 problem.type(urn:fitdining:meetup:<종류>)
 export type MeetupConflict =
-  "name-taken" | "full" | "already-joined" | "host-profile";
+  | "name-taken"
+  | "full"
+  | "already-joined"
+  | "host-profile"
+  | "calculating"
+  | "phase";
 
 export const NAME_MAX = 10;
 export const WANT_MENU_MAX = 20;

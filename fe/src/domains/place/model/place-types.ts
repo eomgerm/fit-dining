@@ -114,6 +114,9 @@ export type Reason = {
   quoteSource?: string;
 };
 
+// 상세가 보이는 핏 점수, 추천 이유, 주의점. 검색 카드가 주고, 모임에서 열면 모임 결과의 카드가 준다(모임 D-22)
+export type PlaceFit = Pick<PlaceCard, "score" | "reasons" | "caution">;
+
 export type ScoreItem = {
   source: EvidenceSource;
   label: string;

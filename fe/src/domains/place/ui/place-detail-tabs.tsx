@@ -53,8 +53,8 @@ import type {
   Hours,
   LatLng,
   Menu,
-  PlaceCard,
   PlaceDetail,
+  PlaceFit,
 } from "../model/place-types";
 import { MenuCard, MenuRow } from "./menu-card";
 import { OpenStatusText } from "./place-parts";
@@ -78,7 +78,7 @@ export function HomeTab({
   onShowMenu,
   reviews,
 }: TabProps & {
-  card?: PlaceCard;
+  card?: PlaceFit;
   now: Date;
   onShowInfo: () => void;
   onShowMenu: () => void;

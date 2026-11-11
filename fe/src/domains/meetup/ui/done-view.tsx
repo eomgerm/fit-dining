@@ -9,20 +9,21 @@ import { TopBar } from "@/shared/ui/layout/top-bar";
 import { hostProfile, myProfile, type MeetupSnapshot } from "../model/meetup";
 import { tasteRows } from "../model/taste";
 
-// 취향을 남긴 뒤(참여자 5). 내 취향을 보이고, 비회원에게는 로그인하면 할 수 있는 것을 알린다. 아래 버튼은 대기 화면을 연다(D-28)
+// 취향을 남긴 뒤(참여자 5). 내 취향을 보이고, 비회원에게는 로그인하면 할 수 있는 것을 알린다. 아래 버튼은 결과 전이면 대기 화면, 결과가 있으면 결과 화면을 연다(D-28)
 export function DoneView({
   snapshot,
   onEditTaste,
   onSignIn,
-  onShowFriends,
+  onContinue,
 }: {
   snapshot: MeetupSnapshot;
   onEditTaste: () => void;
   onSignIn: () => void;
-  onShowFriends: () => void;
+  onContinue: () => void;
 }) {
   const me = myProfile(snapshot);
   const hostName = hostProfile(snapshot)?.name ?? snapshot.info.hostNickname;
+  const hasResult = snapshot.resultCalculationId !== undefined;
   return (
     <Screen>
       <TopBar title="모임 장소 정하기" />
@@ -85,11 +86,13 @@ export function DoneView({
         )}
       </div>
       <BottomBar>
-        <p className="text-center text-caption-sm text-ink-subtle">
-          추천이 나오면 &apos;추천 결과 보기&apos;로 바뀌어요
-        </p>
-        <Button variant="outline" size="md" onClick={onShowFriends}>
-          친구들 취향 보기
+        {!hasResult && (
+          <p className="text-center text-caption-sm text-ink-subtle">
+            추천이 나오면 &apos;추천 결과 보기&apos;로 바뀌어요
+          </p>
+        )}
+        <Button variant="outline" size="md" onClick={onContinue}>
+          {hasResult ? "추천 결과 보기" : "친구들 취향 보기"}
         </Button>
       </BottomBar>
     </Screen>

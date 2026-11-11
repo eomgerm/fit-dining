@@ -23,7 +23,7 @@ import { Tooltip } from "@/shared/ui/overlay/tooltip";
 import { placeQueries } from "../api/place-queries";
 import { placeDetailHref, type BookmarkAccess } from "../model/bookmark";
 import { todayNotice } from "../model/opening-hours";
-import type { PlaceCard, PlaceDetail } from "../model/place-types";
+import type { PlaceDetail, PlaceFit } from "../model/place-types";
 import { BookmarkButton } from "./bookmark-button";
 import { LoadFailed } from "./load-failed";
 import { HomeTab, InfoTab, MenuTab } from "./place-detail-tabs";
@@ -55,15 +55,18 @@ export type PlaceDetailSlots = {
 
 // 장소 상세(6-01, 6-02, 6-04, 6-05, 와이어프레임 Detail·DetailMenu·DetailInfo·DetailSaved). 주소의 id는 페이지가 검사해 넘긴다.
 // fromSaved는 저장한 장소 화면에서 열었는지다. 그러면 핏 점수와 추천 이유를 보이지 않는다(D-12).
+// fit을 넘기면 검색 카드 대신 그 점수와 추천 이유를 보인다(모임에서 연 상세, 모임 D-22).
 // bookmarks는 저장 버튼의 인증이다. 인증 도메인을 쓰는 app이 넘긴다
 export function PlaceDetailScreen({
   placeId,
   fromSaved,
+  fit,
   slots,
   bookmarks,
 }: {
   placeId: number;
   fromSaved: boolean;
+  fit?: PlaceFit;
   slots?: PlaceDetailSlots;
   bookmarks: BookmarkAccess;
 }) {
@@ -74,6 +77,7 @@ export function PlaceDetailScreen({
         slots={slots}
         bookmarks={bookmarks}
         fromSaved={fromSaved}
+        fit={fit}
       />
     </Screen>
   );
@@ -112,17 +116,20 @@ function PlaceDetailContent({
   slots,
   bookmarks,
   fromSaved,
+  fit,
 }: {
   id: number;
   slots?: PlaceDetailSlots;
   bookmarks: BookmarkAccess;
   fromSaved: boolean;
+  fit?: PlaceFit;
 }) {
   const query = useQuery(placeQueries.detail(id));
   // 빈 자리를 보이고 나서 내용이 오면 투명도만 바꿔 나타낸다. 서버가 그려 넣은 상세는 바로 보인다
   const [fadeIn] = useState(query.isPending);
   const storedCard = useStoredCard(id);
-  const card = fromSaved ? undefined : storedCard;
+  const card: PlaceFit | undefined =
+    fit ?? (fromSaved ? undefined : storedCard);
 
   if (query.isPending) {
     return (
@@ -187,7 +194,7 @@ function PlaceDetailView({
   returnTo,
 }: {
   detail: PlaceDetail;
-  card?: PlaceCard;
+  card?: PlaceFit;
   slots?: PlaceDetailSlots;
   bookmarks: BookmarkAccess;
   returnTo: string;

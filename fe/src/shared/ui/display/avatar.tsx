@@ -92,6 +92,30 @@ export function Avatar({
   );
 }
 
+// 작은 아바타를 겹쳐 놓은 줄(결과 카드의 잘 맞는 사람). 배지는 없고, 옆 글자가 사람을 읽으므로 화면 낭독기에서 숨긴다
+export function AvatarStack({
+  people,
+}: {
+  people: { name: string; color: number }[];
+}) {
+  return (
+    <span aria-hidden="true" className="inline-flex shrink-0">
+      {people.map((person, index) => (
+        <span
+          key={index}
+          className={cn(
+            "flex size-5 items-center justify-center rounded-full text-caption-sm font-bold ring-2 ring-surface select-none",
+            index > 0 && "-ml-1.5",
+            PALETTE[person.color % PALETTE.length],
+          )}
+        >
+          {Array.from(person.name.trim())[0] ?? ""}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 // 모임장·회원 배지. 아바타에 붙거나, 프로필 고르기의 "모임장 · 회원" 설명처럼 글 안에 둔다
 export function AvatarBadgeMark({
   kind,
