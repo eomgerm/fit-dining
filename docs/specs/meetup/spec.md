@@ -49,12 +49,12 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 
 뼈대 (BE)
 
-- [ ] AC-1: `POST /api/v1/meetups`는 로그인하지 않으면 401이다. 지역이 없거나, 업종이 식당·카페·술집·상관없음이 아니거나, 인원이 2~8 밖이거나, 모임 설명이 100자를 넘거나, 시간만 있고 날짜가 없거나, 날짜가 오늘(KST)보다 앞이거나 오늘부터 30일(시작값) 뒤보다 늦거나, 오늘인데 시각이 이미 지났으면 400이다. 업종을 빼면 식당으로 저장한다. 성공하면 201과 22자 코드, 보일 질문을 준다. 같은 회원이 여러 번 만들면 코드가 모두 다르다. (D-2, D-17, D-23, D-25; PRD AC-36, AC-37, AC-88)
+- [x] AC-1: `POST /api/v1/meetups`는 로그인하지 않으면 401이다. 지역이 없거나, 업종이 식당·카페·술집·상관없음이 아니거나, 인원이 2~8 밖이거나, 모임 설명이 100자를 넘거나, 시간만 있고 날짜가 없거나, 날짜가 오늘(KST)보다 앞이거나 오늘부터 30일(시작값) 뒤보다 늦거나, 오늘인데 시각이 이미 지났으면 400이다. 업종을 빼면 식당으로 저장한다. 성공하면 201과 22자 코드, 보일 질문을 준다. 같은 회원이 여러 번 만들면 코드가 모두 다르다. (D-2, D-17, D-23, D-25, D-27; PRD AC-36, AC-37, AC-88)
 - [ ] AC-2: 삭제 시각은 모임 날짜 + 8일의 0시(KST), 곧 모임 날짜 + 7일이 끝날 때이고, 날짜가 없으면 만든 날 + 8일의 0시다. 스냅숏의 `info.expiresOn`은 열 수 있는 마지막 날(KST)이다. 서버에 주입한 시계로 계산하고 KST 자정 전후의 경계에서 하루 어긋나지 않는다. 날짜를 고치면 삭제 시각과 `expiresOn`이 다시 계산되고, 날짜를 비우면 비운 날 + 8일의 0시로 다시 계산된다. (D-23; PRD AC-39, AC-77)
-- [ ] AC-3: `GET /api/v1/meetups/{code}`는 로그인도 프로필도 없는 요청에 200과 스냅숏을 준다. 값이 없는 속성은 빠진다. 이 요청은 로그인 세션을 만들지 않는다. 없는 코드는 404다. (D-9)
-- [ ] AC-4: 스냅숏의 `allowed`는 PRD §5.1 표가 그 상태와 역할에 정한 동작만 담는다. 보기만 하는 사람과 참여자에게는 추천받기, 투표 열기, 마감, 정하기, 모임 정보 수정, 프로필 지우기가 없다. 투표 중에는 투표 열기·바로 정하기·추천받기가 없고, 정한 곳이 있으면 추천받기가 없다. (D-3; PRD AC-61, AC-75)
-- [ ] AC-5: `POST /api/v1/meetups/{code}/profiles`는 로그인 없이 프로필과 모임 취향을 만든다. 이름은 필수이고 앞뒤 공백을 지운 값이 1~10자다. 취향은 모두 생략할 수 있다. 같은 모임에 `name_key`가 같은 프로필이 있으면 409 `name-taken`, 프로필이 이미 8개면 409 `full`이다. 두 요청이 동시에 와도 같은 이름은 하나만, 프로필은 8개까지만 생긴다. 색은 0~7 중 그 모임에서 쓰지 않는 값이다. 닫히기 전에는 어느 상태에서든 만들 수 있고, 투표가 열린 뒤나 정한 뒤에 남긴 취향은 추천을 바꾸지 않는다. 로그인한 회원이 만들면 회원 프로필이고, 한 회원은 한 모임에 프로필 하나이고, 두 번째는 409 `already-joined`다. (D-4, D-5; PRD AC-40, AC-64, AC-69)
-- [ ] AC-6: 보이지 않는 질문(`questions`가 false)의 답을 보내면 저장하지 않고 무시한다. 분위기는 조용함·활기·상관없음, 음식 종류는 한식·일식·중식·양식·아시안, 메뉴 가격 상한은 5,000~100,000원의 1,000원 단위(시작값), 먹고 싶은 메뉴는 앞뒤 공백을 지운 값이 20자(시작값)까지이고 그 밖의 값은 400이다. 먹고 싶은 메뉴가 공백뿐이면 없는 것으로 본다. (D-17, D-26; PRD AC-59, AC-89)
+- [x] AC-3: `GET /api/v1/meetups/{code}`는 로그인도 프로필도 없는 요청에 200과 스냅숏을 준다. 값이 없는 속성은 빠진다. 이 요청은 로그인 세션을 만들지 않는다. 없는 코드는 404다. (D-9)
+- [x] AC-4: 스냅숏의 `allowed`는 PRD §5.1 표가 그 상태와 역할에 정한 동작만 담는다. 보기만 하는 사람과 참여자에게는 추천받기, 투표 열기, 마감, 정하기, 모임 정보 수정, 프로필 지우기가 없다. 투표 중에는 투표 열기·바로 정하기·추천받기가 없고, 정한 곳이 있으면 추천받기가 없다. (D-3; PRD AC-61, AC-75)
+- [ ] AC-5: `POST /api/v1/meetups/{code}/profiles`는 로그인 없이 프로필과 모임 취향을 만든다. 이름은 필수이고 앞뒤 공백을 지운 값이 1~10자다. 취향은 모두 생략할 수 있다. 이름은 앞뒤 공백을 지우고 유니코드 NFC로 정규화해 저장한다. 같은 모임에 같은 이름(대소문자 구분)의 프로필이 있으면 409 `name-taken`, 프로필이 이미 8개면 409 `full`이다. 두 요청이 동시에 와도 같은 이름은 하나만, 프로필은 8개까지만 생긴다. 색은 0~7 중 그 모임에서 쓰지 않는 값이다. 닫히기 전에는 어느 상태에서든 만들 수 있고, 투표가 열린 뒤나 정한 뒤에 남긴 취향은 추천을 바꾸지 않는다. 로그인한 회원이 만들면 회원 프로필이고, 한 회원은 한 모임에 프로필 하나이고, 두 번째는 409 `already-joined`다. (D-4, D-5; PRD AC-40, AC-64, AC-69)
+- [ ] AC-6: 보이지 않는 질문(`questions`가 false)의 답을 보내면 저장하지 않고 무시한다. 분위기는 조용함·활기·상관없음, 음식 종류는 한식·일식·중식·양식·아시안, 메뉴 가격 상한은 5,000~100,000원(시작값), 먹고 싶은 메뉴는 앞뒤 공백을 지운 값이 20자(시작값)까지이고 그 밖의 값은 400이다. 먹고 싶은 메뉴가 공백뿐이면 없는 것으로 본다. (D-17, D-26; PRD AC-59, AC-89)
 - [ ] AC-7: 프로필을 만들거나 고른 응답은 모임 쿠키를 준다. 이름 `fitdining_meetup`, HttpOnly, SameSite=Lax, `Path=/api/v1/meetups/{code}`, 만료는 모임 삭제 시각이다. DB에는 쿠키 값의 SHA-256 해시만 있다. 그 쿠키로 스냅숏을 받으면 `me.profileId`가 그 프로필이다. (D-7; PRD AC-63)
 - [ ] AC-8: `POST /api/v1/meetups/{code}/profiles/{profileId}/session`은 닫히기 전 어느 상태에서든 비회원 프로필이면 누구에게나 쿠키를 준다. 회원 프로필이면 그 회원으로 로그인한 요청만 되고 아니면 403이다. 없는 프로필은 404다. (D-7; PRD AC-63)
 - [ ] AC-9: 요청한 사람은 회원의 프로필, 모임 쿠키의 프로필, 보기만 하는 사람 순서로 정한다. 로그인한 회원에게 프로필이 없고 모임 쿠키가 비회원 프로필을 가리키면 그 프로필이고 스냅숏이 회원 프로필로 바꿀 수 있다고 알린다. 지워진 프로필을 가리키는 쿠키는 보기만 하는 사람이다. 모임 쿠키가 회원 프로필을 가리키면 그 회원으로 로그인한 요청에서만 그 프로필로 보고, 아니면 쿠키를 무시한다. (D-7, D-25; PRD AC-76)
@@ -76,7 +76,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 
 뼈대 (FE)
 
-- [ ] AC-25: `/m/new`는 로그인하지 않았으면 로그인 안내를 띄우고, 로그인을 마치면 `/m/new`로 돌아온다. 지역이 비어 있으면 "다음: 내 취향 남기기"가 눌리지 않는다. 업종은 칩 네 개 중 하나이고 처음에 식당이 골라져 있다. 만들기 요청이 처리 중이면 버튼이 눌리지 않고 진행을 보인다. (D-20, D-22; PRD AC-36, AC-37, AC-88)
+- [x] AC-25: `/m/new`는 로그인하지 않았으면 로그인 안내를 띄우고, 로그인을 마치면 `/m/new`로 돌아온다. 지역이 비어 있으면 "다음: 내 취향 남기기"가 눌리지 않는다. 업종은 칩 네 개 중 하나이고 처음에 식당이 골라져 있다. 만들기 요청이 처리 중이면 버튼이 눌리지 않고 진행을 보인다. (D-20, D-22; PRD AC-36, AC-37, AC-88)
 - [ ] AC-26: `/m/{code}`는 스냅숏으로 화면을 정한다. 프로필이 없으면 모임 정보, 프로필 목록, "처음 왔어요"를 보인다. 모임장에게 프로필이 없으면 질문지를 연다. 프로필이 있으면 상태에 맞는 화면(대기, 결과, 투표, 정한 곳)을 연다. 프로필 목록에서 회원 프로필(모임장 포함)을 고르면, 로그인하지 않았으면 로그인 안내를 띄우고 로그인을 마치면 그 모임으로 돌아와 자기 화면을 연다. 다른 회원으로 로그인돼 있으면 그 프로필을 고를 수 없다고 알린다. 프로필 목록의 회원 프로필은 이니셜 아바타의 배지로 보인다(모임장은 진한 주황 원에 흰 왕관, 다른 회원은 흰 원에 회색 테두리와 사람 아이콘이다). 목록 아래에 두 줄 설명이 있다. 첫 줄은 배지와 함께 "모임장 · 회원", 둘째 줄은 "회원 프로필은 로그인해야 들어갈 수 있어요"다. 그 아래 "결과만 보기"는 프로필 없이 결과(없으면 대기 화면)를 연다. 인원을 정한 모임에서 남긴 수가 인원 이상이면 "처음 왔어요"를 누를 때 한 번 묻는다. (D-7, D-20, D-25; PRD AC-63, AC-70, AC-76)
 - [ ] AC-27: 질문지는 이름만 필수이고 스냅숏의 `questions`가 true인 질문만 보인다. 취향을 남기기 전에 남긴 취향이 링크를 가진 사람에게 보인다는 안내가 있다. 화면 문구에 질문 개수가 없다. 메뉴 가격 질문은 1만·2만·3만 원, 직접 입력, 상관없음 칩이고, 직접 입력을 고르면 금액 칸이 열린다. 대표 메뉴 한 개 가격 기준이라는 안내가 있다. 음식 종류 칩 아래에 건너뛸 수 있는 먹고 싶은 메뉴 칸(예: 곱창, 마라탕)이 있고 20자까지 받는다. 파는 곳을 먼저 보이고 꼭 맞추지는 않는다는 안내가 있다. 이미 있는 이름이면(409) 이름 칸 아래에 안내하고 입력이 남는다. 프로필이 다 찼으면(409) 다 찬 모임 화면을 보인다. (D-17, D-26; PRD AC-40, AC-41, AC-59, AC-74, AC-89)
 - [ ] AC-28: 질문지에서 로그인하러 갔다 돌아오면 쓰던 답이 남아 있다. 답은 그 탭의 sessionStorage에만 두고 서버로 보내지 않는다. (D-21; PRD AC-76)
@@ -128,7 +128,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 - [ ] AC-62: 모임이 닫히면(삭제 시각이 지나거나 모임장이 탈퇴하면) 모임 행을 지우고 자식 행(프로필, 쿠키 세션, 계산)이 따라 지워진다. 닫힌 날과 이유를 포함해 그 모임에 대해 남는 것이 없고, 측정용 집계도 남기지 않는다. (D-6; PRD AC-78)
 - [ ] AC-63: 회원이 탈퇴하면 그 회원이 만든 모임이 모두 지워지고, 다른 모임에 있는 그 회원의 프로필과 취향, 표가 지워진다. 탈퇴가 되돌아가면 모임도 그대로다. (D-23; PRD AC-56)
 - [ ] AC-64: 정한 곳이 있고 모임 날짜 당일(날짜가 없으면 정한 당일, KST)부터 스냅숏의 `afterMeetup`이 true다. 회원 참여자에게는 정한 곳의 방문 평가가, 비회원에게는 로그인 안내가 보인다. 방문 평가를 열면 방문일 기본값이 모임 날짜이고, 방문일 범위 밖이면 기본값을 쓰지 않는다. (D-3, D-22, D-23; PRD AC-61, AC-87)
-- [ ] AC-65: 없는 코드의 링크(404)는 없는 링크 화면을 보인다. 문구는 하나이고 처음부터 없던 링크와 끝난 모임을 함께 덮는다("없거나 끝난 모임이에요", "모임은 모임 날짜에서 7일 뒤, 또는 모임장이 탈퇴하면 사라져요"). 모임 정보를 보이지 않는다. (D-6; PRD AC-78)
+- [x] AC-65: 없는 코드의 링크(404)는 없는 링크 화면을 보인다. 문구는 하나이고 처음부터 없던 링크와 끝난 모임을 함께 덮는다("없거나 끝난 모임이에요", "모임은 모임 날짜에서 7일 뒤, 또는 모임장이 탈퇴하면 사라져요"). 모임 정보를 보이지 않는다. (D-6; PRD AC-78)
 
 마무리
 
@@ -143,7 +143,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 - [ ] AC-71: 어떤 상태와 요청 순서에서든 익명 투표에서 누가 어디를 골랐는지가 응답에 나타나지 않는다. 동점 응답과 마감 뒤 응답도 같다. (D-7; PRD AC-62)
 - [ ] AC-72: 어떤 요청에서든 AI 요청 본문과 BE 로그에 참여자 이름이 나타나지 않는다. (D-13; PRD AC-57)
 - [ ] AC-73: 지운 모임의 코드로는 어떤 모임 데이터도 읽거나 쓸 수 없고 모든 요청이 404다. (D-6; PRD AC-39)
-- [ ] AC-74: 한 모임의 프로필은 8개를 넘지 않고, 같은 `name_key`의 프로필이 둘이 되지 않으며, RUNNING인 계산이 둘이 되지 않으며, 모임당 계산 행이 둘을 넘지 않는다. (D-4, D-5)
+- [ ] AC-74: 한 모임의 프로필은 8개를 넘지 않고, 같은 이름의 프로필이 둘이 되지 않으며, RUNNING인 계산이 둘이 되지 않으며, 모임당 계산 행이 둘을 넘지 않는다. (D-4, D-5)
 
 ## Interfaces
 
@@ -196,12 +196,14 @@ Taste {
   likeFoods?: ("KOREAN" | "JAPANESE" | "CHINESE" | "WESTERN" | "ASIAN")[]
   avoidFoods?: 같은 값의 목록
   noSpicy?: boolean
-  priceCap?: integer    // 메뉴 하나 가격의 상한(원). 5,000~100,000의 1,000원 단위. 메뉴 가격 질문이 보일 때만 받는다
+  priceCap?: integer    // 메뉴 하나 가격의 상한(원). 5,000~100,000. 메뉴 가격 질문이 보일 때만 받는다
   wantMenu?: string     // 먹고 싶은 메뉴(예: "곱창, 마라탕"). 앞뒤 공백을 지운 값이 20자까지. 음식 종류 질문이 보일 때만 받는다
 }
 ```
 
 `PATCH /meetups/{code}`는 `MeetupCreateRequest`와 같은 속성을 모두 선택으로 받는다. 빠진 속성은 그대로 두고 null인 속성은 비운다(AC-22). 투표 열기는 `{ placeIds: integer[], anonymous?: boolean }`, 투표와 정하기는 `{ placeId: integer }`다.
+
+`POST /meetups`는 201과 `{ code, questions }`를 준다. `questions`는 스냅숏의 것과 같다. 지역 찾기(`GET /meetups/areas?q=`)는 `{ items: [{ kind: "STATION" | "DONG", name }] }`이고, 찾는 말은 앞뒤 공백을 지운 값이 1~20자, 결과는 10곳까지다. 모임 만들기의 역·동은 이 목록에 있어야 하고 없으면 400이다(D-27).
 
 ### 스냅숏
 
@@ -341,9 +343,9 @@ AI에 주소 두 개를 더한다. 기존 `POST /v1/search`는 바꾸지 않는�
 
 | 테이블 | 주요 컬럼 |
 |---|---|
-| `meetups` | `meetup_id`, `code`(유일), `host_user_id`, `phase`, `area_kind`, `area_name`, `point_lat`, `point_lng`, `radius_m`, `category`, `meet_date`, `meet_time`, `headcount`, `description`, `parsed_conditions`(jsonb), `poll_state`(없음, OPEN, CLOSED), `poll_anonymous`, `poll_place_ids`(bigint[]), `poll_tie_votes`(동점으로 마감했을 때의 표 수), `decided_place_id`, `decided_how`(VOTE, PICK, DIRECT), `decided_at`, `expires_at`, `info_updated_at`, `created_at` |
-| `meetup_profiles` | `profile_id`, `meetup_id`, `name`, `name_key`, `color`, `user_id`, `mood`, `like_foods`, `avoid_foods`, `no_spicy`, `price_cap`, `want_menu`, `taste_updated_at`, `vote_place_id`, `vote_session_id`(비어 있을 수 있음, `ON DELETE SET NULL`), `created_at`. `(meetup_id, name_key)`, `(meetup_id, color)`, `(meetup_id, user_id)` 유일 |
-| `meetup_profile_sessions` | `session_id`, `profile_id`, `token_hash`(유일), `created_at` |
+| `meetups` | `meetup_id`, `code`(유일), `host_user_id`, `phase`, `area_kind`, `area_name`, `point_lat`, `point_lng`, `radius_m`, `category`, `meet_date`, `meet_time`, `headcount`, `description`, `parsed_conditions`(jsonb), `poll_state`(없음, OPEN, CLOSED), `poll_anonymous`, `poll_place_ids`(bigint[]), `poll_tie_votes`(동점으로 마감했을 때의 표 수), `decided_place_id`, `decided_how`(VOTE, PICK, DIRECT), `decided_at`, `expires_at`, `info_updated_at` |
+| `meetup_profiles` | `profile_id`, `meetup_id`, `name`, `color`, `user_id`, `mood`, `like_foods`, `avoid_foods`, `no_spicy`, `price_cap`, `want_menu`, `taste_updated_at`, `vote_place_id`, `vote_session_id`(비어 있을 수 있음, `ON DELETE SET NULL`). `(meetup_id, name)`, `(meetup_id, color)`, `(meetup_id, user_id)` 유일 |
+| `meetup_profile_sessions` | `session_id`, `profile_id`, `token_hash`(유일) |
 | `meetup_calculations` | `calc_id`, `meetup_id`, `state`, `started_at`, `finished_at`, `taste_count`, `profile_ids`, `result`(jsonb), `applied`(jsonb), `empty_reason`(jsonb). 모임당 RUNNING은 하나(부분 유일 인덱스) |
 
 `parsed_conditions`에는 AI가 해석한 조건(그대로)과 요약을 둔다(D-14). 투표는 모임당 하나라 `meetups`에, 표는 프로필당 하나라 `meetup_profiles`에 둔다(D-5). `poll_state`는 한 번 열면 비우지 않는다. 마감할 때 동점이면 그 표 수를 `poll_tie_votes`에 고정한다. 표가 후보 안의 장소인지는 서비스가 확인한다(`poll_place_ids`가 배열이라 FK가 없다). `vote_session_id`는 회원이 로그인으로 던진 표면 비어 있고, 세션이 지워지면 비운다. 계산 행은 마지막 성공 하나와 그 뒤의 실행 중이거나 실패한 하나까지만 남는다. 측정만을 위한 칸(연 수, 걸린 시간, H3 값)은 없고, 닫을 때 남기는 것도 없다(D-6).
@@ -369,7 +371,8 @@ AI에 주소 두 개를 더한다. 기존 `POST /v1/search`는 바꾸지 않는�
 |---|---|---|---|
 | `be/src/main/java/kr/co/fitdining/api/auth/infrastructure/SecurityConfiguration.java#securityFilterChain` | modify | 모임 공개 경로를 더하고, `no-store`를 더한다. CSRF는 S15P31A302-193이 모든 쓰기 요청에 걸어 따로 더하지 않는다. 다른 경로의 동작은 그대로다. 변경을 작게 둔다 | D-8 |
 | `be/src/main/java/kr/co/fitdining/api/place/engine/AiSearchClient.java#AiSearchClient` | modify | 호출 뼈대(예산, 동시 호출 한도, 차단기, 로그 규칙)를 모임 전용 주소 두 개에도 쓸 수 있게 연다. 일반 검색의 동작은 그대로다. S15P31A302-201이 넣은 검색 목적은 그대로 둔다 | D-13 |
-| `be/src/main/java/kr/co/fitdining/api/place/catalog/PlaceCatalog.java#PlaceCatalog` | modify | 모임 카드용 읽기(정한 시각의 영업 상태, 대표 메뉴와 가격, 단체·예약, 가까운 역과 도보 시간)와, 가게 가격이 채워졌는지 읽기(뷰 `ai_place_search`에 `price`가 있는 장소가 있는지)를 더한다. 기존 기능은 그대로다. S15P31A302-201의 `cardsWithin`은 대신 쓰는 추천기와 지점 확인에 다시 쓴다 | D-9, D-11 |
+| `be/src/main/java/kr/co/fitdining/api/place/catalog/PlaceCatalog.java#PlaceCatalog` | modify | 모임 카드용 읽기(정한 시각의 영업 상태, 대표 메뉴와 가격, 단체·예약, 가까운 역과 도보 시간)와, 가게 가격이 채워졌는지 읽기(뷰 `ai_place_search`에 `price`가 있는 장소가 있는지)를 더한다. 장소가 있는 역·동 읽기(`areaNames`)도 더한다. 기존 기능은 그대로다. 장소 카탈로그는 DB 모드에만 있어 모임의 장소 포트(`MeetupPlaces`) 중 DB 모드 구현만 쓴다. S15P31A302-201의 `cardsWithin`은 DB 모드의 지점 확인에 다시 쓴다 | D-9, D-11, D-27 |
+| `be/src/main/java/kr/co/fitdining/api/place/engine/PlaceSearchEngine.java#PlaceSearchEngine` | reuse | 장소 Mock 모드에서 모임의 장소 포트가 Mock 장소를 `placeIds`, `findPlace`로 읽는다. 대신 쓰는 추천기의 후보도 여기서 얻는다 | D-11, D-27 |
 | `be/src/main/java/kr/co/fitdining/api/place/catalog/OpenStatusCalculator.java#openStatus` | reuse | 결과 카드의 영업 상태(모임 시각 기준) | D-9 |
 | `be/src/main/java/kr/co/fitdining/api/place/dto/PlaceSummary.java#PlaceSummary` | reuse | 결과 카드의 장소 요약과 지점에서 직선거리 | D-9 |
 | `be/src/main/java/kr/co/fitdining/api/user/UserService.java#withdraw` | modify | 탈퇴 트랜잭션에서 모임 정리를 부른다. 다른 정리의 순서와 동작은 그대로다 | D-23 |
@@ -417,7 +420,7 @@ AI에 주소 두 개를 더한다. 기존 `POST /v1/search`는 바꾸지 않는�
 ## Open questions
 
 - AI 계약(주소 두 개, AC-50 ~ AC-55, AC-57)은 회의에서 이 스펙을 함께 보고 정한 뒤 AI 문서에 옮긴다. 회의 전이다. 설명이 빈 상관없음 모임에서 후보를 뽑는 낱말(시작값 "맛집")과 먹고 싶은 메뉴를 한 번에 해석하는 요청의 모양, 후보 없음 원인(`emptyReason.cause`)의 값 목록도 그때 정한다. 후보 없음 화면의 버튼은 이 값으로 고른다. (D-12, D-15, D-26)
-- `POST /meetups`(코드와 보일 질문), `GET /meetups/areas`, `GET /meetups/area-check`, 미리보기의 응답 모양과, 장소가 없는 지역으로 만들 때의 응답은 구현 이슈에서 정한다. (D-9)
+- `GET /meetups/area-check`와 미리보기의 응답 모양은 구현 이슈에서 정한다. (D-9)
 - 뷰의 가게 가격을 채우면 일반 검색의 가격 표현("3만원 이하")도 걸러지기 시작한다. AI의 검색 코드가 이미 가게 가격으로 거르게 돼 있다. PRD 본문 FR-08(예산 표현은 추천에 반영하지 않는다)과 어긋나므로 뷰를 고칠 때 검색 담당과 정한다. (D-17)
 - 식당 중 음식 종류가 채워진 비율은 구현 전에 운영 DB에서 확인한다(DB 권한이 있는 팀원). 낮으면 음식 질문과 못 먹는 음식 거르기의 효과가 작다. (PRD OQ-27)
 - 기준값(덜 맞는 사람 50, 프로필 8개, 모임 날짜 30일, 계산 예산 12초, 멈춘 계산 45초, 다시 받기 1초와 5초, 쓰기 한도 15분 120회, 가격 직접 입력 5,000~100,000원, 먹고 싶은 메뉴 20자와 가중치, 메뉴 해석을 기다리는 시간, 가격 판단 기억 10분, 작업 스레드 2·대기열 8)은 시작값이다. 코드 상수 한곳에서 바꾼다. (PRD OQ-29)
