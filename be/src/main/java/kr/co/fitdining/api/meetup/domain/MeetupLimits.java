@@ -48,6 +48,10 @@ public final class MeetupLimits {
 	public static final int MISFIT_SCORE = 50;
 	public static final int REASONS_MAX = 2;
 
+	/** 투표 후보 수(AC-36) */
+	public static final int POLL_CANDIDATES_MIN = 2;
+	public static final int POLL_CANDIDATES_MAX = 5;
+
 	private MeetupLimits() {
 	}
 

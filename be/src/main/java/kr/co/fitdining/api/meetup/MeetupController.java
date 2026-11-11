@@ -17,6 +17,8 @@ import kr.co.fitdining.api.meetup.dto.MeetupCreateResponse;
 import kr.co.fitdining.api.meetup.dto.MeetupResult;
 import kr.co.fitdining.api.meetup.dto.MeetupSnapshot;
 import kr.co.fitdining.api.meetup.dto.MeetupUpdateRequest;
+import kr.co.fitdining.api.meetup.dto.PlaceChoiceRequest;
+import kr.co.fitdining.api.meetup.dto.PollOpenRequest;
 import kr.co.fitdining.api.meetup.dto.ProfileCreateRequest;
 import kr.co.fitdining.api.meetup.dto.ProfileCreateResponse;
 import kr.co.fitdining.api.meetup.exception.InvalidMeetupException;
@@ -59,6 +61,7 @@ public class MeetupController {
 	private final MeetupProfileService profileService;
 	private final MeetupCalculationService calculationService;
 	private final MeetupResultService resultService;
+	private final MeetupPollService pollService;
 	private final MeetupWriteLimiter writeLimiter;
 	private final Validator validator;
 	private final JsonMapper jsonMapper;
@@ -66,12 +69,13 @@ public class MeetupController {
 
 	public MeetupController(MeetupService meetupService, MeetupProfileService profileService,
 			MeetupCalculationService calculationService, MeetupResultService resultService,
-			MeetupWriteLimiter writeLimiter, Validator validator, JsonMapper jsonMapper,
+			MeetupPollService pollService, MeetupWriteLimiter writeLimiter, Validator validator, JsonMapper jsonMapper,
 			@Value("${auth.cookie-secure}") boolean secureCookie) {
 		this.meetupService = meetupService;
 		this.profileService = profileService;
 		this.calculationService = calculationService;
 		this.resultService = resultService;
+		this.pollService = pollService;
 		this.writeLimiter = writeLimiter;
 		this.validator = validator;
 		this.jsonMapper = jsonMapper;
@@ -205,6 +209,67 @@ public class MeetupController {
 	@GetMapping("/{code}/result")
 	public MeetupResult result(@PathVariable String code) {
 		return resultService.result(code);
+	}
+
+	/**
+	 * 투표를 연다(AC-36). 오류: 400(후보 수, 겹치거나 결과에 없는 후보), 401(인증), 404(없는 코드), 403(모임장 아님),
+	 * 409(`calculating`, `phase`).
+	 */
+	@PostMapping("/{code}/poll")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void openPoll(@PathVariable String code, @AuthenticationPrincipal AuthUseCases.Identity identity,
+			@RequestBody PollOpenRequest request) {
+		String userId = identity.userId();
+		validate(request);
+		pollService.open(code, userId, request);
+	}
+
+	/**
+	 * 투표하거나 표를 바꾼다(AC-37). 로그인 없이 된다. 오류: 400(본문, 후보가 아닌 장소), 429, 404(없는 코드),
+	 * 403(프로필 없음), 409(`poll-closed`, `phase`).
+	 */
+	@PutMapping("/{code}/poll/votes/me")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void vote(@PathVariable String code, @AuthenticationPrincipal AuthUseCases.Identity identity,
+			@CookieValue(name = COOKIE, required = false) String cookie, @RequestBody PlaceChoiceRequest request,
+			HttpServletRequest http) {
+		validate(request);
+		countAnonymous(identity, code, http);
+		pollService.vote(code, userId(identity), cookie, request.placeId());
+	}
+
+	/** 마감한다(AC-40). 오류: 401(인증), 404(없는 코드), 403(모임장 아님), 409(`no-votes`, `phase`). */
+	@PostMapping("/{code}/poll/close")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void closePoll(@PathVariable String code, @AuthenticationPrincipal AuthUseCases.Identity identity) {
+		pollService.close(code, identity.userId());
+	}
+
+	/** 동점으로 닫힌 투표를 다시 연다(AC-40). 오류: 401(인증), 404(없는 코드), 403(모임장 아님), 409(`phase`). */
+	@PostMapping("/{code}/poll/reopen")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void reopenPoll(@PathVariable String code, @AuthenticationPrincipal AuthUseCases.Identity identity) {
+		pollService.reopen(code, identity.userId());
+	}
+
+	/**
+	 * 정하거나 바꾼다(AC-41). 오류: 400(본문, 고를 수 없는 장소), 401(인증), 404(없는 코드), 403(모임장 아님),
+	 * 409(`calculating`, `phase`).
+	 */
+	@PutMapping("/{code}/decision")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void decide(@PathVariable String code, @AuthenticationPrincipal AuthUseCases.Identity identity,
+			@RequestBody PlaceChoiceRequest request) {
+		String userId = identity.userId();
+		validate(request);
+		pollService.decide(code, userId, request.placeId());
+	}
+
+	/** 정하기 취소(AC-41). 오류: 401(인증), 404(없는 코드), 403(모임장 아님), 409(`phase`). */
+	@DeleteMapping("/{code}/decision")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void cancelDecision(@PathVariable String code, @AuthenticationPrincipal AuthUseCases.Identity identity) {
+		pollService.cancelDecision(code, identity.userId());
 	}
 
 	private void countAnonymous(AuthUseCases.Identity identity, String code, HttpServletRequest http) {

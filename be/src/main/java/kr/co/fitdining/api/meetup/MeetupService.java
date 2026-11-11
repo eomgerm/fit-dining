@@ -19,6 +19,7 @@ import kr.co.fitdining.api.meetup.area.MeetupAreaSearch;
 import kr.co.fitdining.api.meetup.area.MeetupPlaces;
 import kr.co.fitdining.api.meetup.domain.AreaKind;
 import kr.co.fitdining.api.meetup.domain.CalculationState;
+import kr.co.fitdining.api.meetup.domain.DecisionMethod;
 import kr.co.fitdining.api.meetup.domain.MeetupCategory;
 import kr.co.fitdining.api.meetup.domain.MeetupCodes;
 import kr.co.fitdining.api.meetup.domain.MeetupLimits;
@@ -185,7 +186,7 @@ public class MeetupService {
 		MeetupQuestions questions = questionSource.questions(meetup);
 		MeetupPermissions.Situation situation = new MeetupPermissions.Situation(meetup.getPhase(), requester.role(),
 				requester.hasProfile(), false, latest != null && latest.getState() == CalculationState.RUNNING,
-				outdated, meetup.getPollState(), false, requester.convertible());
+				outdated, meetup.getPollState(), meetup.reopenable(), requester.convertible());
 		MeetupSnapshot.Info info = new MeetupSnapshot.Info(
 				new MeetupSnapshot.Area(meetup.getAreaKind(), meetup.getAreaName()), meetup.getCategory(),
 				meetup.getMeetDate(), meetup.getMeetTime() == null ? null : meetup.getMeetTime().format(HH_MM),
@@ -202,7 +203,37 @@ public class MeetupService {
 				pendingCount(meetup, joined),
 				latest == null ? null : new MeetupSnapshot.Calculation(latest.getCalcId(), latest.getState(),
 						latest.getStartedAt(), latest.getTasteCount(), outdated),
-				success == null ? null : success.getCalcId());
+				success == null ? null : success.getCalcId(), poll(meetup, joined, requester), decision(meetup));
+	}
+
+	/** 익명 투표에는 표 수와 투표한 수만 싣는다. 내 표는 그 표를 던진 브라우저나 그 회원에게만 준다(AC-38, AC-39). */
+	private static MeetupSnapshot.Poll poll(Meetup meetup, List<MeetupProfile> joined,
+			MeetupRequesters.Requester requester) {
+		if (meetup.getPollState() == null) {
+			return null;
+		}
+		boolean anonymous = meetup.anonymousPoll();
+		MeetupPollTally tally = MeetupPollTally.of(meetup, joined);
+		List<MeetupSnapshot.Candidate> candidates = tally.voters().entrySet().stream()
+				.map(entry -> new MeetupSnapshot.Candidate(entry.getKey(), entry.getValue().size(),
+						anonymous ? null : List.copyOf(entry.getValue())))
+				.toList();
+		MeetupProfile mine = requester.profile();
+		boolean voted = mine != null && mine.getVotePlaceId() != null;
+		boolean ownVote = voted && (!anonymous || mine.member()
+				|| requester.sessionId() != null && requester.sessionId().equals(mine.getVoteSessionId()));
+		return new MeetupSnapshot.Poll(meetup.getPollState(), anonymous, meetup.tiedPoll(),
+				meetup.getPollTieVotes(), meetup.reopenable(),
+				candidates, tally.votedCount(), tally.notVoted().size(), anonymous ? null : tally.notVoted(),
+				mine == null ? null : voted, ownVote ? mine.getVotePlaceId() : null);
+	}
+
+	private static MeetupSnapshot.Decision decision(Meetup meetup) {
+		if (meetup.getDecidedPlaceId() == null) {
+			return null;
+		}
+		return new MeetupSnapshot.Decision(meetup.getDecidedPlaceId(), meetup.getDecidedHow(),
+				meetup.getDecidedHow() == DecisionMethod.PICK ? meetup.getPollTieVotes() : null);
 	}
 
 	private static MeetupSnapshot.Profile profileView(Meetup meetup, MeetupProfile profile,

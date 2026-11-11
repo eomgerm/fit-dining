@@ -21,8 +21,8 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 /**
- * 모임 안의 참여자 한 명과 모임 취향({@code meetup_profiles}, D-5). 프로필과 취향은 한 화면에서 함께 남기므로 한 행이다.
- * 표의 칸은 투표 단계에서 매핑한다.
+ * 모임 안의 참여자 한 명과 모임 취향, 표({@code meetup_profiles}, D-5). 프로필과 취향은 한 화면에서 함께 남기므로 한
+ * 행이고, 표도 프로필마다 하나라 이 행에 둔다.
  */
 @Entity
 @Table(name = "meetup_profiles")
@@ -70,6 +70,12 @@ public class MeetupProfile {
 	@Column(nullable = false)
 	private Instant tasteUpdatedAt;
 
+	/** 고른 후보. 투표하지 않았으면 null이다. 한 프로필은 한 표다(D-5). */
+	private Long votePlaceId;
+
+	/** 표를 던진 모임 쿠키 세션. 로그인으로 던진 표면 null이고, 세션이 지워지면 비워진다(D-7). */
+	private Long voteSessionId;
+
 	public MeetupProfile(Long meetupId, String name, int color, String userId, Taste taste, Instant now) {
 		this.meetupId = meetupId;
 		this.name = name;
@@ -94,6 +100,12 @@ public class MeetupProfile {
 
 	public boolean member() {
 		return userId != null;
+	}
+
+	/** 표를 던지거나 바꾼다(AC-37). */
+	public void vote(long placeId, Long sessionId) {
+		this.votePlaceId = placeId;
+		this.voteSessionId = sessionId;
 	}
 
 	public boolean ownedBy(String requester) {

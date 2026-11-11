@@ -18,6 +18,10 @@ public class MeetupConflictException extends RuntimeException {
 		HOST_PROFILE("host-profile", "모임장 프로필은 지울 수 없어요."),
 		/** 계산 중에 다시 추천받기 */
 		CALCULATING("calculating", "지금 추천을 찾고 있어요."),
+		/** 닫힌 투표에 투표 */
+		POLL_CLOSED("poll-closed", "투표가 마감됐어요."),
+		/** 표 없이 마감 */
+		NO_VOTES("no-votes", "아직 아무도 투표하지 않았어요."),
 		/** 지금 상태에서 할 수 없는 동작. 확장 필드 {@code phase}에 지금 상태를 싣는다. */
 		PHASE("phase", "지금은 할 수 없는 동작이에요.");
 

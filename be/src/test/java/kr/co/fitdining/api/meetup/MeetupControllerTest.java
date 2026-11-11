@@ -105,6 +105,9 @@ class MeetupControllerTest {
 	MeetupResultService resultService;
 
 	@MockitoBean
+	MeetupPollService pollService;
+
+	@MockitoBean
 	MeetupWriteLimiter writeLimiter;
 
 	@MockitoBean
@@ -249,7 +252,7 @@ class MeetupControllerTest {
 						null, null, null, null, "민재", LocalDate.of(2026, 11, 18)),
 				new MeetupQuestions(true, true, true, false),
 				new MeetupSnapshot.Me(MeetupRole.VIEWER, null, false, null, null), List.of(MeetupAction.JOIN),
-				List.of(), null, null, null);
+				List.of(), null, null, null, null, null);
 
 		@Test
 		@DisplayName("스냅숏_로그인없이도_200이고값없는속성은빠진다")
@@ -581,6 +584,123 @@ class MeetupControllerTest {
 		void result_none_returnsNotFound() throws Exception {
 			when(resultService.result(CODE)).thenThrow(new MeetupResultNotFoundException());
 			expectProblem(get("/api/v1/meetups/{code}/result", CODE), 404);
+		}
+
+	}
+
+	@Nested
+	@DisplayName("투표와 정하기")
+	class Polls {
+
+		private MockHttpServletRequestBuilder asHost(MockHttpServletRequestBuilder request) {
+			return request.with(SessionTestSupport.csrf()).with(SessionTestSupport.session(USER_ID));
+		}
+
+		private MockHttpServletRequestBuilder json(MockHttpServletRequestBuilder request, String body) {
+			return request.contentType(MediaType.APPLICATION_JSON).content(body);
+		}
+
+		@Test
+		@DisplayName("투표열기_후보와익명여부를_서비스에넘기고204다")
+		void openPoll_valid_passesRequest() throws Exception {
+			mockMvc.perform(json(asHost(post("/api/v1/meetups/{code}/poll", CODE)),
+							"{\"placeIds\":[3,1,2,5,4],\"anonymous\":false}"))
+					.andExpect(status().isNoContent());
+			verify(pollService).open(CODE, USER_ID,
+					new kr.co.fitdining.api.meetup.dto.PollOpenRequest(List.of(3L, 1L, 2L, 5L, 4L), false));
+		}
+
+		@ParameterizedTest
+		@ValueSource(strings = {"{\"placeIds\":[1]}", "{\"placeIds\":[1,2,3,4,5,6]}", "{\"placeIds\":[1,null]}",
+				"{}", "{\"placeIds\":[1,2],\"title\":\"x\"}"})
+		@DisplayName("투표열기_후보가2곳미만이거나5곳을넘거나모르는속성이면_400이다")
+		void openPoll_invalidBody_returnsBadRequest(String body) throws Exception {
+			expectProblem(json(asHost(post("/api/v1/meetups/{code}/poll", CODE)), body), 400);
+			verify(pollService, never()).open(anyString(), anyString(), any());
+		}
+
+		@Test
+		@DisplayName("투표열기_로그인하지않으면_401이다")
+		void openPoll_anonymous_returnsUnauthorized() throws Exception {
+			expectProblem(json(post("/api/v1/meetups/{code}/poll", CODE).with(SessionTestSupport.csrf()),
+					"{\"placeIds\":[1,2]}"), 401);
+		}
+
+		@Test
+		@DisplayName("투표_로그인없이도_모임쿠키를넘기고쓰기한도를센다")
+		void vote_anonymous_passesCookieAndCounts() throws Exception {
+			mockMvc.perform(json(put("/api/v1/meetups/{code}/poll/votes/me", CODE).with(SessionTestSupport.csrf())
+							.cookie(new Cookie("fitdining_meetup", "token-1")), "{\"placeId\":7}"))
+					.andExpect(status().isNoContent());
+			verify(writeLimiter).count(eq(CODE), anyString());
+			verify(pollService).vote(CODE, null, "token-1", 7L);
+		}
+
+		@Test
+		@DisplayName("투표_CSRF토큰이없으면_403이다")
+		void vote_withoutCsrf_returnsForbidden() throws Exception {
+			expectProblem(json(put("/api/v1/meetups/{code}/poll/votes/me", CODE), "{\"placeId\":7}"), 403);
+			verify(pollService, never()).vote(anyString(), any(), any(), org.mockito.ArgumentMatchers.anyLong());
+		}
+
+		@Test
+		@DisplayName("투표_장소가없으면_400이다")
+		void vote_missingPlace_returnsBadRequest() throws Exception {
+			expectProblem(json(put("/api/v1/meetups/{code}/poll/votes/me", CODE).with(SessionTestSupport.csrf()),
+					"{}"), 400);
+		}
+
+		@Test
+		@DisplayName("투표_닫힌투표면_409와종류를받는다")
+		void vote_closed_returnsPollClosed() throws Exception {
+			doThrow(new MeetupConflictException(Conflict.POLL_CLOSED)).when(pollService)
+					.vote(CODE, null, null, 7L);
+			mockMvc.perform(json(put("/api/v1/meetups/{code}/poll/votes/me", CODE).with(SessionTestSupport.csrf()),
+							"{\"placeId\":7}"))
+					.andExpect(status().isConflict())
+					.andExpect(jsonPath("$.type").value("urn:fitdining:meetup:poll-closed"));
+		}
+
+		@Test
+		@DisplayName("마감_표가없으면_409와종류를받는다")
+		void closePoll_noVotes_returnsNoVotes() throws Exception {
+			doThrow(new MeetupConflictException(Conflict.NO_VOTES)).when(pollService).close(CODE, USER_ID);
+			mockMvc.perform(asHost(post("/api/v1/meetups/{code}/poll/close", CODE)))
+					.andExpect(status().isConflict())
+					.andExpect(jsonPath("$.type").value("urn:fitdining:meetup:no-votes"));
+		}
+
+		@Test
+		@DisplayName("투표계속하기_모임장이면_204다")
+		void reopenPoll_host_returnsNoContent() throws Exception {
+			mockMvc.perform(asHost(post("/api/v1/meetups/{code}/poll/reopen", CODE)))
+					.andExpect(status().isNoContent());
+			verify(pollService).reopen(CODE, USER_ID);
+		}
+
+		@Test
+		@DisplayName("정하기_장소를_서비스에넘기고204다")
+		void decide_valid_passesPlace() throws Exception {
+			mockMvc.perform(json(asHost(put("/api/v1/meetups/{code}/decision", CODE)), "{\"placeId\":9}"))
+					.andExpect(status().isNoContent());
+			verify(pollService).decide(CODE, USER_ID, 9L);
+		}
+
+		@Test
+		@DisplayName("정하기_계산중이면_409와종류를받는다")
+		void decide_running_returnsCalculating() throws Exception {
+			doThrow(new MeetupConflictException(Conflict.CALCULATING)).when(pollService).decide(CODE, USER_ID, 9L);
+			mockMvc.perform(json(asHost(put("/api/v1/meetups/{code}/decision", CODE)), "{\"placeId\":9}"))
+					.andExpect(status().isConflict())
+					.andExpect(jsonPath("$.type").value("urn:fitdining:meetup:calculating"));
+		}
+
+		@Test
+		@DisplayName("정하기취소_로그인하지않으면_401이고모임장이아니면_403이다")
+		void cancelDecision_notHost_isRejected() throws Exception {
+			expectProblem(delete("/api/v1/meetups/{code}/decision", CODE).with(SessionTestSupport.csrf()), 401);
+			doThrow(new MeetupForbiddenException()).when(pollService).cancelDecision(CODE, USER_ID);
+			expectProblem(asHost(delete("/api/v1/meetups/{code}/decision", CODE)), 403);
 		}
 
 	}

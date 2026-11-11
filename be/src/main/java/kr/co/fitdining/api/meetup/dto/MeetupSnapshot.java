@@ -5,15 +5,17 @@ import java.time.LocalDate;
 import java.util.List;
 import kr.co.fitdining.api.meetup.domain.AreaKind;
 import kr.co.fitdining.api.meetup.domain.CalculationState;
+import kr.co.fitdining.api.meetup.domain.DecisionMethod;
 import kr.co.fitdining.api.meetup.domain.MeetupAction;
 import kr.co.fitdining.api.meetup.domain.MeetupCategory;
 import kr.co.fitdining.api.meetup.domain.MeetupPhase;
 import kr.co.fitdining.api.meetup.domain.MeetupQuestions;
 import kr.co.fitdining.api.meetup.domain.MeetupRole;
+import kr.co.fitdining.api.meetup.domain.PollState;
 import kr.co.fitdining.api.meetup.domain.Taste;
 
 /**
- * 모임의 지금 상태를 한 번에 주는 응답(D-9). 값이 없는 속성은 빠진다. 투표와 정한 곳은 그 기능을 만들 때 더한다.
+ * 모임의 지금 상태를 한 번에 주는 응답(D-9). 값이 없는 속성은 빠진다.
  *
  * @param phase 저장한 상태
  * @param afterMeetup 모임 뒤인지
@@ -25,6 +27,8 @@ import kr.co.fitdining.api.meetup.domain.Taste;
  * @param pendingCount 아직 취향을 남기지 않은 수. 인원을 정했고 남긴 수가 인원보다 적을 때만 있다.
  * @param calculation 가장 최근 계산. 추천받은 적이 없으면 빠진다.
  * @param resultCalculationId 마지막으로 성공한 계산. 결과는 이 값이 바뀔 때만 다시 받는다.
+ * @param poll 투표. 연 적이 없으면 빠진다.
+ * @param decision 정한 곳. 없으면 빠진다.
  */
 public record MeetupSnapshot(
 		MeetupPhase phase,
@@ -36,8 +40,46 @@ public record MeetupSnapshot(
 		List<Profile> profiles,
 		Integer pendingCount,
 		Calculation calculation,
-		Long resultCalculationId
+		Long resultCalculationId,
+		Poll poll,
+		Decision decision
 ) {
+
+	/**
+	 * 투표(AC-38, AC-39). 익명 투표에는 누가 어디를 골랐는지와 투표하지 않은 사람이 없다.
+	 *
+	 * @param state 열림, 닫힘
+	 * @param anonymous 익명 투표인지
+	 * @param tie 동점으로 마감했는지. 마감할 때 고정한 값이다.
+	 * @param tieVotes 동점으로 마감했을 때 고정한 표 수. 동점이 아니면 빠진다.
+	 * @param reopenable 동점으로 닫혀 투표를 계속할 수 있는지
+	 * @param candidates 후보. 모임장이 고른 순서다.
+	 * @param votedCount 투표한 수
+	 * @param notVotedCount 투표하지 않은 수
+	 * @param notVoted 투표하지 않은 프로필. 이름이 보이는 투표에만 있다.
+	 * @param hasVoted 내 프로필이 투표했는지. 프로필이 있을 때만 있다.
+	 * @param myVote 내가 고른 곳. 익명 투표에서는 그 표를 던진 브라우저나 그 회원에게만 있다.
+	 */
+	public record Poll(PollState state, boolean anonymous, boolean tie, Integer tieVotes, boolean reopenable,
+			List<Candidate> candidates, int votedCount, int notVotedCount, List<Long> notVoted, Boolean hasVoted,
+			Long myVote) {
+	}
+
+	/**
+	 * @param placeId 장소 id
+	 * @param votes 표 수
+	 * @param voters 고른 프로필. 이름이 보이는 투표에만 있다.
+	 */
+	public record Candidate(long placeId, int votes, List<Long> voters) {
+	}
+
+	/**
+	 * @param placeId 정한 장소
+	 * @param method 정한 방법
+	 * @param tieVotes 동점에서 고른 경우의 동점 표 수. 그 밖에는 빠진다.
+	 */
+	public record Decision(long placeId, DecisionMethod method, Integer tieVotes) {
+	}
 
 	/**
 	 * @param area 모임 지역

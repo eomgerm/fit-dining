@@ -11,18 +11,21 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.List;
 import java.util.Objects;
 import kr.co.fitdining.api.meetup.domain.AreaKind;
+import kr.co.fitdining.api.meetup.domain.DecisionMethod;
 import kr.co.fitdining.api.meetup.domain.MeetupCategory;
 import kr.co.fitdining.api.meetup.domain.MeetupPhase;
 import kr.co.fitdining.api.meetup.domain.PollState;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /**
- * 모임 한 건({@code meetups}, D-5). 모임장은 회원 id 값으로만 든다. 투표 후보, 정한 곳, 해석한 조건의 칸은 그
- * 기능을 만들 때 매핑한다.
+ * 모임 한 건({@code meetups}, D-5). 모임장은 회원 id 값으로만 든다. 해석한 조건의 칸은 추천 연동 단계에서 매핑한다.
  */
 @Entity
 @Table(name = "meetups")
@@ -76,9 +79,26 @@ public class Meetup {
 	@Column(nullable = false)
 	private Instant infoUpdatedAt;
 
-	/** 투표 상태. 연 적이 없으면 null이고, 한 번 열면 비우지 않는다(D-5). 여는 일은 투표 단계에서 더한다. */
+	/** 투표 상태. 연 적이 없으면 null이고, 한 번 열면 비우지 않는다(D-5). */
 	@Enumerated(EnumType.STRING)
 	private PollState pollState;
+
+	private Boolean pollAnonymous;
+
+	/** 투표 후보. 모임장이 고른 순서다. */
+	@JdbcTypeCode(SqlTypes.ARRAY)
+	@Column(columnDefinition = "bigint[]")
+	private Long[] pollPlaceIds;
+
+	/** 동점으로 마감했을 때 고정한 표 수. 다시 열면 비운다(D-5). */
+	private Integer pollTieVotes;
+
+	private Long decidedPlaceId;
+
+	@Enumerated(EnumType.STRING)
+	private DecisionMethod decidedHow;
+
+	private Instant decidedAt;
 
 	public Meetup(String code, String hostUserId, AreaKind areaKind, String areaName, MeetupCategory category,
 			LocalDate meetDate, LocalTime meetTime, Integer headcount, String description, Instant expiresAt,
@@ -136,6 +156,63 @@ public class Meetup {
 		if (phase == MeetupPhase.WAITING) {
 			phase = MeetupPhase.RESULT;
 		}
+	}
+
+	/** 투표를 연다(AC-36). 연 뒤에는 익명 여부와 후보를 바꾸지 않는다. */
+	public void openPoll(List<Long> placeIds, boolean anonymous) {
+		this.phase = MeetupPhase.VOTING;
+		this.pollState = PollState.OPEN;
+		this.pollAnonymous = anonymous;
+		this.pollPlaceIds = placeIds.toArray(Long[]::new);
+	}
+
+	public List<Long> pollCandidates() {
+		return pollPlaceIds == null ? List.of() : List.of(pollPlaceIds);
+	}
+
+	public boolean anonymousPoll() {
+		return Boolean.TRUE.equals(pollAnonymous);
+	}
+
+	/** 동점으로 마감했는지. 마감할 때 고정한 값이라 뒤에 프로필을 지워도 바뀌지 않는다(AC-40). */
+	public boolean tiedPoll() {
+		return pollTieVotes != null;
+	}
+
+	/** 동점으로 닫힌 투표만 다시 연다(AC-40). */
+	public boolean reopenable() {
+		return phase == MeetupPhase.VOTING && pollState == PollState.CLOSED && tiedPoll();
+	}
+
+	/** 동점이라 마감하고 모임장의 선택을 기다린다(AC-40). */
+	public void closeTied(int votes) {
+		this.pollState = PollState.CLOSED;
+		this.pollTieVotes = votes;
+	}
+
+	/** 투표 계속하기. 이미 받은 표는 그대로 둔다. */
+	public void reopenPoll() {
+		this.pollState = PollState.OPEN;
+		this.pollTieVotes = null;
+	}
+
+	/** 정한다(AC-40, AC-41). 열린 투표가 있었으면 닫는다. */
+	public void decide(long placeId, DecisionMethod method, Instant now) {
+		if (pollState == PollState.OPEN) {
+			pollState = PollState.CLOSED;
+		}
+		this.phase = MeetupPhase.DECIDED;
+		this.decidedPlaceId = placeId;
+		this.decidedHow = method;
+		this.decidedAt = now;
+	}
+
+	/** 정하기 취소. 투표가 있었으면 닫힌 투표로, 없었으면 결과로 돌아간다(AC-41). */
+	public void cancelDecision() {
+		this.phase = pollState == null ? MeetupPhase.RESULT : MeetupPhase.VOTING;
+		this.decidedPlaceId = null;
+		this.decidedHow = null;
+		this.decidedAt = null;
 	}
 
 }

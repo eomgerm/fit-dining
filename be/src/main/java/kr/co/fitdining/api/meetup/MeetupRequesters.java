@@ -28,14 +28,18 @@ public class MeetupRequesters {
 	/**
 	 * @param role 역할. 모임을 만든 회원이면 프로필이 없어도 HOST다.
 	 * @param profile 요청한 사람의 프로필. 없으면 null이다.
+	 * @param sessionId 프로필을 모임 쿠키로 정했으면 그 쿠키 세션. 로그인으로 정했거나 프로필이 없으면 null이다.
 	 * @param convertible 로그인한 회원에게 자기 프로필이 없고 쿠키가 비회원 프로필을 가리키는지(D-25)
 	 */
-	public record Requester(MeetupRole role, MeetupProfile profile, boolean convertible) {
+	public record Requester(MeetupRole role, MeetupProfile profile, Long sessionId, boolean convertible) {
 
 		public boolean hasProfile() {
 			return profile != null;
 		}
 
+	}
+
+	private record CookieProfile(MeetupProfile profile, long sessionId) {
 	}
 
 	/**
@@ -47,22 +51,23 @@ public class MeetupRequesters {
 	public Requester resolve(Meetup meetup, List<MeetupProfile> profiles, String userId, String cookieToken) {
 		MeetupProfile own = userId == null ? null
 				: profiles.stream().filter(profile -> profile.ownedBy(userId)).findFirst().orElse(null);
-		MeetupProfile fromCookie = own == null ? fromCookie(profiles, userId, cookieToken) : null;
-		MeetupProfile profile = own != null ? own : fromCookie;
+		CookieProfile fromCookie = own == null ? fromCookie(profiles, userId, cookieToken) : null;
+		MeetupProfile profile = own != null ? own : fromCookie == null ? null : fromCookie.profile();
 		MeetupRole role = userId != null && meetup.hostedBy(userId) ? MeetupRole.HOST
 				: profile != null ? MeetupRole.PARTICIPANT : MeetupRole.VIEWER;
-		boolean convertible = userId != null && fromCookie != null && !fromCookie.member();
-		return new Requester(role, profile, convertible);
+		boolean convertible = userId != null && fromCookie != null && !fromCookie.profile().member();
+		return new Requester(role, profile, fromCookie == null ? null : fromCookie.sessionId(), convertible);
 	}
 
-	private MeetupProfile fromCookie(List<MeetupProfile> profiles, String userId, String cookieToken) {
+	private CookieProfile fromCookie(List<MeetupProfile> profiles, String userId, String cookieToken) {
 		if (cookieToken == null || cookieToken.isBlank()) {
 			return null;
 		}
 		return sessions.findByTokenHash(hash(cookieToken))
 				.flatMap(session -> profiles.stream()
-						.filter(profile -> profile.getProfileId().equals(session.getProfileId())).findFirst())
-				.filter(profile -> !profile.member() || profile.ownedBy(userId))
+						.filter(profile -> profile.getProfileId().equals(session.getProfileId())).findFirst()
+						.filter(profile -> !profile.member() || profile.ownedBy(userId))
+						.map(profile -> new CookieProfile(profile, session.getSessionId())))
 				.orElse(null);
 	}
 
