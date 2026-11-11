@@ -23,6 +23,12 @@ it("조 제목과 본문, 시행일을 표시한다", () => {
     screen.getByRole("heading", { level: 2, name: "제10조 (약관 변경)" }),
   ).toBeTruthy();
   expect(screen.getByRole("heading", { level: 2, name: "부칙" })).toBeTruthy();
+  expect(
+    screen.getByText(
+      "① 만 14세 이상인 사람은 이 약관과 개인정보처리방침에 동의하고 이메일 또는 카카오·구글 계정으로 가입할 수 있습니다.",
+    ),
+  ).toBeTruthy();
+  expect(screen.queryByText(/카카오·네이버·구글/)).toBeNull();
   // 제8조: 탈퇴는 문의처로 요청하고, 리뷰는 장소 상세에서 지운다
   expect(
     screen.getByText(/개인정보처리방침의 문의처로 탈퇴를 요청할 수 있습니다/),

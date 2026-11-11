@@ -5,10 +5,15 @@ import { markSignedIn } from "../model/signed-in-cookie";
 // 기존 회원은 제공자 화면을 거쳐 BE가 바로 홈(/)으로 보낸다. 그 첫 요청이 검색 홈을 받도록 로그인 표시를 미리 남긴다.
 // 로그인이 끝나면 갱신이 세션 만료까지로 늘리고, 끝나지 않으면 홈의 복구 실패나 10분 만료로 사라진다
 const PENDING_SECONDS = 10 * 60;
+// 네이버 재활성화 시 목록에 "naver"를 추가한다. 기존 스타일과 라벨은 유지한다.
+const PROVIDERS: readonly ("kakao" | "naver" | "google")[] = [
+  "kakao",
+  "google",
+];
 export function SocialButtons({ from }: { from: "login" | "signup" }) {
   return (
     <div className="flex flex-col gap-3">
-      {(["kakao", "naver", "google"] as const).map((provider) => (
+      {PROVIDERS.map((provider) => (
         <a
           key={provider}
           href={`/api/auth/oauth/${provider}?from=${from}`}

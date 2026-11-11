@@ -14,15 +14,17 @@ it.each(["login", "signup"] as const)(
     render(<SocialButtons from={from} />);
     const links = screen.getAllByRole("link");
     expect(links.map((link) => link.getAttribute("href"))).toEqual(
-      ["kakao", "naver", "google"].map(
+      ["kakao", "google"].map(
         (provider) => `/api/auth/oauth/${provider}?from=${from}`,
       ),
     );
     expect(links.map((link) => link.textContent)).toEqual([
       "카카오로 계속하기",
-      "네이버로 계속하기",
       "구글로 계속하기",
     ]);
+    expect(
+      screen.queryByRole("link", { name: "네이버로 계속하기" }),
+    ).toBeNull();
   },
 );
 
