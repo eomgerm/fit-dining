@@ -56,6 +56,8 @@ def test_returns_chips_for_be(seen):
             {"polarity": "LIKE", "label": "마라탕을 먹을 수 있는 곳", "code": None},
         ],
         "model": "gpt-6-luna",
+        # 임베딩 설정이 없으면 벡터 없이 칩만 준다
+        "vectors": [None, None],
     }
 
 
@@ -111,3 +113,20 @@ def test_logs_counts_without_text_or_labels(seen, caplog):
     assert "direct_input" in caplog.text
     for secret in ("시끄럽", "마라탕", FEATURES["QUIET"].label):
         assert secret not in caplog.text
+
+
+def test_uncoded_like_chip_gets_vector_for_guest_device(seen, monkeypatch):
+    calls = []
+
+    def encode(texts, timeout, attempts):
+        calls.append(texts)
+        return [[0.5] * 1024 for _ in texts]
+
+    from fit_ai import embedding
+
+    monkeypatch.setattr(embedding, "encode_queries", encode)
+    resp = client(Dependencies(embedding_ready=True)).post(URL, json={"text": TEXT})
+    assert resp.status_code == 200
+    # 코드가 붙은 QUIET 칩은 벡터가 없고, 코드 없는 좋아함 칩만 벡터가 있다
+    assert resp.json()["vectors"] == [None, [0.5] * 1024]
+    assert calls == [["마라탕을 먹을 수 있는 곳"]]

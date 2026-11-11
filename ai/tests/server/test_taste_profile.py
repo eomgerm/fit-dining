@@ -90,7 +90,10 @@ def test_refresh_sample_7_matches_sample_profile():
     }
     resp = client().post("/v1/taste/refresh", json=body)
     assert resp.status_code == 200
-    assert resp.json() == {"features": SAMPLES["7"]["features"]}
+    assert resp.json() == {
+        "features": SAMPLES["7"]["features"],
+        "embeddingFailed": False,
+    }
 
 
 def test_refresh_flips_noise_pole_after_3_opposite_places():
@@ -366,3 +369,76 @@ def test_refresh_rejects_invalid_body_item(bad):
         "/v1/taste/refresh", json={"bodies": [review_body(1, 23, [bad])]}
     )
     assert resp.status_code == 400
+
+
+def bundles_of(resp):
+    return [
+        (f["text"], f["weight"], f["category"])
+        for f in resp.json()["features"]
+        if f["code"] is None
+    ]
+
+
+def test_profile_bundles_uncoded_like_chips_with_their_vectors(encoded):
+    body = {
+        "tastes": [
+            chip("LIKE", "창가 자리가 있는 곳", None),
+            chip("LIKE", "조용하고 차분한 곳", "QUIET"),
+        ]
+    }
+    resp = client(embedding_ready=True).post("/v1/taste/profile", json=body)
+    assert resp.status_code == 200
+    assert bundles_of(resp) == [("창가 자리가 있는 곳", 1.0, None)]
+    [bundle] = [f for f in resp.json()["features"] if f["code"] is None]
+    assert (
+        bundle["layer"] is None
+        and bundle["like"] is True
+        and len(bundle["vector"]) == 1024
+    )
+
+
+def test_refresh_embeds_review_phrases_and_uses_stored_chip_vectors(encoded):
+    body = {
+        "tastes": [chip("LIKE", "창가 자리가 있는 곳", None) | {"vector": VECTOR}],
+        "bodies": [
+            review_body(
+                1,
+                23,
+                [
+                    item(None, 1, None, "taste", "브런치가 맛있었다")
+                    | {"slot": "메뉴 평가"},
+                    item(None, 1, None, "taste", "부모님과 함께 방문했다")
+                    | {"slot": "방문 맥락"},
+                    item(None, 1, None, "quality", "맛있다") | {"slot": "메뉴 평가"},
+                ],
+            )
+        ],
+    }
+    resp = client(embedding_ready=True).post("/v1/taste/refresh", json=body)
+    assert resp.status_code == 200
+    # 칩은 BE가 보낸 벡터를 쓰고, 리뷰 문장 중 묶음 재료만 임베딩한다
+    assert [texts for texts, _, _ in encoded] == [["브런치가 맛있었다"]]
+    assert resp.json()["embeddingFailed"] is False
+    # 가짜 임베딩이 모든 문장에 같은 벡터를 주어 한 묶음이 된다
+    assert len(bundles_of(resp)) == 4  # 전체와 업종 3개
+
+
+def test_refresh_without_embedding_keeps_codes_and_flags_bundles(encoded):
+    body = {
+        "reviews": [review("QUIET", 1, 23)],
+        "bodies": [
+            review_body(
+                1,
+                23,
+                [
+                    item(None, 1, None, "taste", "브런치가 맛있었다")
+                    | {"slot": "메뉴 평가"}
+                ],
+            )
+        ],
+    }
+    resp = client(embedding_ready=False).post("/v1/taste/refresh", json=body)
+    assert resp.status_code == 200
+    assert resp.json()["embeddingFailed"] is True
+    assert bundles_of(resp) == []
+    assert any(f["code"] == "QUIET" for f in resp.json()["features"])

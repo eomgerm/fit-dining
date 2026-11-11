@@ -334,6 +334,7 @@ dependencies = [
     { name = "numpy" },
     { name = "psycopg", extra = ["binary"] },
     { name = "psycopg-pool" },
+    { name = "scipy" },
 ]
 
 [package.optional-dependencies]
@@ -366,6 +367,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.5.4" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
     { name = "psycopg-pool", specifier = ">=3.2" },
+    { name = "scipy", specifier = ">=1.16" },
     { name = "sentence-transformers", marker = "extra == 'encoder'", specifier = ">=6.2.0" },
     { name = "torch", marker = "extra == 'cpu'", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "fit-ai", extra = "cpu" } },
     { name = "torch", marker = "extra == 'cu128'", index = "https://download.pytorch.org/whl/cu128", conflict = { package = "fit-ai", extra = "cu128" } },

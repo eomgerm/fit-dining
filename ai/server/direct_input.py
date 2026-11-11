@@ -1,7 +1,8 @@
 """직접 입력 해석 API. BE `TasteAnalyzer`가 온보딩 직접 입력마다 한 번 부른다.
 
-해석은 `fit_ai.taste.direct_input`이 하고, 여기서는 칩 목록으로 돌려준다. 명세는
-docs/specs/taste-profile/spec.md 1단계 "해석 API"에 있다.
+해석은 `fit_ai.taste.direct_input`이 하고, 여기서는 칩 목록으로 돌려준다. 코드 없는 좋아함 칩은
+벡터도 함께 준다. 비회원 기기가 저장했다가 검색 요청에 실어 취향 묶음 재료로 쓴다(taste-profile spec
+4단계). 명세는 docs/specs/taste-profile/spec.md 1단계 "해석 API"에 있다.
 """
 
 import time
@@ -14,6 +15,7 @@ from pydantic import StringConstraints
 from fit_ai import gms
 from fit_ai.taste.direct_input import MAX_LEN, MODEL, interpret, to_chips
 from server.common import Body, Dependencies, log, problem
+from server.taste_profile import TasteChip, chip_vectors
 
 
 class InterpretBody(Body):
@@ -29,10 +31,15 @@ class ChipBody(Body):
 
 
 class InterpretResponse(Body):
-    """해석할 취향이 없으면 `tastes`가 빈 목록이다. `model`은 해석한 LLM이다."""
+    """해석할 취향이 없으면 `tastes`가 빈 목록이다. `model`은 해석한 LLM이다.
+
+    `vectors`는 `tastes`와 같은 순서다. 코드 없는 좋아함 칩만 벡터가 있고, 나머지와 임베딩에
+    실패한 칩은 null이다. 임베딩이 실패해도 칩은 돌려준다.
+    """
 
     tastes: list[ChipBody]
     model: str
+    vectors: list[list[float] | None]
 
 
 def router(deps: Dependencies) -> APIRouter:
@@ -55,7 +62,13 @@ def router(deps: Dependencies) -> APIRouter:
                 503, "INTERPRET_FAILED", "취향을 해석하지 못했다. 다시 시도한다"
             )
         chips = to_chips(rows)
-        log("direct_input", chips=len(chips), seconds=seconds)
-        return InterpretResponse(tastes=chips, model=MODEL)
+        vectors = chip_vectors([TasteChip(**c) for c in chips], deps.embedding_ready)
+        log(
+            "direct_input",
+            chips=len(chips),
+            vectors=sum(v is not None for v in vectors),
+            seconds=seconds,
+        )
+        return InterpretResponse(tastes=chips, model=MODEL, vectors=vectors)
 
     return r

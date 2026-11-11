@@ -46,7 +46,7 @@ from fit_ai.match.search import (
     price_range,
     search,
 )
-from fit_ai.match.taste_select import TasteFeature, TasteProfile
+from fit_ai.match.taste_select import Bundle, TasteFeature, TasteProfile
 
 QUERY = "강남역 조용한 카페"
 
@@ -1166,7 +1166,8 @@ class TestPersonaConditions:
         result = run(store)
 
         # 요청문, 페르소나 경로 질의, 점수용 문구를 한 번에 인코딩한다.
-        assert encoder == [["조용한 카페", "책 읽기 좋은 곳", "책 읽기 좋은 곳"]]
+        # 문구가 하나면 이어 붙인 질의와 문구가 같아 한 번만 인코딩한다
+        assert encoder == [["조용한 카페", "책 읽기 좋은 곳"]]
         assert [k for _, _, k in store.route_calls] == [100]
         # 페르소나 경로로 더 뽑은 4번도 점수를 받는다. 페르소나가 없는 3번은 0.5다.
         assert store.item_calls == [(1, [1, 2, 3, 4], frozenset({"CAFE"}))]
@@ -1216,10 +1217,56 @@ class TestPersonaConditions:
 
         run(store)
 
+        # 시설형 문구도 따로 인코딩한다. 취향 묶음의 겹침 검사가 취향형·시설형 문구 모두와 견준다
         assert encoder == [
-            ["조용한 카페", "책 읽기 좋은 곳, 콘센트 있는 곳", "책 읽기 좋은 곳"]
+            [
+                "조용한 카페",
+                "책 읽기 좋은 곳, 콘센트 있는 곳",
+                "책 읽기 좋은 곳",
+                "콘센트 있는 곳",
+            ]
         ]
         assert [n for n, _, _ in store.item_calls] == [1]
+
+
+class TestTasteBundles:
+    """취향 묶음(taste-profile spec 4단계)"""
+
+    def test_bundles_scored_with_request_phrases_in_one_lookup(
+        self, fake_gms: FakeGms, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """검색_요청문구와겹치지않는묶음은_페르소나항목을한번에내서세기로취향점수에넣는다"""
+
+        def axis(i: int) -> tuple[float, ...]:
+            v = [0.0] * 1024
+            v[i] = 1.0
+            return tuple(v)
+
+        # 요청문과 문구는 모두 0번 축이다. 0번 축 묶음은 요청 문구와 겹쳐 빠진다
+        monkeypatch.setattr(
+            embedding, "encode_queries", lambda texts: [list(axis(0)) for _ in texts]
+        )
+        fake_gms(answers(codes=[], features=[READING]))
+        store = PersonaStore(values={1: 0.9, 2: 0.3})
+        taste = TasteProfile(
+            "u1",
+            (),
+            (),
+            (
+                Bundle("조용히 독서할 수 있는 곳", 3.0, None, axis(0)),
+                Bundle("브런치 먹기 좋은 곳", 2.0, None, axis(1)),
+            ),
+        )
+
+        result = run(store, taste=taste)
+
+        # 요청 문구 1개와 남은 묶음 1개를 한 번에 조회한다
+        assert store.item_calls == [(2, [1, 2, 3], frozenset({"CAFE"}))]
+        items = result.cards[0].score_items
+        assert [(i.label, i.source) for i in items] == [
+            ("책 읽기 좋은 곳", Source.REQUEST),
+            ("브런치 먹기 좋은 곳", Source.PREFERENCE),
+        ]
 
 
 def spicy_candidate(place_id: int, spicy: int) -> Candidate:

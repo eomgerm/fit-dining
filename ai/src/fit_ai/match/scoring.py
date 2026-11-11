@@ -102,6 +102,21 @@ class PhraseScores:
 
 
 @dataclass(frozen=True)
+class BundleScores:
+    """취향 묶음 하나의 페르소나 항목(taste-profile spec 4단계).
+
+    Attributes:
+        phrase: 대표 문구
+        weight: 묶음 세기. 취향 점수의 가중 평균에 쓴다.
+        values: 장소 id마다 페르소나 항목(0~1). 없는 장소는 `UNKNOWN`이다.
+    """
+
+    phrase: str
+    weight: float
+    values: Mapping[int, float]
+
+
+@dataclass(frozen=True)
 class PlaceScore:
     """후보 하나의 핏 점수.
 
@@ -290,6 +305,7 @@ def score_places(
     baseline: Baseline,
     avoid_codes: Sequence[str] = (),
     phrases: Sequence[PhraseScores] = (),
+    bundles: Sequence[BundleScores] = (),
 ) -> list[PlaceScore]:
     """후보마다 핏 점수를 내고 점수 내림차순으로 놓는다.
 
@@ -305,6 +321,8 @@ def score_places(
         avoid_codes: 피해 달라는 요청의 코드("안 매운"은 `FOOD_SPICY`). 1 − 조건 점수로
             요청 점수에 넣는다.
         phrases: 코드 없는 조건 문구마다의 페르소나 항목. 요청 점수에 넣는다.
+        bundles: 요청과 겹치지 않아 남은 취향 묶음마다의 페르소나 항목. 묶음 세기로 취향 점수에
+            넣는다.
 
     Returns:
         핏 점수. 점수 내림차순이다.
@@ -336,6 +354,7 @@ def score_places(
                 if t.code not in FLAVORS
                 or baseline.flavor_scored(place.info.category_group, t.code)
             )
+            + tuple(_bundle_item(place, b) for b in bundles)
         )
         fit = fit_score(items)
         scored.append(
@@ -418,6 +437,19 @@ def _phrase_item(place: Place, phrase: PhraseScores) -> ItemScore:
         evidence_count=0,
         from_reviews=False,
         phrase=phrase.phrase,
+    )
+
+
+def _bundle_item(place: Place, bundle: BundleScores) -> ItemScore:
+    return ItemScore(
+        code=None,
+        request=False,
+        like=True,
+        weight=bundle.weight,
+        value=bundle.values.get(place.place_id, UNKNOWN),
+        evidence_count=0,
+        from_reviews=False,
+        phrase=bundle.phrase,
     )
 
 

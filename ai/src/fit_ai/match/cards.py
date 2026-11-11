@@ -196,9 +196,10 @@ def _labels(place: Place, items: list[ItemScore]) -> tuple[str, ...]:
     requested = sorted(
         (item for item in matched if item.request), key=lambda item: -item.value
     )
-    # 세기가 같으면 조건 점수가 높은 쪽이 먼저다.
+    # 세기가 같으면 조건 점수가 높은 쪽이 먼저다. 취향 묶음(코드 없는 취향)은 대표 문구가 리뷰 문장일 수
+    # 있어("돈가스는 바삭하고 속은 촉촉하며…") 태그로 쓰지 않는다. 점수와 근거 항목에는 남는다.
     tastes = sorted(
-        (item for item in matched if not item.request),
+        (item for item in matched if not item.request and item.code is not None),
         key=lambda item: (-item.weight, -item.value),
     )
     chosen = requested + tastes

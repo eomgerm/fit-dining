@@ -57,8 +57,14 @@ from fit_ai.match.interpretation.segments import (
     Menu,
     Price,
 )
-from fit_ai.match.scoring import PhraseScores, baseline_for, scope_of, score_places
-from fit_ai.match.taste_select import TasteProfile, select_tastes
+from fit_ai.match.scoring import (
+    BundleScores,
+    PhraseScores,
+    baseline_for,
+    scope_of,
+    score_places,
+)
+from fit_ai.match.taste_select import TasteProfile, select_bundles, select_tastes
 
 FACILITY_PHRASES = {
     "PARKING": ("주차할 수 있는", "주차"),
@@ -270,15 +276,19 @@ def search(
     nationwide = not where.areas
 
     # 코드 없는 조건 문구는 요청문과 같은 임베딩 호출로 벡터로 바꾼다. 페르소나 경로는 문구를
-    # 이어 붙인 한 질의로 찾고, 점수는 문구마다 따로 낸다(docs/comparison/spec.md 4.2, 4.3).
+    # 이어 붙인 한 질의로 찾고, 점수는 취향형 문구마다 따로 낸다(docs/comparison/spec.md 4.2, 4.3).
+    # 취향 묶음의 겹침 검사는 취향형과 시설형 문구 모두와 견주므로 문구마다 벡터를 만든다.
     route = conditions.route_phrases
     phrases = conditions.persona_phrases
     start = time.perf_counter()
-    query, *rest = _encode(
-        [conditions.embedding_text, *([ROUTE_SEPARATOR.join(route)] if route else [])]
-        + list(phrases)
+    joined = ROUTE_SEPARATOR.join(route) if route else None
+    texts = list(
+        dict.fromkeys([conditions.embedding_text, *([joined] if route else []), *route])
     )
-    route_vector = rest.pop(0) if route else None
+    encoded = dict(zip(texts, _encode(texts), strict=True))
+    query = encoded[conditions.embedding_text]
+    route_vector = encoded[joined] if joined is not None else None
+    phrase_vectors = {phrase: encoded[phrase] for phrase in route}
     embed_seconds = time.perf_counter() - start
 
     start = time.perf_counter()
@@ -304,7 +314,8 @@ def search(
         conditions,
         request.taste,
         store,
-        tuple(zip(phrases, rest, strict=True)),
+        tuple((phrase, phrase_vectors[phrase]) for phrase in phrases),
+        tuple(phrase_vectors.values()),
     )
     trace = replace(trace, score_seconds=time.perf_counter() - start)
     return SearchResult(
@@ -665,6 +676,7 @@ def _score_cards(
     taste: TasteProfile | None,
     store: PlaceStore,
     phrases: Sequence[tuple[str, Sequence[float]]] = (),
+    request_vectors: Sequence[Sequence[float]] = (),
 ) -> tuple[Card, ...]:
     """⓪ 취향을 고르고 ② 점수를 내서 ③ 카드를 만든다. 점수순으로 돌려줄 수만큼 자른다.
 
@@ -674,6 +686,8 @@ def _score_cards(
         taste: 취향. 없으면 None이다.
         store: 장소 저장소
         phrases: 점수에 넣을 코드 없는 조건 문구와 그 벡터
+        request_vectors: 요청의 코드 없는 조건 문구(취향형, 시설형) 벡터. 취향 묶음의 겹침
+            검사에 쓴다.
 
     Raises:
         StoreError: 점수 기준이나 페르소나 항목을 읽지 못했을 때
@@ -681,13 +695,17 @@ def _score_cards(
     # 피해 달라는 맛("안 매운")은 요청이 정한 것이라 그 묶음의 취향도 뺀다.
     avoided = avoided_codes((), conditions.flavors)
     scope = scope_of(conditions.category_group, conditions.avoid_categories)
+    # 취향 묶음은 코드 취향과 같이 업종을 고르고, 요청 문구와 겹치는 묶음은 뺀다. 남은 묶음의
+    # 페르소나 항목은 요청 문구와 한 번의 조회로 함께 낸다(taste-profile spec 4단계).
+    bundles = (
+        select_bundles(taste.bundles, conditions.category_group, request_vectors)
+        if taste
+        else ()
+    )
+    vectors = [vector for _, vector in phrases] + [b.vector for b in bundles]
     values = (
-        store.persona_items(
-            [vector for _, vector in phrases],
-            [c.place.place_id for c in candidates],
-            scope,
-        )
-        if phrases
+        store.persona_items(vectors, [c.place.place_id for c in candidates], scope)
+        if vectors
         else []
     )
     tastes = (
@@ -709,7 +727,11 @@ def _score_cards(
         avoid_codes=avoided,
         phrases=tuple(
             PhraseScores(phrase, v)
-            for (phrase, _), v in zip(phrases, values, strict=True)
+            for (phrase, _), v in zip(phrases, values[: len(phrases)], strict=True)
+        ),
+        bundles=tuple(
+            BundleScores(b.text, b.weight, v)
+            for b, v in zip(bundles, values[len(phrases) :], strict=True)
         ),
     )
     return tuple(build_card(s) for s in scored[:GENERAL_K])

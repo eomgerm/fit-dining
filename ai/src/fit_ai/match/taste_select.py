@@ -12,6 +12,8 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+import numpy as np
+
 from fit_ai.features import FEATURES, FLAVORS
 from fit_ai.match.conditions import CATEGORY_NAMES, Layer
 
@@ -45,6 +47,32 @@ class TasteFeature:
     category: str | None = None
 
 
+BUNDLE_OVERLAP = 0.62
+"""요청 문구와 겹친다고 볼 취향 묶음 대표 문구의 코사인 유사도. 같은 취향·다른 취향 문구 쌍
+172개(Codex 정답)에서 정답과 가장 잘 맞은 값이다(정밀도 0.83, 재현율 0.78, 2026-11-11). Ward 멈춤
+값과 숫자를 함께 쓸 수 없어 따로 맞췄다(taste-profile spec 4단계)."""
+
+BUNDLE_VECTOR_SIZE = 1024
+"""취향 묶음 대표 벡터의 차원"""
+
+
+@dataclass(frozen=True)
+class Bundle:
+    """코드 없는 취향 묶음 하나. 취향 프로필 `features`에서 `code`가 null인 원소다.
+
+    Attributes:
+        text: 대표 문구
+        weight: 묶음 세기. 0보다 큰 수다.
+        category: 업종. 전체 묶음이면 None이다.
+        vector: 대표 문구의 질의 벡터
+    """
+
+    text: str
+    weight: float
+    category: str | None
+    vector: tuple[float, ...]
+
+
 @dataclass(frozen=True)
 class FreeText:
     """코드가 붙지 않은 취향 문장. 취향 프로필의 `free_texts` 원소다.
@@ -74,13 +102,15 @@ class TasteProfile:
 
     Attributes:
         user_id: 사용자 id
-        features: 취향 목록
+        features: 코드 취향 목록
         free_texts: 코드가 붙지 않은 취향 문장 목록
+        bundles: 코드 없는 취향 묶음 목록(업종마다 3개까지)
     """
 
     user_id: str
     features: tuple[TasteFeature, ...]
     free_texts: tuple[FreeText, ...]
+    bundles: tuple[Bundle, ...] = ()
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "TasteProfile":
@@ -102,10 +132,12 @@ class TasteProfile:
             raise ValueError("읽을 수 없는 취향 프로필 형식이다")
         if not isinstance(data["user_id"], str):
             raise TypeError("user_id가 문자열이 아니다")
+        items = _list(data.get("features", []))
         return cls(
             user_id=data["user_id"],
-            features=tuple(_feature(f) for f in _list(data.get("features", []))),
+            features=tuple(_feature(f) for f in items if f.get("code") is not None),
             free_texts=tuple(_free_text(t) for t in _list(data.get("free_texts", []))),
+            bundles=tuple(_bundle(f) for f in items if f.get("code") is None),
         )
 
     @classmethod
@@ -220,6 +252,38 @@ def select_tastes(
     )
 
 
+def select_bundles(
+    bundles: Sequence[Bundle],
+    category_group: str | None,
+    request_vectors: Sequence[Sequence[float]],
+) -> tuple[Bundle, ...]:
+    """요청 업종의 취향 묶음을 고르고 요청 문구와 겹치는 묶음을 뺀다(taste-profile spec 4단계).
+
+    업종은 코드 취향과 같이 고른다. 요청에 업종이 있고 그 업종의 묶음이 있으면 그것을, 아니면 전체
+    묶음을 쓴다. 대표 문구와 요청의 코드 없는 조건 문구(취향형, 시설형) 중 하나라도 유사도가
+    `BUNDLE_OVERLAP` 이상이면 뺀다. 요청이 그 취향을 이미 말했다는 뜻이라 빠진 자리는 채우지 않는다.
+
+    Args:
+        bundles: 취향 묶음
+        category_group: 요청 업종. 업종을 말하지 않았으면 None이다.
+        request_vectors: 요청의 코드 없는 조건 문구 벡터(질의 인코딩, L2 정규화)
+
+    Returns:
+        남은 묶음. 순서는 그대로다.
+    """
+    in_category = [b for b in bundles if b.category == category_group]
+    if category_group is not None and not in_category:
+        in_category = [b for b in bundles if b.category is None]
+    if not request_vectors or not in_category:
+        return tuple(in_category)
+    requests = np.asarray(request_vectors, dtype=float)
+    return tuple(
+        b
+        for b in in_category
+        if float(np.max(requests @ np.asarray(b.vector))) < BUNDLE_OVERLAP
+    )
+
+
 def _list(value: object) -> list[dict[str, Any]]:
     if not isinstance(value, list) or not all(isinstance(v, dict) for v in value):
         raise TypeError("객체 목록이 아니다")
@@ -251,6 +315,30 @@ def _feature(data: dict[str, Any]) -> TasteFeature:
         weight=weight,
         category=category,
     )
+
+
+def _bundle(data: dict[str, Any]) -> Bundle:
+    """`features`에서 `code`가 null인 원소 하나를 취향 묶음으로 읽는다."""
+    text, weight, vector = data["text"], data["weight"], data["vector"]
+    category = data.get("category")
+    if not isinstance(text, str) or not text or data.get("like") is not True:
+        raise TypeError("취향 묶음의 text나 like가 다르다")
+    if len(text) > MAX_FREE_TEXT_LENGTH:
+        raise ValueError("취향 묶음 문구가 너무 길다")
+    if not isinstance(weight, int | float) or isinstance(weight, bool):
+        raise TypeError("취향 묶음의 weight가 수가 아니다")
+    if not math.isfinite(weight) or weight <= 0:
+        raise ValueError("취향 묶음의 weight가 범위를 벗어났다")
+    if category is not None and category not in CATEGORY_NAMES:
+        raise ValueError("취향 묶음의 category가 모르는 업종이다")
+    if not isinstance(vector, list) or len(vector) != BUNDLE_VECTOR_SIZE:
+        raise TypeError("취향 묶음의 vector가 1024개 수 목록이 아니다")
+    if not all(
+        isinstance(x, int | float) and not isinstance(x, bool) and math.isfinite(x)
+        for x in vector
+    ):
+        raise TypeError("취향 묶음의 vector가 수 목록이 아니다")
+    return Bundle(text=text, weight=weight, category=category, vector=tuple(vector))
 
 
 def _free_text(data: dict[str, Any]) -> FreeText:

@@ -4,6 +4,7 @@ from fit_ai.match.conditions import CATEGORY_NAMES
 from fit_ai.taste.profile import (
     CATEGORIES,
     body_codes,
+    body_phrases,
     build_profile,
     compute_features,
     onboarding_rows,
@@ -407,3 +408,137 @@ def test_flavor_flips_free_text_with_3_opposite_places_and_majority():
     assert strengths(compute_features(rows)) == approx(
         {("FOOD_SPICY", False): 3 - w(3)}
     )
+
+
+def unit(*weights):
+    """앞쪽 성분만 정한 1024차원 단위 벡터. 같은 방향이면 같은 취향으로 묶인다."""
+    v = [0.0] * 1024
+    for i, x in enumerate(weights):
+        v[i] = x
+    norm = sum(x * x for x in v) ** 0.5
+    return [x / norm for x in v]
+
+
+def chip_phrase(text, vector):
+    return free_text(None) | {"positive_text": text, "vector": vector}
+
+
+def review_phrase(text, place, vector, category="카페", created_at=T0, **kw):
+    return review(
+        None,
+        place,
+        created_at,
+        category=category,
+        positive_text=text,
+        vector=vector,
+        **kw,
+    )
+
+
+def bundle_items(features, category=None):
+    return {
+        f["text"]: f["weight"]
+        for f in features
+        if f["code"] is None and f["category"] == category
+    }
+
+
+def test_body_phrases_keep_liked_taste_sentences_outside_visit_context():
+    items = [
+        {
+            "slot": "메뉴 평가",
+            "code": None,
+            "direction": 1,
+            "kind": "taste",
+            "text": "크림 파스타 소스가 진했다",
+        },
+        {
+            "slot": "메뉴 평가",
+            "code": None,
+            "direction": 1,
+            "kind": "quality",
+            "text": "맛있다",
+        },
+        {
+            "slot": "공간",
+            "code": None,
+            "direction": -1,
+            "kind": "taste",
+            "text": "자리가 불편했다",
+        },
+        {
+            "slot": "방문 맥락",
+            "code": None,
+            "direction": 1,
+            "kind": "taste",
+            "text": "부모님과 함께 방문했다",
+        },
+        {
+            "slot": "방문 목적",
+            "code": "PURPOSE_WORK",
+            "direction": 1,
+            "kind": "taste",
+            "text": None,
+        },
+    ]
+    assert body_phrases(items) == ["크림 파스타 소스가 진했다"]
+
+
+def test_same_taste_phrases_become_one_bundle_and_add_strength():
+    # 설계 4단계 예: "콘센트 많아서 좋았다"와 "노트북 하기 편했다"는 한 묶음이고 세기가 더해진다
+    rows = [
+        review_phrase("콘센트 많아서 좋았다", "a", unit(1, 0.1)),
+        review_phrase("노트북 하기 편했다", "b", unit(1, 0.2)),
+        chip_phrase("브런치 먹기 좋은 곳", unit(0, 0, 1)),
+    ]
+    found = bundle_items(compute_features(rows))
+    # 대표는 유사도 합이 같으면 문구 순서로 고른다. 칩은 리뷰 2곳 뒤라 w(2)다
+    assert found == approx({"노트북 하기 편했다": 2, "브런치 먹기 좋은 곳": w(2)})
+
+
+def test_bundle_element_shape():
+    [bundle] = [
+        f
+        for f in compute_features([chip_phrase("창가 자리가 있는 곳", unit(1))])
+        if f["code"] is None
+    ]
+    assert bundle == {
+        "code": None,
+        "layer": None,
+        "like": True,
+        "weight": 1,
+        "category": None,
+        "text": "창가 자리가 있는 곳",
+        "vector": [round(x, 6) for x in unit(1)],
+    }
+
+
+def test_other_category_review_phrase_counts_half():
+    rows = [review_phrase("국물이 시원했다", "a", unit(1), category="식당")]
+    features = compute_features(rows)
+    assert bundle_items(features) == {"국물이 시원했다": 1}
+    assert bundle_items(features, "RESTAURANT") == {"국물이 시원했다": 1}
+    assert bundle_items(features, "CAFE") == {"국물이 시원했다": 0.5}
+
+
+def test_only_overall_bundles_without_review_phrases():
+    features = compute_features([chip_phrase("창가 자리가 있는 곳", unit(1))])
+    assert {f["category"] for f in features if f["code"] is None} == {None}
+
+
+def test_phrases_without_vector_or_dislikes_are_not_materials():
+    rows = [
+        chip_phrase("창가 자리가 있는 곳", None),
+        free_text(None, -1) | {"positive_text": "x", "vector": unit(1)},
+    ]
+    assert [f for f in compute_features(rows) if f["code"] is None] == []
+
+
+def test_more_than_three_bundles_draw_three_the_same_way_for_same_evidence():
+    rows = [
+        review_phrase(f"취향 {i}", f"p{i}", unit(*([0] * i + [1]))) for i in range(5)
+    ]
+    first = bundle_items(compute_features(rows))
+    again = bundle_items(compute_features([dict(r) for r in reversed(rows)]))
+    assert len(first) == 3
+    assert first == again

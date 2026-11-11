@@ -231,6 +231,25 @@ class TestPhraseAndAvoid:
 
         assert card.labels == ("책 읽기 좋은 곳", "조용해요")
 
+    def test_bundle_item_kept_out_of_tags(self) -> None:
+        """카드_맞은취향묶음은_태그로쓰지않고근거항목에는남긴다"""
+        bundle = ItemScore(
+            None,
+            False,
+            True,
+            3,
+            0.95,
+            0,
+            False,
+            "돈가스는 바삭하고 속은 촉촉하며 고기가 부드러움",
+        )
+
+        card = build_card(scored(item("QUIET", 0.8), bundle))
+
+        assert "돈가스는 바삭하고 속은 촉촉하며 고기가 부드러움" not in card.labels
+        assert card.labels[0] == "조용해요"
+        assert [i.label for i in card.score_items][-1] == bundle.phrase
+
     def test_avoided_request_hidden(self) -> None:
         """카드_피해달라는요청은_점수에만들어가고항목과이유에넣지않는다"""
         card = build_card(

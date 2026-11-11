@@ -1,10 +1,14 @@
 """근거 장부 행 → 취향 프로필(spec 2~6단계). LLM은 쓰지 않는다."""
 
+import random
 from bisect import bisect_right
 from collections import defaultdict
 from collections.abc import Callable
 from datetime import datetime
 from typing import Literal, TypedDict
+
+import numpy as np
+from scipy.cluster.hierarchy import fcluster, linkage
 
 from fit_ai.embedding import MODEL_ID, REVISION, encode_queries
 from fit_ai.features import FEATURES, FLAVORS
@@ -18,6 +22,15 @@ FLIP_PLACES = 3  # 소음 축 방향을 바꾸는 반대 평가 장소 수(PRD F
 NOISE = ("QUIET", "LIVELY")
 CATEGORIES = {"식당": "RESTAURANT", "카페": "CAFE", "술집": "BAR"}
 """리뷰 근거의 업종 → 업종별 취향의 `category`. 값은 검색 요청의 업종 코드와 같다."""
+BUNDLE_STOP = 0.90
+"""Ward 묶기의 멈춤 값. 같은 취향·다른 취향 문구 쌍 172개(Codex 정답)에 회원 한 명분 크기로 맞춰
+같은 묶음에 드는지가 정답과 가장 잘 맞은 값이다(F1 0.76, 2026-11-11, taste-profile spec 4단계)."""
+BUNDLES_PER_CATEGORY = 3
+"""업종마다 쓰는 묶음 수. PinnerSage(KDD 2020)가 사용자마다 대표 3개를 뽑은 것을 따른다."""
+VECTOR_DIGITS = 6
+"""묶음 대표 벡터를 저장할 소수 자리. 코드표 벡터(feature_codes)와 같다."""
+CONTEXT_SLOT = "방문 맥락"
+"""묶음 재료에서 빼는 추출 칸. "부모님과 함께 방문했다"처럼 취향이 아닌 사실이 대부분이다."""
 _ORDER = {code: i for i, code in enumerate(FEATURES)}
 
 
@@ -35,6 +48,7 @@ class Row(TypedDict, total=False):
     quote: str
     positive_text: str
     created_at: str  # ISO 8601, 시간대 포함
+    vector: list[float] | None  # 코드 없는 좋아함 문장의 질의 벡터. 묶음 재료다
 
 
 def onboarding_rows(
@@ -82,6 +96,26 @@ def body_codes(items: list[dict]) -> dict[str, int]:
         else:
             seen[code].add(1)
     return {code: dirs.pop() for code, dirs in seen.items() if len(dirs) == 1}
+
+
+def body_phrases(items: list[dict]) -> list[str]:
+    """리뷰 본문 추출 항목 한 리뷰분 → 취향 묶음 재료 문장(taste-profile spec 4단계).
+
+    코드 없는 항목 중 좋았다는(`direction` 1) 취향(`kind` taste) 문장만 쓴다. "맛있다" 같은 범용
+    품질은 kind가 quality라 빠진다. 방문 맥락 칸은 사실이 대부분이라 뺀다(`CONTEXT_SLOT`).
+    """
+    out = []
+    for it in items:
+        text = (it.get("text") or "").strip()
+        if (
+            it.get("code") is None
+            and it.get("kind") == "taste"
+            and it.get("direction") == 1
+            and it.get("slot") != CONTEXT_SLOT
+            and text
+        ):
+            out.append(text)
+    return list(dict.fromkeys(out))
 
 
 def _noise_sign(r: Row) -> int:
@@ -245,7 +279,8 @@ def compute_features(rows: list[Row]) -> list[dict]:
     """특징마다 좋아하는지와 세기를 정한다. 받은 행은 모두 유효한 근거로 본다.
 
     전체 취향(`category` None)을 내고, 리뷰 근거가 있으면 업종별 취향(`CATEGORIES`)도
-    낸다. 리뷰가 없으면 업종별 취향이 전체 취향과 같아서 내지 않는다.
+    낸다. 리뷰가 없으면 업종별 취향이 전체 취향과 같아서 내지 않는다. 벡터가 있는 코드 없는
+    좋아함 문장은 묶어서 취향 묶음 원소로 뒤에 붙인다(`bundles`).
     """
     coded = _latest_per_place([r for r in rows if r.get("code")])
     weigh = _weigher(rows)
@@ -254,15 +289,115 @@ def compute_features(rows: list[Row]) -> list[dict]:
         axes[_feature_key(r["code"])].append(r)
     overall = {key: _axis(key, found, weigh) for key, found in axes.items()}
     out = _features(overall, None)
-    if not any(r["source"] == "review" for r in coded):
-        return out
-    for category in CATEGORIES.values():
-        per = {
-            key: _category_axis(key, found, weigh, category, overall[key])
-            for key, found in axes.items()
-        }
-        out += _features(per, category)
+    if any(r["source"] == "review" for r in coded):
+        for category in CATEGORIES.values():
+            per = {
+                key: _category_axis(key, found, weigh, category, overall[key])
+                for key, found in axes.items()
+            }
+            out += _features(per, category)
+    return out + bundles(rows, weigh)
+
+
+def bundles(rows: list[Row], weigh: Callable[[Row], float]) -> list[dict]:
+    """코드 없는 취향 문장을 같은 취향끼리 묶어 업종마다 3개를 고른다(taste-profile spec 4단계).
+
+    재료는 코드가 없고 좋아하며 벡터가 있는 행이다(온보딩 직접 입력 칩, 리뷰 본문 문장). Ward
+    방식으로 가까운 것부터 합치고 `BUNDLE_STOP`에서 멈춘다. 대표 문구는 묶음 안에서 다른 문구들과
+    가장 비슷한 문구다. 묶음 세기는 재료마다 (3단계 무게 × 업종 배수)를 더한 값이고, 업종 배수는
+    그 업종 리뷰 1, 다른 업종 리뷰 `OTHER_CATEGORY_SHARE`, 리뷰가 아닌 근거 1이다(전체 묶음은 모두 1).
+    묶음이 3개보다 많으면 세기에 비례해 무작위로 3개를 뽑는다. 씨앗은 그 업종 재료의 (문구, 무게)
+    쌍을 정렬해 이은 문자열이라 근거가 같으면 늘 같은 3개다. 리뷰 재료가 있을 때만 업종별 묶음을 낸다.
+
+    Returns:
+        묶음 원소 `{code: None, layer: None, like: True, weight, category, text, vector}` 목록
+    """
+    materials = [
+        r
+        for r in rows
+        if not r.get("code")
+        and r["direction"] > 0
+        and r.get("vector")
+        and r.get("positive_text")
+    ]
+    if not materials:
+        return []
+    vectors = np.asarray([m["vector"] for m in materials], dtype=float)
+    if len(materials) == 1:
+        labels = [1]
+    else:
+        labels = fcluster(
+            linkage(vectors, method="ward"), BUNDLE_STOP, criterion="distance"
+        ).tolist()
+    members: dict[int, list[int]] = defaultdict(list)
+    for i, label in enumerate(labels):
+        members[label].append(i)
+    groups = [_representative(idx, materials, vectors) for idx in members.values()]
+    groups.sort(key=lambda g: g[0])  # 대표 문구 순. 뽑기 순서가 실행마다 같게 한다
+
+    categories: list[str | None] = [None]
+    if any(m["source"] == "review" for m in materials):
+        categories += list(CATEGORIES.values())
+    out = []
+    for category in categories:
+
+        def weight(m: Row, category: str | None = category) -> float:
+            if category is None or m["source"] != "review":
+                return weigh(m)
+            same = CATEGORIES[m["category"]] == category
+            return weigh(m) * (1 if same else OTHER_CATEGORY_SHARE)
+
+        strengths = [sum(weight(materials[i]) for i in idx) for _, _, idx in groups]
+        seed = "\n".join(
+            sorted(f"{m['positive_text']}\t{weight(m):.3f}" for m in materials)
+        )
+        for k in _draw(strengths, random.Random(seed)):
+            text, vector, _ = groups[k]
+            out.append(
+                {
+                    "code": None,
+                    "layer": None,
+                    "like": True,
+                    "weight": round(strengths[k], WEIGHT_DIGITS),
+                    "category": category,
+                    "text": text,
+                    "vector": [round(float(x), VECTOR_DIGITS) for x in vector],
+                }
+            )
     return out
+
+
+def _representative(
+    idx: list[int], materials: list[Row], vectors: np.ndarray
+) -> tuple[str, np.ndarray, list[int]]:
+    """묶음의 (대표 문구, 대표 벡터, 재료 번호). 대표는 다른 문구들과의 유사도 합이 가장 큰 문구다.
+
+    평균 벡터는 튀는 문구에 끌려 엉뚱한 곳에 갈 수 있어 쓰지 않는다. 합이 같으면 문구 순서로 고른다.
+    """
+    sims = vectors[idx] @ vectors[idx].T
+    totals = sims.sum(axis=1)
+    best = min(
+        range(len(idx)),
+        key=lambda j: (-round(float(totals[j]), 9), materials[idx[j]]["positive_text"]),
+    )
+    return materials[idx[best]]["positive_text"], vectors[idx[best]], idx
+
+
+def _draw(strengths: list[float], rng: random.Random) -> list[int]:
+    """세기에 비례해 `BUNDLES_PER_CATEGORY`개를 겹치지 않게 뽑는다. 그보다 적으면 모두 쓴다."""
+    left = list(range(len(strengths)))
+    if len(left) <= BUNDLES_PER_CATEGORY:
+        return left
+    chosen = []
+    while len(chosen) < BUNDLES_PER_CATEGORY:
+        point = rng.random() * sum(strengths[i] for i in left)
+        for i in left:
+            point -= strengths[i]
+            if point < 0:
+                break
+        chosen.append(i)
+        left.remove(i)
+    return chosen
 
 
 def _free_texts(

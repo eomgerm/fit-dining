@@ -7,7 +7,13 @@
 import pytest
 
 from fit_ai.match.conditions import Layer
-from fit_ai.match.taste_select import TasteFeature, TasteProfile, select_tastes
+from fit_ai.match.taste_select import (
+    Bundle,
+    TasteFeature,
+    TasteProfile,
+    select_bundles,
+    select_tastes,
+)
 
 # spec 샘플 5번 사용자에 소음, 음식 종류 취향과 취향 문장을 더했다.
 PROFILE = {
@@ -269,3 +275,72 @@ class TestSelectCategory:
 
         assert "QUIET" in codes(selected)
         assert "PURPOSE_GROUP" not in codes(selected)
+
+
+def bundle_element(text, vector, weight=1.0, category=None):
+    return {
+        "code": None,
+        "layer": None,
+        "like": True,
+        "weight": weight,
+        "category": category,
+        "text": text,
+        "vector": vector,
+    }
+
+
+def axis_vector(i):
+    v = [0.0] * 1024
+    v[i] = 1.0
+    return v
+
+
+class TestBundles:
+    """취향 묶음(taste-profile spec 4단계)"""
+
+    def test_reads_bundle_elements_apart_from_code_features(self) -> None:
+        """묶음읽기_code가null인원소는_코드취향이아니라묶음으로읽는다"""
+        data = PROFILE | {
+            "features": PROFILE["features"]
+            + [bundle_element("창가 자리가 있는 곳", axis_vector(0), 2.5, "CAFE")]
+        }
+        profile = TasteProfile.from_dict(data)
+
+        assert len(profile.features) == len(PROFILE["features"])
+        assert profile.bundles == (
+            Bundle("창가 자리가 있는 곳", 2.5, "CAFE", tuple(axis_vector(0))),
+        )
+
+    @pytest.mark.parametrize(
+        "broken",
+        [
+            {"vector": [0.1] * 3},
+            {"text": ""},
+            {"weight": 0},
+            {"like": False},
+            {"category": "PUB"},
+        ],
+    )
+    def test_rejects_broken_bundle(self, broken) -> None:
+        """묶음읽기_벡터나문구나세기가틀리면_오류로멈춘다"""
+        data = PROFILE | {"features": [bundle_element("창가", axis_vector(0)) | broken]}
+        with pytest.raises((TypeError, ValueError)):
+            TasteProfile.from_dict(data)
+
+    def test_category_bundles_or_overall(self) -> None:
+        """묶음고르기_요청업종의묶음이있으면그것을_없으면전체묶음을쓴다"""
+        overall = Bundle("전체", 1.0, None, tuple(axis_vector(0)))
+        cafe = Bundle("카페", 1.0, "CAFE", tuple(axis_vector(1)))
+
+        assert select_bundles([overall, cafe], "CAFE", []) == (cafe,)
+        assert select_bundles([overall, cafe], "BAR", []) == (overall,)
+        assert select_bundles([overall, cafe], None, []) == (overall,)
+
+    def test_drops_bundle_close_to_request_phrase(self) -> None:
+        """묶음고르기_요청문구와유사도가기준이상인묶음은_뺀다"""
+        reading = Bundle("조용히 독서할 수 있는 곳", 2.0, None, tuple(axis_vector(0)))
+        brunch = Bundle("브런치 먹기 좋은 곳", 1.0, None, tuple(axis_vector(1)))
+        request = [0.0] * 1024
+        request[0], request[2] = 0.7, 0.714  # 독서 묶음과 코사인 0.7
+
+        assert select_bundles([reading, brunch], None, [request]) == (brunch,)

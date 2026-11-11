@@ -3,7 +3,8 @@
 `/v1/taste/profile`은 온보딩 취향을 저장할 때 한 번 부르고, 코드 없는 LIKE 칩은 문장을 질의로
 인코딩해 `vectors`로 돌려준다(S15P31A302-166). 임베딩이 실패해도 `features`는 돌려준다.
 `/v1/taste/refresh`는 04:00 배치가 리뷰 근거(이유 태그와 본문 추출 항목)를 더해 부르고
-`features`만 돌려준다.
+`features`만 돌려준다. 코드 없는 좋아함 칩과 리뷰 본문 문장은 취향 묶음 재료라 벡터가 필요하다. 칩
+벡터는 BE가 저장한 것을 받고, 리뷰 문장은 갱신 때마다 임베딩 앱으로 만든다(taste-profile spec 4단계).
 계산은 `fit_ai.taste.profile`이 하고, 여기서는 BE 저장 형식(`Preferences`)과 리뷰 근거를
 장부 행으로 바꾼다. 명세는 docs/specs/taste-profile/spec.md 6단계에 있다.
 """
@@ -23,6 +24,7 @@ from fit_ai.taste.profile import (
     CATEGORIES,
     Row,
     body_codes,
+    body_phrases,
     compute_features,
     onboarding_rows,
 )
@@ -52,14 +54,24 @@ MAX_TEXT = 200
 """본문 추출 항목 `text`의 길이 상한. 추출기가 짧은 문장으로 정리한다."""
 MAX_ITEMS = 50
 """리뷰 하나의 본문 추출 항목 수 상한"""
+VECTOR_SIZE = 1024  # `tastes[].vector` 차원. BE `AiTasteClient`도 같은 값을 검사한다
+REFRESH_EMBED_TIMEOUT_SECONDS = 90.0
+"""갱신 때 리뷰 문장을 임베딩할 때 단계마다 기다리는 시간. 04:00 배치의 첫 호출은 임베딩 앱이
+콜드 스타트(17~85초)라 기다린다. 검색처럼 응답을 서두를 일이 없다."""
+REFRESH_EMBED_ATTEMPTS = 2
+"""갱신 때 임베딩을 부르는 최대 횟수(시간 초과가 아닌 실패에서). 공유 모듈 기본값과 같다."""
 
 
 class TasteChip(Body):
-    """해석 API가 준 칩. 계산에는 코드가 있는 칩만 쓴다."""
+    """해석 API가 준 칩. 코드가 있는 칩은 그 코드로 세고, 코드 없는 좋아함 칩은 벡터가 있으면
+    취향 묶음 재료다. `vector`는 갱신 때 BE가 저장한 값을 보낸다. 계산 API는 받지 않아도 직접 만든다."""
 
     polarity: Literal["LIKE", "DISLIKE"]
     label: str = Field(min_length=1, max_length=MAX_LABEL)
     code: Literal[tuple(FEATURES)] | None = None  # BE는 null 속성을 빼고 보낸다
+    vector: list[float] | None = Field(
+        default=None, min_length=VECTOR_SIZE, max_length=VECTOR_SIZE
+    )
 
 
 class ProfileBody(Body):
@@ -87,9 +99,11 @@ class ReviewEvidence(Body):
 class BodyItem(Body):
     """리뷰 본문 추출 항목 하나(`/v1/reviews/extract` 응답의 항목에서 구절을 뺀 것).
 
-    `liked`는 맛 코드만 있다. 코드 없는 항목의 `text`와 `kind`는 아직 계산에 쓰지 않는다.
+    `liked`는 맛 코드만 있다. 코드 없는 항목은 `slot`, `kind`, `text`로 취향 묶음 재료를 고른다
+    (`body_phrases`).
     """
 
+    slot: str | None = Field(default=None, max_length=20)
     code: Literal[tuple(FEATURES)] | None = None
     direction: Literal[1, -1]
     liked: Literal[1, -1] | None = None
@@ -114,7 +128,7 @@ class RefreshBody(ProfileBody):
 
 
 class FeatureBody(Body):
-    """취향 하나. `category`가 null이면 전체 취향, 아니면 그 업종의 취향이다."""
+    """코드 취향 하나. `category`가 null이면 전체 취향, 아니면 그 업종의 취향이다."""
 
     code: str
     layer: str
@@ -123,18 +137,39 @@ class FeatureBody(Body):
     category: str | None
 
 
+class BundleBody(Body):
+    """취향 묶음 하나(taste-profile spec 4단계). `code`와 `layer`는 null이고 `like`는 늘 참이다.
+
+    Attributes:
+        text: 대표 문구
+        vector: 대표 문구의 질의 벡터
+    """
+
+    code: None
+    layer: None
+    like: bool
+    weight: float
+    category: str | None
+    text: str
+    vector: list[float]
+
+
 class RefreshResponse(Body):
-    features: list[FeatureBody]
+    """`embeddingFailed`가 참이면 리뷰 문장 임베딩에 실패해 묶음을 다시 계산하지 못했다. 코드
+    취향만 새 값이고 묶음 원소는 없다. BE는 저장된 묶음을 그대로 두고 갱신 시각을 올리지 않는다."""
+
+    features: list[FeatureBody | BundleBody]
+    embedding_failed: bool = False
 
 
-class ProfileResponse(RefreshResponse):
-    """`vectors`는 요청 `tastes`와 같은 순서다. 코드 없는 LIKE 칩만 벡터가 있고, 나머지와
+class ProfileResponse(Body):
+    """`features`는 갱신 API와 같다. `vectors`는 요청 `tastes`와 같은 순서다. 코드 없는 LIKE 칩만 벡터가 있고, 나머지와
     임베딩에 실패한 칩은 null이다."""
 
+    features: list[FeatureBody | BundleBody]
     vectors: list[list[float] | None]
 
 
-VECTOR_SIZE = 1024  # `tastes[].vector` 차원. BE `AiTasteClient`도 같은 값을 검사한다
 # 임베딩이 콜드 스타트(17~85초)에 걸려도 BE 프로필 타임아웃(3초) 안에 features를 돌려주려고
 # 단계(연결·읽기)마다 1초만 기다리고 다시 부르지 않는다. 최악 2초쯤이다
 EMBED_TIMEOUT_SECONDS = 1.0
@@ -144,11 +179,14 @@ def to_rows(
     body: ProfileBody,
     reviews: Sequence[ReviewEvidence] = (),
     bodies: Sequence[ReviewBody] = (),
+    vectors: Sequence[list[float] | None] | None = None,
 ) -> list[Row]:
     """회원 id 없이 계산한다. 행은 돌려주지 않고 BE도 저장하지 않는다.
 
     본문 근거는 태그 뒤에 둔다. 같은 장소·특징은 가장 늦은 리뷰 하나만 세므로(PRD FR-14) 한
     리뷰에서 태그와 본문이 같은 코드를 말하면 한 번만 세고, 방향이 다르면 태그를 따른다.
+    코드 없는 좋아함 칩과 리뷰 본문 문장은 묶음 재료 행이 된다. 칩 벡터는 `vectors`(칩 순서)가
+    있으면 그것을, 없으면 칩의 `vector`를 쓴다. 리뷰 문장은 벡터 없이 두고 부르는 쪽이 채운다.
     """
     now = datetime.now(UTC).isoformat()
     codes = [MOODS[body.mood]] if body.mood else []
@@ -165,6 +203,19 @@ def to_rows(
         )
         for c in body.tastes
         if c.code
+    ]
+    rows += [
+        Row(
+            user_id=None,
+            code=None,
+            direction=1,
+            source="free_text",
+            positive_text=c.label,
+            vector=c.vector if vectors is None else vectors[i],
+            created_at=now,
+        )
+        for i, c in enumerate(body.tastes)
+        if c.code is None and c.polarity == "LIKE"
     ]
     # 리뷰 이유 태그는 항상 +1이다(spec 2단계 기록 규칙)
     rows += [
@@ -196,7 +247,59 @@ def to_rows(
         for b in bodies
         for code, direction in body_codes([i.model_dump() for i in b.items]).items()
     ]
+    rows += [
+        Row(
+            user_id=None,
+            code=None,
+            direction=1,
+            source="review",
+            place_id=str(b.place_id),
+            review_id=str(b.review_id),
+            category=b.category,
+            revisit_intent=b.revisit_intent,
+            positive_text=text,
+            vector=None,
+            created_at=b.created_at.isoformat(),
+        )
+        for b in bodies
+        for text in body_phrases([i.model_dump() for i in b.items])
+    ]
     return rows
+
+
+def embed_materials(rows: list[Row], ready: bool) -> bool:
+    """벡터가 없는 묶음 재료(코드 없는 좋아함 문장)를 한 번에 임베딩해 행에 채운다.
+
+    Returns:
+        모두 채웠거나 채울 것이 없으면 True, 임베딩 앱이 준비되지 않았거나 실패하면 False
+    """
+    todo = [
+        r
+        for r in rows
+        if r.get("code") is None
+        and r["direction"] > 0
+        and r.get("positive_text")
+        and r.get("vector") is None
+    ]
+    if not todo:
+        return True
+    if not ready:
+        return False
+    try:
+        encoded = embedding.encode_queries(
+            [r["positive_text"] for r in todo],
+            timeout=REFRESH_EMBED_TIMEOUT_SECONDS,
+            attempts=REFRESH_EMBED_ATTEMPTS,
+        )
+    except embedding.EmbeddingUnavailable as e:
+        log("embedding_failed", error=str(e))  # 메시지는 실패 종류뿐이다
+        return False
+    if not all(_valid(v) for v in encoded):
+        log("embedding_failed", error="벡터 모양이 다르다")
+        return False
+    for r, v in zip(todo, encoded, strict=True):
+        r["vector"] = v
+    return True
 
 
 def _valid(vector: list[float]) -> bool:
@@ -232,8 +335,9 @@ def router(deps: Dependencies) -> APIRouter:
 
     @r.post("/v1/taste/profile", response_model=ProfileResponse)
     def profile(body: ProfileBody):
-        features = compute_features(to_rows(body))
+        # 칩 벡터를 먼저 만들어 묶음 재료로 쓴다. 임베딩이 실패하면 묶음 없이 계산한다
         vectors = chip_vectors(body.tastes, deps.embedding_ready)
+        features = compute_features(to_rows(body, vectors=vectors))
         log(
             "taste_profile",
             features=len(features),
@@ -243,13 +347,19 @@ def router(deps: Dependencies) -> APIRouter:
 
     @r.post("/v1/taste/refresh", response_model=RefreshResponse)
     def refresh(body: RefreshBody):
-        features = compute_features(to_rows(body, body.reviews, body.bodies))
+        rows = to_rows(body, body.reviews, body.bodies)
+        embedded = embed_materials(rows, deps.embedding_ready)
+        features = compute_features(rows)
+        if not embedded:
+            # 묶음 일부만 다시 계산하면 재료가 빠진 묶음이 저장되므로 묶음은 모두 빼고 알린다
+            features = [f for f in features if f["code"] is not None]
         log(
             "taste_refresh",
             reviews=len(body.reviews),
             bodies=len(body.bodies),
             features=len(features),
+            embedding_failed=not embedded,
         )
-        return RefreshResponse(features=features)
+        return RefreshResponse(features=features, embedding_failed=not embedded)
 
     return r

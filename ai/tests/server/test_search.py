@@ -43,7 +43,7 @@ from fit_ai.match.search import (
     SearchTrace,
     UserLocation,
 )
-from fit_ai.match.taste_select import FreeText, TasteFeature, TasteProfile
+from fit_ai.match.taste_select import Bundle, FreeText, TasteFeature, TasteProfile
 from server import search as server_search
 from server.app import create_app
 from server.common import Dependencies
@@ -342,6 +342,8 @@ class TestSearch:
                             TasteFeature("SPACIOUS_SEATING", Layer.IMPORTANCE, True, 1),
                         ),
                         (FreeText("창가 자리", True, tuple(VECTOR)),),
+                        # 벡터가 있는 코드 없는 좋아함 칩은 비회원도 취향 묶음이 된다
+                        (Bundle("창가 자리", 1.0, None, tuple(VECTOR)),),
                     ),
                     bounds=MapBounds(sw_lat=37.49, ne_lng=127.04),
                 ),
