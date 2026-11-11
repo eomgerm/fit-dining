@@ -23,12 +23,8 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
 class SocialInfrastructureTests {
-    @Test void kakaoEmailScopeIsOptInAndLegacyCookiesRemainStrictlyValidated() {
-        for (String value : List.of("false", "true")) {
-            var provider = new SocialProviders(environment().withProperty("AUTH_KAKAO_EMAIL_SCOPE_ENABLED", value)).get("kakao");
-            assertEquals(value.equals("true") ? "account_email" : null, provider.scope());
-        }
-        assertNull(new SocialProviders(environment()).get("kakao").scope());
+    @Test void kakaoAlwaysRequestsEmailScopeAndLegacyCookiesRemainStrictlyValidated() {
+        assertEquals("account_email", new SocialProviders(environment()).get("kakao").scope());
         Clock clock = Clock.systemUTC();
         var tokens = new SocialTokens(new NimbusTokenCodec(new byte[32], clock), clock);
         String legacy = tokens.encode("social_signup", "kakao", "subject");
@@ -51,7 +47,7 @@ class SocialInfrastructureTests {
         assertNull(google.email(Map.of("email", "person@example.com")));
         assertNull(google.email(Map.of("email", "invalid", "email_verified", true)));
         var kakao = providers.get("kakao");
-        assertNull(kakao.scope());
+        assertEquals("account_email", kakao.scope());
         assertEquals("person@example.com", kakao.email(Map.of("kakao_account", Map.of(
                 "email", "Person@Example.com", "is_email_valid", true, "is_email_verified", true))));
         for (boolean valid : List.of(true, false)) for (boolean verified : List.of(true, false)) {

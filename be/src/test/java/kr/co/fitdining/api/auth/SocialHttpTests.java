@@ -80,16 +80,15 @@ class SocialHttpTests {
         when(transactions.recordAttempt(any(), any())).thenReturn(true);
     }
 
-    @ParameterizedTest @ValueSource(booleans = {false, true})
-    void kakaoAuthorizationRequestsEmailOnlyWhenEnabled(boolean enabled) throws Exception {
+    @Test
+    void kakaoAuthorizationAlwaysRequestsEmailScope() throws Exception {
         var env = new MockEnvironment().withProperty("AUTH_KAKAO_CLIENT_ID", "id")
-                .withProperty("AUTH_KAKAO_CLIENT_SECRET", "secret")
-                .withProperty("AUTH_KAKAO_EMAIL_SCOPE_ENABLED", Boolean.toString(enabled));
+                .withProperty("AUTH_KAKAO_CLIENT_SECRET", "secret");
         doReturn(new SocialProviders(env).get("kakao")).when(providers).get("kakao");
         String location = mvc.perform(get("/api/auth/oauth/kakao")).andExpect(status().isFound())
                 .andReturn().getResponse().getHeader("Location");
         var query = UriComponentsBuilder.fromUriString(location).build().getQueryParams();
-        assertEquals(enabled ? "account_email" : null, query.getFirst("scope"));
+        assertEquals("account_email", query.getFirst("scope"));
     }
 
     @Test
@@ -334,7 +333,7 @@ class SocialHttpTests {
         assertEquals("http://localhost:3000/api/auth/oauth/" + name + "/callback",
             UriUtils.decode(query.getFirst("redirect_uri"), StandardCharsets.UTF_8));
         assertEquals("code", query.getFirst("response_type"));
-        assertFalse(query.containsKey("scope"));
+        assertEquals(name.equals("kakao") ? "account_email" : null, query.getFirst("scope"));
         String[] payload = tokens.decode(response.getCookie("fitdining_oauth").getValue(), "oauth_state", 4);
         assertEquals(name, payload[0]);
         assertEquals(payload[1], query.getFirst("state"));

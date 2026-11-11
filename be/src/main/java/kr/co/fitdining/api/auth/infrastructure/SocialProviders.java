@@ -13,7 +13,7 @@ public class SocialProviders {
     public SocialProviders(Environment environment) {
         add(environment, "google", "https://accounts.google.com/o/oauth2/v2/auth", "https://oauth2.googleapis.com/token", "https://openidconnect.googleapis.com/v1/userinfo", "openid email", true);
         add(environment, "kakao", "https://kauth.kakao.com/oauth/authorize", "https://kauth.kakao.com/oauth/token", "https://kapi.kakao.com/v2/user/me",
-                Boolean.parseBoolean(environment.getProperty("AUTH_KAKAO_EMAIL_SCOPE_ENABLED", "false")) ? "account_email" : null, true);
+                "account_email", true);
         add(environment, "naver", "https://nid.naver.com/oauth2.0/authorize", "https://nid.naver.com/oauth2.0/token", "https://openapi.naver.com/v1/nid/me", null, false);
     }
 
