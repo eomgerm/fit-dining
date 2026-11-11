@@ -165,11 +165,6 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
   const [invalidArea, setInvalidArea] = useState(false);
   // 사용자가 지도를 끌거나 확대·축소한 뒤 아직 멈추지 않았다. 그 사이에는 홈 영역을 확정하지 않는다(spec 70번)
   const [userMoving, setUserMoving] = useState(false);
-  // 확정 중인 홈 진입 번호. 같은 진입을 두 번 재지 않는다
-  const confirmingEntry = useRef<number | undefined>(undefined);
-  // 확정 시도 번호. 홈을 떠나면 올려, 기다리던 확정의 결과를 버린다
-  const confirmAttempt = useRef(0);
-  const homeVisibleRef = useRef(false);
 
   const saved = useSavedPlaces(bookmarks, savedView);
   const [savedPanel, setSavedPanel] = useState<SavedPanelState>(
@@ -299,35 +294,18 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
     }
   }, [entryFrom]);
 
-  useEffect(() => {
-    homeVisibleRef.current = homeVisible;
-    // 홈을 떠나면(새 검색, 저장한 장소) 기다리던 확정은 버린다. 검색을 취소해 돌아와도 그때 화면으로 다시 잰다(spec 72번)
-    if (!homeVisible) {
-      confirmAttempt.current += 1;
-      confirmingEntry.current = undefined;
-    }
-  });
-
   // 홈이 보이고 지금 진입의 영역이 없으면, 처음 이동이 끝나고 지도가 준비되고 멈춘 뒤 그 화면의 보이는 영역을
-  // 크기 적용 뒤에 읽어 확정한다. 처음 홈 요청, 홈 진입, 버려진 확정 뒤의 복귀가 모두 이 길이다(spec 70번, 72번).
-  // 기다리는 사이 다음 진입이 있었거나 홈을 떠났으면(새 검색, 저장한 장소) 그 결과는 버린다
+  // 읽어 확정한다. 처음 홈 요청, 홈 진입, 지도가 늦게 준비된 홈이 모두 이 길이다(spec 70번, 72번).
+  // 렌더 commit 뒤의 effect라 지도 wrapper는 이미 홈 크기이고, 그 크기를 SDK에 직접 알린 뒤 바로 읽는다
   const confirmHomeArea = useEffectEvent((entry: number) => {
-    if (confirmingEntry.current === entry) return;
-    confirmingEntry.current = entry;
-    const attempt = ++confirmAttempt.current;
-    const coverTop = homeCoverTop();
-    void mapRef.current?.settledBounds(coverTop).then((bounds) => {
-      if (attempt !== confirmAttempt.current) return;
-      confirmingEntry.current = undefined;
-      if (searchStore.getSnapshot().home.entry !== entry) return;
-      if (!homeVisibleRef.current || !bounds) return;
-      const area = normalizeBounds(bounds);
-      if (!isValidBounds(area)) {
-        setInvalidArea(true);
-        return;
-      }
-      searchStore.setHomeBounds(entry, area);
-    });
+    const bounds = mapRef.current?.boundsAfterResize(homeCoverTop());
+    if (!bounds) return;
+    const area = normalizeBounds(bounds);
+    if (!isValidBounds(area)) {
+      setInvalidArea(true);
+      return;
+    }
+    searchStore.setHomeBounds(entry, area);
   });
   const homeReady =
     homeVisible &&

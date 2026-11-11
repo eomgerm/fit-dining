@@ -80,10 +80,6 @@ const LOCATION_PIN_SIZE = 32;
 const PAN_SETTLE_MS = 1500;
 // 이만큼 가까우면 이미 그 위치다(위도·경도 차이, 약 1m)
 const SAME_CENTER_DEG = 0.00001;
-// 지도 크기 차이가 이보다 작으면 같은 크기다. 같은 크기를 측정 방식에 따라 소수점 아래만 다르게 잰다(spec 72번)
-const SAME_SIZE_PX = 1;
-// 지도 크기 적용을 기다리는 상한(spec 72번)
-const SIZE_WAIT_MS = 1000;
 // 결과 맞춤 이동(fitBounds)의 네 방향 여백에 더하는 값. 선택된 핀 크기다(spec 69번)
 const FIT_MARGIN = SELECTED_PIN_SIZE;
 // 결과 맞춤 이동의 확대 정도 상한(fitBounds의 maxZoom). 가까운 몇 곳만 있을 때 과하게 확대하지 않는다
@@ -173,14 +169,6 @@ function ignoreSdkError(call: () => void) {
   } catch {}
 }
 
-// 크기 적용을 기다리는 settledBounds에 알린다. 지도가 없어졌으면 available이 false다
-function notifySizeWaiters(
-  waiters: Set<(available: boolean) => void>,
-  available: boolean,
-) {
-  [...waiters].forEach((waiter) => waiter(available));
-}
-
 // 핀 안의 표시. 순위 번호, 저장한 장소의 북마크, 없음(위치 하나만 보이는 지도) 중 하나다
 export type PinMark = number | "bookmark" | undefined;
 
@@ -193,10 +181,9 @@ export type PlaceMapHandle = {
   // 지도 위쪽 safe-area와 그 UI가 겹친 높이를 뺀 띠를 위경도로 바꾼다. 띠가 너무 작거나 변환이 실패하면
   // getBounds() 전체, 지도가 없으면 undefined
   visibleBounds(coverTop?: number): MapBounds | undefined;
-  // 지도 크기가 SDK에 적용된 뒤의 보이는 영역(spec 72번). 지금 wrapper 크기가 마지막으로 setSize한 크기
-  // (아직 없으면 지도를 만들 때의 크기)와 같으면(1px 미만 차이) 바로, 다르면 크기가 맞는 setSize 뒤에 읽는다.
-  // 1초(SIZE_WAIT_MS)가 지나도 맞지 않으면 그때 화면으로 읽는다. 지도가 실패하거나 없어지면 undefined
-  settledBounds(coverTop?: number): Promise<MapBounds | undefined>;
+  // 지금 wrapper 크기를 SDK에 직접 알린(setSize) 뒤 바로 읽은 보이는 영역(spec 72번). 크기 변화를 기다리지 않는다.
+  // 지도가 없거나 SDK가 던지면 undefined이고, 던지면 지도를 쓸 수 없는 상태가 된다
+  boundsAfterResize(coverTop?: number): MapBounds | undefined;
   // 결과 맞춤 이동(spec 69번). 2곳 이상이면 fitBounds(확대 정도 상한 FIT_MAX_ZOOM), 1곳이면 panTo, 0곳이면 없음.
   // 코드 이동이라 사용자 이동으로 세지 않는다. 지도를 옮기기 시작했으면 true
   fitTo(points: LatLng[], coverTop?: number): boolean;
@@ -255,9 +242,6 @@ export function PlaceMap({
   const markersRef = useRef(
     new Map<number, { marker: NaverMarker; mark?: PinMark; zIndex: number }>(),
   );
-  // SDK에 마지막으로 알린 지도 크기와, 크기 적용을 기다리는 settledBounds들(spec 72번)
-  const appliedSize = useRef<{ width: number; height: number }>(undefined);
-  const sizeWaiters = useRef(new Set<(available: boolean) => void>());
   // 멈춤(idle)을 기다리는 panTo들. 지도를 없애거나 지도가 실패하면 그 자리에서 끝낸다(지도가 없으면 바로 끝난다)
   const pendingPans = useRef(new Set<() => void>());
   // 인증이 실패하면 SDK 내부 값이 비어 어떤 호출이든 던지므로, 그 뒤에는 SDK를 부르지 않는다
@@ -271,7 +255,6 @@ export function PlaceMap({
 
   useEffect(() => {
     const container = containerRef.current;
-    const waiters = sizeWaiters.current;
     const pans = pendingPans.current;
     let cancelled = false;
     const fail = () => setFailed(true);
@@ -294,11 +277,6 @@ export function PlaceMap({
             zoom: start.zoom,
           });
           kept.current = { naver, map };
-          const rect = wrapperRef.current?.getBoundingClientRect();
-          appliedSize.current = rect && {
-            width: rect.width,
-            height: rect.height,
-          };
           setLoaded(kept.current);
         })
         .catch(() => {
@@ -314,7 +292,6 @@ export function PlaceMap({
       if (container?.isConnected) return;
       const map = kept.current?.map;
       kept.current = undefined;
-      notifySizeWaiters(waiters, false);
       [...pans].forEach((finish) => finish());
       ignoreSdkError(() => map?.destroy());
       if (map) unavailable.current?.();
@@ -327,7 +304,6 @@ export function PlaceMap({
 
   useEffect(() => {
     if (!failed) return;
-    notifySizeWaiters(sizeWaiters.current, false);
     [...pendingPans.current].forEach((finish) => finish());
     unavailable.current?.();
   }, [failed]);
@@ -349,8 +325,6 @@ export function PlaceMap({
     const observer = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect;
       guard(() => active.map.setSize(new active.naver.Size(width, height)));
-      appliedSize.current = { width, height };
-      notifySizeWaiters(sizeWaiters.current, true);
     });
     observer.observe(wrapper);
     return () => observer.disconnect();
@@ -520,36 +494,20 @@ export function PlaceMap({
         }
         return handle.getBounds();
       },
-      settledBounds(coverTop) {
-        if (!active) return Promise.resolve(undefined);
-        // setSize에 넘긴 값은 ResizeObserver contentRect인데 지금 크기는 getBoundingClientRect로 잰다.
-        // 소수 화면 배율(125%, 150%)에서는 두 측정이 같은 크기를 0.01px쯤 다르게 내므로 1px 미만 차이는 같은 크기다
-        const sized = () => {
-          const rect = wrapperRef.current?.getBoundingClientRect();
-          const applied = appliedSize.current;
-          return (
-            rect !== undefined &&
-            applied !== undefined &&
-            Math.abs(rect.width - applied.width) < SAME_SIZE_PX &&
-            Math.abs(rect.height - applied.height) < SAME_SIZE_PX
-          );
-        };
-        if (sized()) return Promise.resolve(handle.visibleBounds(coverTop));
-        return new Promise((resolve) => {
-          // finish는 알림이나 상한이 올 때만 불리므로 그때는 timer가 정해져 있다
-          const finish = (available: boolean) => {
-            clearTimeout(timer);
-            sizeWaiters.current.delete(waiter);
-            resolve(available ? handle.visibleBounds(coverTop) : undefined);
-          };
-          const waiter = (available: boolean) => {
-            if (available && !sized()) return;
-            finish(available);
-          };
-          sizeWaiters.current.add(waiter);
-          // 예상 못 한 이유로 크기가 끝내 맞지 않아도 홈이 skeleton에 멈추지 않게, 상한이 지나면 그때 화면으로 읽는다
-          const timer = setTimeout(() => finish(true), SIZE_WAIT_MS);
-        });
+      boundsAfterResize(coverTop) {
+        if (!active) return;
+        const rect = wrapperRef.current?.getBoundingClientRect();
+        try {
+          // 결과 화면(지도 절반)에서 홈(지도 전체)으로 오면 ResizeObserver가 알리기 전이라 SDK는 아직 절반
+          // 크기의 영역을 준다. 지금 크기를 직접 알려 기다리지 않고 읽는다
+          if (rect)
+            active.map.setSize(new active.naver.Size(rect.width, rect.height));
+        } catch {
+          // 인증 실패 알림처럼 렌더링 뒤에 지도를 비운다
+          queueMicrotask(() => setFailed(true));
+          return;
+        }
+        return handle.visibleBounds(coverTop);
       },
       fitTo(points, coverTop) {
         if (!active) return false;

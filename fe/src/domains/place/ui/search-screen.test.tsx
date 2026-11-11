@@ -1984,30 +1984,15 @@ describe("SearchScreen", () => {
         };
       }
 
-      // 크기 알림(ResizeObserver)을 테스트가 보낸다. observe만으로는 알리지 않는다
-      function controlResize() {
-        const callbacks: ResizeObserverCallback[] = [];
+      // 크기 알림(ResizeObserver)이 오지 않는다. 그러면 SDK 크기는 홈 영역 확정이 직접 setSize할 때만 바뀐다
+      function silenceResize() {
         vi.stubGlobal(
           "ResizeObserver",
           class {
-            constructor(callback: ResizeObserverCallback) {
-              callbacks.push(callback);
-            }
             observe() {}
             disconnect() {}
           },
         );
-        return {
-          notify: (width: number, height: number) =>
-            act(() =>
-              callbacks.forEach((callback) =>
-                callback(
-                  [{ contentRect: { width, height } } as ResizeObserverEntry],
-                  {} as ResizeObserver,
-                ),
-              ),
-            ),
-        };
       }
 
       // 지도 바깥 div의 크기만 바꾼다(절반 높이였던 지도가 전체 높이가 됨). 덮는 UI 위 끝은 0이라 띠가 없어
@@ -2051,14 +2036,14 @@ describe("SearchScreen", () => {
           expect(pins.marks().sort()).toEqual(["1", "2"]);
         });
 
-        it("홈 진입의 첫 렌더부터 이전 영역의 카드·핀 없이 skeleton이고, 크기 적용 전 영역이 아니라 적용 뒤 영역으로만 한 번 받는다 (AC-69, AC-70)", async () => {
+        it("홈 진입(결과 화면의 절반 지도 → 전체)의 첫 렌더부터 이전 영역의 카드·핀 없이 skeleton이고, 지금 지도 바깥 크기를 SDK에 직접 알린 뒤의 영역으로 한 번 받는다 (AC-69, AC-70)", async () => {
           const pins = stubMapWithPins();
-          const sizes = controlResize();
+          // 크기 알림(ResizeObserver)은 오지 않는다. 확정이 직접 setSize해야 영역이 AREA_B가 된다
+          silenceResize();
           renderScreen();
           await mapReady();
           await nearbyList();
           await newSearch("역삼 카페");
-          // 지도 바깥 크기는 바뀌었지만 SDK에는 아직 알리지 않았다. 알리면 영역이 AREA_B가 된다
           resizeMapElement(400, 800);
           map.view.afterSize = AREA_B;
 
@@ -2069,93 +2054,9 @@ describe("SearchScreen", () => {
             screen.queryByRole("region", { name: "주변 추천 장소" }),
           ).toBeNull();
           expect(pins.count()).toBe(0);
-          await act(async () => {});
-          expect(nearbyBodies).toHaveLength(1);
-
-          sizes.notify(400, 800);
-
-          await nearbyList();
-          expect(nearbyBodies).toEqual([
-            { mapBounds: BOUNDS },
-            { mapBounds: AREA_B },
-          ]);
-          expect(homeArea().bounds).toEqual(AREA_B);
-        });
-
-        it("크기 알림이 지도 바깥 크기와 다르면(중간 크기) 그 영역으로 확정하지 않고, 크기가 맞는 알림 뒤 영역으로만 한 번 받는다 (AC-70)", async () => {
-          const sizes = controlResize();
-          renderScreen();
-          await mapReady();
-          await nearbyList();
-          await newSearch("역삼 카페");
-          resizeMapElement(400, 800);
-          fireEvent.click(screen.getByRole("button", { name: "새 검색" }));
-
-          // 바깥은 400x800인데 SDK에 알린 크기는 아직 중간이다. 그때 영역(BOUNDS)으로 확정하면 안 된다
-          sizes.notify(400, 600);
-          await act(async () => {});
-          expect(homeArea().bounds).toBeUndefined();
-          expect(skeleton()).toBeTruthy();
-          expect(nearbyBodies).toHaveLength(1);
-
-          map.view.afterSize = AREA_B;
-          sizes.notify(400, 800);
-
-          await nearbyList();
-          expect(nearbyBodies).toEqual([
-            { mapBounds: BOUNDS },
-            { mapBounds: AREA_B },
-          ]);
-          expect(homeArea().bounds).toEqual(AREA_B);
-        });
-
-        // 화면 배율 125%에서 크롬이 잰 값. 지도 바깥 div의 getBoundingClientRect와 ResizeObserver contentRect가
-        // 1px 미만으로 다르다
-        const SCALED_RECT = {
-          width: 1404.1666259765625,
-          height: 764.1666259765625,
-        };
-        const SCALED_CONTENT = { width: 1404.15625, height: 764.15625 };
-
-        it("화면 배율 때문에 크기 알림이 지도 바깥 크기와 1px 미만으로 다르면 같은 크기로 보고 처음 홈 요청을 한 번 보낸다 (AC-70)", async () => {
-          resizeMapElement(SCALED_RECT.width, SCALED_RECT.height);
-          // 브라우저처럼 observe하면 한 번 알리는데, 그 크기는 contentRect로 잰 값이다
-          vi.stubGlobal(
-            "ResizeObserver",
-            class {
-              constructor(private readonly callback: ResizeObserverCallback) {}
-              observe(target: Element) {
-                this.callback(
-                  [
-                    {
-                      target,
-                      contentRect: SCALED_CONTENT,
-                    } as ResizeObserverEntry,
-                  ],
-                  this as unknown as ResizeObserver,
-                );
-              }
-              disconnect() {}
-            },
+          expect(map.created[0].setSize).toHaveBeenLastCalledWith(
+            expect.objectContaining({ width: 400, height: 800 }),
           );
-          renderScreen();
-          await mapReady();
-
-          await nearbyList();
-          expect(nearbyBodies).toEqual([{ mapBounds: BOUNDS }]);
-        });
-
-        it("홈 진입(절반 → 전체)에서 크기 알림이 지도 바깥 크기와 1px 미만으로 다르면 그 알림 뒤 영역으로 한 번 받는다 (AC-70)", async () => {
-          const sizes = controlResize();
-          renderScreen();
-          await mapReady();
-          await nearbyList();
-          await newSearch("역삼 카페");
-          resizeMapElement(SCALED_RECT.width, SCALED_RECT.height);
-          map.view.afterSize = AREA_B;
-          fireEvent.click(screen.getByRole("button", { name: "새 검색" }));
-
-          sizes.notify(SCALED_CONTENT.width, SCALED_CONTENT.height);
 
           await nearbyList();
           expect(nearbyBodies).toEqual([
@@ -2165,203 +2066,35 @@ describe("SearchScreen", () => {
           expect(homeArea().bounds).toEqual(AREA_B);
         });
 
-        it("크기 적용을 기다리는 사이 새 검색을 했으면 그 확정은 버려 요청하지 않고, 다음 홈 진입은 그때 화면으로 받는다 (AC-70)", async () => {
-          const sizes = controlResize();
-          renderScreen();
-          await mapReady();
-          await nearbyList();
-          await newSearch("역삼 카페");
+        it("처음 홈 요청도 지금 지도 바깥 크기를 SDK에 직접 알린 뒤의 영역으로 한 번 받는다 (AC-70)", async () => {
+          silenceResize();
           resizeMapElement(400, 800);
           map.view.afterSize = AREA_B;
-          fireEvent.click(screen.getByRole("button", { name: "새 검색" }));
+          renderScreen();
+          await mapReady();
 
-          await newSearch("강남 술집");
-          sizes.notify(400, 800);
-          await act(async () => {});
-          expect(nearbyBodies).toHaveLength(1);
-
-          fireEvent.click(screen.getByRole("button", { name: "새 검색" }));
           await nearbyList();
-          expect(nearbyBodies).toEqual([
-            { mapBounds: BOUNDS },
-            { mapBounds: AREA_B },
-          ]);
+          expect(map.created[0].setSize).toHaveBeenLastCalledWith(
+            expect.objectContaining({ width: 400, height: 800 }),
+          );
+          expect(nearbyBodies).toEqual([{ mapBounds: AREA_B }]);
         });
 
-        it("크기 적용을 기다리는 사이 홈에서 검색을 보냈다 취소해 돌아오면 이전 확정은 버리고 돌아온 화면의 덮는 UI 위 끝으로 다시 잰다 (AC-70)", async () => {
-          const sizes = controlResize();
+        it("영역을 읽기 전 SDK에 크기를 알리다 던지면(지도 실패) 요청하지 않고 지도 실패 안내를 보인다 (AC-70)", async () => {
+          silenceResize();
           renderScreen();
           await mapReady();
           await nearbyList();
           await newSearch("역삼 카페");
-          // 지도 바깥은 400x800으로 바뀌었고, 홈 아래 묶음의 위 끝은 그때마다 테스트가 정한다
-          let stackTop = 500;
-          const rect = (top: number, height: number) =>
-            ({
-              top,
-              bottom: top + height,
-              left: 0,
-              right: 400,
-              width: 400,
-              height,
-              x: 0,
-              y: top,
-              toJSON() {},
-            }) as DOMRect;
-          const original = HTMLElement.prototype.getBoundingClientRect;
-          vi.spyOn(
-            HTMLElement.prototype,
-            "getBoundingClientRect",
-          ).mockImplementation(function (this: HTMLElement) {
-            if (this.hasAttribute("data-map-state")) return rect(0, 800);
-            if (this.className.includes("bottom-0 flex flex-col")) {
-              return rect(stackTop, 800 - stackTop);
-            }
-            return original.call(this);
+          map.created[0].setSize.mockImplementation(() => {
+            throw new Error("지도 실패");
           });
-          map.view.afterSize = AREA_B;
-          fireEvent.click(screen.getByRole("button", { name: "새 검색" }));
-          await act(async () => {});
 
-          holdSearches();
-          vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-          fireEvent.change(screen.getByRole("textbox", { name: "장소 검색" }), {
-            target: { value: "강남 술집" },
-          });
-          fireEvent.submit(screen.getByRole("search"));
-          await act(() => vi.advanceTimersByTimeAsync(SEARCH_SLOW_MS));
-          vi.useRealTimers();
-          stackTop = 600;
-          fireEvent.click(screen.getByRole("button", { name: "검색 취소" }));
-          await screen.findByRole("textbox", { name: "장소 검색" });
-          await act(async () => {});
-
-          sizes.notify(400, 800);
-
-          await nearbyList();
-          // 돌아온 화면의 위 끝(600)으로 잰 띠 영역 하나로만 받는다. 크기 적용 뒤 화면(AREA_B)의 왼쪽 위
-          // (37.53, 127.06)에서 가짜 지도는 아래로 1000px마다 위도 1도라 swLat이 36.93
-          expect(nearbyBodies).toEqual([
-            { mapBounds: BOUNDS },
-            {
-              mapBounds: {
-                swLat: expect.closeTo(36.93, 3),
-                swLng: expect.closeTo(127.06, 3),
-                neLat: expect.closeTo(37.53, 3),
-                neLng: expect.closeTo(127.46, 3),
-              },
-            },
-          ]);
-          expect(homeArea().bounds).toEqual(nearbyBodies[1].mapBounds);
-        });
-
-        it("크기 적용을 기다리는 사이 화면이 없어지면 영역 없이 끝나 요청하지 않는다 (AC-70)", async () => {
-          controlResize();
-          renderScreen();
-          await mapReady();
-          await nearbyList();
-          await newSearch("역삼 카페");
-          resizeMapElement(400, 800);
           fireEvent.click(screen.getByRole("button", { name: "새 검색" }));
 
-          cleanup();
+          expect(await screen.findByText(MAP_FAILED)).toBeTruthy();
           await act(async () => {});
-
           expect(nearbyBodies).toHaveLength(1);
-        });
-
-        describe("크기 적용 대기는 1초까지다 (AC-70)", () => {
-          // 크기 대기 상한(spec 72번)
-          const SIZE_WAIT_MS = 1000;
-          // 진입 직후 지도 바깥은 400x800인데 SDK에 알린 크기는 아직 그대로인 홈 진입
-          async function enterHomeWaitingForSize() {
-            const sizes = controlResize();
-            renderScreen();
-            await mapReady();
-            await nearbyList();
-            await newSearch("역삼 카페");
-            resizeMapElement(400, 800);
-            vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-            fireEvent.click(screen.getByRole("button", { name: "새 검색" }));
-            await act(async () => {});
-            return sizes;
-          }
-          const advance = (ms: number) =>
-            act(() => vi.advanceTimersByTimeAsync(ms));
-
-          afterEach(() => {
-            vi.useRealTimers();
-          });
-
-          it("크기가 끝내 맞지 않으면 999ms에는 요청이 없고 1초에 그때 화면의 영역으로 한 번 받는다", async () => {
-            await enterHomeWaitingForSize();
-            // 기다리는 동안 크기 알림은 없고, 그때 화면은 AREA_B다
-            map.view.bounds = AREA_B;
-
-            await advance(SIZE_WAIT_MS - 1);
-            expect(nearbyBodies).toHaveLength(1);
-            expect(skeleton()).toBeTruthy();
-            expect(homeArea().bounds).toBeUndefined();
-
-            await advance(1);
-            expect(nearbyBodies).toEqual([
-              { mapBounds: BOUNDS },
-              { mapBounds: AREA_B },
-            ]);
-            expect(homeArea().bounds).toEqual(AREA_B);
-            // 응답을 그리는 React Query 알림도 setTimeout이라 가짜 시간을 조금 더 흘린다
-            await advance(SIZE_WAIT_MS);
-            vi.useRealTimers();
-
-            await nearbyList();
-            expect(nearbyBodies).toHaveLength(2);
-          });
-
-          it("1초 안에 크기가 맞으면 맞은 뒤 영역으로 한 번 받고, 1초가 지나도 다시 확정하지 않는다", async () => {
-            const sizes = await enterHomeWaitingForSize();
-            await advance(500);
-            map.view.afterSize = AREA_B;
-
-            sizes.notify(400, 800);
-            await advance(0);
-            expect(homeArea().bounds).toEqual(AREA_B);
-            // 1초 타이머가 남아 있으면 이 화면으로 다시 확정한다
-            map.view.bounds = AFTER_INITIAL_MOVE;
-            await advance(SIZE_WAIT_MS);
-            vi.useRealTimers();
-
-            await nearbyList();
-            await act(async () => {});
-            expect(nearbyBodies).toEqual([
-              { mapBounds: BOUNDS },
-              { mapBounds: AREA_B },
-            ]);
-            expect(homeArea().bounds).toEqual(AREA_B);
-          });
-
-          it("기다리는 사이 지도가 실패하면 1초가 지나도 요청하지 않는다", async () => {
-            const sizes = await enterHomeWaitingForSize();
-            // SDK가 setSize에서 던지면 지도를 쓸 수 없게 된다
-            map.created[0].setSize.mockImplementation(() => {
-              throw new Error("지도 실패");
-            });
-
-            sizes.notify(400, 800);
-            await advance(SIZE_WAIT_MS);
-            vi.useRealTimers();
-
-            expect(await screen.findByText(MAP_FAILED)).toBeTruthy();
-            expect(nearbyBodies).toHaveLength(1);
-          });
-
-          it("기다리는 사이 화면이 없어지면 1초가 지나도 요청하지 않는다", async () => {
-            await enterHomeWaitingForSize();
-
-            cleanup();
-            await advance(SIZE_WAIT_MS);
-
-            expect(nearbyBodies).toHaveLength(1);
-          });
         });
 
         it("상세에 다녀오면 skeleton 없이 영역·선택한 카드·지도가 그대로이고 요청이 없다 (AC-67)", async () => {
