@@ -96,6 +96,14 @@ public class SecurityConfiguration {
                 "/api/v1/onboarding/taste-analysis").permitAll()
             .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/auth/csrf", "/api/auth/oauth/*", "/api/auth/oauth/*/callback",
                 "/api/v1/places/suggest", "/api/v1/places/ids", "/api/v1/places/*", "/api/v1/places/*/reviews").permitAll()
+            // 모임 공개 경로(meetup D-8). 지역 찾기와 지점 확인은 회원만이라 공개 GET보다 먼저 둔다.
+            .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/meetups/areas", "/api/v1/meetups/area-check").authenticated()
+            .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/meetups/*", "/api/v1/meetups/*/result",
+                "/api/v1/meetups/*/preview").permitAll()
+            .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/v1/meetups/*/profiles",
+                "/api/v1/meetups/*/profiles/*/session").permitAll()
+            .requestMatchers(org.springframework.http.HttpMethod.PUT, "/api/v1/meetups/*/profiles/me/taste",
+                "/api/v1/meetups/*/poll/votes/me").permitAll()
             .anyRequest().authenticated())
             .exceptionHandling(exceptions -> exceptions
                 .authenticationEntryPoint((request, response, exception) -> failure(errors, mapper, new AuthFailure("Authentication required."), request, response))
@@ -110,7 +118,8 @@ public class SecurityConfiguration {
                 String path = path(request);
                 if (path.startsWith("/api/")) response.setHeader("X-Content-Type-Options", "nosniff");
                 if (path.startsWith("/api/auth/") || path.startsWith("/api/v1/users/") || path.startsWith("/api/v1/me/")
-                    || path.startsWith("/api/v1/onboarding/")) response.setHeader("Cache-Control", "no-store");
+                    || path.startsWith("/api/v1/onboarding/") || path.startsWith("/api/v1/meetups"))
+                    response.setHeader("Cache-Control", "no-store");
             })).build();
     }
 }

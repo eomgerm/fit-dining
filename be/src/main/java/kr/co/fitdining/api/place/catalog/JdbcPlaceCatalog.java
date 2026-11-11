@@ -109,6 +109,10 @@ public class JdbcPlaceCatalog implements PlaceCatalog {
 			FROM place_hours WHERE place_id IN (""" + AREA_PLACE_IDS + ")";
 	private static final String ALL_MENU_NAMES_SQL = """
 			SELECT place_id, name FROM place_menus ORDER BY place_id, sort_order""";
+	private static final String STATIONS_SQL = """
+			SELECT DISTINCT station FROM places WHERE station IS NOT NULL ORDER BY station""";
+	private static final String DONGS_SQL = """
+			SELECT DISTINCT btrim(dong) AS dong FROM places WHERE btrim(dong) <> '' ORDER BY dong""";
 
 	private final JdbcClient jdbc;
 	private final JsonMapper jsonMapper;
@@ -147,6 +151,13 @@ public class JdbcPlaceCatalog implements PlaceCatalog {
 	@Override
 	public List<PlaceCard> cardsWithin(MapBounds area, int limit) {
 		return cards(area(jdbc.sql(AREA_PLACES_SQL), area, limit), area(jdbc.sql(AREA_HOURS_SQL), area, limit));
+	}
+
+	@Override
+	public PlaceAreaNames areaNames() {
+		return new PlaceAreaNames(
+				jdbc.sql(STATIONS_SQL).query(String.class).list().stream().map(Station::valueOf).toList(),
+				jdbc.sql(DONGS_SQL).query(String.class).list());
 	}
 
 	private static JdbcClient.StatementSpec area(JdbcClient.StatementSpec spec, MapBounds area, int limit) {

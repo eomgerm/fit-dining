@@ -59,4 +59,11 @@ public interface PlaceCatalog {
 	 */
 	List<PlaceSearchDocument> loadSearchDocuments();
 
+	/**
+	 * 장소가 하나라도 있는 역과 동을 읽는다. 모임 추천의 지역 찾기가 쓴다(meetup spec AC-1).
+	 *
+	 * @return 장소의 가까운 역(중복 없음, 코드 순)과 동 이름(중복 없음, 이름 순)
+	 */
+	PlaceAreaNames areaNames();
+
 }

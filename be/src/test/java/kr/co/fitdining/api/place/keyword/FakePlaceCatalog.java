@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
+import kr.co.fitdining.api.place.catalog.PlaceAreaNames;
 import kr.co.fitdining.api.place.catalog.PlaceCatalog;
 import kr.co.fitdining.api.place.catalog.PlaceSearchDocument;
 import kr.co.fitdining.api.place.dto.PlaceCard;
@@ -49,6 +50,11 @@ final class FakePlaceCatalog implements PlaceCatalog {
 
 	@Override
 	public List<PlaceCard> cardsWithin(MapBounds area, int limit) {
+		throw new UnsupportedOperationException();
+	}
+
+	@Override
+	public PlaceAreaNames areaNames() {
 		throw new UnsupportedOperationException();
 	}
 

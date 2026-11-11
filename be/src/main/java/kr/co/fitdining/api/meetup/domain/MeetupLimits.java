@@ -1,0 +1,34 @@
+package kr.co.fitdining.api.meetup.domain;
+
+import java.time.ZoneId;
+
+/**
+ * 모임 기능의 기준값을 한곳에 모은다. 모두 시작값이고 환경 변수로 빼지 않는다(spec Constraints, PRD OQ-29).
+ * DB 제약(V26)과 FE 입력 제한은 이 값과 따로 맞춘다.
+ */
+public final class MeetupLimits {
+
+	/** 날짜 계산의 기준 시간대. 서버 시각을 이 시간대의 날짜로 바꿔 판정한다(D-23). */
+	public static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
+
+	public static final int HEADCOUNT_MIN = 2;
+	public static final int HEADCOUNT_MAX = 8;
+	public static final int DESCRIPTION_MAX = 100;
+
+	/** 모임 날짜는 오늘부터 이 일수 뒤까지 고를 수 있다(AC-1). */
+	public static final int DATE_RANGE_DAYS = 30;
+
+	/** 모임 날짜(없으면 만든 날)에서 이 일수가 지나면 닫는다. 삭제는 그다음 날 0시다(AC-2). */
+	public static final int KEEP_DAYS = 7;
+
+	public static final int AREA_QUERY_MAX = 20;
+	public static final int AREA_RESULTS_MAX = 10;
+
+	/** 메뉴 하나 가격 상한(원)의 범위(AC-6). 단위는 화면의 입력 단위일 뿐 서버는 보지 않고, DB는 0보다 큰지만 본다(D-5). */
+	public static final int PRICE_CAP_MIN = 5_000;
+	public static final int PRICE_CAP_MAX = 100_000;
+
+	private MeetupLimits() {
+	}
+
+}
