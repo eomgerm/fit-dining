@@ -2270,6 +2270,100 @@ describe("SearchScreen", () => {
           expect(nearbyBodies).toHaveLength(1);
         });
 
+        describe("크기 적용 대기는 1초까지다 (AC-70)", () => {
+          // 크기 대기 상한(spec 72번)
+          const SIZE_WAIT_MS = 1000;
+          // 진입 직후 지도 바깥은 400x800인데 SDK에 알린 크기는 아직 그대로인 홈 진입
+          async function enterHomeWaitingForSize() {
+            const sizes = controlResize();
+            renderScreen();
+            await mapReady();
+            await nearbyList();
+            await newSearch("역삼 카페");
+            resizeMapElement(400, 800);
+            vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+            fireEvent.click(screen.getByRole("button", { name: "새 검색" }));
+            await act(async () => {});
+            return sizes;
+          }
+          const advance = (ms: number) =>
+            act(() => vi.advanceTimersByTimeAsync(ms));
+
+          afterEach(() => {
+            vi.useRealTimers();
+          });
+
+          it("크기가 끝내 맞지 않으면 999ms에는 요청이 없고 1초에 그때 화면의 영역으로 한 번 받는다", async () => {
+            await enterHomeWaitingForSize();
+            // 기다리는 동안 크기 알림은 없고, 그때 화면은 AREA_B다
+            map.view.bounds = AREA_B;
+
+            await advance(SIZE_WAIT_MS - 1);
+            expect(nearbyBodies).toHaveLength(1);
+            expect(skeleton()).toBeTruthy();
+            expect(homeArea().bounds).toBeUndefined();
+
+            await advance(1);
+            expect(nearbyBodies).toEqual([
+              { mapBounds: BOUNDS },
+              { mapBounds: AREA_B },
+            ]);
+            expect(homeArea().bounds).toEqual(AREA_B);
+            // 응답을 그리는 React Query 알림도 setTimeout이라 가짜 시간을 조금 더 흘린다
+            await advance(SIZE_WAIT_MS);
+            vi.useRealTimers();
+
+            await nearbyList();
+            expect(nearbyBodies).toHaveLength(2);
+          });
+
+          it("1초 안에 크기가 맞으면 맞은 뒤 영역으로 한 번 받고, 1초가 지나도 다시 확정하지 않는다", async () => {
+            const sizes = await enterHomeWaitingForSize();
+            await advance(500);
+            map.view.afterSize = AREA_B;
+
+            sizes.notify(400, 800);
+            await advance(0);
+            expect(homeArea().bounds).toEqual(AREA_B);
+            // 1초 타이머가 남아 있으면 이 화면으로 다시 확정한다
+            map.view.bounds = AFTER_INITIAL_MOVE;
+            await advance(SIZE_WAIT_MS);
+            vi.useRealTimers();
+
+            await nearbyList();
+            await act(async () => {});
+            expect(nearbyBodies).toEqual([
+              { mapBounds: BOUNDS },
+              { mapBounds: AREA_B },
+            ]);
+            expect(homeArea().bounds).toEqual(AREA_B);
+          });
+
+          it("기다리는 사이 지도가 실패하면 1초가 지나도 요청하지 않는다", async () => {
+            const sizes = await enterHomeWaitingForSize();
+            // SDK가 setSize에서 던지면 지도를 쓸 수 없게 된다
+            map.created[0].setSize.mockImplementation(() => {
+              throw new Error("지도 실패");
+            });
+
+            sizes.notify(400, 800);
+            await advance(SIZE_WAIT_MS);
+            vi.useRealTimers();
+
+            expect(await screen.findByText(MAP_FAILED)).toBeTruthy();
+            expect(nearbyBodies).toHaveLength(1);
+          });
+
+          it("기다리는 사이 화면이 없어지면 1초가 지나도 요청하지 않는다", async () => {
+            await enterHomeWaitingForSize();
+
+            cleanup();
+            await advance(SIZE_WAIT_MS);
+
+            expect(nearbyBodies).toHaveLength(1);
+          });
+        });
+
         it("상세에 다녀오면 skeleton 없이 영역·선택한 카드·지도가 그대로이고 요청이 없다 (AC-67)", async () => {
           const view = renderHideableScreen();
           await mapReady();

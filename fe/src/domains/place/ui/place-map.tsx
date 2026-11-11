@@ -82,6 +82,8 @@ const PAN_SETTLE_MS = 1500;
 const SAME_CENTER_DEG = 0.00001;
 // 지도 크기 차이가 이보다 작으면 같은 크기다. 같은 크기를 측정 방식에 따라 소수점 아래만 다르게 잰다(spec 72번)
 const SAME_SIZE_PX = 1;
+// 지도 크기 적용을 기다리는 상한(spec 72번)
+const SIZE_WAIT_MS = 1000;
 // 결과 맞춤 이동(fitBounds)의 네 방향 여백에 더하는 값. 선택된 핀 크기다(spec 69번)
 const FIT_MARGIN = SELECTED_PIN_SIZE;
 // 결과 맞춤 이동의 확대 정도 상한(fitBounds의 maxZoom). 가까운 몇 곳만 있을 때 과하게 확대하지 않는다
@@ -192,7 +194,8 @@ export type PlaceMapHandle = {
   // getBounds() 전체, 지도가 없으면 undefined
   visibleBounds(coverTop?: number): MapBounds | undefined;
   // 지도 크기가 SDK에 적용된 뒤의 보이는 영역(spec 72번). 지금 wrapper 크기가 마지막으로 setSize한 크기
-  // (아직 없으면 지도를 만들 때의 크기)와 같으면(1px 미만 차이) 바로, 다르면 다음 setSize 뒤에 읽는다. 지도가 실패하거나 없어지면 undefined
+  // (아직 없으면 지도를 만들 때의 크기)와 같으면(1px 미만 차이) 바로, 다르면 크기가 맞는 setSize 뒤에 읽는다.
+  // 1초(SIZE_WAIT_MS)가 지나도 맞지 않으면 그때 화면으로 읽는다. 지도가 실패하거나 없어지면 undefined
   settledBounds(coverTop?: number): Promise<MapBounds | undefined>;
   // 결과 맞춤 이동(spec 69번). 2곳 이상이면 fitBounds(확대 정도 상한 FIT_MAX_ZOOM), 1곳이면 panTo, 0곳이면 없음.
   // 코드 이동이라 사용자 이동으로 세지 않는다. 지도를 옮기기 시작했으면 true
@@ -533,12 +536,19 @@ export function PlaceMap({
         };
         if (sized()) return Promise.resolve(handle.visibleBounds(coverTop));
         return new Promise((resolve) => {
-          const waiter = (available: boolean) => {
-            if (available && !sized()) return;
+          // finish는 알림이나 상한이 올 때만 불리므로 그때는 timer가 정해져 있다
+          const finish = (available: boolean) => {
+            clearTimeout(timer);
             sizeWaiters.current.delete(waiter);
             resolve(available ? handle.visibleBounds(coverTop) : undefined);
           };
+          const waiter = (available: boolean) => {
+            if (available && !sized()) return;
+            finish(available);
+          };
           sizeWaiters.current.add(waiter);
+          // 예상 못 한 이유로 크기가 끝내 맞지 않아도 홈이 skeleton에 멈추지 않게, 상한이 지나면 그때 화면으로 읽는다
+          const timer = setTimeout(() => finish(true), SIZE_WAIT_MS);
         });
       },
       fitTo(points, coverTop) {
