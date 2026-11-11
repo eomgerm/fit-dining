@@ -38,12 +38,13 @@ export function AiFallbackNote({
   kind,
   className,
 }: {
-  kind?: EntryKind;
+  // nearby는 홈 주변 카드다. region과 같이 지도 영역 안 장소라 같은 문구를 쓴다(spec 68번)
+  kind?: EntryKind | "nearby";
   className?: string;
 }) {
   return (
     <Note className={className}>
-      {kind === "region"
+      {kind === "region" || kind === "nearby"
         ? "지도 안의 장소만 보여드려요. 검색 조건은 적용되지 않았어요"
         : "지금은 AI 추천을 쓸 수 없어 가게 이름·메뉴로 찾았어요"}
     </Note>
@@ -74,8 +75,6 @@ type ResultPanelProps = {
   cards: PlaceCardData[];
   selectedId?: number;
   here?: LatLng;
-  locating: boolean;
-  unfilteredNearby: boolean;
   hasNextPage: boolean;
   onLoadMore: () => void;
   // 다음 페이지를 받지 못했을 때
@@ -106,8 +105,6 @@ export function ResultPanel({
   cards,
   selectedId,
   here,
-  locating,
-  unfilteredNearby,
   hasNextPage,
   onLoadMore,
   loadMoreFailed,
@@ -198,8 +195,6 @@ export function ResultPanel({
               cards={cards}
               selectedId={selectedId}
               here={here}
-              locating={locating}
-              unfilteredNearby={unfilteredNearby}
               hasNextPage={hasNextPage}
               onLoadMore={onLoadMore}
               loadMoreFailed={loadMoreFailed}
@@ -221,8 +216,6 @@ export function PanelResults({
   cards,
   selectedId,
   here,
-  locating,
-  unfilteredNearby,
   hasNextPage,
   onLoadMore,
   loadMoreFailed,
@@ -236,8 +229,6 @@ export function PanelResults({
     | "cards"
     | "selectedId"
     | "here"
-    | "locating"
-    | "unfilteredNearby"
     | "hasNextPage"
     | "onLoadMore"
     | "loadMoreFailed"
@@ -270,22 +261,11 @@ export function PanelResults({
       </div>
     );
   }
-  if (locating) {
-    return (
-      <p className="py-6 text-center text-body-sm text-ink-muted">
-        위치를 확인하는 중
-      </p>
-    );
-  }
-
   return (
     <>
       {showsAiFallback(firstPage) && <AiFallbackNote kind={kind} />}
-      {unfilteredNearby && (
-        <Note>위치를 확인할 수 없어 지역 기준으로 보여 드려요</Note>
-      )}
       {cards.length === 0 && (
-        // 근처 필터로 다 걸러졌거나 비어 있으면 지원 지역 밖일 수 있다(5-E05)
+        // emptyReason 없이 비어 있으면 지원 지역 밖일 수 있다(5-E05)
         <EmptyState
           icon={<PinOffIcon />}
           title="추천 장소가 없어요"

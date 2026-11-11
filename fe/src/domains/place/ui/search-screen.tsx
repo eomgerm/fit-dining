@@ -16,11 +16,14 @@ import {
 
 import { prefersReducedMotion } from "@/shared/lib/reduced-motion";
 import { Button } from "@/shared/ui/button/button";
+import { EmptyState } from "@/shared/ui/display/empty-state";
 import { Fab } from "@/shared/ui/button/fab";
 import { BookmarkIcon } from "@/shared/ui/icon/icons/bookmark";
 import { MyLocationIcon } from "@/shared/ui/icon/icons/my-location";
+import { PinOffIcon } from "@/shared/ui/icon/icons/pin-off";
 import { RefreshIcon } from "@/shared/ui/icon/icons/refresh";
 import { UserIcon } from "@/shared/ui/icon/icons/user";
+import { WarningIcon } from "@/shared/ui/icon/icons/warning";
 import { StatusBarColor } from "@/shared/ui/layout/status-bar-color";
 import { useToast } from "@/shared/ui/overlay/toast";
 
@@ -32,16 +35,18 @@ import {
   savedPlacesHref,
   type BookmarkAccess,
 } from "../model/bookmark";
-import { filterNearby } from "../model/nearby";
 import type {
   CategoryGroup,
+  MapBounds,
   PlaceCard,
   PlaceSearchResponse,
   SearchRequest,
 } from "../model/place-types";
 import {
   followUpRequest,
+  isValidBounds,
   newSearchRequest,
+  normalizeBounds,
   regionRequest,
 } from "../model/search-request";
 import {
@@ -63,7 +68,7 @@ import {
   stopInitialMoveByUser,
 } from "./locate-device";
 import { LoginPrompt, SAVED_LOGIN_MESSAGE } from "./login-prompt";
-import { NearbyCarousel } from "./nearby-carousel";
+import { NearbyCarousel, NearbyCarouselSkeleton } from "./nearby-carousel";
 import { PastResultView } from "./past-result-view";
 import { placeCardElementId } from "./place-card";
 import { PlaceMap, type PlaceMapHandle } from "./place-map";
@@ -89,6 +94,20 @@ type SearchInput = {
 // 실행 불가인 region 기록의 "이 조건으로 다시 검색"(spec 67번)
 const REPEAT_UNAVAILABLE_MESSAGE = "다시 검색할 수 없어요";
 
+// 지도를 쓸 수 없어 홈 주변 카드를 받을 수 없을 때(spec 75번)
+const MAP_FAILED_TITLE = "지도를 불러오지 못했어요";
+const MAP_FAILED_DESCRIPTION =
+  "주변 추천을 보려면 지도가 필요해요. 아래 검색창으로 장소를 직접 찾아볼 수 있어요.";
+
+const sameBounds = (a: MapBounds, b: MapBounds) =>
+  a.swLat === b.swLat &&
+  a.swLng === b.swLng &&
+  a.neLat === b.neLat &&
+  a.neLng === b.neLng;
+
+// 홈 진입 판정에 쓰는 화면 종류(spec 73번). 결과·과거 결과나 저장한 장소를 보다가 홈이 되는 것만 진입이다
+type ScreenKind = "home" | "results" | "searching" | "saved";
+
 type SearchScreenProps = {
   // 저장한 장소의 인증. 인증 도메인을 쓰는 app이 넘긴다
   bookmarks: BookmarkAccess;
@@ -111,6 +130,7 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
     selectedPlaceId,
     epoch,
     initialView,
+    home,
     locationNotice,
   } = useSearchStore();
   const results = useViewingResults();
@@ -146,6 +166,20 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
   const [locating, setLocating] = useState(false);
   // 화면 키보드 높이. 바닥의 검색창·후속 입력창만 그만큼 올린다
   const keyboardInset = useKeyboardInset();
+  // 지도를 쓸 수 없다(키 없음, 인증 실패). 홈 주변 카드는 받지 않고 실패 안내를 보인다(spec 75번)
+  const [mapFailed, setMapFailed] = useState(false);
+  // 확정하려던 홈 영역이 유효하지 않았다. 다음 멈춤(idle)에서 다시 잰다(spec 71번)
+  const [invalidArea, setInvalidArea] = useState(false);
+  // 사용자가 지도를 끌거나 확대·축소한 뒤 아직 멈추지 않았다. 그 사이에는 홈 영역을 확정하지 않는다(spec 70번)
+  const [userMoving, setUserMoving] = useState(false);
+  // 홈에서 사용자 이동이나 "내 위치" 이동이 있었는지와, 홈 "이 지역에서 검색" 버튼을 보일지(spec 74번)
+  const [homeMoved, setHomeMoved] = useState(false);
+  const [homeButton, setHomeButton] = useState(false);
+  // "내 위치"가 지도를 옮기는 중. 그 이동이 멈추면(idle) 홈에서 옮긴 것으로 센다
+  const myLocationMoving = useRef(false);
+  // 확정 중인 홈 진입 번호. 같은 진입을 두 번 재지 않는다
+  const confirmingEntry = useRef<number | undefined>(undefined);
+  const homeVisibleRef = useRef(false);
 
   const saved = useSavedPlaces(bookmarks, savedView);
   const [savedPanel, setSavedPanel] = useState<SavedPanelState>(
@@ -226,7 +260,36 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
   const failed = search.isError;
   const showPanel = Boolean(viewing) || searching || failed;
   const firstScreen = !showPanel && !past;
-  const nearby = useNearbyPicks(firstScreen && !savedView);
+  const homeVisible = firstScreen && !savedView;
+
+  // 홈 진입은 결과·과거 결과나 저장한 장소를 보다가 첫 화면이 되는 것이다. 그 렌더부터 이전 영역의 카드를 숨기고,
+  // store의 진입 번호는 effect에서 올린다. 검색 중·실패에서 취소해 돌아오는 것과 상세 왕복은 진입이 아니다(spec 73번)
+  const screenKind: ScreenKind = savedView
+    ? "saved"
+    : past || viewing
+      ? "results"
+      : showPanel
+        ? "searching"
+        : "home";
+  const [lastScreen, setLastScreen] = useState(screenKind);
+  // 마지막 홈 진입을 판정한 렌더의 store 진입 번호. store가 아직 그 번호면 진입을 반영하기 전이다
+  const [entryFrom, setEntryFrom] = useState<number>();
+  if (lastScreen !== screenKind) {
+    setLastScreen(screenKind);
+    if (
+      screenKind === "home" &&
+      (lastScreen === "results" || lastScreen === "saved")
+    ) {
+      setEntryFrom(home.entry);
+      setHomeMoved(false);
+      setHomeButton(false);
+    }
+  }
+  // 세션 변경(reset)이 같은 때 번호를 올렸으면 그것으로 진입이 반영된 것이라 한 번이다(spec 73번)
+  const entryPending = entryFrom === home.entry;
+  const homeArea = entryPending ? undefined : home.bounds;
+  const nearby = useNearbyPicks(homeVisible, homeArea);
+  const homeUnavailable = mapFailed || invalidArea;
   const nearbyOffline = isOfflineError(nearby.error);
   // 고른 적이 없으면 첫 카드가 선택된 카드다
   const selectedNearbyId = nearby.cards.some(
@@ -240,13 +303,59 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
     void initialLocation();
   }, []);
 
+  // store의 진입 번호는 effect에서 올린다. 다시 실행돼도 번호가 이미 올랐으면 그대로다
+  useEffect(() => {
+    if (entryFrom === undefined) return;
+    if (searchStore.getSnapshot().home.entry === entryFrom) {
+      searchStore.beginHomeEntry();
+    }
+  }, [entryFrom]);
+
+  useEffect(() => {
+    homeVisibleRef.current = homeVisible;
+  });
+
+  // 홈이 보이고 지금 진입의 영역이 없으면, 처음 이동이 끝나고 지도가 준비되고 멈춘 뒤 그 화면의 보이는 영역을
+  // 크기 적용 뒤에 읽어 확정한다. 처음 홈 요청, 홈 진입, 버려진 확정 뒤의 복귀가 모두 이 길이다(spec 70번, 72번).
+  // 기다리는 사이 다음 진입이 있었거나 홈이 아니게 됐으면(새 검색, 저장한 장소) 그 결과는 버린다
+  const confirmHomeArea = useEffectEvent((entry: number) => {
+    if (confirmingEntry.current === entry) return;
+    confirmingEntry.current = entry;
+    const coverTop = homeCoverTop();
+    void mapRef.current?.settledBounds(coverTop).then((bounds) => {
+      if (confirmingEntry.current === entry)
+        confirmingEntry.current = undefined;
+      if (searchStore.getSnapshot().home.entry !== entry) return;
+      if (!homeVisibleRef.current || !bounds) return;
+      const area = normalizeBounds(bounds);
+      if (!isValidBounds(area)) {
+        setInvalidArea(true);
+        return;
+      }
+      searchStore.setHomeBounds(entry, area, coverTop);
+      setHomeMoved(false);
+      setHomeButton(false);
+    });
+  });
+  const homeReady =
+    homeVisible &&
+    !entryPending &&
+    !home.bounds &&
+    mapReady &&
+    !homeUnavailable &&
+    !userMoving &&
+    initialView === "done";
+  useEffect(() => {
+    if (homeReady) confirmHomeArea(home.entry);
+  }, [homeReady, home.entry]);
+
   // 앱을 연 뒤 처음 얻은 위치로 지도를 한 번만 옮긴다. 확대 정도는 그대로다. here가 바뀐 것만으로는 옮기지 않고,
   // 이미 다른 화면이 옮기는 중이거나 끝났으면(버튼, 사용자가 지도를 움직임) 옮기지 않는다(spec 62번)
   useEffect(() => {
     if (initialView !== "pending" || !mapReady || !here) return;
     if (!searchStore.startInitialView()) return;
     const move = mapRef.current?.panTo(here) ?? Promise.resolve();
-    void move.then(() => searchStore.finishInitialView());
+    void move.then(() => searchStore.finishInitialView("initial"));
   }, [initialView, mapReady, here]);
 
   // 처음 조회의 알림은 지금 보이는 화면이 한 번 가져가 띄운다. 숨겨진 화면은 Effect가 돌지 않는다(spec 63번)
@@ -271,6 +380,10 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
     abandonSearch();
     setRecentOpen(false);
     setPanel("middle");
+    // store가 홈 영역을 비웠으므로(reset) 홈이 보이면 지금 화면으로 다시 확정한다(spec 73번)
+    setHomeMoved(false);
+    setHomeButton(false);
+    setInvalidArea(false);
   });
   const seenEpoch = useRef(epoch);
   useEffect(() => {
@@ -296,20 +409,14 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
     return bottomStackRef.current?.getBoundingClientRect().top;
   }
 
-  // 받은 첫 페이지의 화면 핀으로 지도를 맞춘다(spec 69번). 근처 응답이 위치를 확인하는 중이면 옮기지 않고,
+  // 받은 첫 페이지의 화면 핀으로 지도를 맞춘다(spec 69번). 근처 응답도 거르지 않은 핀 그대로다(41번).
   // 옮기기 시작했으면 남은 처음 이동은 하지 않는다
   function fitToResults(response: PlaceSearchResponse) {
-    const { location, initialView } = searchStore.getSnapshot();
-    if (response.nearby && initialView !== "done") return;
-    const cards =
-      response.nearby && location.status === "ok"
-        ? filterNearby(response.items, location.here)
-        : response.items;
     const moved = mapRef.current?.fitTo(
-      cards.map(({ place }) => place),
+      response.items.map(({ place }) => place),
       panelCoverTop(),
     );
-    if (moved) searchStore.finishInitialView();
+    if (moved) searchStore.finishInitialView("fit");
   }
 
   // 새 검색은 보내는 순간 보이는 지도 영역을 담는다(spec 64번)
@@ -504,17 +611,55 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
 
   // 찾는 중에 다시 누르면 무시한다. 남은 처음 이동을 대신하고, 얻은 위치로 확대 정도를 첫 화면과 같게 맞추며
   // 옮긴 뒤 파란색을 끈다(D-100, D-104). 실패 알림은 누를 때마다 띄운다
+  // 처음 이동이 남아 있으면 버튼이 가져가고, 이동이 끝나거나 위치를 못 얻은 뒤에 끝낸다(spec 70번).
+  // 홈에서는 지도만 옮기고 카드는 다시 받지 않는다. 지도가 실제로 움직였으면 "이 지역에서 검색"을 판정한다(spec 74번)
   async function handleMyLocation() {
     if (locating) return;
     setLocating(true);
     const found = await locateFromButton();
     if (!found) {
+      searchStore.finishInitialView("button");
       setLocating(false);
       toast(LOCATION_FAILED_MESSAGE);
       return;
     }
+    myLocationMoving.current = true;
     await mapRef.current?.panTo(found, { resetZoom: true });
+    myLocationMoving.current = false;
+    searchStore.finishInitialView("button");
     setLocating(false);
+  }
+
+  // 지도가 멈췄다. 홈에서 옮긴 적이 있으면 확정 때의 덮는 UI 위 끝으로 지금 영역을 재서 홈 영역과 다르면
+  // "이 지역에서 검색"을 보인다. 판정은 멈출 때만 한다(spec 74번)
+  function handleMapIdle() {
+    setUserMoving(false);
+    if (invalidArea) setInvalidArea(false);
+    const movedByMyLocation = myLocationMoving.current;
+    if (movedByMyLocation) {
+      myLocationMoving.current = false;
+      if (homeVisible) setHomeMoved(true);
+    }
+    if (!homeVisible || !home.bounds || !(homeMoved || movedByMyLocation)) {
+      return;
+    }
+    const current = mapRef.current?.visibleBounds(home.coverTop);
+    setHomeButton(
+      current !== undefined &&
+        !sameBounds(normalizeBounds(current), home.bounds),
+    );
+  }
+
+  // 홈 "이 지역에서 검색". 확정 때의 덮는 UI 위 끝으로 지금 영역을 재서 새 홈 영역으로 삼고, 선택은 첫 카드로 되돌린다
+  function handleHomeRegionSearch() {
+    const current = mapRef.current?.visibleBounds(home.coverTop);
+    if (!current) return;
+    const area = normalizeBounds(current);
+    if (!isValidBounds(area)) return;
+    searchStore.setHomeBounds(home.entry, area, home.coverTop);
+    searchStore.select(undefined);
+    setHomeMoved(false);
+    setHomeButton(false);
   }
 
   const savedItems =
@@ -581,11 +726,17 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
         onPinClick={map.onPinClick}
         onUserMove={() => {
           setMapMoved(true);
+          setUserMoving(true);
+          if (homeVisible) setHomeMoved(true);
           // 사용자가 지도를 움직이면 남은 처음 이동은 하지 않는다(spec 62번)
           stopInitialMoveByUser();
         }}
+        onIdle={handleMapIdle}
         onReadyChange={setMapReady}
-        onUnavailable={searchStore.finishInitialView}
+        onUnavailable={() => {
+          setMapFailed(true);
+          searchStore.finishInitialView("map");
+        }}
       />
 
       {/* 저장한 장소 화면에는 [뒤로]와 "내 위치"만 있다(D-12) */}
@@ -618,6 +769,23 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
                 <RefreshIcon size="sm" className="mr-1" />이 지역에서 검색
               </Button>
             )}
+
+          {/* 홈의 "이 지역에서 검색". 결과 화면의 버튼과 같은 자리·모양이다(spec 74번) */}
+          {mapReady &&
+            homeVisible &&
+            homeButton &&
+            homeArea &&
+            !homeUnavailable &&
+            !nearbyOffline && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleHomeRegionSearch}
+                className="absolute top-safe-4 left-1/2 -translate-x-1/2"
+              >
+                <RefreshIcon size="sm" className="mr-1" />이 지역에서 검색
+              </Button>
+            )}
         </>
       )}
 
@@ -645,8 +813,6 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
           cards={pastResults.cards}
           selectedId={selectedPlaceId}
           here={here}
-          locating={pastResults.locating}
-          unfilteredNearby={pastResults.unfilteredNearby}
           onCardPress={handleCardPress}
           onBack={handleBackFromPast}
           onRepeat={handleRepeatPast}
@@ -681,8 +847,6 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
           cards={results.cards}
           selectedId={selectedPlaceId}
           here={here}
-          locating={results.locating}
-          unfilteredNearby={results.unfilteredNearby}
           hasNextPage={results.hasNextPage}
           onLoadMore={results.loadMore}
           loadMoreFailed={results.loadMoreFailed}
@@ -726,30 +890,62 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
             {myLocationButton && !nearbyOffline && (
               <div className="flex justify-end px-4">{myLocationButton}</div>
             )}
-            {nearby.error && !nearbyOffline && (
-              // 주변 추천을 받지 못하면 카드 자리에 안내를 띄운다(4-E03)
-              // 카드 안 위 24px, 아래 20px. 안내 자체 여백(위 28px, 아래 8px)에 맞춘다
+            {homeUnavailable ? (
+              // 지도가 없으면 영역을 정할 수 없어 주변 카드를 받지 않는다(spec 75번)
               <div className="mx-4 mb-0.5 rounded-lg bg-surface pb-3 shadow-2">
-                <LoadFailed
-                  error={nearby.error}
-                  title="주변 추천을 불러오지 못했어요"
-                  onRetry={nearby.retry}
+                <EmptyState
+                  role="alert"
+                  tone="warn"
+                  icon={<WarningIcon />}
+                  title={MAP_FAILED_TITLE}
+                  description={MAP_FAILED_DESCRIPTION}
                   className="-mt-1"
                 />
               </div>
-            )}
-            {nearby.cards.length > 0 && selectedNearbyId !== undefined && (
-              <>
-                {nearby.aiFallback && <AiFallbackNote className="mx-4" />}
-                <NearbyCarousel
-                  cards={nearby.cards}
-                  selectedId={selectedNearbyId}
-                  origin={nearby.origin}
-                  originLabel={nearby.originLabel}
-                  onSelect={handleNearbySelect}
-                  onOpen={({ place }) => router.push(placeDetailHref(place.id))}
+            ) : nearby.error ? (
+              !nearbyOffline && (
+                // 주변 추천을 받지 못하면 카드 자리에 안내를 띄운다(4-E03)
+                // 카드 안 위 24px, 아래 20px. 안내 자체 여백(위 28px, 아래 8px)에 맞춘다
+                <div className="mx-4 mb-0.5 rounded-lg bg-surface pb-3 shadow-2">
+                  <LoadFailed
+                    error={nearby.error}
+                    title="주변 추천을 불러오지 못했어요"
+                    onRetry={nearby.retry}
+                    className="-mt-1"
+                  />
+                </div>
+              )
+            ) : nearby.loading ? (
+              // 지금 홈 진입의 영역을 확정해 카드를 받기 전(spec 73번)
+              <NearbyCarouselSkeleton />
+            ) : nearby.emptyReason ? (
+              // 영역 안에 장소가 없으면 그 이유를 카드 자리에 보인다(spec 75번)
+              <div className="mx-4 mb-0.5 rounded-lg bg-surface pb-3 shadow-2">
+                <EmptyState
+                  icon={<PinOffIcon />}
+                  title={nearby.emptyReason.cause}
+                  description={nearby.emptyReason.suggestion}
+                  className="-mt-1"
                 />
-              </>
+              </div>
+            ) : (
+              nearby.cards.length > 0 &&
+              selectedNearbyId !== undefined && (
+                <>
+                  {nearby.aiFallback && (
+                    <AiFallbackNote kind="nearby" className="mx-4" />
+                  )}
+                  <NearbyCarousel
+                    cards={nearby.cards}
+                    selectedId={selectedNearbyId}
+                    here={here}
+                    onSelect={handleNearbySelect}
+                    onOpen={({ place }) =>
+                      router.push(placeDetailHref(place.id))
+                    }
+                  />
+                </>
+              )
             )}
             <div
               className="px-4"

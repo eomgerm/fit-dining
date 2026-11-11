@@ -1,6 +1,7 @@
 import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 
 import type {
+  MapBounds,
   PlaceSearchRequest,
   RegionSearchRequest,
   SearchRequest,
@@ -10,6 +11,7 @@ import type { EntryKind } from "../model/search-store";
 import {
   getPlace,
   isAiFallback,
+  searchNearby,
   searchPlaces,
   searchRegion,
   suggestPlaces,
@@ -21,6 +23,9 @@ import {
 export type SearchAccess = <T>(
   send: (extras: SearchExtras) => Promise<T>,
 ) => Promise<T>;
+
+// 홈 주변 카드의 cache 시간. 매일 04:00 점수가 다시 계산되므로 길게 두지 않는다(D-111)
+const NEARBY_CACHE_MS = 10 * 60_000;
 
 // app이 정하기 전에는 아무것도 싣지 않는다
 let searchAccess: SearchAccess = (send) => send({});
@@ -67,15 +72,20 @@ export const placeQueries = {
       gcTime: Infinity,
     }),
 
-  // 첫 화면 주변 카드. 요청 기록 항목이 아니라 키가 따로이고, 페이지 세션 동안 다시 받지 않는다.
-  // AI 대신 키워드로 찾은 결과만은 첫 화면을 다시 그릴 때 새로 받는다. 포커스와 재연결로는 받지 않는다(D-16)
-  nearby: () =>
+  // 첫 화면 주변 카드. 요청 기록 항목이 아니라 키가 따로이고, 키는 정규화한 영역(spec 71번)이다.
+  // 본문에는 키에 든 그 영역 객체를 그대로 쓴다. 점수가 매일 바뀌어 10분 뒤에는 다시 받고, 영역마다 키가 생기므로
+  // 쓰지 않는 영역은 10분 뒤 지운다. AI 대신 지도 영역 안 장소를 준 결과는 홈을 다시 그릴 때 새로 받는다.
+  // 포커스와 재연결로는 받지 않는다(D-111)
+  nearby: (area: MapBounds) =>
     queryOptions({
-      queryKey: ["places", "nearby"],
+      queryKey: ["places", "nearby", area] as const,
       queryFn: ({ signal }) =>
-        searchAccess((extras) => searchPlaces(nearbyRequest(), signal, extras)),
-      staleTime: ({ state }) => (isAiFallback(state.data) ? 0 : Infinity),
-      gcTime: Infinity,
+        searchAccess((extras) =>
+          searchNearby(nearbyRequest(area), signal, extras),
+        ),
+      staleTime: ({ state }) =>
+        isAiFallback(state.data) ? 0 : NEARBY_CACHE_MS,
+      gcTime: NEARBY_CACHE_MS,
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
     }),

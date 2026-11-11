@@ -1,15 +1,8 @@
-import type { LatLng, PlaceCard } from "./place-types";
+import type { LatLng } from "./place-types";
+
+// 거리는 표시용으로만 계산한다. 근처 응답은 서버가 지도 영역으로 거른 결과라 FE가 거리로 거르지 않는다(D-111)
 
 const EARTH_RADIUS_M = 6_371_000;
-
-// 근처 검색 반경. 최종 값은 미정이라 임시값이다(spec Open questions)
-export const NEARBY_RADIUS_M = 1000;
-
-// 기기 위치가 없을 때 첫 화면 주변 카드의 기준 지점이자 지도의 처음 중심
-export const YEOKSAM_STATION: LatLng = { lat: 37.5006, lng: 127.0364 };
-
-// 첫 화면 주변 카드의 최대 개수
-export const NEARBY_PICK_LIMIT = 10;
 
 const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
 
@@ -30,33 +23,4 @@ export function formatDistance(meters: number) {
   const rounded = Math.round(meters / 10) * 10;
   if (rounded < 1000) return `${rounded}m`;
   return `${(rounded / 1000).toFixed(1)}km`;
-}
-
-export function filterNearby(
-  cards: PlaceCard[],
-  here: LatLng,
-  radiusM = NEARBY_RADIUS_M,
-) {
-  return cards.filter((card) => distanceMeters(here, card.place) <= radiusM);
-}
-
-// 근처 응답에서 보여 줄 카드(subset)의 순서. 응답의 모든 카드에 점수가 없으면(AI 엔진 전) 서버 순서에 의미가
-// 없어서 기준 지점에서 가까운 순으로 정렬하고, 점수가 있으면 서버 순서(점수순)를 그대로 둔다
-export function orderNearby(
-  response: PlaceCard[],
-  subset: PlaceCard[],
-  origin: LatLng,
-) {
-  if (!response.every(({ score }) => score === undefined)) return subset;
-  return [...subset].sort(
-    (a, b) => distanceMeters(origin, a.place) - distanceMeters(origin, b.place),
-  );
-}
-
-// 첫 화면 주변 카드. 근처 응답을 기준 지점에서 반경 안으로 거른 앞의 몇 곳
-export function pickNearby(cards: PlaceCard[], origin: LatLng) {
-  return orderNearby(cards, filterNearby(cards, origin), origin).slice(
-    0,
-    NEARBY_PICK_LIMIT,
-  );
 }

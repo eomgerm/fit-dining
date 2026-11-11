@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { QueryClientProvider } from "@tanstack/react-query";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -205,6 +206,23 @@ describe("PlaceDetailScreen", () => {
     expect(tabs).toEqual(["홈", "메뉴", "정보"]);
     expect(screen.getByRole("button", { name: "저장" })).toBeTruthy();
     expect(screen.queryByText("방문 평가 남기기")).toBeNull();
+  });
+
+  it("위치를 얻기 전에는 거리가 없고, 위치를 얻으면 장소 정보 줄에 거리가 보인다 (AC-28)", async () => {
+    const distance = /(^|· )0m( ·|$)/;
+    renderDetail();
+    await screen.findByRole("heading", { name: "카페 온담" });
+    expect(screen.queryByText(distance)).toBeNull();
+    expect(screen.queryByText(/역삼역/)).toBeNull();
+
+    act(() =>
+      stores.current.setLocation({
+        status: "ok",
+        here: { lat: place.lat, lng: place.lng },
+      }),
+    );
+
+    expect(await screen.findByText(distance)).toBeTruthy();
   });
 
   it("리뷰 자리를 넘기면 리뷰 탭, 홈 미리보기, 하단 버튼이 생기고 미리보기에서 리뷰 탭을 연다", async () => {

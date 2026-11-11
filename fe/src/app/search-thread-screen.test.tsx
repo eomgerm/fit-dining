@@ -16,12 +16,13 @@ import type {
   PlaceCard,
   PlaceSearchResponse,
 } from "@/domains/place/model/place-types";
-import { NEARBY_QUERY } from "@/domains/place/model/search-request";
 import { searchStore } from "@/domains/place/model/search-store";
 import type { ThreadTurn } from "@/domains/place/model/search-threads";
 import { SearchScreen } from "@/domains/place/ui/search-screen";
 import { resetThreadSession } from "@/domains/place/ui/thread-storage";
+import { stubNaverMaps } from "@/domains/place/ui/testing/naver-maps-stub";
 import { useStoredCard } from "@/domains/place/ui/use-stored-card";
+import type { RuntimeConfig } from "@/shared/lib/runtime-config";
 
 import { Providers } from "./providers";
 import { threadAuth } from "./search-thread-auth";
@@ -60,8 +61,12 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push }),
   useSearchParams: () => new URLSearchParams(),
 }));
+// 지도는 기본으로 없다. 홈 주변 카드를 보는 테스트만 지도 키를 넣고 가짜 SDK를 둔다
+const mapConfig = vi.hoisted(() => ({
+  value: undefined as RuntimeConfig | undefined,
+}));
 vi.mock("@/shared/lib/runtime-config", () => ({
-  loadRuntimeConfig: async () => undefined,
+  loadRuntimeConfig: async () => mapConfig.value,
 }));
 
 const member = (userId: string, sessionId = "s1"): AuthSession => ({
@@ -138,16 +143,17 @@ function seedThread(user: string, id: string, turns: ThreadTurn[]) {
 
 async function handle(url: string, init?: RequestInit): Promise<Response> {
   if (url.startsWith("/api/v1/places/suggest")) return Response.json([]);
+  // 홈 주변 카드. 이 파일은 지도가 없어 보내지 않지만, 보냈다면 검색 기록과 섞이지 않게 따로 답한다
+  if (url === "/api/v1/places/nearby") {
+    return Response.json({
+      conditions: {},
+      nearby: true,
+      totalCount: 1,
+      items: [card(9)],
+    } satisfies PlaceSearchResponse);
+  }
   if (url === "/api/v1/places/search") {
     const body = JSON.parse(String(init?.body));
-    if (body.query === NEARBY_QUERY) {
-      return Response.json({
-        conditions: {},
-        nearby: true,
-        totalCount: 1,
-        items: [card(9)],
-      } satisfies PlaceSearchResponse);
-    }
     server.searches.push(body);
     await server.gate.search;
     // 400은 쿼리 클라이언트가 다시 시도하지 않아 곧바로 실패한다
@@ -313,6 +319,7 @@ function turn(
 
 beforeEach(() => {
   cleanup();
+  mapConfig.value = undefined;
   server.threads = new Map();
   server.searches = [];
   server.lists = [];
@@ -391,6 +398,8 @@ describe("회원 검색 기록 저장", () => {
         disconnect() {}
       },
     );
+    mapConfig.value = { env: "dev", naverMapClientId: "key" };
+    stubNaverMaps();
     renderApp();
     await screen.findByText("장소 9");
     await newSearch("역삼 카페");

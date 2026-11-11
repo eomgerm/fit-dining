@@ -1,6 +1,7 @@
 import type {
   LatLng,
   MapBounds,
+  NearbyRequest,
   PlaceSearchRequest,
   RegionSearchRequest,
   SearchConditions,
@@ -40,12 +41,32 @@ export function followUpRequest(
   };
 }
 
-// 첫 화면 주변 카드의 고정 문장. "근처"가 있어 근처 응답(후보 전체, 커서 없음)이 온다
-export const NEARBY_QUERY = "근처 맛집";
+// 첫 화면 주변 카드 요청(POST /places/nearby). 정규화한 영역 객체 하나만 담는다.
+// 문장("근처 맛집")은 BE가 채우고 기기 좌표는 담지 않는다(spec 70번)
+export function nearbyRequest(mapBounds: MapBounds): NearbyRequest {
+  return { mapBounds };
+}
 
-// 첫 화면 주변 카드 요청. 문장만 보내고 좌표도 지도 영역도 담지 않는다
-export function nearbyRequest(): PlaceSearchRequest {
-  return { query: NEARBY_QUERY };
+// 격자 위의 값이 부동소수 오차로 한 칸 아래·위로 밀리지 않게 하는 여유(0.001도의 1/10000)
+const GRID_EPSILON = 1e-4;
+const toGrid = (value: number) => value * 1000;
+// -0은 0으로 둔다(JSON과 key 비교에서 같게)
+const fromGrid = (steps: number) => steps / 1000 + 0;
+
+// 홈 영역 정규화(spec 71번). 네 좌표를 0.001도에서 가까운 값으로 반올림하고(가운데는 큰 쪽),
+// 반올림으로 폭이 0이 된 축만 원본 SW를 내림, NE를 올림한다. cache key와 요청 본문에 이 결과를 그대로 쓴다
+export function normalizeBounds(bounds: MapBounds): MapBounds {
+  const axis = (sw: number, ne: number) => {
+    const low = Math.round(toGrid(sw));
+    const high = Math.round(toGrid(ne));
+    if (low !== high) return [fromGrid(low), fromGrid(high)];
+    const floor = Math.floor(toGrid(sw) + GRID_EPSILON);
+    const ceil = Math.ceil(toGrid(ne) - GRID_EPSILON);
+    return [fromGrid(floor), fromGrid(ceil > floor ? ceil : floor + 1)];
+  };
+  const [swLat, neLat] = axis(bounds.swLat, bounds.neLat);
+  const [swLng, neLng] = axis(bounds.swLng, bounds.neLng);
+  return { swLat, swLng, neLat, neLng };
 }
 
 export function nextPageRequest<T extends SearchRequest>(

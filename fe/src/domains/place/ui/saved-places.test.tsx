@@ -23,10 +23,10 @@ import {
   type BookmarkSession,
 } from "../model/bookmark";
 import type { PlaceSearchResponse } from "../model/place-types";
-import { NEARBY_QUERY } from "../model/search-request";
 import { createSearchStore, type SearchStore } from "../model/search-store";
 import { savedViewState } from "./saved-view-state";
 import { SearchScreen } from "./search-screen";
+import { BOUNDS, stubNaverMaps } from "./testing/naver-maps-stub";
 
 const stores = vi.hoisted(() => ({
   current: undefined as unknown as SearchStore,
@@ -170,9 +170,8 @@ beforeEach(() => {
         if (!next) throw new Error("예상하지 못한 목록 요청");
         return next();
       }
+      if (url === "/api/v1/places/nearby") return Response.json(nearby);
       if (url === "/api/v1/places/search") {
-        const body = JSON.parse(String(init?.body));
-        if (body.query === NEARBY_QUERY) return Response.json(nearby);
         searchCalls += 1;
         return new Promise<Response>((resolve) => (pendingSearch = resolve));
       }
@@ -273,9 +272,8 @@ describe("저장한 장소 화면 들어가기", () => {
   it("로그인한 사용자가 메인 버튼을 누르면 ?view=saved로 기록을 쌓고 저장한 장소만 보인다", async () => {
     listReplies.push(list([item(3), item(5)]));
     renderScreen();
-    await screen.findByRole("region", { name: "주변 추천 장소" });
-
-    fireEvent.click(screen.getByRole("button", { name: "저장한 장소" }));
+    // 지도 키가 없어 홈은 주변 카드 대신 지도 실패 안내다(spec 75번). 홈이 그려지면 누른다
+    fireEvent.click(await screen.findByRole("button", { name: "저장한 장소" }));
 
     expect(router.push).toHaveBeenCalledWith("/?view=saved");
     expect(cardNames(await savedList())).toEqual([
@@ -822,5 +820,90 @@ describe("목록에서 해제(D-18)", () => {
 
     expect(await screen.findByRole("alertdialog")).toBeTruthy();
     expect(harness.endSession).toHaveBeenCalled();
+  });
+});
+
+describe("저장한 장소 화면과 홈 주변 카드 (S15P31A302-204)", () => {
+  const AREA_B = { swLat: 37.52, swLng: 127.06, neLat: 37.53, neLng: 127.08 };
+  let map: ReturnType<typeof stubNaverMaps>;
+  // 홈 주변 카드 요청 본문
+  let nearbyBodies: unknown[];
+
+  beforeEach(() => {
+    config.value = { env: "dev", naverMapClientId: "key" };
+    map = stubNaverMaps();
+    nearbyBodies = [];
+    const original = globalThis.fetch;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>((input, init) => {
+        if (String(input) === "/api/v1/places/nearby") {
+          nearbyBodies.push(JSON.parse(String(init?.body)));
+        }
+        return original(input, init);
+      }),
+    );
+  });
+
+  const homeCards = () =>
+    screen.findByRole("region", { name: "주변 추천 장소" });
+
+  it("앱을 저장한 장소 화면으로 열면 그동안은 받지 않고, 홈이 처음 보일 때 한 번 받는다 (AC-64)", async () => {
+    listReplies.push(list([item(3)]));
+    renderScreen("/?view=saved");
+    await savedList();
+    await waitFor(() =>
+      expect(document.querySelector('[data-map-state="ready"]')).toBeTruthy(),
+    );
+    await act(async () => {});
+    expect(nearbyBodies).toEqual([]);
+
+    fireEvent.click(screen.getByRole("button", { name: "뒤로" }));
+
+    await homeCards();
+    await act(async () => {});
+    expect(nearbyBodies).toEqual([{ mapBounds: BOUNDS }]);
+  });
+
+  it("저장한 장소 화면에서 지도를 끈 뒤 홈으로 오면 홈 진입이라 끈 화면의 영역으로 한 번 받는다 (AC-67)", async () => {
+    listReplies.push(list([item(3)]));
+    renderScreen();
+    await homeCards();
+    fireEvent.click(screen.getByRole("button", { name: "저장한 장소" }));
+    await savedList();
+
+    map.fire("dragend");
+    map.view.bounds = AREA_B;
+    map.fire("idle");
+    fireEvent.click(screen.getByRole("button", { name: "뒤로" }));
+
+    await waitFor(() => expect(nearbyBodies).toHaveLength(2));
+    expect(nearbyBodies).toEqual([
+      { mapBounds: BOUNDS },
+      { mapBounds: AREA_B },
+    ]);
+  });
+
+  it("결과를 보다가 저장한 장소 화면에 다녀오면 결과 화면으로 돌아가 nearby 요청이 없다 (AC-67)", async () => {
+    listReplies.push(list([item(3)]));
+    renderScreen();
+    await homeCards();
+    fireEvent.change(screen.getByRole("textbox", { name: "장소 검색" }), {
+      target: { value: "역삼 카페" },
+    });
+    fireEvent.submit(screen.getByRole("search"));
+    await waitFor(() => expect(searchCalls).toBe(1));
+    await act(async () =>
+      pendingSearch?.(Response.json({ ...nearby, nearby: false })),
+    );
+    await screen.findByRole("list", { name: "추천 장소" });
+    fireEvent.click(screen.getByRole("button", { name: "저장한 장소" }));
+    await savedList();
+
+    fireEvent.click(screen.getByRole("button", { name: "뒤로" }));
+
+    expect(await screen.findByRole("list", { name: "추천 장소" })).toBeTruthy();
+    await act(async () => {});
+    expect(nearbyBodies).toHaveLength(1);
   });
 });

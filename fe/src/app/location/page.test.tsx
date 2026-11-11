@@ -61,7 +61,9 @@ it.each(["success", "denied", "unavailable", "timeout"])(
     expect(
       screen.getByRole("heading", { name: /가까운 곳부터\s*보여 드릴게요/ }),
     ).toBeTruthy();
-    expect(screen.getByText(/허용하지 않으면 역삼역 주변/)).toBeTruthy();
+    expect(
+      screen.getByText(/허용하지 않으면 지도로 지역을 골라 볼 수 있어요/),
+    ).toBeTruthy();
     expect(allow.getAttribute("aria-disabled")).toBe("true");
     expect(mocks.position).toHaveBeenCalledTimes(1);
     expect(mocks.position.mock.calls[0][2]).toEqual({

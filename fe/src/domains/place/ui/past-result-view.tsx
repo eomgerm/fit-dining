@@ -23,8 +23,6 @@ type PastResultViewProps = {
   cards: PlaceCard[];
   selectedId?: number;
   here?: LatLng;
-  locating: boolean;
-  unfilteredNearby: boolean;
   onCardPress: (card: PlaceCard) => void;
   // "현재 검색으로". 요청 기록을 펼친 결과 패널로 돌아간다
   onBack: () => void;
@@ -41,8 +39,6 @@ export function PastResultView({
   cards,
   selectedId,
   here,
-  locating,
-  unfilteredNearby,
   onCardPress,
   onBack,
   onRepeat,
@@ -88,8 +84,6 @@ export function PastResultView({
             cards={cards}
             selectedId={selectedId}
             here={here}
-            locating={locating}
-            unfilteredNearby={unfilteredNearby}
             hasNextPage={false}
             onLoadMore={() => {}}
             loadMoreFailed={false}

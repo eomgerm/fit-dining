@@ -69,17 +69,18 @@ export async function locateDevice() {
   }
 }
 
-// "내 위치" 버튼. 누른 순간부터 남은 처음 이동을 대신하고, 처음 조회가 진행 중이면 같은 조회를 기다린다(spec 62번)
+// "내 위치" 버튼. 누른 순간부터 남은 처음 이동을 가져가고, 처음 조회가 진행 중이면 같은 조회를 기다린다.
+// 처음 이동은 버튼의 이동이 끝나거나 위치를 얻지 못했을 때 부르는 쪽이 끝낸다(spec 62번, 70번)
 export function locateFromButton() {
   pageSessionState().buttonTookOver = true;
-  searchStore.finishInitialView();
+  searchStore.takeInitialViewByButton();
   return locateDevice();
 }
 
 // 사용자가 지도를 끌거나 확대·축소했다. 남은 처음 이동을 하지 않고, 아직 시작하지 않은 처음 조회도 하지 않는다(spec 62번)
 export function stopInitialMoveByUser() {
   pageSessionState().userMovedMap = true;
-  searchStore.finishInitialView();
+  searchStore.finishInitialView("user");
 }
 
 async function geolocationPermission() {

@@ -66,6 +66,11 @@ export type MapBounds = {
   neLng: number;
 };
 
+// 홈 주변 카드 요청(POST /places/nearby). 영역은 정규화한 값이다(spec 70번, 71번)
+export type NearbyRequest = {
+  mapBounds: MapBounds;
+};
+
 // BE와 FE가 해석하지 않고 다음 후속 요청에 그대로 돌려보내는 값
 export type SearchConditions = Record<string, unknown>;
 

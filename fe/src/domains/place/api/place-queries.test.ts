@@ -116,3 +116,79 @@ describe("placeQueries.search", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+describe("placeQueries.nearby", () => {
+  const area = { swLat: 37.491, swLng: 127.021, neLat: 37.51, neLng: 127.044 };
+
+  it("쿼리 키는 정규화한 영역이고 본문은 키에 든 그 영역 객체 하나다(AC-65)", async () => {
+    const fetchMock = stubSearch([page()]);
+    const options = placeQueries.nearby(area);
+
+    expect(options.queryKey).toEqual(["places", "nearby", area]);
+    expect(options.queryKey[2]).toBe(area);
+    await createQueryClient().fetchQuery(options);
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/places/nearby");
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({
+      mapBounds: area,
+    });
+  });
+
+  it("staleTime과 gcTime은 10분이고 AI 대체 응답만 staleTime 0이다(AC-66)", async () => {
+    stubSearch([page()]);
+    const options = placeQueries.nearby(area);
+    expect(options.gcTime).toBe(600_000);
+    const staleTime = options.staleTime as (query: {
+      state: { data: unknown };
+    }) => number;
+    const client = createQueryClient();
+    const data = await client.fetchQuery(options);
+    expect(staleTime({ state: { data } })).toBe(600_000);
+    expect(options.refetchOnWindowFocus).toBe(false);
+    expect(options.refetchOnReconnect).toBe(false);
+  });
+
+  it("AI 대체 응답(X-Fallback: AI_UNAVAILABLE)은 staleTime 0이라 같은 key를 다시 보면 다시 받는다(AC-66)", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      Response.json(page(), { headers: { "X-Fallback": "AI_UNAVAILABLE" } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("location", { search: "" });
+    const options = placeQueries.nearby(area);
+    const staleTime = options.staleTime as (query: {
+      state: { data: unknown };
+    }) => number;
+    const client = createQueryClient();
+
+    const data = await client.fetchQuery(options);
+    expect(staleTime({ state: { data } })).toBe(0);
+    await client.fetchQuery(placeQueries.nearby({ ...area }));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("받은 지 10분 전에는 다시 받지 않고, 10분이 지나면 같은 key로 다시 받는다(AC-66, AC-67)", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const fetchMock = stubSearch([page(), page()]);
+      const client = createQueryClient();
+      await client.fetchQuery(placeQueries.nearby(area));
+
+      vi.advanceTimersByTime(600_000 - 1);
+      await client.fetchQuery(placeQueries.nearby({ ...area }));
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      vi.advanceTimersByTime(2);
+      await client.fetchQuery(placeQueries.nearby({ ...area }));
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("같은 영역 key의 fresh cache가 있으면 다시 받지 않는다(AC-66)", async () => {
+    const fetchMock = stubSearch([page(), page()]);
+    const client = createQueryClient();
+    await client.fetchQuery(placeQueries.nearby(area));
+    await client.fetchQuery(placeQueries.nearby({ ...area }));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});

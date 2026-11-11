@@ -25,15 +25,12 @@ export const statusVariants = cva("", {
 export function PlaceMeta({
   place,
   here,
-  hereLabel,
   status,
   extra,
   className,
 }: {
   place: PlaceSummary;
   here?: LatLng;
-  // 기준 지점이 기기 위치가 아닐 때 거리 앞에 붙는 이름("역삼역 350m")
-  hereLabel?: string;
   status?: OpenStatus;
   // 맨 뒤에 붙는 말(자동완성의 "메뉴: …")
   extra?: ReactNode;
@@ -42,8 +39,7 @@ export function PlaceMeta({
   const statusLabel = status && OPEN_STATUS_LABELS[status];
   const parts: ReactNode[] = [CATEGORY_LABELS[place.categoryGroup]];
   if (here) {
-    const distance = formatDistance(distanceMeters(here, place));
-    parts.push(hereLabel ? `${hereLabel} ${distance}` : distance);
+    parts.push(formatDistance(distanceMeters(here, place)));
   }
   if (statusLabel) {
     parts.push(

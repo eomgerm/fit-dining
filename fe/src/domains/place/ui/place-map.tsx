@@ -165,6 +165,14 @@ function ignoreSdkError(call: () => void) {
   } catch {}
 }
 
+// 크기 적용을 기다리는 settledBounds에 알린다. 지도가 없어졌으면 available이 false다
+function notifySizeWaiters(
+  waiters: Set<(available: boolean) => void>,
+  available: boolean,
+) {
+  [...waiters].forEach((waiter) => waiter(available));
+}
+
 // 핀 안의 표시. 순위 번호, 저장한 장소의 북마크, 없음(위치 하나만 보이는 지도) 중 하나다
 export type PinMark = number | "bookmark" | undefined;
 
@@ -177,6 +185,9 @@ export type PlaceMapHandle = {
   // 지도 위쪽 safe-area와 그 UI가 겹친 높이를 뺀 띠를 위경도로 바꾼다. 띠가 너무 작거나 변환이 실패하면
   // getBounds() 전체, 지도가 없으면 undefined
   visibleBounds(coverTop?: number): MapBounds | undefined;
+  // 지도 크기가 SDK에 적용된 뒤의 보이는 영역(spec 72번). 지금 wrapper 크기가 마지막으로 setSize한 크기
+  // (아직 없으면 지도를 만들 때의 크기)와 같으면 바로, 다르면 다음 setSize 뒤에 읽는다. 지도가 실패하거나 없어지면 undefined
+  settledBounds(coverTop?: number): Promise<MapBounds | undefined>;
   // 결과 맞춤 이동(spec 69번). 2곳 이상이면 fitBounds(확대 정도 상한 FIT_MAX_ZOOM), 1곳이면 panTo, 0곳이면 없음.
   // 코드 이동이라 사용자 이동으로 세지 않는다. 지도를 옮기기 시작했으면 true
   fitTo(points: LatLng[], coverTop?: number): boolean;
@@ -197,6 +208,8 @@ type PlaceMapProps = {
   onPinClick: (id: number) => void;
   // 사용자가 지도를 끌거나 확대·축소했을 때. panTo 같은 코드의 이동으로는 부르지 않는다
   onUserMove?: () => void;
+  // 지도가 멈췄을 때(idle). 홈의 "이 지역에서 검색" 판정에 쓴다(spec 74번)
+  onIdle?: () => void;
   // 지도가 그려졌는지. 지도 위 버튼("이 지역에서 검색", "내 위치")을 이것으로 보인다
   onReadyChange?: (ready: boolean) => void;
   // 지도를 쓸 수 없게 됐을 때(키 없음, 인증 실패, 지도를 없앰). 처음 이동을 끝내는 데 쓴다(spec 62번)
@@ -215,6 +228,7 @@ export function PlaceMap({
   rememberView = false,
   onPinClick,
   onUserMove,
+  onIdle,
   onReadyChange,
   onUnavailable,
   className,
@@ -232,6 +246,11 @@ export function PlaceMap({
   const markersRef = useRef(
     new Map<number, { marker: NaverMarker; mark?: PinMark; zIndex: number }>(),
   );
+  // SDK에 마지막으로 알린 지도 크기와, 크기 적용을 기다리는 settledBounds들(spec 72번)
+  const appliedSize = useRef<{ width: number; height: number }>(undefined);
+  const sizeWaiters = useRef(new Set<(available: boolean) => void>());
+  // 멈춤(idle)을 기다리는 panTo들. 지도를 없애거나 지도가 실패하면 그 자리에서 끝낸다(지도가 없으면 바로 끝난다)
+  const pendingPans = useRef(new Set<() => void>());
   // 인증이 실패하면 SDK 내부 값이 비어 어떤 호출이든 던지므로, 그 뒤에는 SDK를 부르지 않는다
   const active = failed ? undefined : loaded;
   const ready = Boolean(active);
@@ -243,6 +262,8 @@ export function PlaceMap({
 
   useEffect(() => {
     const container = containerRef.current;
+    const waiters = sizeWaiters.current;
+    const pans = pendingPans.current;
     let cancelled = false;
     const fail = () => setFailed(true);
     authFailureListeners.add(fail);
@@ -264,6 +285,11 @@ export function PlaceMap({
             zoom: start.zoom,
           });
           kept.current = { naver, map };
+          const rect = wrapperRef.current?.getBoundingClientRect();
+          appliedSize.current = rect && {
+            width: rect.width,
+            height: rect.height,
+          };
           setLoaded(kept.current);
         })
         .catch(() => {
@@ -279,6 +305,8 @@ export function PlaceMap({
       if (container?.isConnected) return;
       const map = kept.current?.map;
       kept.current = undefined;
+      notifySizeWaiters(waiters, false);
+      [...pans].forEach((finish) => finish());
       ignoreSdkError(() => map?.destroy());
       if (map) unavailable.current?.();
     };
@@ -289,7 +317,10 @@ export function PlaceMap({
   }, [ready, onReadyChange]);
 
   useEffect(() => {
-    if (failed) unavailable.current?.();
+    if (!failed) return;
+    notifySizeWaiters(sizeWaiters.current, false);
+    [...pendingPans.current].forEach((finish) => finish());
+    unavailable.current?.();
   }, [failed]);
 
   // 인증 실패 알림보다 먼저 SDK가 던지는 경우도 지도를 비운다. 실패 알림처럼 렌더링 뒤에 바꾼다
@@ -309,12 +340,15 @@ export function PlaceMap({
     const observer = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect;
       guard(() => active.map.setSize(new active.naver.Size(width, height)));
+      appliedSize.current = { width, height };
+      notifySizeWaiters(sizeWaiters.current, true);
     });
     observer.observe(wrapper);
     return () => observer.disconnect();
   }, [active]);
 
   const handleUserMove = useEffectEvent(() => onUserMove?.());
+  const handleIdle = useEffectEvent(() => onIdle?.());
   // 코드가 확대 정도를 바꾸는 중인지(D-104). 그 움직임이 멈출 때(idle)까지 zoom_changed를 사용자 조작으로 세지 않는다
   const zoomingByCode = useRef(false);
   // 처음 멈춤을 이미 지난 지도. 화면이 숨었다 다시 보여도 지도는 그대로라 다시 세지 않는다
@@ -332,6 +366,7 @@ export function PlaceMap({
         }),
         naver.Event.addListener(map, "idle", () => {
           zoomingByCode.current = false;
+          handleIdle();
           // 지도를 만든 뒤 처음 멈춤은 저장된 화면 그대로이므로 쓰지 않는다(spec 61번)
           if (!settledOnce.current.has(map)) {
             settledOnce.current.add(map);
@@ -469,6 +504,28 @@ export function PlaceMap({
         }
         return handle.getBounds();
       },
+      settledBounds(coverTop) {
+        if (!active) return Promise.resolve(undefined);
+        const sized = () => {
+          const rect = wrapperRef.current?.getBoundingClientRect();
+          const applied = appliedSize.current;
+          return (
+            rect !== undefined &&
+            applied !== undefined &&
+            rect.width === applied.width &&
+            rect.height === applied.height
+          );
+        };
+        if (sized()) return Promise.resolve(handle.visibleBounds(coverTop));
+        return new Promise((resolve) => {
+          const waiter = (available: boolean) => {
+            if (available && !sized()) return;
+            sizeWaiters.current.delete(waiter);
+            resolve(available ? handle.visibleBounds(coverTop) : undefined);
+          };
+          sizeWaiters.current.add(waiter);
+        });
+      },
       fitTo(points, coverTop) {
         if (!active) return false;
         const plan = fitPlan(points);
@@ -516,6 +573,7 @@ export function PlaceMap({
           let listener: unknown;
           let timer: ReturnType<typeof setTimeout> | undefined;
           const finish = () => {
+            pendingPans.current.delete(finish);
             clearTimeout(timer);
             ignoreSdkError(() => naver.Event.removeListener(listener));
             resolve();
@@ -528,6 +586,7 @@ export function PlaceMap({
               Math.abs(center.lat() - lat) > SAME_CENTER_DEG ||
               Math.abs(center.lng() - lng) > SAME_CENTER_DEG;
             if (moves) {
+              pendingPans.current.add(finish);
               listener = naver.Event.addListener(map, "idle", finish);
               // 알림이 오지 않아도 기다림이 남지 않게 한다
               timer = setTimeout(finish, PAN_SETTLE_MS);

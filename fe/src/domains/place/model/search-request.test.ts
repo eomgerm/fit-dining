@@ -4,10 +4,10 @@ import type { MapBounds } from "./place-types";
 import {
   followUpRequest,
   isValidBounds,
-  NEARBY_QUERY,
   nearbyRequest,
   newSearchRequest,
   nextPageRequest,
+  normalizeBounds,
   regionRequest,
   runnableRequest,
 } from "./search-request";
@@ -84,10 +84,117 @@ describe("followUpRequest", () => {
   });
 });
 
+describe("normalizeBounds", () => {
+  it("네 좌표를 0.001도에서 가까운 값으로 반올림한다(AC-65)", () => {
+    expect(
+      normalizeBounds({
+        swLat: 37.49149,
+        swLng: 127.02051,
+        neLat: 37.50951,
+        neLng: 127.04449,
+      }),
+    ).toEqual({ swLat: 37.491, swLng: 127.021, neLat: 37.51, neLng: 127.044 });
+  });
+
+  it("가운데 값은 큰 쪽으로 반올림한다(Math.round와 같은 방향)", () => {
+    expect(
+      normalizeBounds({
+        swLat: 37.4995,
+        swLng: -0.0005,
+        neLat: 37.6,
+        neLng: 1,
+      }),
+    ).toEqual({ swLat: 37.5, swLng: 0, neLat: 37.6, neLng: 1 });
+  });
+
+  it("반올림으로 폭이 0이 된 축만 원본 SW를 내림, NE를 올림한다(고확대)", () => {
+    expect(
+      normalizeBounds({
+        swLat: 37.5004,
+        swLng: 127.02,
+        neLat: 37.50045,
+        neLng: 127.03,
+      }),
+    ).toEqual({ swLat: 37.5, swLng: 127.02, neLat: 37.501, neLng: 127.03 });
+    expect(
+      normalizeBounds({
+        swLat: 37.49,
+        swLng: 127.0301,
+        neLat: 37.51,
+        neLng: 127.0304,
+      }),
+    ).toEqual({ swLat: 37.49, swLng: 127.03, neLat: 37.51, neLng: 127.031 });
+  });
+
+  it("격자 위의 값을 보정할 때 부동소수 오차로 한 칸 더 내리거나 올리지 않는다", () => {
+    expect(
+      normalizeBounds({
+        swLat: 37.501,
+        swLng: 127.02,
+        neLat: 37.5012,
+        neLng: 127.03,
+      }),
+    ).toEqual({ swLat: 37.501, swLng: 127.02, neLat: 37.502, neLng: 127.03 });
+  });
+});
+
+describe("normalizeBounds (property)", () => {
+  it("임의의 유효한 영역에서 결과는 SW<NE이고 region 영역 규칙을 통과하며, 같은 격자점에 드는 입력은 같은 결과다(AC-65)", () => {
+    const next = random(204);
+    for (let i = 0; i < 5000; i += 1) {
+      const lat = -89 + next() * 178;
+      const lng = -179 + next() * 358;
+      // 고확대(폭 0.0001도 미만)부터 넓은 화면까지
+      const height = 10 ** (-5 + next() * 5);
+      const width = 10 ** (-5 + next() * 5);
+      const input = {
+        swLat: lat,
+        swLng: lng,
+        neLat: Math.min(lat + height, 90),
+        neLng: Math.min(lng + width, 180),
+      };
+      const result = normalizeBounds(input);
+      expect(result.swLat).toBeLessThan(result.neLat);
+      expect(result.swLng).toBeLessThan(result.neLng);
+      expect(isValidBounds(result)).toBe(true);
+      for (const value of Object.values(result)) {
+        expect(Math.abs(value * 1000 - Math.round(value * 1000))).toBeLessThan(
+          1e-6,
+        );
+      }
+      // 같은 격자점에 드는 다른 입력(각 좌표를 0.0001도 안에서 흔듦)은 폭이 0이 아니면 같은 결과다
+      const nudge = (value: number) => {
+        const moved = value + (next() - 0.5) * 0.0001;
+        return Math.round(moved * 1000) === Math.round(value * 1000)
+          ? moved
+          : value;
+      };
+      const other = {
+        swLat: nudge(input.swLat),
+        swLng: nudge(input.swLng),
+        neLat: nudge(input.neLat),
+        neLng: nudge(input.neLng),
+      };
+      const rounded = (b: typeof input) => [
+        Math.round(b.swLat * 1000),
+        Math.round(b.neLat * 1000),
+        Math.round(b.swLng * 1000),
+        Math.round(b.neLng * 1000),
+      ];
+      const [a, b, c, d] = rounded(input);
+      if (a !== b && c !== d) {
+        expect(normalizeBounds(other)).toEqual(result);
+      }
+    }
+  });
+});
+
 describe("nearbyRequest", () => {
-  it("'근처'가 든 고정 문장만 담고 좌표도 지도 영역도 담지 않는다", () => {
-    expect(nearbyRequest()).toEqual({ query: NEARBY_QUERY });
-    expect(NEARBY_QUERY).toContain("근처");
+  it("받은 영역 객체 하나만 mapBounds로 담고 문장도 기기 좌표도 담지 않는다(AC-33, AC-65)", () => {
+    const area = normalizeBounds(bounds);
+    const request = nearbyRequest(area);
+    expect(request).toEqual({ mapBounds: area });
+    expect(request.mapBounds).toBe(area);
   });
 });
 

@@ -448,6 +448,89 @@ describe("createSearchStore", () => {
     expect(store.startInitialView()).toBe(false);
   });
 
+  it('"내 위치"가 처음 이동을 가지면 처음 조회와 처음 panTo의 끝으로는 done이 되지 않고 버튼의 끝으로 done이 된다(spec 70번)', () => {
+    const { store } = setup();
+    expect(store.startInitialView()).toBe(true);
+
+    store.takeInitialViewByButton();
+    expect(store.getSnapshot().initialView).toBe("applying");
+    store.finishInitialView("initial");
+    expect(store.getSnapshot().initialView).toBe("applying");
+    // 처음 이동을 다른 화면이 다시 가져가지 않는다
+    expect(store.startInitialView()).toBe(false);
+
+    store.finishInitialView("button");
+    expect(store.getSnapshot()).toMatchObject({
+      initialView: "done",
+      initialEndedBy: "button",
+    });
+  });
+
+  it.each(["user", "fit", "map"] as const)(
+    "버튼이 가진 동안에도 %s로는 done이 된다(spec 70번)",
+    (by) => {
+      const { store } = setup();
+      store.takeInitialViewByButton();
+
+      store.finishInitialView(by);
+
+      expect(store.getSnapshot()).toMatchObject({
+        initialView: "done",
+        initialEndedBy: by,
+      });
+    },
+  );
+
+  it("이미 done이면 버튼이 가져가도 그대로 done이다", () => {
+    const { store } = setup();
+    store.finishInitialView("user");
+
+    store.takeInitialViewByButton();
+
+    expect(store.getSnapshot()).toMatchObject({
+      initialView: "done",
+      initialEndedBy: "user",
+    });
+  });
+
+  it("홈 진입마다 번호가 오르고 영역이 비며, 지금 진입의 영역만 확정한다(spec 72번, 73번)", () => {
+    const { store } = setup();
+    const area = { swLat: 37.49, swLng: 127.02, neLat: 37.51, neLng: 127.05 };
+    const first = store.getSnapshot().home.entry;
+    store.setHomeBounds(first, area, 700);
+    expect(store.getSnapshot().home).toEqual({
+      entry: first,
+      bounds: area,
+      coverTop: 700,
+    });
+
+    store.beginHomeEntry();
+    const second = store.getSnapshot().home.entry;
+    expect(second).toBe(first + 1);
+    expect(store.getSnapshot().home.bounds).toBeUndefined();
+
+    // 지난 진입의 늦은 확정은 버린다
+    store.setHomeBounds(first, area, 700);
+    expect(store.getSnapshot().home.bounds).toBeUndefined();
+    store.setHomeBounds(second, area, 640);
+    expect(store.getSnapshot().home).toMatchObject({
+      bounds: area,
+      coverTop: 640,
+    });
+  });
+
+  it("로그인 세션이 바뀌면 홈 영역을 비우고 진입 번호를 올린다(spec 73번)", () => {
+    const { store } = setup();
+    const area = { swLat: 37.49, swLng: 127.02, neLat: 37.51, neLng: 127.05 };
+    const entry = store.getSnapshot().home.entry;
+    store.setHomeBounds(entry, area, 700);
+
+    store.reset();
+
+    expect(store.getSnapshot().home.bounds).toBeUndefined();
+    expect(store.getSnapshot().home.entry).toBe(entry + 1);
+  });
+
   it("위치 알림은 한 번만 가져갈 수 있다(spec 63번)", () => {
     const { store } = setup();
     expect(store.takeLocationNotice()).toBeUndefined();

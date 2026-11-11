@@ -12,9 +12,8 @@ type NearbyCarouselProps = {
   cards: PlaceCard[];
   // 선택된 카드
   selectedId: number;
-  // 거리의 기준 지점과, 기기 위치가 아닐 때 거리 앞에 붙는 이름
-  origin: LatLng;
-  originLabel?: string;
+  // 기기 위치. 있을 때만 거리를 보인다(spec 55번)
+  here?: LatLng;
   // 넘기거나 가운데가 아닌 카드를 눌러 선택이 바뀔 때
   onSelect: (card: PlaceCard) => void;
   // 선택된 카드를 누를 때. 상세로 간다
@@ -25,8 +24,7 @@ type NearbyCarouselProps = {
 export function NearbyCarousel({
   cards,
   selectedId,
-  origin,
-  originLabel,
+  here,
   onSelect,
   onOpen,
 }: NearbyCarouselProps) {
@@ -63,8 +61,7 @@ export function NearbyCarousel({
               card={card}
               rank={cardIndex + 1}
               selected={selected}
-              origin={origin}
-              originLabel={originLabel}
+              here={here}
               onPress={() => (selected ? onOpen(card) : onSelect(card))}
             />
           </div>
@@ -78,15 +75,13 @@ function NearbyCard({
   card,
   rank,
   selected,
-  origin,
-  originLabel,
+  here,
   onPress,
 }: {
   card: PlaceCard;
   rank: number;
   selected: boolean;
-  origin: LatLng;
-  originLabel?: string;
+  here?: LatLng;
   onPress: () => void;
 }) {
   const { place, score, labels, openStatus } = card;
@@ -111,12 +106,7 @@ function NearbyCard({
                 {place.name}
               </span>
             </div>
-            <PlaceMeta
-              place={place}
-              here={origin}
-              hereLabel={originLabel}
-              status={openStatus}
-            />
+            <PlaceMeta place={place} here={here} status={openStatus} />
           </div>
           {score !== undefined && <FitScore score={score} />}
         </div>
@@ -129,5 +119,38 @@ function NearbyCard({
         </div>
       </div>
     </button>
+  );
+}
+
+// 홈 영역을 확정하고 카드를 받기 전의 자리(spec 73번). 실제 카드와 같은 틀과 줄 높이로 그려 아래 묶음 높이가
+// 바뀌지 않게 한다. 휴대폰 폭에서는 카드처럼 화면 좌우 16px, 넓은 폭에서는 320px 카드가 왼쪽 24px에 놓인다
+export function NearbyCarouselSkeleton() {
+  return (
+    <div
+      role="status"
+      aria-label="주변 추천을 불러오는 중"
+      className="px-4 sm:px-6"
+    >
+      <div className="flex w-full flex-col overflow-hidden rounded-lg bg-surface shadow-2 sm:w-80">
+        <div className="h-30 w-full skeleton" />
+        <div className="flex w-full flex-col gap-2 px-3.5 pt-3 pb-3.5">
+          <div className="flex flex-col gap-0.5">
+            <span className="text-title-md">
+              <span className="inline-block w-3/5 skeleton rounded-sm text-transparent">
+                &nbsp;
+              </span>
+            </span>
+            <span className="text-caption-md">
+              <span className="inline-block w-2/5 skeleton rounded-sm text-transparent">
+                &nbsp;
+              </span>
+            </span>
+          </div>
+          <div aria-hidden className="invisible flex gap-1">
+            <Tag variant="match">&nbsp;</Tag>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

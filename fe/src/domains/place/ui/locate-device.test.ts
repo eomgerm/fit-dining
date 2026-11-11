@@ -181,7 +181,11 @@ describe('"내 위치" 버튼과 처음 조회 (AC-49, AC-50)', () => {
     const device = stubDevice("granted");
     const initial = initialLocation();
     const button = locateFromButton();
-    expect(snapshot().initialView).toBe("done");
+    // 누르는 순간 끝나지 않고 버튼이 처음 이동을 가진다(spec 70번)
+    expect(snapshot()).toMatchObject({
+      initialView: "applying",
+      initialOwnedByButton: true,
+    });
 
     device.grantPermission();
     await settle();
@@ -204,7 +208,18 @@ describe('"내 위치" 버튼과 처음 조회 (AC-49, AC-50)', () => {
     expect(await button).toEqual(HERE);
     expect(await initial).toEqual({ status: "located", here: HERE });
     expect(device.getCurrentPosition).toHaveBeenCalledTimes(1);
-    expect(snapshot().initialView).toBe("done");
+    // 처음 조회의 결과로는 끝나지 않고 버튼의 이동이 끝낼 때까지 버튼이 가진다(spec 70번)
+    expect(snapshot().initialView).toBe("applying");
+  });
+
+  it("권한이 정해지지 않은 채 확인 중에 버튼을 누르면 처음 조회가 unavailable로 끝나도 처음 이동은 끝나지 않는다(AC-64)", async () => {
+    const device = stubDevice("prompt");
+    const initial = initialLocation();
+    locateFromButton();
+    device.grantPermission();
+
+    expect(await initial).toEqual({ status: "unavailable" });
+    expect(snapshot().initialView).toBe("applying");
   });
 
   it("버튼이 대신한 뒤 같은 조회가 실패하면 처음 조회의 알림은 남기지 않는다(버튼이 알린다)", async () => {
@@ -244,6 +259,7 @@ describe('"내 위치" 버튼과 처음 조회 (AC-49, AC-50)', () => {
     device.grantPermission();
     await settle();
     stopInitialMoveByUser();
+    expect(snapshot().initialEndedBy).toBe("user");
     device.succeed();
 
     await initial;

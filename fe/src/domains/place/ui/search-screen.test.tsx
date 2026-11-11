@@ -2,6 +2,7 @@
 import {
   focusManager,
   onlineManager,
+  type QueryClient,
   QueryClientProvider,
 } from "@tanstack/react-query";
 import {
@@ -22,9 +23,10 @@ import { ToastProvider } from "@/shared/ui/overlay/toast";
 
 import type { BookmarkAccess } from "../model/bookmark";
 import type { PlaceCard, PlaceSearchResponse } from "../model/place-types";
-import { NEARBY_QUERY } from "../model/search-request";
 import { createSearchStore, type SearchStore } from "../model/search-store";
 import { SearchScreen } from "./search-screen";
+import { SEARCH_SLOW_MS, SEARCH_STEP_MS } from "./search-steps";
+import { BOUNDS, stubNaverMaps } from "./testing/naver-maps-stub";
 
 // 인증은 북마크 테스트(place-detail-bookmark, saved-places)가 본다. 여기서는 비로그인이다
 const guest: BookmarkAccess = {
@@ -80,7 +82,7 @@ function card(id: number): PlaceCard {
   };
 }
 
-// 사용자가 보낸 검색 요청 본문과 주소(같은 순서). 첫 화면 주변 카드 요청은 nearbyBodies에 따로 모은다
+// 사용자가 보낸 검색 요청 본문과 주소(같은 순서). 첫 화면 주변 카드 요청(/places/nearby)은 nearbyBodies에 따로 모은다
 let searchBodies: Record<string, unknown>[];
 let searchUrls: string[];
 let nearbyBodies: Record<string, unknown>[];
@@ -102,13 +104,14 @@ function stubApi() {
       const url = String(input);
       if (url.startsWith("/api/v1/places/suggest")) return Response.json([]);
       const body = JSON.parse(String(init?.body));
-      if (body.query === NEARBY_QUERY) nearbyBodies.push(body);
+      const home = url === "/api/v1/places/nearby";
+      if (home) nearbyBodies.push(body);
       else {
         searchBodies.push(body);
         searchUrls.push(url);
       }
       const followUp = body.previousConditions !== undefined;
-      if (body.query.includes("근처")) {
+      if (home || body.query.includes("근처")) {
         // 1번은 역삼역 바로 앞, 3번은 약 2km 떨어진 곳
         const far = { ...card(3), place: { ...card(3).place, lat: 37.518 } };
         return Response.json(
@@ -118,9 +121,7 @@ function stubApi() {
             totalCount: 2,
             items: [card(1), far],
           } satisfies PlaceSearchResponse,
-          fallbackHeaders(
-            body.query === NEARBY_QUERY ? aiFallback.nearby : aiFallback.search,
-          ),
+          fallbackHeaders(home ? aiFallback.nearby : aiFallback.search),
         );
       }
       if (body.query.includes("없는")) {
@@ -152,9 +153,23 @@ function stubApi() {
   );
 }
 
+// 테스트가 만든 QueryClient. 화면을 내린 뒤 cache와 진행 중인 요청·재시도를 비워 다음 테스트에 닿지 않게 한다
+const clients: QueryClient[] = [];
+// 재시도 횟수는 제품 그대로 두고 재시도 사이 대기만 없앤다(재시도 정책은 query-client 테스트가 본다)
+function newClient() {
+  const client = createQueryClient();
+  const defaults = client.getDefaultOptions();
+  client.setDefaultOptions({
+    ...defaults,
+    queries: { ...defaults.queries, retryDelay: 0 },
+  });
+  clients.push(client);
+  return client;
+}
+
 function renderScreen() {
   return render(
-    <QueryClientProvider client={createQueryClient()}>
+    <QueryClientProvider client={newClient()}>
       <ToastProvider>
         <SearchScreen bookmarks={guest} />
       </ToastProvider>
@@ -162,9 +177,28 @@ function renderScreen() {
   );
 }
 
+// 지도 인증 실패는 페이지 세션(place-map 모듈)에 남는다. 그 테스트는 모듈을 새로 읽어 새 페이지 세션에서 그린다.
+// React Query는 node_modules라 다시 읽히지 않아 같은 Provider를 쓴다
+async function renderInNewPageSession() {
+  vi.resetModules();
+  const [screenModule, toastModule] = await Promise.all([
+    import("./search-screen"),
+    import("@/shared/ui/overlay/toast"),
+  ]);
+  const Screen = screenModule.SearchScreen;
+  const Toasts = toastModule.ToastProvider;
+  return render(
+    <QueryClientProvider client={newClient()}>
+      <Toasts>
+        <Screen bookmarks={guest} />
+      </Toasts>
+    </QueryClientProvider>,
+  );
+}
+
 // 다른 화면으로 가면 Next가 이 화면을 숨겨 두었다가(Effect 정리) 돌아오면 다시 보인다. 그 숨김을 흉내 낸다
 function renderHideableScreen() {
-  const client = createQueryClient();
+  const client = newClient();
   const ui = (mode: "visible" | "hidden") => (
     <QueryClientProvider client={client}>
       <ToastProvider>
@@ -183,6 +217,15 @@ function renderHideableScreen() {
 
 const mapState = () =>
   document.querySelector("[data-map-state]")?.getAttribute("data-map-state");
+
+// 지도가 그려지고 검색 화면도 그 알림을 받은 뒤. data-map-state는 PlaceMap이 바로 그리지만, 지도 위 버튼("내 위치",
+// "이 지역에서 검색")은 검색 화면이 onReadyChange를 받은 다음 렌더에 그린다. 그 사이 한 commit에는 버튼이 없다
+async function mapReady() {
+  await waitFor(() => {
+    expect(mapState()).toBe("ready");
+    expect(screen.getByRole("button", { name: "내 위치" })).toBeTruthy();
+  });
+}
 
 async function newSearch(text: string) {
   fireEvent.change(screen.getByRole("textbox", { name: "장소 검색" }), {
@@ -213,14 +256,56 @@ async function openHistory() {
 
 const pastView = () => screen.findByRole("region", { name: "과거 결과" });
 
+// 검색 요청(/places/search, /places/search/region)만 붙잡는다. held[i]()가 그 요청을 놓고 원래 응답의 Promise를 돌려준다
+function holdSearches() {
+  const original = globalThis.fetch;
+  const held: Array<() => Promise<Response>> = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn<typeof fetch>((input, init) => {
+      if (!String(input).includes("/search")) return original(input, init);
+      let release = () => {};
+      const gate = new Promise<void>((resolve) => (release = resolve));
+      const response = gate.then(() => original(input, init));
+      held.push(() => {
+        release();
+        return response;
+      });
+      return response;
+    }),
+  );
+  return held;
+}
+
+// 붙잡은 응답을 놓고, 그 응답을 받은 쪽이 처리를 끝낼 때까지(fetch 끝, query와 mutation 끝, 그 뒤 렌더와 effect) 기다린다.
+// 늦은 응답이 화면을 바꾸지 않았다는 단언은 이 뒤에 한다
+async function releaseAndSettle(release: () => Promise<Response>) {
+  await act(async () => {
+    await release();
+  });
+  await waitFor(() => {
+    expect(clients.at(-1)!.isFetching()).toBe(0);
+    expect(clients.at(-1)!.isMutating()).toBe(0);
+  });
+  await act(async () => {});
+}
+
 beforeEach(() => {
   stores.current = createSearchStore();
   stubApi();
   config.value = undefined;
+  // 브라우저처럼 observe하면 지금 크기를 한 번 알린다. 크기 적용을 기다리는 테스트는 따로 바꿔 끼운다
   vi.stubGlobal(
     "ResizeObserver",
     class {
-      observe() {}
+      constructor(private readonly callback: ResizeObserverCallback) {}
+      observe(target: Element) {
+        const { width, height } = target.getBoundingClientRect();
+        this.callback(
+          [{ target, contentRect: { width, height } } as ResizeObserverEntry],
+          this as unknown as ResizeObserver,
+        );
+      }
       disconnect() {}
     },
   );
@@ -240,137 +325,21 @@ beforeEach(() => {
   localStorage.clear();
 });
 
+// 실패한 테스트도 다음 테스트에 남기지 않도록 여기서 되돌린다
 afterEach(() => {
   cleanup();
+  clients.splice(0).forEach((client) => client.clear());
+  vi.useRealTimers();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  focusManager.setFocused(undefined);
+  onlineManager.setOnline(true);
+  document.head
+    .querySelectorAll('script[src*="oapi.map.naver.com"]')
+    .forEach((script) => script.remove());
+  delete window.navermap_authFailure;
   push.mockReset();
 });
-
-const BOUNDS = { swLat: 37.49, swLng: 127.02, neLat: 37.51, neLng: 127.05 };
-
-// 네이버 지도 SDK 흉내. Marker만 바꿔 끼울 수 있다. fire로 지도 이벤트(사용자가 끌기 등)를 일으킨다
-function stubNaverMaps({ Marker }: { Marker?: unknown } = {}) {
-  const listeners: { target: unknown; name: string; listener: () => void }[] =
-    [];
-  const latLng = (lat: number, lng: number) => ({
-    lat: () => lat,
-    lng: () => lng,
-  });
-  const created: {
-    // 지도를 만들 때 넘긴 처음 중심과 확대 정도
-    options: { center: { lat(): number; lng(): number }; zoom: number };
-    setSize: ReturnType<typeof vi.fn>;
-    panTo: ReturnType<typeof vi.fn>;
-    morph: ReturnType<typeof vi.fn>;
-    fitBounds: ReturnType<typeof vi.fn>;
-    setZoom: ReturnType<typeof vi.fn>;
-    getCenter: ReturnType<typeof vi.fn>;
-    getZoom: ReturnType<typeof vi.fn>;
-  }[] = [];
-  // 지도에 건 이벤트를 지금 바로 부른다(SDK가 확대 정도를 바꾸면 그 자리에서 zoom_changed를 알린다)
-  const emit = (target: unknown, name: string) =>
-    listeners
-      .filter((entry) => entry.name === name && entry.target === target)
-      .forEach(({ listener }) => listener());
-  // fitBounds 뒤의 확대 정도. 테스트가 바꿔 "움직이지 않음"(15)이나 "너무 확대됨"(19)을 흉내 낸다
-  const fit = { zoom: 16 };
-  const maps = {
-    Map: class {
-      constructor(
-        _: unknown,
-        readonly options: {
-          center: { lat(): number; lng(): number };
-          zoom: number;
-        },
-      ) {
-        created.push(this);
-      }
-      getBounds = () => ({
-        getSW: () => latLng(BOUNDS.swLat, BOUNDS.swLng),
-        getNE: () => latLng(BOUNDS.neLat, BOUNDS.neLng),
-      });
-      // 처음 중심은 기기 위치와 멀다. 테스트가 바꿔 "이미 그 위치"를 흉내 낸다
-      getCenter = vi.fn(() => latLng(0, 0));
-      // 처음 확대 정도. 테스트가 바꿔 사용자가 확대·축소해 둔 지도를 흉내 낸다
-      getZoom = vi.fn(() => 15);
-      panTo = vi.fn();
-      morph = vi.fn();
-      // 지도 컨테이너 기준 화면 좌표(px)를 위경도로 바꾼다. 아래로 1000px마다 위도 1도, 오른쪽으로 1000px마다 경도 1도
-      getProjection = () => ({
-        fromOffsetToCoord: ({ x, y }: { x: number; y: number }) =>
-          latLng(38 - y / 1000, 127 + x / 1000),
-      });
-      // 문서대로 부드러운 이동 없이 그 자리에서 중심과 확대 정도를 바꾸고, 옵션의 maxZoom을 넘지 않는다
-      fitBounds = vi.fn((_: unknown, options?: { maxZoom?: number }) => {
-        const zoom = Math.min(fit.zoom, options?.maxZoom ?? Infinity);
-        if (zoom === this.getZoom()) return;
-        this.getZoom.mockReturnValue(zoom);
-        emit(this, "zoom_changed");
-      });
-      setZoom = vi.fn((zoom: number) => {
-        this.getZoom.mockReturnValue(zoom);
-        emit(this, "zoom_changed");
-      });
-      setSize = vi.fn();
-      destroy() {}
-    },
-    LatLng: class {
-      constructor(
-        readonly latValue: number,
-        readonly lngValue: number,
-      ) {}
-      lat = () => this.latValue;
-      lng = () => this.lngValue;
-    },
-    LatLngBounds: class {
-      constructor(
-        readonly sw: { lat(): number; lng(): number },
-        readonly ne: { lat(): number; lng(): number },
-      ) {}
-    },
-    Size: class {
-      constructor(
-        readonly width: number,
-        readonly height: number,
-      ) {}
-    },
-    Point: class {
-      constructor(
-        readonly x: number,
-        readonly y: number,
-      ) {}
-    },
-    Marker:
-      Marker ??
-      class {
-        setMap() {}
-        setIcon() {}
-        setZIndex() {}
-      },
-    Event: {
-      addListener(target: unknown, name: string, listener: () => void) {
-        const entry = { target, name, listener };
-        listeners.push(entry);
-        return entry;
-      },
-      removeListener(entry: unknown) {
-        listeners.splice(listeners.indexOf(entry as never), 1);
-      },
-    },
-  };
-  vi.stubGlobal("naver", { maps });
-  // 지도에 건 이벤트만 일으킨다
-  const fire = (name: string) =>
-    act(() =>
-      listeners
-        .filter(
-          (entry) =>
-            entry.name === name && created.includes(entry.target as never),
-        )
-        .forEach(({ listener }) => listener()),
-    );
-  return { created, fire, fit };
-}
 
 // 화면을 열 때 보는 위치 권한과 기기 위치. permission이 없으면 Permissions API가 없는 브라우저다
 function stubLocation({
@@ -403,7 +372,7 @@ function stubNearbyItems(items: PlaceCard[]) {
   vi.stubGlobal(
     "fetch",
     vi.fn<typeof fetch>(async (input, init) => {
-      if (init?.body && JSON.parse(String(init.body)).query === NEARBY_QUERY) {
+      if (String(input) === "/api/v1/places/nearby") {
         await original(input, init);
         return Response.json({
           conditions: {},
@@ -419,6 +388,15 @@ function stubNearbyItems(items: PlaceCard[]) {
 
 const nearbyList = () =>
   screen.findByRole("region", { name: "주변 추천 장소" });
+
+// 홈 영역을 확정해 카드를 받기 전의 카드 자리(spec 73번)
+const SKELETON = "주변 추천을 불러오는 중";
+const skeleton = () => screen.queryByRole("status", { name: SKELETON });
+
+// 지도를 쓸 수 없어 홈 영역을 정할 수 없을 때 카드 자리의 안내(spec 75번)
+const MAP_FAILED_TITLE = "지도를 불러오지 못했어요";
+const MAP_FAILED_DESCRIPTION =
+  "주변 추천을 보려면 지도가 필요해요. 아래 검색창으로 장소를 직접 찾아볼 수 있어요.";
 
 const HERE = { lat: 37.5, lng: 127.03 };
 
@@ -451,7 +429,6 @@ function stubLocationLater() {
 }
 
 describe("SearchScreen", () => {
-  // 인증 실패 알림은 모듈에 남으므로 지도가 있어야 하는 테스트는 그 테스트보다 먼저 둔다
   describe("지도가 있을 때", () => {
     let map: ReturnType<typeof stubNaverMaps>;
     const regionButton = () =>
@@ -535,7 +512,7 @@ describe("SearchScreen", () => {
           JSON.stringify([{ id: "thread-old", turns }]),
         );
         renderScreen();
-        await waitFor(() => expect(mapState()).toBe("ready"));
+        await mapReady();
         fireEvent.click(screen.getByRole("button", { name: "최근 검색" }));
         const sheet = await screen.findByRole("dialog", { name: "최근 검색" });
         const row = within(
@@ -605,7 +582,7 @@ describe("SearchScreen", () => {
           stubLocation(location);
           stubLayout();
           renderScreen();
-          await waitFor(() => expect(mapState()).toBe("ready"));
+          await mapReady();
           if (permission === "granted") {
             await waitFor(() =>
               expect(map.created[0].panTo).toHaveBeenCalled(),
@@ -630,7 +607,7 @@ describe("SearchScreen", () => {
       it("키보드로 검색창이 위로 들려 있어도(검색창 위 끝 100) 아래 묶음 위 끝으로 잰 입력 전 화면의 영역이다 (AC-53, AC-54)", async () => {
         stubLayout();
         renderScreen();
-        await waitFor(() => expect(mapState()).toBe("ready"));
+        await mapReady();
         const input = screen.getByRole("textbox", { name: "장소 검색" });
 
         fireEvent.focus(input);
@@ -644,7 +621,7 @@ describe("SearchScreen", () => {
       it("화면 좌표를 위경도로 바꾸다 SDK가 던지면 지도 전체 영역을 담는다 (AC-54)", async () => {
         stubLayout();
         renderScreen();
-        await waitFor(() => expect(mapState()).toBe("ready"));
+        await mapReady();
         Object.assign(map.created[0], {
           getProjection: () => {
             throw new Error("변환 실패");
@@ -658,7 +635,7 @@ describe("SearchScreen", () => {
 
       it("배치를 잴 수 없으면(보이는 띠가 너무 작음) 지도 전체 영역을 담는다 (AC-54)", async () => {
         renderScreen();
-        await waitFor(() => expect(mapState()).toBe("ready"));
+        await mapReady();
 
         await newSearch("역삼 카페");
 
@@ -668,7 +645,7 @@ describe("SearchScreen", () => {
       it("후속 조건은 지도를 옮겨도 기준 항목의 영역을 잇고, region 항목이 기준이면 그 영역이다 (AC-55)", async () => {
         stubLayout();
         renderScreen();
-        await waitFor(() => expect(mapState()).toBe("ready"));
+        await mapReady();
         await newSearch("역삼 카페");
 
         map.fire("dragend");
@@ -693,7 +670,7 @@ describe("SearchScreen", () => {
       it("'이 지역에서 검색'은 region API로 보던 항목의 문장과 conditions, 패널 위로 보이는 영역을 보내고 previousConditions는 없다 (AC-56)", async () => {
         stubLayout();
         renderScreen();
-        await waitFor(() => expect(mapState()).toBe("ready"));
+        await mapReady();
         await newSearch("역삼 카페");
         await followUp("더 조용하게");
 
@@ -756,7 +733,7 @@ describe("SearchScreen", () => {
           },
         );
         renderScreen();
-        await waitFor(() => expect(mapState()).toBe("ready"));
+        await mapReady();
         await newSearch("역삼 카페");
 
         map.fire("dragend");
@@ -929,7 +906,7 @@ describe("SearchScreen", () => {
         const SEARCH_NOTICE =
           "지금은 AI 추천을 쓸 수 없어 가게 이름·메뉴로 찾았어요";
         renderScreen();
-        await waitFor(() => expect(mapState()).toBe("ready"));
+        await mapReady();
         await newSearch("역삼 카페");
         expect(screen.getByText(SEARCH_NOTICE)).toBeTruthy();
 
@@ -946,7 +923,7 @@ describe("SearchScreen", () => {
         it("새 검색의 첫 페이지(2곳)에 fitBounds를 한 번 부르고 여백은 패널과 겹친 높이 + 40, 위 safe-area + 40, 옆 40이다", async () => {
           stubLayout();
           renderScreen();
-          await waitFor(() => expect(mapState()).toBe("ready"));
+          await mapReady();
 
           await newSearch("역삼 카페");
 
@@ -971,7 +948,7 @@ describe("SearchScreen", () => {
 
         it("1곳이면 확대 정도 그대로 panTo, 0곳·region·다음 결과 보기·이어 검색에서는 맞춤 이동이 없다", async () => {
           renderScreen();
-          await waitFor(() => expect(mapState()).toBe("ready"));
+          await mapReady();
           await newSearch("역삼 카페");
           const [created] = map.created;
 
@@ -1007,29 +984,18 @@ describe("SearchScreen", () => {
 
         it("첫 화면 주변 카드, 버린 검색의 늦은 응답으로는 맞춤 이동이 없다", async () => {
           renderScreen();
-          await waitFor(() => expect(mapState()).toBe("ready"));
+          await mapReady();
           await nearbyList();
           const [created] = map.created;
           expect(created.fitBounds).not.toHaveBeenCalled();
 
           await newSearch("역삼 카페");
           expect(created.fitBounds).toHaveBeenCalledTimes(1);
-          const original = globalThis.fetch;
-          const held: Array<() => void> = [];
-          vi.stubGlobal(
-            "fetch",
-            vi.fn<typeof fetch>(async (input, init) => {
-              if (String(input).includes("/search")) {
-                await new Promise<void>((resolve) => held.push(resolve));
-              }
-              return original(input, init);
-            }),
-          );
+          const held = holdSearches();
           sendFollowUp("더 조용하게");
           await waitFor(() => expect(held).toHaveLength(1));
           fireEvent.click(screen.getByRole("button", { name: "새 검색" }));
-          held[0]();
-          await new Promise((resolve) => setTimeout(resolve, 50));
+          await releaseAndSettle(held[0]);
 
           expect(created.fitBounds).toHaveBeenCalledTimes(1);
           expect(created.panTo).not.toHaveBeenCalled();
@@ -1067,7 +1033,7 @@ describe("SearchScreen", () => {
             },
           );
           renderScreen();
-          await waitFor(() => expect(mapState()).toBe("ready"));
+          await mapReady();
 
           await newSearch("역삼 카페");
           await waitFor(() =>
@@ -1095,7 +1061,7 @@ describe("SearchScreen", () => {
             }),
           );
           renderScreen();
-          await waitFor(() => expect(mapState()).toBe("ready"));
+          await mapReady();
           fireEvent.change(screen.getByRole("textbox", { name: "장소 검색" }), {
             target: { value: "역삼 카페" },
           });
@@ -1117,33 +1083,33 @@ describe("SearchScreen", () => {
           );
         });
 
-        it("근처 응답이 위치를 확인하는 중이면 맞춤 이동이 없고 끝난 뒤에도 그 결과로는 없으며, 처음 이동은 그대로다", async () => {
+        it("근처 응답도 위치를 기다리지 않고 거르지 않은 핀 전부로 맞추며, 남은 처음 이동은 하지 않는다 (AC-61, AC-52)", async () => {
           const device = stubLocationLater();
           renderScreen();
-          await waitFor(() => expect(mapState()).toBe("ready"));
+          await mapReady();
           await waitFor(() =>
             expect(device.getCurrentPosition).toHaveBeenCalled(),
           );
-          fireEvent.change(screen.getByRole("textbox", { name: "장소 검색" }), {
-            target: { value: "근처 카페" },
-          });
-          fireEvent.submit(screen.getByRole("search"));
-          expect(await screen.findByText("위치를 확인하는 중")).toBeTruthy();
 
-          await device.succeed();
+          await newSearch("근처 카페");
+
           const [created] = map.created;
-          await waitFor(() => expect(created.panTo).toHaveBeenCalledTimes(1));
-          map.fire("idle");
-          await waitFor(() =>
-            expect(stores.current.getSnapshot().initialView).toBe("done"),
-          );
-          expect(created.fitBounds).not.toHaveBeenCalled();
+          expect(created.fitBounds).toHaveBeenCalledTimes(1);
+          // 1번(역삼역 앞)과 2km 떨어진 3번이 모두 사각형에 든다
+          const [rect] = created.fitBounds.mock.calls[0] as [
+            { sw: { lat(): number }; ne: { lat(): number } },
+          ];
+          expect([rect.sw.lat(), rect.ne.lat()]).toEqual([37.5, 37.518]);
+          expect(stores.current.getSnapshot().initialView).toBe("done");
+          await device.succeed();
+          await act(async () => {});
+          expect(created.panTo).not.toHaveBeenCalled();
         });
 
         it("처음 이동이 남은 채 맞춤 이동하면 처음 이동은 하지 않고, 늦게 온 위치는 내 위치로만 남는다 (AC-32, AC-48)", async () => {
           const device = stubLocationLater();
           renderScreen();
-          await waitFor(() => expect(mapState()).toBe("ready"));
+          await mapReady();
           await waitFor(() =>
             expect(device.getCurrentPosition).toHaveBeenCalled(),
           );
@@ -1164,7 +1130,7 @@ describe("SearchScreen", () => {
 
         it("맞춤 이동의 확대·축소로는 '이 지역에서 검색'이 나타나지 않고, 그 뒤 사용자가 확대·축소하면 나타난다", async () => {
           renderScreen();
-          await waitFor(() => expect(mapState()).toBe("ready"));
+          await mapReady();
 
           await newSearch("역삼 카페");
           expect(regionButton()).toBeNull();
@@ -1178,7 +1144,7 @@ describe("SearchScreen", () => {
         it("맞춤 이동이 지도를 움직이지 않았으면 바로 다음 사용자 확대·축소로 나타난다", async () => {
           map.fit.zoom = 15;
           renderScreen();
-          await waitFor(() => expect(mapState()).toBe("ready"));
+          await mapReady();
 
           await newSearch("역삼 카페");
           expect(map.created[0].fitBounds).toHaveBeenCalledTimes(1);
@@ -1191,7 +1157,7 @@ describe("SearchScreen", () => {
         it("핀이 가까워 더 확대될 자리여도 fitBounds의 maxZoom으로 확대 정도는 17이고, 따로 setZoom을 부르지 않는다", async () => {
           map.fit.zoom = 19;
           renderScreen();
-          await waitFor(() => expect(mapState()).toBe("ready"));
+          await mapReady();
 
           await newSearch("역삼 카페");
 
@@ -1208,7 +1174,7 @@ describe("SearchScreen", () => {
           stubLocation({ position: HERE });
           map.fit.zoom = 19;
           renderScreen();
-          await waitFor(() => expect(mapState()).toBe("ready"));
+          await mapReady();
           await newSearch("역삼 카페");
           const [created] = map.created;
 
@@ -1228,7 +1194,7 @@ describe("SearchScreen", () => {
         "결과가 있어도 지도를 움직이기 전에는 없고, %s 뒤에 나타난다",
         async (event) => {
           renderScreen();
-          await waitFor(() => expect(mapState()).toBe("ready"));
+          await mapReady();
           await newSearch("역삼 카페");
           expect(regionButton()).toBeNull();
           // 결과 맞춤 이동이 멈춘 뒤의 사용자 조작이다(spec 69번)
@@ -1242,7 +1208,7 @@ describe("SearchScreen", () => {
 
       it("카드를 눌러 지도가 옮겨 가도 나타나지 않는다", async () => {
         renderScreen();
-        await waitFor(() => expect(mapState()).toBe("ready"));
+        await mapReady();
         const list = await newSearch("역삼 카페");
 
         fireEvent.click(within(list).getAllByRole("button")[1]);
@@ -1253,7 +1219,7 @@ describe("SearchScreen", () => {
 
       it("누르거나, 보는 결과가 바뀌거나, '새 검색'을 누르면 숨는다", async () => {
         renderScreen();
-        await waitFor(() => expect(mapState()).toBe("ready"));
+        await mapReady();
         await newSearch("역삼 카페");
 
         map.fire("dragend");
@@ -1298,7 +1264,7 @@ describe("SearchScreen", () => {
           JSON.stringify({ lat: 36.35, lng: 127.34, zoom: 13 }),
         );
         renderScreen();
-        await waitFor(() => expect(mapState()).toBe("ready"));
+        await mapReady();
         expect(startView()).toEqual({ lat: 36.35, lng: 127.34, zoom: 13 });
 
         const created = map.created[0];
@@ -1334,7 +1300,7 @@ describe("SearchScreen", () => {
       ])("%s 기본 화면(SSAFY 서울캠퍼스)에서 시작한다", async (_, raw) => {
         if (raw) localStorage.setItem("fd.map.view.v1", raw);
         renderScreen();
-        await waitFor(() => expect(mapState()).toBe("ready"));
+        await mapReady();
 
         expect(startView()).toEqual({ lat: 37.5013, lng: 127.0396, zoom: 15 });
       });
@@ -1350,7 +1316,7 @@ describe("SearchScreen", () => {
           });
         try {
           renderScreen();
-          await waitFor(() => expect(mapState()).toBe("ready"));
+          await mapReady();
           expect(startView()).toEqual({
             lat: 37.5013,
             lng: 127.0396,
@@ -1373,7 +1339,7 @@ describe("SearchScreen", () => {
       it("위치가 지도 준비보다 먼저 끝나도 그 위치로 한 번만 옮기고, 다시 마운트하거나 로그인 세션이 바뀌어도 다시 옮기지 않는다", async () => {
         stubLocation({ permission: "granted", position: HERE });
         renderScreen();
-        await waitFor(() => expect(mapState()).toBe("ready"));
+        await mapReady();
         await waitFor(() =>
           expect(map.created[0].panTo).toHaveBeenCalledTimes(1),
         );
@@ -1385,7 +1351,7 @@ describe("SearchScreen", () => {
         // here가 store에 남은 채 화면을 다시 마운트한다
         cleanup();
         renderScreen();
-        await waitFor(() => expect(mapState()).toBe("ready"));
+        await mapReady();
         act(() => stores.current.reset());
         await act(async () => {});
         expect(map.created[1].panTo).not.toHaveBeenCalled();
@@ -1398,7 +1364,7 @@ describe("SearchScreen", () => {
       it("위치가 지도 준비보다 늦게 끝나도 한 번만 옮기고 확대 정도는 그대로다", async () => {
         const device = stubLocationLater();
         renderScreen();
-        await waitFor(() => expect(mapState()).toBe("ready"));
+        await mapReady();
         await waitFor(() =>
           expect(device.getCurrentPosition).toHaveBeenCalled(),
         );
@@ -1417,10 +1383,55 @@ describe("SearchScreen", () => {
         expect(map.created[0].panTo).toHaveBeenCalledTimes(1);
       });
 
+      // 지도를 없앤 뒤에도 이동이 1.5초 대기로 남으면, 그 뒤에 끝난 이동이 그때의 store(다음 화면, 테스트에서는 다음 테스트)의
+      // 처음 이동을 끝내 버린다. 지도를 없애는 순간 기다리던 이동은 그 자리에서 끝난다(PlaceMap 핸들 계약 "지도가 없으면 바로 끝난다")
+      it("처음 이동 중에 화면이 없어지면 기다리던 이동이 그 자리에서 끝나 그 화면의 처음 이동을 끝낸다", async () => {
+        stubLocation({ permission: "granted", position: HERE });
+        renderScreen();
+        await waitFor(() =>
+          expect(map.created[0].panTo).toHaveBeenCalledTimes(1),
+        );
+        expect(initialView()).toBe("applying");
+        const store = stores.current;
+
+        cleanup();
+        await act(async () => {});
+        expect(store.getSnapshot().initialView).toBe("done");
+
+        // 다음 화면(테스트)의 store로 바뀐 뒤 옛 지도가 멈춤을 알려도(1.5초 대기가 끝나는 것과 같다) 새 store는 그대로다
+        stores.current = createSearchStore();
+        map.fire("idle");
+        await act(async () => {});
+        expect(stores.current.getSnapshot().initialView).toBe("pending");
+      });
+
+      it("'내 위치' 이동 중에 화면이 없어지면 기다리던 이동이 그 자리에서 끝나 버튼이 가진 처음 이동을 끝낸다", async () => {
+        const device = stubLocationLater();
+        renderScreen();
+        await mapReady();
+        await waitFor(() =>
+          expect(device.getCurrentPosition).toHaveBeenCalled(),
+        );
+        fireEvent.click(screen.getByRole("button", { name: "내 위치" }));
+        await device.succeed();
+        await waitFor(() => expect(map.created[0].morph).toHaveBeenCalled());
+        const store = stores.current;
+        expect(store.getSnapshot().initialView).toBe("applying");
+
+        cleanup();
+        await act(async () => {});
+        expect(store.getSnapshot().initialView).toBe("done");
+
+        stores.current = createSearchStore();
+        map.fire("idle");
+        await act(async () => {});
+        expect(stores.current.getSnapshot().initialView).toBe("pending");
+      });
+
       it("처음 이동 중에 화면을 숨겼다 다시 보여도 다시 옮기지 않는다", async () => {
         const device = stubLocationLater();
         const view = renderHideableScreen();
-        await waitFor(() => expect(mapState()).toBe("ready"));
+        await mapReady();
         await waitFor(() =>
           expect(device.getCurrentPosition).toHaveBeenCalled(),
         );
@@ -1442,7 +1453,7 @@ describe("SearchScreen", () => {
       it("위치를 기다리는 동안 '내 위치'를 누르면 위치 조회 1회, 이동 1회(확대 정도 15)이고 처음 이동은 하지 않는다", async () => {
         const device = stubLocationLater();
         renderScreen();
-        await waitFor(() => expect(mapState()).toBe("ready"));
+        await mapReady();
         await waitFor(() =>
           expect(device.getCurrentPosition).toHaveBeenCalled(),
         );
@@ -1452,7 +1463,8 @@ describe("SearchScreen", () => {
         expect(locationButton.getAttribute("aria-busy")).toBe("false");
         fireEvent.click(locationButton);
         expect(locationButton.getAttribute("aria-busy")).toBe("true");
-        expect(initialView()).toBe("done");
+        // 누르는 순간 끝나지 않고 버튼이 처음 이동을 가진다(spec 70번)
+        expect(initialView()).toBe("applying");
         await device.succeed();
 
         await waitFor(() =>
@@ -1464,12 +1476,18 @@ describe("SearchScreen", () => {
         expect(map.created[0].morph).toHaveBeenCalledTimes(1);
         expect(map.created[0].panTo).not.toHaveBeenCalled();
         expect(device.getCurrentPosition).toHaveBeenCalledTimes(1);
+        // 버튼의 이동이 끝나야 처음 이동이 끝나고, 그 화면으로 처음 홈 요청이 한 번 나간다(AC-64)
+        expect(nearbyBodies).toEqual([]);
+        map.fire("idle");
+        await waitFor(() => expect(initialView()).toBe("done"));
+        expect(stores.current.getSnapshot().initialEndedBy).toBe("button");
+        await waitFor(() => expect(nearbyBodies).toHaveLength(1));
       });
 
       it("'내 위치'로 찾는 중에 다른 화면으로 갔다 오면 파란색이 꺼져 있다", async () => {
         const device = stubLocationLater();
         const view = renderHideableScreen();
-        await waitFor(() => expect(mapState()).toBe("ready"));
+        await mapReady();
         await waitFor(() =>
           expect(device.getCurrentPosition).toHaveBeenCalled(),
         );
@@ -1491,36 +1509,35 @@ describe("SearchScreen", () => {
         ).toBe("false");
       });
 
-      it("처음 이동 뒤 지도가 멈춤을 알리지 않아도 1.5초 안에 끝나고, 근처 응답의 '위치를 확인하는 중'도 사라진다", async () => {
+      it("처음 이동 뒤 지도가 멈춤을 알리지 않으면 1.5초에 끝나고 그 뒤 처음 홈 요청이 나간다 (AC-64)", async () => {
         const device = stubLocationLater();
         renderScreen();
-        await waitFor(() => expect(mapState()).toBe("ready"));
+        await mapReady();
         await waitFor(() =>
           expect(device.getCurrentPosition).toHaveBeenCalled(),
         );
-        fireEvent.change(screen.getByRole("textbox", { name: "장소 검색" }), {
-          target: { value: "근처 카페" },
-        });
-        fireEvent.submit(screen.getByRole("search"));
-        expect(await screen.findByText("위치를 확인하는 중")).toBeTruthy();
+        // waitFor는 vitest의 가짜 타이머를 진행시키지 않으므로 이 구간은 act로만 진행한다
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
 
         await device.succeed();
-        await waitFor(() => expect(map.created[0].panTo).toHaveBeenCalled());
+        expect(map.created[0].panTo).toHaveBeenCalledTimes(1);
         expect(initialView()).toBe("applying");
 
         // idle을 일으키지 않는다
-        await waitFor(() => expect(initialView()).toBe("done"), {
-          timeout: 3000,
-        });
-        await waitFor(() =>
-          expect(screen.queryByText("위치를 확인하는 중")).toBeNull(),
-        );
+        await act(() => vi.advanceTimersByTimeAsync(1499));
+        expect(initialView()).toBe("applying");
+        expect(nearbyBodies).toEqual([]);
+        await act(() => vi.advanceTimersByTimeAsync(1));
+        expect(initialView()).toBe("done");
+        vi.useRealTimers();
+
+        await waitFor(() => expect(nearbyBodies).toHaveLength(1));
       });
 
       it("위치를 기다리는 동안 지도를 끌면 처음 이동이 취소되고, 늦게 온 위치는 내 위치 점으로만 남는다", async () => {
         const device = stubLocationLater();
         renderScreen();
-        await waitFor(() => expect(mapState()).toBe("ready"));
+        await mapReady();
         await waitFor(() =>
           expect(device.getCurrentPosition).toHaveBeenCalled(),
         );
@@ -1538,26 +1555,34 @@ describe("SearchScreen", () => {
         expect(map.created[0].morph).not.toHaveBeenCalled();
       });
 
-      it("위치가 늦게 오면 그때 그 위치 기준으로 주변 카드를 다시 거른다", async () => {
+      it("위치가 지도 준비보다 늦게 와도 처음 홈 요청은 처음 이동이 끝난 뒤 그 화면으로 1회이고, 그 전에는 skeleton이다 (AC-64)", async () => {
         const device = stubLocationLater();
         renderScreen();
-        const list = await nearbyList();
+        await mapReady();
         await waitFor(() =>
-          expect(within(list).getByText(/· 역삼역 \d+m$/)).toBeTruthy(),
+          expect(device.getCurrentPosition).toHaveBeenCalled(),
         );
+        expect(
+          screen.getByRole("status", { name: "주변 추천을 불러오는 중" }),
+        ).toBeTruthy();
+        expect(nearbyBodies).toEqual([]);
 
         await device.succeed();
+        await waitFor(() => expect(map.created[0].panTo).toHaveBeenCalled());
+        expect(nearbyBodies).toEqual([]);
+        map.fire("idle");
 
-        await waitFor(() =>
-          expect(within(list).getByText(/· 0m$/)).toBeTruthy(),
-        );
+        const list = await nearbyList();
+        expect(within(list).getByText(/· 0m$/)).toBeTruthy();
         expect(within(list).queryByText(/역삼역/)).toBeNull();
+        expect(nearbyBodies).toHaveLength(1);
+        expect(Object.keys(nearbyBodies[0])).toEqual(["mapBounds"]);
       });
 
       it("처음 이동으로는 결과 화면의 '이 지역에서 검색' 버튼이 나타나지 않는다", async () => {
         const device = stubLocationLater();
         renderScreen();
-        await waitFor(() => expect(mapState()).toBe("ready"));
+        await mapReady();
         await waitFor(() =>
           expect(device.getCurrentPosition).toHaveBeenCalled(),
         );
@@ -1573,29 +1598,6 @@ describe("SearchScreen", () => {
         map.fire("idle");
 
         expect(regionButton()).toBeNull();
-      });
-
-      it("근처 응답에서 '위치를 확인하는 중'은 처음 이동이 끝나기 전에만 보이고, 끝나면 위치로 거른 결과가 보인다", async () => {
-        const device = stubLocationLater();
-        renderScreen();
-        await waitFor(() => expect(mapState()).toBe("ready"));
-        await waitFor(() =>
-          expect(device.getCurrentPosition).toHaveBeenCalled(),
-        );
-        fireEvent.change(screen.getByRole("textbox", { name: "장소 검색" }), {
-          target: { value: "근처 카페" },
-        });
-        fireEvent.submit(screen.getByRole("search"));
-
-        expect(await screen.findByText("위치를 확인하는 중")).toBeTruthy();
-
-        await device.succeed();
-        map.fire("idle");
-        const list = await screen.findByRole("list", { name: "추천 장소" });
-        await waitFor(() =>
-          expect(within(list).getAllByRole("listitem")).toHaveLength(1),
-        );
-        expect(screen.queryByText("위치를 확인하는 중")).toBeNull();
       });
     });
 
@@ -1623,7 +1625,7 @@ describe("SearchScreen", () => {
       it("'내 위치' 버튼 실패 알림은 처음 조회 알림과 따로 누를 때마다 뜬다", async () => {
         stubLocation({ permission: "denied" });
         renderScreen();
-        await waitFor(() => expect(mapState()).toBe("ready"));
+        await mapReady();
         expect(await screen.findByText(/위치 권한이 꺼져 있어요/)).toBeTruthy();
 
         fireEvent.click(screen.getByRole("button", { name: "내 위치" }));
@@ -1633,24 +1635,25 @@ describe("SearchScreen", () => {
     });
 
     describe("첫 화면", () => {
-      it("위치 권한이 이미 허용이면 열 때 위치를 받아 지도를 그 위치로 옮기고, 그 위치 기준 주변 카드를 보인다", async () => {
+      it("위치 권한이 이미 허용이면 열 때 위치를 받아 지도를 그 위치로 옮기고, 그 화면 영역의 주변 카드를 거르지 않고 거리와 함께 보인다 (AC-32, AC-33)", async () => {
         const getCurrentPosition = stubLocation({
           permission: "granted",
           position: { lat: 37.5, lng: 127.03 },
         });
         renderScreen();
-        await waitFor(() => expect(mapState()).toBe("ready"));
+        await mapReady();
 
         await waitFor(() => expect(map.created[0].panTo).toHaveBeenCalled());
         expect(map.created[0].morph).not.toHaveBeenCalled();
         expect(getCurrentPosition).toHaveBeenCalledTimes(1);
+        map.fire("idle");
         const list = await nearbyList();
-        await waitFor(() =>
-          expect(within(list).getByText(/· 0m$/)).toBeTruthy(),
-        );
-        expect(within(list).getByText("장소 1")).toBeTruthy();
-        expect(within(list).queryByText("장소 3")).toBeNull();
+        expect(within(list).getByText(/· 0m$/)).toBeTruthy();
+        // 2km 떨어진 3번도 서버가 준 대로 보인다
+        expect(within(list).getByText("장소 3")).toBeTruthy();
+        expect(within(list).getByText(/· 2\.0km$/)).toBeTruthy();
         expect(within(list).queryByText(/역삼역/)).toBeNull();
+        expect(nearbyBodies).toHaveLength(1);
       });
 
       describe('"내 위치" 버튼 (D-100, D-101, D-104)', () => {
@@ -1665,7 +1668,7 @@ describe("SearchScreen", () => {
             position: { lat: 37.5, lng: 127.03 },
           });
           renderScreen();
-          await waitFor(() => expect(mapState()).toBe("ready"));
+          await mapReady();
           expect(busy()).toBe("false");
           expect(iconClass()).toContain("text-icon");
 
@@ -1689,7 +1692,7 @@ describe("SearchScreen", () => {
         it("지도가 이미 그 위치이고 확대 정도가 15라 움직이지 않으면 바로 원래 색으로 돌아온다", async () => {
           stubLocation({ position: { lat: 37.5, lng: 127.03 } });
           renderScreen();
-          await waitFor(() => expect(mapState()).toBe("ready"));
+          await mapReady();
           map.created[0].getCenter.mockReturnValue({
             lat: () => 37.5,
             lng: () => 127.03,
@@ -1705,7 +1708,7 @@ describe("SearchScreen", () => {
           async (zoom) => {
             stubLocation({ position: { lat: 37.5, lng: 127.03 } });
             renderScreen();
-            await waitFor(() => expect(mapState()).toBe("ready"));
+            await mapReady();
             await newSearch("역삼 카페");
             const created = map.created[0];
             created.getCenter.mockReturnValue({
@@ -1733,7 +1736,7 @@ describe("SearchScreen", () => {
         it("위치를 얻지 못하면 알리고 원래 색으로 돌아온다", async () => {
           stubLocation({});
           renderScreen();
-          await waitFor(() => expect(mapState()).toBe("ready"));
+          await mapReady();
 
           fireEvent.click(locationButton());
           expect(
@@ -1746,7 +1749,7 @@ describe("SearchScreen", () => {
       it("가운데가 아닌 카드를 누르면 선택하고 지도를 옮기며, 선택된 카드를 누르면 상세로 간다", async () => {
         stubNearbyItems([card(1), card(2)]);
         renderScreen();
-        await waitFor(() => expect(mapState()).toBe("ready"));
+        await mapReady();
         const list = await nearbyList();
         const [first, second] = await within(list).findAllByRole("button", {
           pressed: undefined,
@@ -1765,7 +1768,54 @@ describe("SearchScreen", () => {
         expect(push).toHaveBeenCalledWith("/places/2");
       });
 
-      it("점수가 없는 카드는 핏 점수 없이 기준 지점(역삼역)에서 가까운 순으로 보인다", async () => {
+      it("위치를 얻기 전에는 자동완성·결과 카드·주변 카드에 거리가 없고, '내 위치'로 위치를 얻으면 세 곳 모두 거리가 보이며 요청에는 좌표가 없다 (AC-28)", async () => {
+        const distance = /(^|· )0m( ·|$)/;
+        stubLocation({ permission: "prompt", position: HERE });
+        const original = globalThis.fetch;
+        vi.stubGlobal(
+          "fetch",
+          vi.fn<typeof fetch>(async (input, init) =>
+            String(input).startsWith("/api/v1/places/suggest")
+              ? Response.json([{ type: "PLACE", place: card(1).place }])
+              : original(input, init),
+          ),
+        );
+        renderScreen();
+        await mapReady();
+        const suggestions = async () => {
+          const bar = screen.getByRole("textbox", { name: "장소 검색" });
+          fireEvent.focus(bar);
+          fireEvent.change(bar, { target: { value: "장소" } });
+          const list = await screen.findByRole("list", { name: "검색 추천" });
+          // 입력한 단어가 강조되어 이름이 여러 요소로 나뉜다
+          await waitFor(() => expect(list.textContent).toContain("장소 1"));
+          return list;
+        };
+
+        expect(within(await nearbyList()).queryByText(distance)).toBeNull();
+        expect(within(await suggestions()).queryByText(distance)).toBeNull();
+        const results = await newSearch("역삼 카페");
+        expect(within(results).queryByText(distance)).toBeNull();
+        fireEvent.click(screen.getByRole("button", { name: "새 검색" }));
+
+        fireEvent.click(screen.getByRole("button", { name: "내 위치" }));
+        await waitFor(() =>
+          expect(stores.current.getSnapshot().location.status).toBe("ok"),
+        );
+
+        expect(
+          await within(await nearbyList()).findByText(distance),
+        ).toBeTruthy();
+        expect(within(await suggestions()).getByText(distance)).toBeTruthy();
+        const located = await newSearch("역삼 카페");
+        expect(within(located).getAllByText(distance).length).toBeGreaterThan(
+          0,
+        );
+        const sent = JSON.stringify([...searchBodies, ...nearbyBodies]);
+        expect(sent).not.toContain(String(HERE.lng));
+      });
+
+      it("점수가 없는 카드도 핏 점수 없이 서버 순서 그대로 보인다 (AC-33)", async () => {
         const far = { ...card(1), score: undefined };
         const near = {
           ...card(2),
@@ -1774,14 +1824,684 @@ describe("SearchScreen", () => {
         };
         stubNearbyItems([far, near]);
         renderScreen();
-        await waitFor(() => expect(mapState()).toBe("ready"));
+        await mapReady();
         const list = await nearbyList();
 
         const names = (await within(list).findAllByText(/^장소 \d$/)).map(
           (node) => node.textContent,
         );
-        expect(names).toEqual(["장소 2", "장소 1"]);
+        expect(names).toEqual(["장소 1", "장소 2"]);
         expect(within(list).queryByText("핏 점수")).toBeNull();
+      });
+    });
+
+    describe("홈 주변 카드 (S15P31A302-204)", () => {
+      // 끌거나 버튼으로 옮긴 다른 화면. 0.001도 격자 위라 정규화해도 그대로다
+      const AREA_B = {
+        swLat: 37.52,
+        swLng: 127.06,
+        neLat: 37.53,
+        neLng: 127.08,
+      };
+      const MAP_FAILED = MAP_FAILED_TITLE;
+      const initialView = () => stores.current.getSnapshot().initialView;
+      const homeArea = () => stores.current.getSnapshot().home;
+      // 카드 목록의 카드 버튼(선택 여부를 aria-pressed로 알린다)
+      const cardButtons = (list: HTMLElement) =>
+        within(list)
+          .getAllByRole("button")
+          .filter((button) => button.hasAttribute("aria-pressed"));
+
+      // 지도에 지금 올라 있는 핀. 핀마다 아이콘 안의 순위 번호를 읽는다
+      function stubMapWithPins() {
+        const live = new Set<{ options: { icon: { content: string } } }>();
+        map = stubNaverMaps({
+          Marker: class {
+            constructor(readonly options: { icon: { content: string } }) {
+              live.add(this);
+            }
+            setMap(target: unknown) {
+              if (target === null) live.delete(this);
+            }
+            setIcon() {}
+            setZIndex() {}
+          },
+        });
+        return {
+          count: () => live.size,
+          marks: () =>
+            [...live].map(
+              ({ options }) =>
+                options.icon.content.match(/>(\d+)<\/(?:div|span)>/)?.[1],
+            ),
+        };
+      }
+
+      // 크기 알림(ResizeObserver)을 테스트가 보낸다. observe만으로는 알리지 않는다
+      function controlResize() {
+        const callbacks: ResizeObserverCallback[] = [];
+        vi.stubGlobal(
+          "ResizeObserver",
+          class {
+            constructor(callback: ResizeObserverCallback) {
+              callbacks.push(callback);
+            }
+            observe() {}
+            disconnect() {}
+          },
+        );
+        return {
+          notify: (width: number, height: number) =>
+            act(() =>
+              callbacks.forEach((callback) =>
+                callback(
+                  [{ contentRect: { width, height } } as ResizeObserverEntry],
+                  {} as ResizeObserver,
+                ),
+              ),
+            ),
+        };
+      }
+
+      // 지도 바깥 div의 크기만 바꾼다(절반 높이였던 지도가 전체 높이가 됨). 덮는 UI 위 끝은 0이라 띠가 없어
+      // 보이는 영역은 getBounds() 전체다
+      function resizeMapElement(width: number, height: number) {
+        const original = HTMLElement.prototype.getBoundingClientRect;
+        vi.spyOn(
+          HTMLElement.prototype,
+          "getBoundingClientRect",
+        ).mockImplementation(function (this: HTMLElement) {
+          if (!this.hasAttribute("data-map-state")) return original.call(this);
+          return {
+            top: 0,
+            bottom: height,
+            left: 0,
+            right: width,
+            width,
+            height,
+            x: 0,
+            y: 0,
+            toJSON() {},
+          } as DOMRect;
+        });
+      }
+
+      // 사용자가 지도를 끌어 그 화면에서 멈춘다
+      function dragTo(bounds: typeof AREA_B) {
+        map.fire("dragend");
+        map.view.bounds = bounds;
+        map.fire("idle");
+      }
+
+      describe("영역 확정과 홈 진입", () => {
+        it("지도가 있으면 주변 카드마다 핀이 하나씩 있고 카드와 같은 순위 번호다 (AC-23)", async () => {
+          const pins = stubMapWithPins();
+          renderScreen();
+          await mapReady();
+          const list = await nearbyList();
+
+          expect(cardButtons(list)).toHaveLength(2);
+          expect(pins.marks().sort()).toEqual(["1", "2"]);
+        });
+
+        it("홈 진입의 첫 렌더부터 이전 영역의 카드·핀 없이 skeleton이고, 크기 적용 전 영역이 아니라 적용 뒤 영역으로만 한 번 받는다 (AC-69, AC-70)", async () => {
+          const pins = stubMapWithPins();
+          const sizes = controlResize();
+          renderScreen();
+          await mapReady();
+          await nearbyList();
+          await newSearch("역삼 카페");
+          // 지도 바깥 크기는 바뀌었지만 SDK에는 아직 알리지 않았다. 알리면 영역이 AREA_B가 된다
+          resizeMapElement(400, 800);
+          map.view.afterSize = AREA_B;
+
+          fireEvent.click(screen.getByRole("button", { name: "새 검색" }));
+
+          expect(skeleton()).toBeTruthy();
+          expect(
+            screen.queryByRole("region", { name: "주변 추천 장소" }),
+          ).toBeNull();
+          expect(pins.count()).toBe(0);
+          await act(async () => {});
+          expect(nearbyBodies).toHaveLength(1);
+
+          sizes.notify(400, 800);
+
+          await nearbyList();
+          expect(nearbyBodies).toEqual([
+            { mapBounds: BOUNDS },
+            { mapBounds: AREA_B },
+          ]);
+          expect(homeArea().bounds).toEqual(AREA_B);
+        });
+
+        it("크기 적용을 기다리는 사이 새 검색을 했으면 그 확정은 버려 요청하지 않고, 다음 홈 진입은 그때 화면으로 받는다 (AC-70)", async () => {
+          const sizes = controlResize();
+          renderScreen();
+          await mapReady();
+          await nearbyList();
+          await newSearch("역삼 카페");
+          resizeMapElement(400, 800);
+          map.view.afterSize = AREA_B;
+          fireEvent.click(screen.getByRole("button", { name: "새 검색" }));
+
+          await newSearch("강남 술집");
+          sizes.notify(400, 800);
+          await act(async () => {});
+          expect(nearbyBodies).toHaveLength(1);
+
+          fireEvent.click(screen.getByRole("button", { name: "새 검색" }));
+          await nearbyList();
+          expect(nearbyBodies).toEqual([
+            { mapBounds: BOUNDS },
+            { mapBounds: AREA_B },
+          ]);
+        });
+
+        it("크기 적용을 기다리는 사이 화면이 없어지면 영역 없이 끝나 요청하지 않는다 (AC-70)", async () => {
+          controlResize();
+          renderScreen();
+          await mapReady();
+          await nearbyList();
+          await newSearch("역삼 카페");
+          resizeMapElement(400, 800);
+          fireEvent.click(screen.getByRole("button", { name: "새 검색" }));
+
+          cleanup();
+          await act(async () => {});
+
+          expect(nearbyBodies).toHaveLength(1);
+        });
+
+        it("상세에 다녀오면 skeleton 없이 영역·선택한 카드·지도가 그대로이고 요청이 없다 (AC-67)", async () => {
+          const view = renderHideableScreen();
+          await mapReady();
+          const list = await nearbyList();
+          fireEvent.click(cardButtons(list)[1]);
+
+          view.hide();
+          view.show();
+
+          expect(skeleton()).toBeNull();
+          const shown = screen.getByRole("region", { name: "주변 추천 장소" });
+          expect(cardButtons(shown)[1].getAttribute("aria-pressed")).toBe(
+            "true",
+          );
+          await act(async () => {});
+          expect(nearbyBodies).toHaveLength(1);
+          expect(map.created).toHaveLength(1);
+          expect(homeArea().bounds).toEqual(BOUNDS);
+        });
+
+        it("받은 지 10분 안에 상세에서 돌아오면 요청이 없고, 10분이 지나면 카드를 그린 채 같은 영역으로 다시 받는다 (AC-67)", async () => {
+          vi.useFakeTimers({ toFake: ["Date"] });
+          const view = renderHideableScreen();
+          await mapReady();
+          await nearbyList();
+
+          view.hide();
+          vi.setSystemTime(Date.now() + 600_000 - 1_000);
+          view.show();
+          await act(async () => {});
+          expect(nearbyBodies).toHaveLength(1);
+
+          view.hide();
+          vi.setSystemTime(Date.now() + 2_000);
+          view.show();
+          expect(skeleton()).toBeNull();
+          expect(
+            screen.getByRole("region", { name: "주변 추천 장소" }),
+          ).toBeTruthy();
+          await waitFor(() => expect(nearbyBodies).toHaveLength(2));
+          expect(nearbyBodies[1]).toEqual(nearbyBodies[0]);
+        });
+
+        it("숨은 사이 cache가 gc됐으면 영역과 선택은 그대로 두고 skeleton을 보이며 같은 영역으로 다시 받는다 (AC-67)", async () => {
+          const view = renderHideableScreen();
+          await mapReady();
+          const list = await nearbyList();
+          fireEvent.click(cardButtons(list)[1]);
+
+          view.hide();
+          // gcTime(10분, place-queries 테스트)이 지나 cache가 지워진 것과 같다
+          clients[0].removeQueries({ queryKey: ["places", "nearby"] });
+          view.show();
+
+          expect(skeleton()).toBeTruthy();
+          const shown = await nearbyList();
+          expect(cardButtons(shown)[1].getAttribute("aria-pressed")).toBe(
+            "true",
+          );
+          expect(nearbyBodies).toEqual([
+            { mapBounds: BOUNDS },
+            { mapBounds: BOUNDS },
+          ]);
+        });
+
+        it("홈에서 보낸 검색을 취소해 돌아오면 홈 진입이 아니라 카드가 그대로이고 요청이 없다 (AC-67)", async () => {
+          renderScreen();
+          await mapReady();
+          await nearbyList();
+          const entry = homeArea().entry;
+          holdSearches();
+          vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+          fireEvent.change(screen.getByRole("textbox", { name: "장소 검색" }), {
+            target: { value: "역삼 카페" },
+          });
+          fireEvent.submit(screen.getByRole("search"));
+          await act(() => vi.advanceTimersByTimeAsync(SEARCH_SLOW_MS));
+          vi.useRealTimers();
+
+          fireEvent.click(screen.getByRole("button", { name: "검색 취소" }));
+          await screen.findByRole("textbox", { name: "장소 검색" });
+
+          expect(skeleton()).toBeNull();
+          expect(
+            screen.getByRole("region", { name: "주변 추천 장소" }),
+          ).toBeTruthy();
+          await act(async () => {});
+          expect(nearbyBodies).toHaveLength(1);
+          expect(homeArea().entry).toBe(entry);
+        });
+
+        it("홈에서 보낸 검색이 실패해 '새 검색'으로 돌아오면 홈 진입이 아니라 카드가 그대로이고 요청이 없다 (AC-67)", async () => {
+          const original = globalThis.fetch;
+          vi.stubGlobal(
+            "fetch",
+            vi.fn<typeof fetch>((input, init) =>
+              String(input) === "/api/v1/places/search"
+                ? Promise.resolve(
+                    Response.json({ status: 400 }, { status: 400 }),
+                  )
+                : original(input, init),
+            ),
+          );
+          renderScreen();
+          await mapReady();
+          await nearbyList();
+          const entry = homeArea().entry;
+          fireEvent.change(screen.getByRole("textbox", { name: "장소 검색" }), {
+            target: { value: "역삼 카페" },
+          });
+          fireEvent.submit(screen.getByRole("search"));
+          await screen.findByText("추천을 불러오지 못했어요");
+
+          fireEvent.click(screen.getByRole("button", { name: "새 검색" }));
+
+          expect(skeleton()).toBeNull();
+          expect(
+            screen.getByRole("region", { name: "주변 추천 장소" }),
+          ).toBeTruthy();
+          await act(async () => {});
+          expect(nearbyBodies).toHaveLength(1);
+          expect(homeArea().entry).toBe(entry);
+        });
+      });
+
+      describe("홈 '이 지역에서 검색' (AC-71)", () => {
+        it("카드를 넘겨 지도가 옮겨져도 보이지 않고, 끌어서 영역이 달라지면 멈출 때 보이며, 같은 격자로 돌아오면 숨는다", async () => {
+          renderScreen();
+          await mapReady();
+          const list = await nearbyList();
+
+          fireEvent.click(cardButtons(list)[1]);
+          map.view.bounds = AREA_B;
+          map.fire("idle");
+          expect(regionButton()).toBeNull();
+
+          // 멈추기 전에는 판정하지 않는다
+          map.fire("dragend");
+          expect(regionButton()).toBeNull();
+          map.fire("idle");
+          expect(regionButton()).toBeTruthy();
+
+          dragTo({ ...BOUNDS, swLat: BOUNDS.swLat + 0.0001 });
+          expect(regionButton()).toBeNull();
+          // 끌기와 카드 panTo는 홈 영역을 바꾸지 않는다
+          expect(homeArea().bounds).toEqual(BOUNDS);
+          expect(nearbyBodies).toHaveLength(1);
+        });
+
+        it("누르면 그 영역으로 한 번 받아 새 홈 영역이 되고, 받기 전에는 이전 카드·핀 없이 skeleton이며 선택은 첫 카드로 돌아가고, 그 뒤 카드 panTo로는 다시 보이지 않는다", async () => {
+          const pins = stubMapWithPins();
+          renderScreen();
+          await mapReady();
+          const list = await nearbyList();
+          fireEvent.click(cardButtons(list)[1]);
+          dragTo(AREA_B);
+
+          fireEvent.click(regionButton()!);
+
+          expect(skeleton()).toBeTruthy();
+          expect(pins.count()).toBe(0);
+          expect(regionButton()).toBeNull();
+          const next = await nearbyList();
+          expect(nearbyBodies).toEqual([
+            { mapBounds: BOUNDS },
+            { mapBounds: AREA_B },
+          ]);
+          expect(homeArea().bounds).toEqual(AREA_B);
+          expect(cardButtons(next)[0].getAttribute("aria-pressed")).toBe(
+            "true",
+          );
+
+          fireEvent.click(cardButtons(next)[1]);
+          map.view.bounds = BOUNDS;
+          map.fire("idle");
+          expect(regionButton()).toBeNull();
+        });
+
+        it("홈 진입 때 옮긴 적이 있다는 표시를 지워, 그 뒤 카드 panTo만으로는 보이지 않는다", async () => {
+          renderScreen();
+          await mapReady();
+          await nearbyList();
+          dragTo(AREA_B);
+          expect(regionButton()).toBeTruthy();
+          await newSearch("역삼 카페");
+
+          fireEvent.click(screen.getByRole("button", { name: "새 검색" }));
+          const list = await nearbyList();
+          expect(regionButton()).toBeNull();
+          expect(homeArea().bounds).toEqual(AREA_B);
+
+          fireEvent.click(cardButtons(list)[1]);
+          map.view.bounds = BOUNDS;
+          map.fire("idle");
+          expect(regionButton()).toBeNull();
+        });
+
+        it("'내 위치'를 누르면 지도만 옮기고 카드는 그대로이며 요청이 없고, 실제로 움직여 영역이 달라졌으면 멈출 때 보인다 (AC-45)", async () => {
+          stubLocation({ permission: "prompt", position: HERE });
+          renderScreen();
+          await mapReady();
+          await nearbyList();
+
+          fireEvent.click(screen.getByRole("button", { name: "내 위치" }));
+          await waitFor(() => expect(map.created[0].morph).toHaveBeenCalled());
+          map.view.bounds = AREA_B;
+          map.fire("idle");
+
+          expect(regionButton()).toBeTruthy();
+          expect(
+            screen.getByRole("region", { name: "주변 추천 장소" }),
+          ).toBeTruthy();
+          expect(nearbyBodies).toHaveLength(1);
+          expect(homeArea().bounds).toEqual(BOUNDS);
+        });
+
+        it("'내 위치'로 지도가 움직이지 않았으면 그 뒤 멈춤에도 보이지 않는다", async () => {
+          stubLocation({ permission: "prompt", position: HERE });
+          renderScreen();
+          await mapReady();
+          await nearbyList();
+          // 이미 내 위치이고 확대 정도가 15다
+          map.created[0].getCenter.mockReturnValue({
+            lat: () => HERE.lat,
+            lng: () => HERE.lng,
+          });
+          const button = screen.getByRole("button", { name: "내 위치" });
+
+          fireEvent.click(button);
+          await waitFor(() =>
+            expect(button.getAttribute("aria-busy")).toBe("false"),
+          );
+          map.view.bounds = AREA_B;
+          map.fire("idle");
+
+          expect(regionButton()).toBeNull();
+        });
+      });
+
+      describe("빈 상태와 지도 실패 (AC-72, AC-73)", () => {
+        function stubNearbyResponse(response: PlaceSearchResponse) {
+          const original = globalThis.fetch;
+          vi.stubGlobal(
+            "fetch",
+            vi.fn<typeof fetch>(async (input, init) => {
+              if (String(input) !== "/api/v1/places/nearby") {
+                return original(input, init);
+              }
+              await original(input, init);
+              return Response.json(response);
+            }),
+          );
+        }
+
+        it("영역 안에 장소가 없고 emptyReason이 있으면 카드 자리에 이유와 제안을 보인다 (AC-72)", async () => {
+          stubNearbyResponse({
+            conditions: {},
+            nearby: true,
+            totalCount: 0,
+            items: [],
+            emptyReason: {
+              cause: "이 지역에는 아직 장소가 없어요",
+              suggestion: "지도를 옮겨 보세요",
+            },
+          });
+          renderScreen();
+          await mapReady();
+
+          expect(
+            await screen.findByText("이 지역에는 아직 장소가 없어요"),
+          ).toBeTruthy();
+          expect(screen.getByText("지도를 옮겨 보세요")).toBeTruthy();
+          expect(skeleton()).toBeNull();
+          expect(
+            screen.queryByRole("region", { name: "주변 추천 장소" }),
+          ).toBeNull();
+        });
+
+        it("emptyReason 없는 0곳이면 카드 자리에 아무것도 그리지 않는다 (AC-72)", async () => {
+          stubNearbyResponse({
+            conditions: {},
+            nearby: true,
+            totalCount: 0,
+            items: [],
+          });
+          renderScreen();
+          await mapReady();
+          await waitFor(() => expect(nearbyBodies).toHaveLength(1));
+          await waitFor(() => expect(skeleton()).toBeNull());
+
+          expect(
+            screen.queryByRole("region", { name: "주변 추천 장소" }),
+          ).toBeNull();
+          expect(screen.queryByRole("alert")).toBeNull();
+          expect(
+            screen.queryByText("주변 추천을 불러오지 못했어요"),
+          ).toBeNull();
+        });
+
+        it("정규화한 영역이 유효하지 않으면 요청 없이 지도 실패 안내를 보이고, 다음 멈춤에서 다시 잰 영역이 유효하면 그 영역으로 받는다 (AC-65, AC-73)", async () => {
+          // 경도의 SW가 NE보다 크다
+          map.view.bounds = {
+            swLat: 37.49,
+            swLng: 127.05,
+            neLat: 37.51,
+            neLng: 127.02,
+          };
+          renderScreen();
+          await mapReady();
+
+          expect(await screen.findByText(MAP_FAILED)).toBeTruthy();
+          expect(skeleton()).toBeNull();
+          expect(nearbyBodies).toEqual([]);
+
+          dragTo(BOUNDS);
+
+          await nearbyList();
+          expect(screen.queryByText(MAP_FAILED)).toBeNull();
+          expect(nearbyBodies).toEqual([{ mapBounds: BOUNDS }]);
+        });
+        it("정규화한 영역만 유효하지 않은 동안의 새 검색은 64번대로 보내는 순간의 보이는 영역을 담는다 (AC-73)", async () => {
+          const invalid = {
+            swLat: 37.49,
+            swLng: 127.05,
+            neLat: 37.51,
+            neLng: 127.02,
+          };
+          map.view.bounds = invalid;
+          renderScreen();
+          await mapReady();
+          expect(await screen.findByText(MAP_FAILED)).toBeTruthy();
+
+          await newSearch("역삼 카페");
+
+          expect(searchBodies).toEqual([
+            { query: "역삼 카페", mapBounds: invalid },
+          ]);
+          expect(nearbyBodies).toEqual([]);
+        });
+      });
+
+      describe("처음 홈 요청 (AC-64)", () => {
+        it("위치 조회가 10초 안에 끝나지 않으면 timeout 뒤에 그때 화면의 영역으로 한 번 나간다", async () => {
+          vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+          const getCurrentPosition = vi.fn(
+            (
+              _: PositionCallback,
+              error: PositionErrorCallback,
+              options?: PositionOptions,
+            ) => {
+              // 브라우저가 timeout만큼 기다린 뒤 TIMEOUT으로 끝낸다
+              setTimeout(
+                () =>
+                  error({ code: 3, TIMEOUT: 3 } as GeolocationPositionError),
+                options?.timeout,
+              );
+            },
+          );
+          vi.stubGlobal("navigator", {
+            geolocation: { getCurrentPosition },
+            permissions: { query: async () => ({ state: "granted" }) },
+          });
+          renderScreen();
+          await act(() => vi.advanceTimersByTimeAsync(0));
+          expect(mapState()).toBe("ready");
+          expect(getCurrentPosition).toHaveBeenCalledTimes(1);
+
+          await act(() => vi.advanceTimersByTimeAsync(9_999));
+          expect(nearbyBodies).toEqual([]);
+          expect(skeleton()).toBeTruthy();
+          await act(() => vi.advanceTimersByTimeAsync(1));
+          vi.useRealTimers();
+
+          await waitFor(() =>
+            expect(nearbyBodies).toEqual([{ mapBounds: BOUNDS }]),
+          );
+        });
+
+        it("처음 이동이 끝나기 전에 지도를 끌면 지도가 멈춘 뒤의 화면으로 한 번 나간다", async () => {
+          const device = stubLocationLater();
+          renderScreen();
+          await mapReady();
+          await waitFor(() =>
+            expect(device.getCurrentPosition).toHaveBeenCalled(),
+          );
+
+          map.fire("dragend");
+          expect(initialView()).toBe("done");
+          await act(async () => {});
+          expect(nearbyBodies).toEqual([]);
+          map.view.bounds = AREA_B;
+          map.fire("idle");
+
+          await waitFor(() =>
+            expect(nearbyBodies).toEqual([{ mapBounds: AREA_B }]),
+          );
+        });
+
+        it("처음 panTo 중에 '내 위치'를 누르면 그 이동이 끝난 화면으로 한 번 나간다", async () => {
+          const device = stubLocationLater();
+          renderScreen();
+          await mapReady();
+          await waitFor(() =>
+            expect(device.getCurrentPosition).toHaveBeenCalled(),
+          );
+          await device.succeed();
+          expect(map.created[0].panTo).toHaveBeenCalledTimes(1);
+          expect(initialView()).toBe("applying");
+
+          fireEvent.click(screen.getByRole("button", { name: "내 위치" }));
+          expect(stores.current.getSnapshot().initialOwnedByButton).toBe(true);
+          // 버튼은 위치를 새로 묻는다
+          await waitFor(() =>
+            expect(device.getCurrentPosition).toHaveBeenCalledTimes(2),
+          );
+          await device.succeed();
+          await waitFor(() => expect(map.created[0].morph).toHaveBeenCalled());
+          expect(nearbyBodies).toEqual([]);
+          map.view.bounds = AREA_B;
+          map.fire("idle");
+
+          await waitFor(() =>
+            expect(nearbyBodies).toEqual([{ mapBounds: AREA_B }]),
+          );
+          expect(stores.current.getSnapshot().initialEndedBy).toBe("button");
+        });
+
+        it("위치를 기다리는 동안 누른 '내 위치'가 위치를 얻지 못하면 그때 화면으로 한 번 나간다", async () => {
+          const device = stubLocationLater();
+          renderScreen();
+          await mapReady();
+          await waitFor(() =>
+            expect(device.getCurrentPosition).toHaveBeenCalled(),
+          );
+
+          fireEvent.click(screen.getByRole("button", { name: "내 위치" }));
+          await device.fail();
+
+          await waitFor(() =>
+            expect(nearbyBodies).toEqual([{ mapBounds: BOUNDS }]),
+          );
+          expect(stores.current.getSnapshot().initialEndedBy).toBe("button");
+        });
+
+        it("권한 확인 중에 '내 위치'를 누르면 버튼 이동이 끝나기 전에는 나가지 않고, 끝난 뒤 한 번 나간다", async () => {
+          const pending: PositionCallback[] = [];
+          vi.stubGlobal("navigator", {
+            geolocation: {
+              getCurrentPosition: (success: PositionCallback) =>
+                pending.push(success),
+            },
+            // 권한 확인이 끝나지 않는다
+            permissions: { query: () => new Promise(() => {}) },
+          });
+          renderScreen();
+          await mapReady();
+
+          fireEvent.click(screen.getByRole("button", { name: "내 위치" }));
+          await waitFor(() => expect(pending).toHaveLength(1));
+          await act(async () =>
+            pending[0]({
+              coords: { latitude: HERE.lat, longitude: HERE.lng },
+            } as GeolocationPosition),
+          );
+          await waitFor(() => expect(map.created[0].morph).toHaveBeenCalled());
+          await act(async () => {});
+          expect(nearbyBodies).toEqual([]);
+
+          map.fire("idle");
+
+          await waitFor(() => expect(nearbyBodies).toHaveLength(1));
+        });
+
+        it("'내 위치'가 처음 이동을 가진 동안 결과 맞춤 이동이 시작되면 처음 이동이 끝난다", async () => {
+          const device = stubLocationLater();
+          renderScreen();
+          await mapReady();
+          await waitFor(() =>
+            expect(device.getCurrentPosition).toHaveBeenCalled(),
+          );
+          fireEvent.click(screen.getByRole("button", { name: "내 위치" }));
+          expect(stores.current.getSnapshot().initialOwnedByButton).toBe(true);
+
+          await newSearch("역삼 카페");
+
+          expect(map.created[0].fitBounds).toHaveBeenCalledTimes(1);
+          expect(initialView()).toBe("done");
+          expect(stores.current.getSnapshot().initialEndedBy).toBe("fit");
+        });
       });
     });
 
@@ -1800,7 +2520,7 @@ describe("SearchScreen", () => {
       );
       const { created } = stubNaverMaps();
       renderScreen();
-      await waitFor(() => expect(mapState()).toBe("ready"));
+      await mapReady();
 
       // SDK는 안쪽 div에 px 크기를 박으므로 CSS로 크기가 정해지는 바깥을 봐야 한다
       const wrapper = document.querySelector("[data-map-state]");
@@ -1850,17 +2570,17 @@ describe("SearchScreen", () => {
       });
     });
 
-    // 인증 실패 알림은 모듈에 남으므로 그 테스트보다 먼저 둔다
     it("지도 SDK가 핀을 만들다 던지면(인증 실패 직후) 지도 영역이 비고 카드 목록은 동작한다", async () => {
       config.value = { env: "dev", naverMapClientId: "key" };
-      const marker = vi.fn(() => {
+      // SDK가 new로 부르므로 생성자로 쓸 수 있는 함수여야 한다
+      const marker = vi.fn(function () {
         throw new TypeError(
           "Cannot read properties of null (reading 'LatLng')",
         );
       });
       stubNaverMaps({ Marker: marker });
       renderScreen();
-      await waitFor(() => expect(mapState()).toBe("ready"));
+      await mapReady();
 
       const list = await newSearch("역삼 카페");
 
@@ -1890,9 +2610,51 @@ describe("SearchScreen", () => {
       },
     );
 
+    it.each([
+      ["지도 키가 없으면", { env: "dev" }],
+      ["/config.json 요청이 실패하면", undefined],
+    ])(
+      "%s 홈은 skeleton에 머물지 않고 카드 자리에 지도 실패 안내를 보이며, 다시 시도가 없고 nearby 요청이 없다 (AC-73)",
+      async (_, value) => {
+        config.value = value;
+        renderScreen();
+
+        expect(await screen.findByText(MAP_FAILED_TITLE)).toBeTruthy();
+        expect(screen.getByText(MAP_FAILED_DESCRIPTION)).toBeTruthy();
+        expect(skeleton()).toBeNull();
+        expect(screen.queryByRole("button", { name: "다시 시도" })).toBeNull();
+        expect(nearbyBodies).toEqual([]);
+      },
+    );
+
+    it("카드가 보인 뒤 지도 인증 실패가 늦게 오면 카드 대신 지도 실패 안내를 보이고 다시 받지 않는다 (AC-73)", async () => {
+      config.value = { env: "dev", naverMapClientId: "key" };
+      await renderInNewPageSession();
+      const script = await waitFor(() => {
+        const element = document.querySelector<HTMLScriptElement>(
+          'script[src*="oapi.map.naver.com"]',
+        );
+        expect(element).toBeTruthy();
+        return element!;
+      });
+      stubNaverMaps();
+      act(() => script.onload?.(new Event("load")));
+      await nearbyList();
+
+      act(() => window.navermap_authFailure?.());
+
+      expect(await screen.findByText(MAP_FAILED_TITLE)).toBeTruthy();
+      expect(
+        screen.queryByRole("region", { name: "주변 추천 장소" }),
+      ).toBeNull();
+      expect(screen.queryByRole("button", { name: "다시 시도" })).toBeNull();
+      await act(async () => {});
+      expect(nearbyBodies).toHaveLength(1);
+    });
+
     it("지도 인증이 실패하면(navermap_authFailure) 지도 영역이 비고 카드 목록은 동작한다", async () => {
       config.value = { env: "dev", naverMapClientId: "wrong-key" };
-      renderScreen();
+      await renderInNewPageSession();
 
       await waitFor(() =>
         expect(
@@ -1908,6 +2670,9 @@ describe("SearchScreen", () => {
       window.navermap_authFailure?.();
 
       await waitFor(() => expect(mapState()).toBe("empty"));
+      // 홈은 카드 자리에 지도 실패 안내를 보이고 주변 카드를 받지 않는다(AC-73)
+      expect(await screen.findByText(MAP_FAILED_TITLE)).toBeTruthy();
+      expect(nearbyBodies).toEqual([]);
       const list = await newSearch("역삼 카페");
       expect(within(list).getAllByRole("listitem")).toHaveLength(2);
     });
@@ -2121,6 +2886,13 @@ describe("SearchScreen", () => {
   });
 
   describe("근처 검색", () => {
+    let map: ReturnType<typeof stubNaverMaps>;
+    // 홈 주변 카드는 지도 영역으로 받으므로 지도가 있어야 한다(지도가 없으면 실패 안내, spec 75번)
+    beforeEach(() => {
+      config.value = { env: "dev", naverMapClientId: "key" };
+      map = stubNaverMaps();
+    });
+
     // 권한은 허용이라 앱을 열 때 위치를 받는다. denied면 위치를 얻지 못한다
     function stubGeolocation(result: { lat: number; lng: number } | "denied") {
       vi.stubGlobal("navigator", {
@@ -2139,44 +2911,67 @@ describe("SearchScreen", () => {
       });
     }
 
-    it("위치를 얻으면 반경 안의 항목만 거리와 함께 보여 준다", async () => {
+    const rankedNames = (list: HTMLElement) =>
+      within(list)
+        .getAllByRole("listitem")
+        .map((item) => within(item).getByText(/^장소 \d$/).textContent);
+
+    it("위치를 얻어도 근처 응답을 거리로 거르지 않고 서버 순서와 개수 그대로 거리와 함께 보인다(AC-52, AC-16)", async () => {
       stubGeolocation({ lat: 37.5, lng: 127.03 });
       renderScreen();
+      // 처음 이동(panTo)이 멈출 때까지 기다린다
+      await waitFor(() => expect(map.created[0]?.panTo).toHaveBeenCalled());
+      map.fire("idle");
+      await waitFor(() =>
+        expect(stores.current.getSnapshot().initialView).toBe("done"),
+      );
 
       const list = await newSearch("근처 카페");
 
-      await waitFor(() =>
-        expect(within(list).getAllByRole("listitem")).toHaveLength(1),
-      );
-      expect(within(list).getByText("장소 1")).toBeTruthy();
+      // 3번은 약 2km 떨어져 있어도 그대로 보인다
+      expect(rankedNames(list)).toEqual(["장소 1", "장소 3"]);
       expect(within(list).getByText(/· 0m$/)).toBeTruthy();
-      expect(searchBodies[0]).toEqual({ query: "근처 카페" });
+      expect(within(list).getByText(/· 2\.0km$/)).toBeTruthy();
+      // 기기 좌표는 어디에도 없고 검색 지역(mapBounds)만 담는다
+      expect(searchBodies[0]).toEqual({
+        query: "근처 카페",
+        mapBounds: BOUNDS,
+      });
     });
 
-    it("반경 안에 남는 항목이 없으면 지원 지역 안내를 보여 준다", async () => {
-      stubGeolocation({ lat: 35.1, lng: 129.04 });
-      renderScreen();
-
-      await newSearch("근처 카페");
-
-      expect(await screen.findByText("추천 장소가 없어요")).toBeTruthy();
-      expect(
-        screen.getByText(/지금은 강남역·역삼역·선릉역 근처만 추천해요/),
-      ).toBeTruthy();
-    });
-
-    it("위치를 얻지 못하면 거르지 않고 지역 기준 안내를 보여 준다", async () => {
+    it("위치를 얻지 못해도 거르지 않고 거리 없이 보이며 지역 기준 안내와 위치 확인 중 안내가 없다(AC-52)", async () => {
       stubGeolocation("denied");
       renderScreen();
 
       const list = await newSearch("근처 카페");
 
-      await screen.findByText(
-        "위치를 확인할 수 없어 지역 기준으로 보여 드려요",
-      );
-      expect(within(list).getAllByRole("listitem")).toHaveLength(2);
+      expect(rankedNames(list)).toEqual(["장소 1", "장소 3"]);
       expect(await screen.findByText("위치를 확인할 수 없어요")).toBeTruthy();
       expect(within(list).queryByText(/\d+m$/)).toBeNull();
+      expect(
+        screen.queryByText("위치를 확인할 수 없어 지역 기준으로 보여 드려요"),
+      ).toBeNull();
+      expect(screen.queryByText("위치를 확인하는 중")).toBeNull();
+    });
+
+    it("앱을 연 뒤 위치 조회가 끝나기 전에 받은 근처 응답도 위치 확인 중 안내 없이 바로 보인다(AC-52)", async () => {
+      const location = stubLocationLater();
+      renderScreen();
+      // 위치 조회는 시작했고 아직 끝나지 않았다(initialView는 위치와 다른 상태라 보지 않는다)
+      await waitFor(() =>
+        expect(location.getCurrentPosition).toHaveBeenCalledTimes(1),
+      );
+
+      const list = await newSearch("근처 카페");
+
+      expect(stores.current.getSnapshot().location).toEqual({
+        status: "idle",
+      });
+      expect(rankedNames(list)).toEqual(["장소 1", "장소 3"]);
+      expect(screen.queryByText("위치를 확인하는 중")).toBeNull();
+      await location.succeed();
+      expect(stores.current.getSnapshot().location.status).toBe("ok");
+      expect(rankedNames(list)).toEqual(["장소 1", "장소 3"]);
     });
 
     // 점수 없는 근처 응답을 입력한 검색에 돌려준다. id 1이 가장 멀고 2가 가장 가깝다
@@ -2202,15 +2997,9 @@ describe("SearchScreen", () => {
       );
     }
 
-    const rankedNames = (list: HTMLElement) =>
-      within(list)
-        .getAllByRole("listitem")
-        .map((item) => within(item).getByText(/^장소 \d$/).textContent);
-
-    it("점수가 없는 근처 결과는 위치에서 가까운 순으로 순위가 매겨진다", async () => {
+    it("점수가 없는 근처 결과도 위치에서 가까운 순으로 다시 정렬하지 않고 서버 순서 그대로다(AC-52)", async () => {
       stubUnscoredNearby();
-      // 역삼역 기준이면 2, 3, 1이고 이 위치 기준이면 1, 3, 2다. 위치를 기준으로 삼는지 가른다
-      stubGeolocation({ lat: 37.508, lng: 127.03 });
+      stubGeolocation({ lat: 37.5, lng: 127.03 });
       renderScreen();
 
       const list = await newSearch("근처 카페");
@@ -2218,10 +3007,10 @@ describe("SearchScreen", () => {
       await waitFor(() =>
         expect(within(list).getAllByRole("listitem")).toHaveLength(3),
       );
-      expect(rankedNames(list)).toEqual(["장소 1", "장소 3", "장소 2"]);
+      expect(rankedNames(list)).toEqual(["장소 1", "장소 2", "장소 3"]);
     });
 
-    it("위치 권한이 정해지지 않아 위치가 없으면 근처 응답을 받아도 위치를 묻지 않고, 안내 없이 거르지 않고 역삼역에서 가까운 순으로 보인다", async () => {
+    it("위치 권한이 정해지지 않았으면 근처 응답을 받아도 위치를 묻지 않고 안내 없이 서버 순서로 보인다(AC-52, AC-51)", async () => {
       stubUnscoredNearby();
       const getCurrentPosition = stubLocation({ permission: "prompt" });
       renderScreen();
@@ -2234,46 +3023,14 @@ describe("SearchScreen", () => {
       await waitFor(() =>
         expect(within(list).getAllByRole("listitem")).toHaveLength(3),
       );
-      expect(rankedNames(list)).toEqual(["장소 2", "장소 3", "장소 1"]);
-      expect(
-        screen.queryByText("위치를 확인할 수 없어 지역 기준으로 보여 드려요"),
-      ).toBeNull();
+      expect(rankedNames(list)).toEqual(["장소 1", "장소 2", "장소 3"]);
       expect(screen.queryByText("위치를 확인하는 중")).toBeNull();
       expect(getCurrentPosition).not.toHaveBeenCalled();
       expect(stores.current.getSnapshot().location).toEqual({ status: "idle" });
     });
-
-    it("위치를 얻지 못해도 점수가 없는 근처 결과는 역삼역에서 가까운 순이다", async () => {
-      stubUnscoredNearby();
-      stubGeolocation("denied");
-      renderScreen();
-
-      const list = await newSearch("근처 카페");
-
-      await screen.findByText(
-        "위치를 확인할 수 없어 지역 기준으로 보여 드려요",
-      );
-      expect(rankedNames(list)).toEqual(["장소 2", "장소 3", "장소 1"]);
-    });
   });
 
   describe("검색 중", () => {
-    // 검색 요청만 release()를 부를 때까지 붙잡는다
-    function holdSearches() {
-      const original = globalThis.fetch;
-      const held: Array<() => void> = [];
-      vi.stubGlobal(
-        "fetch",
-        vi.fn<typeof fetch>(async (input, init) => {
-          if (String(input).includes("/search")) {
-            await new Promise<void>((resolve) => held.push(resolve));
-          }
-          return original(input, init);
-        }),
-      );
-      return held;
-    }
-
     async function startFollowUp(text: string) {
       fireEvent.change(screen.getByRole("textbox", { name: "후속 조건" }), {
         target: { value: text },
@@ -2282,23 +3039,33 @@ describe("SearchScreen", () => {
       await screen.findByText("요청을 이해하는 중");
     }
 
+    // 단계 문구와 "검색 취소"의 타이머. 이 타이머를 만들기 전에 가짜 타이머를 켜고, 켠 동안은 waitFor 대신 act로 진행한다
+    const fakeStepTimers = () =>
+      vi.useFakeTimers({
+        toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"],
+      });
+    const advance = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
+
     it("첫 페이지를 받는 동안 단계 문구를 차례로 바꾸고, 3초가 지나면 '조금만 더 걸려요'로 바꾸며 후속 입력창을 막는다", async () => {
       renderScreen();
       await newSearch("역삼 카페");
       const held = holdSearches();
-      await startFollowUp("더 조용하게");
+      fakeStepTimers();
+      sendFollowUp("더 조용하게");
+      await advance(0);
 
+      expect(screen.getByText("요청을 이해하는 중")).toBeTruthy();
       const input = screen.getByRole("textbox", { name: "후속 조건" });
       expect(input.hasAttribute("disabled")).toBe(true);
       expect(screen.queryByRole("button", { name: "최근 검색" })).toBeNull();
+      await advance(SEARCH_STEP_MS);
+      expect(screen.getByText("주변 장소를 찾는 중")).toBeTruthy();
+      await advance(SEARCH_SLOW_MS - SEARCH_STEP_MS - 1);
       expect(screen.queryByRole("button", { name: "검색 취소" })).toBeNull();
-      expect(
-        await screen.findByText("주변 장소를 찾는 중", {}, { timeout: 2500 }),
-      ).toBeTruthy();
-      expect(
-        await screen.findByText("조금만 더 걸려요", {}, { timeout: 2500 }),
-      ).toBeTruthy();
+      await advance(1);
+      expect(screen.getByText("조금만 더 걸려요")).toBeTruthy();
       expect(screen.getByRole("button", { name: "검색 취소" })).toBeTruthy();
+      vi.useRealTimers();
 
       held[0]();
       await waitFor(() => expect(input.hasAttribute("disabled")).toBe(false));
@@ -2308,15 +3075,12 @@ describe("SearchScreen", () => {
       renderScreen();
       await newSearch("역삼 카페");
       holdSearches();
-      await startFollowUp("더 조용하게");
+      fakeStepTimers();
+      sendFollowUp("더 조용하게");
+      await advance(SEARCH_SLOW_MS);
+      vi.useRealTimers();
 
-      fireEvent.click(
-        await screen.findByRole(
-          "button",
-          { name: "검색 취소" },
-          { timeout: 3500 },
-        ),
-      );
+      fireEvent.click(screen.getByRole("button", { name: "검색 취소" }));
 
       expect(
         await screen.findByRole("heading", { name: "“역삼 카페”" }),
@@ -2328,18 +3092,15 @@ describe("SearchScreen", () => {
     it("첫 검색에서 '검색 취소'를 누르면 첫 화면으로 돌아간다", async () => {
       holdSearches();
       renderScreen();
+      fakeStepTimers();
       fireEvent.change(screen.getByRole("textbox", { name: "장소 검색" }), {
         target: { value: "역삼 카페" },
       });
       fireEvent.submit(screen.getByRole("search"));
+      await advance(SEARCH_SLOW_MS);
+      vi.useRealTimers();
 
-      fireEvent.click(
-        await screen.findByRole(
-          "button",
-          { name: "검색 취소" },
-          { timeout: 3500 },
-        ),
-      );
+      fireEvent.click(screen.getByRole("button", { name: "검색 취소" }));
 
       expect(
         await screen.findByRole("textbox", { name: "장소 검색" }),
@@ -2355,8 +3116,7 @@ describe("SearchScreen", () => {
       await waitFor(() => expect(held).toHaveLength(1));
 
       fireEvent.click(screen.getByRole("button", { name: "새 검색" }));
-      held[0]();
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await releaseAndSettle(held[0]);
 
       expect(screen.getByRole("textbox", { name: "장소 검색" })).toBeTruthy();
       expect(screen.queryByRole("list", { name: "추천 장소" })).toBeNull();
@@ -2376,8 +3136,7 @@ describe("SearchScreen", () => {
       fireEvent.click(
         within(history).getAllByRole("button", { name: "결과 보기" })[0],
       );
-      held[0]();
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await releaseAndSettle(held[0]);
 
       expect(stores.current.getSnapshot().entries).toHaveLength(2);
       expect(
@@ -2494,6 +3253,12 @@ describe("SearchScreen", () => {
   });
 
   describe("첫 화면", () => {
+    // 홈 주변 카드는 지도 영역으로 받으므로 지도가 있어야 한다(지도가 없으면 실패 안내, spec 75번)
+    beforeEach(() => {
+      config.value = { env: "dev", naverMapClientId: "key" };
+      stubNaverMaps();
+    });
+
     it("결과가 없으면 아래 검색창이, 결과가 있으면 결과 목록 아래 후속 입력창이 있다", async () => {
       renderScreen();
       const bar = screen.getByRole("textbox", { name: "장소 검색" });
@@ -2511,15 +3276,17 @@ describe("SearchScreen", () => {
       ).toBeTruthy();
     });
 
-    it("위치가 없으면 역삼역 기준 주변 카드를 보이고, 그 요청은 문장만 보내며 기록에 쌓지 않는다", async () => {
+    it("위치가 없으면 서버가 준 주변 카드를 거르지 않고 거리 없이 보이고, 그 요청은 지도 영역만 보내며 기록에 쌓지 않는다 (AC-33, AC-28, AC-65)", async () => {
       renderScreen();
 
       const list = await nearbyList();
 
       expect(within(list).getByText("장소 1")).toBeTruthy();
-      expect(within(list).getByText(/· 역삼역 \d+m$/)).toBeTruthy();
-      expect(within(list).queryByText("장소 3")).toBeNull();
-      expect(nearbyBodies).toEqual([{ query: NEARBY_QUERY }]);
+      expect(within(list).getByText("장소 3")).toBeTruthy();
+      expect(within(list).queryByText(/역삼역/)).toBeNull();
+      expect(within(list).queryByText(/\d+m$|km$/)).toBeNull();
+      // jsdom은 요소 크기가 0이라 보이는 영역 대신 getBounds() 전체를 쓰고, 이미 0.001도 격자 위라 그대로다
+      expect(nearbyBodies).toEqual([{ mapBounds: BOUNDS }]);
       expect(searchBodies).toEqual([]);
       expect(stores.current.getSnapshot().entries).toEqual([]);
       // 상세 화면이 핏 점수와 추천 이유를 쓸 수 있게 둔다
@@ -2540,6 +3307,7 @@ describe("SearchScreen", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "새 검색" }));
       expect(await nearbyList()).toBeTruthy();
+      // 홈 진입으로 영역을 다시 확정했지만 같은 영역 key의 fresh cache라 다시 받지 않는다(AC-67)
       expect(nearbyBodies).toHaveLength(1);
     });
 
@@ -2814,6 +3582,12 @@ describe("SearchScreen", () => {
 
   // 요청이 실패하는 화면(4-E03, 5-E01, 5-E03, 5-E04). 400은 재시도하지 않아 곧바로 실패한다
   describe("불러오기 실패", () => {
+    // 홈 주변 카드는 지도 영역으로 받으므로 지도가 있어야 한다(지도가 없으면 실패 안내, spec 75번)
+    beforeEach(() => {
+      config.value = { env: "dev", naverMapClientId: "key" };
+      stubNaverMaps();
+    });
+
     // match에 맞는 요청을 times번 실패시키고 그 뒤로는 원래대로 응답한다
     function failRequests(
       match: (url: string, body?: { query?: string }) => boolean,
@@ -2838,8 +3612,9 @@ describe("SearchScreen", () => {
         }),
       );
     }
-    const isSearch = (url: string, body?: { query?: string }) =>
-      url.includes("/search") && body?.query !== NEARBY_QUERY;
+    // 검색(/places/search, /places/search/region)과 홈 주변 카드(/places/nearby)는 주소로 가린다
+    const isSearch = (url: string) => url.startsWith("/api/v1/places/search");
+    const isNearby = (url: string) => url === "/api/v1/places/nearby";
 
     it("추천을 받지 못하면 결과 패널에 안내와 '다시 시도'를 보이고, 다시 시도하면 결과를 보인다", async () => {
       failRequests(isSearch);
@@ -2869,7 +3644,7 @@ describe("SearchScreen", () => {
       expect(searchBodies).toHaveLength(1);
     });
 
-    // 연결 실패는 두 번 더 보낸 뒤(약 3초) 실패한다
+    // 연결 실패는 두 번 더 보낸 뒤 실패한다(테스트 client는 재시도 사이 대기가 없다)
     it("연결이 없어 추천을 받지 못하면 연결 안내를 보인다", async () => {
       renderScreen();
       await newSearch("역삼 카페");
@@ -2878,46 +3653,60 @@ describe("SearchScreen", () => {
       sendFollowUp("더 조용하게");
 
       expect(
-        await screen.findByText(
-          "인터넷에 연결되어 있지 않아요",
-          {},
-          { timeout: 5000 },
-        ),
+        await screen.findByText("인터넷에 연결되어 있지 않아요"),
       ).toBeTruthy();
       expect(
         screen.getByText("연결을 확인하고 다시 시도해 주세요."),
       ).toBeTruthy();
       expect(screen.queryByRole("list", { name: "추천 장소" })).toBeNull();
-    }, 8000);
+    });
 
-    it("주변 추천을 받지 못하면 카드 자리에 안내를 보이고, 다시 시도하면 카드를 보인다", async () => {
-      failRequests((url, body) => body?.query === NEARBY_QUERY);
+    it("보인 카드가 없을 때 주변 추천을 받지 못하면 카드 자리에 안내를 보이고, 다시 시도는 같은 영역으로 받는다 (AC-72)", async () => {
+      failRequests(isNearby);
       renderScreen();
 
       expect(
         await screen.findByText("주변 추천을 불러오지 못했어요"),
       ).toBeTruthy();
+      expect(skeleton()).toBeNull();
 
       fireEvent.click(screen.getByRole("button", { name: "다시 시도" }));
 
       expect(await nearbyList()).toBeTruthy();
       expect(screen.queryByText("주변 추천을 불러오지 못했어요")).toBeNull();
+      expect(nearbyBodies).toEqual([{ mapBounds: BOUNDS }]);
     });
 
-    // 연결 실패는 두 번 더 보낸 뒤(약 3초) 실패한다
+    it("카드가 보이는 채 같은 영역을 다시 받다가 실패하면 카드가 그대로이고 실패 안내와 연결 안내가 없다 (AC-72)", async () => {
+      // AI 대체 응답은 staleTime 0이라 홈 진입 때 같은 key로 다시 받는다
+      aiFallback.nearby = true;
+      renderScreen();
+      await nearbyList();
+      await newSearch("역삼 카페");
+      failRequests(isNearby, { times: 3, offline: true });
+      const nearbyCalls = () =>
+        vi
+          .mocked(globalThis.fetch)
+          .mock.calls.filter(([url]) => isNearby(String(url))).length;
+
+      fireEvent.click(screen.getByRole("button", { name: "새 검색" }));
+
+      await waitFor(() => expect(nearbyCalls()).toBe(3));
+      await waitFor(() => expect(clients[0].isFetching()).toBe(0));
+      await act(async () => {});
+      expect(
+        screen.getByRole("region", { name: "주변 추천 장소" }),
+      ).toBeTruthy();
+      expect(screen.queryByText("주변 추천을 불러오지 못했어요")).toBeNull();
+      expect(screen.queryByText("인터넷에 연결되어 있지 않아요")).toBeNull();
+    });
+
     it("연결이 없어 주변 추천을 받지 못하면 검색창이 꺼지고 최근 검색 버튼이 없다", async () => {
-      failRequests((url, body) => body?.query === NEARBY_QUERY, {
-        times: 3,
-        offline: true,
-      });
+      failRequests(isNearby, { times: 3, offline: true });
       renderScreen();
 
       expect(
-        await screen.findByText(
-          "인터넷에 연결되어 있지 않아요",
-          {},
-          { timeout: 5000 },
-        ),
+        await screen.findByText("인터넷에 연결되어 있지 않아요"),
       ).toBeTruthy();
       expect(
         screen
@@ -2934,7 +3723,7 @@ describe("SearchScreen", () => {
           .getByRole("textbox", { name: "장소 검색" })
           .hasAttribute("disabled"),
       ).toBe(false);
-    }, 8000);
+    });
 
     it("자동완성 후보를 받지 못하면 '이 조건으로 추천받기'와 안내만 보인다", async () => {
       failRequests((url) => url.startsWith("/api/v1/places/suggest"));
@@ -2955,7 +3744,15 @@ describe("SearchScreen", () => {
     });
   });
   describe("AI 대신 키워드로 찾은 결과", () => {
+    // 홈 주변 카드는 지도 영역으로 받으므로 지도가 있어야 한다(지도가 없으면 실패 안내, spec 75번)
+    beforeEach(() => {
+      config.value = { env: "dev", naverMapClientId: "key" };
+      stubNaverMaps();
+    });
+
     const NOTICE = "지금은 AI 추천을 쓸 수 없어 가게 이름·메뉴로 찾았어요";
+    const HOME_NOTICE =
+      "지도 안의 장소만 보여드려요. 검색 조건은 적용되지 않았어요";
 
     it("검색 결과가 대체 결과이고 카드가 있으면 목록 위에 안내가 보인다", async () => {
       aiFallback.search = true;
@@ -2966,14 +3763,21 @@ describe("SearchScreen", () => {
       expect(screen.getByText(NOTICE)).toBeTruthy();
     });
 
-    it("대체 결과가 아니면 검색 결과와 첫 화면에 안내가 없다", async () => {
+    it("대체 결과가 아니면 첫 화면 주변 카드에 안내가 없다", async () => {
       renderScreen();
       await nearbyList();
+
+      expect(screen.queryByText(HOME_NOTICE)).toBeNull();
       expect(screen.queryByText(NOTICE)).toBeNull();
+    });
+
+    it("대체 결과가 아니면 검색 결과에 안내가 없다", async () => {
+      renderScreen();
 
       await newSearch("역삼 카페");
 
       expect(screen.queryByText(NOTICE)).toBeNull();
+      expect(screen.queryByText(HOME_NOTICE)).toBeNull();
     });
 
     it("대체 결과에 카드가 없으면 안내 없이 emptyReason만 보인다", async () => {
@@ -2988,26 +3792,30 @@ describe("SearchScreen", () => {
       expect(screen.queryByText(NOTICE)).toBeNull();
     });
 
-    it("첫 화면 주변 카드가 대체 결과면 안내가 보이고 다시 그릴 때 새로 받는다", async () => {
+    it("첫 화면 주변 카드가 대체 결과면 카드 위에 지도 안 장소 안내가 보이고, 홈 진입 때 같은 영역으로 새로 받는다 (AC-60, AC-72, AC-66)", async () => {
       aiFallback.nearby = true;
       renderScreen();
-      await nearbyList();
-      expect(screen.getByText(NOTICE)).toBeTruthy();
+      const list = await nearbyList();
+      const note = screen.getByText(HOME_NOTICE);
+      expect(
+        note.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(screen.queryByText(NOTICE)).toBeNull();
 
       await newSearch("역삼 카페");
       fireEvent.click(screen.getByRole("button", { name: "새 검색" }));
       await nearbyList();
 
-      // 캐시의 카드를 먼저 그리고 뒤에서 다시 받는다. 다른 테스트와 함께 돌아 느려도 기다린다
-      await waitFor(() => expect(nearbyBodies).toHaveLength(2), {
-        timeout: 5000,
-      });
+      // fallback은 staleTime 0이라 cache의 카드를 먼저 그리고 뒤에서 같은 영역으로 다시 받는다
+      await waitFor(() => expect(nearbyBodies).toHaveLength(2));
+      expect(nearbyBodies[1]).toEqual(nearbyBodies[0]);
     });
 
-    it("첫 화면 대체 결과도 창 포커스나 재연결로는 다시 받지 않는다", async () => {
+    it("첫 화면 대체 결과도 창 포커스나 재연결로는 다시 받지 않는다 (AC-66)", async () => {
       aiFallback.nearby = true;
       renderScreen();
       await nearbyList();
+      await waitFor(() => expect(clients[0].isFetching()).toBe(0));
 
       act(() => {
         focusManager.setFocused(false);
@@ -3016,9 +3824,9 @@ describe("SearchScreen", () => {
         onlineManager.setOnline(true);
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      // 다시 받기를 시작했다면 그 자리에서 fetching이 된다
+      expect(clients[0].isFetching()).toBe(0);
       expect(nearbyBodies).toHaveLength(1);
-      focusManager.setFocused(undefined);
     });
   });
 });

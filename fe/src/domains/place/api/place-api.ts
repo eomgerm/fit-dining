@@ -1,6 +1,7 @@
 import { request, requestWithHeaders } from "@/shared/api/client";
 
 import type {
+  NearbyRequest,
   PlaceDetail,
   PlaceSearchRequest,
   PlaceSearchResponse,
@@ -53,9 +54,18 @@ export function searchRegion(
   return postSearch("/v1/places/search/region", body, signal, extras);
 }
 
+// 홈 주변 카드(spec 70번). 비회원 답, 시간 초과, X-Fallback 처리는 검색과 같다(D-111)
+export function searchNearby(
+  body: NearbyRequest,
+  signal?: AbortSignal,
+  extras?: SearchExtras,
+) {
+  return postSearch("/v1/places/nearby", body, signal, extras);
+}
+
 async function postSearch(
   path: string,
-  body: PlaceSearchRequest | RegionSearchRequest,
+  body: PlaceSearchRequest | RegionSearchRequest | NearbyRequest,
   signal?: AbortSignal,
   { preferences }: SearchExtras = {},
 ) {

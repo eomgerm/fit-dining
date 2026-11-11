@@ -11,6 +11,7 @@ import {
   getPlace,
   isAiFallback,
   searchPlaces,
+  searchNearby,
   searchRegion,
   showsAiFallback,
   suggestPlaces,
@@ -35,7 +36,9 @@ beforeEach(() => {
   vi.stubGlobal("fetch", fetchMock);
 });
 
+// 테스트가 중간에 실패해도 AbortSignal.timeout spy가 다음 테스트에 남지 않게 여기서 되돌린다
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -97,7 +100,6 @@ describe("searchPlaces", () => {
     expect(timeout.mock.calls.map(([ms]) => ms)).toEqual([
       15_000, 15_000, 10_000, 10_000,
     ]);
-    timeout.mockRestore();
   });
 
   it("인증 헤더 없이 보내고 비회원 답은 본문의 preferences로 싣는다", async () => {
@@ -216,7 +218,6 @@ describe("searchRegion", () => {
     expect(sentHeaders(0).has("Authorization")).toBe(false);
     expect(JSON.parse(sentBody(0))).toEqual(region);
     expect(JSON.parse(sentBody(1))).toEqual({ ...region, preferences });
-    timeout.mockRestore();
   });
 
   it("X-Fallback의 AI_UNAVAILABLE을 대체 결과로 읽는다", async () => {
@@ -227,5 +228,46 @@ describe("searchRegion", () => {
     );
 
     expect(isAiFallback(await searchRegion(region))).toBe(true);
+  });
+});
+
+describe("searchNearby", () => {
+  const nearby = {
+    mapBounds: { swLat: 37.491, swLng: 127.021, neLat: 37.51, neLng: 127.044 },
+  };
+
+  it("POST /api/v1/places/nearby로 영역만 보내고 문장과 기기 좌표는 없다(AC-33, AC-65)", async () => {
+    await expect(searchNearby(nearby)).resolves.toEqual(searchResponse);
+
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/places/nearby");
+    expect(fetchMock.mock.calls[0][1]?.method).toBe("POST");
+    expect(JSON.parse(sentBody())).toEqual(nearby);
+  });
+
+  it("검색처럼 15초를 기다리고 비회원 답은 보낼 때만 preferences로 싣는다", async () => {
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    const preferences = {
+      mood: null,
+      priorities: [],
+      purposes: [],
+      tastes: [],
+    };
+
+    await searchNearby(nearby);
+    await searchNearby(nearby, undefined, { preferences });
+
+    expect(timeout.mock.calls.map(([ms]) => ms)).toEqual([15_000, 15_000]);
+    expect(JSON.parse(sentBody(0))).toEqual(nearby);
+    expect(JSON.parse(sentBody(1))).toEqual({ ...nearby, preferences });
+  });
+
+  it("X-Fallback의 AI_UNAVAILABLE을 대체 결과로 읽는다", async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json(searchResponse, {
+        headers: { "X-Fallback": "AI_UNAVAILABLE" },
+      }),
+    );
+
+    expect(isAiFallback(await searchNearby(nearby))).toBe(true);
   });
 });

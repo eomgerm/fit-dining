@@ -1,6 +1,7 @@
 import { CATEGORY_LABELS } from "./place-labels";
 import type {
   CategoryGroup,
+  MapBounds,
   PlaceCard,
   PlaceSearchResponse,
   SearchConditions,
@@ -21,6 +22,18 @@ export type EntryKind = "new" | "followUp" | "region";
 // 앱을 연 뒤 처음 얻은 위치로 지도를 한 번 옮기는 일의 상태(spec 62번). pending이면 아직 옮기지 않았고,
 // applying이면 한 화면이 옮기는 중이며, done이면 다시 옮기지 않는다
 export type InitialView = "pending" | "applying" | "done";
+
+// 처음 이동을 끝낸 쪽(spec 70번). initial은 처음 조회의 결과나 처음 panTo의 끝, button은 "내 위치"의 이동,
+// user는 사용자의 끌기·확대·축소, fit은 결과 맞춤 이동, map은 지도 실패다
+export type InitialViewEnd = "initial" | "button" | "user" | "fit" | "map";
+
+// 홈 주변 카드의 영역(spec 72번, 73번). entry는 홈 진입 번호이고, bounds는 그 진입에서 확정한 정규화 영역,
+// coverTop은 그때 잰 덮는 UI의 위 끝(화면 좌표)이다. 확정 전에는 bounds가 없다
+export type HomeArea = {
+  entry: number;
+  bounds?: MapBounds;
+  coverTop?: number;
+};
 
 // 앱을 열 때의 위치 조회 결과 중 화면이 알려야 하는 것(spec 63번)
 export type LocationNotice = "denied" | "failed";
@@ -57,6 +70,11 @@ export type SearchState = {
   // 상세 화면이 핏 점수와 추천 이유를 꺼내 쓴다
   latestCards: ReadonlyMap<number, PlaceCard>;
   initialView: InitialView;
+  // "내 위치"가 처음 이동을 가져갔는지. 가진 동안은 처음 조회와 처음 panTo의 끝으로 done이 되지 않는다
+  initialOwnedByButton: boolean;
+  // 처음 이동을 끝낸 쪽. 사용자가 끝냈으면 처음 홈 요청은 지도가 멈춘 뒤의 화면으로 나간다
+  initialEndedBy?: InitialViewEnd;
+  home: HomeArea;
   // 아직 아무 화면도 띄우지 않은 위치 알림. 지금 보이는 화면이 한 번 가져가 띄운다
   locationNotice?: LocationNotice;
   // 로그인 세션이 바뀌어 처음으로 되돌린 횟수. 그 전에 시작한 요청의 응답은 버린다(search-thread D-6)
@@ -112,6 +130,8 @@ export function createSearchStore(now: () => number = Date.now) {
     location: { status: "idle" },
     latestCards: new Map(),
     initialView: "pending",
+    initialOwnedByButton: false,
+    home: { entry: 0 },
     epoch: 0,
   };
   const listeners = new Set<() => void>();
@@ -224,9 +244,33 @@ export function createSearchStore(now: () => number = Date.now) {
       return true;
     },
 
-    // 처음 이동이 끝났거나 더 할 필요가 없다(위치를 못 얻음, "내 위치", 사용자가 지도를 움직임, 지도 실패)
-    finishInitialView() {
-      if (state.initialView !== "done") update({ initialView: "done" });
+    // "내 위치"가 남은 처음 이동을 가져간다(pending이든 applying이든). 이미 done이면 그대로다(spec 70번)
+    takeInitialViewByButton() {
+      if (state.initialView === "done") return;
+      update({ initialView: "applying", initialOwnedByButton: true });
+    },
+
+    // 처음 이동이 끝났거나 더 할 필요가 없다(위치를 못 얻음, "내 위치", 사용자가 지도를 움직임, 맞춤 이동, 지도 실패).
+    // "내 위치"가 가진 동안은 처음 조회의 결과와 처음 panTo의 끝(initial)으로 끝내지 않는다
+    finishInitialView(by: InitialViewEnd = "initial") {
+      if (state.initialView === "done") return;
+      if (state.initialOwnedByButton && by === "initial") return;
+      update({ initialView: "done", initialEndedBy: by });
+    },
+
+    // 홈 진입. 번호를 올리고 영역을 비운다. 그 진입의 영역은 setHomeBounds가 확정한다(spec 73번)
+    beginHomeEntry() {
+      update({ home: { entry: state.home.entry + 1 } });
+    },
+
+    // 지금 홈 진입의 영역을 확정한다. 지난 진입의 늦은 결과는 버린다(spec 72번)
+    setHomeBounds(
+      entry: number,
+      bounds: MapBounds,
+      coverTop: number | undefined,
+    ) {
+      if (entry !== state.home.entry) return;
+      update({ home: { entry, bounds, coverTop } });
     },
 
     noticeLocation(notice: LocationNotice) {
@@ -248,6 +292,8 @@ export function createSearchStore(now: () => number = Date.now) {
         pastId: undefined,
         selectedPlaceId: undefined,
         latestCards: new Map(),
+        // 홈 영역을 비워 다음에 홈이 보일 때 새로 확정한다(숨은 동안 바뀐 경우 포함, spec 73번)
+        home: { entry: state.home.entry + 1 },
         epoch: state.epoch + 1,
       });
     },

@@ -82,17 +82,20 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+// 홈 주변 카드 요청의 정규화한 영역(spec 70번)
+const AREA = { swLat: 37.491, swLng: 127.021, neLat: 37.51, neLng: 127.044 };
+
 describe("검색 요청에 싣는 값", () => {
   it("확인된 회원이면 인증 헤더와 기기 답 없이 세션 쿠키로 보낸다", async () => {
     auth.session = session("user-1");
     localStorage.setItem("fd.onboarding.answers.v1", JSON.stringify(answers));
     const { placeQueries, queryClient } = await load();
 
-    await queryClient.fetchQuery(placeQueries.nearby());
+    await queryClient.fetchQuery(placeQueries.nearby(AREA));
 
     expect(sent(0)).toEqual({
       token: null,
-      body: { query: "근처 맛집" },
+      body: { mapBounds: AREA },
     });
   });
 
@@ -100,20 +103,20 @@ describe("검색 요청에 싣는 값", () => {
     localStorage.setItem("fd.onboarding.answers.v1", JSON.stringify(answers));
     const { placeQueries, queryClient } = await load();
 
-    await queryClient.fetchQuery(placeQueries.nearby());
+    await queryClient.fetchQuery(placeQueries.nearby(AREA));
 
     expect(sent(0)).toEqual({
       token: null,
-      body: { query: "근처 맛집", preferences: answers },
+      body: { mapBounds: AREA, preferences: answers },
     });
   });
 
   it("비회원의 답이 없으면 preferences 없이 보낸다", async () => {
     const { placeQueries, queryClient } = await load();
 
-    await queryClient.fetchQuery(placeQueries.nearby());
+    await queryClient.fetchQuery(placeQueries.nearby(AREA));
 
-    expect(sent(0)).toEqual({ token: null, body: { query: "근처 맛집" } });
+    expect(sent(0)).toEqual({ token: null, body: { mapBounds: AREA } });
   });
 
   it("비회원 답의 칩 code가 BE 규칙에 맞지 않으면 preferences 없이 보낸다", async () => {
@@ -126,9 +129,9 @@ describe("검색 요청에 싣는 값", () => {
     );
     const { placeQueries, queryClient } = await load();
 
-    await queryClient.fetchQuery(placeQueries.nearby());
+    await queryClient.fetchQuery(placeQueries.nearby(AREA));
 
-    expect(sent(0)).toEqual({ token: null, body: { query: "근처 맛집" } });
+    expect(sent(0)).toEqual({ token: null, body: { mapBounds: AREA } });
   });
 
   it("세션을 확인하지 못하면 토큰도 답도 싣지 않는다", async () => {
@@ -136,9 +139,9 @@ describe("검색 요청에 싣는 값", () => {
     localStorage.setItem("fd.onboarding.answers.v1", JSON.stringify(answers));
     const { placeQueries, queryClient } = await load();
 
-    await queryClient.fetchQuery(placeQueries.nearby());
+    await queryClient.fetchQuery(placeQueries.nearby(AREA));
 
-    expect(sent(0)).toEqual({ token: null, body: { query: "근처 맛집" } });
+    expect(sent(0)).toEqual({ token: null, body: { mapBounds: AREA } });
   });
 
   it("회원 세션이 만료돼 401이면 재시도 없이 비회원으로 전환한다", async () => {
@@ -153,7 +156,7 @@ describe("검색 요청에 싣는 값", () => {
     const { placeQueries, queryClient } = await load();
 
     await expect(
-      queryClient.fetchQuery(placeQueries.nearby()),
+      queryClient.fetchQuery(placeQueries.nearby(AREA)),
     ).rejects.toMatchObject({ status: 401 });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
