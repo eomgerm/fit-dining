@@ -23,7 +23,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 6. `migrate` 프로필은 웹 서버 없이 뜨고 인증 빈을 만들지 않는다. 지금 `PlaceController`는 이 프로필에서도 만들어진다(D-4).
 7. 이번 반복 전 FE는 검색 요청에 `preferences`와 토큰을 싣지 않았다(`fe/src/domains/place/model/search-request.ts`). 비회원 온보딩 답은 기기에 가입과 같은 모양으로 저장돼 있고, 읽을 때 지금 선택지에 맞지 않으면 지운다(`fe/src/domains/onboarding/model/storage.ts#readAnswers`)(D-4, D-16).
 8. FE의 API 요청은 기본 10초에 끊기고 요청마다 바꿀 수 있다(`fe/src/shared/api/client.ts`의 `timeoutMs`). 대체 결과가 화면에 닿으려면 BE가 FE보다 먼저 응답해야 한다(D-3).
-9. AI DB 계정은 `ai_place_search`와 `user_preferences`만 읽고, 배포는 마이그레이션 뒤에 그 권한을 다시 맞춘다(`infra/data/grant-ai-read.sh`, `infra/deploy/deploy.sh`). 서버 dev DB에는 아직 이 뷰가 없다(D-15).
+9. AI DB 계정은 `ai_place_search`와 `user_preferences`만 읽고(2026-11-10에 페르소나 뷰 `ai_place_personas`(V25)를 더했다, S15P31A302-161), 배포는 마이그레이션 뒤에 그 권한을 다시 맞춘다(`infra/data/grant-ai-read.sh`, `infra/deploy/deploy.sh`). 서버 dev DB에는 아직 이 뷰가 없다(D-15).
 10. FE의 도메인끼리는 서로 import하지 않고 app 계층이 잇는다(`fe/eslint.config.mjs`). place 도메인은 auth와 onboarding을 import하지 않는다(D-16).
 11. AI 검색 API는 모르는 요청 속성을 400으로 막는다(`extra="forbid"`). `rulesOnly`와 `mapFirst`를 받는 AI(S15P31A302-196)가 배포되기 전에는 NEARBY·REGION 요청이 AI의 400을 받아 AC-7 ⑥으로 대체된다. 배포 순서는 AI → BE → FE이고 같은 배포 창이다(D-18).
 12. 이번 반복의 FE는 새 API를 부르지 않는다. 지금 FE와 배포 직후 남은 옛 FE 탭은 홈 주변 카드를 `/places/search` `{query: "근처 맛집"}`으로 보낸다(D-18).

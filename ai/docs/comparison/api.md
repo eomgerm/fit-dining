@@ -1,6 +1,6 @@
 # AI 검색 API 명세
 
-Status: 초안 v0.13 · Jira: S15P31A302-41, S15P31A302-136, S15P31A302-158, S15P31A302-209, S15P31A302-236 · 작성일: 2026-10-23 · 고친 날: 2026-11-12
+Status: 초안 v0.14 · Jira: S15P31A302-41, S15P31A302-136, S15P31A302-158, S15P31A302-209, S15P31A302-236, S15P31A302-161 · 작성일: 2026-10-23 · 고친 날: 2026-11-12
 
 BE는 검색 첫 페이지마다 AI를 한 번 부른다. AI는 요청을 해석하고 DB에서 후보를 뽑아 핏 점수로 정렬한 뒤 카드의 AI 필드를 돌려준다. v0.7부터 정렬에 LLM을 쓰지 않는다. BE는 카드에 장소 정보와 영업 상태를 붙여 FE에 준다. 모임 추천은 모임 설명 해석과 모임 계산 주소 두 개를 따로 쓴다(6장).
 
@@ -70,6 +70,8 @@ v0.8부터 메뉴(`menus`)와 음식 종류·매운맛(`codes`, `avoidFoods`)을
 
 v0.9부터 `conditions`는 3차 모양(`version: 3`)이다. 업종·음식 종류·맛·메뉴는 항목마다 원함과 피함(`want`)을 두고, 특징·시설·인원은 칸을 나눈다(`categories`, `foodTypes`, `flavors`, `menus`, `features`, `facilities`, `partySize`). `codes`, `categoryGroup`, `station`, `nearby`, `avoidCategories`, `avoidFoods`는 없어진다. 모양은 [conditions-v3.md](conditions-v3.md) 3장에 있다. AI는 `version`이 없는 v0.8 이전 `conditions`도 계속 읽으므로 BE가 검색 대화에 저장해 둔 조건으로 하는 후속 검색도 이어진다. 응답 최상위 `nearby`는 그대로다. v0.9를 배포한 뒤 v0.8로 되돌리면 3차 `conditions`로 하는 후속 검색은 새 검색으로 바뀐다(`PREVIOUS_INVALID`). BE와 FE는 바꿀 것이 없다.
 
+v0.14부터 `conditions.features`의 코드 없는 특징에 `kind`(`TASTE`, `FACILITY`, `QUALITY`)가 붙고 `value`가 "~곳" 문구다. 더한 칸이라 `version`은 3이고 BE와 FE는 바꿀 것이 없다. v0.12를 배포한 뒤 되돌리면 `kind`가 있는 조건으로 하는 후속 검색은 새 검색으로 바뀐다(`PREVIOUS_INVALID`).
+
 ### 응답
 
 BE Mock 장소(`samples/place/mock.json`)와 실제 인코더·GMS로 받은 응답이다(2026-11-03). 카드는 하나만 남겼다.
@@ -107,7 +109,7 @@ BE Mock 장소(`samples/place/mock.json`)와 실제 인코더·GMS로 받은 응
 
 `totalCount`는 `items` 수이고 `nextCursor`는 없다. `PlaceCard`에는 `placeId`가 없으므로 응답도 AI 응답용 DTO로 받는다.
 
-카드 필드는 `PlaceCard`의 AI 필드와 이름이 같다. `labels`는 2개, `reasons`는 3개까지다. `labels`는 이번 검색에서 맞은 조건을 먼저 쓰고, 그 문구는 `matched`가 true인 `scoreItems`의 `label`과 같다. FE는 이 문구와 같은 태그에만 강조색을 칠하고, 채운 태그(장소 특징, 업종·역 이름)는 회색으로 둔다(v0.12. 전에는 리뷰 근거가 많은 장소 특징이었고 FE가 첫 태그를 강조했다). 고르는 순서는 [spec.md](spec.md) 4.4에 있다. `score`는 판정할 요청 조각도 취향도 없으면 빠진다(v0.7). `scoreItems`는 점수를 낸 조각 그대로다. 요청 조각, 그다음 좋아하는 취향 순서이고 카드 조건(코드표 14개와 시설 4개)과 확장 코드(음식 종류, 매운맛, 빨리 나옴, 음악, 독특한 컨셉)가 들어간다. 싫어하는 취향은 점수에만 들어가고 화면 문구가 정해질 때까지 넣지 않는다. 점수 계산은 [spec.md](spec.md) 4.3에 있다. `caution`과 `quote`는 MVP에 없다. 아래 두 필드는 BE Javadoc과 뜻이 달라 화면 문구를 맞춰야 한다.
+카드 필드는 `PlaceCard`의 AI 필드와 이름이 같다. `labels`는 2개, `reasons`는 3개까지다. `labels`는 이번 검색에서 맞은 조건을 먼저 쓰고, 그 문구는 `matched`가 true인 `scoreItems`의 `label`과 같다. FE는 이 문구와 같은 태그에만 강조색을 칠하고, 채운 태그(장소 특징, 업종·역 이름)는 회색으로 둔다(v0.12. 전에는 리뷰 근거가 많은 장소 특징이었고 FE가 첫 태그를 강조했다). 고르는 순서는 [spec.md](spec.md) 4.4에 있다. `score`는 판정할 요청 조각도 취향도 없으면 빠진다(v0.7). `scoreItems`는 점수를 낸 조각 그대로다. 요청 조각, 그다음 좋아하는 취향 순서이고 카드 조건(코드표 14개와 시설 4개)과 확장 코드(음식 종류, 매운맛, 빨리 나옴, 음악, 독특한 컨셉), 코드 없는 취향형 문구가 들어간다. 문구 항목은 `label`이 문구("책 읽기 좋은 곳")이고 `evidenceCount`가 0이다(v0.12). 피해 달라는 맛("안 매운")은 점수에만 들어가고 항목에 넣지 않는다. 싫어하는 취향은 점수에만 들어가고 화면 문구가 정해질 때까지 넣지 않는다. 점수 계산은 [spec.md](spec.md) 4.3에 있다. `caution`과 `quote`는 MVP에 없다. 아래 두 필드는 BE Javadoc과 뜻이 달라 화면 문구를 맞춰야 한다.
 
 - `matched`: 조건 점수가 0.7 이상(리뷰는 업종 범위 상위 30%, 장소 정보는 있음)일 때 true다. false는 근거가 부족하거나 아니라는 근거가 있을 때다. 점수에는 `matched`와 상관없이 조건 점수가 그대로 들어간다.
 - `evidenceCount`: 앱 리뷰와 외부 리뷰를 합친 수다. 장소 정보(시설, 음식 종류)로 판정한 항목은 0이다.

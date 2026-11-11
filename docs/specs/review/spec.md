@@ -269,7 +269,7 @@ Walking Skeleton
 
 취향·AI·검색 담당
 - 코드표(`ai/src/fit_ai/features.py`)는 S15P31A302-39로 develop에 들어왔고 리뷰 태그도 이 코드를 쓴다(D-16, D-36). V6(S15P31A302-103)이 같은 코드를 `feature_codes` 테이블로 만들었고 `reason_tags.feature_code`가 이 테이블을 참조한다(FK). develop의 온보딩 코드(`SPACIOUS`, `VALUE`, `CONVERSATION` 등)는 아직 코드표와 다른데 어느 쪽에 맞추나요?
-- AI는 리뷰를 어디서 읽나요? AI API는 서버 A의 컨테이너에서 읽기 전용 DB 계정으로 돌고, 지금은 뷰 `ai_place_search`와 `user_preferences`만 읽는다(인프라 설계 11.4절). AI가 리뷰를 읽으려면 리뷰용 뷰를 BE 마이그레이션으로 만들고 `infra/data/grant-ai-read.sh`의 허용 목록에 더해야 한다. 리뷰는 삭제·숨김·분석 제외 시각과 `updated_at`을 남긴다(D-34). 뷰에 담을 필드와, 삭제·숨김·분석 제외된 리뷰를 어디서 거를지 AI·인프라 담당과 정해야 한다(S15P31A302-57).
+- AI는 리뷰를 어디서 읽나요? AI API는 서버 A의 컨테이너에서 읽기 전용 DB 계정으로 돌고, 지금은 뷰 `ai_place_search`, `ai_place_personas`와 `user_preferences`만 읽는다(인프라 설계 11.4절). AI가 리뷰를 읽으려면 리뷰용 뷰를 BE 마이그레이션으로 만들고 `infra/data/grant-ai-read.sh`의 허용 목록에 더해야 한다. 리뷰는 삭제·숨김·분석 제외 시각과 `updated_at`을 남긴다(D-34). 뷰에 담을 필드와, 삭제·숨김·분석 제외된 리뷰를 어디서 거를지 AI·인프라 담당과 정해야 한다(S15P31A302-57).
 - 삭제·숨김·분석 제외된 리뷰가 카드의 인용(`reasons[].quote`, `quoteSource` "앱 리뷰")과 근거 수(`evidenceCount`)에서 빠지게 하는 쪽은 비교 쪽인가요? 지금 베이스라인은 인용을 넣지 않지만 다음 단계에서 앱 리뷰 인용을 붙인다.
 
 BE 팀 공통

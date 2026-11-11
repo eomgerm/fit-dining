@@ -33,7 +33,7 @@
   "flavors": [{"code": "SPICY", "want": false}],
   "menus": [{"text": "스시", "value": "초밥", "spellings": [], "want": true}],
   "features": [{"text": "북적이는 데 말고", "value": "조용하고 차분한 곳", "code": "QUIET"},
-               {"text": "충전되는", "value": "콘센트", "code": null}],
+               {"text": "충전되는", "value": "콘센트 있는 곳", "code": null, "kind": "FACILITY"}],
   "facilities": ["PARKING"],
   "partySize": 5,
   "locations": [{"text": "션릉역", "kind": "STATION", "value": "선릉역"}],
@@ -45,7 +45,7 @@
 ```
 
 - 업종은 원함이 하나까지다.
-- 특징의 `code`는 코드표의 성향 축·중요 기준·방문 목적 코드이고, 코드표에 없는 특징이면 null이다.
+- 특징의 `code`는 코드표의 성향 축·중요 기준·방문 목적 코드이고, 코드표에 없는 특징이면 null이다. 코드 없는 특징은 `value`가 "~곳" 문구이고 `kind`(`TASTE`, `FACILITY`, `QUALITY`)가 붙는다(2026-11-10, spec.md 4.1). `kind`는 더한 칸이라 `version`은 3 그대로다. `kind`가 없는 옛 조건도 읽고, 그 특징은 후보와 점수에 쓰지 않는다.
 - `station`, `nearby`는 칸에서 빼고 지역에서 계산한다. 검색 응답 최상위 `nearby`는 2026-11-09에 `nationwide`(전국에서 찾았는지)로 바꿨다(api.md v0.10).
 - `mapBounds`는 해석 결과가 아니라 "이 지역에서 검색"으로 고른 지도 영역이다. 다음 후속 요청이 지역을 말하지 않으면 이 영역에서 찾는다. 그 밖의 검색이면 빠진다(2026-11-09).
 
