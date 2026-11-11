@@ -80,6 +80,8 @@ const LOCATION_PIN_SIZE = 32;
 const PAN_SETTLE_MS = 1500;
 // 이만큼 가까우면 이미 그 위치다(위도·경도 차이, 약 1m)
 const SAME_CENTER_DEG = 0.00001;
+// 지금 화면이 시작 화면과 같은지 볼 때 허용하는 오차(도, 약 0.1m). 좌표를 지도 안에서 오가며 생기는 부동소수 오차를 넘긴다
+const SAME_VIEW_EPSILON = 1e-6;
 // 결과 맞춤 이동(fitBounds)의 네 방향 여백에 더하는 값. 선택된 핀 크기다(spec 69번)
 const FIT_MARGIN = SELECTED_PIN_SIZE;
 // 결과 맞춤 이동의 확대 정도 상한(fitBounds의 maxZoom). 가까운 몇 곳만 있을 때 과하게 확대하지 않는다
@@ -162,6 +164,14 @@ function pinIcon(naver: NaverMaps, mark: PinMark, selected: boolean) {
 const MY_LOCATION_ICON =
   '<div class="flex size-8 items-center justify-center rounded-full bg-location-halo"><div class="size-3.5 rounded-full border-2 border-surface bg-location"></div></div>';
 
+function sameView(a: MapView, b: MapView) {
+  return (
+    Math.abs(a.lat - b.lat) < SAME_VIEW_EPSILON &&
+    Math.abs(a.lng - b.lng) < SAME_VIEW_EPSILON &&
+    Math.abs(a.zoom - b.zoom) < SAME_VIEW_EPSILON
+  );
+}
+
 // 정리(cleanup) 중에는 SDK가 던져도 할 일이 없다
 function ignoreSdkError(call: () => void) {
   try {
@@ -239,6 +249,8 @@ export function PlaceMap({
   // 처음 화면은 지도를 만들 때 한 번만 정한다. 기기 저장소는 브라우저에서만 읽는다
   const initialCenter = useRef(center);
   const remembers = useRef(rememberView);
+  // 지도를 만들 때의 시작 화면(center·zoom). 지금 화면이 이것과 같으면 저장하지 않는다(spec 61번)
+  const startView = useRef<MapView>(undefined);
   const markersRef = useRef(
     new Map<number, { marker: NaverMarker; mark?: PinMark; zIndex: number }>(),
   );
@@ -276,6 +288,7 @@ export function PlaceMap({
             center: new naver.LatLng(start.lat, start.lng),
             zoom: start.zoom,
           });
+          startView.current = start;
           kept.current = { naver, map };
           setLoaded(kept.current);
         })
@@ -334,8 +347,6 @@ export function PlaceMap({
   const handleIdle = useEffectEvent(() => onIdle?.());
   // 코드가 확대 정도를 바꾸는 중인지(D-104). 그 움직임이 멈출 때(idle)까지 zoom_changed를 사용자 조작으로 세지 않는다
   const zoomingByCode = useRef(false);
-  // 처음 멈춤을 이미 지난 지도. 화면이 숨었다 다시 보여도 지도는 그대로라 다시 세지 않는다
-  const settledOnce = useRef(new WeakSet<NaverMap>());
   useEffect(() => {
     if (!active) return;
     const { naver, map } = active;
@@ -350,19 +361,17 @@ export function PlaceMap({
         naver.Event.addListener(map, "idle", () => {
           zoomingByCode.current = false;
           handleIdle();
-          // 지도를 만든 뒤 처음 멈춤은 저장된 화면 그대로이므로 쓰지 않는다(spec 61번)
-          if (!settledOnce.current.has(map)) {
-            settledOnce.current.add(map);
-            return;
-          }
           if (!remembers.current) return;
+          // 멈춤의 순서나 개수가 아니라 화면으로 정한다. 시작 화면 그대로면 쓰지 않고, 다르면 무엇이 옮겼든 쓴다(spec 61번)
           guard(() => {
             const center = map.getCenter();
-            writeMapView({
+            const view = {
               lat: center.lat(),
               lng: center.lng(),
               zoom: map.getZoom(),
-            });
+            };
+            if (startView.current && sameView(startView.current, view)) return;
+            writeMapView(view);
           });
         }),
       );

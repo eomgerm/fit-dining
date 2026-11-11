@@ -1362,7 +1362,7 @@ describe("SearchScreen", () => {
       };
       const savedView = () => localStorage.getItem("fd.map.view.v1");
 
-      it("저장된 화면에서 시작하고, 멈출 때마다(지도를 만든 뒤 처음 멈춤은 빼고) 그 화면을 저장한다", async () => {
+      it("저장된 화면에서 시작하고, 멈출 때마다 지금 화면이 시작 화면과 다르면 그 화면을 저장한다", async () => {
         localStorage.setItem(
           "fd.map.view.v1",
           JSON.stringify({ lat: 36.35, lng: 127.34, zoom: 13 }),
@@ -1374,13 +1374,6 @@ describe("SearchScreen", () => {
         const created = map.created[0];
         created.getCenter.mockReturnValue({ lat: () => 37.4, lng: () => 127 });
         created.getZoom.mockReturnValue(16);
-        map.fire("idle");
-        expect(JSON.parse(savedView()!)).toEqual({
-          lat: 36.35,
-          lng: 127.34,
-          zoom: 13,
-        });
-
         map.fire("idle");
         expect(JSON.parse(savedView()!)).toEqual({
           lat: 37.4,
@@ -1396,6 +1389,59 @@ describe("SearchScreen", () => {
           lng: 127,
           zoom: 16,
         });
+      });
+
+      // 실제 SDK는 지도를 만들 때의 idle을 앱이 listener를 달기 전에 지나치거나 보내지 않는다(S15P31A302-228)
+      it("지도를 만들 때 idle이 오지 않아도 사용자의 첫 끌기 뒤 idle에서 그 화면을 저장한다", async () => {
+        renderScreen();
+        await mapReady();
+        const created = map.created[0];
+        created.getCenter.mockReturnValue({
+          lat: () => 37.51,
+          lng: () => 127.05,
+        });
+        created.getZoom.mockReturnValue(15);
+        map.fire("dragend");
+        map.fire("idle");
+
+        expect(JSON.parse(savedView()!)).toEqual({
+          lat: 37.51,
+          lng: 127.05,
+          zoom: 15,
+        });
+      });
+
+      it("지도를 만든 직후 idle이 와도 화면이 시작 화면 그대로(부동소수 오차 포함)면 저장하지 않는다", async () => {
+        renderScreen();
+        await mapReady();
+        const created = map.created[0];
+        const { lat, lng, zoom } = startView();
+        created.getCenter.mockReturnValue({
+          lat: () => lat + 1e-9,
+          lng: () => lng - 1e-9,
+        });
+        created.getZoom.mockReturnValue(zoom);
+        map.fire("idle");
+        map.fire("idle");
+
+        expect(savedView()).toBeNull();
+      });
+
+      it("처음 위치 panTo가 지도를 옮긴 뒤의 화면은 저장한다", async () => {
+        stubLocation({ permission: "granted", position: HERE });
+        renderScreen();
+        await mapReady();
+        await waitFor(() =>
+          expect(map.created[0].panTo).toHaveBeenCalledTimes(1),
+        );
+        const created = map.created[0];
+        created.getCenter.mockReturnValue({
+          lat: () => HERE.lat,
+          lng: () => HERE.lng,
+        });
+        map.fire("idle");
+
+        expect(JSON.parse(savedView()!)).toEqual({ ...HERE, zoom: 15 });
       });
 
       it.each([
