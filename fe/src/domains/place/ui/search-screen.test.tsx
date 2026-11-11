@@ -2307,6 +2307,24 @@ describe("SearchScreen", () => {
           expect(homeArea().bounds).toEqual(AREA_B);
         });
 
+        it("영역을 확정하기 전에는 끌어서 멈춰도 보이지 않는다", async () => {
+          controlResize();
+          renderScreen();
+          await mapReady();
+          await nearbyList();
+          await newSearch("역삼 카페");
+          // 홈 진입의 확정이 크기 적용을 기다린다
+          resizeMapElement(400, 800);
+          fireEvent.click(screen.getByRole("button", { name: "새 검색" }));
+          await act(async () => {});
+          expect(homeArea().bounds).toBeUndefined();
+
+          dragTo(AREA_B);
+
+          expect(regionButton()).toBeNull();
+          expect(skeleton()).toBeTruthy();
+        });
+
         it("보이던 중 지도가 실패하면 숨는다", async () => {
           let broken = false;
           map = stubNaverMaps({
