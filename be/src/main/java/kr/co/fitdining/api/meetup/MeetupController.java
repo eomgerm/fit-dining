@@ -5,6 +5,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Validator;
+import java.time.Duration;
 import java.util.Set;
 import kr.co.fitdining.api.auth.ports.AuthUseCases;
 import kr.co.fitdining.api.meetup.domain.MeetupLimits;
@@ -15,6 +16,7 @@ import kr.co.fitdining.api.meetup.dto.MeetupCreateRequest;
 import kr.co.fitdining.api.meetup.dto.MeetupCreateResponse;
 import kr.co.fitdining.api.meetup.dto.MeetupResult;
 import kr.co.fitdining.api.meetup.dto.MeetupSnapshot;
+import kr.co.fitdining.api.meetup.dto.MeetupUpdateRequest;
 import kr.co.fitdining.api.meetup.dto.ProfileCreateRequest;
 import kr.co.fitdining.api.meetup.dto.ProfileCreateResponse;
 import kr.co.fitdining.api.meetup.exception.InvalidMeetupException;
@@ -27,6 +29,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -35,6 +38,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * 모임 API. 요청 형식만 검증하고 처리는 서비스에 맡긴다. 오류는 {@code MeetupExceptionHandler}가 ProblemDetail로
@@ -56,11 +61,12 @@ public class MeetupController {
 	private final MeetupResultService resultService;
 	private final MeetupWriteLimiter writeLimiter;
 	private final Validator validator;
+	private final JsonMapper jsonMapper;
 	private final boolean secureCookie;
 
 	public MeetupController(MeetupService meetupService, MeetupProfileService profileService,
 			MeetupCalculationService calculationService, MeetupResultService resultService,
-			MeetupWriteLimiter writeLimiter, Validator validator,
+			MeetupWriteLimiter writeLimiter, Validator validator, JsonMapper jsonMapper,
 			@Value("${auth.cookie-secure}") boolean secureCookie) {
 		this.meetupService = meetupService;
 		this.profileService = profileService;
@@ -68,6 +74,7 @@ public class MeetupController {
 		this.resultService = resultService;
 		this.writeLimiter = writeLimiter;
 		this.validator = validator;
+		this.jsonMapper = jsonMapper;
 		this.secureCookie = secureCookie;
 	}
 
@@ -98,12 +105,34 @@ public class MeetupController {
 		return meetupService.areas(userId, query);
 	}
 
-	/** 모임의 지금 상태. 로그인과 프로필이 없어도 된다. 오류: 없는 코드는 404(AC-3). */
+	/**
+	 * 모임의 지금 상태. 로그인과 프로필이 없어도 된다. 모임 쿠키가 이 모임의 프로필을 가리키면 같은 값의 쿠키를 지금 삭제
+	 * 시각에 맞춰 다시 준다(AC-24). 오류: 없는 코드는 404(AC-3).
+	 */
 	@GetMapping("/{code}")
 	public MeetupSnapshot snapshot(@PathVariable String code,
 			@AuthenticationPrincipal AuthUseCases.Identity identity,
-			@CookieValue(name = COOKIE, required = false) String cookie) {
-		return meetupService.snapshot(code, userId(identity), cookie);
+			@CookieValue(name = COOKIE, required = false) String cookie, HttpServletResponse response) {
+		MeetupSnapshot snapshot = meetupService.snapshot(code, userId(identity), cookie);
+		profileService.cookieLifetime(code, cookie)
+				.ifPresent(maxAge -> setCookie(response, code, cookie, maxAge));
+		return snapshot;
+	}
+
+	/**
+	 * 모임 정보를 고친다(AC-22). 빠진 속성은 그대로 두고 null인 속성은 비운다.
+	 *
+	 * <p>오류: 401(인증), 400(본문, 모르는 속성, 값의 모양과 범위, 지역·업종 비우기, 고를 수 없는 지역·날짜·시간),
+	 * 404(없는 코드), 403(모임장 아님), 409(`phase`).
+	 */
+	@PatchMapping("/{code}")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void update(@PathVariable String code, @AuthenticationPrincipal AuthUseCases.Identity identity,
+			@RequestBody JsonNode body) {
+		String userId = identity.userId();
+		MeetupUpdateRequest request = MeetupUpdateRequest.from(body, jsonMapper);
+		validate(request);
+		meetupService.update(code, userId, request);
 	}
 
 	/**
@@ -185,9 +214,13 @@ public class MeetupController {
 	}
 
 	private void setCookie(HttpServletResponse response, String code, MeetupProfileService.Joined joined) {
-		response.addHeader(HttpHeaders.SET_COOKIE, ResponseCookie.from(COOKIE, joined.token())
+		setCookie(response, code, joined.token(), joined.maxAge());
+	}
+
+	private void setCookie(HttpServletResponse response, String code, String token, Duration maxAge) {
+		response.addHeader(HttpHeaders.SET_COOKIE, ResponseCookie.from(COOKIE, token)
 				.httpOnly(true).secure(secureCookie).sameSite("Lax").path("/api/v1/meetups/" + code)
-				.maxAge(joined.maxAge()).build().toString());
+				.maxAge(maxAge).build().toString());
 	}
 
 	private static String userId(AuthUseCases.Identity identity) {

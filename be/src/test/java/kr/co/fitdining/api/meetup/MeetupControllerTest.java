@@ -12,6 +12,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -25,6 +26,8 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import kr.co.fitdining.api.auth.ports.AuthUseCases;
 import kr.co.fitdining.api.meetup.domain.AreaKind;
 import kr.co.fitdining.api.meetup.domain.FoodType;
@@ -42,6 +45,7 @@ import kr.co.fitdining.api.meetup.dto.MeetupCreateRequest;
 import kr.co.fitdining.api.meetup.dto.MeetupCreateResponse;
 import kr.co.fitdining.api.meetup.dto.MeetupResult;
 import kr.co.fitdining.api.meetup.dto.MeetupSnapshot;
+import kr.co.fitdining.api.meetup.dto.MeetupUpdateRequest;
 import kr.co.fitdining.api.meetup.dto.ProfileCreateRequest;
 import kr.co.fitdining.api.meetup.exception.MeetupConflictException;
 import kr.co.fitdining.api.meetup.exception.MeetupConflictException.Conflict;
@@ -66,6 +70,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.mockito.ArgumentCaptor;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -429,6 +434,78 @@ class MeetupControllerTest {
 							.with(SessionTestSupport.session(USER_ID)))
 					.andExpect(status().isConflict())
 					.andExpect(jsonPath("$.type").value("urn:fitdining:meetup:host-profile"));
+		}
+
+	}
+
+	@Nested
+	@DisplayName("모임 정보 수정")
+	class Update {
+
+		private MockHttpServletRequestBuilder update(String body) {
+			return patch("/api/v1/meetups/{code}", CODE).with(SessionTestSupport.csrf())
+					.with(SessionTestSupport.session(USER_ID)).contentType(MediaType.APPLICATION_JSON).content(body);
+		}
+
+		@Test
+		@DisplayName("수정_빠진속성과null인속성을_구분해서비스에넘긴다")
+		void update_absentAndNull_passedWithFields() throws Exception {
+			mockMvc.perform(update("{\"headcount\":null,\"date\":\"2026-11-20\",\"time\":\"18:00\"}"))
+					.andExpect(status().isNoContent());
+
+			ArgumentCaptor<MeetupUpdateRequest> request = ArgumentCaptor.forClass(MeetupUpdateRequest.class);
+			verify(meetupService).update(eq(CODE), eq(USER_ID), request.capture());
+			assertThat(request.getValue().fields()).isEqualTo(Set.of("headcount", "date", "time"));
+			assertThat(request.getValue().headcount()).isNull();
+			assertThat(request.getValue().date()).isEqualTo(LocalDate.of(2026, 11, 20));
+			assertThat(request.getValue().time()).isEqualTo(LocalTime.of(18, 0));
+			assertThat(request.getValue().has("description")).isFalse();
+		}
+
+		@ParameterizedTest
+		@ValueSource(strings = {"{\"unknown\":1}", "{\"headcount\":9}", "{\"headcount\":\"넷\"}", "[]",
+				"{\"area\":{\"name\":\"선릉\"}}"})
+		@DisplayName("수정_모르는속성이나틀린값이면_400이다")
+		void update_invalidBody_badRequest(String body) throws Exception {
+			expectProblem(update(body), 400);
+			verify(meetupService, never()).update(anyString(), anyString(), any());
+		}
+
+		@Test
+		@DisplayName("수정_로그인하지않으면_401이다")
+		void update_anonymous_unauthorized() throws Exception {
+			expectProblem(patch("/api/v1/meetups/{code}", CODE).with(SessionTestSupport.csrf())
+					.contentType(MediaType.APPLICATION_JSON).content("{\"headcount\":5}"), 401);
+		}
+
+		@Test
+		@DisplayName("수정_지금상태에서못고치면_409와지금상태를받는다")
+		void update_phase_conflict() throws Exception {
+			doThrow(MeetupConflictException.phase(MeetupPhase.DECIDED)).when(meetupService)
+					.update(eq(CODE), eq(USER_ID), any());
+			mockMvc.perform(update("{\"headcount\":5}"))
+					.andExpect(status().isConflict())
+					.andExpect(jsonPath("$.type").value("urn:fitdining:meetup:phase"))
+					.andExpect(jsonPath("$.phase").value("DECIDED"));
+		}
+
+		@Test
+		@DisplayName("스냅숏_이모임의쿠키면_같은값을새수명으로다시준다")
+		void snapshot_knownCookie_reissued() throws Exception {
+			when(profileService.cookieLifetime(CODE, "cookie-value")).thenReturn(Optional.of(Duration.ofDays(9)));
+			mockMvc.perform(get("/api/v1/meetups/{code}", CODE).cookie(new Cookie("fitdining_meetup", "cookie-value")))
+					.andExpect(header().stringValues("Set-Cookie", org.hamcrest.Matchers.hasItem(org.hamcrest.Matchers.allOf(
+							org.hamcrest.Matchers.containsString("fitdining_meetup=cookie-value"),
+							org.hamcrest.Matchers.containsString("Max-Age=777600"),
+							org.hamcrest.Matchers.containsString("Path=/api/v1/meetups/" + CODE)))));
+		}
+
+		@Test
+		@DisplayName("스냅숏_모르는쿠키면_다시주지않는다")
+		void snapshot_unknownCookie_notReissued() throws Exception {
+			mockMvc.perform(get("/api/v1/meetups/{code}", CODE).cookie(new Cookie("fitdining_meetup", "other")))
+					.andExpect(header().stringValues("Set-Cookie", org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem(
+							org.hamcrest.Matchers.containsString("fitdining_meetup")))));
 		}
 
 	}

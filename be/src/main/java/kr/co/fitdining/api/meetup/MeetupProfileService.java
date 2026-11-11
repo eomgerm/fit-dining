@@ -160,11 +160,32 @@ public class MeetupProfileService {
 		profiles.delete(profile);
 	}
 
+	/**
+	 * 모임 쿠키를 지금 삭제 시각에 맞춰 다시 줄 수명(AC-24). 날짜를 고쳐 삭제 시각이 바뀌어도 쿠키가 먼저 사라지지 않게
+	 * 한다.
+	 *
+	 * @return 쿠키가 이 모임의 프로필을 가리킬 때만 있다.
+	 */
+	@Transactional(readOnly = true)
+	public Optional<Duration> cookieLifetime(String code, String cookieToken) {
+		if (cookieToken == null || cookieToken.isBlank() || !MeetupCodes.wellFormed(code)) {
+			return Optional.empty();
+		}
+		return meetups.findByCode(code).flatMap(meetup -> sessions.findByTokenHash(MeetupRequesters.hash(cookieToken))
+				.flatMap(session -> profiles.findByProfileIdAndMeetupId(session.getProfileId(), meetup.getMeetupId()))
+				.map(profile -> lifetime(meetup, now())));
+	}
+
 	private Joined issue(Meetup meetup, MeetupProfile profile, Instant now) {
 		String token = MeetupRequesters.newToken();
 		sessions.save(new MeetupProfileSession(profile.getProfileId(), MeetupRequesters.hash(token)));
+		return new Joined(profile.getProfileId(), token, lifetime(meetup, now));
+	}
+
+	/** 모임을 지울 때까지다. */
+	private static Duration lifetime(Meetup meetup, Instant now) {
 		Duration maxAge = Duration.between(now, meetup.getExpiresAt());
-		return new Joined(profile.getProfileId(), token, maxAge.isNegative() ? Duration.ZERO : maxAge);
+		return maxAge.isNegative() ? Duration.ZERO : maxAge;
 	}
 
 	private Meetup lock(String code) {

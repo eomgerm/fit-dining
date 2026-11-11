@@ -2,10 +2,12 @@ package kr.co.fitdining.api.meetup;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -30,7 +32,10 @@ import kr.co.fitdining.api.meetup.dto.MeetupAreasResponse;
 import kr.co.fitdining.api.meetup.dto.MeetupCreateRequest;
 import kr.co.fitdining.api.meetup.dto.MeetupCreateResponse;
 import kr.co.fitdining.api.meetup.dto.MeetupSnapshot;
+import kr.co.fitdining.api.meetup.dto.MeetupUpdateRequest;
 import kr.co.fitdining.api.meetup.exception.InvalidMeetupException;
+import kr.co.fitdining.api.meetup.exception.MeetupConflictException;
+import kr.co.fitdining.api.meetup.exception.MeetupForbiddenException;
 import kr.co.fitdining.api.meetup.exception.MeetupNotFoundException;
 import kr.co.fitdining.api.meetup.store.Meetup;
 import kr.co.fitdining.api.meetup.store.MeetupCalculation;
@@ -42,13 +47,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 모임 만들기, 지역 찾기, 스냅숏. 상태와 역할별 허용 동작은 {@link MeetupPermissions}가 정한다(D-3). 모임 설명과 참여자의
+ * 모임 만들기, 지역 찾기, 정보 수정, 스냅숏. 상태와 역할별 허용 동작은 {@link MeetupPermissions}가 정한다(D-3). 모임 설명과 참여자의
  * 답은 로그에 남기지 않는다(D-8).
  */
 @Service
 public class MeetupService {
 
 	private static final DateTimeFormatter HH_MM = DateTimeFormatter.ofPattern("HH:mm");
+	/** 투표 중·정함에서도 고칠 수 있는 항목 */
+	private static final Set<String> DATE_FIELDS = Set.of("date", "time");
 
 	private final MeetupRepository meetups;
 	private final MeetupProfileRepository profiles;
@@ -86,7 +93,7 @@ public class MeetupService {
 		requireActiveUser(userId);
 		Instant now = now();
 		MeetupArea area = selectableArea(request.area());
-		LocalTime time = request.time() == null ? null : request.time().truncatedTo(ChronoUnit.MINUTES);
+		LocalTime time = minutes(request.time());
 		if (!MeetupSchedule.selectable(request.date(), time, now)) {
 			throw new InvalidMeetupException();
 		}
@@ -95,6 +102,49 @@ public class MeetupService {
 				request.date(), time, request.headcount(), description(request.description()),
 				MeetupSchedule.expiresAt(request.date(), now), now));
 		return new MeetupCreateResponse(meetup.getCode(), questionSource.questions(meetup));
+	}
+
+	/**
+	 * 모임 정보를 고친다(AC-2, AC-22). 대기·결과에서는 모든 항목을, 투표 중·정함에서는 날짜·시간만 고친다. 날짜를
+	 * 바꾸거나 비우면 삭제 시각을 다시 계산한다. 이미 남긴 취향은 그대로 둔다.
+	 *
+	 * @throws AuthFailure 탈퇴했거나 없는 회원일 때(401)
+	 * @throws MeetupForbiddenException 모임장이 아닐 때
+	 * @throws MeetupConflictException 투표 중·정함에서 날짜·시간 밖의 항목을 고치거나 날짜를 비울 때({@code phase})
+	 * @throws InvalidMeetupException 지역이나 업종을 비우거나, 고를 수 없는 지역·날짜·시간이거나, 설명이 길 때
+	 */
+	@Transactional
+	public void update(String code, String userId, MeetupUpdateRequest request) {
+		requireActiveUser(userId);
+		if (!MeetupCodes.wellFormed(code)) {
+			throw new MeetupNotFoundException();
+		}
+		Meetup meetup = meetups.findLockedByCode(code).orElseThrow(MeetupNotFoundException::new);
+		if (!meetup.hostedBy(userId)) {
+			throw new MeetupForbiddenException();
+		}
+		if (!meetup.infoEditable() && (!DATE_FIELDS.containsAll(request.fields())
+				|| request.has("date") && request.date() == null)) {
+			throw MeetupConflictException.phase(meetup.getPhase());
+		}
+		Instant now = now();
+		if (request.has("area") && request.area() == null || request.has("category") && request.category() == null) {
+			throw new InvalidMeetupException();
+		}
+		MeetupArea area = request.has("area") ? selectableArea(request.area())
+				: new MeetupArea(meetup.getAreaKind(), meetup.getAreaName());
+		MeetupCategory category = request.has("category") ? request.category() : meetup.getCategory();
+		LocalDate date = request.has("date") ? request.date() : meetup.getMeetDate();
+		LocalTime time = request.has("time") ? minutes(request.time()) : date == null ? null : meetup.getMeetTime();
+		if ((request.has("date") || request.has("time")) && !MeetupSchedule.selectable(date, time, now)) {
+			throw new InvalidMeetupException();
+		}
+		Instant expiresAt = Objects.equals(date, meetup.getMeetDate()) ? meetup.getExpiresAt()
+				: MeetupSchedule.expiresAt(date, now);
+		meetup.edit(area.kind(), area.name(), category, date, time,
+				request.has("headcount") ? request.headcount() : meetup.getHeadcount(),
+				request.has("description") ? description(request.description()) : meetup.getDescription(),
+				expiresAt, now);
 	}
 
 	/**
@@ -203,6 +253,10 @@ public class MeetupService {
 			throw new InvalidMeetupException();
 		}
 		return area;
+	}
+
+	private static LocalTime minutes(LocalTime time) {
+		return time == null ? null : time.truncatedTo(ChronoUnit.MINUTES);
 	}
 
 	private static String description(String raw) {

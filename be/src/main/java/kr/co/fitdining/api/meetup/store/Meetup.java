@@ -11,6 +11,7 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.Objects;
 import kr.co.fitdining.api.meetup.domain.AreaKind;
 import kr.co.fitdining.api.meetup.domain.MeetupCategory;
 import kr.co.fitdining.api.meetup.domain.MeetupPhase;
@@ -98,6 +99,31 @@ public class Meetup {
 
 	public boolean hostedBy(String userId) {
 		return hostUserId.equals(userId);
+	}
+
+	/** 대기·결과에서는 모든 항목을, 투표 중·정함에서는 날짜·시간만 고친다(AC-22, D-19). */
+	public boolean infoEditable() {
+		return phase == MeetupPhase.WAITING || phase == MeetupPhase.RESULT;
+	}
+
+	/** 모임 정보를 바꾼다. 하나라도 바뀌면 추천이 낡았다고 판단하도록 바꾼 시각을 남긴다(D-9). */
+	public void edit(AreaKind areaKind, String areaName, MeetupCategory category, LocalDate meetDate,
+			LocalTime meetTime, Integer headcount, String description, Instant expiresAt, Instant now) {
+		boolean changed = areaKind != this.areaKind || !Objects.equals(areaName, this.areaName)
+				|| category != this.category || !Objects.equals(meetDate, this.meetDate)
+				|| !Objects.equals(meetTime, this.meetTime) || !Objects.equals(headcount, this.headcount)
+				|| !Objects.equals(description, this.description);
+		this.areaKind = areaKind;
+		this.areaName = areaName;
+		this.category = category;
+		this.meetDate = meetDate;
+		this.meetTime = meetTime;
+		this.headcount = headcount;
+		this.description = description;
+		this.expiresAt = expiresAt;
+		if (changed) {
+			this.infoUpdatedAt = now;
+		}
 	}
 
 	/** 추천은 대기나 결과 상태에서 투표를 연 적이 없을 때만 받는다(AC-15, D-19). */
