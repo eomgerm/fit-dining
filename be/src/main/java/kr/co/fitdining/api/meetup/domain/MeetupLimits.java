@@ -38,6 +38,16 @@ public final class MeetupLimits {
 	public static final int ANONYMOUS_WRITES = 120;
 	public static final Duration ANONYMOUS_WRITE_WINDOW = Duration.ofMinutes(15);
 
+	/** 계산 작업 스레드 수와 대기열 길이(D-10) */
+	public static final int CALCULATION_THREADS = 2;
+	public static final int CALCULATION_QUEUE = 8;
+	/** 실행 중인 계산이 이 시간을 넘으면 멈춘 것으로 본다. AI 호출 세 번(한 번에 12초)에 여유를 더했다(D-10). */
+	public static final Duration CALCULATION_STALE = Duration.ofSeconds(45);
+	public static final int RESULT_MAX = 20;
+	/** 참여자 취향 점수가 이 값보다 낮으면 덜 맞는 사람이다(D-18). */
+	public static final int MISFIT_SCORE = 50;
+	public static final int REASONS_MAX = 2;
+
 	private MeetupLimits() {
 	}
 

@@ -173,7 +173,7 @@ class MeetupProfilePersistenceTest extends PostgresTestSupport {
 			MeetupSnapshot snapshot = meetupService.snapshot(code, null, joined.token());
 
 			assertThat(snapshot.me()).isEqualTo(new MeetupSnapshot.Me(MeetupRole.PARTICIPANT, joined.profileId(), false,
-					null));
+					false, null));
 			assertThat(snapshot.allowed()).containsExactly(MeetupAction.EDIT_TASTE);
 			assertThat(snapshot.profiles()).singleElement().satisfies(profile -> {
 				assertThat(profile.name()).isEqualTo("하린");
@@ -196,7 +196,7 @@ class MeetupProfilePersistenceTest extends PostgresTestSupport {
 
 			MeetupSnapshot snapshot = meetupService.snapshot(code, HOST, null);
 
-			assertThat(snapshot.me()).isEqualTo(new MeetupSnapshot.Me(MeetupRole.HOST, joined.profileId(), true, null));
+			assertThat(snapshot.me()).isEqualTo(new MeetupSnapshot.Me(MeetupRole.HOST, joined.profileId(), true, false, null));
 			assertThat(snapshot.allowed()).contains(MeetupAction.EDIT_TASTE).doesNotContain(MeetupAction.JOIN);
 			assertThat(snapshot.profiles()).singleElement().satisfies(profile -> {
 				assertThat(profile.member()).isTrue();
@@ -344,7 +344,7 @@ class MeetupProfilePersistenceTest extends PostgresTestSupport {
 			MeetupSnapshot snapshot = meetupService.snapshot(code, MEMBER, guest.token());
 
 			assertThat(snapshot.me()).isEqualTo(new MeetupSnapshot.Me(MeetupRole.PARTICIPANT, guest.profileId(), true,
-					true));
+					false, true));
 			assertThat(snapshot.allowed()).containsExactly(MeetupAction.EDIT_TASTE, MeetupAction.LINK_ACCOUNT);
 		}
 

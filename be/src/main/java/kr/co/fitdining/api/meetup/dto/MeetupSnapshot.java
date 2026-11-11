@@ -1,8 +1,10 @@
 package kr.co.fitdining.api.meetup.dto;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import kr.co.fitdining.api.meetup.domain.AreaKind;
+import kr.co.fitdining.api.meetup.domain.CalculationState;
 import kr.co.fitdining.api.meetup.domain.MeetupAction;
 import kr.co.fitdining.api.meetup.domain.MeetupCategory;
 import kr.co.fitdining.api.meetup.domain.MeetupPhase;
@@ -11,7 +13,7 @@ import kr.co.fitdining.api.meetup.domain.MeetupRole;
 import kr.co.fitdining.api.meetup.domain.Taste;
 
 /**
- * 모임의 지금 상태를 한 번에 주는 응답(D-9). 값이 없는 속성은 빠진다. 계산, 투표, 정한 곳은 그 기능을 만들 때 더한다.
+ * 모임의 지금 상태를 한 번에 주는 응답(D-9). 값이 없는 속성은 빠진다. 투표와 정한 곳은 그 기능을 만들 때 더한다.
  *
  * @param phase 저장한 상태
  * @param afterMeetup 모임 뒤인지
@@ -21,6 +23,8 @@ import kr.co.fitdining.api.meetup.domain.Taste;
  * @param allowed 지금 이 사람이 할 수 있는 동작
  * @param profiles 들어온 순서의 프로필 목록
  * @param pendingCount 아직 취향을 남기지 않은 수. 인원을 정했고 남긴 수가 인원보다 적을 때만 있다.
+ * @param calculation 가장 최근 계산. 추천받은 적이 없으면 빠진다.
+ * @param resultCalculationId 마지막으로 성공한 계산. 결과는 이 값이 바뀔 때만 다시 받는다.
  */
 public record MeetupSnapshot(
 		MeetupPhase phase,
@@ -30,7 +34,9 @@ public record MeetupSnapshot(
 		Me me,
 		List<MeetupAction> allowed,
 		List<Profile> profiles,
-		Integer pendingCount
+		Integer pendingCount,
+		Calculation calculation,
+		Long resultCalculationId
 ) {
 
 	/**
@@ -58,9 +64,20 @@ public record MeetupSnapshot(
 	 * @param role 역할
 	 * @param profileId 내 프로필. 없으면 빠진다.
 	 * @param signedIn 로그인했는지
+	 * @param tasteReflected 내 취향이 마지막으로 성공한 추천에 들어갔는지. 프로필이 있을 때만 있다(AC-18).
 	 * @param convertible 비회원 프로필을 로그인한 회원의 프로필로 바꿀 수 있을 때만 true로 있다(D-25).
 	 */
-	public record Me(MeetupRole role, Long profileId, boolean signedIn, Boolean convertible) {
+	public record Me(MeetupRole role, Long profileId, boolean signedIn, Boolean tasteReflected,
+			Boolean convertible) {
+	}
+
+	/**
+	 * @param state 실행 중인 계산이 45초를 넘었으면 이미 실패로 바뀌어 있다(AC-17).
+	 * @param tasteCount 계산에 넣은 프로필 수
+	 * @param outdated 마지막으로 성공한 계산 뒤에 취향이나 모임 정보가 바뀌었거나 그 계산의 프로필이 지워졌는지(AC-18)
+	 */
+	public record Calculation(long id, CalculationState state, Instant startedAt, int tasteCount,
+			boolean outdated) {
 	}
 
 	/**

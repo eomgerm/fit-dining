@@ -13,6 +13,7 @@ import kr.co.fitdining.api.meetup.domain.Taste;
 import kr.co.fitdining.api.meetup.dto.MeetupAreasResponse;
 import kr.co.fitdining.api.meetup.dto.MeetupCreateRequest;
 import kr.co.fitdining.api.meetup.dto.MeetupCreateResponse;
+import kr.co.fitdining.api.meetup.dto.MeetupResult;
 import kr.co.fitdining.api.meetup.dto.MeetupSnapshot;
 import kr.co.fitdining.api.meetup.dto.ProfileCreateRequest;
 import kr.co.fitdining.api.meetup.dto.ProfileCreateResponse;
@@ -51,15 +52,20 @@ public class MeetupController {
 
 	private final MeetupService meetupService;
 	private final MeetupProfileService profileService;
+	private final MeetupCalculationService calculationService;
+	private final MeetupResultService resultService;
 	private final MeetupWriteLimiter writeLimiter;
 	private final Validator validator;
 	private final boolean secureCookie;
 
 	public MeetupController(MeetupService meetupService, MeetupProfileService profileService,
+			MeetupCalculationService calculationService, MeetupResultService resultService,
 			MeetupWriteLimiter writeLimiter, Validator validator,
 			@Value("${auth.cookie-secure}") boolean secureCookie) {
 		this.meetupService = meetupService;
 		this.profileService = profileService;
+		this.calculationService = calculationService;
+		this.resultService = resultService;
 		this.writeLimiter = writeLimiter;
 		this.validator = validator;
 		this.secureCookie = secureCookie;
@@ -153,6 +159,23 @@ public class MeetupController {
 	public void removeProfile(@PathVariable String code, @PathVariable long profileId,
 			@AuthenticationPrincipal AuthUseCases.Identity identity) {
 		profileService.remove(code, identity.userId(), profileId);
+	}
+
+	/**
+	 * 추천받기(AC-15). 계산은 작업 스레드에서 하고, 끝났는지는 스냅숏으로 안다(D-10).
+	 *
+	 * <p>오류: 401(인증), 404(없는 코드), 403(모임장 아님), 409(`calculating`, `phase`).
+	 */
+	@PostMapping("/{code}/calculations")
+	@ResponseStatus(HttpStatus.ACCEPTED)
+	public void calculate(@PathVariable String code, @AuthenticationPrincipal AuthUseCases.Identity identity) {
+		calculationService.start(code, identity.userId());
+	}
+
+	/** 마지막으로 성공한 계산의 결과(AC-19). 로그인 없이 된다. 오류: 404(없는 코드, 아직 결과 없음). */
+	@GetMapping("/{code}/result")
+	public MeetupResult result(@PathVariable String code) {
+		return resultService.result(code);
 	}
 
 	private void countAnonymous(AuthUseCases.Identity identity, String code, HttpServletRequest http) {

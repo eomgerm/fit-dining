@@ -21,12 +21,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import jakarta.servlet.http.Cookie;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
 import kr.co.fitdining.api.auth.ports.AuthUseCases;
 import kr.co.fitdining.api.meetup.domain.AreaKind;
 import kr.co.fitdining.api.meetup.domain.FoodType;
+import kr.co.fitdining.api.meetup.domain.FitKind;
 import kr.co.fitdining.api.meetup.domain.Mood;
 import kr.co.fitdining.api.meetup.domain.Taste;
 import kr.co.fitdining.api.meetup.domain.MeetupAction;
@@ -34,9 +36,11 @@ import kr.co.fitdining.api.meetup.domain.MeetupCategory;
 import kr.co.fitdining.api.meetup.domain.MeetupPhase;
 import kr.co.fitdining.api.meetup.domain.MeetupQuestions;
 import kr.co.fitdining.api.meetup.domain.MeetupRole;
+import kr.co.fitdining.api.meetup.domain.ResultGroup;
 import kr.co.fitdining.api.meetup.dto.MeetupAreasResponse;
 import kr.co.fitdining.api.meetup.dto.MeetupCreateRequest;
 import kr.co.fitdining.api.meetup.dto.MeetupCreateResponse;
+import kr.co.fitdining.api.meetup.dto.MeetupResult;
 import kr.co.fitdining.api.meetup.dto.MeetupSnapshot;
 import kr.co.fitdining.api.meetup.dto.ProfileCreateRequest;
 import kr.co.fitdining.api.meetup.exception.MeetupConflictException;
@@ -45,6 +49,10 @@ import kr.co.fitdining.api.meetup.exception.MeetupForbiddenException;
 import kr.co.fitdining.api.meetup.exception.TooManyMeetupWritesException;
 import kr.co.fitdining.api.meetup.exception.InvalidMeetupException;
 import kr.co.fitdining.api.meetup.exception.MeetupNotFoundException;
+import kr.co.fitdining.api.meetup.exception.MeetupResultNotFoundException;
+import kr.co.fitdining.api.meetup.recommend.MeetupRanking;
+import kr.co.fitdining.api.meetup.recommend.MeetupRecommendation;
+import kr.co.fitdining.api.place.dto.PlaceSummary;
 import kr.co.fitdining.api.support.SessionTestSupport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -84,6 +92,12 @@ class MeetupControllerTest {
 
 	@MockitoBean
 	MeetupProfileService profileService;
+
+	@MockitoBean
+	MeetupCalculationService calculationService;
+
+	@MockitoBean
+	MeetupResultService resultService;
 
 	@MockitoBean
 	MeetupWriteLimiter writeLimiter;
@@ -229,8 +243,8 @@ class MeetupControllerTest {
 				new MeetupSnapshot.Info(new MeetupSnapshot.Area(AreaKind.STATION, "선릉"), MeetupCategory.RESTAURANT,
 						null, null, null, null, "민재", LocalDate.of(2026, 11, 18)),
 				new MeetupQuestions(true, true, true, false),
-				new MeetupSnapshot.Me(MeetupRole.VIEWER, null, false, null), List.of(MeetupAction.JOIN), List.of(),
-				null);
+				new MeetupSnapshot.Me(MeetupRole.VIEWER, null, false, null, null), List.of(MeetupAction.JOIN),
+				List.of(), null, null, null);
 
 		@Test
 		@DisplayName("스냅숏_로그인없이도_200이고값없는속성은빠진다")
@@ -415,6 +429,81 @@ class MeetupControllerTest {
 							.with(SessionTestSupport.session(USER_ID)))
 					.andExpect(status().isConflict())
 					.andExpect(jsonPath("$.type").value("urn:fitdining:meetup:host-profile"));
+		}
+
+	}
+
+	@Nested
+	@DisplayName("추천받기와 결과")
+	class Calculations {
+
+		@Test
+		@DisplayName("추천받기_모임장이면_202다")
+		void calculate_host_returnsAccepted() throws Exception {
+			mockMvc.perform(post("/api/v1/meetups/{code}/calculations", CODE).with(SessionTestSupport.csrf())
+							.with(SessionTestSupport.session(USER_ID)))
+					.andExpect(status().isAccepted());
+			verify(calculationService).start(CODE, USER_ID);
+		}
+
+		@Test
+		@DisplayName("추천받기_로그인하지않으면_401이다")
+		void calculate_anonymous_returnsUnauthorized() throws Exception {
+			expectProblem(post("/api/v1/meetups/{code}/calculations", CODE).with(SessionTestSupport.csrf()), 401);
+			verify(calculationService, never()).start(anyString(), anyString());
+		}
+
+		@Test
+		@DisplayName("추천받기_계산중이면_409와종류를받는다")
+		void calculate_running_returnsCalculating() throws Exception {
+			doThrow(new MeetupConflictException(Conflict.CALCULATING)).when(calculationService).start(CODE, USER_ID);
+			mockMvc.perform(post("/api/v1/meetups/{code}/calculations", CODE).with(SessionTestSupport.csrf())
+							.with(SessionTestSupport.session(USER_ID)))
+					.andExpect(status().isConflict())
+					.andExpect(jsonPath("$.type").value("urn:fitdining:meetup:calculating"))
+					.andExpect(jsonPath("$.phase").doesNotExist());
+		}
+
+		@Test
+		@DisplayName("추천받기_할수없는상태면_409와지금상태를받는다")
+		void calculate_wrongPhase_returnsPhase() throws Exception {
+			doThrow(MeetupConflictException.phase(MeetupPhase.VOTING)).when(calculationService).start(CODE, USER_ID);
+			mockMvc.perform(post("/api/v1/meetups/{code}/calculations", CODE).with(SessionTestSupport.csrf())
+							.with(SessionTestSupport.session(USER_ID)))
+					.andExpect(status().isConflict())
+					.andExpect(jsonPath("$.type").value("urn:fitdining:meetup:phase"))
+					.andExpect(jsonPath("$.phase").value("VOTING"));
+		}
+
+		@Test
+		@DisplayName("결과_로그인없이도_200이고값없는속성은빠진다")
+		void result_anonymous_returnsWithoutNullFields() throws Exception {
+			MeetupRanking.Fit fit = new MeetupRanking.Fit(FitKind.ALL, List.of(1L, 2L), null, null);
+			when(resultService.result(CODE)).thenReturn(new MeetupResult(5L, Instant.parse("2026-11-11T03:00:00Z"), 2,
+					MeetupRecommendation.Applied.NONE,
+					List.of(new MeetupResult.Item(1, new PlaceSummary(10L, "온담", PlaceSummary.CategoryGroup.RESTAURANT,
+							null, 37.5, 127.0, null), null, null, ResultGroup.ALL_FIT, fit, List.of(), null, null, null,
+							null)),
+					null));
+
+			mockMvc.perform(get("/api/v1/meetups/{code}/result", CODE))
+					.andExpect(status().isOk())
+					.andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store")))
+					.andExpect(jsonPath("$.calculationId").value(5))
+					.andExpect(jsonPath("$.applied").isMap())
+					.andExpect(jsonPath("$.applied.mood").doesNotExist())
+					.andExpect(jsonPath("$.applied.blank").doesNotExist())
+					.andExpect(jsonPath("$.items[0].fit.kind").value("ALL"))
+					.andExpect(jsonPath("$.items[0].fit.misfitProfileIds").doesNotExist())
+					.andExpect(jsonPath("$.items[0].score").doesNotExist())
+					.andExpect(jsonPath("$.emptyReason").doesNotExist());
+		}
+
+		@Test
+		@DisplayName("결과_아직없으면_404다")
+		void result_none_returnsNotFound() throws Exception {
+			when(resultService.result(CODE)).thenThrow(new MeetupResultNotFoundException());
+			expectProblem(get("/api/v1/meetups/{code}/result", CODE), 404);
 		}
 
 	}

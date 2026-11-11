@@ -7,6 +7,8 @@ import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 import kr.co.fitdining.api.auth.domain.AuthFailure;
 import kr.co.fitdining.api.auth.domain.AuthUser;
 import kr.co.fitdining.api.auth.repository.AuthUserRepository;
@@ -14,6 +16,7 @@ import kr.co.fitdining.api.meetup.area.MeetupArea;
 import kr.co.fitdining.api.meetup.area.MeetupAreaSearch;
 import kr.co.fitdining.api.meetup.area.MeetupPlaces;
 import kr.co.fitdining.api.meetup.domain.AreaKind;
+import kr.co.fitdining.api.meetup.domain.CalculationState;
 import kr.co.fitdining.api.meetup.domain.MeetupCategory;
 import kr.co.fitdining.api.meetup.domain.MeetupCodes;
 import kr.co.fitdining.api.meetup.domain.MeetupLimits;
@@ -30,6 +33,8 @@ import kr.co.fitdining.api.meetup.dto.MeetupSnapshot;
 import kr.co.fitdining.api.meetup.exception.InvalidMeetupException;
 import kr.co.fitdining.api.meetup.exception.MeetupNotFoundException;
 import kr.co.fitdining.api.meetup.store.Meetup;
+import kr.co.fitdining.api.meetup.store.MeetupCalculation;
+import kr.co.fitdining.api.meetup.store.MeetupCalculationRepository;
 import kr.co.fitdining.api.meetup.store.MeetupProfile;
 import kr.co.fitdining.api.meetup.store.MeetupProfileRepository;
 import kr.co.fitdining.api.meetup.store.MeetupRepository;
@@ -47,17 +52,19 @@ public class MeetupService {
 
 	private final MeetupRepository meetups;
 	private final MeetupProfileRepository profiles;
+	private final MeetupCalculationRepository calculations;
 	private final AuthUserRepository users;
 	private final MeetupPlaces places;
 	private final MeetupRequesters requesters;
 	private final MeetupQuestionSource questionSource;
 	private final Clock clock;
 
-	public MeetupService(MeetupRepository meetups, MeetupProfileRepository profiles, AuthUserRepository users,
-			MeetupPlaces places, MeetupRequesters requesters, MeetupQuestionSource questionSource,
-			Optional<Clock> clock) {
+	public MeetupService(MeetupRepository meetups, MeetupProfileRepository profiles,
+			MeetupCalculationRepository calculations, AuthUserRepository users, MeetupPlaces places,
+			MeetupRequesters requesters, MeetupQuestionSource questionSource, Optional<Clock> clock) {
 		this.meetups = meetups;
 		this.profiles = profiles;
+		this.calculations = calculations;
 		this.users = users;
 		this.places = places;
 		this.requesters = requesters;
@@ -105,21 +112,30 @@ public class MeetupService {
 	}
 
 	/**
-	 * 모임의 지금 상태(AC-3, AC-4, AC-9). 프로필의 취향은 지금 보이는 질문의 답만 담는다.
+	 * 모임의 지금 상태(AC-3, AC-4, AC-9, AC-18). 프로필의 취향은 지금 보이는 질문의 답만 담는다. 실행 중인 계산이
+	 * 45초를 넘었으면 읽기 전에 실패로 바꾼다(AC-17).
 	 *
 	 * @param code 모임 코드
 	 * @param userId 로그인한 회원. 비회원이면 null이다.
 	 * @param cookieToken 모임 쿠키 값. 없으면 null이다.
 	 * @throws MeetupNotFoundException 없는 코드일 때
 	 */
-	@Transactional(readOnly = true)
+	@Transactional
 	public MeetupSnapshot snapshot(String code, String userId, String cookieToken) {
 		Meetup meetup = find(code);
+		Instant now = now();
+		calculations.failStale(meetup.getMeetupId(), now.minus(MeetupLimits.CALCULATION_STALE), now);
+		List<MeetupCalculation> recent = calculations.findByMeetupIdOrderByCalcIdDesc(meetup.getMeetupId());
+		MeetupCalculation latest = recent.isEmpty() ? null : recent.getFirst();
+		MeetupCalculation success = recent.stream().filter(calc -> calc.getState() == CalculationState.SUCCEEDED)
+				.findFirst().orElse(null);
 		List<MeetupProfile> joined = profiles.findByMeetupIdOrderByProfileId(meetup.getMeetupId());
+		boolean outdated = outdated(meetup, joined, success);
 		MeetupRequesters.Requester requester = requesters.resolve(meetup, joined, userId, cookieToken);
 		MeetupQuestions questions = questionSource.questions(meetup);
 		MeetupPermissions.Situation situation = new MeetupPermissions.Situation(meetup.getPhase(), requester.role(),
-				requester.hasProfile(), false, false, false, null, false, requester.convertible());
+				requester.hasProfile(), false, latest != null && latest.getState() == CalculationState.RUNNING,
+				outdated, meetup.getPollState(), false, requester.convertible());
 		MeetupSnapshot.Info info = new MeetupSnapshot.Info(
 				new MeetupSnapshot.Area(meetup.getAreaKind(), meetup.getAreaName()), meetup.getCategory(),
 				meetup.getMeetDate(), meetup.getMeetTime() == null ? null : meetup.getMeetTime().format(HH_MM),
@@ -128,18 +144,40 @@ public class MeetupService {
 				MeetupSchedule.lastOpenDay(meetup.getExpiresAt()));
 		MeetupSnapshot.Me me = new MeetupSnapshot.Me(requester.role(),
 				requester.hasProfile() ? requester.profile().getProfileId() : null, userId != null,
+				requester.hasProfile() ? reflected(requester.profile(), success) : null,
 				requester.convertible() ? Boolean.TRUE : null);
 		return new MeetupSnapshot(meetup.getPhase(), false, info, questions, me,
 				List.copyOf(MeetupPermissions.allowed(situation)),
-				joined.stream().map(profile -> profileView(meetup, profile, questions)).toList(),
-				pendingCount(meetup, joined));
+				joined.stream().map(profile -> profileView(meetup, profile, questions, success)).toList(),
+				pendingCount(meetup, joined),
+				latest == null ? null : new MeetupSnapshot.Calculation(latest.getCalcId(), latest.getState(),
+						latest.getStartedAt(), latest.getTasteCount(), outdated),
+				success == null ? null : success.getCalcId());
 	}
 
 	private static MeetupSnapshot.Profile profileView(Meetup meetup, MeetupProfile profile,
-			MeetupQuestions questions) {
+			MeetupQuestions questions, MeetupCalculation success) {
 		Taste taste = MeetupTasteRules.visibleOnly(profile.taste(), questions);
 		return new MeetupSnapshot.Profile(profile.getProfileId(), profile.getName(), profile.getColor(),
-				profile.member(), profile.ownedBy(meetup.getHostUserId()), taste.isEmpty() ? null : taste, false);
+				profile.member(), profile.ownedBy(meetup.getHostUserId()), taste.isEmpty() ? null : taste,
+				reflected(profile, success));
+	}
+
+	/** 마지막으로 성공한 계산에 들어갔고 그 뒤로 취향을 고치지 않았는지(AC-18). 성공한 계산이 없으면 false다. */
+	private static boolean reflected(MeetupProfile profile, MeetupCalculation success) {
+		return success != null && success.includedProfileIds().contains(profile.getProfileId())
+				&& !profile.getTasteUpdatedAt().isAfter(success.getStartedAt());
+	}
+
+	/** 마지막으로 성공한 계산 뒤에 취향이나 모임 정보가 바뀌었거나, 그 계산의 프로필이 지워졌는지(AC-18) */
+	private static boolean outdated(Meetup meetup, List<MeetupProfile> joined, MeetupCalculation success) {
+		if (success == null) {
+			return false;
+		}
+		Set<Long> current = joined.stream().map(MeetupProfile::getProfileId).collect(Collectors.toSet());
+		return meetup.getInfoUpdatedAt().isAfter(success.getStartedAt())
+				|| joined.stream().anyMatch(profile -> !reflected(profile, success))
+				|| !current.containsAll(success.includedProfileIds());
 	}
 
 	/** 인원을 정했고 남긴 수가 인원보다 적을 때만 남은 수를 준다(AC-29). */

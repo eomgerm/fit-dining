@@ -1,6 +1,7 @@
 package kr.co.fitdining.api.meetup.exception;
 
 import java.net.URI;
+import kr.co.fitdining.api.meetup.domain.MeetupPhase;
 
 /** 같은 409 안에서 FE가 구분해 안내할 부딪힘. {@code type}은 {@code urn:fitdining:meetup:...}이다(D-9). */
 public class MeetupConflictException extends RuntimeException {
@@ -14,7 +15,11 @@ public class MeetupConflictException extends RuntimeException {
 		/** 이미 이 모임에 프로필이 있는 회원 */
 		ALREADY_JOINED("already-joined", "이미 이 모임에 참여했어요."),
 		/** 모임장 자신의 프로필 지우기 */
-		HOST_PROFILE("host-profile", "모임장 프로필은 지울 수 없어요.");
+		HOST_PROFILE("host-profile", "모임장 프로필은 지울 수 없어요."),
+		/** 계산 중에 다시 추천받기 */
+		CALCULATING("calculating", "지금 추천을 찾고 있어요."),
+		/** 지금 상태에서 할 수 없는 동작. 확장 필드 {@code phase}에 지금 상태를 싣는다. */
+		PHASE("phase", "지금은 할 수 없는 동작이에요.");
 
 		private final URI type;
 		private final String detail;
@@ -34,14 +39,30 @@ public class MeetupConflictException extends RuntimeException {
 	}
 
 	private final Conflict conflict;
+	private final MeetupPhase phase;
 
 	public MeetupConflictException(Conflict conflict) {
+		this(conflict, null);
+	}
+
+	private MeetupConflictException(Conflict conflict, MeetupPhase phase) {
 		super(conflict.name(), null, false, false);
 		this.conflict = conflict;
+		this.phase = phase;
+	}
+
+	/** @param phase 지금 상태 */
+	public static MeetupConflictException phase(MeetupPhase phase) {
+		return new MeetupConflictException(Conflict.PHASE, phase);
 	}
 
 	public Conflict conflict() {
 		return conflict;
+	}
+
+	/** @return {@link Conflict#PHASE}일 때의 지금 상태. 아니면 null이다. */
+	public MeetupPhase phase() {
+		return phase;
 	}
 
 }

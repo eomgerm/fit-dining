@@ -241,7 +241,7 @@ class MeetupPersistenceTest extends PostgresTestSupport {
 			MeetupSnapshot snapshot = service.snapshot(code, HOST, null);
 
 			assertThat(snapshot.phase()).isEqualTo(MeetupPhase.WAITING);
-			assertThat(snapshot.me()).isEqualTo(new MeetupSnapshot.Me(MeetupRole.HOST, null, true, null));
+			assertThat(snapshot.me()).isEqualTo(new MeetupSnapshot.Me(MeetupRole.HOST, null, true, null, null));
 			assertThat(snapshot.allowed()).containsExactly(MeetupAction.EDIT_INFO, MeetupAction.REMOVE_PROFILE,
 					MeetupAction.CALCULATE, MeetupAction.JOIN);
 			assertThat(snapshot.info()).isEqualTo(new MeetupSnapshot.Info(
@@ -254,9 +254,9 @@ class MeetupPersistenceTest extends PostgresTestSupport {
 		void snapshot_otherUserOrAnonymous_viewer() {
 			String code = create(null, null, null).code();
 
-			assertThat(service.snapshot(code, GUEST, null).me()).isEqualTo(new MeetupSnapshot.Me(MeetupRole.VIEWER, null, true, null));
+			assertThat(service.snapshot(code, GUEST, null).me()).isEqualTo(new MeetupSnapshot.Me(MeetupRole.VIEWER, null, true, null, null));
 			MeetupSnapshot anonymous = service.snapshot(code, null, null);
-			assertThat(anonymous.me()).isEqualTo(new MeetupSnapshot.Me(MeetupRole.VIEWER, null, false, null));
+			assertThat(anonymous.me()).isEqualTo(new MeetupSnapshot.Me(MeetupRole.VIEWER, null, false, null, null));
 			assertThat(anonymous.allowed()).containsExactly(MeetupAction.JOIN);
 			assertThat(anonymous.info().expiresOn()).isEqualTo(LocalDate.of(2026, 11, 18));
 		}

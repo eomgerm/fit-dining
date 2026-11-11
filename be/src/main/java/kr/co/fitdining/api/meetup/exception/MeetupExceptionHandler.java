@@ -71,7 +71,15 @@ public class MeetupExceptionHandler {
 		log.info("Rejected meetup request: reason={}", e.conflict());
 		ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.conflict().detail());
 		problem.setType(e.conflict().type());
+		if (e.phase() != null) {
+			problem.setProperty("phase", e.phase());
+		}
 		return problem;
+	}
+
+	@ExceptionHandler(MeetupResultNotFoundException.class)
+	public ProblemDetail handleResultNotFound() {
+		return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "아직 추천 결과가 없어요.");
 	}
 
 	@ExceptionHandler(TooManyMeetupWritesException.class)

@@ -14,13 +14,14 @@ import java.time.LocalTime;
 import kr.co.fitdining.api.meetup.domain.AreaKind;
 import kr.co.fitdining.api.meetup.domain.MeetupCategory;
 import kr.co.fitdining.api.meetup.domain.MeetupPhase;
+import kr.co.fitdining.api.meetup.domain.PollState;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 /**
- * 모임 한 건({@code meetups}, D-5). 모임장은 회원 id 값으로만 든다. 투표, 정한 곳, 해석한 조건의 칸은 그 기능을
- * 만들 때 매핑한다.
+ * 모임 한 건({@code meetups}, D-5). 모임장은 회원 id 값으로만 든다. 투표 후보, 정한 곳, 해석한 조건의 칸은 그
+ * 기능을 만들 때 매핑한다.
  */
 @Entity
 @Table(name = "meetups")
@@ -74,6 +75,10 @@ public class Meetup {
 	@Column(nullable = false)
 	private Instant infoUpdatedAt;
 
+	/** 투표 상태. 연 적이 없으면 null이고, 한 번 열면 비우지 않는다(D-5). 여는 일은 투표 단계에서 더한다. */
+	@Enumerated(EnumType.STRING)
+	private PollState pollState;
+
 	public Meetup(String code, String hostUserId, AreaKind areaKind, String areaName, MeetupCategory category,
 			LocalDate meetDate, LocalTime meetTime, Integer headcount, String description, Instant expiresAt,
 			Instant now) {
@@ -93,6 +98,18 @@ public class Meetup {
 
 	public boolean hostedBy(String userId) {
 		return hostUserId.equals(userId);
+	}
+
+	/** 추천은 대기나 결과 상태에서 투표를 연 적이 없을 때만 받는다(AC-15, D-19). */
+	public boolean calculable() {
+		return (phase == MeetupPhase.WAITING || phase == MeetupPhase.RESULT) && pollState == null;
+	}
+
+	/** 추천이 처음 성공하면 결과 상태로 간다(AC-16). */
+	public void showResult() {
+		if (phase == MeetupPhase.WAITING) {
+			phase = MeetupPhase.RESULT;
+		}
 	}
 
 }

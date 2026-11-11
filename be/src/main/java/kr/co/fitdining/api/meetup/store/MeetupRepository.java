@@ -13,4 +13,8 @@ public interface MeetupRepository extends JpaRepository<Meetup, Long> {
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	Optional<Meetup> findLockedByCode(String code);
 
+	/** 계산 작업이 결과를 저장할 때 잡는다. */
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	Optional<Meetup> findLockedByMeetupId(Long meetupId);
+
 }
