@@ -72,7 +72,8 @@ export type SearchState = {
   initialView: InitialView;
   // "내 위치"가 처음 이동을 가져갔는지. 가진 동안은 처음 조회와 처음 panTo의 끝으로 done이 되지 않는다
   initialOwnedByButton: boolean;
-  // 처음 이동을 끝낸 쪽. 사용자가 끝냈으면 처음 홈 요청은 지도가 멈춘 뒤의 화면으로 나간다
+  // 처음 이동을 끝낸 쪽. 화면은 읽지 않고 테스트가 누가 끝냈는지 확인하는 데 쓴다.
+  // 사용자가 끝냈을 때 멈춘 뒤의 화면으로 보내는 것은 search-screen의 userMoving이 맡는다
   initialEndedBy?: InitialViewEnd;
   home: HomeArea;
   // 아직 아무 화면도 띄우지 않은 위치 알림. 지금 보이는 화면이 한 번 가져가 띄운다

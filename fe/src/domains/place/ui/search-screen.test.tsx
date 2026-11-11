@@ -1975,6 +1975,33 @@ describe("SearchScreen", () => {
           expect(homeArea().bounds).toEqual(AREA_B);
         });
 
+        it("크기 알림이 지도 바깥 크기와 다르면(중간 크기) 그 영역으로 확정하지 않고, 크기가 맞는 알림 뒤 영역으로만 한 번 받는다 (AC-70)", async () => {
+          const sizes = controlResize();
+          renderScreen();
+          await mapReady();
+          await nearbyList();
+          await newSearch("역삼 카페");
+          resizeMapElement(400, 800);
+          fireEvent.click(screen.getByRole("button", { name: "새 검색" }));
+
+          // 바깥은 400x800인데 SDK에 알린 크기는 아직 중간이다. 그때 영역(BOUNDS)으로 확정하면 안 된다
+          sizes.notify(400, 600);
+          await act(async () => {});
+          expect(homeArea().bounds).toBeUndefined();
+          expect(skeleton()).toBeTruthy();
+          expect(nearbyBodies).toHaveLength(1);
+
+          map.view.afterSize = AREA_B;
+          sizes.notify(400, 800);
+
+          await nearbyList();
+          expect(nearbyBodies).toEqual([
+            { mapBounds: BOUNDS },
+            { mapBounds: AREA_B },
+          ]);
+          expect(homeArea().bounds).toEqual(AREA_B);
+        });
+
         it("크기 적용을 기다리는 사이 새 검색을 했으면 그 확정은 버려 요청하지 않고, 다음 홈 진입은 그때 화면으로 받는다 (AC-70)", async () => {
           const sizes = controlResize();
           renderScreen();
@@ -1995,6 +2022,65 @@ describe("SearchScreen", () => {
           expect(nearbyBodies).toEqual([
             { mapBounds: BOUNDS },
             { mapBounds: AREA_B },
+          ]);
+        });
+
+        it("크기 적용을 기다리는 사이 홈에서 검색을 보냈다 취소해 돌아오면 이전 확정은 버리고 돌아온 화면의 덮는 UI 위 끝으로 다시 잰다 (AC-70)", async () => {
+          const sizes = controlResize();
+          renderScreen();
+          await mapReady();
+          await nearbyList();
+          await newSearch("역삼 카페");
+          // 지도 바깥은 400x800으로 바뀌었고, 홈 아래 묶음의 위 끝은 그때마다 테스트가 정한다
+          let stackTop = 500;
+          const rect = (top: number, height: number) =>
+            ({
+              top,
+              bottom: top + height,
+              left: 0,
+              right: 400,
+              width: 400,
+              height,
+              x: 0,
+              y: top,
+              toJSON() {},
+            }) as DOMRect;
+          const original = HTMLElement.prototype.getBoundingClientRect;
+          vi.spyOn(
+            HTMLElement.prototype,
+            "getBoundingClientRect",
+          ).mockImplementation(function (this: HTMLElement) {
+            if (this.hasAttribute("data-map-state")) return rect(0, 800);
+            if (this.className.includes("bottom-0 flex flex-col")) {
+              return rect(stackTop, 800 - stackTop);
+            }
+            return original.call(this);
+          });
+          map.view.afterSize = AREA_B;
+          fireEvent.click(screen.getByRole("button", { name: "새 검색" }));
+          await act(async () => {});
+
+          holdSearches();
+          vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+          fireEvent.change(screen.getByRole("textbox", { name: "장소 검색" }), {
+            target: { value: "강남 술집" },
+          });
+          fireEvent.submit(screen.getByRole("search"));
+          await act(() => vi.advanceTimersByTimeAsync(SEARCH_SLOW_MS));
+          vi.useRealTimers();
+          stackTop = 600;
+          fireEvent.click(screen.getByRole("button", { name: "검색 취소" }));
+          await screen.findByRole("textbox", { name: "장소 검색" });
+          await act(async () => {});
+
+          sizes.notify(400, 800);
+
+          await nearbyList();
+          // 돌아온 화면의 위 끝(600)으로 잰 띠 영역 하나로만 받는다
+          expect(homeArea().coverTop).toBe(600);
+          expect(nearbyBodies).toEqual([
+            { mapBounds: BOUNDS },
+            { mapBounds: homeArea().bounds },
           ]);
         });
 
@@ -2191,6 +2277,85 @@ describe("SearchScreen", () => {
           expect(regionButton()).toBeNull();
         });
 
+        it("누르는 순간 다시 잰 영역이 유효하지 않으면 요청 없이 지도 실패 안내를 보이고, 다음 멈춤에서 다시 잰 영역이 유효하면 그 영역으로 받는다 (AC-65, AC-73)", async () => {
+          renderScreen();
+          await mapReady();
+          await nearbyList();
+          dragTo(AREA_B);
+          // 멈춘 뒤 영역이 유효하지 않게 바뀌었다(경도의 SW가 NE보다 크다)
+          map.view.bounds = {
+            swLat: 37.49,
+            swLng: 127.05,
+            neLat: 37.51,
+            neLng: 127.02,
+          };
+
+          fireEvent.click(regionButton()!);
+
+          expect(await screen.findByText(MAP_FAILED)).toBeTruthy();
+          expect(regionButton()).toBeNull();
+          expect(nearbyBodies).toHaveLength(1);
+
+          dragTo(AREA_B);
+
+          await nearbyList();
+          expect(screen.queryByText(MAP_FAILED)).toBeNull();
+          expect(nearbyBodies).toEqual([
+            { mapBounds: BOUNDS },
+            { mapBounds: AREA_B },
+          ]);
+          expect(homeArea().bounds).toEqual(AREA_B);
+        });
+
+        it("보이던 중 지도가 실패하면 숨는다", async () => {
+          let broken = false;
+          map = stubNaverMaps({
+            Marker: class {
+              setMap() {}
+              setZIndex() {}
+              setIcon() {
+                // 인증 실패 직후처럼 SDK 호출이 던진다
+                if (broken) throw new TypeError("Cannot read properties");
+              }
+            },
+          });
+          renderScreen();
+          await mapReady();
+          const list = await nearbyList();
+          dragTo(AREA_B);
+          expect(regionButton()).toBeTruthy();
+
+          broken = true;
+          fireEvent.click(cardButtons(list)[1]);
+
+          expect(await screen.findByText(MAP_FAILED)).toBeTruthy();
+          expect(regionButton()).toBeNull();
+        });
+
+        it("연결 오류 전체 안내 중에는 끌어서 영역이 달라져도 보이지 않는다", async () => {
+          renderScreen();
+          await mapReady();
+          await nearbyList();
+          const original = globalThis.fetch;
+          vi.stubGlobal(
+            "fetch",
+            vi.fn<typeof fetch>((input, init) =>
+              String(input) === "/api/v1/places/nearby"
+                ? Promise.reject(new TypeError("Failed to fetch"))
+                : original(input, init),
+            ),
+          );
+          dragTo(AREA_B);
+          fireEvent.click(regionButton()!);
+          expect(
+            await screen.findByText("인터넷에 연결되어 있지 않아요"),
+          ).toBeTruthy();
+
+          dragTo({ ...AREA_B, swLat: 37.51 });
+
+          expect(regionButton()).toBeNull();
+        });
+
         it("홈 진입 때 옮긴 적이 있다는 표시를 지워, 그 뒤 카드 panTo만으로는 보이지 않는다", async () => {
           renderScreen();
           await mapReady();
@@ -2355,6 +2520,37 @@ describe("SearchScreen", () => {
       });
 
       describe("처음 홈 요청 (AC-64)", () => {
+        it("처음 홈 요청 전의 홈 진입은 따로 요청하지 않고, 처음 이동이 끝난 뒤 그때 화면으로 한 번 나간다", async () => {
+          const device = stubLocationLater();
+          renderScreen();
+          await mapReady();
+          await waitFor(() =>
+            expect(device.getCurrentPosition).toHaveBeenCalled(),
+          );
+          // 결과가 0곳이라 결과 맞춤 이동이 없어 처음 이동이 남은 채 홈으로 돌아온다(spec 70번의 예)
+          fireEvent.change(screen.getByRole("textbox", { name: "장소 검색" }), {
+            target: { value: "없는 가게" },
+          });
+          fireEvent.submit(screen.getByRole("search"));
+          await screen.findByText("찾지 못했어요");
+
+          fireEvent.click(screen.getByRole("button", { name: "새 검색" }));
+          await screen.findByRole("textbox", { name: "장소 검색" });
+          await act(async () => {});
+          expect(initialView()).not.toBe("done");
+          expect(skeleton()).toBeTruthy();
+          expect(nearbyBodies).toEqual([]);
+
+          await device.succeed();
+          await waitFor(() => expect(map.created[0].panTo).toHaveBeenCalled());
+          map.view.bounds = AREA_B;
+          map.fire("idle");
+
+          await nearbyList();
+          await act(async () => {});
+          expect(nearbyBodies).toEqual([{ mapBounds: AREA_B }]);
+        });
+
         it("위치 조회가 10초 안에 끝나지 않으면 timeout 뒤에 그때 화면의 영역으로 한 번 나간다", async () => {
           vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
           const getCurrentPosition = vi.fn(

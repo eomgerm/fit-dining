@@ -179,6 +179,8 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
   const myLocationMoving = useRef(false);
   // 확정 중인 홈 진입 번호. 같은 진입을 두 번 재지 않는다
   const confirmingEntry = useRef<number | undefined>(undefined);
+  // 확정 시도 번호. 홈을 떠나면 올려, 기다리던 확정의 결과를 버린다
+  const confirmAttempt = useRef(0);
   const homeVisibleRef = useRef(false);
 
   const saved = useSavedPlaces(bookmarks, savedView);
@@ -313,18 +315,24 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
 
   useEffect(() => {
     homeVisibleRef.current = homeVisible;
+    // 홈을 떠나면(새 검색, 저장한 장소) 기다리던 확정은 버린다. 검색을 취소해 돌아와도 그때 화면으로 다시 잰다(spec 72번)
+    if (!homeVisible) {
+      confirmAttempt.current += 1;
+      confirmingEntry.current = undefined;
+    }
   });
 
   // 홈이 보이고 지금 진입의 영역이 없으면, 처음 이동이 끝나고 지도가 준비되고 멈춘 뒤 그 화면의 보이는 영역을
   // 크기 적용 뒤에 읽어 확정한다. 처음 홈 요청, 홈 진입, 버려진 확정 뒤의 복귀가 모두 이 길이다(spec 70번, 72번).
-  // 기다리는 사이 다음 진입이 있었거나 홈이 아니게 됐으면(새 검색, 저장한 장소) 그 결과는 버린다
+  // 기다리는 사이 다음 진입이 있었거나 홈을 떠났으면(새 검색, 저장한 장소) 그 결과는 버린다
   const confirmHomeArea = useEffectEvent((entry: number) => {
     if (confirmingEntry.current === entry) return;
     confirmingEntry.current = entry;
+    const attempt = ++confirmAttempt.current;
     const coverTop = homeCoverTop();
     void mapRef.current?.settledBounds(coverTop).then((bounds) => {
-      if (confirmingEntry.current === entry)
-        confirmingEntry.current = undefined;
+      if (attempt !== confirmAttempt.current) return;
+      confirmingEntry.current = undefined;
       if (searchStore.getSnapshot().home.entry !== entry) return;
       if (!homeVisibleRef.current || !bounds) return;
       const area = normalizeBounds(bounds);
@@ -655,11 +663,16 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
     const current = mapRef.current?.visibleBounds(home.coverTop);
     if (!current) return;
     const area = normalizeBounds(current);
-    if (!isValidBounds(area)) return;
-    searchStore.setHomeBounds(home.entry, area, home.coverTop);
-    searchStore.select(undefined);
     setHomeMoved(false);
     setHomeButton(false);
+    if (!isValidBounds(area)) {
+      // 요청하지 않고 지도 실패 안내를 보인다. 영역을 비워 다음 멈춤에서 다시 잰 영역으로 확정한다(spec 71번)
+      searchStore.beginHomeEntry();
+      setInvalidArea(true);
+      return;
+    }
+    searchStore.setHomeBounds(home.entry, area, home.coverTop);
+    searchStore.select(undefined);
   }
 
   const savedItems =

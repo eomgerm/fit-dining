@@ -54,18 +54,23 @@ const toGrid = (value: number) => value * 1000;
 const fromGrid = (steps: number) => steps / 1000 + 0;
 
 // 홈 영역 정규화(spec 71번). 네 좌표를 0.001도에서 가까운 값으로 반올림하고(가운데는 큰 쪽),
-// 반올림으로 폭이 0이 된 축만 원본 SW를 내림, NE를 올림한다. cache key와 요청 본문에 이 결과를 그대로 쓴다
+// 반올림으로 폭이 0이 된 축만 원본 SW를 내림, NE를 올림한다. cache key와 요청 본문에 이 결과를 그대로 쓴다.
+// 끝(위도 90, 경도 180)에서 NE를 올릴 칸이 없으면 SW를 한 칸 내려 유효한 범위 안에 둔다
 export function normalizeBounds(bounds: MapBounds): MapBounds {
-  const axis = (sw: number, ne: number) => {
+  const axis = (sw: number, ne: number, limit: number) => {
     const low = Math.round(toGrid(sw));
     const high = Math.round(toGrid(ne));
     if (low !== high) return [fromGrid(low), fromGrid(high)];
     const floor = Math.floor(toGrid(sw) + GRID_EPSILON);
     const ceil = Math.ceil(toGrid(ne) - GRID_EPSILON);
-    return [fromGrid(floor), fromGrid(ceil > floor ? ceil : floor + 1)];
+    if (ceil > floor) return [fromGrid(floor), fromGrid(ceil)];
+    const top = toGrid(limit);
+    return floor + 1 <= top
+      ? [fromGrid(floor), fromGrid(floor + 1)]
+      : [fromGrid(top - 1), fromGrid(top)];
   };
-  const [swLat, neLat] = axis(bounds.swLat, bounds.neLat);
-  const [swLng, neLng] = axis(bounds.swLng, bounds.neLng);
+  const [swLat, neLat] = axis(bounds.swLat, bounds.neLat, 90);
+  const [swLng, neLng] = axis(bounds.swLng, bounds.neLng, 180);
   return { swLat, swLng, neLat, neLng };
 }
 

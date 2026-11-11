@@ -126,6 +126,32 @@ describe("normalizeBounds", () => {
     ).toEqual({ swLat: 37.49, swLng: 127.03, neLat: 37.51, neLng: 127.031 });
   });
 
+  it("위도 90·경도 180 끝에서 폭이 0이 되면 NE를 끝 밖으로 올리지 않고 SW를 한 칸 내린다(AC-65)", () => {
+    const result = normalizeBounds({
+      swLat: 89.9999999,
+      swLng: 179.9999999,
+      neLat: 90,
+      neLng: 180,
+    });
+    expect(result).toEqual({
+      swLat: 89.999,
+      swLng: 179.999,
+      neLat: 90,
+      neLng: 180,
+    });
+    expect(isValidBounds(result)).toBe(true);
+    expect(
+      isValidBounds(
+        normalizeBounds({
+          swLat: -90,
+          swLng: -180,
+          neLat: -89.9999999,
+          neLng: -179.9999999,
+        }),
+      ),
+    ).toBe(true);
+  });
+
   it("격자 위의 값을 보정할 때 부동소수 오차로 한 칸 더 내리거나 올리지 않는다", () => {
     expect(
       normalizeBounds({
