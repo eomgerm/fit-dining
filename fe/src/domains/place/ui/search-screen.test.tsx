@@ -2039,6 +2039,62 @@ describe("SearchScreen", () => {
           expect(homeArea().bounds).toEqual(AREA_B);
         });
 
+        // 화면 배율 125%에서 크롬이 잰 값. 지도 바깥 div의 getBoundingClientRect와 ResizeObserver contentRect가
+        // 1px 미만으로 다르다
+        const SCALED_RECT = {
+          width: 1404.1666259765625,
+          height: 764.1666259765625,
+        };
+        const SCALED_CONTENT = { width: 1404.15625, height: 764.15625 };
+
+        it("화면 배율 때문에 크기 알림이 지도 바깥 크기와 1px 미만으로 다르면 같은 크기로 보고 처음 홈 요청을 한 번 보낸다 (AC-70)", async () => {
+          resizeMapElement(SCALED_RECT.width, SCALED_RECT.height);
+          // 브라우저처럼 observe하면 한 번 알리는데, 그 크기는 contentRect로 잰 값이다
+          vi.stubGlobal(
+            "ResizeObserver",
+            class {
+              constructor(private readonly callback: ResizeObserverCallback) {}
+              observe(target: Element) {
+                this.callback(
+                  [
+                    {
+                      target,
+                      contentRect: SCALED_CONTENT,
+                    } as ResizeObserverEntry,
+                  ],
+                  this as unknown as ResizeObserver,
+                );
+              }
+              disconnect() {}
+            },
+          );
+          renderScreen();
+          await mapReady();
+
+          await nearbyList();
+          expect(nearbyBodies).toEqual([{ mapBounds: BOUNDS }]);
+        });
+
+        it("홈 진입(절반 → 전체)에서 크기 알림이 지도 바깥 크기와 1px 미만으로 다르면 그 알림 뒤 영역으로 한 번 받는다 (AC-70)", async () => {
+          const sizes = controlResize();
+          renderScreen();
+          await mapReady();
+          await nearbyList();
+          await newSearch("역삼 카페");
+          resizeMapElement(SCALED_RECT.width, SCALED_RECT.height);
+          map.view.afterSize = AREA_B;
+          fireEvent.click(screen.getByRole("button", { name: "새 검색" }));
+
+          sizes.notify(SCALED_CONTENT.width, SCALED_CONTENT.height);
+
+          await nearbyList();
+          expect(nearbyBodies).toEqual([
+            { mapBounds: BOUNDS },
+            { mapBounds: AREA_B },
+          ]);
+          expect(homeArea().bounds).toEqual(AREA_B);
+        });
+
         it("크기 적용을 기다리는 사이 새 검색을 했으면 그 확정은 버려 요청하지 않고, 다음 홈 진입은 그때 화면으로 받는다 (AC-70)", async () => {
           const sizes = controlResize();
           renderScreen();

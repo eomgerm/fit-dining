@@ -76,6 +76,8 @@ const LOCATION_PIN_SIZE = 32;
 const PAN_SETTLE_MS = 1500;
 // 이만큼 가까우면 이미 그 위치다(위도·경도 차이, 약 1m)
 const SAME_CENTER_DEG = 0.00001;
+// 지도 크기 차이가 이보다 작으면 같은 크기다. 같은 크기를 측정 방식에 따라 소수점 아래만 다르게 잰다(spec 72번)
+const SAME_SIZE_PX = 1;
 // 결과 맞춤 이동(fitBounds)의 네 방향 여백에 더하는 값. 선택된 핀 크기다(spec 69번)
 const FIT_MARGIN = SELECTED_PIN_SIZE;
 // 결과 맞춤 이동의 확대 정도 상한(fitBounds의 maxZoom). 가까운 몇 곳만 있을 때 과하게 확대하지 않는다
@@ -186,7 +188,7 @@ export type PlaceMapHandle = {
   // getBounds() 전체, 지도가 없으면 undefined
   visibleBounds(coverTop?: number): MapBounds | undefined;
   // 지도 크기가 SDK에 적용된 뒤의 보이는 영역(spec 72번). 지금 wrapper 크기가 마지막으로 setSize한 크기
-  // (아직 없으면 지도를 만들 때의 크기)와 같으면 바로, 다르면 다음 setSize 뒤에 읽는다. 지도가 실패하거나 없어지면 undefined
+  // (아직 없으면 지도를 만들 때의 크기)와 같으면(1px 미만 차이) 바로, 다르면 다음 setSize 뒤에 읽는다. 지도가 실패하거나 없어지면 undefined
   settledBounds(coverTop?: number): Promise<MapBounds | undefined>;
   // 결과 맞춤 이동(spec 69번). 2곳 이상이면 fitBounds(확대 정도 상한 FIT_MAX_ZOOM), 1곳이면 panTo, 0곳이면 없음.
   // 코드 이동이라 사용자 이동으로 세지 않는다. 지도를 옮기기 시작했으면 true
@@ -506,14 +508,16 @@ export function PlaceMap({
       },
       settledBounds(coverTop) {
         if (!active) return Promise.resolve(undefined);
+        // setSize에 넘긴 값은 ResizeObserver contentRect인데 지금 크기는 getBoundingClientRect로 잰다.
+        // 소수 화면 배율(125%, 150%)에서는 두 측정이 같은 크기를 0.01px쯤 다르게 내므로 1px 미만 차이는 같은 크기다
         const sized = () => {
           const rect = wrapperRef.current?.getBoundingClientRect();
           const applied = appliedSize.current;
           return (
             rect !== undefined &&
             applied !== undefined &&
-            rect.width === applied.width &&
-            rect.height === applied.height
+            Math.abs(rect.width - applied.width) < SAME_SIZE_PX &&
+            Math.abs(rect.height - applied.height) < SAME_SIZE_PX
           );
         };
         if (sized()) return Promise.resolve(handle.visibleBounds(coverTop));
