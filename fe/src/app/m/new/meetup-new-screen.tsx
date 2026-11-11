@@ -44,7 +44,7 @@ export function MeetupNewScreen() {
       <MeetupCreateForm
         withSession={withSession}
         onBack={leave}
-        onCreated={(code) => router.replace(meetupHref(code))}
+        onCreated={(code) => router.replace(`${meetupHref(code)}/join`)}
         onUnauthorized={showLoginPrompt}
       />
       <MeetupLoginPrompt open={signedOut} onCancel={leave} onSignIn={signIn} />

@@ -55,12 +55,28 @@ export type MeetupInfo = {
   expiresOn: string;
 };
 
+export type Mood = "QUIET" | "LIVELY" | "ANY";
+export type FoodType = "KOREAN" | "JAPANESE" | "CHINESE" | "WESTERN" | "ASIAN";
+
+// 모임 질문의 답. 모두 생략할 수 있고, 스냅숏에는 지금 보이는 질문의 답만 온다
+export type Taste = {
+  mood?: Mood;
+  likeFoods?: FoodType[];
+  avoidFoods?: FoodType[];
+  noSpicy?: boolean;
+  priceCap?: number;
+  wantMenu?: string;
+};
+
 export type MeetupProfile = {
   id: number;
   name: string;
+  // 아바타 색 번호(0~7)
   color: number;
   member: boolean;
   host: boolean;
+  taste?: Taste;
+  reflected: boolean;
 };
 
 export type MeetupSnapshot = {
@@ -68,10 +84,62 @@ export type MeetupSnapshot = {
   afterMeetup: boolean;
   info: MeetupInfo;
   questions: MeetupQuestions;
-  me: { role: MeetupRole; profileId?: number; signedIn: boolean };
+  me: {
+    role: MeetupRole;
+    profileId?: number;
+    signedIn: boolean;
+    convertible?: boolean;
+  };
   allowed: MeetupAction[];
   profiles: MeetupProfile[];
+  // 인원을 정했고 남긴 수가 인원보다 적을 때만 온다
+  pendingCount?: number;
 };
+
+export type ProfileCreateRequest = { name: string; taste?: Taste };
+export type ProfileCreateResponse = { profileId: number };
+
+// 409의 problem.type(urn:fitdining:meetup:<종류>)
+export type MeetupConflict =
+  "name-taken" | "full" | "already-joined" | "host-profile";
+
+export const NAME_MAX = 10;
+export const WANT_MENU_MAX = 20;
+export const PRICE_CAP_MIN = 5_000;
+export const PRICE_CAP_MAX = 100_000;
+export const PRICE_CAP_STEP = 1_000;
+
+export const FOOD_TYPES: FoodType[] = [
+  "KOREAN",
+  "JAPANESE",
+  "CHINESE",
+  "WESTERN",
+  "ASIAN",
+];
+
+export const FOOD_LABELS: Record<FoodType, string> = {
+  KOREAN: "한식",
+  JAPANESE: "일식",
+  CHINESE: "중식",
+  WESTERN: "양식",
+  ASIAN: "아시안",
+};
+
+// 내 프로필
+export function myProfile(snapshot: MeetupSnapshot) {
+  return snapshot.profiles.find(
+    (profile) => profile.id === snapshot.me.profileId,
+  );
+}
+
+export function hostProfile(snapshot: MeetupSnapshot) {
+  return snapshot.profiles.find((profile) => profile.host);
+}
+
+export function profileBadge(profile: MeetupProfile) {
+  if (profile.host) return "host" as const;
+  return profile.member ? ("member" as const) : undefined;
+}
 
 export const CATEGORY_LABELS: Record<MeetupCategory, string> = {
   RESTAURANT: "식당",

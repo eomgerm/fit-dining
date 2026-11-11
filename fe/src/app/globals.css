@@ -147,6 +147,26 @@
   --color-map-road: var(--white);
   --color-map-bg: #f3efea;
 
+  /* 모임 프로필의 이니셜 아바타 8색(바탕과 글자). 모임 안에서 색 번호(0~7)가 겹치지 않는다(meetup D-20) */
+  --color-avatar-0: var(--color-primary-soft);
+  --color-avatar-0-ink: var(--orange-700);
+  /* 모임장 배지(진한 주황 원에 흰 왕관) */
+  --color-host-badge: var(--orange-700);
+  --color-avatar-1: var(--color-info-soft);
+  --color-avatar-1-ink: var(--color-info);
+  --color-avatar-2: var(--color-success-soft);
+  --color-avatar-2-ink: var(--color-success);
+  --color-avatar-3: var(--color-warning-soft);
+  --color-avatar-3-ink: var(--color-warning);
+  --color-avatar-4: var(--color-danger-soft);
+  --color-avatar-4-ink: var(--color-danger);
+  --color-avatar-5: #f2eefb;
+  --color-avatar-5-ink: #6a45b5;
+  --color-avatar-6: #e7f5f6;
+  --color-avatar-6-ink: #136f78;
+  --color-avatar-7: var(--gray-100);
+  --color-avatar-7-ink: var(--gray-700);
+
   /* Figma에는 primitive에 역할 설명만 있는 색. 컴포넌트가 primitive를 직접 쓰지 않도록 이름을 붙였다 */
   --color-primary-pressed: var(--orange-700); /* primary 버튼 눌림 */
   --color-primary-disabled: var(--orange-200); /* 비활성 primary 버튼 면 */

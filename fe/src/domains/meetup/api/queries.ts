@@ -1,17 +1,31 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { isApiError } from "@/shared/api/api-error";
 
-import type { MeetupCreateRequest } from "../model/meetup";
-import { createMeetup, fetchSnapshot, searchAreas } from "./meetup-api";
+import type {
+  MeetupConflict,
+  MeetupCreateRequest,
+  ProfileCreateRequest,
+  Taste,
+} from "../model/meetup";
+import {
+  createMeetup,
+  createProfile,
+  fetchSnapshot,
+  removeProfile,
+  searchAreas,
+  selectProfile,
+  updateTaste,
+} from "./meetup-api";
 
 // 로그인을 확인하고 요청을 보내는 함수. 모임 도메인은 인증 도메인을 부를 수 없어 app이 만들어 넘긴다
 export type WithSession = <T>(send: () => Promise<T>) => Promise<T>;
 
+// 스냅숏의 키는 ["meetups", 코드]다(D-21). 지역 찾기 키의 "areas"는 22자 코드와 겹치지 않는다
 export const meetupKeys = {
   all: ["meetups"] as const,
   areas: (query: string) => [...meetupKeys.all, "areas", query] as const,
-  snapshot: (code: string) => [...meetupKeys.all, "snapshot", code] as const,
+  snapshot: (code: string) => [...meetupKeys.all, code] as const,
 };
 
 export function useAreaSearch(query: string, withSession: WithSession) {
@@ -41,6 +55,49 @@ export function useMeetupSnapshot(code: string) {
   });
 }
 
+// 모임 쓰기는 리뷰와 같은 규칙이다. 꺼진 네트워크에서도 바로 실패를 알리고, 재시도하지 않고, 끝나면 스냅숏을 다시 받는다(D-21)
+function useMeetupWrite<T, R>(code: string, send: (input: T) => Promise<R>) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: send,
+    networkMode: "always",
+    retry: false,
+    onSettled: () =>
+      client.invalidateQueries({ queryKey: meetupKeys.snapshot(code) }),
+  });
+}
+
+export function useCreateProfile(code: string) {
+  return useMeetupWrite(code, (body: ProfileCreateRequest) =>
+    createProfile(code, body),
+  );
+}
+
+export function useSelectProfile(code: string) {
+  return useMeetupWrite(code, (profileId: number) =>
+    selectProfile(code, profileId),
+  );
+}
+
+export function useUpdateTaste(code: string) {
+  return useMeetupWrite(code, (taste: Taste) => updateTaste(code, taste));
+}
+
+export function useRemoveProfile(code: string) {
+  return useMeetupWrite(code, (profileId: number) =>
+    removeProfile(code, profileId),
+  );
+}
+
 export function isNotFound(error: unknown) {
   return isApiError(error) && error.status === 404;
+}
+
+// 409의 종류. 다른 실패면 undefined다
+export function conflictOf(error: unknown): MeetupConflict | undefined {
+  if (!isApiError(error) || error.status !== 409) return undefined;
+  const type = error.problem?.type;
+  return typeof type === "string" && type.startsWith("urn:fitdining:meetup:")
+    ? (type.slice("urn:fitdining:meetup:".length) as MeetupConflict)
+    : undefined;
 }
