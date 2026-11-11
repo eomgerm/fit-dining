@@ -395,6 +395,15 @@ const skeleton = () => screen.queryByRole("status", { name: SKELETON });
 
 // 지도를 쓸 수 없어 홈 영역을 정할 수 없을 때 카드 자리의 안내(spec 75번)
 const MAP_FAILED_TITLE = "지도를 불러오지 못했어요";
+
+// 처음 이동(panTo)이 끝난 화면의 영역. 이동 전 영역(BOUNDS)과 달라야 처음 홈 요청이 이동 뒤 화면으로 나갔는지 가린다.
+// 0.001도 격자 위라 정규화해도 그대로다
+const AFTER_INITIAL_MOVE = {
+  swLat: 37.495,
+  swLng: 127.025,
+  neLat: 37.505,
+  neLng: 127.035,
+};
 const MAP_FAILED_DESCRIPTION =
   "주변 추천을 보려면 지도가 필요해요. 아래 검색창으로 장소를 직접 찾아볼 수 있어요.";
 
@@ -1570,13 +1579,14 @@ describe("SearchScreen", () => {
         await device.succeed();
         await waitFor(() => expect(map.created[0].panTo).toHaveBeenCalled());
         expect(nearbyBodies).toEqual([]);
+        // 지도가 위치로 옮겨져 영역이 바뀐 뒤 멈춘다
+        map.view.bounds = AFTER_INITIAL_MOVE;
         map.fire("idle");
 
         const list = await nearbyList();
         expect(within(list).getByText(/· 0m$/)).toBeTruthy();
         expect(within(list).queryByText(/역삼역/)).toBeNull();
-        expect(nearbyBodies).toHaveLength(1);
-        expect(Object.keys(nearbyBodies[0])).toEqual(["mapBounds"]);
+        expect(nearbyBodies).toEqual([{ mapBounds: AFTER_INITIAL_MOVE }]);
       });
 
       it("처음 이동으로는 결과 화면의 '이 지역에서 검색' 버튼이 나타나지 않는다", async () => {
@@ -1646,6 +1656,8 @@ describe("SearchScreen", () => {
         await waitFor(() => expect(map.created[0].panTo).toHaveBeenCalled());
         expect(map.created[0].morph).not.toHaveBeenCalled();
         expect(getCurrentPosition).toHaveBeenCalledTimes(1);
+        // 지도가 위치로 옮겨져 영역이 바뀐 뒤 멈춘다. 처음 홈 요청은 그 화면의 영역으로 나간다(AC-64)
+        map.view.bounds = AFTER_INITIAL_MOVE;
         map.fire("idle");
         const list = await nearbyList();
         expect(within(list).getByText(/· 0m$/)).toBeTruthy();
@@ -1653,7 +1665,7 @@ describe("SearchScreen", () => {
         expect(within(list).getByText("장소 3")).toBeTruthy();
         expect(within(list).getByText(/· 2\.0km$/)).toBeTruthy();
         expect(within(list).queryByText(/역삼역/)).toBeNull();
-        expect(nearbyBodies).toHaveLength(1);
+        expect(nearbyBodies).toEqual([{ mapBounds: AFTER_INITIAL_MOVE }]);
       });
 
       describe('"내 위치" 버튼 (D-100, D-101, D-104)', () => {
