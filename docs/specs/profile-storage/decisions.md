@@ -30,7 +30,7 @@ Glossary: none · ADRs: none
 - Rejected: `places`에 jsonb 배열로 → pgvector가 페르소나 벡터를 행 단위로 비교할 수 없다(41은 장소별 최대 유사도를 쓴다).
 
 ## D-6 네이버 데이터와 중간 결과는 저장하지 않음
-- Status: settled
+- Status: settled. 앱 리뷰 추출 결과는 D-21로 바뀌었다(저장한다)
 - Decision: 네이버 리뷰 원문, 네이버 리뷰 ID, 40의 리뷰별 추출 결과(`evidence`)를 저장하지 않는다. 첫 생성 뒤 네이버 리뷰는 분석에 쓰지 않는다. 앱 리뷰의 추출 결과도 저장하지 않고, 삭제된 리뷰는 soft delete로 남은 원문을 다시 읽어 뺀다.
 - Rejected: `evidence`를 행으로 보관(`quote` 포함 또는 제외) → 네이버 쪽은 다시 쓸 일이 없고, 앱 리뷰는 원문이 남는다. 외부 리뷰 원문의 이용 범위도 정해지지 않았다(PRD OQ-20).
 
@@ -75,7 +75,7 @@ Glossary: none · ADRs: none
 - Rejected: 별도 `code_id` PK → 코드를 쓰는 곳(`reason_tags`, jsonb)이 모두 코드 문자열이라 id를 둘 곳이 없다. `code_vectors.json` 파일로 → 41이 페르소나 벡터와 DB 안에서 바로 비교할 수 없다. 벡터를 NULL로 두고 적재 작업이 채움 → 코드 23개뿐이라 미리 만들어 넣는 편이 단순하다. jsonb 안의 코드와 `priorities`·`purposes` 배열에 FK → 배열과 jsonb에는 FK를 걸 수 없고, 걸려면 행으로 쪼개야 한다.
 
 ## D-15 04:00 취향 갱신 배치
-- Status: settled
+- Status: settled. 대상 조건의 "고친 리뷰는 대상이 아니다"는 D-21로 바뀌었다
 - Decision: Jira S15P31A302-165. BE 앱 안의 스케줄러가 매일 04:00 KST에 회원 취향을 다시 계산한다. 대상은 탈퇴하지 않은 회원 중 `user_preferences` 행이 있고, 마지막 갱신(`features_refreshed_at`, V21) 이후에 리뷰를 쓰거나 지운 회원이다(`greatest(created_at, deleted_at)`로 본다). 아직 갱신한 적 없이 `features`가 빈 회원(온보딩 때 AI 호출 실패)도 넣는다. 리뷰는 본문과 사진만 고칠 수 있어(리뷰 D-6) 고친 리뷰는 대상이 아니다. 배치는 대상 회원마다 저장된 원본과 지우지 않은 리뷰 전체의 이유 태그를 AI 취향 갱신 API(`POST /v1/taste/refresh`, S15P31A302-164)로 보내고 받은 `features`만 쓴다. AI가 상태 없이 같은 장소 최신 1건과 소음 축 전환(서로 다른 장소 3곳)을 전체 근거로 세므로 새 리뷰만 보내지 않는다. 태그 코드는 `ReasonTagRule.userFeatureCode`로 사용자 쪽 코드로 바꾼다(리뷰 D-36). 성공하면 `features_refreshed_at`을 실행 시작 5분 전(DB 시각)으로 쓴다. 실행 중에 쓴 리뷰와 먼저 시작해 늦게 커밋된 리뷰는 다음 실행에 다시 잡힌다. AI 호출이 실패한 회원은 기존 값과 시각을 그대로 두어 다음 날 다시 대상이 된다. `updated_at`은 바꾸지 않는다. 사용자가 답을 바꾼 시각이고 `GET /preferences`에 `features`가 없기 때문이다(spec 문제 3). Blue/Green 두 색이 함께 깨어나도 한 번만 돌도록 ShedLock(`shedlock` 테이블, DB 시각)으로 잠근다(인프라 BE 계약 #19). `lockAtLeastFor` 30분이라 먼저 끝난 색 뒤에 깨어난 색도 건너뛴다. `BATCH_ENABLED`(기본 `false`)가 켜져 있을 때만 배치 빈이 생긴다.
 - Rejected: Postgres advisory lock → 의존성과 테이블이 없지만, 먼저 끝난 색이 잠금을 풀면 늦게 깨어난 색이 한 번 더 돈다. 호스트 cron이나 CI 스케줄이 관리 엔드포인트를 부름 → 인증된 내부 엔드포인트와 인프라 설정이 함께 필요하다. 리뷰가 있는 회원 전원을 매일 다시 계산 → 바뀌지 않은 회원도 매일 AI를 불러 결과가 같다. 컬럼 없이 직전 24시간에 쓰거나 지운 리뷰만 봄 → AI가 실패한 회원이나 배치를 못 돈 날의 변경이 영영 반영되지 않는다. `user_preferences` 행이 없는 회원(온보딩 답 없이 가입)에게 행을 만들어 채움 → `GET /preferences`의 뜻이 바뀐다. 이 회원은 리뷰를 써도 `features`가 생기지 않는다.
 - Anchors: `be/src/main/java/kr/co/fitdining/api/onboarding/TasteRefreshBatch.java#TasteRefreshBatch.run` (new) · `be/src/main/java/kr/co/fitdining/api/config/SchedulerLockConfiguration.java#SchedulerLockConfiguration` (new) · `be/src/main/resources/db/migration/V20__create_shedlock.sql` (new) · `be/src/main/resources/db/migration/V21__add_features_refreshed_at.sql` (new) · `be/src/main/java/kr/co/fitdining/api/review/tag/ReasonTagRule.java#ReasonTagRule.userFeatureCode` (new) · `be/src/main/java/kr/co/fitdining/api/onboarding/AiTasteClient.java#AiTasteClient.refresh` (new)
@@ -122,3 +122,12 @@ Glossary: none · ADRs: none
   AI와 BE는 서로 모르는 속성을 거절한다(AI 요청 `extra="forbid"`, BE `fail-on-unknown-properties`). 그래서 BE만 먼저 배포하면 AI가 `revisitIntent`를 거절하고, AI만 먼저 배포하면 BE가 `category`를 읽지 못해 배치가 실패한다. 둘을 같이 배포한다.
 - Rejected: 업종별 취향을 별도 컬럼이나 테이블로 → 사용자당 한 번에 읽고 쓰는 값이라 나눌 이유가 없고(D-3), 원소에 칸 하나를 더하면 옛 행도 그대로 읽힌다. 배포 뒤 새 리뷰를 쓴 회원만 다시 계산 → 리뷰를 쉬는 회원에게 옛 세기(최대 3, 업종 없음)가 계속 남는다. 리뷰가 없는 회원까지 다시 계산 → 결과가 같다.
 - Anchors: `be/src/main/resources/db/migration/V24__recompute_taste_features.sql` (new) · `be/src/main/java/kr/co/fitdining/api/user/TasteFeature.java#TasteFeature` · `be/src/main/java/kr/co/fitdining/api/onboarding/TasteRefreshBatch.java#TasteRefreshBatch.evidence` · `ai/src/fit_ai/taste/profile.py#compute_features` · `ai/src/fit_ai/match/taste_select.py#select_tastes`
+
+## D-21 앱 리뷰 본문 추출 결과를 리뷰마다 저장하고, 고친 리뷰도 갱신 대상이다
+- Status: settled
+- Decision: Jira S15P31A302-229. 04:00 배치가 맨 앞에서 새 리뷰와 고친 리뷰의 본문을 AI `/v1/reviews/extract`로 10건씩 보내고, 결과를 `review_extractions`(V31)에 리뷰마다 한 행으로 둔다. 행은 리뷰 ID, 추출 항목(JSON), 모델, 프롬프트 버전, 추출 시각이다. 추출할 리뷰는 지우지 않았고 본문이 있으며, 결과가 없거나 `updated_at`이 `extracted_at`보다 늦은 리뷰다. `extracted_at`은 갱신 시각과 같은 "실행 시작 5분 전"이라 읽은 뒤 고친 리뷰는 다음 실행에서 다시 추출한다(그 5분 안에 고친 리뷰는 한 번 더 추출된다).
+  대상 조건은 `greatest(created_at, updated_at, deleted_at)`으로 본다. D-15의 "고친 리뷰는 대상이 아니다"를 바꾼다. 본문을 고치면 맛 근거가 달라지기 때문이다. 사진만 고쳐도 `updated_at`이 바뀌어 다시 추출하지만 횟수가 적어 그대로 둔다.
+  갱신 API에는 이유 태그와 함께 지우지 않은 리뷰의 추출 결과를 보낸다. 고친 뒤 아직 추출하지 못한 결과는 보내지 않는다. 추출이 남은 회원(AI 실패, `GMS_ENABLED`가 꺼져 AI가 503)은 그날 태그로 계산한 `features`는 쓰고 `features_refreshed_at`은 그대로 두어 다음 날 다시 대상이 된다. 지운 리뷰(soft delete)의 결과는 남기되 읽지 않고, 리뷰 행이 지워지면 함께 지운다(`ON DELETE CASCADE`).
+  맛 코드 8개를 `feature_codes`에 더한다(V32). 기존 회원의 직접 입력은 다시 해석하지 않는다(taste-profile spec 확장 코드).
+- Rejected: 결과를 저장하지 않고 매번 추출 → 매일 모든 리뷰를 다시 추출해야 한다. 추출만 끄는 스위치를 따로 둠 → `GMS_ENABLED`가 꺼지면 AI가 503을 주어 같은 동작이 된다. 장소 리뷰에서 새 맛 코드만 다시 뽑기 → D-6 예외와 PRD OQ-20(외부 리뷰 원문의 이용 범위)이 정해져야 해서 이번에 하지 않는다. 그동안 새 맛은 회원 취향에만 쌓이고 장소 근거가 기준을 넘을 때까지 점수에 쓰지 않는다.
+- Anchors: `be/src/main/resources/db/migration/V31__create_review_extractions.sql` (new) · `be/src/main/resources/db/migration/V32__add_flavor_feature_codes.sql` (new) · `be/src/main/java/kr/co/fitdining/api/onboarding/TasteRefreshBatch.java#TasteRefreshBatch.extract` (new) · `be/src/main/java/kr/co/fitdining/api/onboarding/AiTasteClient.java#AiTasteClient.extract` (new) · `ai/server/review_extract.py` (new)
