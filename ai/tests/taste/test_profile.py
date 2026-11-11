@@ -3,6 +3,7 @@ import pytest
 from fit_ai.match.conditions import CATEGORY_NAMES
 from fit_ai.taste.profile import (
     CATEGORIES,
+    body_codes,
     build_profile,
     compute_features,
     onboarding_rows,
@@ -34,7 +35,9 @@ def day(d):
 
 
 def feat(code, like, weight, category=None):
-    layer = {"QUIET": "axis", "LIVELY": "axis", "FOOD_SPICY": "food"}.get(code)
+    layer = {"QUIET": "axis", "LIVELY": "axis"}.get(code)
+    if code.startswith("FOOD_"):
+        layer = "food"
     layer = layer or ("purpose" if code.startswith("PURPOSE_") else "importance")
     return {
         "code": code,
@@ -327,3 +330,80 @@ def test_profile_header_and_failed_interpretation_keeps_no_sentence():
         "prompt": "query",
     }
     assert profile["free_texts"] == []
+
+
+def body(code, direction=1, liked=None, kind="taste"):
+    return {"code": code, "direction": direction, "liked": liked, "kind": kind}
+
+
+@pytest.mark.parametrize(
+    ("direction", "liked", "expected"),
+    [
+        (1, 1, 1),  # "칼칼해서 좋았어요": 났고 좋았음 → 좋아함
+        (1, -1, -1),  # "너무 매워요": 났고 아쉬움 → 싫어함
+        (-1, 1, -1),  # "달지 않아서 좋아요": 안 났고 좋았음 → 싫어함
+        (-1, -1, 1),  # "싱거워서 아쉬워요": 안 났고 아쉬움 → 좋아함
+    ],
+)
+def test_body_flavor_direction_is_occurred_times_liked(direction, liked, expected):
+    assert body_codes([body("FOOD_SWEET", direction, liked)]) == {
+        "FOOD_SWEET": expected
+    }
+
+
+def test_body_flavor_without_liked_is_left_to_the_place_side():
+    # "달달한 케이크"처럼 좋고 나쁨이 없는 맛은 사용자 취향에 세지 않는다
+    assert body_codes([body("FOOD_SWEET", 1, None)]) == {}
+
+
+def test_body_codes_follow_reason_tag_rules():
+    # 아쉬웠다는 말도 그 특징을 따진다는 근거다. 소음 축만 반대 극이다(리뷰 D-36)
+    items = [
+        body("SPACIOUS_SEATING", -1),
+        body("LIVELY", -1),
+        body("PURPOSE_TALK", 1),
+        body(None, 1, kind="quality"),  # 코드 없는 항목은 세지 않는다
+    ]
+    assert body_codes(items) == {"SPACIOUS_SEATING": 1, "QUIET": 1, "PURPOSE_TALK": 1}
+
+
+def test_body_codes_skip_a_code_with_mixed_directions_in_one_review():
+    items = [
+        body("FOOD_SPICY", 1, 1),
+        body("FOOD_SPICY", 1, -1),
+        body("FOOD_SWEET", 1, 1),
+    ]
+    assert body_codes(items) == {"FOOD_SWEET": 1}
+
+
+def flavor_review(code, place, direction, created_at=T0):
+    return review(code, place, created_at, direction=direction)
+
+
+def test_flavor_from_free_text_only():
+    # 설계 2단계 예: 직접 입력 "매운 거 좋아해요"만 있으면 매운맛 좋아함 1
+    assert compute_features([free_text("FOOD_SPICY")]) == [feat("FOOD_SPICY", True, 1)]
+
+
+def test_flavor_keeps_free_text_direction_with_one_opposite_place():
+    # 설계 2단계 예: 위 회원이 본문 "맵게 좋았어요" 2곳, "너무 매웠어요" 1곳 → 좋아함 3 − 싫어함 1.
+    # 직접 입력은 리뷰 3곳 뒤라 w(3)이다
+    rows = [free_text("FOOD_SPICY")] + [
+        flavor_review("FOOD_SPICY", p, d) for p, d in (("a", 1), ("b", 1), ("c", -1))
+    ]
+    assert strengths(compute_features(rows)) == approx({("FOOD_SPICY", True): w(3) + 1})
+
+
+def test_flavor_dislike_from_body_without_free_text():
+    # 설계 2단계 예: 직접 입력 없이 본문 "달지 않아서 좋아요" 1곳 → 단맛 싫어함 1
+    rows = [flavor_review("FOOD_SWEET", "a", -1)]
+    assert strengths(compute_features(rows)) == {("FOOD_SWEET", False): 1}
+
+
+def test_flavor_flips_free_text_with_3_opposite_places_and_majority():
+    rows = [free_text("FOOD_SPICY")] + [
+        flavor_review("FOOD_SPICY", p, -1) for p in "abc"
+    ]
+    assert strengths(compute_features(rows)) == approx(
+        {("FOOD_SPICY", False): 3 - w(3)}
+    )

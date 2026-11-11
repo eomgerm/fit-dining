@@ -24,6 +24,7 @@ REASONING_EFFORT = "none"
 # 프롬프트는 라벨 설명을 붙인 제로샷 지시(Gen-Z, arXiv 2311.07115)를 GEPA로 최적화한 것이다
 # (S15P31A302-107, ai/experiments/prompt_opt). 합성 test 108개 평균이 0.675에서 0.849가 됐다.
 # 예시 일부는 GEPA 학습 문장이다. 문구를 고치면 같은 test로 다시 재고 바꾼다.
+# "맛 코드 규칙"은 맛 코드 8개를 더하며 손으로 넣었다(취향 보정 2단계, 2026-11-11).
 # LLM은 부정에 약해서(arXiv 2306.08189) like는 parse_items에서 코드 규칙으로 다시 검사한다.
 _CODES = "\n".join(
     f"- {f.code} [{f.layer}] {f.label}: {f.phrase}" for f in FEATURES.values()
@@ -195,6 +196,16 @@ taste 항목의 code 판정:
     - "초밥 좋아해요" → taste, code null, like true, positive_text "초밥을 먹을 수 있는 곳"
     - "파스타 싫어요" → taste, code null, like false, positive_text null
 - 단, "중국집", "일식집", "한식집"처럼 특정 메뉴가 아니라 음식점 카테고리를 직접 말한 표현은 음식 종류 코드로 매핑한다.
+
+맛 코드 규칙:
+- 맛을 좋아하거나 싫어한다고 말하면 맛 코드를 붙인다. FOOD_SPICY 매운맛, FOOD_SWEET 단맛, FOOD_SOUR 신맛·산미, FOOD_SALTY 짠맛, FOOD_BITTER 쓴맛, FOOD_UMAMI 감칠맛, FOOD_NUTTY 고소함, FOOD_RICH 진한 맛, FOOD_CLEAN 담백·깔끔함이다.
+- like는 그 맛이 나는 음식을 원하면 true, 피하고 싶으면 false다.
+  - "달달한 디저트 좋아해요" → taste, FOOD_SWEET, like true
+  - "달지 않은 게 좋아요" → taste, FOOD_SWEET, like false
+  - "싱거운 건 별로예요" → taste, FOOD_SALTY, like true
+  - "신 커피는 싫어요" → taste, FOOD_SOUR, like false
+- 감칠맛(FOOD_UMAMI)은 "감칠"이라는 말이 있을 때만 붙인다. "깊은 맛"은 FOOD_RICH다.
+- "맛있는 곳"처럼 맛의 종류가 없는 말은 quality다.
 
 웨이팅/대기 시간 규칙:
 - “줄 서다”, “웨이팅”, “대기”, “기다리다”, “오래 기다리다”와 관련된 표현은 음식점·카페·술집 선택 기준이므로 taste로 처리한다.

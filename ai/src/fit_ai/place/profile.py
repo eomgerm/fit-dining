@@ -2,7 +2,7 @@
 
 import re
 from collections import defaultdict
-from typing import Literal, TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 from fit_ai.features import FEATURES
 
@@ -23,16 +23,22 @@ class Evidence(TypedDict):
     review_id: str | None  # 메뉴 근거는 None
     source: Literal["naver_text", "naver_keyword", "app_text", "app_tag", "menu"]
     code: str | None  # 코드 없는 항목(메뉴 평가 등)은 None
-    direction: int  # 좋았어요 1, 아쉬웠어요 -1
+    direction: int  # 좋았어요 1, 아쉬웠어요 -1. 맛 코드는 그 맛이 났으면 1, 안 났거나 약했으면 -1
     slot: str | None  # 3단계 칸. 키워드·이유 태그·메뉴는 None
     quote: str
     text: str | None  # 코드가 없을 때 정리한 문장
+    liked: NotRequired[
+        int | None
+    ]  # 맛 코드만. 좋았음 1, 아쉬웠음 -1, 드러나지 않음 None
+    kind: NotRequired[str]  # 본문 추출 항목만. taste, facility, quality, budget
 
 
 def count(evidence: list[Evidence]) -> dict[str, tuple[int, int]]:
     """코드별 (좋았어요 리뷰 수, 아쉬웠어요 리뷰 수).
 
-    한 리뷰에서 같은 코드는 한 번만 세고, 방향이 엇갈리면 그 리뷰에서는 세지 않는다.
+    맛 코드는 (그 맛이 났다는 리뷰 수, 안 났거나 약했다는 리뷰 수)다. 장소 쪽 맛 근거는 좋았는지와
+    상관없이 "그 맛이 났나"만 본다. 한 리뷰에서 같은 코드는 한 번만 세고, 방향이 엇갈리면 그
+    리뷰에서는 세지 않는다.
     메뉴 근거는 장소당 최대 1개다.
     """
     seen: dict[tuple[str | None, str], set[int]] = defaultdict(set)

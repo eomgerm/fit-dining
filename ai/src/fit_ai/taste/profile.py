@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Literal, TypedDict
 
 from fit_ai.embedding import MODEL_ID, REVISION, encode_queries
-from fit_ai.features import FEATURES
+from fit_ai.features import FEATURES, FLAVORS
 
 SCHEMA = "taste-profile/v1"
 HALF_LIFE_REVIEWS = 10  # 근거 무게가 절반이 되는 뒤 리뷰 수. 시작값
@@ -56,6 +56,32 @@ def onboarding_rows(
         )
         for c in dict.fromkeys(codes)
     ]
+
+
+def body_codes(items: list[dict]) -> dict[str, int]:
+    """리뷰 본문 추출 항목 한 리뷰분 → {사용자 쪽 코드: 근거 방향}(taste-profile spec 2단계).
+
+    본문에서 말한 코드는 그 리뷰에서 그 태그를 고른 것과 같이 본다. 그래서 이유 태그처럼
+    아쉬웠다는 말도 그 특징을 따진다는 근거(+1)이고, 소음 축만 아쉬웠으면 반대 극이다(리뷰 D-36).
+    맛은 "그 맛이 났나"(direction)와 "좋았나"(liked)를 곱한 방향이다. 났는데 좋았거나 안 났는데
+    아쉬웠으면 좋아함(+1), 났는데 아쉬웠거나 안 났는데 좋았으면 싫어함(−1)이다. 좋고 나쁨이
+    드러나지 않은 맛은 장소 쪽에만 쓰고 여기서는 뺀다. 한 리뷰에서 같은 코드의 방향이 엇갈리면
+    그 코드는 세지 않는다.
+    """
+    seen: dict[str, set[int]] = defaultdict(set)
+    for it in items:
+        code = it.get("code")
+        if code is None or code not in FEATURES:
+            continue
+        if code in FLAVORS:
+            if it.get("liked") is None:
+                continue
+            seen[code].add(it["direction"] * it["liked"])
+        elif code in NOISE and it["direction"] < 0:
+            seen[FEATURES[code].opposite].add(1)
+        else:
+            seen[code].add(1)
+    return {code: dirs.pop() for code, dirs in seen.items() if len(dirs) == 1}
 
 
 def _noise_sign(r: Row) -> int:
@@ -116,39 +142,59 @@ def _weigher(rows: list[Row]) -> Callable[[Row], float]:
     return weigh
 
 
-def _noise(rows: list[Row], weigh: Callable[[Row], float]) -> list[tuple]:
-    """소음 축의 (코드, 좋아함, 세기). 방향은 근거 수로, 세기는 무게 합으로 정한다."""
-    count = sum(_noise_sign(r) for r in rows)
-    weighted = sum(_noise_sign(r) * weigh(r) for r in rows)
-    pole = next((r["code"] for r in rows if r["source"] == "onboarding"), None)
-    # 온보딩 극이 있으면 그 극을 지키고, 없으면 근거 수의 부호를 따른다.
-    # 근거 수가 같으면 무게 합(최근 근거 쪽)을 따른다.
-    sign = {"QUIET": 1, "LIVELY": -1}.get(pole, 1 if (count or weighted) > 0 else -1)
-    # 반대 평가가 서로 다른 장소 3곳 이상이고 과반이면 근거 쪽으로 바꾼다(PRD FR-14)
+def _two_way(
+    rows: list[Row],
+    weigh: Callable[[Row], float],
+    sign_of: Callable[[Row], int],
+    pole: int | None,
+) -> tuple[int, float] | None:
+    """양쪽 축(소음, 음식·맛)의 (방향, 세기). 방향은 근거 수로, 세기는 무게 합으로 정한다.
+
+    처음 방향(`pole`)이 있으면 그 방향을 지키고, 없으면 근거 수의 부호를 따른다. 근거 수가
+    같으면 무게 합(최근 근거 쪽)을 따른다. 반대 근거가 서로 다른 장소 3곳 이상이고 과반이면
+    근거 쪽으로 바꾼다(PRD FR-14). 세기가 0 이하면 None이다.
+    """
+    count = sum(sign_of(r) for r in rows)
+    weighted = sum(sign_of(r) * weigh(r) for r in rows)
+    sign = pole or (1 if (count or weighted) > 0 else -1)
     against = {
-        r["place_id"]
-        for r in rows
-        if r["source"] == "review" and _noise_sign(r) == -sign
+        r["place_id"] for r in rows if r["source"] == "review" and sign_of(r) == -sign
     }
     if len(against) >= FLIP_PLACES and count * sign < 0:
         sign = -sign
     strength = round(weighted * sign, WEIGHT_DIGITS)
-    if strength <= 0:
+    return (sign, strength) if strength > 0 else None
+
+
+def _noise(rows: list[Row], weigh: Callable[[Row], float]) -> list[tuple]:
+    """소음 축의 (코드, 좋아함, 세기). 처음 방향은 온보딩에서 고른 극이다."""
+    pole = next((r["code"] for r in rows if r["source"] == "onboarding"), None)
+    found = _two_way(rows, weigh, _noise_sign, {"QUIET": 1, "LIVELY": -1}.get(pole))
+    if found is None:
         return []
-    liked, disliked = NOISE if sign > 0 else NOISE[::-1]
-    return [(liked, True, strength), (disliked, False, strength)]
+    liked, disliked = NOISE if found[0] > 0 else NOISE[::-1]
+    return [(liked, True, found[1]), (disliked, False, found[1])]
+
+
+def _food(key: str, rows: list[Row], weigh: Callable[[Row], float]) -> list[tuple]:
+    """음식·맛 축의 (코드, 좋아함, 세기). 처음 방향은 직접 입력이다(taste-profile spec 2단계).
+
+    세기는 좋아함 근거의 무게 합 − 싫어함 근거의 무게 합이다. 반대 극 코드가 없어서 싫어하면
+    같은 코드의 싫어함으로 낸다.
+    """
+    pole = next((r["direction"] for r in rows if r["source"] == "free_text"), None)
+    found = _two_way(rows, weigh, lambda r: r["direction"], pole)
+    return [] if found is None else [(key, found[0] > 0, found[1])]
 
 
 def _axis(key: str, rows: list[Row], weigh: Callable[[Row], float]) -> list[tuple]:
     """한 축의 (코드, 좋아함, 세기) 목록. 세기는 같은 쪽 무게 합 − 반대쪽 무게 합이다."""
     if key == "NOISE":
         return _noise(rows, weigh)
+    if FEATURES[key].layer == "food":
+        return _food(key, rows, weigh)
     net = round(sum(r["direction"] * weigh(r) for r in rows), WEIGHT_DIGITS)
-    if net > 0:
-        return [(key, True, net)]
-    if net < 0 and FEATURES[key].layer == "food":  # 반대 극이 없는 비선호는 음식·맛만
-        return [(key, False, -net)]
-    return []
+    return [(key, True, net)] if net > 0 else []
 
 
 def _in_category(r: Row, category: str) -> bool:

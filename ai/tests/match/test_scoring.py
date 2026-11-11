@@ -261,6 +261,61 @@ class TestScorePlaces:
             (3, None),
         ]
 
+    def test_flavor_taste_only_where_category_has_evidence(self) -> None:
+        """순서_맛취향은_그업종에근거3건이상장소가10퍼센트이상일때만넣는다"""
+        # 카페 10곳 중 1곳(10%)만 단맛 근거가 3건이다. 식당 10곳은 2건뿐이다
+        cafes = [
+            make_place(i, {"FOOD_SWEET": 3 if i == 1 else 0}) for i in range(1, 11)
+        ]
+        restaurants = [
+            make_place(i, {"FOOD_SWEET": 2}, category="RESTAURANT")
+            for i in range(11, 21)
+        ]
+        baseline = Baseline([*cafes, *restaurants])
+        tastes = [
+            TasteFeature("FOOD_SWEET", Layer.FOOD, True, 1),
+            TasteFeature("QUIET", Layer.AXIS, True, 1),
+        ]
+
+        scored = score_places(
+            [Candidate(cafes[0], 1.0), Candidate(restaurants[0], 0.9)],
+            [],
+            tastes,
+            ALL,
+            baseline,
+        )
+
+        codes = {s.candidate.place.place_id: [i.code for i in s.items] for s in scored}
+        assert codes == {1: ["FOOD_SWEET", "QUIET"], 11: ["QUIET"]}
+
+    def test_flavor_taste_dropped_below_ten_percent(self) -> None:
+        """순서_근거있는장소가10퍼센트에못미치면_맛취향을뺀다"""
+        cafes = [
+            make_place(i, {"FOOD_SWEET": 3 if i == 1 else 0}) for i in range(1, 12)
+        ]
+
+        [scored] = score_places(
+            [Candidate(cafes[0], 1.0)],
+            [],
+            [TasteFeature("FOOD_SWEET", Layer.FOOD, False, 1)],
+            CAFE,
+            Baseline(cafes),
+        )
+
+        assert scored.items == () and scored.score is None
+
+    def test_requested_flavor_is_scored_without_place_evidence(self) -> None:
+        """순서_요청한맛은_장소근거가적어도점수에넣는다"""
+        [scored] = score_places(
+            [Candidate(QUIET_CAFES[0], 1.0)],
+            ["FOOD_SPICY"],
+            [],
+            CAFE,
+            Baseline(QUIET_CAFES),
+        )
+
+        assert [i.code for i in scored.items] == ["FOOD_SPICY"]
+
 
 @pytest.mark.parametrize(
     ("category", "excluded", "expected"),

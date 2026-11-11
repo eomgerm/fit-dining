@@ -77,6 +77,67 @@ _TABLE = [
     Feature(
         "GOOD_MUSIC", "importance", "음악이 좋은 곳", "음악이 좋은 곳", onboarding=False
     ),
+    # 맛 코드 8개(취향 보정 2단계). 음식 추천 연구의 맛 6가지(arXiv 1905.06269)에 한국어 리뷰에
+    # 많은 고소함, 진한 맛, 담백·깔끔함을 더했다. label은 설계의 맛 이름이고 phrase는 매운맛 모양이다.
+    # 이미 있는 코드의 순서(결과 정렬, 동점 가르기)를 바꾸지 않게 끝에 둔다
+    Feature(
+        "FOOD_SWEET", "food", "단맛", "달콤한 음식이나 음료가 있는 곳", onboarding=False
+    ),
+    Feature(
+        "FOOD_SOUR",
+        "food",
+        "신맛·산미",
+        "새콤하거나 산미 있는 음식이나 음료가 있는 곳",
+        onboarding=False,
+    ),
+    Feature(
+        "FOOD_SALTY", "food", "짠맛", "간이 센 짭짤한 음식이 있는 곳", onboarding=False
+    ),
+    Feature(
+        "FOOD_BITTER",
+        "food",
+        "쓴맛",
+        "쌉싸름한 음식이나 음료가 있는 곳",
+        onboarding=False,
+    ),
+    Feature(
+        "FOOD_UMAMI", "food", "감칠맛", "감칠맛 나는 음식이 있는 곳", onboarding=False
+    ),
+    Feature(
+        "FOOD_NUTTY",
+        "food",
+        "고소함",
+        "고소한 음식이나 음료가 있는 곳",
+        onboarding=False,
+    ),
+    Feature(
+        "FOOD_RICH",
+        "food",
+        "진한 맛",
+        "맛이 진하고 깊은 음식이 있는 곳",
+        onboarding=False,
+    ),
+    Feature(
+        "FOOD_CLEAN",
+        "food",
+        "담백·깔끔함",
+        "맛이 담백하고 깔끔한 음식이 있는 곳",
+        onboarding=False,
+    ),
 ]
 
 FEATURES: dict[str, Feature] = {f.code: f for f in _TABLE}
+
+FLAVORS = (
+    "FOOD_SPICY",
+    "FOOD_SWEET",
+    "FOOD_SOUR",
+    "FOOD_SALTY",
+    "FOOD_BITTER",
+    "FOOD_UMAMI",
+    "FOOD_NUTTY",
+    "FOOD_RICH",
+    "FOOD_CLEAN",
+)
+"""맛 코드 9개. 리뷰 본문에서 "그 맛이 났나"(direction)와 "좋았나"(liked)를 따로 받고, 점수에는
+업종마다 장소 근거가 충분한 맛만 쓴다(docs/specs/taste-profile/spec.md)."""

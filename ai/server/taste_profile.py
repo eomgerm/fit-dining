@@ -2,7 +2,8 @@
 
 `/v1/taste/profile`은 온보딩 취향을 저장할 때 한 번 부르고, 코드 없는 LIKE 칩은 문장을 질의로
 인코딩해 `vectors`로 돌려준다(S15P31A302-166). 임베딩이 실패해도 `features`는 돌려준다.
-`/v1/taste/refresh`는 04:00 배치가 리뷰 근거를 더해 부르고 `features`만 돌려준다.
+`/v1/taste/refresh`는 04:00 배치가 리뷰 근거(이유 태그와 본문 추출 항목)를 더해 부르고
+`features`만 돌려준다.
 계산은 `fit_ai.taste.profile`이 하고, 여기서는 BE 저장 형식(`Preferences`)과 리뷰 근거를
 장부 행으로 바꾼다. 명세는 docs/specs/taste-profile/spec.md 6단계에 있다.
 """
@@ -17,8 +18,14 @@ from pydantic import AwareDatetime, Field
 
 from fit_ai import embedding
 from fit_ai.features import FEATURES
-from fit_ai.taste.direct_input import MAX_CHIPS, MAX_LABEL
-from fit_ai.taste.profile import CATEGORIES, Row, compute_features, onboarding_rows
+from fit_ai.taste.direct_input import KINDS, MAX_CHIPS, MAX_LABEL
+from fit_ai.taste.profile import (
+    CATEGORIES,
+    Row,
+    body_codes,
+    compute_features,
+    onboarding_rows,
+)
 from server.common import Body, Dependencies, log
 
 # BE 온보딩 태그 → 코드표 코드. 태그 이름을 통일하기 전까지 AI 경계에서 바꾼다
@@ -40,6 +47,11 @@ PURPOSES = {
     "GATHERING": "PURPOSE_GROUP",
     "WORK_STUDY": "PURPOSE_WORK",
 }
+
+MAX_TEXT = 200
+"""본문 추출 항목 `text`의 길이 상한. 추출기가 짧은 문장으로 정리한다."""
+MAX_ITEMS = 50
+"""리뷰 하나의 본문 추출 항목 수 상한"""
 
 
 class TasteChip(Body):
@@ -72,8 +84,33 @@ class ReviewEvidence(Body):
     revisit_intent: bool
 
 
+class BodyItem(Body):
+    """리뷰 본문 추출 항목 하나(`/v1/reviews/extract` 응답의 항목에서 구절을 뺀 것).
+
+    `liked`는 맛 코드만 있다. 코드 없는 항목의 `text`와 `kind`는 아직 계산에 쓰지 않는다.
+    """
+
+    code: Literal[tuple(FEATURES)] | None = None
+    direction: Literal[1, -1]
+    liked: Literal[1, -1] | None = None
+    kind: Literal[KINDS]
+    text: str | None = Field(default=None, max_length=MAX_TEXT)
+
+
+class ReviewBody(Body):
+    """리뷰 하나의 본문 추출 결과. 태그와 같은 리뷰를 같은 장소·시각으로 센다."""
+
+    place_id: int
+    review_id: int
+    category: Literal[tuple(CATEGORIES)]
+    created_at: AwareDatetime
+    revisit_intent: bool
+    items: list[BodyItem] = Field(max_length=MAX_ITEMS)
+
+
 class RefreshBody(ProfileBody):
     reviews: list[ReviewEvidence] = Field(default_factory=list)
+    bodies: list[ReviewBody] = Field(default_factory=list)
 
 
 class FeatureBody(Body):
@@ -103,8 +140,16 @@ VECTOR_SIZE = 1024  # `tastes[].vector` 차원. BE `AiTasteClient`도 같은 값
 EMBED_TIMEOUT_SECONDS = 1.0
 
 
-def to_rows(body: ProfileBody, reviews: Sequence[ReviewEvidence] = ()) -> list[Row]:
-    """회원 id 없이 계산한다. 행은 돌려주지 않고 BE도 저장하지 않는다."""
+def to_rows(
+    body: ProfileBody,
+    reviews: Sequence[ReviewEvidence] = (),
+    bodies: Sequence[ReviewBody] = (),
+) -> list[Row]:
+    """회원 id 없이 계산한다. 행은 돌려주지 않고 BE도 저장하지 않는다.
+
+    본문 근거는 태그 뒤에 둔다. 같은 장소·특징은 가장 늦은 리뷰 하나만 세므로(PRD FR-14) 한
+    리뷰에서 태그와 본문이 같은 코드를 말하면 한 번만 세고, 방향이 다르면 태그를 따른다.
+    """
     now = datetime.now(UTC).isoformat()
     codes = [MOODS[body.mood]] if body.mood else []
     codes += [PRIORITIES[p] for p in body.priorities]
@@ -135,6 +180,21 @@ def to_rows(body: ProfileBody, reviews: Sequence[ReviewEvidence] = ()) -> list[R
             created_at=r.created_at.isoformat(),
         )
         for r in reviews
+    ]
+    rows += [
+        Row(
+            user_id=None,
+            code=code,
+            direction=direction,
+            source="review",
+            place_id=str(b.place_id),
+            review_id=str(b.review_id),
+            category=b.category,
+            revisit_intent=b.revisit_intent,
+            created_at=b.created_at.isoformat(),
+        )
+        for b in bodies
+        for code, direction in body_codes([i.model_dump() for i in b.items]).items()
     ]
     return rows
 
@@ -183,8 +243,13 @@ def router(deps: Dependencies) -> APIRouter:
 
     @r.post("/v1/taste/refresh", response_model=RefreshResponse)
     def refresh(body: RefreshBody):
-        features = compute_features(to_rows(body, body.reviews))
-        log("taste_refresh", reviews=len(body.reviews), features=len(features))
+        features = compute_features(to_rows(body, body.reviews, body.bodies))
+        log(
+            "taste_refresh",
+            reviews=len(body.reviews),
+            bodies=len(body.bodies),
+            features=len(features),
+        )
         return RefreshResponse(features=features)
 
     return r

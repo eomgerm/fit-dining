@@ -42,7 +42,7 @@
 {"id": "double_negation-08", "split": "test", "slice": "double_negation", "text": "가격이 아깝지 않은 곳", "items": [{"kind": "taste", "code": "VALUE_FOR_MONEY", "like": true}]}
 {"id": "no_code-01", "split": "train", "slice": "no_code", "text": "회 먹는 거 좋아해요", "items": [{"kind": "taste", "code": null, "like": true}], "note": "FOOD_JAPANESE 아님(구체 메뉴)"}
 {"id": "no_code-02", "split": "test", "slice": "no_code", "text": "국밥 좋아합니다", "items": [{"kind": "taste", "code": null, "like": true}], "note": "FOOD_KOREAN 아님(구체 메뉴)", "reviewed": true}
-{"id": "no_code-03", "split": "val", "slice": "no_code", "text": "담백한 맛 좋아해요", "items": [{"kind": "taste", "code": null, "like": true}]}
+{"id": "no_code-03", "split": "val", "slice": "no_code", "text": "담백한 맛 좋아해요", "items": [{"kind": "taste", "code": "FOOD_CLEAN", "like": true}]}
 {"id": "no_code-04", "split": "train", "slice": "no_code", "text": "디저트 종류 많은 카페 좋아해요", "items": [{"kind": "taste", "code": null, "like": true}]}
 {"id": "no_code-05", "split": "test", "slice": "no_code", "text": "고깃집 좋아해요", "items": [{"kind": "taste", "code": null, "like": true}]}
 {"id": "no_code-06", "split": "val", "slice": "no_code", "text": "파스타 좋아해요", "items": [{"kind": "taste", "code": null, "like": true}], "note": "FOOD_WESTERN 아님(구체 메뉴)"}
@@ -185,7 +185,7 @@
 {"id": "no_code-20", "split": "test", "slice": "no_code", "text": "순대는 안 먹어요", "items": [{"kind": "taste", "code": null, "like": false}]}
 {"id": "no_code-21", "split": "val", "slice": "no_code", "text": "오이 들어간 음식 싫어요", "items": [{"kind": "taste", "code": null, "like": false}]}
 {"id": "no_code-22", "split": "test", "slice": "no_code", "text": "고수 못 먹어요", "items": [{"kind": "taste", "code": null, "like": false}]}
-{"id": "no_code-23", "split": "val", "slice": "no_code", "text": "단 디저트 좋아해요", "items": [{"kind": "taste", "code": null, "like": true}]}
+{"id": "no_code-23", "split": "val", "slice": "no_code", "text": "단 디저트 좋아해요", "items": [{"kind": "taste", "code": "FOOD_SWEET", "like": true}]}
 {"id": "no_code-24", "split": "test", "slice": "no_code", "text": "해장국 좋아해요", "items": [{"kind": "taste", "code": null, "like": true}], "note": "FOOD_KOREAN 아님(구체 메뉴)", "reviewed": true}
 {"id": "no_code-25", "split": "val", "slice": "no_code", "text": "와인 마실 수 있는 곳", "items": [{"kind": "taste", "code": null, "like": true}]}
 {"id": "no_code-26", "split": "test", "slice": "no_code", "text": "막걸리집 좋아해요", "items": [{"kind": "taste", "code": null, "like": true}], "note": "업종이지만 맞는 코드가 없음"}

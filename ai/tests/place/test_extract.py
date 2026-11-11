@@ -17,12 +17,14 @@ def rv(review_id, body):
     return {"review_id": review_id, "body": body}
 
 
-def it(slot, quote, code=None, direction=1, text=None):
+def it(slot, quote, code=None, direction=1, text=None, liked=None, kind="taste"):
     return {
         "slot": slot,
         "quote": quote,
         "code": code,
         "direction": direction,
+        "liked": liked,
+        "kind": kind,
         "text": text,
     }
 
@@ -113,6 +115,34 @@ def test_parse_drops_text_when_a_code_is_given():
     assert out[0][0]["text"] is None
 
 
+def test_parse_keeps_liked_only_on_flavor_codes_and_marks_coded_items_taste():
+    bodies = ["달지 않아서 좋았고 자리가 넓어요", "크림 파스타 소스가 진했어요"]
+    resp = answer(
+        [
+            it("맛 성향", "달지 않아서 좋았고", "FOOD_SWEET", -1, liked=1),
+            # 맛 코드가 아니면 liked를 버리고, 코드가 있으면 kind는 taste다
+            it("공간", "자리가 넓어요", "SPACIOUS_SEATING", liked=1, kind="facility"),
+        ],
+        # 메뉴 평가 칸에도 맛 코드를 붙인다
+        [it("메뉴 평가", "크림 파스타 소스가 진했어요", "FOOD_RICH", liked=None)],
+    )
+    out, dropped = parse_batch(resp, bodies)
+    assert dropped == 0
+    assert out[0] == [
+        it("맛 성향", "달지 않아서 좋았고", "FOOD_SWEET", -1, liked=1),
+        it("공간", "자리가 넓어요", "SPACIOUS_SEATING"),
+    ]
+    assert out[1] == [it("메뉴 평가", "크림 파스타 소스가 진했어요", "FOOD_RICH")]
+
+
+def test_parse_keeps_kind_of_items_without_a_code():
+    resp = answer(
+        [it("방문 맥락", "콘센트가 많아서", None, 1, "콘센트가 많다", kind="facility")]
+    )
+    out, _ = parse_batch(resp, ["콘센트가 많아서 좋아요"])
+    assert out[0][0]["kind"] == "facility"
+
+
 def test_parse_asks_again_when_a_review_is_missing_or_shape_is_wrong():
     with pytest.raises(ValueError):  # 리뷰가 빠짐
         parse_batch(answer([]), ["가", "나"])
@@ -122,6 +152,10 @@ def test_parse_asks_again_when_a_review_is_missing_or_shape_is_wrong():
         parse_batch(answer([it("없는 칸", "가")]), ["가"])
     with pytest.raises(TypeError):
         parse_batch(answer([it("공간", "가", direction=0)]), ["가"])
+    with pytest.raises(TypeError):
+        parse_batch(answer([it("맛 성향", "가", "FOOD_SWEET", liked=0)]), ["가"])
+    with pytest.raises(TypeError):
+        parse_batch(answer([it("공간", "가", kind="없는 종류")]), ["가"])
     with pytest.raises(TypeError):
         parse_batch({"1": "목록이 아님"}, ["가"])
 
@@ -155,6 +189,8 @@ def test_extract_batches_reviews_and_counts_failed_ones():
         "slot": "공간",
         "quote": "넓어요",
         "text": None,
+        "liked": None,
+        "kind": "taste",
     }
     assert failed == 1
     assert dropped == 2

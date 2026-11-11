@@ -1,9 +1,15 @@
-from fit_ai.features import FEATURES
+from fit_ai.features import FEATURES, FLAVORS
 
 
 def test_code_table_has_onboarding_and_extension_codes():
-    assert len(FEATURES) == 23
+    # 2단계에서 맛 코드 8개를 더해 23 → 31개다
+    assert len(FEATURES) == 31
     assert sum(f.onboarding for f in FEATURES.values()) == 14
+
+
+def test_flavors_are_nine_food_codes_in_the_table():
+    assert len(FLAVORS) == 9
+    assert all(FEATURES[c].layer == "food" for c in FLAVORS)
 
 
 def test_noise_poles_point_to_each_other():

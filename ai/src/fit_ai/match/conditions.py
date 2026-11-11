@@ -95,6 +95,14 @@ EXTRA_LABELS = {
     "UNIQUE_CONCEPT": "컨셉이 독특해요",
     "FAST_SERVING": "음식이 빨리 나와요",
     "GOOD_MUSIC": "음악이 좋아요",
+    "FOOD_SWEET": "달콤해요",
+    "FOOD_SOUR": "산미가 있어요",
+    "FOOD_SALTY": "짭짤해요",
+    "FOOD_BITTER": "쌉싸름해요",
+    "FOOD_UMAMI": "감칠맛이 나요",
+    "FOOD_NUTTY": "고소해요",
+    "FOOD_RICH": "맛이 진해요",
+    "FOOD_CLEAN": "담백하고 깔끔해요",
 }
 """코드표의 확장 코드(온보딩에 없는 코드)의 카드 문구. 카드 조건 목록에는 없지만 요청과
 취향에 나오면 점수를 내고 근거 항목에 보인다. 코드표에 확장 코드가 늘면 여기도 더해야

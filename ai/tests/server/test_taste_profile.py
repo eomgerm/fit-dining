@@ -279,3 +279,90 @@ def test_bad_vector_keeps_features(monkeypatch, bad):
     assert resp.status_code == 200
     assert resp.json()["features"] != []
     assert resp.json()["vectors"] == [None]
+
+
+def review_body(place, day, items, category="카페"):
+    """배치가 보내는 리뷰 하나의 본문 추출 결과."""
+    return {
+        "placeId": place,
+        "reviewId": place * 100 + day,
+        "category": category,
+        "createdAt": f"2026-10-{day}T12:00:00+09:00",
+        "revisitIntent": False,
+        "items": items,
+    }
+
+
+def item(code, direction=1, liked=None, kind="taste", text=None):
+    return {
+        "code": code,
+        "direction": direction,
+        "liked": liked,
+        "kind": kind,
+        "text": text,
+    }
+
+
+def overall(resp):
+    return {
+        (f["code"], f["like"]): f["weight"]
+        for f in resp.json()["features"]
+        if f["category"] is None
+    }
+
+
+def test_refresh_counts_tag_and_body_of_different_places():
+    # 설계 2단계 예: 카페 리뷰에 "대화" 태그 1곳, 본문 "친구랑 수다 떨기 딱" 다른 1곳 → 대화 2
+    body = {
+        "reviews": [review("PURPOSE_TALK", 1, 23)],
+        "bodies": [review_body(2, 23, [item("PURPOSE_TALK")])],
+    }
+    resp = client().post("/v1/taste/refresh", json=body)
+    assert resp.status_code == 200
+    assert overall(resp) == {("PURPOSE_TALK", True): 2}
+
+
+def test_refresh_counts_tag_and_body_of_one_review_once():
+    body = {
+        "reviews": [review("PURPOSE_TALK", 1, 23)],
+        "bodies": [review_body(1, 23, [item("PURPOSE_TALK")])],
+    }
+    assert overall(client().post("/v1/taste/refresh", json=body)) == {
+        ("PURPOSE_TALK", True): 1
+    }
+
+
+def test_refresh_reads_flavor_from_body_and_ignores_text_items():
+    body = {
+        "bodies": [
+            review_body(
+                1,
+                23,
+                [
+                    item("FOOD_SWEET", -1, 1),  # "달지 않아서 좋아요"
+                    item("FOOD_NUTTY", 1, None),  # 좋고 나쁨 없음
+                    item(None, 1, None, "taste", "크림 파스타 소스가 진하다"),
+                ],
+            )
+        ]
+    }
+    assert overall(client().post("/v1/taste/refresh", json=body)) == {
+        ("FOOD_SWEET", False): 1
+    }
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        item("NOPE"),
+        item("FOOD_SWEET", 0, 1),
+        item("FOOD_SWEET", 1, 2),
+        item(None, kind="없는 종류"),
+        item(None, text="가" * 201),
+    ],
+)
+def test_refresh_rejects_invalid_body_item(bad):
+    resp = client().post(
+        "/v1/taste/refresh", json={"bodies": [review_body(1, 23, [bad])]}
+    )
+    assert resp.status_code == 400

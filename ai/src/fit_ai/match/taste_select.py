@@ -12,11 +12,8 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from fit_ai.features import FEATURES
+from fit_ai.features import FEATURES, FLAVORS
 from fit_ai.match.conditions import CATEGORY_NAMES, Layer
-
-FOOD_SPICY = "FOOD_SPICY"
-"""매운맛 코드. 음식 층이지만 음식 종류는 아니라 따로 다룬다."""
 
 SCHEMA = "taste-profile/v1"
 """읽을 수 있는 취향 프로필 형식"""
@@ -279,9 +276,10 @@ def _group(code: str) -> str | None:
     if feature is None:
         # 시설처럼 코드표에 없는 요청 조건이다.
         return None
-    if code == FOOD_SPICY:
-        # "한식"을 찾아도 매운 것을 싫어하는 취향은 그대로 맞는다.
-        return FOOD_SPICY
+    if code in FLAVORS:
+        # 맛 코드는 음식 층이지만 음식 종류가 아니다. "한식"을 찾아도 매운 것을 싫어하는 취향은
+        # 그대로 맞는다. 맛마다 따로 덮는다.
+        return code
     if feature.layer in (Layer.AXIS, Layer.PURPOSE, Layer.FOOD):
         return feature.layer
     return None

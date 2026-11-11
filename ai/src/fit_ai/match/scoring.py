@@ -11,7 +11,7 @@
   비율이다.
 
 요청 점수는 요청 조건 점수의 기하평균(모두 원함), 취향 점수는 취향 세기로 낸 가중 평균이다.
-싫어하는 취향은 1 − 조건 점수로 넣는다. 핏 점수는 요청 0.7, 취향 0.3으로 더한다. 점수를
+싫어하는 취향은 1 − 조건 점수로 넣는다. 맛 취향은 장소 업종에 장소 근거가 충분한 맛만 넣는다. 핏 점수는 요청 0.7, 취향 0.3으로 더한다. 점수를
 먼저 내고 그 점수로 순서를 정한다. 비교 대상은 그 검색의 후보가 아니라 업종 범위 안의 장소
 전체라서, 같은 장소와 같은 요청이면 늘 같은 점수다(docs/comparison/spec.md 4.3).
 """
@@ -22,6 +22,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from fit_ai.features import FLAVORS
 from fit_ai.match.candidates import Candidate
 from fit_ai.match.conditions import CATEGORY_NAMES, CONDITIONS, SCORE_LABELS, Layer
 from fit_ai.match.interpretation import FOOD_TYPES
@@ -42,6 +43,14 @@ PRIOR_REVIEWS_RANGE = (0.01, 10_000.0)
 
 UNKNOWN = 0.5
 """판단할 근거가 전혀 없을 때의 조건 점수(가운데)"""
+
+FLAVOR_MIN_EVIDENCE = 3
+"""맛을 점수에 쓸지 볼 때 세는 장소의 근거 수 하한. "그 맛이 났다"는 리뷰(매운맛은 메뉴명
+근거 포함)가 이만큼 있는 장소를 센다(docs/specs/taste-profile/spec.md 확장 코드 규칙)."""
+
+FLAVOR_MIN_SHARE = 0.10
+"""업종 안에서 위 장소의 비율이 이 값 이상인 맛만 취향 점수에 쓴다. 근거가 없는 맛은 거의 모든
+장소에서 같은 값이라 가중 평균의 몫만 차지하고 장소를 가르지 못한다(취향 보정 설계 2단계)."""
 
 GRID_POINTS = 2001
 """장소의 진짜 비율이 될 수 있는 값을 나눠 보는 점의 수. 계산 정밀도라 결과에는 거의 영향이
@@ -134,6 +143,32 @@ class Baseline:
         self._places = tuple(places)
         self._reviews: dict[tuple[frozenset[str], str], _ReviewStats | None] = {}
         self._shares: dict[tuple[frozenset[str], str], float] = {}
+        self._flavors: dict[tuple[str, str], bool] = {}
+
+    def flavor_scored(self, category_group: str, code: str) -> bool:
+        """맛 취향을 이 업종 장소의 점수에 쓰는지.
+
+        업종 안에서 그 맛 근거가 `FLAVOR_MIN_EVIDENCE`건 이상인 장소가 `FLAVOR_MIN_SHARE`
+        이상이면 쓴다. 쓰지 않는 맛도 회원 취향에는 계속 쌓이고, 장소 근거가 쌓이면 저절로
+        점수에 들어간다.
+
+        Args:
+            category_group: 장소의 업종
+            code: 맛 코드(`FLAVORS`)
+
+        Returns:
+            점수에 쓰면 True
+        """
+        key = (category_group, code)
+        if key not in self._flavors:
+            places = [
+                p for p in self._places if p.info.category_group == category_group
+            ]
+            enough = sum(p.evidence(code).pos >= FLAVOR_MIN_EVIDENCE for p in places)
+            self._flavors[key] = bool(places) and enough >= FLAVOR_MIN_SHARE * len(
+                places
+            )
+        return self._flavors[key]
 
     def value(self, place: Place, code: str, scope: frozenset[str]) -> float:
         """장소 하나의 조건 점수.
@@ -241,7 +276,7 @@ def score_places(
         candidates: 후보. 유사도 내림차순이다.
         request_codes: 요청 조건 코드. `SCORE_LABELS`에 없는 코드는 판정하지 않는다.
         tastes: ⓪ 취향 고르기로 남은 취향. 좋아함과 싫어함 모두다. 요청과 같은 코드는
-            뺀다.
+            뺀다. 맛 취향은 후보 업종에 장소 근거가 충분할 때만 쓴다(`Baseline.flavor_scored`).
         scope: 업종 범위
         baseline: 조건 점수 기준
 
@@ -259,6 +294,8 @@ def score_places(
         ) + tuple(
             _item(place, t.code, False, t.like, t.weight, scope, baseline)
             for t in tastes
+            if t.code not in FLAVORS
+            or baseline.flavor_scored(place.info.category_group, t.code)
         )
         fit = fit_score(items)
         scored.append(

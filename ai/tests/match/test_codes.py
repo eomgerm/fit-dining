@@ -2,7 +2,7 @@
 
 import pytest
 
-from fit_ai.features import FEATURES
+from fit_ai.features import FEATURES, FLAVORS
 from fit_ai.match.interpretation import Conditions
 from fit_ai.match.interpretation.codes import (
     FACILITY_CODES,
@@ -22,10 +22,12 @@ from fit_ai.match.interpretation.segments import (
 
 
 def test_code_groups_cover_shared_table() -> None:
-    """코드묶음_특징·음식·시설코드는_코드표와시설을겹치지않고모두덮는다"""
+    """코드묶음_특징·음식·시설코드는_요청에서받지않는맛을빼고_코드표와시설을겹치지않고모두덮는다"""
     groups = [set(FEATURE_CODES), set(FOOD_CODES), set(FACILITY_CODES)]
+    # 매운맛 밖의 맛 코드는 아직 취향에만 있다. 요청 해석의 맛 칸을 9개로 늘리는 일은 4단계다
+    taste_only = set(FLAVORS) - set(FOOD_CODES)
 
-    assert set().union(*groups) == {*FEATURES, *FACILITY_CODES}
+    assert set().union(*groups) == {*FEATURES, *FACILITY_CODES} - taste_only
     assert sum(map(len, groups)) == len(set().union(*groups))
 
 

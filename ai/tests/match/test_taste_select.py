@@ -223,6 +223,14 @@ class TestSelectTastes:
             "FOOD_JAPANESE",
         ]
 
+    def test_cuisine_and_spicy_requests_keep_other_flavors(self) -> None:
+        """취향고르기_음식종류나매운맛요청은_다른맛취향을빼지않는다"""
+        features = [*FEATURES, TasteFeature("FOOD_SWEET", Layer.FOOD, False, 1)]
+
+        for request_codes in (["FOOD_KOREAN"], ["FOOD_SPICY"]):
+            assert "FOOD_SWEET" in codes(select_tastes(features, request_codes))
+        assert "FOOD_SWEET" in codes(select_tastes(features, [], menu_requested=True))
+
     @pytest.mark.parametrize("request_codes", [[], ["SPACIOUS_SEATING", "PARKING"]])
     def test_other_requests_keep_all(self, request_codes: list[str]) -> None:
         """취향고르기_요청이중요기준이나시설뿐이면_취향을모두남긴다"""
