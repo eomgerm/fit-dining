@@ -35,6 +35,7 @@ public class SocialAuthController {
     private final SocialAccounts accounts;
     private final AuthTransactions transactions;
     private final SessionLogin sessions;
+    private final EmailVerifications verifications;
     private static final SecureRandom RANDOM = new SecureRandom();
 
     @GetMapping("/oauth/{provider}")
@@ -80,7 +81,8 @@ public class SocialAuthController {
                 throw new AuthFailure("Invalid callback");
             }
 
-            String subject = client.exchange(providers.get(provider), code, state, payload[2], callback(provider));
+            var profile = client.exchange(providers.get(provider), code, state, payload[2], callback(provider));
+            String subject = profile.subject();
             var issued = accounts.existing(provider, subject);
             if (issued != null) {
                 sessions.establish(issued.identity(), request, response);
@@ -88,7 +90,7 @@ public class SocialAuthController {
                 return redirect("/");
             }
 
-            response.addHeader(HttpHeaders.SET_COOKIE, cookie("fitdining_social", tokens.encode("social_signup", provider, subject), true, 600).toString());
+            response.addHeader(HttpHeaders.SET_COOKIE, cookie("fitdining_social", tokens.encode("social_signup", provider, subject, profile.email() == null ? "" : profile.email()), true, 600).toString());
             return redirect("/signup/social");
         } catch (Exception failure) {
             try { if (failureAuditAllowed) transactions.audit(null, "LOGIN_FAILURE"); }
@@ -100,12 +102,27 @@ public class SocialAuthController {
         }
     }
 
+    public record SignupInfo(String provider,
+            @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.ALWAYS) String email) {}
+
+    @GetMapping("/social/signup")
+    public SignupInfo signupInfo(@CookieValue(name = "fitdining_social", required = false) String cookie) {
+        String[] payload = tokens.decode(cookie, "social_signup", 3);
+        return new SignupInfo(payload[0], payload[2].isEmpty() ? null : payload[2]);
+    }
+
     @PostMapping("/social/signup")
     public ResponseEntity<AuthController.TokenResponse> signup(@Valid @RequestBody SocialSignupRequest body,
         @CookieValue(name = "fitdining_social", required = false) String cookie, HttpServletRequest request, HttpServletResponse response) {
-        String[] identity = tokens.decode(cookie, "social_signup", 2);
+        String[] identity = tokens.decode(cookie, "social_signup", 3);
         if (!transactions.recordAttempt(request.getRemoteAddr(), "signup")) throw new AuthFailure("Limited", 429);
-        var issued = accounts.signup(identity[0], identity[1], body.preferences());
+        String email = body.contactEmail();
+        String hash = null;
+        if (email == null || email.equals(identity[2])) email = identity[2];
+        else hash = verifications.requireToken(email, body.verificationToken());
+        if (!SignupValue.Validator.valid("email", email)) throw EmailVerificationFailure.required();
+        var issued = accounts.signup(identity[0], identity[1], body.preferences(), email, hash,
+                Boolean.TRUE.equals(body.agreements().marketing()));
         response.addHeader(HttpHeaders.SET_COOKIE, cookie("fitdining_social", "", true, 0).toString());
         sessions.establish(issued.identity(), request, response);
         LoginSuccessAudit.record(() -> transactions.audit(issued.identity().userId(), "LOGIN_SUCCESS"));

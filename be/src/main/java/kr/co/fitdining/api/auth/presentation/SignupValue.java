@@ -16,15 +16,17 @@ import java.nio.charset.StandardCharsets;
 @Constraint(validatedBy = SignupValue.Validator.class)
 public @interface SignupValue {
     String value();
+    boolean optional() default false;
     String message() default "입력 형식을 확인해 주세요.";
     Class<?>[] groups() default {};
     Class<? extends Payload>[] payload() default {};
 
     final class Validator implements ConstraintValidator<SignupValue, String> {
         private String field;
-        @Override public void initialize(SignupValue rule) { field = rule.value(); }
+        private boolean optional;
+        @Override public void initialize(SignupValue rule) { field = rule.value(); optional = rule.optional(); }
         @Override public boolean isValid(String value, ConstraintValidatorContext context) {
-            return valid(field, value);
+            return (optional && value == null) || valid(field, value);
         }
         public static boolean valid(String field, String value) {
             if (value == null) return false;

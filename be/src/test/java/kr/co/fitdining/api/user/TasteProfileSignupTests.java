@@ -59,7 +59,7 @@ class TasteProfileSignupTests extends PostgresTestSupport {
     }
     private String signup(boolean socialSignup) {
         String id = UUID.randomUUID().toString();
-        return (socialSignup ? social.signup("google", id, answers)
+        return (socialSignup ? social.signup("google", id, answers, "provider@example.com", null, false)
                 : auth.signup(id + "@example.com", "password123", id.substring(0, 10), verifiedToken(id + "@example.com"), id, answers)).identity().userId();
     }
 }

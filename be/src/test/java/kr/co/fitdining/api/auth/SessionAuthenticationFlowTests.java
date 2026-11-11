@@ -101,7 +101,7 @@ class SessionAuthenticationFlowTests extends PostgresTestSupport {
         new JdbcTemplate(appSource()).update(
                 "insert into auth_social_accounts(provider, provider_user_id, user_id, created_at) values ('google', ?, ?, now())",
                 subject, userId);
-        when(provider.exchange(any(), any(), any(), any(), any())).thenReturn(subject);
+        when(provider.exchange(any(), any(), any(), any(), any())).thenReturn(new kr.co.fitdining.api.auth.infrastructure.SocialProviderClient.Profile(subject, "provider@example.com"));
         String state = socialTokens.encode("oauth_state", "google", "state", "verifier", "login");
         var callback = request("GET", "/api/auth/oauth/google/callback?code=code&state=state", null,
                 "fitdining_oauth=" + state, null);
@@ -110,7 +110,7 @@ class SessionAuthenticationFlowTests extends PostgresTestSupport {
         assertSessionMe(callback, userId);
     }
     @Test void socialSignupIssuesRedisSession() throws Exception {
-        String token = socialTokens.encode("social_signup", "google", UUID.randomUUID().toString());
+        String token = socialTokens.encode("social_signup", "google", UUID.randomUUID().toString(), "provider@example.com");
         var result = request("POST", "/api/auth/social/signup",
                 "{\"agreements\":{\"ageOver14\":true,\"terms\":true,\"privacy\":true}}", "fitdining_social=" + token, null);
         assertEquals(201, result.statusCode(), result.body());

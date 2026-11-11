@@ -43,7 +43,7 @@ public class SmtpVerificationMailer implements VerificationMailer {
     static String text(String code) {
         return """
                 핏다이닝 이메일 인증번호는 %s 입니다.
-                가입 화면에 10분 안에 입력해 주세요.
+                인증 화면에 10분 안에 입력해 주세요.
                 요청하지 않았다면 이 메일을 무시해 주세요.
                 """.formatted(code);
     }
@@ -52,7 +52,7 @@ public class SmtpVerificationMailer implements VerificationMailer {
         return """
                 <p>핏다이닝 이메일 인증번호입니다.</p>
                 <p style="font-size:24px;font-weight:bold;letter-spacing:4px">%s</p>
-                <p>가입 화면에 10분 안에 입력해 주세요.<br>요청하지 않았다면 이 메일을 무시해 주세요.</p>
+                <p>인증 화면에 10분 안에 입력해 주세요.<br>요청하지 않았다면 이 메일을 무시해 주세요.</p>
                 """.formatted(code);
     }
 }

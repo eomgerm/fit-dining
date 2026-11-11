@@ -57,11 +57,13 @@ public class EmailVerifications {
      * @return 인증번호 만료 시각과 다시 보낼 수 있는 시각
      * @throws AuthFailure 이미 가입한 이메일 409, 시도 제한 429, 발송 실패 503
      */
-    public Requested request(String email, String address) {
+    public Requested request(String email, String address) { return request(email, address, "signup"); }
+
+    public Requested request(String email, String address, String purpose) {
         String normalized = AuthService.normalizeEmail(email);
         if (!transactions.recordSend(address))
             throw new AuthFailure("잠시 후 다시 시도해주세요.", 429);
-        if (users.findByEmail(normalized).isPresent()) throw new SignupConflict("email");
+        if (!"contact".equals(purpose) && users.findByEmail(normalized).isPresent()) throw new SignupConflict("email");
         String code = "%06d".formatted(random.nextInt(1_000_000));
         var issued = transactions.issue(normalized, codeHash(normalized, code));
         try {

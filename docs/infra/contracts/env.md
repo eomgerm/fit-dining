@@ -68,6 +68,7 @@
 | `AUTH_GOOGLE_CLIENT_SECRET` | app | X | 구글 OAuth 클라이언트 시크릿. 비밀 |
 | `AUTH_KAKAO_CLIENT_ID` | app | X | 카카오 로그인의 REST API 키. `AUTH_KAKAO_CLIENT_SECRET`과 한 쌍이다. 콜백 `https://<호스트>/api/auth/oauth/kakao/callback`을 등록한다 |
 | `AUTH_KAKAO_CLIENT_SECRET` | app | X | 카카오 클라이언트 시크릿. 비밀. 카카오 콘솔의 클라이언트 시크릿은 ON으로 둔다 |
+| `AUTH_KAKAO_EMAIL_SCOPE_ENABLED` | app | X | 기본 `false`. `true`일 때만 카카오 인가에 `account_email` scope를 요청한다. 해당 환경의 카카오 앱 콘솔에서 카카오계정 이메일을 선택 동의로 설정한 뒤 켠다. 설정 전 켜면 KOE205로 기존·신규 카카오 로그인이 모두 실패할 수 있다. 꺼진 환경에서는 가입 시 연락용 이메일을 직접 입력·인증한다 |
 | `AUTH_NAVER_CLIENT_ID` | app | X | 네이버 로그인의 Client ID. `AUTH_NAVER_CLIENT_SECRET`과 한 쌍이다. 콜백 `https://<호스트>/api/auth/oauth/naver/callback`을 등록한다 |
 | `AUTH_NAVER_CLIENT_SECRET` | app | X | 네이버 Client Secret. 비밀 |
 | `MODAL_BASE_URL` | app | O | BE가 AI API(`/v1/taste/interpret`, `/v1/taste/profile`, 검색)를 부르는 기준 URL이다(키 이름은 Modal 시절 그대로다). A에서 도는 AI API는 `http://ai-dev:8000`, `http://ai-prod:8000`이다(design.md 11.4절). Modal 임베딩 주소가 아니다(그것은 `ai` 그룹의 `EMBED_BASE_URL`) |

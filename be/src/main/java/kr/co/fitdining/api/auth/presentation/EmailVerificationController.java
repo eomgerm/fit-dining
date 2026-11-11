@@ -25,9 +25,12 @@ public class EmailVerificationController {
 
     /** @param email 인증할 이메일. 검사 전에 정규화한다 */
     public record EmailVerificationRequest(
-            @SignupValue(value = "email", message = "이메일 형식을 확인해 주세요.") String email) {
+            @SignupValue(value = "email", message = "이메일 형식을 확인해 주세요.") String email,
+            @Pattern(regexp = "signup|contact", message = "인증 목적은 signup 또는 contact여야 합니다.") String purpose) {
+        public EmailVerificationRequest(String email) { this(email, "signup"); }
         public EmailVerificationRequest {
             email = email == null ? null : AuthService.normalizeEmail(email);
+            purpose = purpose == null ? "signup" : purpose;
         }
     }
 
@@ -59,7 +62,7 @@ public class EmailVerificationController {
     @PostMapping
     public ResponseEntity<EmailVerificationResponse> request(@Valid @RequestBody EmailVerificationRequest body,
             HttpServletRequest request) {
-        var requested = verifications.request(body.email(), request.getRemoteAddr());
+        var requested = verifications.request(body.email(), request.getRemoteAddr(), body.purpose());
         return ResponseEntity.accepted().body(new EmailVerificationResponse(requested.expiresAt(), requested.resendAvailableAt()));
     }
 

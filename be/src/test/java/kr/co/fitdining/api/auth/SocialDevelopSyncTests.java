@@ -44,37 +44,53 @@ class SocialDevelopSyncTests extends PostgresTestSupport {
     }
     @MockitoBean SocialProviderClient client;
 
+    @Test void existingCallbackPreservesStoredContactEmailAndConsent() throws Exception {
+        String subject = UUID.randomUUID().toString();
+        String user = accounts.signup("google", subject, null, "stored@example.com", null, true).identity().userId();
+        var before = jdbc.queryForMap("select contact_email, contact_email_verified_at, marketing_agreed_at from auth_users where id=?", user);
+        when(client.exchange(any(), any(), any(), any(), any()))
+                .thenReturn(new SocialProviderClient.Profile(subject, "different@example.com"));
+        mvc.perform(get("/api/auth/oauth/google/callback").param("code", "code").param("state", "state")
+                .with(request -> { request.setRemoteAddr("existing-" + UUID.randomUUID()); return request; })
+                .cookie(new Cookie("fitdining_oauth", tokens.encode("oauth_state", "google", "state", "verifier", "login"))))
+                .andExpect(status().isFound()).andExpect(header().string("Location", "/"));
+        assertEquals(before, jdbc.queryForMap("select contact_email, contact_email_verified_at, marketing_agreed_at from auth_users where id=?", user));
+        assertNull(jdbc.queryForObject("select email from auth_users where id=?", String.class, user));
+    }
+
     @Test
     @DisplayName("소셜탈퇴_같은 식별자_새 계정으로 재가입")
     void withdraw_sameIdentity_createsNewAccount() throws Exception {
         String subject = UUID.randomUUID().toString();
-        var old = accounts.signup("google", subject);
+        var old = accounts.signup("google", subject, null, "provider@example.com", null, false);
         String user = old.identity().userId();
         mvc.perform(delete("/api/v1/users/" + user).with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).header("Origin", "http://localhost:3000")
                 .cookie(sessionCookie(user)))
                 .andExpect(status().isNoContent());
         assertEquals(0, jdbc.queryForObject("select count(*) from auth_social_accounts where user_id=?", Integer.class, user));
-        when(client.exchange(any(), any(), any(), any(), any())).thenReturn(subject);
+        when(client.exchange(any(), any(), any(), any(), any())).thenReturn(new kr.co.fitdining.api.auth.infrastructure.SocialProviderClient.Profile(subject, "provider@example.com"));
         mvc.perform(get("/api/auth/oauth/google/callback").param("code", "code").param("state", "state")
                 .cookie(new Cookie("fitdining_oauth", tokens.encode("oauth_state", "google", "state", "verifier", "login"))))
                 .andExpect(status().isFound()).andExpect(header().string("Location", "/signup/social"));
-        var fresh = accounts.signup("google", subject);
+        var fresh = accounts.signup("google", subject, null, "provider@example.com", null, false);
         assertNotEquals(user, fresh.identity().userId());
+        jdbc.update("update auth_users set contact_email=null, contact_email_verified_at=null where id=?", fresh.identity().userId());
         mvc.perform(get("/api/auth/oauth/google/callback").param("code", "code").param("state", "state")
                 .cookie(new Cookie("fitdining_oauth", tokens.encode("oauth_state", "google", "state", "verifier", "login"))))
                 .andExpect(status().isFound()).andExpect(header().string("Location", "/"))
                 .andExpect(cookie().exists("fitdining_session"));
         assertEquals(fresh.identity().userId(), accounts.existing("google", subject).identity().userId());
+        assertNull(jdbc.queryForObject("select contact_email from auth_users where id=?", String.class, fresh.identity().userId()));
     }
 
     @Test
     @DisplayName("소셜콜백_탈퇴 계정 연결 잔존_로그인 거부")
     void existing_withdrawnLinkedUser_rejectsLogin() throws Exception {
         String subject = UUID.randomUUID().toString();
-        var old = accounts.signup("google", subject);
+        var old = accounts.signup("google", subject, null, "provider@example.com", null, false);
         jdbc.update("update auth_users set deleted_at=current_timestamp where id=?", old.identity().userId());
         assertThrows(AuthFailure.class, () -> accounts.existing("google", subject));
-        when(client.exchange(any(), any(), any(), any(), any())).thenReturn(subject);
+        when(client.exchange(any(), any(), any(), any(), any())).thenReturn(new kr.co.fitdining.api.auth.infrastructure.SocialProviderClient.Profile(subject, "provider@example.com"));
         mvc.perform(get("/api/auth/oauth/google/callback").param("code", "code").param("state", "state")
                 .cookie(new Cookie("fitdining_oauth", tokens.encode("oauth_state", "google", "state", "verifier", "login"))))
                 .andExpect(status().isFound()).andExpect(header().string("Location", "/login?error=social"))
@@ -90,7 +106,7 @@ class SocialDevelopSyncTests extends PostgresTestSupport {
         String preferences = include ? ",\"preferences\":{\"mood\":\"QUIET\",\"priorities\":[\"SPACIOUS\"],\"purposes\":[\"SOLO\"],\"tastes\":[{\"polarity\":\"LIKE\",\"label\":\"국물\"}]}" : "";
         var response = mvc.perform(post("/api/auth/social/signup").with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).header("Origin", "http://localhost:3000")
                 .contentType("application/json").content(body(nickname, preferences))
-                .cookie(new Cookie("fitdining_social", tokens.encode("social_signup", "google", subject))))
+                .cookie(new Cookie("fitdining_social", tokens.encode("social_signup", "google", subject, "provider@example.com"))))
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.userId").isNotEmpty())
                 .andReturn().getResponse();
         String user = accounts.existing("google", subject).identity().userId();
@@ -112,7 +128,7 @@ class SocialDevelopSyncTests extends PostgresTestSupport {
         String subject = UUID.randomUUID().toString();
         mvc.perform(post("/api/auth/social/signup").with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).header("Origin", "http://localhost:3000")
                 .contentType("application/json").content(body("검증취향", ",\"preferences\":" + preferences))
-                .cookie(new Cookie("fitdining_social", tokens.encode("social_signup", "google", subject))))
+                .cookie(new Cookie("fitdining_social", tokens.encode("social_signup", "google", subject, "provider@example.com"))))
                 .andExpect(status().isBadRequest());
         assertNull(accounts.existing("google", subject));
     }

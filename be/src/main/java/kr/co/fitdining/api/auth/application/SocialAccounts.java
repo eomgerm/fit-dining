@@ -22,16 +22,13 @@ public class SocialAccounts {
         return transactions.existing(provider, subject);
     }
 
-    public Issued signup(String provider, String subject) {
-        return signup(provider, subject, null);
-    }
-
-    public Issued signup(String provider, String subject, kr.co.fitdining.api.user.Preferences preferences) {
+    public Issued signup(String provider, String subject, kr.co.fitdining.api.user.Preferences preferences,
+            String email, String tokenHash, boolean marketing) {
         var profile = tasteProfiles.compute(preferences);
         for (int attempt = 0; attempt < 10; attempt++) {
             String nickname = nicknames.next(attempt);
             try {
-                return transactions.signup(provider, subject, nickname, preferences, profile);
+                return transactions.signup(provider, subject, nickname, preferences, profile, email, tokenHash, marketing);
             } catch (SignupConflict conflict) {
                 if (!"nickname".equals(conflict.field())) throw conflict;
             } catch (DataIntegrityViolationException conflict) {

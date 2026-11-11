@@ -137,6 +137,9 @@ class AuthServiceTests extends PostgresTestSupport {
         var issued = auth.signup(" New@Example.COM ", "password1", " 새이름 ", token("new@example.com"), "signup-ip");
         var user = users.findByEmail("new@example.com").orElseThrow();
         assertEquals("새이름", user.getNickname());
+        assertEquals("new@example.com", user.getContactEmail());
+        assertEquals(user.getEmailVerifiedAt(), user.getContactEmailVerifiedAt());
+        assertNull(user.getMarketingAgreedAt());
         assertEquals(clock.instant(), user.getAgeConfirmedAt());
         assertEquals(clock.instant(), user.getTermsAgreedAt());
         assertEquals(clock.instant(), user.getPrivacyAgreedAt());

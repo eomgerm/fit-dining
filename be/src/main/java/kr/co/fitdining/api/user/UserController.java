@@ -19,6 +19,28 @@ public class UserController {
             @AuthenticationPrincipal Identity identity) {
         return service.profile(userId, identity);
     }
+    public record ContactEmailRequest(
+            @kr.co.fitdining.api.auth.presentation.SignupValue(value = "email") String email, String verificationToken) {
+        public ContactEmailRequest {
+            email = email == null ? null : kr.co.fitdining.api.auth.application.AuthService.normalizeEmail(email);
+        }
+    }
+    public record MarketingConsentRequest(@jakarta.validation.constraints.NotNull Boolean agreed) {}
+
+    @PutMapping("/contact-email")
+    public ResponseEntity<Void> contactEmail(@PathVariable String userId, @AuthenticationPrincipal Identity identity,
+            @jakarta.validation.Valid @RequestBody ContactEmailRequest body) {
+        service.contactEmail(userId, identity, body.email(), body.verificationToken());
+        return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/marketing-consent")
+    public ResponseEntity<Void> marketingConsent(@PathVariable String userId, @AuthenticationPrincipal Identity identity,
+            @jakarta.validation.Valid @RequestBody MarketingConsentRequest body) {
+        service.marketingConsent(userId, identity, body.agreed());
+        return ResponseEntity.noContent().build();
+    }
+
     @DeleteMapping
     public ResponseEntity<Void> withdraw(@PathVariable String userId,
             @AuthenticationPrincipal Identity identity, jakarta.servlet.http.HttpServletRequest request) {

@@ -53,7 +53,9 @@ public class AuthController {
     @PostMapping("/signup")
     public ResponseEntity<TokenResponse> signup(@Valid @RequestBody SignupRequest body,
             HttpServletRequest request, HttpServletResponse response) {
-        Issued result = body.preferences() == null
+        Issued result = Boolean.TRUE.equals(body.agreements().marketing())
+                ? auth.signup(body.email(), body.password(), body.nickname(), body.verificationToken(), request.getRemoteAddr(), body.preferences(), true)
+                : body.preferences() == null
                 ? auth.signup(body.email(), body.password(), body.nickname(), body.verificationToken(), request.getRemoteAddr())
                 : auth.signup(body.email(), body.password(), body.nickname(), body.verificationToken(), request.getRemoteAddr(),
                         body.preferences());

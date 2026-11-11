@@ -34,5 +34,9 @@ public record SignupRequest(
             @NotNull(message = "서비스 이용약관에 동의해 주세요.")
             @AssertTrue(message = "서비스 이용약관에 동의해 주세요.") Boolean terms,
             @NotNull(message = "개인정보 수집·이용에 동의해 주세요.")
-            @AssertTrue(message = "개인정보 수집·이용에 동의해 주세요.") Boolean privacy) {}
+            @AssertTrue(message = "개인정보 수집·이용에 동의해 주세요.") Boolean privacy, Boolean marketing) {
+        public Agreements(Boolean ageOver14, Boolean terms, Boolean privacy) {
+            this(ageOver14, terms, privacy, false);
+        }
+    }
 }

@@ -11,8 +11,9 @@ import org.springframework.stereotype.Component;
 public class SocialProviders {
     private final Map<String, Provider> providers = new HashMap<>();
     public SocialProviders(Environment environment) {
-        add(environment, "google", "https://accounts.google.com/o/oauth2/v2/auth", "https://oauth2.googleapis.com/token", "https://openidconnect.googleapis.com/v1/userinfo", "openid", true);
-        add(environment, "kakao", "https://kauth.kakao.com/oauth/authorize", "https://kauth.kakao.com/oauth/token", "https://kapi.kakao.com/v2/user/me", null, true);
+        add(environment, "google", "https://accounts.google.com/o/oauth2/v2/auth", "https://oauth2.googleapis.com/token", "https://openidconnect.googleapis.com/v1/userinfo", "openid email", true);
+        add(environment, "kakao", "https://kauth.kakao.com/oauth/authorize", "https://kauth.kakao.com/oauth/token", "https://kapi.kakao.com/v2/user/me",
+                Boolean.parseBoolean(environment.getProperty("AUTH_KAKAO_EMAIL_SCOPE_ENABLED", "false")) ? "account_email" : null, true);
         add(environment, "naver", "https://nid.naver.com/oauth2.0/authorize", "https://nid.naver.com/oauth2.0/token", "https://openapi.naver.com/v1/nid/me", null, false);
     }
 
@@ -35,6 +36,18 @@ public class SocialProviders {
     public record Provider(String name, String authorization, String token, String userinfo, String scope, boolean pkce, String clientId, String clientSecret) {
         @Override public String toString() {
             return "Provider[" + name + "]";
+        }
+
+        public String email(Map<?, ?> body) {
+            Object value = null;
+            if (name.equals("google") && Boolean.TRUE.equals(body.get("email_verified"))) value = body.get("email");
+            if (name.equals("kakao") && body.get("kakao_account") instanceof Map<?, ?> account
+                    && Boolean.TRUE.equals(account.get("is_email_valid")) && Boolean.TRUE.equals(account.get("is_email_verified")))
+                value = account.get("email");
+            if (name.equals("naver") && body.get("response") instanceof Map<?, ?> account) value = account.get("email");
+            if (!(value instanceof String text)) return null;
+            String normalized = kr.co.fitdining.api.auth.application.AuthService.normalizeEmail(text);
+            return kr.co.fitdining.api.auth.presentation.SignupValue.Validator.valid("email", normalized) ? normalized : null;
         }
 
         public String subject(Map<?, ?> body) {

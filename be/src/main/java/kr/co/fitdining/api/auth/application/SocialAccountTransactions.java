@@ -22,6 +22,7 @@ public class SocialAccountTransactions {
     private final AuthTransactions transactions;
     private final Clock clock;
     private final kr.co.fitdining.api.user.UserPreferencesRepository preferences;
+    private final AuthEmailVerificationRepository verifications;
     @Value("${auth.terms-version}")
     private String termsVersion;
 
@@ -33,12 +34,18 @@ public class SocialAccountTransactions {
 
     @Transactional
     public Issued signup(String provider, String subject, String nickname, kr.co.fitdining.api.user.Preferences answers,
-            kr.co.fitdining.api.onboarding.TasteProfileService.Profile profile) {
+            kr.co.fitdining.api.onboarding.TasteProfileService.Profile profile, String email, String tokenHash, boolean marketing) {
         locks.lockAddress("social:" + provider + ":" + subject);
         Issued existing = existing(provider, subject);
         if (existing != null) return existing;
         if (users.existsByNickname(nickname)) throw new SignupConflict("nickname");
-        AuthUser user = users.saveAndFlush(new AuthUser(UUID.randomUUID().toString(), nickname, clock.instant(), termsVersion));
+        if (email == null) throw EmailVerificationFailure.required();
+        var now = clock.instant();
+        if (tokenHash != null && verifications.consume(tokenHash, email, now) != 1) throw EmailVerificationFailure.required();
+        AuthUser created = new AuthUser(UUID.randomUUID().toString(), nickname, now, termsVersion);
+        created.changeContactEmail(email, now);
+        created.marketingConsent(marketing, now);
+        AuthUser user = users.saveAndFlush(created);
         accounts.saveAndFlush(new AuthSocialAccount(new AuthSocialAccount.Key(provider, subject), user.getId(), clock.instant()));
         if (answers != null) preferences.saveAndFlush(new kr.co.fitdining.api.user.UserPreferences(user.getId(), answers, clock.instant(), profile.features(), profile.tastes()));
         return transactions.login(user);

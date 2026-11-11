@@ -39,22 +39,22 @@ class SocialNicknamesTests {
         when(names.next(0)).thenReturn("first");
         when(names.next(1)).thenReturn("second");
         when(names.next(2)).thenReturn("third");
-        when(tx.signup("google", "id", "first", null, null)).thenThrow(new SignupConflict("nickname"));
-        when(tx.signup("google", "id", "second", null, null)).thenThrow(new DataIntegrityViolationException("race"));
+        when(tx.signup("google", "id", "first", null, null, "contact@example.com", null, false)).thenThrow(new SignupConflict("nickname"));
+        when(tx.signup("google", "id", "second", null, null, "contact@example.com", null, false)).thenThrow(new DataIntegrityViolationException("race"));
         when(users.existsByNickname("second")).thenReturn(true);
-        accounts.signup("google", "id");
-        verify(tx).signup("google", "id", "third", null, null);
+        accounts.signup("google", "id", null, "contact@example.com", null, false);
+        verify(tx).signup("google", "id", "third", null, null, "contact@example.com", null, false);
     }
 
     @Test void exhaustedRetries_areGeneralError() {
         var tx = mock(SocialAccountTransactions.class);
         var names = mock(SocialNicknames.class);
         when(names.next(anyInt())).thenReturn("name");
-        when(tx.signup(anyString(), anyString(), anyString(), isNull(), isNull())).thenThrow(new SignupConflict("nickname"));
+        when(tx.signup(anyString(), anyString(), anyString(), isNull(), isNull(), eq("contact@example.com"), isNull(), eq(false))).thenThrow(new SignupConflict("nickname"));
         var accounts = new SocialAccounts(tx, mock(kr.co.fitdining.api.onboarding.TasteProfileService.class), mock(AuthUserRepository.class), names);
-        assertThrows(IllegalStateException.class, () -> accounts.signup("google", "id"));
+        assertThrows(IllegalStateException.class, () -> accounts.signup("google", "id", null, "contact@example.com", null, false));
         verify(names).next(9);
-        verify(tx, times(10)).signup("google", "id", "name", null, null);
+        verify(tx, times(10)).signup("google", "id", "name", null, null, "contact@example.com", null, false);
     }
 
     @Test void unrelatedConflicts_areNotRetried() {
@@ -62,8 +62,8 @@ class SocialNicknamesTests {
         var names = mock(SocialNicknames.class);
         when(names.next(0)).thenReturn("name");
         var accounts = new SocialAccounts(tx, mock(kr.co.fitdining.api.onboarding.TasteProfileService.class), mock(AuthUserRepository.class), names);
-        when(tx.signup("google", "id", "name", null, null)).thenThrow(new DataIntegrityViolationException("other"));
-        assertThrows(DataIntegrityViolationException.class, () -> accounts.signup("google", "id"));
+        when(tx.signup("google", "id", "name", null, null, "contact@example.com", null, false)).thenThrow(new DataIntegrityViolationException("other"));
+        assertThrows(DataIntegrityViolationException.class, () -> accounts.signup("google", "id", null, "contact@example.com", null, false));
         verify(names, never()).next(1);
     }
     @Test void profileComputedOnceAcrossNicknameRetries_andForwardedToTransaction() {
@@ -76,10 +76,10 @@ class SocialNicknamesTests {
         when(profiles.compute(answers)).thenReturn(features);
         when(names.next(0)).thenReturn("first");
         when(names.next(1)).thenReturn("second");
-        when(tx.signup("google", "id", "first", answers, features)).thenThrow(new SignupConflict("nickname"));
-        new SocialAccounts(tx, profiles, mock(AuthUserRepository.class), names).signup("google", "id", answers);
+        when(tx.signup("google", "id", "first", answers, features, "contact@example.com", null, false)).thenThrow(new SignupConflict("nickname"));
+        new SocialAccounts(tx, profiles, mock(AuthUserRepository.class), names).signup("google", "id", answers, "contact@example.com", null, false);
         verify(profiles).compute(answers);
-        verify(tx).signup("google", "id", "second", answers, features);
+        verify(tx).signup("google", "id", "second", answers, features, "contact@example.com", null, false);
     }
 
 }

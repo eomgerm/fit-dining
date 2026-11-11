@@ -47,7 +47,9 @@ class PreferencesFlowTests extends PostgresTestSupport {
         assertEquals(user, profile.get("userId").asString());
         assertEquals(name, profile.get("nickname").asString());
         assertEquals("email", profile.get("loginMethod").asString());
-        assertEquals(3, profile.size());
+        assertEquals(name + "@example.com", profile.get("contactEmail").asString());
+        assertFalse(profile.get("marketingAgreed").asBoolean());
+        assertEquals(5, profile.size());
         assertEquals(401, request("GET", path, null, null).statusCode());
         assertEquals(403, request("GET", "/api/v1/users/other", null, token).statusCode());
         assertEquals(204, request("DELETE", path, null, token).statusCode());

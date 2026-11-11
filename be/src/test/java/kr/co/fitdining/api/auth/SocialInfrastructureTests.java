@@ -23,6 +23,49 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
 class SocialInfrastructureTests {
+    @Test void kakaoEmailScopeIsOptInAndLegacyCookiesRemainStrictlyValidated() {
+        for (String value : List.of("false", "true")) {
+            var provider = new SocialProviders(environment().withProperty("AUTH_KAKAO_EMAIL_SCOPE_ENABLED", value)).get("kakao");
+            assertEquals(value.equals("true") ? "account_email" : null, provider.scope());
+        }
+        assertNull(new SocialProviders(environment()).get("kakao").scope());
+        Clock clock = Clock.systemUTC();
+        var tokens = new SocialTokens(new NimbusTokenCodec(new byte[32], clock), clock);
+        String legacy = tokens.encode("social_signup", "kakao", "subject");
+        assertArrayEquals(new String[]{"kakao", "subject", ""}, tokens.decode(legacy, "social_signup", 3));
+        assertThrows(AuthFailure.class, () -> tokens.decode(legacy + "x", "social_signup", 3));
+        assertThrows(AuthFailure.class, () -> tokens.decode(tokens.encode("social_signup", "kakao"), "social_signup", 3));
+        assertThrows(AuthFailure.class, () -> tokens.decode(tokens.encode("social_signup", "kakao", "subject", "", "extra"), "social_signup", 3));
+        assertThrows(AuthFailure.class, () -> tokens.decode(tokens.encode("oauth_state", "kakao", "subject"), "social_signup", 3));
+        var expired = new SocialTokens(new NimbusTokenCodec(new byte[32], Clock.offset(clock, Duration.ofMinutes(11))), clock);
+        assertThrows(AuthFailure.class, () -> expired.decode(legacy, "social_signup", 3));
+    }
+
+    @Test
+    void providerEmailsRequireTrustedFlagsAndValidFormat() {
+        var providers = new SocialProviders(environment());
+        var google = providers.get("google");
+        assertEquals("openid email", google.scope());
+        assertEquals("person@example.com", google.email(Map.of("email", " Person@Example.com ", "email_verified", true)));
+        assertNull(google.email(Map.of("email", "person@example.com", "email_verified", false)));
+        assertNull(google.email(Map.of("email", "person@example.com")));
+        assertNull(google.email(Map.of("email", "invalid", "email_verified", true)));
+        var kakao = providers.get("kakao");
+        assertNull(kakao.scope());
+        assertEquals("person@example.com", kakao.email(Map.of("kakao_account", Map.of(
+                "email", "Person@Example.com", "is_email_valid", true, "is_email_verified", true))));
+        for (boolean valid : List.of(true, false)) for (boolean verified : List.of(true, false)) {
+            if (valid && verified) continue;
+            assertNull(kakao.email(Map.of("kakao_account", Map.of(
+                    "email", "person@example.com", "is_email_valid", valid, "is_email_verified", verified))));
+        }
+        assertNull(kakao.email(Map.of()));
+        var naver = providers.get("naver");
+        assertEquals("person@example.com", naver.email(Map.of("response", Map.of("email", "Person@Example.com"))));
+        assertNull(naver.email(Map.of("response", Map.of())));
+        assertNull(naver.email(Map.of("response", Map.of("email", "invalid"))));
+    }
+
     MockEnvironment environment() {
         var env = new MockEnvironment();
         for (String provider : List.of("GOOGLE", "KAKAO", "NAVER")) {
@@ -99,7 +142,7 @@ class SocialInfrastructureTests {
             .andRespond(withSuccess("{\"access_token\":\"provider-token\"}", MediaType.APPLICATION_JSON));
         server.expect(requestTo(provider.userinfo())).andExpect(header("Authorization", "Bearer provider-token"))
             .andRespond(withSuccess(profile, MediaType.APPLICATION_JSON));
-        assertEquals(expected, new SocialProviderClient(builder.build()).exchange(provider, "code", "state", "verifier", "http://localhost/callback"));
+        assertEquals(expected, new SocialProviderClient(builder.build()).exchange(provider, "code", "state", "verifier", "http://localhost/callback").subject());
         server.verify();
     }
 
@@ -117,7 +160,7 @@ class SocialInfrastructureTests {
             server.expect(requestTo(provider.userinfo())).andRespond(withServerError());
         } else server.expect(requestTo(provider.token())).andRespond(withBadRequest());
         assertThrows(RestClientResponseException.class,
-            () -> new SocialProviderClient(builder.build()).exchange(provider, "code", "state", "verifier", "http://localhost/callback"));
+            () -> new SocialProviderClient(builder.build()).exchange(provider, "code", "state", "verifier", "http://localhost/callback").subject());
         server.verify();
     }
 
@@ -134,7 +177,7 @@ class SocialInfrastructureTests {
         server.expect(requestTo(provider.userinfo()))
             .andRespond(withSuccess("{\"response\":{\"id\":\"naver-id\"}}", MediaType.APPLICATION_JSON));
         assertEquals("naver-id", new SocialProviderClient(builder.build()).exchange(
-            provider, "code", "naver-state", "unused-verifier", "http://localhost/callback"));
+            provider, "code", "naver-state", "unused-verifier", "http://localhost/callback").subject());
         server.verify();
     }
 }

@@ -27,7 +27,9 @@ public class SocialProviderClient {
         this.client = client;
     }
 
-    public String exchange(SocialProviders.Provider provider, String code, String state, String verifier, String redirect) {
+    public record Profile(String subject, String email) {}
+
+    public Profile exchange(SocialProviders.Provider provider, String code, String state, String verifier, String redirect) {
         var form = new LinkedMultiValueMap<String, String>();
         form.add("grant_type", "authorization_code");
         form.add("client_id", provider.clientId());
@@ -41,6 +43,6 @@ public class SocialProviderClient {
         var request = client.get().uri(provider.userinfo()).header("Authorization", "Bearer " + access);
         Map<?, ?> profile = request.retrieve().body(Map.class);
         if (profile == null) throw new IllegalArgumentException("Missing provider profile");
-        return provider.subject(profile);
+        return new Profile(provider.subject(profile), provider.email(profile));
     }
 }

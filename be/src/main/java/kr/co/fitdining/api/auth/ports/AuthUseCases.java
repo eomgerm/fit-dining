@@ -32,6 +32,8 @@ public interface AuthUseCases {
      * @throws kr.co.fitdining.api.auth.domain.AuthFailure if signup fails */
     Issued signup(String email, String password, String nickname, String verificationToken, String clientAddress,
             kr.co.fitdining.api.user.Preferences preferences);
+    Issued signup(String email, String password, String nickname, String verificationToken, String clientAddress,
+            kr.co.fitdining.api.user.Preferences preferences, boolean marketing);
     /** @param nickname public name @param email account email */
     record Profile(String nickname, String email) {}
 

@@ -45,7 +45,7 @@ class SocialApplicationTests extends PostgresTestSupport {
         auth.signup(email, "password123", taken, verifiedToken(email), "nickname-retry");
         Mockito.doReturn(taken).when(nicknames).next(0);
         Mockito.doReturn(available).when(nicknames).next(1);
-        var issued = accounts.signup("google", UUID.randomUUID().toString());
+        var issued = accounts.signup("google", UUID.randomUUID().toString(), null, "provider@example.com", null, false);
         assertEquals(available, issued.identity().nickname());
         Mockito.verify(nicknames).next(1);
     }
@@ -60,7 +60,7 @@ class SocialApplicationTests extends PostgresTestSupport {
             for (int i = 0; i < 4; i++) {
                 tasks.add(executor.submit(() -> {
                     gate.await();
-                    return accounts.signup("google", subject);
+                    return accounts.signup("google", subject, null, "provider@example.com", null, false);
                 }));
             }
 
@@ -76,9 +76,9 @@ class SocialApplicationTests extends PostgresTestSupport {
     @DisplayName("소셜계정_가입과 갱신 및 로그아웃_이메일 없이 기존 세션 사용")
     void socialSession_refreshLogoutAndProfile_worksWithoutEmail() {
         String subject = UUID.randomUUID().toString();
-        var session = accounts.signup("kakao", subject);
+        var session = accounts.signup("kakao", subject, null, "provider@example.com", null, false);
         assertNull(auth.me(session.identity().userId()).email());
-        assertEquals(session.identity().userId(), accounts.signup("kakao", subject).identity().userId());
+        assertEquals(session.identity().userId(), accounts.signup("kakao", subject, null, "provider@example.com", null, false).identity().userId());
         auth.logout(session.identity().userId());
         assertEquals(session.identity().userId(), accounts.existing("kakao", subject).identity().userId());
     }
@@ -86,7 +86,7 @@ class SocialApplicationTests extends PostgresTestSupport {
     @Test
     @DisplayName("마이그레이션_이메일과 암호 한쪽만 없음_CHECK 거부")
     void migration_halfCredentials_rejects() {
-        var session = accounts.signup("naver", UUID.randomUUID().toString());
+        var session = accounts.signup("naver", UUID.randomUUID().toString(), null, "provider@example.com", null, false);
         assertThrows(DataIntegrityViolationException.class, () -> jdbc.update("update auth_users set email='half@example.com' where id=?", session.identity().userId()));
         assertThrows(DataIntegrityViolationException.class, () -> jdbc.update("update auth_users set password_hash='half' where id=?", session.identity().userId()));
     }
@@ -95,7 +95,7 @@ class SocialApplicationTests extends PostgresTestSupport {
     @DisplayName("별도계정_같은 제공자 식별자와 이메일 문자열_이메일 계정에 연결 안 함")
     void signup_emailShapedIdentity_remainsIndependent() {
         var email = auth.signup("independent@example.com", "password123", "이메일독립", verifiedToken("independent@example.com"), "independent-address");
-        var social = accounts.signup("google", "independent@example.com");
+        var social = accounts.signup("google", "independent@example.com", null, "provider@example.com", null, false);
         assertNotEquals(email.identity().userId(), social.identity().userId());
         assertNull(auth.me(social.identity().userId()).email());
         assertEquals(email.identity().userId(), auth.login("independent@example.com", "password123", "independent-address").identity().userId());
@@ -125,7 +125,7 @@ class SocialApplicationTests extends PostgresTestSupport {
                     MockMvcRequestBuilders.post("/api/auth/social/signup").with(kr.co.fitdining.api.support.SessionTestSupport.csrf())
                     .header("Origin", "http://localhost:3000").contentType("application/json")
                     .content("{\"agreements\":{\"ageOver14\":true,\"terms\":true,\"privacy\":true}}")
-                    .cookie(new Cookie("fitdining_social", tokens.encode("social_signup", "google", subject))))
+                    .cookie(new Cookie("fitdining_social", tokens.encode("social_signup", "google", subject, "provider@example.com"))))
                     .andReturn().getResponse().getStatus()));
             }
             for (var task : tasks) assertEquals(201, task.get(20, TimeUnit.SECONDS));

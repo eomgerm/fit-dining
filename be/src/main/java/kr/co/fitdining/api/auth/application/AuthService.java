@@ -63,6 +63,12 @@ public class AuthService implements AuthUseCases {
     @Override
     public Issued signup(String email, String password, String nickname, String verificationToken, String address,
             kr.co.fitdining.api.user.Preferences preferences) {
+        return signup(email, password, nickname, verificationToken, address, preferences, false);
+    }
+
+    @Override
+    public Issued signup(String email, String password, String nickname, String verificationToken, String address,
+            kr.co.fitdining.api.user.Preferences preferences, boolean marketing) {
         if (!transactions.recordAttempt(address, "signup")) throw new AuthFailure("잠시 후 다시 시도해주세요.", 429);
         String normalized = normalizeEmail(email);
         String name = kr.co.fitdining.api.auth.domain.AuthText.strip(nickname);
@@ -71,7 +77,7 @@ public class AuthService implements AuthUseCases {
         String tokenHash = verifications.requireToken(normalized, verificationToken);
         String hash = passwords.hash(password);
         var profile = tasteProfiles.compute(preferences);
-        try { return transactions.signup(normalized, name, hash, tokenHash, preferences, profile); }
+        try { return transactions.signup(normalized, name, hash, tokenHash, preferences, profile, marketing); }
         catch (org.springframework.dao.DataIntegrityViolationException conflict) {
             if (users.findByEmail(normalized).isPresent()) throw new kr.co.fitdining.api.auth.domain.SignupConflict("email");
             if (users.existsByNickname(name)) throw new kr.co.fitdining.api.auth.domain.SignupConflict("nickname");

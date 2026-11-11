@@ -8,6 +8,32 @@ import org.springframework.dao.DataAccessException;
 
 @RestControllerAdvice(basePackageClasses = UserController.class)
 public class UserExceptionHandler {
+    @ExceptionHandler(org.springframework.web.bind.MethodArgumentNotValidException.class)
+    public ResponseEntity<ProblemDetail> invalidFields(org.springframework.web.bind.MethodArgumentNotValidException failure) {
+        var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "입력 형식을 확인해주세요.");
+        problem.setProperty("errors", failure.getBindingResult().getFieldErrors().stream()
+                .map(error -> java.util.Map.of("field", error.getField(), "reason",
+                        error.getDefaultMessage() == null ? "입력 형식을 확인해 주세요." : error.getDefaultMessage())).toList());
+        return response(problem);
+    }
+
+    @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
+    public ResponseEntity<ProblemDetail> malformed(org.springframework.http.converter.HttpMessageNotReadableException failure) {
+        var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "입력 형식을 확인해주세요.");
+        StringBuilder field = new StringBuilder();
+        if (failure.getCause() instanceof tools.jackson.core.JacksonException mapping) {
+            for (var part : mapping.getPath()) {
+                if (part.getPropertyName() != null) {
+                    if (!field.isEmpty()) field.append('.');
+                    field.append(part.getPropertyName());
+                } else if (part.getIndex() >= 0) field.append('[').append(part.getIndex()).append(']');
+            }
+        }
+        problem.setProperty("errors", java.util.List.of(java.util.Map.of(
+                "field", field.isEmpty() ? "body" : field.toString(), "reason", "입력 형식을 확인해 주세요.")));
+        return response(problem);
+    }
+
     @ExceptionHandler(AuthFailure.class)
     public ResponseEntity<ProblemDetail> auth(AuthFailure failure) {
         var problem = ProblemDetail.forStatusAndDetail(HttpStatusCode.valueOf(failure.status()),
