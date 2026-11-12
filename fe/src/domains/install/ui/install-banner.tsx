@@ -39,8 +39,9 @@ export function useHideInstallBanner(active: boolean) {
   }, [active]);
 }
 
-// 4-01b 홈 화면 추가 배너. 1-01a 모달을 본 뒤로 4-01 첫 화면부터의 브라우저 화면 맨 위에 띄운다.
-// 페이지 배치를 밀지 않고 위에 떠 있어, 닫기 전까지는 화면 맨 위 48px(상단 바·지도 버튼)를 덮는다
+// 4-01b 홈 화면 추가 배너. 1-01a 모달을 본 뒤로 4-01 첫 화면부터의 브라우저 화면 맨 위(safe area 아래)에 띄운다.
+// 페이지 배치를 밀지 않고 위에 떠 있어, 그 아래 48px를 덮는다. 보이는 동안 <html>에 data-install-banner를 달아
+// 지도 위 버튼 같은 위쪽 요소가 CSS(globals.css의 top-safe-banner-*)로 배너 아래에 서게 한다
 export function InstallBanner() {
   const pathname = usePathname();
   const { available, start } = useInstall();
@@ -54,17 +55,23 @@ export function InstallBanner() {
     () => hidden > 0,
     () => true,
   );
-  if (
-    !available ||
-    !waiting ||
-    hiddenByScreen ||
-    beforeHome.some((path) => pathname.startsWith(path))
-  )
-    return null;
+  const visible =
+    available &&
+    waiting &&
+    !hiddenByScreen &&
+    !beforeHome.some((path) => pathname.startsWith(path));
+  // 그리기 전에 달아야 배너가 뜨는 프레임에 위쪽 요소도 같이 내려간다
+  useLayoutEffect(() => {
+    if (!visible) return;
+    document.documentElement.setAttribute("data-install-banner", "");
+    return () =>
+      document.documentElement.removeAttribute("data-install-banner");
+  }, [visible]);
+  if (!visible) return null;
   return (
     <aside
       aria-label="홈 화면 추가 안내"
-      className="fixed inset-x-0 top-0 flex h-12 items-center gap-2 bg-ink pl-3 text-label-md text-surface"
+      className="fixed inset-x-0 top-safe-0 flex h-12 items-center gap-2 bg-ink pl-3 text-label-md text-surface"
     >
       <Image
         src="/icons/icon-192.png"

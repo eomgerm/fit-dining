@@ -17,7 +17,7 @@ export function SearchScreenSkeleton() {
     <main className="relative h-viewport overflow-hidden">
       <StatusBarColor />
       <div aria-hidden className="absolute inset-0 bg-map-bg" />
-      <div className="absolute top-safe-4 right-4 flex flex-col gap-2">
+      <div className="absolute top-safe-banner-4 right-4 flex flex-col gap-2">
         <Fab label="저장한 장소">
           <BookmarkIcon className="text-icon" />
         </Fab>

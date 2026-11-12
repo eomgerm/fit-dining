@@ -40,6 +40,10 @@ afterEach(() => {
 const banner = () =>
   screen.queryByRole("complementary", { name: "홈 화면 추가 안내" });
 
+// 배너가 보이는 동안 <html>에 달리는 표시. 지도 위 버튼 같은 위쪽 요소가 CSS로 이 표시를 보고 비켜 선다
+const flagged = () =>
+  document.documentElement.hasAttribute("data-install-banner");
+
 describe("홈 화면 추가 배너", () => {
   it("모달을 보기 전에는 띄우지 않는다", () => {
     render(<InstallBanner />);
@@ -118,6 +122,61 @@ describe("홈 화면 추가 배너", () => {
       </>,
     );
     expect(banner()).not.toBeNull();
+  });
+
+  it("배너가 보이는 동안 <html>에 표시하고 닫으면 지운다", () => {
+    markIntroSeen();
+    render(<InstallBanner />);
+    expect(flagged()).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "배너 닫기" }));
+    expect(flagged()).toBe(false);
+  });
+
+  it("[추가하기]를 눌러 숨겨도 표시를 지운다", () => {
+    markIntroSeen();
+    render(<InstallBanner />);
+    fireEvent.click(screen.getByRole("button", { name: "추가하기" }));
+    expect(flagged()).toBe(false);
+  });
+
+  it("배너가 없으면 표시도 없다", () => {
+    render(<InstallBanner />);
+    expect(flagged()).toBe(false);
+    cleanup();
+    markIntroSeen();
+    mocks.pathname = "/login";
+    render(<InstallBanner />);
+    expect(flagged()).toBe(false);
+  });
+
+  it("최초화면·온보딩이 숨기는 동안에는 표시하지 않고 끝나면 표시한다", () => {
+    markIntroSeen();
+    function Onboarding({ active }: { active: boolean }) {
+      useHideInstallBanner(active);
+      return null;
+    }
+    const view = render(
+      <>
+        <Onboarding active />
+        <InstallBanner />
+      </>,
+    );
+    expect(flagged()).toBe(false);
+    view.rerender(
+      <>
+        <Onboarding active={false} />
+        <InstallBanner />
+      </>,
+    );
+    expect(flagged()).toBe(true);
+  });
+
+  it("배너 화면이 사라지면 표시도 지운다", () => {
+    markIntroSeen();
+    const view = render(<InstallBanner />);
+    expect(flagged()).toBe(true);
+    view.unmount();
+    expect(flagged()).toBe(false);
   });
 
   it("[추가하기]는 설치 창이 없으면 가이드로 간다", () => {

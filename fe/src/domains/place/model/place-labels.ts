@@ -85,3 +85,12 @@ export function missingEvidenceNotes(items: ScoreItem[]) {
         `이 장소는 ‘${label}’ ${source === "PREFERENCE" ? "취향을" : "요청을"} 확인할 근거가 부족해요`,
     );
 }
+
+// 카드 태그 중 이번 요청이나 취향에서 맞은 조건의 문구. AI는 맞은 조건 태그를 근거 항목(scoreItems)과
+// 같은 문구로 보내고 채운 태그(장소 특징, 업종·역 이름)는 다른 문구라, 문구가 같으면 강조색을 칠한다.
+// 태그 순서와 개수는 labels가 정하므로 여기서 바꾸지 않는다(spec 55번, ai/docs/comparison/api.md)
+export function matchedLabels(items: ScoreItem[]) {
+  return new Set(
+    items.filter(({ matched }) => matched).map(({ label }) => label),
+  );
+}

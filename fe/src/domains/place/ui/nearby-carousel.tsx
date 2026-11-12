@@ -4,6 +4,7 @@ import { cn } from "@/shared/lib/cn";
 import { Carousel } from "@/shared/ui/display/carousel";
 import { Tag } from "@/shared/ui/display/tag";
 
+import { matchedLabels } from "../model/place-labels";
 import type { LatLng, PlaceCard } from "../model/place-types";
 import { FitScore } from "./fit-score";
 import { PlaceMeta, PlacePhoto, RankBadge } from "./place-parts";
@@ -84,7 +85,9 @@ function NearbyCard({
   here?: LatLng;
   onPress: () => void;
 }) {
-  const { place, score, labels, openStatus } = card;
+  const { place, score, labels, openStatus, scoreItems } = card;
+  // 검색 결과 카드와 같은 규칙이다. 비회원은 scoreItems가 비어 태그가 대부분 회색이다(spec 55번)
+  const matched = matchedLabels(scoreItems);
   return (
     <button
       type="button"
@@ -111,8 +114,8 @@ function NearbyCard({
           {score !== undefined && <FitScore score={score} />}
         </div>
         <div className="flex flex-wrap gap-1">
-          {labels.map((label, labelIndex) => (
-            <Tag key={label} variant={labelIndex === 0 ? "match" : "default"}>
+          {labels.map((label) => (
+            <Tag key={label} variant={matched.has(label) ? "match" : "default"}>
               {label}
             </Tag>
           ))}

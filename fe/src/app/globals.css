@@ -305,6 +305,26 @@
 @utility top-safe-* {
   top: calc(--spacing(--value(number)) + env(safe-area-inset-top));
 }
+/*
+ * 홈 화면 추가 배너(InstallBanner)는 화면 맨 위(safe area 바로 아래)에 떠서 아래를 밀지 않는다. 보이는 동안 <html>에
+ * data-install-banner가 달려 --install-banner-height가 배너 높이(h-12)가 되고, 아니면 0이다.
+ * top-safe-banner-* = 상태바 + max(원래 간격, 배너 높이 + 8px). 배너가 없으면 top-safe-*와 같다
+ */
+:root {
+  --install-banner-height: 0px;
+}
+:root[data-install-banner] {
+  --install-banner-height: --spacing(12);
+}
+@utility top-safe-banner-* {
+  top: calc(
+    env(safe-area-inset-top) +
+      max(
+        --spacing(--value(number)),
+        var(--install-banner-height) + --spacing(2)
+      )
+  );
+}
 @utility pb-safe-* {
   padding-bottom: max(--spacing(--value(number)), env(safe-area-inset-bottom));
 }

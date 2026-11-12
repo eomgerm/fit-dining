@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { facilityIconGroup, missingEvidenceNotes } from "./place-labels";
+import {
+  facilityIconGroup,
+  matchedLabels,
+  missingEvidenceNotes,
+} from "./place-labels";
 
 describe("facilityIconGroup", () => {
   it.each([
@@ -68,5 +72,28 @@ describe("missingEvidenceNotes", () => {
         { source: "REQUEST", label: "조용한", matched: true, evidenceCount: 3 },
       ]),
     ).toEqual([]);
+  });
+});
+
+describe("matchedLabels", () => {
+  const item = (label: string, matched: boolean) => ({
+    source: "PREFERENCE" as const,
+    label,
+    matched,
+    evidenceCount: 2,
+  });
+
+  it("matched인 항목의 문구만 모은다", () => {
+    const labels = matchedLabels([
+      item("조용해요", true),
+      item("넓어요", false),
+    ]);
+
+    expect(labels.has("조용해요")).toBe(true);
+    expect(labels.has("넓어요")).toBe(false);
+  });
+
+  it("항목이 없으면 비어 있다", () => {
+    expect(matchedLabels([]).size).toBe(0);
   });
 });
