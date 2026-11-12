@@ -361,6 +361,35 @@ describe("추천받기와 결과", () => {
     expect(api.fetchResult).toHaveBeenCalledWith(CODE, expect.anything());
   });
 
+  it("다른 곳에는 있는 모임 점수가 없는 곳은 맨 뒤의 정보가 적은 곳 묶음에 보인다", async () => {
+    api.fetchSnapshot.mockResolvedValue(resultSnapshot());
+    api.fetchResult.mockResolvedValue({
+      ...RESULT,
+      items: [
+        ...RESULT.items,
+        {
+          rank: 3,
+          place: { id: 12, name: "골목 식당", categoryGroup: "RESTAURANT" },
+          group: "UNSCORED",
+          fit: { kind: "MOSTLY", fitProfileIds: [1, 2] },
+          reasons: [],
+        },
+      ],
+    });
+    mount();
+    expect(await screen.findByText("아직 정보가 적은 곳")).toBeTruthy();
+    const headings = screen
+      .getAllByRole("heading", { level: 2 })
+      .map((heading) => heading.textContent);
+    expect(headings).toEqual([
+      "모두에게 잘 맞는 곳",
+      "취향이 조금 갈리는 곳",
+      "아직 정보가 적은 곳",
+    ]);
+    const last = screen.getByText("아직 정보가 적은 곳").closest("section");
+    expect(last?.textContent).toContain("골목 식당");
+  });
+
   it("모임 점수가 없으면 핏 점수와 그 설명을 보이지 않는다", async () => {
     api.fetchSnapshot.mockResolvedValue(resultSnapshot());
     api.fetchResult.mockResolvedValue({

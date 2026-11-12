@@ -373,6 +373,11 @@ export function ResultView({
               items={listed.filter((item) => item.group === "SOME_MISFIT")}
               render={card}
             />
+            <ResultGroup
+              title="아직 정보가 적은 곳"
+              items={listed.filter((item) => item.group === "UNSCORED")}
+              render={card}
+            />
           </>
         ) : (
           <EmptyState

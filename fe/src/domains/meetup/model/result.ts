@@ -40,7 +40,8 @@ export type MeetupResultItem = {
   openStatus?: OpenStatus;
   // 모임 점수. 점수를 매길 조건이 없으면 없다
   score?: number;
-  group: "ALL_FIT" | "SOME_MISFIT";
+  // UNSCORED: 다른 곳에는 모임 점수가 있는데 이곳에는 없어 맨 뒤에 둔 곳
+  group: "ALL_FIT" | "SOME_MISFIT" | "UNSCORED";
   fit: {
     kind: FitKind;
     fitProfileIds: number[];
