@@ -310,8 +310,9 @@ class TasteRefreshBatchTests extends PostgresTestSupport {
 
     @Test @DisplayName("묶음_리뷰 문장 임베딩 실패_코드 취향만 바꾸고 저장된 묶음과 갱신 시각을 둔다")
     void embeddingFailure_keepsStoredBundles() {
+        // jsonb가 키를 길이 순, 같으면 글자 순으로 다시 늘어놓으므로 그 순서로 적는다(vector가 weight보다 앞)
         String stored = "[{\"code\": null, \"like\": true, \"text\": \"창가 자리\", \"layer\": null, "
-                + "\"weight\": 1.0, \"vector\": [0.5], \"category\": null}]";
+                + "\"vector\": [0.5], \"weight\": 1.0, \"category\": null}]";
         user("bundled", Priority.COZY, stored);
         review("bundled", 900001, "2026-10-23T03:00:00Z", "QUIET_GOOD");
         embeddingFails = true;
