@@ -361,6 +361,13 @@ export function requestTitle(entries: HistoryEntry[], id?: string) {
   return entry?.sentence;
 }
 
+// 상세 추천 이유에 보낼 그 검색의 요청 문장. 새 검색 문장 뒤에 후속 입력을 쉼표로 잇고 BE 상한 200자에서 자른다
+export function searchSentence(entries: HistoryEntry[], id?: string) {
+  const title = requestTitle(entries, id);
+  if (!title) return undefined;
+  return [title, ...followUpChips(entries, id)].join(", ").slice(0, 200);
+}
+
 // 지금 보는 요청에서 기준 요청을 따라 새 검색까지 거슬러 올라가며 만난 후속 입력(오래된 순서)
 export function followUpChips(entries: HistoryEntry[], viewingId?: string) {
   const byId = new Map(entries.map((entry) => [entry.id, entry]));

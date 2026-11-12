@@ -22,6 +22,7 @@ import type {
   PlaceCard,
   PlaceDetail,
   PlaceFit,
+  PlaceReasonsResponse,
 } from "../model/place-types";
 import { createSearchStore, type SearchStore } from "../model/search-store";
 import {
@@ -127,10 +128,28 @@ const card: PlaceCard = {
   openStatus: "OPEN",
   reasons: [
     {
-      title: "조용히 대화하기 좋다는 리뷰가 많아요",
-      tags: [{ source: "REQUEST", label: "조용해요" }],
-      quote: "대화하기 좋아요",
-      quoteSource: "앱 리뷰",
+      source: "REQUEST",
+      code: "QUIET",
+      label: "조용해요",
+      value: 0.95,
+      fromReviews: true,
+      fallbackTitle: "카페 중 손꼽히게 조용해요",
+    },
+    {
+      source: "PREFERENCE",
+      code: "COZY",
+      label: "아늑해요",
+      value: 0.8,
+      fromReviews: true,
+      fallbackTitle: "아늑한 편이에요",
+    },
+    {
+      source: "PREFERENCE",
+      code: "PARKING",
+      label: "주차할 수 있어요",
+      value: 1,
+      fromReviews: false,
+      fallbackTitle: "주차할 수 있어요",
     },
   ],
   scoreItems: [
@@ -145,8 +164,43 @@ const menu = (overrides: Partial<Menu> & { name: string }): Menu => ({
   ...overrides,
 });
 
+// 추천 이유 API 응답. 카드 reasons와 같은 순서다
+const reasonsReply: PlaceReasonsResponse = {
+  reasons: [
+    {
+      source: "REQUEST",
+      label: "조용해요",
+      title: "차분해서 오래 머물기 좋아요",
+      reviews: [],
+      personaSummary: "혼자 책 읽으러 오는 손님",
+    },
+    {
+      source: "PREFERENCE",
+      label: "아늑해요",
+      title: "평소 좋아하시는 아늑함이 있어요",
+      reviews: [
+        {
+          nickname: "밥친구",
+          visitedAt: "2026-11-01",
+          tag: "아늑해서 좋았어요",
+        },
+        { visitedAt: "2026-10-20", tag: "아늑해서 좋았어요" },
+      ],
+    },
+    {
+      source: "PREFERENCE",
+      label: "주차할 수 있어요",
+      title: "주차할 수 있어요",
+      reviews: [],
+    },
+  ],
+};
+
 // 테스트마다 상세 응답을 바꿀 수 있다. 기본은 detail이다
 let served: PlaceDetail = detail;
+// 추천 이유 API 응답. 함수면 요청마다 부른다
+let reasonsServed: () => Response | Promise<Response> = () =>
+  Response.json(reasonsReply);
 function setDetail(overrides: Partial<PlaceDetail>) {
   served = { ...detail, ...overrides };
 }
@@ -158,11 +212,12 @@ beforeEach(() => {
   served = detail;
   stores.current = createSearchStore();
   config.load.mockClear();
-  fetchMock = vi.fn<typeof fetch>(async (input) =>
-    String(input) === "/api/v1/places/1"
-      ? Response.json(served)
-      : Response.json({ status: 404 }, { status: 404 }),
-  );
+  reasonsServed = () => Response.json(reasonsReply);
+  fetchMock = vi.fn<typeof fetch>(async (input) => {
+    if (String(input) === "/api/v1/places/1") return Response.json(served);
+    if (String(input) === "/api/v1/places/1/reasons") return reasonsServed();
+    return Response.json({ status: 404 }, { status: 404 });
+  });
   vi.stubGlobal("fetch", fetchMock);
 });
 
@@ -249,7 +304,7 @@ describe("PlaceDetailScreen", () => {
     ).toBeTruthy();
   });
 
-  it("검색 카드가 있으면 핏 점수, ⓘ 시트, AI 추천 이유, 주의점을 보여 준다", async () => {
+  it("검색 카드가 있으면 핏 점수, ⓘ 시트, AI 추천 이유를 보여 주고 주의점과 근거 부족 안내는 없다", async () => {
     stores.current.recordCards([card]);
     renderDetail();
 
@@ -257,14 +312,9 @@ describe("PlaceDetailScreen", () => {
     expect(screen.getByText("84")).toBeTruthy();
     expect(screen.queryByText("84%")).toBeNull();
     expect(screen.getByText("AI 추천 이유")).toBeTruthy();
-    expect(
-      screen.getByText("조용히 대화하기 좋다는 리뷰가 많아요"),
-    ).toBeTruthy();
-    expect(screen.getByText("주말 오후에는 대기가 길어요")).toBeTruthy();
-    // 점수에 넣지 못한 항목의 근거 부족 안내는 숨긴다(D-105)
-    expect(
-      screen.queryByText("이 장소는 ‘가성비’ 취향을 확인할 근거가 부족해요"),
-    ).toBeNull();
+    expect(await screen.findByText("차분해서 오래 머물기 좋아요")).toBeTruthy();
+    expect(screen.queryByText("주말 오후에는 대기가 길어요")).toBeNull();
+    expect(screen.queryByText(/근거가 부족해요/)).toBeNull();
 
     fireEvent.click(
       screen.getByRole("button", { name: "핏 점수 84, 설명 보기" }),
@@ -287,6 +337,33 @@ describe("PlaceDetailScreen", () => {
     expect(screen.queryByText("주말 오후에는 대기가 길어요")).toBeNull();
   });
 
+  it("모임에서 연 상세는 모임 결과의 태그·인용·주의점을 그대로 보이고 추천 이유 API를 부르지 않는다", async () => {
+    stores.current.recordCards([card]);
+    renderDetail(undefined, createQueryClient(), {
+      score: 72,
+      caution: "주말에는 단체석이 일찍 차요",
+      reasons: [
+        {
+          title: "모임하기 좋다는 리뷰가 많아요",
+          tags: [{ source: "REQUEST", label: "모임하기 좋아요" }],
+          quote: "여럿이 가도 자리가 넉넉했어요",
+          quoteSource: "앱 리뷰",
+        },
+      ],
+    });
+
+    await screen.findByRole("heading", { name: "카페 온담" });
+    expect(screen.getByText("요청 · 모임하기 좋아요")).toBeTruthy();
+    expect(screen.getByText(/여럿이 가도 자리가 넉넉했어요/)).toBeTruthy();
+    expect(screen.getByText("앱 리뷰")).toBeTruthy();
+    expect(screen.getByText("주말에는 단체석이 일찍 차요")).toBeTruthy();
+    expect(
+      fetchMock.mock.calls.some(
+        ([input]) => String(input) === "/api/v1/places/1/reasons",
+      ),
+    ).toBe(false);
+  });
+
   it("밖에서 넘긴 점수가 없으면 검색 카드가 있어도 핏 점수를 보이지 않는다", async () => {
     stores.current.recordCards([card]);
     renderDetail(undefined, createQueryClient(), { reasons: [] });
@@ -304,11 +381,20 @@ describe("PlaceDetailScreen", () => {
         ...card,
         reasons: [
           {
-            title: "조용해요",
-            tags: [
-              { source: "PREFERENCE", label: "조용한" },
-              { source: "REQUEST", label: "디저트" },
-            ],
+            source: "PREFERENCE",
+            code: "QUIET",
+            label: "조용한",
+            value: 0.9,
+            fromReviews: true,
+            fallbackTitle: "조용한 편이에요",
+          },
+          {
+            source: "REQUEST",
+            code: "PRETTY_SPACE",
+            label: "디저트",
+            value: 0.9,
+            fromReviews: true,
+            fallbackTitle: "공간이 예쁜 편이에요",
           },
         ],
       },
@@ -326,14 +412,71 @@ describe("PlaceDetailScreen", () => {
     expect(isMatch("조용한")).toBe(false);
   });
 
-  it("추천 이유 인용은 주황 선에 진한 글자다", async () => {
+  it("추천 이유는 처음에 모두 접혀 있고, 펼치면 앱 리뷰나 페르소나 요약을 보이며 근거가 없는 줄은 펼칠 수 없다", async () => {
     stores.current.recordCards([card]);
     renderDetail();
 
-    await screen.findByRole("heading", { name: "카페 온담" });
-    const quote = screen.getByText(/대화하기 좋아요/).closest("blockquote")!;
-    expect(quote.classList.contains("border-primary-disabled")).toBe(true);
-    expect(quote.classList.contains("text-ink")).toBe(true);
+    const quiet = await screen.findByRole("button", {
+      name: /차분해서 오래 머물기 좋아요/,
+    });
+    const cozy = screen.getByRole("button", {
+      name: /평소 좋아하시는 아늑함이 있어요/,
+    });
+    expect(quiet.getAttribute("aria-expanded")).toBe("false");
+    expect(cozy.getAttribute("aria-expanded")).toBe("false");
+    // 출처는 글자로 구분한다
+    expect(within(quiet).getByText("요청 · 조용해요")).toBeTruthy();
+    expect(within(cozy).getByText("내 취향 · 아늑해요")).toBeTruthy();
+    // 근거가 없는 줄은 버튼이 아니다
+    const parking = screen.getByText("내 취향 · 주차할 수 있어요");
+    expect(parking.closest("button")).toBeNull();
+
+    fireEvent.click(cozy);
+    expect(cozy.getAttribute("aria-expanded")).toBe("true");
+    expect(await screen.findByText("밥친구")).toBeTruthy();
+    expect(screen.getByText("11월 1일 방문")).toBeTruthy();
+    expect(screen.getByText("탈퇴한 회원")).toBeTruthy();
+    expect(screen.getAllByText("아늑해서 좋았어요")).toHaveLength(2);
+
+    fireEvent.click(quiet);
+    expect(await screen.findByText("이런 손님이 많이 찾아요")).toBeTruthy();
+    expect(screen.getByText("혼자 책 읽으러 오는 손님")).toBeTruthy();
+    // 둘 다 펼쳐 둘 수 있다
+    expect(cozy.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("추천 이유 API에 카드의 이유를 그대로 보내고, 어느 요청의 카드인지 모르면 요청 문장은 빼고 보낸다", async () => {
+    stores.current.recordCards([card]);
+    renderDetail();
+
+    await screen.findByText("차분해서 오래 머물기 좋아요");
+    const sent = fetchMock.mock.calls.find(
+      ([input]) => String(input) === "/api/v1/places/1/reasons",
+    )!;
+    expect(sent[1]?.method).toBe("POST");
+    expect(JSON.parse(String(sent[1]?.body))).toEqual({
+      reasons: card.reasons,
+    });
+  });
+
+  it("추천 이유를 받는 동안 줄 수만큼 뼈대를 보인다", async () => {
+    reasonsServed = () => new Promise<Response>(() => {});
+    stores.current.recordCards([card]);
+    renderDetail();
+
+    expect(await screen.findByText("추천 이유를 불러오는 중")).toBeTruthy();
+    expect(screen.getByText("AI 추천 이유")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /조용/ })).toBeNull();
+  });
+
+  it("추천 이유 API가 실패하면 카드의 대체 제목을 펼칠 수 없는 줄로 보인다", async () => {
+    reasonsServed = () => Response.json({ status: 404 }, { status: 404 });
+    stores.current.recordCards([card]);
+    renderDetail();
+
+    const title = await screen.findByText("카페 중 손꼽히게 조용해요");
+    expect(title.closest("button")).toBeNull();
+    expect(screen.getByText("아늑한 편이에요")).toBeTruthy();
   });
 
   it("홈 탭 메뉴 미리보기는 대표 메뉴를 먼저, 나머지는 원래 순서로 6개까지 보인다", async () => {
@@ -386,7 +529,7 @@ describe("PlaceDetailScreen", () => {
     expect(screen.queryByText("매주 일요일 휴무")).toBeNull();
   });
 
-  it("검색 카드에 점수가 없으면 핏 점수를 숨기고 나머지 카드 정보는 그대로 보여 준다", async () => {
+  it("검색 카드에 점수도 이유도 없으면 핏 점수와 추천 이유를 숨기고 주의점도 보이지 않는다", async () => {
     stores.current.recordCards([
       { ...card, score: undefined, reasons: [], scoreItems: [] },
     ]);
@@ -396,7 +539,7 @@ describe("PlaceDetailScreen", () => {
     expect(screen.queryByText("핏 점수")).toBeNull();
     expect(screen.queryByRole("button", { name: /핏 점수/ })).toBeNull();
     expect(screen.queryByText("AI 추천 이유")).toBeNull();
-    expect(screen.getByText("주말 오후에는 대기가 길어요")).toBeTruthy();
+    expect(screen.queryByText("주말 오후에는 대기가 길어요")).toBeNull();
   });
 
   it("BE가 점수를 생략한 카드(주의점도 이유도 없음)면 핏 점수와 추천 이유 영역을 모두 숨긴다", async () => {

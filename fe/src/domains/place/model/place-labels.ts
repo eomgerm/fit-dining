@@ -71,19 +71,15 @@ export const EVIDENCE_LABELS: Record<EvidenceSource, string> = {
   PREFERENCE: "내 취향",
 };
 
-// "요청 · 조용해요"
-export function evidenceText(source: EvidenceSource, label: string) {
-  return `${EVIDENCE_LABELS[source]} · ${label}`;
+// 추천 이유 근거 리뷰의 작성자. 리뷰 탭처럼 탈퇴한 회원이면 닉네임이 없다(review D-38)
+export function reasonAuthor({ nickname }: { nickname?: string }) {
+  return nickname ?? "탈퇴한 회원";
 }
 
-// 홈 탭 추천 이유 아래의 근거 부족 안내. 점수에 넣지 못한(matched가 아닌) 항목마다 하나다
-export function missingEvidenceNotes(items: ScoreItem[]) {
-  return items
-    .filter(({ matched }) => !matched)
-    .map(
-      ({ source, label }) =>
-        `이 장소는 ‘${label}’ ${source === "PREFERENCE" ? "취향을" : "요청을"} 확인할 근거가 부족해요`,
-    );
+// "11월 1일 방문". 리뷰 탭과 같은 모양이다. visitedAt은 yyyy-MM-dd다
+export function visitedDay(visitedAt: string) {
+  const [, month, day] = visitedAt.split("-").map(Number);
+  return `${month}월 ${day}일 방문`;
 }
 
 // 카드 태그 중 이번 요청이나 취향에서 맞은 조건의 문구. AI는 맞은 조건 태그를 근거 항목(scoreItems)과

@@ -9,7 +9,6 @@ import {
 
 import { cn } from "@/shared/lib/cn";
 import { Note } from "@/shared/ui/display/note";
-import { Tag } from "@/shared/ui/display/tag";
 import type { IconProps } from "@/shared/ui/icon/icon";
 import { BabyIcon } from "@/shared/ui/icon/icons/baby";
 import { CalendarIcon } from "@/shared/ui/icon/icons/calendar";
@@ -42,9 +41,7 @@ import {
   todayNotice,
 } from "../model/opening-hours";
 import {
-  evidenceText,
   facilityIconGroup,
-  // missingEvidenceNotes, // 근거 부족 안내를 잠시 숨긴다(D-105)
   OPEN_STATUS_LABELS,
   type FacilityIconGroup,
 } from "../model/place-labels";
@@ -53,12 +50,14 @@ import type {
   Hours,
   LatLng,
   Menu,
+  PlaceCard,
   PlaceDetail,
   PlaceFit,
 } from "../model/place-types";
 import { MenuCard, MenuRow } from "./menu-card";
 import { OpenStatusText } from "./place-parts";
 import { PlaceMap } from "./place-map";
+import { GivenReasons, PlaceReasons } from "./place-reasons";
 
 const MENU_PREVIEW_COUNT = 6;
 
@@ -68,17 +67,24 @@ type TabProps = {
 };
 
 // 홈 탭(6-01, 와이어프레임 Detail). 섹션 사이는 두꺼운 띠로 나눈다.
-// 추천 이유, 근거 부족 안내, 주의점은 검색 카드가 있을 때만 보인다
+// 추천 이유는 검색 카드가 있을 때만 보인다. 근거 부족 안내와 주의점은 두지 않는다(5단계 상세 추천 이유).
+// 모임에서 열었으면 모임 결과가 준 추천 이유와 주의점을 그대로 보인다(모임 D-22)
 export function HomeTab({
   detail,
   card,
+  sentence,
+  fit,
   here,
   now,
   onShowInfo,
   onShowMenu,
   reviews,
 }: TabProps & {
-  card?: PlaceFit;
+  card?: PlaceCard;
+  // 카드를 받은 검색의 요청 문장. 추천 이유 API에 보낸다
+  sentence?: string;
+  // 모임에서 연 상세면 모임 결과가 준 점수·추천 이유·주의점이다(모임 D-22)
+  fit?: PlaceFit;
   now: Date;
   onShowInfo: () => void;
   onShowMenu: () => void;
@@ -87,59 +93,21 @@ export function HomeTab({
 }) {
   const [weekOpen, setWeekOpen] = useState(false);
   const today = todayHours(detail.hours, now);
-  const reasons = card?.reasons ?? [];
-  // 근거 부족 안내는 잠시 숨긴다. 좋은 이유만 보인다(D-105)
-  // const notes = card ? missingEvidenceNotes(card.scoreItems) : [];
 
   return (
     <div className="flex flex-col">
-      {(reasons.length > 0 || card?.caution) && (
+      {card && card.reasons.length > 0 && (
         <Section>
-          {reasons.length > 0 && (
-            <SectionHeader title="AI 추천 이유" className="mb-3" />
-          )}
-          <div className="flex flex-col gap-2.5">
-            {reasons.length > 0 && (
-              <ul className="flex flex-col gap-2.5">
-                {reasons.map((reason) => (
-                  <li
-                    key={reason.title}
-                    className="flex flex-col gap-2.5 rounded-lg bg-surface p-4 ring-1 ring-line ring-inset"
-                  >
-                    <p className="text-title-sm text-ink">{reason.title}</p>
-                    <div className="flex flex-wrap gap-1">
-                      {reason.tags.map((tag) => (
-                        <Tag
-                          key={`${tag.source}-${tag.label}`}
-                          variant={
-                            tag.source === "PREFERENCE" ? "match" : "default"
-                          }
-                        >
-                          {evidenceText(tag.source, tag.label)}
-                        </Tag>
-                      ))}
-                    </div>
-                    {reason.quote && (
-                      <blockquote className="border-l-2 border-primary-disabled pl-3 text-body-sm text-ink">
-                        “{reason.quote}”
-                        {reason.quoteSource && (
-                          <footer className="mt-0.5 text-caption-sm text-ink-muted">
-                            {reason.quoteSource}
-                          </footer>
-                        )}
-                      </blockquote>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-            {/* 근거 부족 안내(D-105로 잠시 숨김)
-            {notes.map((note) => (
-              <Note key={note}>{note}</Note>
-            ))}
-            */}
-            {card?.caution && <Note tone="warn">{card.caution}</Note>}
-          </div>
+          <PlaceReasons
+            placeId={detail.place.id}
+            reasons={card.reasons}
+            sentence={sentence}
+          />
+        </Section>
+      )}
+      {fit && (fit.reasons.length > 0 || fit.caution) && (
+        <Section>
+          <GivenReasons fit={fit} />
         </Section>
       )}
 

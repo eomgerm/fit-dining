@@ -3,6 +3,8 @@ import { request, requestWithHeaders } from "@/shared/api/client";
 import type {
   NearbyRequest,
   PlaceDetail,
+  PlaceReasonsRequest,
+  PlaceReasonsResponse,
   PlaceSearchRequest,
   PlaceSearchResponse,
   PlaceSuggestion,
@@ -12,6 +14,8 @@ import type {
 
 // BE가 AI를 기다리는 12초보다 길어야 대체 결과가 화면에 닿는다(place-ai-search D-3)
 const SEARCH_TIMEOUT_MS = 15_000;
+// BE가 AI 제목 API를 기다리는 12초보다 길어야 대체 제목이 화면에 닿는다
+const REASONS_TIMEOUT_MS = 15_000;
 
 // 회원이면 추가 값 없이, 비회원이면 기기의 온보딩 답. 무엇을 실을지는 app이 정한다(D-16)
 export type SearchExtras = {
@@ -82,6 +86,20 @@ async function postSearch(
     aiFallbacks.add(data);
   }
   return data;
+}
+
+// 상세 추천 이유. 제목을 LLM이 써서 검색보다 오래 걸릴 수 있다(BE가 AI를 최대 12초 기다린다)
+export function postReasons(
+  placeId: number,
+  body: PlaceReasonsRequest,
+  signal?: AbortSignal,
+) {
+  return request<PlaceReasonsResponse>(`/v1/places/${placeId}/reasons`, {
+    method: "POST",
+    body,
+    signal,
+    timeoutMs: REASONS_TIMEOUT_MS,
+  });
 }
 
 export function getPlace(id: number, signal?: AbortSignal) {

@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   facilityIconGroup,
   matchedLabels,
-  missingEvidenceNotes,
+  reasonAuthor,
+  visitedDay,
 } from "./place-labels";
 
 describe("facilityIconGroup", () => {
@@ -42,36 +43,11 @@ describe("facilityIconGroup", () => {
   );
 });
 
-describe("missingEvidenceNotes", () => {
-  it("점수에 넣지 못한 항목마다 출처에 맞춘 안내를 만든다", () => {
-    expect(
-      missingEvidenceNotes([
-        {
-          source: "REQUEST",
-          label: "대화하기 좋은",
-          matched: true,
-          evidenceCount: 12,
-        },
-        {
-          source: "PREFERENCE",
-          label: "아늑한 곳",
-          matched: false,
-          evidenceCount: 0,
-        },
-        { source: "REQUEST", label: "주차", matched: false, evidenceCount: 1 },
-      ]),
-    ).toEqual([
-      "이 장소는 ‘아늑한 곳’ 취향을 확인할 근거가 부족해요",
-      "이 장소는 ‘주차’ 요청을 확인할 근거가 부족해요",
-    ]);
-  });
-
-  it("모두 반영됐으면 안내가 없다", () => {
-    expect(
-      missingEvidenceNotes([
-        { source: "REQUEST", label: "조용한", matched: true, evidenceCount: 3 },
-      ]),
-    ).toEqual([]);
+describe("reasonAuthor, visitedDay", () => {
+  it("추천 이유 근거 리뷰는 리뷰 탭처럼 작성자와 방문일을 쓴다", () => {
+    expect(reasonAuthor({ nickname: "밥친구" })).toBe("밥친구");
+    expect(reasonAuthor({})).toBe("탈퇴한 회원");
+    expect(visitedDay("2026-11-01")).toBe("11월 1일 방문");
   });
 });
 

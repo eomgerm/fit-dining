@@ -106,17 +106,58 @@ export type SearchPreferences = {
   }[];
 };
 
+// 상세 추천 이유로 고른 항목(요청 최대 2개, 그다음 취향 최대 2개). 제목은 상세를 열 때 추천 이유 API로 받는다
+export type Reason = {
+  source: EvidenceSource;
+  code: string;
+  label: string;
+  value: number;
+  // false면 장소 정보(시설, 음식 종류)로 판정해 근거가 없다
+  fromReviews: boolean;
+  // 추천 이유 API가 실패하면 이 문구를 제목으로 쓴다
+  fallbackTitle: string;
+};
+
+export type PlaceReasonsRequest = {
+  // 그 검색의 요청 문장. 홈 주변 카드처럼 모르면 생략한다
+  request?: string;
+  reasons: Reason[];
+};
+
+// 근거가 된 앱 리뷰. 탈퇴한 회원이면 닉네임이 없다
+export type ReasonReview = {
+  nickname?: string;
+  visitedAt: string;
+  tag: string;
+};
+
+// 추천 이유 한 줄. 앱 리뷰가 있으면 리뷰만, 없으면 페르소나 요약만 온다. 둘 다 없으면 펼칠 수 없다
+export type ReasonView = {
+  source: EvidenceSource;
+  label: string;
+  title: string;
+  reviews: ReasonReview[];
+  personaSummary?: string;
+};
+
+export type PlaceReasonsResponse = { reasons: ReasonView[] };
+
 export type ReasonTag = { source: EvidenceSource; label: string };
 
-export type Reason = {
+// 모임 결과 카드가 완성해서 준 추천 이유(모임 D-22). 추천 이유 API를 부르지 않고 그대로 보인다
+export type GivenReason = {
   title: string;
   tags: ReasonTag[];
   quote?: string;
   quoteSource?: string;
 };
 
-// 상세가 보이는 핏 점수, 추천 이유, 주의점. 검색 카드가 주고, 모임에서 열면 모임 결과의 카드가 준다(모임 D-22)
-export type PlaceFit = Pick<PlaceCard, "score" | "reasons" | "caution">;
+// 모임에서 연 상세가 보이는 모임 점수, 추천 이유, 주의점(모임 D-22). 넘기면 개인 검색 카드를 쓰지 않는다
+export type PlaceFit = {
+  score?: number;
+  reasons: GivenReason[];
+  caution?: string;
+};
 
 export type ScoreItem = {
   source: EvidenceSource;

@@ -3,6 +3,7 @@ import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 import type {
   MapBounds,
   PlaceSearchRequest,
+  Reason,
   RegionSearchRequest,
   SearchRequest,
 } from "../model/place-types";
@@ -11,6 +12,7 @@ import type { EntryKind } from "../model/search-store";
 import {
   getPlace,
   isAiFallback,
+  postReasons,
   searchNearby,
   searchPlaces,
   searchRegion,
@@ -96,5 +98,13 @@ export const placeQueries = {
       queryFn: ({ signal }) => getPlace(id, signal),
       // 서버가 페이지에 넣어 보낸 상세를 열자마자 다시 받지 않는다. 장소 정보는 자주 바뀌지 않는다
       staleTime: 60_000,
+    }),
+
+  // 상세 추천 이유. 같은 장소, 요청 문장, 고른 이유면 같은 키다. 같은 입력의 응답은 BE가 캐시에 둔다
+  reasons: (placeId: number, request: string | undefined, reasons: Reason[]) =>
+    queryOptions({
+      queryKey: ["places", "reasons", placeId, request ?? null, reasons],
+      queryFn: ({ signal }) =>
+        postReasons(placeId, { request, reasons }, signal),
     }),
 };

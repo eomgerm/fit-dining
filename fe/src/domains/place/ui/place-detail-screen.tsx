@@ -23,7 +23,7 @@ import { Tooltip } from "@/shared/ui/overlay/tooltip";
 import { placeQueries } from "../api/place-queries";
 import { placeDetailHref, type BookmarkAccess } from "../model/bookmark";
 import { todayNotice } from "../model/opening-hours";
-import type { PlaceDetail, PlaceFit } from "../model/place-types";
+import type { PlaceCard, PlaceDetail, PlaceFit } from "../model/place-types";
 import { BookmarkButton } from "./bookmark-button";
 import { LoadFailed } from "./load-failed";
 import { HomeTab, InfoTab, MenuTab } from "./place-detail-tabs";
@@ -34,7 +34,7 @@ import {
   PlacePhoto,
 } from "./place-parts";
 import { useHere } from "./use-search-store";
-import { useStoredCard } from "./use-stored-card";
+import { useStoredSearch } from "./use-stored-card";
 
 type DetailTab = "home" | "menu" | "review" | "info";
 
@@ -127,9 +127,9 @@ function PlaceDetailContent({
   const query = useQuery(placeQueries.detail(id));
   // 빈 자리를 보이고 나서 내용이 오면 투명도만 바꿔 나타낸다. 서버가 그려 넣은 상세는 바로 보인다
   const [fadeIn] = useState(query.isPending);
-  const storedCard = useStoredCard(id);
-  const card: PlaceFit | undefined =
-    fit ?? (fromSaved ? undefined : storedCard);
+  const stored = useStoredSearch(id);
+  // 모임에서 열었으면(fit) 개인 검색 카드를 쓰지 않는다(모임 D-22)
+  const card = fit || fromSaved ? undefined : stored.card;
 
   if (query.isPending) {
     return (
@@ -172,6 +172,8 @@ function PlaceDetailContent({
     <PlaceDetailView
       detail={query.data}
       card={card}
+      sentence={stored.sentence}
+      fit={fit}
       slots={slots}
       bookmarks={bookmarks}
       returnTo={placeDetailHref(id, fromSaved)}
@@ -189,12 +191,16 @@ function PlaceDetailContent({
 function PlaceDetailView({
   detail,
   card,
+  sentence,
+  fit,
   slots,
   bookmarks,
   returnTo,
 }: {
   detail: PlaceDetail;
-  card?: PlaceFit;
+  card?: PlaceCard;
+  sentence?: string;
+  fit?: PlaceFit;
   slots?: PlaceDetailSlots;
   bookmarks: BookmarkAccess;
   returnTo: string;
@@ -205,14 +211,21 @@ function PlaceDetailView({
   const [tab, setTab] = useState<DetailTab>("home");
   const [photoIndex, setPhotoIndex] = useState(0);
   const { place } = detail;
-  // 상단 태그 중 검색 카드의 '내 취향' 근거와 같은 문구만 주황이다(VQA D-12). 카드가 없으면 모두 회색이다
+  // 상단 태그 중 검색 카드(모임에서 열었으면 모임 결과)의 '내 취향' 근거와 같은 문구만 주황이다(VQA D-12).
+  // 카드가 없으면 모두 회색이다
   const preferred = new Set(
-    card?.reasons.flatMap((reason) =>
-      reason.tags
-        .filter((tag) => tag.source === "PREFERENCE")
-        .map((tag) => tag.label),
-    ),
+    fit
+      ? fit.reasons.flatMap((reason) =>
+          reason.tags
+            .filter((tag) => tag.source === "PREFERENCE")
+            .map((tag) => tag.label),
+        )
+      : card?.reasons
+          .filter((reason) => reason.source === "PREFERENCE")
+          .map((reason) => reason.label),
   );
+  // 모임에서 열었으면 모임 점수다
+  const score = fit ? fit.score : card?.score;
 
   return (
     <>
@@ -254,15 +267,15 @@ function PlaceDetailView({
         <PlaceMeta place={place} here={here} />
         <div className="flex items-end justify-between gap-3">
           <h1 className="text-headline-lg text-ink">{place.name}</h1>
-          {card?.score !== undefined && (
+          {score !== undefined && (
             <Tooltip label="핏 점수 설명" content={SCORE_HELP}>
               <button
                 type="button"
-                aria-label={`핏 점수 ${card.score}, 설명 보기`}
+                aria-label={`핏 점수 ${score}, 설명 보기`}
                 className="flex min-h-11 shrink-0 flex-col items-end"
               >
                 <span className="text-headline-md text-primary-strong">
-                  {card.score}
+                  {score}
                 </span>
                 <span className="flex items-center gap-0.5 text-caption-sm text-ink-muted">
                   핏 점수
@@ -316,6 +329,8 @@ function PlaceDetailView({
           <HomeTab
             detail={detail}
             card={card}
+            sentence={sentence}
+            fit={fit}
             here={here}
             now={now}
             onShowInfo={() => setTab("info")}

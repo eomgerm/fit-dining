@@ -13,6 +13,7 @@ import {
   formatClock,
   historyMeta,
   requestTitle,
+  searchSentence,
   type HistoryEntry,
 } from "./search-store";
 
@@ -689,5 +690,37 @@ describe("requestTitle", () => {
   it("기록에 없는 요청이면 없다", () => {
     expect(requestTitle([entry({ id: "A" })], "X")).toBeUndefined();
     expect(requestTitle([entry({ id: "A" })], undefined)).toBeUndefined();
+  });
+});
+
+describe("searchSentence", () => {
+  it("새 검색 문장 뒤에 그 요청까지의 후속 입력을 쉼표로 잇는다", () => {
+    const entries = [
+      entry({ id: "A", sentence: "역삼 카페" }),
+      entry({
+        id: "B",
+        kind: "followUp",
+        baseId: "A",
+        sentence: "더 조용한 곳",
+      }),
+    ];
+
+    expect(searchSentence(entries, "B")).toBe("역삼 카페, 더 조용한 곳");
+    expect(searchSentence(entries, "A")).toBe("역삼 카페");
+    expect(searchSentence(entries, "없는 항목")).toBeUndefined();
+  });
+
+  it("BE 상한 200자에서 자른다", () => {
+    const entries = [
+      entry({ id: "A", sentence: "가".repeat(150) }),
+      entry({
+        id: "B",
+        kind: "followUp",
+        baseId: "A",
+        sentence: "나".repeat(100),
+      }),
+    ];
+
+    expect(searchSentence(entries, "B")).toHaveLength(200);
   });
 });

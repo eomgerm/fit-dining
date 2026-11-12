@@ -84,8 +84,12 @@ const card: PlaceCard = {
   openStatus: "OPEN",
   reasons: [
     {
-      title: "조용히 대화하기 좋다는 리뷰가 많아요",
-      tags: [{ source: "REQUEST", label: "조용해요" }],
+      source: "REQUEST",
+      code: "QUIET",
+      label: "조용해요",
+      value: 0.95,
+      fromReviews: true,
+      fallbackTitle: "카페 중 손꼽히게 조용해요",
     },
   ],
   scoreItems: [],
@@ -121,6 +125,9 @@ beforeEach(() => {
     vi.fn<typeof fetch>(async (input, init) => {
       const url = String(input);
       if (url === "/api/v1/places/1") return Response.json(detail);
+      // 추천 이유는 이 파일에서 보지 않는다. 실패하면 카드의 대체 제목이 보인다
+      if (url === "/api/v1/places/1/reasons")
+        return Response.json({ status: 404 }, { status: 404 });
       const method = init?.method ?? "GET";
       calls.push({
         method,
