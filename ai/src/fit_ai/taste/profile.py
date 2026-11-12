@@ -31,6 +31,10 @@ VECTOR_DIGITS = 6
 """묶음 대표 벡터를 저장할 소수 자리. 코드표 벡터(feature_codes)와 같다."""
 CONTEXT_SLOT = "방문 맥락"
 """묶음 재료에서 빼는 추출 칸. "부모님과 함께 방문했다"처럼 취향이 아닌 사실이 대부분이다."""
+MAX_BUNDLE_TEXT = 100
+"""묶음 재료 문장의 길이 상한. 대표 문구가 되면 BE가 저장 전에 100자로 검사하고(`AiTasteClient.Feature`)
+검색도 100자까지 읽으므로(`taste_select.MAX_FREE_TEXT_LENGTH`) 그보다 긴 리뷰 문장은 재료에서 뺀다. 본문 추출은
+200자까지 받는다. BE처럼 UTF-16 단위로 센다."""
 _ORDER = {code: i for i, code in enumerate(FEATURES)}
 
 
@@ -102,7 +106,8 @@ def body_phrases(items: list[dict]) -> list[str]:
     """리뷰 본문 추출 항목 한 리뷰분 → 취향 묶음 재료 문장(taste-profile spec 4단계).
 
     코드 없는 항목 중 좋았다는(`direction` 1) 취향(`kind` taste) 문장만 쓴다. "맛있다" 같은 범용
-    품질은 kind가 quality라 빠진다. 방문 맥락 칸은 사실이 대부분이라 뺀다(`CONTEXT_SLOT`).
+    품질은 kind가 quality라 빠진다. 방문 맥락 칸은 사실이 대부분이라 뺀다(`CONTEXT_SLOT`). `MAX_BUNDLE_TEXT`보다
+    긴 문장도 뺀다. 대표 문구가 되면 BE 저장 검사에 막혀 그 회원의 갱신이 매일 실패하기 때문이다.
     """
     out = []
     for it in items:
@@ -113,6 +118,7 @@ def body_phrases(items: list[dict]) -> list[str]:
             and it.get("direction") == 1
             and it.get("slot") != CONTEXT_SLOT
             and text
+            and len(text.encode("utf-16-le")) // 2 <= MAX_BUNDLE_TEXT
         ):
             out.append(text)
     return list(dict.fromkeys(out))

@@ -145,7 +145,11 @@ def _score_item(item: ItemScore) -> ScoreItem:
 
 
 def _reasons(items: list[ItemScore]) -> tuple[Reason, ...]:
-    """근거가 충분한 항목마다 이유를 하나씩 만든다. 최대 `MAX_REASONS`개다."""
+    """근거가 충분한 항목마다 이유를 하나씩 만든다. 최대 `MAX_REASONS`개다.
+
+    취향 묶음은 태그처럼 이유에도 쓰지 않는다(`_bundle`). 대표 문구가 리뷰 문장이면 "돈가스가 바삭하고 속은
+    촉촉함.에 맞아요"처럼 되고, 그 장소가 아니라 회원이 다른 곳에서 좋아한 점이라서다.
+    """
     reasons = [
         Reason(
             title=_reason_title(item),
@@ -157,9 +161,14 @@ def _reasons(items: list[ItemScore]) -> tuple[Reason, ...]:
             ),
         )
         for item in items
-        if item.value >= MATCHED_SCORE
+        if item.value >= MATCHED_SCORE and not _bundle(item)
     ]
     return tuple(reasons[:MAX_REASONS])
+
+
+def _bundle(item: ItemScore) -> bool:
+    """취향 묶음 항목인지. 코드가 없는 취향 항목이다. 코드가 없는 요청 항목은 검색 문구라 묶음이 아니다."""
+    return not item.request and item.code is None
 
 
 def _label(item: ItemScore) -> str:
@@ -199,7 +208,7 @@ def _labels(place: Place, items: list[ItemScore]) -> tuple[str, ...]:
     # 세기가 같으면 조건 점수가 높은 쪽이 먼저다. 취향 묶음(코드 없는 취향)은 대표 문구가 리뷰 문장일 수
     # 있어("돈가스는 바삭하고 속은 촉촉하며…") 태그로 쓰지 않는다. 점수와 근거 항목에는 남는다.
     tastes = sorted(
-        (item for item in matched if not item.request and item.code is not None),
+        (item for item in matched if not item.request and not _bundle(item)),
         key=lambda item: (-item.weight, -item.value),
     )
     chosen = requested + tastes

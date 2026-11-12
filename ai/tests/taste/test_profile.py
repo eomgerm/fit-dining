@@ -3,6 +3,7 @@ import pytest
 from fit_ai.match.conditions import CATEGORY_NAMES
 from fit_ai.taste.profile import (
     CATEGORIES,
+    MAX_BUNDLE_TEXT,
     body_codes,
     body_phrases,
     build_profile,
@@ -482,6 +483,24 @@ def test_body_phrases_keep_liked_taste_sentences_outside_visit_context():
         },
     ]
     assert body_phrases(items) == ["크림 파스타 소스가 진했다"]
+
+
+def test_body_phrases_drop_sentences_longer_than_bundle_text_limit():
+    # 대표 문구가 되면 BE가 100자(UTF-16 단위)로 검사한다. 이모지는 2단위다
+    def sentence(text: str) -> dict:
+        return {
+            "slot": "메뉴 평가",
+            "code": None,
+            "direction": 1,
+            "kind": "taste",
+            "text": text,
+        }
+
+    exact = "가" * MAX_BUNDLE_TEXT
+    longer = "나" * (MAX_BUNDLE_TEXT + 1)
+    emoji = "다" * (MAX_BUNDLE_TEXT - 1) + "😋"
+
+    assert body_phrases([sentence(exact), sentence(longer), sentence(emoji)]) == [exact]
 
 
 def test_same_taste_phrases_become_one_bundle_and_add_strength():
