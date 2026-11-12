@@ -8,9 +8,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import java.time.Clock;
-import java.time.Instant;
-import java.time.ZoneId;
 import java.util.stream.Stream;
 import kr.co.fitdining.api.auth.ports.AuthUseCases;
 import kr.co.fitdining.api.place.engine.MockPlaceSearchEngine;
@@ -23,11 +20,9 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.TestPropertySource;
@@ -41,16 +36,8 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  */
 @TestPropertySource(properties = {"auth.cookie-secure=false", "auth.frontend-origin=http://localhost:3000"})
 @WebMvcTest(controllers = PlaceController.class, properties = "place.mock.enabled=true")
-@Import({PlaceService.class, MockPlaceSearchEngine.class, PlaceAreaSearchControllerTest.FixedClockConfig.class})
+@Import({PlaceService.class, MockPlaceSearchEngine.class, PlaceTestClock.class})
 class PlaceAreaSearchControllerTest {
-
-	@TestConfiguration
-	static class FixedClockConfig {
-		@Bean
-		Clock clock() {
-			return Clock.fixed(Instant.parse("2026-10-21T03:00:00Z"), ZoneId.of("Asia/Seoul"));
-		}
-	}
 
 	/** mock 장소 36곳을 모두 담는 영역 */
 	static final String ALL = "{\"swLat\":37.49,\"swLng\":127.02,\"neLat\":37.51,\"neLng\":127.06}";

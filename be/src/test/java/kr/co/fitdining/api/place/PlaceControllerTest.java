@@ -18,9 +18,6 @@ import kr.co.fitdining.api.auth.domain.AuthFailure;
 import kr.co.fitdining.api.auth.ports.AuthUseCases;
 import com.jayway.jsonpath.JsonPath;
 import java.nio.charset.StandardCharsets;
-import java.time.Clock;
-import java.time.Instant;
-import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Comparator;
@@ -39,11 +36,9 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.json.JsonCompareMode;
@@ -55,17 +50,8 @@ import tools.jackson.databind.json.JsonMapper;
 
 @org.springframework.test.context.TestPropertySource(properties = {"auth.cookie-secure=false", "auth.frontend-origin=http://localhost:3000"})
 @WebMvcTest(controllers = PlaceController.class, properties = "place.mock.enabled=true")
-@Import({PlaceService.class, MockPlaceSearchEngine.class, PlaceControllerTest.FixedClockConfig.class})
+@Import({PlaceService.class, MockPlaceSearchEngine.class, PlaceTestClock.class})
 class PlaceControllerTest {
-
-	/** 2026-10-21(수) 12:00 KST. 응답의 영업 상태를 고정한다. */
-	@TestConfiguration
-	static class FixedClockConfig {
-		@Bean
-		Clock clock() {
-			return Clock.fixed(Instant.parse("2026-10-21T03:00:00Z"), ZoneId.of("Asia/Seoul"));
-		}
-	}
 
 	@Autowired
 	MockMvc mockMvc;

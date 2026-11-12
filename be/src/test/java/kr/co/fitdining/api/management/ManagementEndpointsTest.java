@@ -33,7 +33,9 @@ import org.springframework.test.web.servlet.MockMvc;
  * 서버 소켓의 {@code listen}이 무작위로 실패해 실제 서버를 띄우는 시험이 흔들리므로 소켓을 쓰지 않는다. 관리 포트로만 열리는 것은
  * 실제 서버를 띄워 따로 확인한다. readiness가 사용하는 DB는 공통 Testcontainers 기반에서 제공한다.
  */
-@SpringBootTest(properties = {"management.server.port=8080", "management.prometheus.metrics.export.enabled=true"})
+// 뒤의 둘은 이 시험과 상관없다. PlaceAiStartupTest.UnreachableBaseUrl과 property 묶음(순서까지)을 같게 두어 Spring context를 함께 쓴다
+@SpringBootTest(properties = {"management.server.port=8080", "management.prometheus.metrics.export.enabled=true",
+		"place.mock.enabled=false", "fitdining.ai.base-url=http://127.0.0.1:1"})
 @AutoConfigureMockMvc
 @DisplayName("관리 경로")
 class ManagementEndpointsTest extends PostgresTestSupport {

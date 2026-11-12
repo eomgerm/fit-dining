@@ -52,10 +52,14 @@ class PlaceAiStartupTest {
 	class BlankBaseUrl extends Startup {
 	}
 
+	/**
+	 * {@code ManagementEndpointsTest}와 property 묶음(순서까지)이 같아 Spring context 하나를 함께 쓴다. 한쪽을 바꾸면 다른 쪽도
+	 * 같이 바꾼다. 다르면 context가 하나 더 떠서 전체 실행이 약 2초 늘어날 뿐 결과는 같다.
+	 */
 	@Nested
 	@DisplayName("닿지 않는 주소")
-	@SpringBootTest(properties = {COMMON, "place.mock.enabled=false", "fitdining.ai.base-url=http://127.0.0.1:1",
-			"spring.datasource.hikari.maximum-pool-size=2"})
+	@SpringBootTest(properties = {COMMON, "management.prometheus.metrics.export.enabled=true",
+			"place.mock.enabled=false", "fitdining.ai.base-url=http://127.0.0.1:1"})
 	@AutoConfigureMockMvc
 	class UnreachableBaseUrl extends Startup {
 	}
