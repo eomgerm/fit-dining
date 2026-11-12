@@ -11,7 +11,7 @@ import kr.co.fitdining.api.place.engine.AiSearchClient.Reply;
 import org.springframework.stereotype.Component;
 
 /**
- * AI의 모임 전용 주소 두 개를 부른다(ai/docs/comparison/api.md 6장). 일반 검색과 같은 시간 예산, 동시 호출 상한,
+ * AI의 모임 전용 주소 두 개를 부른다(ai/docs/comparison/api.md 7장). 일반 검색과 같은 시간 예산, 동시 호출 상한,
  * circuit breaker를 함께 쓴다(D-13, AC-46). 요청에는 프로필 번호만 싣고 이름을 싣지 않으며, 본문은 로그에 남기지 않는다
  * (AC-72).
  */

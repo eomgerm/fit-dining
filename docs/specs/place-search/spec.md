@@ -219,6 +219,7 @@ S15P31A302-204 전의 홈은 고정 문장 "근처 맛집"만 보내 전국 후�
 | `POST /api/v1/places/search/region` | `{query, conditions?, mapBounds, preferences?, cursor?}` ("이 지역에서 검색", place-ai-search#D-18) | `PlaceSearchResponse` |
 | `GET /api/v1/places/{id}` | 경로 `id` | `PlaceDetailResponse` |
 | `GET /api/v1/places/ids` | 없음 | 열 수 있는 장소 id 오름차순 `Long[]`(장소 sitemap, D-107) |
+| `POST /api/v1/places/{id}/reasons` | `PlaceReasonsRequest` (상세 추천 이유, 로그인 선택, S15P31A302-224) | `PlaceReasonsResponse` |
 
 요청 헤더 `X-Mock-Scenario: empty`는 Mock 구현만 읽는다. 두 새 API의 요청 모양, `mapBounds` 검증, AI 요청, 대체 결과는 place-ai-search spec이 정한다(AC-29~AC-36).
 
@@ -267,8 +268,13 @@ kr.co.fitdining.api.place.dto (D-64. 파일은 아래 들여쓰지 않은 7개�
   PlaceCard      : place(PlaceSummary), score?(Integer 0..100), labels(String[2]), caution?(String),
                    openStatus(OpenStatus), reasons(Reason[]), scoreItems(ScoreItem[])
                    -- DB 모드(AI 엔진 전)에서는 score와 caution을 생략하고 labels, reasons, scoreItems는 빈 목록이다(place-lookup-db#D-12)
-    Reason       : title, tags(ReasonTag[]), quote?(String), quoteSource?(String, 예: "앱 리뷰")
-    ReasonTag    : source(EvidenceSource), label
+    Reason       : source(EvidenceSource), code(String, 예: QUIET), label, value(Double 0..1), fromReviews(Boolean),
+                   fallbackTitle(String)  -- 상세 추천 이유로 고른 항목. 요청 2개, 취향 2개까지. 제목은 상세에서 받는다
+  PlaceReasonsRequest  : request?(String ≤200, 그 검색의 요청 문장), reasons(Reason[1..4], 카드의 reasons 그대로)
+  PlaceReasonsResponse : reasons(ReasonView[]) -- 요청 reasons 순서
+    ReasonView   : source(EvidenceSource), label, title, reviews(ReviewEvidence[0..2]), personaSummary?(String)
+                   -- 펼친 곳: 앱 리뷰가 있으면 리뷰만, 없으면 personaSummary, 둘 다 없으면 펼칠 수 없다
+    ReviewEvidence : nickname?(탈퇴한 회원이면 없음), visitedAt(yyyy-MM-dd), tag(이유 태그 문구)
     ScoreItem    : source(EvidenceSource), label, matched(Boolean), evidenceCount(Integer >= 0)
     enum EvidenceSource: REQUEST | PREFERENCE              (화면: "요청 ·", "내 취향 ·")
   PlaceDetailResponse  : place(PlaceSummary), address, tags(String[]), photos(String[] URL),

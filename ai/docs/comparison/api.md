@@ -1,8 +1,8 @@
 # AI 검색 API 명세
 
-Status: 초안 v0.15 · Jira: S15P31A302-41, S15P31A302-136, S15P31A302-158, S15P31A302-209, S15P31A302-236, S15P31A302-161, S15P31A302-196 · 작성일: 2026-10-23 · 고친 날: 2026-11-13
+Status: 초안 v0.16 · Jira: S15P31A302-41, S15P31A302-136, S15P31A302-158, S15P31A302-209, S15P31A302-236, S15P31A302-161, S15P31A302-196, S15P31A302-224 · 작성일: 2026-10-23 · 고친 날: 2026-11-13
 
-BE는 검색 첫 페이지마다 AI를 한 번 부른다. AI는 요청을 해석하고 DB에서 후보를 뽑아 핏 점수로 정렬한 뒤 카드의 AI 필드를 돌려준다. v0.7부터 정렬에 LLM을 쓰지 않는다. BE는 카드에 장소 정보와 영업 상태를 붙여 FE에 준다. 모임 추천은 모임 설명 해석과 모임 계산 주소 두 개를 따로 쓴다(6장).
+BE는 검색 첫 페이지마다 AI를 한 번 부른다. AI는 요청을 해석하고 DB에서 후보를 뽑아 핏 점수로 정렬한 뒤 카드의 AI 필드를 돌려준다. v0.7부터 정렬에 LLM을 쓰지 않는다. BE는 카드에 장소 정보와 영업 상태를 붙여 FE에 준다. 모임 추천은 모임 설명 해석과 모임 계산 주소 두 개를 따로 쓴다(7장).
 
 ## 1. 주소
 
@@ -10,10 +10,10 @@ BE는 검색 첫 페이지마다 AI를 한 번 부른다. AI는 요청을 해석
 | --- | --- |
 | `POST /v1/search` | 검색 한 번. 요청문으로 카드 목록을 만든다 |
 | `GET /healthz` | 검색할 준비가 됐는지 알려 준다 |
-| `POST /v1/meetup/interpret` | 모임 설명을 해석만 한다(6.1) |
-| `POST /v1/meetup/search` | 모임 계산 한 번. 참여자들의 취향을 합쳐 장소 20곳과 참여자별 점수를 낸다(6.2) |
+| `POST /v1/meetup/interpret` | 모임 설명을 해석만 한다(7.1) |
+| `POST /v1/meetup/search` | 모임 계산 한 번. 참여자들의 취향을 합쳐 장소 20곳과 참여자별 점수를 낸다(7.2) |
 
-JSON 이름은 camelCase다. 요청에 모르는 속성이 있으면 400이고(검색 spec D-41), 응답에서 값이 없는 필드는 null 대신 빠진다. 오류는 ProblemDetail로 온다(4장).
+JSON 이름은 camelCase다. 요청에 모르는 속성이 있으면 400이고(검색 spec D-41), 응답에서 값이 없는 필드는 null 대신 빠진다. 오류는 ProblemDetail로 온다(5장).
 
 ## 2. `POST /v1/search`
 
@@ -35,7 +35,7 @@ JSON 이름은 camelCase다. 요청에 모르는 속성이 있으면 400이고(�
 | `mapFirst` | | "이 지역에서 검색"으로 보낸 요청이면 `true`(참/거짓만, 빼면 `false`). `true`면 요청문과 이전 요청의 지역을 보지 않고 `mapBounds`로만 거르고, 그 영역을 응답 `conditions.mapBounds`에 남긴다. `true`인데 `mapBounds`가 없거나 `{}`이면 400이다(v0.11) | 새로 추가 |
 | `rulesOnly` | | `true`면 해석 LLM을 부르지 않고 낱말 규칙으로만 해석한다(참/거짓만, 빼면 `false`). 첫 화면 주변 카드의 "근처 맛집"처럼 FE가 정한 고정 문장에만 쓴다. 규칙 해석은 자유 문장에 약하다. 폴백이 아니라서 `fallbacks`에 담지 않고 `interpretedBy`만 `RULE`이다(v0.11) | 새로 추가 |
 | `userId` | | 회원 id(1~64자). BE가 로그인으로 확인한 id만 보낸다. 있으면 AI가 회원 취향(`user_preferences`)을 직접 읽고 `tasteProfile`은 읽지 않는다. 취향이 저장돼 있지 않으면 취향 없이 정렬한다 | 로그인 사용자 |
-| `tasteProfile` | | 비회원 취향. 기기가 저장한 온보딩 답을 BE가 그대로 넘긴다(아래 예). 없으면 취향 없이 정렬한다. 모양이 틀리면 취향 없이 정렬하고 `TASTE_INVALID`를 담는다 | 없음(5장) |
+| `tasteProfile` | | 비회원 취향. 기기가 저장한 온보딩 답을 BE가 그대로 넘긴다(아래 예). 없으면 취향 없이 정렬한다. 모양이 틀리면 취향 없이 정렬하고 `TASTE_INVALID`를 담는다 | 없음(6장) |
 
 비회원 취향은 이렇게 보낸다. 회원 `user_preferences` 행에서 `features`를 뺀 모양이고, 취향 프로필 계산 API(`POST /v1/taste/profile`) 요청에 칩 벡터가 더해진 모양이다. 모든 필드는 빠져도 된다.
 
@@ -84,7 +84,7 @@ BE Mock 장소(`samples/place/mock.json`)와 실제 인코더·GMS로 받은 응
       "placeId": 5,
       "score": 35,
       "labels": ["혼밥하기 좋아요", "대화하기 좋아요"],
-      "reasons": [{"title": "리뷰에서 \"대화하기 좋아요\"라는 말이 많아요", "tags": [{"source": "REQUEST", "label": "대화하기 좋아요"}]}],
+      "reasons": [{"source": "REQUEST", "code": "PURPOSE_TALK", "label": "대화하기 좋아요", "value": 0.947, "fromReviews": true, "fallbackTitle": "식당 중 손꼽히게 대화하기 좋아요"}],
       "scoreItems": [{"source": "REQUEST", "label": "조용해요", "matched": false, "evidenceCount": 0}, {"source": "REQUEST", "label": "대화하기 좋아요", "matched": true, "evidenceCount": 15}]
     }
   ],
@@ -108,7 +108,7 @@ BE Mock 장소(`samples/place/mock.json`)와 실제 인코더·GMS로 받은 응
 
 `totalCount`는 `items` 수이고 `nextCursor`는 없다. `PlaceCard`에는 `placeId`가 없으므로 응답도 AI 응답용 DTO로 받는다.
 
-카드 필드는 `PlaceCard`의 AI 필드와 이름이 같다. `labels`는 2개, `reasons`는 3개까지다. `labels`는 이번 검색에서 맞은 조건을 먼저 쓰고, 그 문구는 `matched`가 true인 `scoreItems`의 `label`과 같다. FE는 이 문구와 같은 태그에만 강조색을 칠하고, 채운 태그(장소 특징, 업종·역 이름)는 회색으로 둔다(v0.12. 전에는 리뷰 근거가 많은 장소 특징이었고 FE가 첫 태그를 강조했다). 고르는 순서는 [spec.md](spec.md) 4.4에 있다. `score`는 판정할 요청 조각도 취향도 없으면 빠진다(v0.7). `scoreItems`는 점수를 낸 조각 그대로다. 요청 조각, 그다음 좋아하는 취향 순서이고 카드 조건(코드표 14개와 시설 4개)과 확장 코드(음식 종류, 매운맛, 빨리 나옴, 음악, 독특한 컨셉), 코드 없는 취향형 문구가 들어간다. 문구 항목은 `label`이 문구("책 읽기 좋은 곳")이고 `evidenceCount`가 0이다(v0.12). 피해 달라는 맛("안 매운")은 점수에만 들어가고 항목에 넣지 않는다. 싫어하는 취향은 점수에만 들어가고 화면 문구가 정해질 때까지 넣지 않는다. 점수 계산은 [spec.md](spec.md) 4.3에 있다. `caution`과 `quote`는 MVP에 없다. 아래 두 필드는 BE Javadoc과 뜻이 달라 화면 문구를 맞춰야 한다.
+카드 필드는 `PlaceCard`의 AI 필드와 이름이 같다. `labels`는 2개, `reasons`는 4개까지다. `reasons`는 상세 추천 이유로 고른 항목(요청 최대 2개, 그다음 취향 최대 2개)이고 `source`, `code`, `label`, `value`(항목 점수), `fromReviews`, `fallbackTitle`을 담는다. 제목은 상세를 열 때 BE가 3장의 API로 받는다(v0.16. 전에는 `title`, `tags`, `quote`, `quoteSource`였다). 코드가 없는 항목(코드 없는 취향형 문구, 취향 묶음)은 이유로 고르지 않는다. `labels`는 이번 검색에서 맞은 조건을 먼저 쓰고, 그 문구는 `matched`가 true인 `scoreItems`의 `label`과 같다. FE는 이 문구와 같은 태그에만 강조색을 칠하고, 채운 태그(장소 특징, 업종·역 이름)는 회색으로 둔다(v0.12. 전에는 리뷰 근거가 많은 장소 특징이었고 FE가 첫 태그를 강조했다). 고르는 순서는 [spec.md](spec.md) 4.4에 있다. `score`는 판정할 요청 조각도 취향도 없으면 빠진다(v0.7). `scoreItems`는 점수를 낸 조각 그대로다. 요청 조각, 그다음 좋아하는 취향 순서이고 카드 조건(코드표 14개와 시설 4개)과 확장 코드(음식 종류, 매운맛, 빨리 나옴, 음악, 독특한 컨셉), 코드 없는 취향형 문구가 들어간다. 문구 항목은 `label`이 문구("책 읽기 좋은 곳")이고 `evidenceCount`가 0이다(v0.12). 피해 달라는 맛("안 매운")은 점수에만 들어가고 항목에 넣지 않는다. 싫어하는 취향은 점수에만 들어가고 화면 문구가 정해질 때까지 넣지 않는다. 점수 계산은 [spec.md](spec.md) 4.3에 있다. `caution`과 `quote`는 MVP에 없다. 아래 두 필드는 BE Javadoc과 뜻이 달라 화면 문구를 맞춰야 한다.
 
 - `matched`: 조건 점수가 0.7 이상(리뷰는 업종 범위 상위 30%, 장소 정보는 있음)일 때 true다. false는 근거가 부족하거나 아니라는 근거가 있을 때다. 점수에는 `matched`와 상관없이 조건 점수가 그대로 들어간다.
 - `evidenceCount`: 앱 리뷰와 외부 리뷰를 합친 수다. 장소 정보(시설, 음식 종류)로 판정한 항목은 0이다.
@@ -149,7 +149,7 @@ BE는 검색마다 `modal_llm_calls_total`과 `modal_embedding_calls_total`을 �
       "placeId": 5,
       "score": 39,
       "labels": ["혼밥하기 좋아요", "대화하기 좋아요"],
-      "reasons": [{"title": "리뷰에서 \"대화하기 좋아요\"라는 말이 많아요", "tags": [{"source": "REQUEST", "label": "대화하기 좋아요"}]}],
+      "reasons": [{"source": "REQUEST", "code": "PURPOSE_TALK", "label": "대화하기 좋아요", "value": 0.947, "fromReviews": true, "fallbackTitle": "식당 중 손꼽히게 대화하기 좋아요"}],
       "scoreItems": [{"source": "REQUEST", "label": "조용해요", "matched": false, "evidenceCount": 0}, {"source": "REQUEST", "label": "대화하기 좋아요", "matched": true, "evidenceCount": 15}, {"source": "REQUEST", "label": "자리가 넉넉해요", "matched": false, "evidenceCount": 0}]
     }
   ],
@@ -228,11 +228,40 @@ BE는 검색마다 `modal_llm_calls_total`과 `modal_embedding_calls_total`을 �
 {"conditions": {"version": 3, "text": "역삼역 조용한 술집", "categories": [{"code": "BAR", "want": true}], "features": [{"text": "조용하고 차분한 곳", "value": "조용하고 차분한 곳", "code": "QUIET"}], "locations": [{"text": "역삼역", "kind": "STATION", "value": "역삼역"}]}, "items": [{"placeId": 12, "score": 81}, {"placeId": 24, "score": 69}], "interpretedBy": "RULE", "rankedBy": "SCORE", "fallbacks": ["INTERPRET_LLM_FAILED"], "models": {"embedding": "dragonkue/snowflake-arctic-embed-l-v2.0-ko@55ec6e9358a56d56af759bc8372e970caf8c305f"}}
 ```
 
-## 3. `GET /healthz`
+## 3. `POST /v1/reasons/titles`
+
+상세 화면 추천 이유의 제목. BE가 상세 추천 이유를 처음 만들 때 장소마다 한 번 부른다(v0.16, [spec.md](spec.md) 4.5). LLM이 꺼져 있거나 실패해도 대체 제목으로 200을 준다.
+
+```json
+{
+  "request": "조용한 카페",
+  "categoryGroup": "CAFE",
+  "items": [
+    {"source": "REQUEST", "code": "QUIET", "value": 0.95, "fromReviews": true,
+     "persona": {"name": "조용한 독서가", "description": "…", "reason": "…"}, "quotes": []},
+    {"source": "PREFERENCE", "code": "PARKING", "value": 1.0, "fromReviews": false}
+  ]
+}
+```
+
+| 필드 | 뜻 |
+| --- | --- |
+| `request` | 그 검색의 요청 문장(500자 이하). 없으면 빠진다 |
+| `categoryGroup` | 장소 업종 그룹. 대체 제목의 "카페 중"에 쓴다 |
+| `items` | 검색 응답 카드의 `reasons` 순서 그대로 1~4개. `code`는 코드표나 시설 코드여야 한다. `persona`는 BE가 짝지은 만족한 손님 페르소나, `quotes`는 앱 리뷰 구절(2개까지, 작성자 정보 없음)이다 |
+
+```json
+{"titles": [{"title": "차분해서 오래 머물기 좋아요", "personaSummary": "혼자 책 읽으러 오는 손님"}, {"title": "주차할 수 있어요"}],
+ "fallbacks": [], "model": "gpt-4o-mini"}
+```
+
+`titles`는 `items`와 같은 순서다. `personaSummary`는 LLM이 그 페르소나가 특징과 관계있다고 판단했을 때만 있다. 근거(페르소나, 앱 리뷰 구절)가 없거나 장소 정보로 판정한 항목은 LLM에 넘기지 않고 대체 제목을 쓴다. LLM에 넘길 항목이 있었는데 호출이 실패하면 `fallbacks`에 `TITLE_LLM_FAILED`가 들고, BE는 그 응답을 캐시에 넣지 않는다. 요청 형식이 틀리면 400 `INVALID_REQUEST`다.
+
+## 4. `GET /healthz`
 
 준비됐으면 200 `{"status": "ok"}`, 아니면 503 ProblemDetail이다. 원격 임베딩 설정(`EMBED_*`)이 비었거나 틀렸으면 `EMBEDDING_UNAVAILABLE`(Modal은 부르지 않는다), DB 주소가 없거나 못 읽으면 `PLACES_UNAVAILABLE`, 모든 장소의 벡터 모델이 다르면 `MODEL_MISMATCH`다. 일부 장소만 다르면 200이고 그 장소만 검색에서 빠진다.
 
-## 4. 오류
+## 5. 오류
 
 ```json
 {"type": "about:blank", "title": "Bad Request", "status": 400, "detail": "요청 형식이 올바르지 않다", "code": "INVALID_REQUEST"}
@@ -251,7 +280,7 @@ BE는 검색마다 `modal_llm_calls_total`과 `modal_embedding_calls_total`을 �
 
 LLM 실패와 읽지 못한 입력은 오류가 아니라 200과 `fallbacks`로 온다. 모임 계산의 참여자 답은 예외로, 모양이 틀리면 취향을 빼고 계산하지 않고 400이다.
 
-## 5. 임시로 정한 값
+## 6. 임시로 정한 값
 
 | 항목 | 지금 값 |
 | --- | --- |
@@ -265,11 +294,11 @@ LLM 실패와 읽지 못한 입력은 오류가 아니라 200과 `fallbacks`로 
 | 취향 전달 | 회원은 `userId`로 보내고 AI가 `user_preferences`(저장 설계 V6)를 읽는다. 비회원은 기기가 저장한 온보딩 답(칩 벡터 포함)을 `tasteProfile`로 보내고 AI가 `features`를 계산한다(10-30). FE는 해석 API가 준 칩 벡터를 저장하고 검색 요청에 싣는다(S15P31A302-230) |
 | 모임 계산 | 분위기의 남은 무게 기준 0.5, 음식이 모두 갈릴 때의 비중 0.25, 평소 취향의 무게 0.5, 영업 마감 여유 1시간, 메뉴 해석 LLM 대기 4초, 설명이 빈 상관없음 모임의 후보 문장 "맛집"(모임 추천 PRD OQ-29) |
 
-## 6. 모임 주소
+## 7. 모임 주소
 
 모임 추천(docs/specs/meetup)의 BE가 부른다. 계약의 근거는 모임 추천 spec의 "AI 계약"과 D-12 ~ D-15, D-26, D-32이고, 합치는 규칙은 모임 추천 PRD FR-22와 D-42다. 이름은 받지 않고 프로필 번호(`key`)만 받는다. 참여자 답과 설명 원문은 로그에 남기지 않는다. 동시 처리 상한은 일반 검색과 함께 쓴다.
 
-### 6.1. `POST /v1/meetup/interpret`
+### 7.1. `POST /v1/meetup/interpret`
 
 모임을 만들거나 설명을 고칠 때 한 번 부른다. 지금 검색의 해석(LLM, 실패하면 규칙)을 그대로 쓴다.
 
@@ -286,7 +315,7 @@ LLM 실패와 읽지 못한 입력은 오류가 아니라 200과 `fallbacks`로 
 
 설명은 앞뒤 공백을 지운 값이 1~100자이고 그 밖이면 400 `INVALID_REQUEST`다.
 
-### 6.2. `POST /v1/meetup/search`
+### 7.2. `POST /v1/meetup/search`
 
 추천받기마다 한 번 부른다. 모임 설명으로 LLM을 다시 부르지 않고, 참여자들의 먹고 싶은 메뉴 글만 한 번 모아 해석한다.
 
@@ -330,7 +359,7 @@ LLM 실패와 읽지 못한 입력은 오류가 아니라 200과 `fallbacks`로 
 | 응답 필드 | 설명 |
 | --- | --- |
 | `applied` | 적용한 합친 취향. `mood`(무게가 큰 쪽, 같으면 없음), `likeFoods`(많이 고른 순서), `avoidFoods`, `noSpicy`, `menuPriceCapWon`(가장 낮은 상한. 거르지 않고 점수에 반영한다), `wantMenus`(해석한 메뉴, 많이 적은 순서) |
-| `items[]` | 20곳까지. 모임 점수 내림차순, 점수가 없으면 후보 순서다. `placeId`, `score`(없을 수 있음), `labels`, `reasons`(검색 카드와 같은 모양), `caution`, `memberScores` |
+| `items[]` | 20곳까지. 모임 점수 내림차순, 점수가 없으면 후보 순서다. `placeId`, `score`(없을 수 있음), `labels`, `reasons`(최대 3개. `title`과 근거 칩 `tags`(`source`, `label`)인 검색 카드의 v0.16 전 모양이다. 모임에서 연 상세가 그대로 보이고 제목 API를 부르지 않는다), `caution`, `memberScores` |
 | `items[].memberScores[]` | 요청의 참여자 순서. `key`, `score`(판정할 항목이 없으면 빠짐), `unverified`(근거가 없어 뺀 항목이 있으면 true), `missedMenu`(그 사람이 원한 메뉴가 메뉴판에 하나도 없으면 적은 순서의 첫 메뉴) |
 | `emptyReason` | 후보가 없을 때만. 조건을 하나씩 빼 보고 결과가 생기는 조건을 원인으로 준다(`cause`, `suggestion`). 참여자 조건이면 `memberKeys`에 그 프로필 번호가 있다. 자동으로 완화하지 않는다 |
 | `fallbacks` | `MENU_LLM_FAILED`(메뉴 해석을 규칙으로 대신함), `TASTE_INVALID`(회원 평소 취향을 읽지 못함), `PROFILE_INVALID`(프로필을 읽지 못해 뺀 장소가 있음) |
