@@ -9,6 +9,7 @@ import { SearchScreen } from "@/domains/place/ui/search-screen";
 import { takeLoginReturn } from "../login-return";
 import { threadAuth } from "../search-thread-auth";
 import { useBookmarkAccess } from "../use-bookmark-access";
+import { MeetupStartButton } from "./meetup-start-button";
 
 // 홈(/)의 검색 홈. 로그인·비회원 표시 쿠키가 있을 때 서버가 고른다(next.config의 / rewrite)
 export function HomeScreen() {
@@ -36,5 +37,12 @@ export function HomeScreen() {
     };
   }, [router]);
   // 검색 기록 저장에 인증을 잇는다. place는 auth를 import하지 않는다(search-thread D-6)
-  return <SearchScreen bookmarks={bookmarks} threadAuth={threadAuth} />;
+  // 지도 왼쪽 위의 모임 시작 버튼. 붙이는 것이 모임 추천의 공개다(meetup D-24)
+  return (
+    <SearchScreen
+      bookmarks={bookmarks}
+      threadAuth={threadAuth}
+      topStart={<MeetupStartButton />}
+    />
+  );
 }

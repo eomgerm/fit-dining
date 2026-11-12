@@ -177,7 +177,7 @@ function renderScreen() {
   );
 }
 
-// 지도 인증 실패는 페이지 세션(place-map 모듈)에 남는다. 그 테스트는 모듈을 새로 읽어 새 페이지 세션에서 그린다.
+// 지도 인증 실패는 페이지 세션(shared/lib/naver-maps 모듈)에 남는다. 그 테스트는 모듈을 새로 읽어 새 페이지 세션에서 그린다.
 // React Query는 node_modules라 다시 읽히지 않아 같은 Provider를 쓴다
 async function renderInNewPageSession() {
   vi.resetModules();
@@ -3928,5 +3928,23 @@ describe("SearchScreen", () => {
       expect(clients[0].isFetching()).toBe(0);
       expect(nearbyBodies).toHaveLength(1);
     });
+  });
+});
+
+describe("홈 지도 왼쪽 위 자리 (meetup AC-67)", () => {
+  it("첫 화면에 app이 넣은 버튼을 보인다", async () => {
+    render(
+      <QueryClientProvider client={newClient()}>
+        <ToastProvider>
+          <SearchScreen
+            bookmarks={guest}
+            topStart={<button type="button">모임 장소 정하기</button>}
+          />
+        </ToastProvider>
+      </QueryClientProvider>,
+    );
+    expect(
+      await screen.findByRole("button", { name: "모임 장소 정하기" }),
+    ).toBeTruthy();
   });
 });

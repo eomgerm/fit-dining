@@ -12,6 +12,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type ReactNode,
 } from "react";
 
 import { prefersReducedMotion } from "@/shared/lib/reduced-motion";
@@ -106,10 +107,16 @@ type SearchScreenProps = {
   bookmarks: BookmarkAccess;
   // 회원 검색 기록을 서버에 저장하는 인증 연결. 없으면 비회원처럼 기기에 저장한다(search-thread D-6)
   threadAuth?: ThreadAuth;
+  // 홈 지도 왼쪽 위 자리. 첫 화면에만 보여 결과 화면의 "이 지역에서 검색"과 겹치지 않는다(meetup D-22)
+  topStart?: ReactNode;
 };
 
 // 첫 화면(와이어프레임 Start)과 검색·추천 결과 화면(5-01, 5-03~5-07), 저장한 장소 화면(?view=saved, 와이어프레임 Saved)
-export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
+export function SearchScreen({
+  bookmarks,
+  threadAuth,
+  topStart,
+}: SearchScreenProps) {
   const router = useRouter();
   const params = useSearchParams();
   // 저장한 장소 화면은 메인의 지도와 하단 패널이 내 저장 장소만 보이도록 바뀐 상태다(D-12)
@@ -682,6 +689,9 @@ export function SearchScreen({ bookmarks, threadAuth }: SearchScreenProps) {
       {/* 저장한 장소 화면에는 [뒤로]와 "내 위치"만 있다(D-12) */}
       {!savedView && (
         <>
+          {firstScreen && topStart && (
+            <div className="absolute top-safe-4 left-4">{topStart}</div>
+          )}
           {/* 과거 결과 화면에는 "현재 검색으로"만 둔다(D-98) */}
           {(firstScreen || (!past && panel !== "full")) && (
             <div className="absolute top-safe-banner-4 right-4 flex flex-col gap-2">
