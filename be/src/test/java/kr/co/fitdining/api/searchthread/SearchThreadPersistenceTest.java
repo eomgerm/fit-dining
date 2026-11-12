@@ -17,7 +17,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.stream.IntStream;
 import kr.co.fitdining.api.auth.domain.AuthUser;
 import kr.co.fitdining.api.auth.ports.AuthUseCases;
-import kr.co.fitdining.api.auth.ports.PasswordHasher;
 import kr.co.fitdining.api.auth.repository.AuthUserRepository;
 import kr.co.fitdining.api.support.PostgresTestSupport;
 import kr.co.fitdining.api.user.UserService;
@@ -37,6 +36,7 @@ import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -51,6 +51,11 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 
 	private static final String USER_PREFIX = "thread-test-";
 	private static final String PASSWORD = "thread-test-password1";
+	/**
+	 * cost 4로 만든 {@link #PASSWORD}의 hash. 로그인은 hash에 적힌 cost로 확인하므로 앱의 cost 12 hash를 만들고 확인하는
+	 * 시간(로그인마다 약 0.45초)을 아낀다. 로그인({@code auth.login})은 그대로 실제로 부른다.
+	 */
+	private static final String PASSWORD_HASH = new BCryptPasswordEncoder(4).encode(PASSWORD);
 	private static final String BASE = "/api/v1/me/search-threads";
 	private static final long AT = 1_761_700_000_000L;
 	private static final String INVALID = "urn:fitdining:search-thread:invalid";
@@ -71,9 +76,6 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 	AuthUseCases auth;
 
     @Autowired org.springframework.session.FindByIndexNameSessionRepository<?> sessionRepository;
-
-	@Autowired
-	PasswordHasher passwords;
 
 	@Autowired
 	UserService userService;
@@ -104,7 +106,7 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 	/** n번 사용자를 만들고 로그인한 AT를 돌려준다. */
 	private String signIn(int n) {
 		users.save(new AuthUser(USER_PREFIX + n, USER_PREFIX + n + "@example.com", "기록테스트" + n,
-				passwords.hash(PASSWORD), Instant.parse("2026-10-20T00:00:00Z"), "2026-10-23"));
+				PASSWORD_HASH, Instant.parse("2026-10-20T00:00:00Z"), "2026-10-23"));
 		// 로그인 시도 제한은 주소별이라 로그인마다 다른 주소로 보낸다
 		return kr.co.fitdining.api.support.SessionTestSupport.persist(sessionRepository, auth.login(USER_PREFIX + n + "@example.com", PASSWORD, USER_PREFIX + UUID.randomUUID()).identity());
 	}
