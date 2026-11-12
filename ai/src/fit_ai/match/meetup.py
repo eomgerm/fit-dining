@@ -34,12 +34,12 @@ from fit_ai.match.candidates import (
     StationArea,
     menu_key,
 )
-from fit_ai.match.cards import Card, build_card
+from fit_ai.match.cards import MATCHED_SCORE, Card, build_card
 from fit_ai.match.conditions import CATEGORY_NAMES, CONDITIONS, SCORE_LABELS, Layer
 from fit_ai.match.interpretation import FOOD_TYPES, Conditions
 from fit_ai.match.interpretation.segments import DAYS, Menu
 from fit_ai.match.meetup_menus import MenuReading
-from fit_ai.match.place import Place, Verdict
+from fit_ai.match.place import Place
 from fit_ai.match.scoring import (
     MIN_CONDITION_SCORE,
     REQUEST_WEIGHT,
@@ -701,32 +701,35 @@ def _leading(weights: dict[str, float]) -> str | None:
 
 
 def _known(place: Place, code: str) -> bool:
-    """장소에 그 조건을 판정할 근거가 있는지. 근거가 없으면 감점하지 않고 비교에서 뺀다."""
+    """장소에 그 조건을 판정할 근거가 있는지. 근거가 없으면 감점하지 않고 비교에서 뺀다.
+
+    리뷰로 판정하는 조건은 그렇다는 리뷰가 하나라도 있어야 근거가 있다. 조용함과 활기처럼
+    반대 극이 있는 조건도 쪽마다 따로 본다. 반대 극의 리뷰를 그 쪽이 아니라는 근거로 보면,
+    분위기가 갈린 모임에서 조용하다는 리뷰가 있는 곳마다 활기를 고른 사람이 덜 맞는 사람이
+    되어 근거가 없는 곳이 근거가 확실한 곳보다 앞에 온다(2026-11-12 실험, D-32).
+    """
     if code in FOOD_TYPES:
         return place.info.food_type is not None
     if not from_reviews(code):
         return place.info.facilities.get(code) is not None
-    evidence = place.evidence(code)
-    return bool(place.info.review_count) and evidence.pos + evidence.neg > 0
+    return bool(place.info.review_count) and place.evidence(code).pos > 0
 
 
-def _verdict(place: Place, code: str) -> float | None:
-    """참여자 점수의 항목 판정. 맞음 1, 아님 0, 모름 None이다."""
+def _verdict(
+    place: Place, code: str, scope: frozenset[str], baseline: Baseline
+) -> float | None:
+    """참여자 점수의 항목 판정. 맞음 1, 아님 0, 모름 None이다.
+
+    음식 종류와 시설은 장소 정보로 판정한다. 리뷰로 판정하는 조건은 그렇다는 리뷰가 있을 때만
+    판정하고, 조건 점수가 카드의 맞음 기준(`MATCHED_SCORE`) 이상이면 맞음이다.
+    """
+    if not _known(place, code):
+        return None
     if code in FOOD_TYPES:
-        if place.info.food_type is None:
-            return None
         return float(place.info.food_type == code)
-    if code in CONDITIONS:
-        verdict = place.judge(code)
-        if verdict is Verdict.UNKNOWN:
-            return None
-        return 1.0 if verdict is Verdict.CONFIRMED else 0.0
-    evidence = place.evidence(code)
-    if evidence.supported:
-        return 1.0
-    if evidence.neg > evidence.pos:
-        return 0.0
-    return None
+    if not from_reviews(code):
+        return float(place.info.facilities[code] is True)
+    return float(baseline.value(place, code, scope) >= MATCHED_SCORE)
 
 
 def _sold(details: PlaceDetails, terms: tuple[str, ...]) -> bool | None:
@@ -809,7 +812,9 @@ def _score(
     score = _fit(request, taste)
     card = build_card(PlaceScore(candidate, score, tuple(shown)))
     return MeetupItem(
-        card, score, tuple(_member_score(p, place, details) for p in people)
+        card,
+        score,
+        tuple(_member_score(p, place, details, scope, baseline) for p in people),
     )
 
 
@@ -850,11 +855,22 @@ def _fit(request: Sequence[float], taste: Sequence[tuple[float, float]]) -> int 
     return round(100 * fit)
 
 
-def _member_score(person: _Person, place: Place, details: PlaceDetails) -> MemberScore:
+def _member_score(
+    person: _Person,
+    place: Place,
+    details: PlaceDetails,
+    scope: frozenset[str],
+    baseline: Baseline,
+) -> MemberScore:
     """참여자 한 명의 취향 점수. 그 사람의 취향만, 근거가 있는 항목만으로 낸다.
 
-    이번 답은 무게 1, 평소 취향은 `USUAL_TASTE_WEIGHT`다. 모임 설명은 넣지 않는다.
+    항목마다 맞음 1, 아님 0이고(`_verdict`), 이번 답은 무게 1, 평소 취향은
+    `USUAL_TASTE_WEIGHT`다. 모임 설명은 넣지 않는다.
     """
+
+    def verdict(code: str) -> float | None:
+        return _verdict(place, code, scope, baseline)
+
     items: list[tuple[float, float]] = []
     skipped = False
 
@@ -866,7 +882,7 @@ def _member_score(person: _Person, place: Place, details: PlaceDetails) -> Membe
             items.append((weight, value))
 
     if person.mood:
-        add(1.0, _verdict(place, person.mood))
+        add(1.0, verdict(person.mood))
     if person.foods:
         add(
             1.0,
@@ -875,7 +891,7 @@ def _member_score(person: _Person, place: Place, details: PlaceDetails) -> Membe
             else float(place.info.food_type in person.foods),
         )
     if person.spicy_averse:
-        spicy = _verdict(place, FOOD_SPICY)
+        spicy = verdict(FOOD_SPICY)
         add(1.0, None if spicy is None else 1 - spicy)
     if person.price_cap is not None:
         add(
@@ -896,7 +912,7 @@ def _member_score(person: _Person, place: Place, details: PlaceDetails) -> Membe
             if not hit:
                 missed = groups[0][1]
     for feature in person.usual:
-        value = _verdict(place, feature.code)
+        value = verdict(feature.code)
         add(
             USUAL_TASTE_WEIGHT,
             None if value is None else value if feature.like else 1 - value,

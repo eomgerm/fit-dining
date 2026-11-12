@@ -296,7 +296,7 @@ class TestMerge:
     """사람별 취향과 항목별 합치기(PRD FR-22, D-42)"""
 
     def test_mood_weights_renormalized(self, encoded: list[str]) -> None:
-        """분위기_고른비율이무게이고_근거없는쪽은빼고다시나눈다"""
+        """분위기_고른비율이무게이고_그렇다는리뷰가없는쪽은빼고다시나눈다"""
         quiet_majority = meetup_search(
             request(
                 MeetupMember("1", mood="QUIET"),
@@ -310,10 +310,13 @@ class TestMerge:
             request(MeetupMember("1", mood="LIVELY")), FakeStore(), no_menus
         )
 
-        assert scores(quiet_majority)[1] > scores(quiet_majority)[2]
-        assert scores(lively_only)[2] > scores(lively_only)[1]
-        # 근거가 없는 중식집은 분위기를 판정하지 못해 점수가 없다.
+        # 조용한 한식집은 조용함 쪽(무게 2/3)만 남아 그 쪽 조건 점수만으로 낸다.
+        assert scores(quiet_majority)[1] is not None
+        # 활기찬 한식집은 활기 쪽(1/3)만 남아 분위기를 비교에서 뺀다. 감점하지 않는다.
+        assert scores(quiet_majority)[2] is None
         assert scores(quiet_majority)[4] is None
+        assert scores(lively_only)[1] is None
+        assert scores(lively_only)[2] is not None
 
     def test_mood_dropped_when_only_minority_known(self, encoded: list[str]) -> None:
         """분위기_근거있는쪽의무게가0점5보다작으면_분위기를뺀다"""
@@ -331,7 +334,8 @@ class TestMerge:
 
         # 조용함 쪽에만 근거가 있고 그 무게가 1/3이라 분위기를 판정하지 않는다.
         assert scores(result)[9] is None
-        assert scores(result)[1] is not None
+        # 활기 쪽(2/3)에 근거가 있는 곳은 판정한다.
+        assert scores(result)[2] is not None
 
     def test_foods_weighted_by_largest(self, encoded: list[str]) -> None:
         """선호음식_그장소의종류무게를가장큰무게로나눈다"""
@@ -490,12 +494,35 @@ class TestMemberScore:
         mine = member_scores(result, "1")
 
         assert mine[1].score == 100
-        assert mine[2].score == 50
-        assert mine[3].score == 50
         assert not mine[1].unverified
-        # 중식집은 분위기 근거가 없어 음식만으로 내고, 뺀 항목이 있다고 알린다.
+        # 조용하다는 리뷰가 조금 있지만 맞음 기준에 못 미치는 양식집은 분위기가 아님(0)이다.
+        assert mine[3].score == 0
+        assert not mine[3].unverified
+        # 조용하다는 리뷰가 없는 곳은 분위기를 모름으로 빼고 음식만으로 낸다.
+        assert mine[2].score == 100
+        assert mine[2].unverified
         assert mine[4].score == 0
         assert mine[4].unverified
+
+    def test_opposite_reviews_are_unknown_for_minority(
+        self, encoded: list[str]
+    ) -> None:
+        """참여자점수_반대극리뷰만있는곳은_그쪽을고른사람에게모름이라덜맞는사람이아니다"""
+        result = meetup_search(
+            request(
+                MeetupMember("1", mood="QUIET"),
+                MeetupMember("2", mood="QUIET"),
+                MeetupMember("3", mood="LIVELY"),
+            ),
+            FakeStore(),
+            no_menus,
+        )
+        lively = member_scores(result, "3")
+
+        # 조용한 한식집에서 활기를 고른 사람은 판정할 항목이 없다(2026-11-12 실험).
+        assert lively[1].score is None
+        assert lively[1].unverified
+        assert lively[2].score == 100
 
     def test_missed_menu(self, encoded: list[str]) -> None:
         """참여자점수_원한메뉴가메뉴판에없으면_그메뉴를준다"""
