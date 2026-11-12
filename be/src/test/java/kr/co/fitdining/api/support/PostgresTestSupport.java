@@ -1,12 +1,15 @@
 package kr.co.fitdining.api.support;
 
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Base64;
 import javax.sql.DataSource;
 import org.flywaydb.core.Flyway;
-import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.jdbc.datasource.DelegatingDataSource;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.postgresql.PostgreSQLContainer;
@@ -78,7 +81,54 @@ public abstract class PostgresTestSupport extends RedisTestSupport {
     /** @param email 가입 이메일 @return 지금 시각 기준으로 만든 인증 토큰 원문 */
     protected static String verifiedToken(String email) { return verifiedToken(email, java.time.Instant.now()); }
 
+    /**
+     * 앱 계정(fit_dev_app) 연결. JVM에서 하나인 작은 pool이라 문장마다 새 연결(10~12ms)을 열지 않는다.
+     * 연결을 직접 꺼내면 반드시 닫는다(try-with-resources). 닫힌 연결은 pool로 돌아간다.
+     */
     protected static DataSource appSource() {
-        return new DriverManagerDataSource(POSTGRES.getJdbcUrl(), "fit_dev_app", "test-app");
+        return AppPool.SOURCE;
+    }
+
+    /** 컨테이너 관리자 계정 연결. {@link #appSource()}와 같은 방식의 pool이다. */
+    protected static DataSource superuserSource() {
+        return SuperuserPool.SOURCE;
+    }
+
+    /** 처음 쓸 때 만든다. 역할은 {@link #migrate()}가 만들므로 만들 때는 연결하지 않는다. */
+    private static final class AppPool {
+        static final DataSource SOURCE = pool("fit-dev-app", "fit_dev_app", "test-app");
+    }
+
+    private static final class SuperuserPool {
+        static final DataSource SOURCE = pool("superuser", POSTGRES.getUsername(), POSTGRES.getPassword());
+    }
+
+    /**
+     * 연결을 꺼낼 때마다 {@code RESET ALL}로 session 설정을 기본값으로 되돌린다. 앞서 쓴 test가 {@code SET}으로 바꾼 값
+     * (예: ReviewPersistenceTest의 {@code enable_seqscan})이 다른 test로 새지 않게 한다. autocommit과 격리 수준은 Hikari가 되돌린다.
+     */
+    private static DataSource pool(String name, String user, String password) {
+        HikariConfig config = new HikariConfig();
+        config.setPoolName("test-" + name);
+        config.setJdbcUrl(POSTGRES.getJdbcUrl());
+        config.setUsername(user);
+        config.setPassword(password);
+        config.setMaximumPoolSize(4);
+        config.setMinimumIdle(0);
+        config.setConnectionTimeout(10_000);
+        config.setInitializationFailTimeout(-1);
+        return new DelegatingDataSource(new HikariDataSource(config)) {
+            @Override
+            public Connection getConnection() throws SQLException {
+                Connection connection = super.getConnection();
+                try (Statement reset = connection.createStatement()) {
+                    reset.execute("RESET ALL");
+                } catch (SQLException failure) {
+                    connection.close();
+                    throw failure;
+                }
+                return connection;
+            }
+        };
     }
 }

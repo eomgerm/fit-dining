@@ -24,7 +24,6 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 /**
  * 장소 카탈로그 마이그레이션이 만든 테이블 8개를 카탈로그로 정확히 비교하고, 앱 계정으로 실제 DML을 실행해
@@ -170,8 +169,7 @@ class PlaceCatalogSchemaTest extends PostgresTestSupport {
 	@BeforeAll
 	static void migrateSchema() throws Exception {
 		migrate();
-		catalog = new JdbcTemplate(new DriverManagerDataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(),
-				POSTGRES.getPassword()));
+		catalog = new JdbcTemplate(superuserSource());
 		app = new JdbcTemplate(appSource());
 	}
 
