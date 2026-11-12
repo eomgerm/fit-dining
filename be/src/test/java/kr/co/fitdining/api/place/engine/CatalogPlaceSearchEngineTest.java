@@ -22,7 +22,6 @@ import kr.co.fitdining.api.place.dto.OpenStatus;
 import kr.co.fitdining.api.place.dto.PlaceCard;
 import kr.co.fitdining.api.place.dto.PlaceCard.EvidenceSource;
 import kr.co.fitdining.api.place.dto.PlaceCard.Reason;
-import kr.co.fitdining.api.place.dto.PlaceCard.ReasonTag;
 import kr.co.fitdining.api.place.dto.PlaceCard.ScoreItem;
 import kr.co.fitdining.api.place.dto.PlaceDetailResponse;
 import kr.co.fitdining.api.place.dto.PlaceSearchRequest;
@@ -175,7 +174,7 @@ class CatalogPlaceSearchEngineTest {
 		@Test
 		@DisplayName("AI카드_순서와AI필드를그대로옮기고_장소와영업상태를붙인다")
 		void aiCards_aiResponse_keepOrderAndFields() {
-			Reason reason = new Reason("제목", List.of(new ReasonTag(EvidenceSource.REQUEST, "조용해요")), "인용", "앱 리뷰");
+			Reason reason = new Reason(EvidenceSource.REQUEST, "QUIET", "조용해요", 0.95, true, "카페 중 손꼽히게 조용해요");
 			ScoreItem scoreItem = new ScoreItem(EvidenceSource.PREFERENCE, "넓어요", true, 3);
 			Map<String, Object> conditions = new HashMap<>();
 			conditions.put("text", "t");
@@ -284,7 +283,7 @@ class CatalogPlaceSearchEngineTest {
 		@DisplayName("AI카드_읽을수있는응답이면_interpretedBy와rankedBy와models를INFO로남기고문구는남기지않는다")
 		void aiCards_readableResponse_logsModelsWithoutText(CapturedOutput output) {
 			JsonMapper mapper = JsonMapper.builder().build();
-			Reason reason = new Reason(SECRET, List.of(new ReasonTag(EvidenceSource.REQUEST, SECRET)), SECRET, SECRET);
+			Reason reason = new Reason(EvidenceSource.REQUEST, SECRET, SECRET, 0.9, true, SECRET);
 			ai(new AiSearchClient.Response(Map.of("text", SECRET), false, SECRET, new EmptyReason(SECRET, SECRET),
 					List.of(new AiSearchClient.Item(1L, 1, List.of(SECRET), List.of(reason), List.of())),
 					List.of(), mapper.readTree("\"LLM\""), mapper.readTree("\"SIMILARITY\""),

@@ -389,8 +389,7 @@ public class AiSearchClient {
 	private static boolean readable(Response response) {
 		return response != null && response.items() != null && noNulls(response.fallbacks())
 				&& response.items().stream().allMatch(item -> item != null && item.placeId() != null
-						&& noNulls(item.labels()) && noNulls(item.scoreItems()) && noNulls(item.reasons())
-						&& (item.reasons() == null || item.reasons().stream().allMatch(reason -> noNulls(reason.tags()))));
+						&& noNulls(item.labels()) && noNulls(item.scoreItems()) && noNulls(item.reasons()));
 	}
 
 	private static boolean noNulls(List<?> list) {

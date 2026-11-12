@@ -6,7 +6,6 @@ import java.util.Objects;
 import java.util.Optional;
 import kr.co.fitdining.api.meetup.domain.MeetupInterpretation;
 import kr.co.fitdining.api.place.catalog.ConditionalOnCatalogMode;
-import kr.co.fitdining.api.place.dto.PlaceCard;
 import kr.co.fitdining.api.place.engine.AiSearchClient;
 import kr.co.fitdining.api.place.engine.AiSearchClient.Reply;
 import org.springframework.stereotype.Component;
@@ -99,7 +98,7 @@ class AiMeetupClient implements MeetupInterpreter {
 			Integer menuPriceCapWon, List<String> wantMenus) {
 	}
 
-	record Item(Long placeId, Integer score, List<PlaceCard.Reason> reasons, String caution,
+	record Item(Long placeId, Integer score, List<MeetupRecommendation.Reason> reasons, String caution,
 			List<MemberScore> memberScores) {
 	}
 

@@ -26,6 +26,7 @@ import java.util.stream.Stream;
 import kr.co.fitdining.api.place.catalog.PlaceCatalog;
 import kr.co.fitdining.api.place.dto.OpenStatus;
 import kr.co.fitdining.api.place.dto.PlaceCard;
+import kr.co.fitdining.api.place.dto.PlaceCard.EvidenceSource;
 import kr.co.fitdining.api.place.dto.PlaceCard.Reason;
 import kr.co.fitdining.api.place.dto.PlaceDetailResponse;
 import kr.co.fitdining.api.place.dto.PlaceSummary;
@@ -279,7 +280,8 @@ class PlaceControllerMockDisabledTest {
 		switch (scenario) {
 			case "AI 성공" -> when(aiClient.search(any(), any(), any())).thenReturn(Optional.of(new AiSearchClient.Response(
 					Map.of("text", SECRET), false, SECRET, null, List.of(new AiSearchClient.Item(7L, 1, List.of(SECRET),
-							List.of(new Reason(SECRET, List.of(), SECRET, SECRET)), null)), List.of(), null, null, null)));
+							List.of(new Reason(EvidenceSource.REQUEST, SECRET, SECRET, 0.9, true, SECRET)), null)), List.of(), null, null,
+					null)));
 			case "503" -> {
 				when(aiClient.search(any(), any(), any())).thenReturn(Optional.empty());
 				when(catalog.cards(any())).thenThrow(new DataAccessResourceFailureException("db"));

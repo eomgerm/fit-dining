@@ -646,8 +646,8 @@ class PlaceControllerTest {
 		private static final Set<String> EMPTY_REASON = Set.of("cause", "suggestion");
 		private static final Set<String> CARD = Set.of("place", "score", "labels", "caution", "openStatus", "reasons",
 				"scoreItems");
-		private static final Set<String> REASON = Set.of("title", "tags", "quote", "quoteSource");
-		private static final Set<String> REASON_TAG = Set.of("source", "label");
+		private static final Set<String> REASON = Set.of("source", "code", "label", "value", "fromReviews",
+				"fallbackTitle");
 		private static final Set<String> SCORE_ITEM = Set.of("source", "label", "matched", "evidenceCount");
 		private static final Set<String> DETAIL = Set.of("place", "address", "tags", "photos", "phone", "website",
 				"openStatus", "hours", "closedDayNote", "menus", "facilities", "subways", "directions", "parking", "pet",
@@ -703,7 +703,6 @@ class PlaceControllerTest {
 					assertKeys(card.get("place"), SUMMARY);
 					for (JsonNode reason : card.get("reasons")) {
 						assertKeys(reason, REASON);
-						reason.get("tags").forEach(tag -> assertKeys(tag, REASON_TAG));
 					}
 					card.get("scoreItems").forEach(item -> assertKeys(item, SCORE_ITEM));
 				}

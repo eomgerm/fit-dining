@@ -63,7 +63,7 @@ class AiMeetupRecommenderTest {
 		return new AiMeetupClient.Found(
 				new AiMeetupClient.Applied("QUIET", List.of("KOREAN", "MEXICAN"), null, true, 20000, List.of("곱창")),
 				List.of(new AiMeetupClient.Item(10L, 86,
-						List.of(new PlaceCard.Reason("조용해요", List.of(new PlaceCard.ReasonTag(
+						List.of(new MeetupRecommendation.Reason("조용해요", List.of(new MeetupRecommendation.ReasonTag(
 								PlaceCard.EvidenceSource.PREFERENCE, "조용해요")), null, null)),
 						"주차는 어려워요",
 						List.of(new AiMeetupClient.MemberScore("1", 100, null, null),
@@ -153,7 +153,7 @@ class AiMeetupRecommenderTest {
 		assertThat(place.placeId()).isEqualTo(10L);
 		assertThat(place.score()).isEqualTo(86);
 		assertThat(place.caution()).isEqualTo("주차는 어려워요");
-		assertThat(place.reasons()).extracting(PlaceCard.Reason::title).containsExactly("조용해요");
+		assertThat(place.reasons()).extracting(MeetupRecommendation.Reason::title).containsExactly("조용해요");
 		assertThat(place.members()).containsExactly(new MeetupRecommendation.MemberScore(1, 100, false, null),
 				new MeetupRecommendation.MemberScore(2, 40, true, "곱창"),
 				new MeetupRecommendation.MemberScore(3, null, false, null));

@@ -100,11 +100,11 @@ class StubMeetupRecommender implements MeetupRecommender {
 		return sells ? null : wanted.getFirst();
 	}
 
-	private static List<PlaceCard.Reason> reasons(PlaceDetailResponse detail) {
+	private static List<MeetupRecommendation.Reason> reasons(PlaceDetailResponse detail) {
 		List<String> tags = detail.tags() == null ? List.of() : detail.tags();
 		return tags.stream().limit(MeetupLimits.REASONS_MAX)
-				.map(tag -> new PlaceCard.Reason("\"" + tag + "\"" + (endsWithBatchim(tag) ? "이라는" : "라는") + " 평이 많아요",
-						List.of(new PlaceCard.ReasonTag(PlaceCard.EvidenceSource.REQUEST, tag)), null, null))
+				.map(tag -> new MeetupRecommendation.Reason("\"" + tag + "\"" + (endsWithBatchim(tag) ? "이라는" : "라는") + " 평이 많아요",
+						List.of(new MeetupRecommendation.ReasonTag(PlaceCard.EvidenceSource.REQUEST, tag)), null, null))
 				.toList();
 	}
 

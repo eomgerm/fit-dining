@@ -19,8 +19,29 @@ public record MeetupRecommendation(List<Place> places, Applied applied, EmptyRea
 	 * @param score 모임 점수(0~100). 점수를 매길 조건이 없으면 null이다(AC-20).
 	 * @param members 계산에 넣은 프로필마다의 취향 점수
 	 */
-	public record Place(long placeId, Integer score, List<PlaceCard.Reason> reasons, String caution,
+	public record Place(long placeId, Integer score, List<Reason> reasons, String caution,
 			List<MemberScore> members) {
+	}
+
+	/**
+	 * 모임 결과의 추천 이유 1개. 모임에서 연 장소 상세도 이 값을 그대로 보인다(AC-33). 장소 검색 카드의 추천 이유는
+	 * 상세에서 제목을 받는 모양으로 바뀌었고(place-search, S15P31A302-224) 모임은 그 전 모양을 이어 쓴다.
+	 *
+	 * @param title 이유 제목
+	 * @param tags 이 이유의 근거 칩
+	 * @param quote 근거가 된 문장 인용. 없으면 생략한다.
+	 * @param quoteSource 인용 출처(예: "앱 리뷰"). 없으면 생략한다.
+	 */
+	public record Reason(String title, List<ReasonTag> tags, String quote, String quoteSource) {
+	}
+
+	/**
+	 * 추천 이유의 근거 칩. 화면에 "요청 · 조용해요"처럼 보인다.
+	 *
+	 * @param source 근거 출처
+	 * @param label 칩 문구
+	 */
+	public record ReasonTag(PlaceCard.EvidenceSource source, String label) {
 	}
 
 	/**

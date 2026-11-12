@@ -20,26 +20,28 @@
         "openStatus": "UNKNOWN",
         "reasons": [
           {
-            "title": "리뷰에서 \"커피가 맛있어요\"라는 말이 많아요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "커피가 맛있어요"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "VALUE_FOR_MONEY",
+            "label": "가격만큼 만족해요",
+            "value": 0.92,
+            "fromReviews": true,
+            "fallbackTitle": "카페 중 손꼽히게 가격만큼 만족해요"
           },
           {
-            "title": "\"디저트가 맛있어요\"라는 평이 있어요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "디저트가 맛있어요"
-              },
-              {
-                "source": "PREFERENCE",
-                "label": "주차 가능"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "PRETTY_SPACE",
+            "label": "공간이 예뻐요",
+            "value": 0.8,
+            "fromReviews": true,
+            "fallbackTitle": "공간이 예쁜 편이에요"
+          },
+          {
+            "source": "PREFERENCE",
+            "code": "PARKING",
+            "label": "주차할 수 있어요",
+            "value": 1.0,
+            "fromReviews": false,
+            "fallbackTitle": "주차할 수 있어요"
           }
         ],
         "scoreItems": [
@@ -595,28 +597,28 @@
         "openStatus": "UNKNOWN",
         "reasons": [
           {
-            "title": "리뷰에서 \"혼술하기 좋아요\"라는 말이 많아요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "혼술하기 좋아요"
-              }
-            ],
-            "quote": "혼술하기 좋아요. 다음에도 오고 싶어요.",
-            "quoteSource": "앱 리뷰"
+            "source": "REQUEST",
+            "code": "PURPOSE_SOLO",
+            "label": "혼밥하기 좋아요",
+            "value": 0.92,
+            "fromReviews": true,
+            "fallbackTitle": "술집 중 손꼽히게 혼밥하기 좋아요"
           },
           {
-            "title": "\"늦게까지 해요\"라는 평이 있어요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "늦게까지 해요"
-              },
-              {
-                "source": "PREFERENCE",
-                "label": "주차 가능"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "SHORT_WAIT",
+            "label": "대기가 짧아요",
+            "value": 0.8,
+            "fromReviews": true,
+            "fallbackTitle": "대기가 짧은 편이에요"
+          },
+          {
+            "source": "PREFERENCE",
+            "code": "PARKING",
+            "label": "주차할 수 있어요",
+            "value": 1.0,
+            "fromReviews": false,
+            "fallbackTitle": "주차할 수 있어요"
           }
         ],
         "scoreItems": [
@@ -1192,28 +1194,28 @@
         "openStatus": "UNKNOWN",
         "reasons": [
           {
-            "title": "리뷰에서 \"채광이 좋아요\"라는 말이 많아요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "채광이 좋아요"
-              }
-            ],
-            "quote": "채광이 좋아요. 다음에도 오고 싶어요.",
-            "quoteSource": "앱 리뷰"
+            "source": "REQUEST",
+            "code": "VIEW_OUTDOOR",
+            "label": "전망이 좋아요",
+            "value": 0.92,
+            "fromReviews": true,
+            "fallbackTitle": "카페 중 손꼽히게 전망이 좋아요"
           },
           {
-            "title": "\"조용해요\"라는 평이 있어요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "조용해요"
-              },
-              {
-                "source": "PREFERENCE",
-                "label": "가성비"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "QUIET",
+            "label": "조용해요",
+            "value": 0.8,
+            "fromReviews": true,
+            "fallbackTitle": "조용한 편이에요"
+          },
+          {
+            "source": "PREFERENCE",
+            "code": "VALUE_FOR_MONEY",
+            "label": "가격만큼 만족해요",
+            "value": 0.85,
+            "fromReviews": true,
+            "fallbackTitle": "가격만큼 만족스러운 편이에요"
           }
         ],
         "scoreItems": [
@@ -1491,13 +1493,12 @@
         "openStatus": "UNKNOWN",
         "reasons": [
           {
-            "title": "리뷰에서 \"혼밥하기 좋아요\"라는 말이 많아요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "혼밥하기 좋아요"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "PURPOSE_SOLO",
+            "label": "혼밥하기 좋아요",
+            "value": 0.92,
+            "fromReviews": true,
+            "fallbackTitle": "식당 중 손꼽히게 혼밥하기 좋아요"
           }
         ],
         "scoreItems": [
@@ -1827,26 +1828,28 @@
         "openStatus": "UNKNOWN",
         "reasons": [
           {
-            "title": "리뷰에서 \"혼밥하기 좋아요\"라는 말이 많아요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "혼밥하기 좋아요"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "PURPOSE_SOLO",
+            "label": "혼밥하기 좋아요",
+            "value": 0.92,
+            "fromReviews": true,
+            "fallbackTitle": "식당 중 손꼽히게 혼밥하기 좋아요"
           },
           {
-            "title": "\"대화하기 좋아요\"라는 평이 있어요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "대화하기 좋아요"
-              },
-              {
-                "source": "PREFERENCE",
-                "label": "가성비"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "PURPOSE_TALK",
+            "label": "대화하기 좋아요",
+            "value": 0.8,
+            "fromReviews": true,
+            "fallbackTitle": "대화하기 좋은 편이에요"
+          },
+          {
+            "source": "PREFERENCE",
+            "code": "VALUE_FOR_MONEY",
+            "label": "가격만큼 만족해요",
+            "value": 0.85,
+            "fromReviews": true,
+            "fallbackTitle": "가격만큼 만족스러운 편이에요"
           }
         ],
         "scoreItems": [
@@ -2903,28 +2906,28 @@
         "openStatus": "UNKNOWN",
         "reasons": [
           {
-            "title": "리뷰에서 \"채광이 좋아요\"라는 말이 많아요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "채광이 좋아요"
-              }
-            ],
-            "quote": "채광이 좋아요. 다음에도 오고 싶어요.",
-            "quoteSource": "앱 리뷰"
+            "source": "REQUEST",
+            "code": "VIEW_OUTDOOR",
+            "label": "전망이 좋아요",
+            "value": 0.92,
+            "fromReviews": true,
+            "fallbackTitle": "카페 중 손꼽히게 전망이 좋아요"
           },
           {
-            "title": "\"오래 머물기 좋아요\"라는 평이 있어요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "오래 머물기 좋아요"
-              },
-              {
-                "source": "PREFERENCE",
-                "label": "조용한 곳"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "PURPOSE_WORK",
+            "label": "작업하기 좋아요",
+            "value": 0.8,
+            "fromReviews": true,
+            "fallbackTitle": "작업하기 좋은 편이에요"
+          },
+          {
+            "source": "PREFERENCE",
+            "code": "QUIET",
+            "label": "조용해요",
+            "value": 0.85,
+            "fromReviews": true,
+            "fallbackTitle": "조용한 편이에요"
           }
         ],
         "scoreItems": [
@@ -3101,15 +3104,12 @@
         "openStatus": "UNKNOWN",
         "reasons": [
           {
-            "title": "리뷰에서 \"오래 머물기 좋아요\"라는 말이 많아요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "오래 머물기 좋아요"
-              }
-            ],
-            "quote": "오래 머물기 좋아요. 다음에도 오고 싶어요.",
-            "quoteSource": "앱 리뷰"
+            "source": "REQUEST",
+            "code": "PURPOSE_WORK",
+            "label": "작업하기 좋아요",
+            "value": 0.92,
+            "fromReviews": true,
+            "fallbackTitle": "카페 중 손꼽히게 작업하기 좋아요"
           }
         ],
         "scoreItems": [
@@ -3277,28 +3277,28 @@
         "openStatus": "UNKNOWN",
         "reasons": [
           {
-            "title": "리뷰에서 \"자리가 넓어요\"라는 말이 많아요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "자리가 넓어요"
-              }
-            ],
-            "quote": "자리가 넓어요. 다음에도 오고 싶어요.",
-            "quoteSource": "앱 리뷰"
+            "source": "REQUEST",
+            "code": "SPACIOUS_SEATING",
+            "label": "자리가 넉넉해요",
+            "value": 0.92,
+            "fromReviews": true,
+            "fallbackTitle": "카페 중 손꼽히게 자리가 넉넉해요"
           },
           {
-            "title": "\"커피가 맛있어요\"라는 평이 있어요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "커피가 맛있어요"
-              },
-              {
-                "source": "PREFERENCE",
-                "label": "주차 가능"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "VALUE_FOR_MONEY",
+            "label": "가격만큼 만족해요",
+            "value": 0.8,
+            "fromReviews": true,
+            "fallbackTitle": "가격만큼 만족스러운 편이에요"
+          },
+          {
+            "source": "PREFERENCE",
+            "code": "PARKING",
+            "label": "주차할 수 있어요",
+            "value": 1.0,
+            "fromReviews": false,
+            "fallbackTitle": "주차할 수 있어요"
           }
         ],
         "scoreItems": [
@@ -3853,28 +3853,28 @@
         "openStatus": "UNKNOWN",
         "reasons": [
           {
-            "title": "리뷰에서 \"음식이 빨리 나와요\"라는 말이 많아요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "음식이 빨리 나와요"
-              }
-            ],
-            "quote": "음식이 빨리 나와요. 다음에도 오고 싶어요.",
-            "quoteSource": "앱 리뷰"
+            "source": "REQUEST",
+            "code": "FAST_SERVING",
+            "label": "음식이 빨리 나와요",
+            "value": 0.92,
+            "fromReviews": true,
+            "fallbackTitle": "식당 중 손꼽히게 음식이 빨리 나와요"
           },
           {
-            "title": "\"양이 넉넉해요\"라는 평이 있어요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "양이 넉넉해요"
-              },
-              {
-                "source": "PREFERENCE",
-                "label": "주차 가능"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "GENEROUS_PORTION",
+            "label": "양이 넉넉해요",
+            "value": 0.8,
+            "fromReviews": true,
+            "fallbackTitle": "양이 넉넉한 편이에요"
+          },
+          {
+            "source": "PREFERENCE",
+            "code": "PARKING",
+            "label": "주차할 수 있어요",
+            "value": 1.0,
+            "fromReviews": false,
+            "fallbackTitle": "주차할 수 있어요"
           }
         ],
         "scoreItems": [
@@ -4103,28 +4103,28 @@
         "openStatus": "UNKNOWN",
         "reasons": [
           {
-            "title": "리뷰에서 \"혼술하기 좋아요\"라는 말이 많아요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "혼술하기 좋아요"
-              }
-            ],
-            "quote": "혼술하기 좋아요. 다음에도 오고 싶어요.",
-            "quoteSource": "앱 리뷰"
+            "source": "REQUEST",
+            "code": "PURPOSE_SOLO",
+            "label": "혼밥하기 좋아요",
+            "value": 0.92,
+            "fromReviews": true,
+            "fallbackTitle": "술집 중 손꼽히게 혼밥하기 좋아요"
           },
           {
-            "title": "\"안주가 맛있어요\"라는 평이 있어요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "안주가 맛있어요"
-              },
-              {
-                "source": "PREFERENCE",
-                "label": "가성비"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "VALUE_FOR_MONEY",
+            "label": "가격만큼 만족해요",
+            "value": 0.8,
+            "fromReviews": true,
+            "fallbackTitle": "가격만큼 만족스러운 편이에요"
+          },
+          {
+            "source": "PREFERENCE",
+            "code": "VALUE_FOR_MONEY",
+            "label": "가격만큼 만족해요",
+            "value": 0.85,
+            "fromReviews": true,
+            "fallbackTitle": "가격만큼 만족스러운 편이에요"
           }
         ],
         "scoreItems": [
@@ -4362,26 +4362,28 @@
         "openStatus": "UNKNOWN",
         "reasons": [
           {
-            "title": "리뷰에서 \"대화하기 좋아요\"라는 말이 많아요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "대화하기 좋아요"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "PURPOSE_TALK",
+            "label": "대화하기 좋아요",
+            "value": 0.92,
+            "fromReviews": true,
+            "fallbackTitle": "술집 중 손꼽히게 대화하기 좋아요"
           },
           {
-            "title": "\"안주가 맛있어요\"라는 평이 있어요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "안주가 맛있어요"
-              },
-              {
-                "source": "PREFERENCE",
-                "label": "조용한 곳"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "VALUE_FOR_MONEY",
+            "label": "가격만큼 만족해요",
+            "value": 0.8,
+            "fromReviews": true,
+            "fallbackTitle": "가격만큼 만족스러운 편이에요"
+          },
+          {
+            "source": "PREFERENCE",
+            "code": "QUIET",
+            "label": "조용해요",
+            "value": 0.85,
+            "fromReviews": true,
+            "fallbackTitle": "조용한 편이에요"
           }
         ],
         "scoreItems": [
@@ -4863,13 +4865,12 @@
         "openStatus": "UNKNOWN",
         "reasons": [
           {
-            "title": "리뷰에서 \"분위기가 좋아요\"라는 말이 많아요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "분위기가 좋아요"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "COZY",
+            "label": "아늑해요",
+            "value": 0.92,
+            "fromReviews": true,
+            "fallbackTitle": "술집 중 손꼽히게 아늑해요"
           }
         ],
         "scoreItems": [
@@ -5368,13 +5369,12 @@
         "openStatus": "UNKNOWN",
         "reasons": [
           {
-            "title": "리뷰에서 \"혼밥하기 좋아요\"라는 말이 많아요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "혼밥하기 좋아요"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "PURPOSE_SOLO",
+            "label": "혼밥하기 좋아요",
+            "value": 0.92,
+            "fromReviews": true,
+            "fallbackTitle": "식당 중 손꼽히게 혼밥하기 좋아요"
           }
         ],
         "scoreItems": [
@@ -5719,28 +5719,28 @@
         "openStatus": "UNKNOWN",
         "reasons": [
           {
-            "title": "리뷰에서 \"재료가 신선해요\"라는 말이 많아요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "재료가 신선해요"
-              }
-            ],
-            "quote": "재료가 신선해요. 다음에도 오고 싶어요.",
-            "quoteSource": "앱 리뷰"
+            "source": "REQUEST",
+            "code": "GENEROUS_PORTION",
+            "label": "양이 넉넉해요",
+            "value": 0.92,
+            "fromReviews": true,
+            "fallbackTitle": "식당 중 손꼽히게 양이 넉넉해요"
           },
           {
-            "title": "\"대화하기 좋아요\"라는 평이 있어요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "대화하기 좋아요"
-              },
-              {
-                "source": "PREFERENCE",
-                "label": "주차 가능"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "PURPOSE_TALK",
+            "label": "대화하기 좋아요",
+            "value": 0.8,
+            "fromReviews": true,
+            "fallbackTitle": "대화하기 좋은 편이에요"
+          },
+          {
+            "source": "PREFERENCE",
+            "code": "PARKING",
+            "label": "주차할 수 있어요",
+            "value": 1.0,
+            "fromReviews": false,
+            "fallbackTitle": "주차할 수 있어요"
           }
         ],
         "scoreItems": [
@@ -6073,15 +6073,12 @@
         "openStatus": "UNKNOWN",
         "reasons": [
           {
-            "title": "리뷰에서 \"대화하기 좋아요\"라는 말이 많아요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "대화하기 좋아요"
-              }
-            ],
-            "quote": "대화하기 좋아요. 다음에도 오고 싶어요.",
-            "quoteSource": "앱 리뷰"
+            "source": "REQUEST",
+            "code": "PURPOSE_TALK",
+            "label": "대화하기 좋아요",
+            "value": 0.92,
+            "fromReviews": true,
+            "fallbackTitle": "술집 중 손꼽히게 대화하기 좋아요"
           }
         ],
         "scoreItems": [
@@ -6589,28 +6586,28 @@
         "openStatus": "UNKNOWN",
         "reasons": [
           {
-            "title": "리뷰에서 \"늦게까지 해요\"라는 말이 많아요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "늦게까지 해요"
-              }
-            ],
-            "quote": "늦게까지 해요. 다음에도 오고 싶어요.",
-            "quoteSource": "앱 리뷰"
+            "source": "REQUEST",
+            "code": "SHORT_WAIT",
+            "label": "대기가 짧아요",
+            "value": 0.92,
+            "fromReviews": true,
+            "fallbackTitle": "술집 중 손꼽히게 대기가 짧아요"
           },
           {
-            "title": "\"음악이 좋아요\"라는 평이 있어요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "음악이 좋아요"
-              },
-              {
-                "source": "PREFERENCE",
-                "label": "주차 가능"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "GOOD_MUSIC",
+            "label": "음악이 좋아요",
+            "value": 0.8,
+            "fromReviews": true,
+            "fallbackTitle": "음악이 좋은 편이에요"
+          },
+          {
+            "source": "PREFERENCE",
+            "code": "PARKING",
+            "label": "주차할 수 있어요",
+            "value": 1.0,
+            "fromReviews": false,
+            "fallbackTitle": "주차할 수 있어요"
           }
         ],
         "scoreItems": [
@@ -7487,28 +7484,28 @@
         "openStatus": "UNKNOWN",
         "reasons": [
           {
-            "title": "리뷰에서 \"혼밥하기 좋아요\"라는 말이 많아요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "혼밥하기 좋아요"
-              }
-            ],
-            "quote": "혼밥하기 좋아요. 다음에도 오고 싶어요.",
-            "quoteSource": "앱 리뷰"
+            "source": "REQUEST",
+            "code": "PURPOSE_SOLO",
+            "label": "혼밥하기 좋아요",
+            "value": 0.92,
+            "fromReviews": true,
+            "fallbackTitle": "식당 중 손꼽히게 혼밥하기 좋아요"
           },
           {
-            "title": "\"재료가 신선해요\"라는 평이 있어요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "재료가 신선해요"
-              },
-              {
-                "source": "PREFERENCE",
-                "label": "주차 가능"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "GENEROUS_PORTION",
+            "label": "양이 넉넉해요",
+            "value": 0.8,
+            "fromReviews": true,
+            "fallbackTitle": "양이 넉넉한 편이에요"
+          },
+          {
+            "source": "PREFERENCE",
+            "code": "PARKING",
+            "label": "주차할 수 있어요",
+            "value": 1.0,
+            "fromReviews": false,
+            "fallbackTitle": "주차할 수 있어요"
           }
         ],
         "scoreItems": [
@@ -7789,13 +7786,12 @@
         "openStatus": "UNKNOWN",
         "reasons": [
           {
-            "title": "리뷰에서 \"디저트가 맛있어요\"라는 말이 많아요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "디저트가 맛있어요"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "PRETTY_SPACE",
+            "label": "공간이 예뻐요",
+            "value": 0.92,
+            "fromReviews": true,
+            "fallbackTitle": "카페 중 손꼽히게 공간이 예뻐요"
           }
         ],
         "scoreItems": [
@@ -8132,26 +8128,28 @@
         "openStatus": "UNKNOWN",
         "reasons": [
           {
-            "title": "리뷰에서 \"음식이 빨리 나와요\"라는 말이 많아요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "음식이 빨리 나와요"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "FAST_SERVING",
+            "label": "음식이 빨리 나와요",
+            "value": 0.92,
+            "fromReviews": true,
+            "fallbackTitle": "식당 중 손꼽히게 음식이 빨리 나와요"
           },
           {
-            "title": "\"단체로 가기 좋아요\"라는 평이 있어요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "단체로 가기 좋아요"
-              },
-              {
-                "source": "PREFERENCE",
-                "label": "가성비"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "PURPOSE_GROUP",
+            "label": "모임하기 좋아요",
+            "value": 0.8,
+            "fromReviews": true,
+            "fallbackTitle": "모임하기 좋은 편이에요"
+          },
+          {
+            "source": "PREFERENCE",
+            "code": "VALUE_FOR_MONEY",
+            "label": "가격만큼 만족해요",
+            "value": 0.85,
+            "fromReviews": true,
+            "fallbackTitle": "가격만큼 만족스러운 편이에요"
           }
         ],
         "scoreItems": [
@@ -8617,15 +8615,12 @@
         "openStatus": "UNKNOWN",
         "reasons": [
           {
-            "title": "리뷰에서 \"대화하기 좋아요\"라는 말이 많아요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "대화하기 좋아요"
-              }
-            ],
-            "quote": "대화하기 좋아요. 다음에도 오고 싶어요.",
-            "quoteSource": "앱 리뷰"
+            "source": "REQUEST",
+            "code": "PURPOSE_TALK",
+            "label": "대화하기 좋아요",
+            "value": 0.92,
+            "fromReviews": true,
+            "fallbackTitle": "술집 중 손꼽히게 대화하기 좋아요"
           }
         ],
         "scoreItems": [
@@ -9378,26 +9373,28 @@
         "openStatus": "UNKNOWN",
         "reasons": [
           {
-            "title": "리뷰에서 \"채광이 좋아요\"라는 말이 많아요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "채광이 좋아요"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "VIEW_OUTDOOR",
+            "label": "전망이 좋아요",
+            "value": 0.92,
+            "fromReviews": true,
+            "fallbackTitle": "카페 중 손꼽히게 전망이 좋아요"
           },
           {
-            "title": "\"자리가 넓어요\"라는 평이 있어요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "자리가 넓어요"
-              },
-              {
-                "source": "PREFERENCE",
-                "label": "조용한 곳"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "SPACIOUS_SEATING",
+            "label": "자리가 넉넉해요",
+            "value": 0.8,
+            "fromReviews": true,
+            "fallbackTitle": "자리가 넉넉한 편이에요"
+          },
+          {
+            "source": "PREFERENCE",
+            "code": "QUIET",
+            "label": "조용해요",
+            "value": 0.85,
+            "fromReviews": true,
+            "fallbackTitle": "조용한 편이에요"
           }
         ],
         "scoreItems": [
@@ -9618,26 +9615,28 @@
         "openStatus": "UNKNOWN",
         "reasons": [
           {
-            "title": "리뷰에서 \"오래 머물기 좋아요\"라는 말이 많아요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "오래 머물기 좋아요"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "PURPOSE_WORK",
+            "label": "작업하기 좋아요",
+            "value": 0.92,
+            "fromReviews": true,
+            "fallbackTitle": "카페 중 손꼽히게 작업하기 좋아요"
           },
           {
-            "title": "\"조용해요\"라는 평이 있어요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "조용해요"
-              },
-              {
-                "source": "PREFERENCE",
-                "label": "주차 가능"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "QUIET",
+            "label": "조용해요",
+            "value": 0.8,
+            "fromReviews": true,
+            "fallbackTitle": "조용한 편이에요"
+          },
+          {
+            "source": "PREFERENCE",
+            "code": "PARKING",
+            "label": "주차할 수 있어요",
+            "value": 1.0,
+            "fromReviews": false,
+            "fallbackTitle": "주차할 수 있어요"
           }
         ],
         "scoreItems": [
@@ -9792,28 +9791,28 @@
         "openStatus": "UNKNOWN",
         "reasons": [
           {
-            "title": "리뷰에서 \"양이 넉넉해요\"라는 말이 많아요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "양이 넉넉해요"
-              }
-            ],
-            "quote": "양이 넉넉해요. 다음에도 오고 싶어요.",
-            "quoteSource": "앱 리뷰"
+            "source": "REQUEST",
+            "code": "GENEROUS_PORTION",
+            "label": "양이 넉넉해요",
+            "value": 0.92,
+            "fromReviews": true,
+            "fallbackTitle": "식당 중 손꼽히게 양이 넉넉해요"
           },
           {
-            "title": "\"음식이 빨리 나와요\"라는 평이 있어요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "음식이 빨리 나와요"
-              },
-              {
-                "source": "PREFERENCE",
-                "label": "주차 가능"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "FAST_SERVING",
+            "label": "음식이 빨리 나와요",
+            "value": 0.8,
+            "fromReviews": true,
+            "fallbackTitle": "음식이 빨리 나오는 편이에요"
+          },
+          {
+            "source": "PREFERENCE",
+            "code": "PARKING",
+            "label": "주차할 수 있어요",
+            "value": 1.0,
+            "fromReviews": false,
+            "fallbackTitle": "주차할 수 있어요"
           }
         ],
         "scoreItems": [
@@ -10113,28 +10112,28 @@
         "openStatus": "UNKNOWN",
         "reasons": [
           {
-            "title": "리뷰에서 \"혼술하기 좋아요\"라는 말이 많아요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "혼술하기 좋아요"
-              }
-            ],
-            "quote": "혼술하기 좋아요. 다음에도 오고 싶어요.",
-            "quoteSource": "앱 리뷰"
+            "source": "REQUEST",
+            "code": "PURPOSE_SOLO",
+            "label": "혼밥하기 좋아요",
+            "value": 0.92,
+            "fromReviews": true,
+            "fallbackTitle": "술집 중 손꼽히게 혼밥하기 좋아요"
           },
           {
-            "title": "\"분위기가 좋아요\"라는 평이 있어요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "분위기가 좋아요"
-              },
-              {
-                "source": "PREFERENCE",
-                "label": "조용한 곳"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "COZY",
+            "label": "아늑해요",
+            "value": 0.8,
+            "fromReviews": true,
+            "fallbackTitle": "아늑한 편이에요"
+          },
+          {
+            "source": "PREFERENCE",
+            "code": "QUIET",
+            "label": "조용해요",
+            "value": 0.85,
+            "fromReviews": true,
+            "fallbackTitle": "조용한 편이에요"
           }
         ],
         "scoreItems": [
@@ -11046,28 +11045,28 @@
         "openStatus": "UNKNOWN",
         "reasons": [
           {
-            "title": "리뷰에서 \"늦게까지 해요\"라는 말이 많아요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "늦게까지 해요"
-              }
-            ],
-            "quote": "늦게까지 해요. 다음에도 오고 싶어요.",
-            "quoteSource": "앱 리뷰"
+            "source": "REQUEST",
+            "code": "SHORT_WAIT",
+            "label": "대기가 짧아요",
+            "value": 0.92,
+            "fromReviews": true,
+            "fallbackTitle": "술집 중 손꼽히게 대기가 짧아요"
           },
           {
-            "title": "\"혼술하기 좋아요\"라는 평이 있어요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "혼술하기 좋아요"
-              },
-              {
-                "source": "PREFERENCE",
-                "label": "조용한 곳"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "PURPOSE_SOLO",
+            "label": "혼밥하기 좋아요",
+            "value": 0.8,
+            "fromReviews": true,
+            "fallbackTitle": "혼밥하기 좋은 편이에요"
+          },
+          {
+            "source": "PREFERENCE",
+            "code": "QUIET",
+            "label": "조용해요",
+            "value": 0.85,
+            "fromReviews": true,
+            "fallbackTitle": "조용한 편이에요"
           }
         ],
         "scoreItems": [
@@ -11243,28 +11242,28 @@
         "openStatus": "UNKNOWN",
         "reasons": [
           {
-            "title": "리뷰에서 \"단체로 가기 좋아요\"라는 말이 많아요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "단체로 가기 좋아요"
-              }
-            ],
-            "quote": "단체로 가기 좋아요. 다음에도 오고 싶어요.",
-            "quoteSource": "앱 리뷰"
+            "source": "REQUEST",
+            "code": "PURPOSE_GROUP",
+            "label": "모임하기 좋아요",
+            "value": 0.92,
+            "fromReviews": true,
+            "fallbackTitle": "식당 중 손꼽히게 모임하기 좋아요"
           },
           {
-            "title": "\"양이 넉넉해요\"라는 평이 있어요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "양이 넉넉해요"
-              },
-              {
-                "source": "PREFERENCE",
-                "label": "조용한 곳"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "GENEROUS_PORTION",
+            "label": "양이 넉넉해요",
+            "value": 0.8,
+            "fromReviews": true,
+            "fallbackTitle": "양이 넉넉한 편이에요"
+          },
+          {
+            "source": "PREFERENCE",
+            "code": "QUIET",
+            "label": "조용해요",
+            "value": 0.85,
+            "fromReviews": true,
+            "fallbackTitle": "조용한 편이에요"
           }
         ],
         "scoreItems": [
@@ -11545,13 +11544,12 @@
         "openStatus": "UNKNOWN",
         "reasons": [
           {
-            "title": "리뷰에서 \"채광이 좋아요\"라는 말이 많아요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "채광이 좋아요"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "VIEW_OUTDOOR",
+            "label": "전망이 좋아요",
+            "value": 0.92,
+            "fromReviews": true,
+            "fallbackTitle": "카페 중 손꼽히게 전망이 좋아요"
           }
         ],
         "scoreItems": [
@@ -11738,26 +11736,28 @@
         "openStatus": "UNKNOWN",
         "reasons": [
           {
-            "title": "리뷰에서 \"음식이 빨리 나와요\"라는 말이 많아요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "음식이 빨리 나와요"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "FAST_SERVING",
+            "label": "음식이 빨리 나와요",
+            "value": 0.92,
+            "fromReviews": true,
+            "fallbackTitle": "식당 중 손꼽히게 음식이 빨리 나와요"
           },
           {
-            "title": "\"재료가 신선해요\"라는 평이 있어요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "재료가 신선해요"
-              },
-              {
-                "source": "PREFERENCE",
-                "label": "주차 가능"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "GENEROUS_PORTION",
+            "label": "양이 넉넉해요",
+            "value": 0.8,
+            "fromReviews": true,
+            "fallbackTitle": "양이 넉넉한 편이에요"
+          },
+          {
+            "source": "PREFERENCE",
+            "code": "PARKING",
+            "label": "주차할 수 있어요",
+            "value": 1.0,
+            "fromReviews": false,
+            "fallbackTitle": "주차할 수 있어요"
           }
         ],
         "scoreItems": [
@@ -12073,28 +12073,28 @@
         "openStatus": "UNKNOWN",
         "reasons": [
           {
-            "title": "리뷰에서 \"조용해요\"라는 말이 많아요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "조용해요"
-              }
-            ],
-            "quote": "조용해요. 다음에도 오고 싶어요.",
-            "quoteSource": "앱 리뷰"
+            "source": "REQUEST",
+            "code": "QUIET",
+            "label": "조용해요",
+            "value": 0.92,
+            "fromReviews": true,
+            "fallbackTitle": "카페 중 손꼽히게 조용해요"
           },
           {
-            "title": "\"커피가 맛있어요\"라는 평이 있어요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "커피가 맛있어요"
-              },
-              {
-                "source": "PREFERENCE",
-                "label": "조용한 곳"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "VALUE_FOR_MONEY",
+            "label": "가격만큼 만족해요",
+            "value": 0.8,
+            "fromReviews": true,
+            "fallbackTitle": "가격만큼 만족스러운 편이에요"
+          },
+          {
+            "source": "PREFERENCE",
+            "code": "QUIET",
+            "label": "조용해요",
+            "value": 0.85,
+            "fromReviews": true,
+            "fallbackTitle": "조용한 편이에요"
           }
         ],
         "scoreItems": [
@@ -12356,28 +12356,28 @@
         "openStatus": "UNKNOWN",
         "reasons": [
           {
-            "title": "리뷰에서 \"안주가 맛있어요\"라는 말이 많아요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "안주가 맛있어요"
-              }
-            ],
-            "quote": "안주가 맛있어요. 다음에도 오고 싶어요.",
-            "quoteSource": "앱 리뷰"
+            "source": "REQUEST",
+            "code": "VALUE_FOR_MONEY",
+            "label": "가격만큼 만족해요",
+            "value": 0.92,
+            "fromReviews": true,
+            "fallbackTitle": "술집 중 손꼽히게 가격만큼 만족해요"
           },
           {
-            "title": "\"분위기가 좋아요\"라는 평이 있어요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "분위기가 좋아요"
-              },
-              {
-                "source": "PREFERENCE",
-                "label": "가성비"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "COZY",
+            "label": "아늑해요",
+            "value": 0.8,
+            "fromReviews": true,
+            "fallbackTitle": "아늑한 편이에요"
+          },
+          {
+            "source": "PREFERENCE",
+            "code": "VALUE_FOR_MONEY",
+            "label": "가격만큼 만족해요",
+            "value": 0.85,
+            "fromReviews": true,
+            "fallbackTitle": "가격만큼 만족스러운 편이에요"
           }
         ],
         "scoreItems": [
@@ -12791,28 +12791,28 @@
         "openStatus": "UNKNOWN",
         "reasons": [
           {
-            "title": "리뷰에서 \"분위기가 좋아요\"라는 말이 많아요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "분위기가 좋아요"
-              }
-            ],
-            "quote": "분위기가 좋아요. 다음에도 오고 싶어요.",
-            "quoteSource": "앱 리뷰"
+            "source": "REQUEST",
+            "code": "COZY",
+            "label": "아늑해요",
+            "value": 0.92,
+            "fromReviews": true,
+            "fallbackTitle": "술집 중 손꼽히게 아늑해요"
           },
           {
-            "title": "\"늦게까지 해요\"라는 평이 있어요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "늦게까지 해요"
-              },
-              {
-                "source": "PREFERENCE",
-                "label": "주차 가능"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "SHORT_WAIT",
+            "label": "대기가 짧아요",
+            "value": 0.8,
+            "fromReviews": true,
+            "fallbackTitle": "대기가 짧은 편이에요"
+          },
+          {
+            "source": "PREFERENCE",
+            "code": "PARKING",
+            "label": "주차할 수 있어요",
+            "value": 1.0,
+            "fromReviews": false,
+            "fallbackTitle": "주차할 수 있어요"
           }
         ],
         "scoreItems": [
@@ -13211,28 +13211,28 @@
         "openStatus": "UNKNOWN",
         "reasons": [
           {
-            "title": "리뷰에서 \"혼밥하기 좋아요\"라는 말이 많아요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "혼밥하기 좋아요"
-              }
-            ],
-            "quote": "혼밥하기 좋아요. 다음에도 오고 싶어요.",
-            "quoteSource": "앱 리뷰"
+            "source": "REQUEST",
+            "code": "PURPOSE_SOLO",
+            "label": "혼밥하기 좋아요",
+            "value": 0.92,
+            "fromReviews": true,
+            "fallbackTitle": "식당 중 손꼽히게 혼밥하기 좋아요"
           },
           {
-            "title": "\"양이 넉넉해요\"라는 평이 있어요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "양이 넉넉해요"
-              },
-              {
-                "source": "PREFERENCE",
-                "label": "주차 가능"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "GENEROUS_PORTION",
+            "label": "양이 넉넉해요",
+            "value": 0.8,
+            "fromReviews": true,
+            "fallbackTitle": "양이 넉넉한 편이에요"
+          },
+          {
+            "source": "PREFERENCE",
+            "code": "PARKING",
+            "label": "주차할 수 있어요",
+            "value": 1.0,
+            "fromReviews": false,
+            "fallbackTitle": "주차할 수 있어요"
           }
         ],
         "scoreItems": [
@@ -13496,28 +13496,28 @@
         "openStatus": "UNKNOWN",
         "reasons": [
           {
-            "title": "리뷰에서 \"자리가 넓어요\"라는 말이 많아요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "자리가 넓어요"
-              }
-            ],
-            "quote": "자리가 넓어요. 다음에도 오고 싶어요.",
-            "quoteSource": "앱 리뷰"
+            "source": "REQUEST",
+            "code": "SPACIOUS_SEATING",
+            "label": "자리가 넉넉해요",
+            "value": 0.92,
+            "fromReviews": true,
+            "fallbackTitle": "카페 중 손꼽히게 자리가 넉넉해요"
           },
           {
-            "title": "\"채광이 좋아요\"라는 평이 있어요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "채광이 좋아요"
-              },
-              {
-                "source": "PREFERENCE",
-                "label": "주차 가능"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "VIEW_OUTDOOR",
+            "label": "전망이 좋아요",
+            "value": 0.8,
+            "fromReviews": true,
+            "fallbackTitle": "전망이 좋은 편이에요"
+          },
+          {
+            "source": "PREFERENCE",
+            "code": "PARKING",
+            "label": "주차할 수 있어요",
+            "value": 1.0,
+            "fromReviews": false,
+            "fallbackTitle": "주차할 수 있어요"
           }
         ],
         "scoreItems": [
@@ -13775,28 +13775,28 @@
         "openStatus": "UNKNOWN",
         "reasons": [
           {
-            "title": "리뷰에서 \"양이 넉넉해요\"라는 말이 많아요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "양이 넉넉해요"
-              }
-            ],
-            "quote": "양이 넉넉해요. 다음에도 오고 싶어요.",
-            "quoteSource": "앱 리뷰"
+            "source": "REQUEST",
+            "code": "GENEROUS_PORTION",
+            "label": "양이 넉넉해요",
+            "value": 0.92,
+            "fromReviews": true,
+            "fallbackTitle": "식당 중 손꼽히게 양이 넉넉해요"
           },
           {
-            "title": "\"음식이 빨리 나와요\"라는 평이 있어요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "음식이 빨리 나와요"
-              },
-              {
-                "source": "PREFERENCE",
-                "label": "주차 가능"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "FAST_SERVING",
+            "label": "음식이 빨리 나와요",
+            "value": 0.8,
+            "fromReviews": true,
+            "fallbackTitle": "음식이 빨리 나오는 편이에요"
+          },
+          {
+            "source": "PREFERENCE",
+            "code": "PARKING",
+            "label": "주차할 수 있어요",
+            "value": 1.0,
+            "fromReviews": false,
+            "fallbackTitle": "주차할 수 있어요"
           }
         ],
         "scoreItems": [
@@ -14232,13 +14232,12 @@
         "openStatus": "UNKNOWN",
         "reasons": [
           {
-            "title": "리뷰에서 \"음악이 좋아요\"라는 말이 많아요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "음악이 좋아요"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "GOOD_MUSIC",
+            "label": "음악이 좋아요",
+            "value": 0.92,
+            "fromReviews": true,
+            "fallbackTitle": "술집 중 손꼽히게 음악이 좋아요"
           }
         ],
         "scoreItems": [
@@ -14720,28 +14719,28 @@
         "openStatus": "UNKNOWN",
         "reasons": [
           {
-            "title": "리뷰에서 \"자리가 넓어요\"라는 말이 많아요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "자리가 넓어요"
-              }
-            ],
-            "quote": "자리가 넓어요. 다음에도 오고 싶어요.",
-            "quoteSource": "앱 리뷰"
+            "source": "REQUEST",
+            "code": "SPACIOUS_SEATING",
+            "label": "자리가 넉넉해요",
+            "value": 0.92,
+            "fromReviews": true,
+            "fallbackTitle": "카페 중 손꼽히게 자리가 넉넉해요"
           },
           {
-            "title": "\"채광이 좋아요\"라는 평이 있어요",
-            "tags": [
-              {
-                "source": "REQUEST",
-                "label": "채광이 좋아요"
-              },
-              {
-                "source": "PREFERENCE",
-                "label": "주차 가능"
-              }
-            ]
+            "source": "REQUEST",
+            "code": "VIEW_OUTDOOR",
+            "label": "전망이 좋아요",
+            "value": 0.8,
+            "fromReviews": true,
+            "fallbackTitle": "전망이 좋은 편이에요"
+          },
+          {
+            "source": "PREFERENCE",
+            "code": "PARKING",
+            "label": "주차할 수 있어요",
+            "value": 1.0,
+            "fromReviews": false,
+            "fallbackTitle": "주차할 수 있어요"
           }
         ],
         "scoreItems": [

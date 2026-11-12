@@ -92,7 +92,7 @@ public class SecurityConfiguration {
             .requestMatchers("/actuator/**", "/healthz", "/api/v1/version").permitAll()
             .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/auth/login", "/api/auth/signup",
                 "/api/auth/logout", "/api/auth/dev/token", "/api/auth/email-verifications", "/api/auth/email-verifications/confirm",
-                "/api/auth/social/signup", "/api/v1/places/search", "/api/v1/places/nearby", "/api/v1/places/search/region",
+                "/api/auth/social/signup", "/api/v1/places/search", "/api/v1/places/nearby", "/api/v1/places/search/region", "/api/v1/places/*/reasons",
                 "/api/v1/onboarding/taste-analysis").permitAll()
             .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/auth/social/signup", "/api/auth/csrf", "/api/auth/oauth/*", "/api/auth/oauth/*/callback",
                 "/api/v1/places/suggest", "/api/v1/places/ids", "/api/v1/places/*", "/api/v1/places/*/reviews").permitAll()

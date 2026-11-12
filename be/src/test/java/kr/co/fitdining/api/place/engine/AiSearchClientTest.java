@@ -29,7 +29,6 @@ import java.util.Map;
 import java.util.List;
 import kr.co.fitdining.api.place.dto.PlaceCard.EvidenceSource;
 import kr.co.fitdining.api.place.dto.PlaceCard.Reason;
-import kr.co.fitdining.api.place.dto.PlaceCard.ReasonTag;
 import kr.co.fitdining.api.place.dto.PlaceCard.ScoreItem;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.test.system.CapturedOutput;
@@ -371,7 +370,7 @@ class AiSearchClientTest {
 					{"conditions":{"text":"t","station":null},"nearby":true,"changeSummary":"넓은 곳",
 					 "emptyReason":{"cause":"c","suggestion":"s"},
 					 "items":[{"placeId":7,"score":91,"labels":["조용해요"],
-					   "reasons":[{"title":"제목","tags":[{"source":"REQUEST","label":"조용해요"}],"quote":"q","quoteSource":"앱 리뷰"}],
+					   "reasons":[{"source":"REQUEST","code":"QUIET","label":"조용해요","value":0.95,"fromReviews":true,"fallbackTitle":"카페 중 손꼽히게 조용해요"}],
 					   "scoreItems":[{"source":"PREFERENCE","label":"넓어요","matched":false,"evidenceCount":0}]}],
 					 "fallbacks":["PREVIOUS_INVALID","TASTE_INVALID"],"interpretedBy":"RULE","rankedBy":"SIMILARITY",
 					 "models":{"embedding":"e"}}""", MediaType.APPLICATION_JSON));
@@ -387,8 +386,8 @@ class AiSearchClientTest {
 			assertThat(item.placeId()).isEqualTo(7L);
 			assertThat(item.score()).isEqualTo(91);
 			assertThat(item.labels()).containsExactly("조용해요");
-			assertThat(item.reasons()).containsExactly(new Reason("제목",
-					List.of(new ReasonTag(EvidenceSource.REQUEST, "조용해요")), "q", "앱 리뷰"));
+			assertThat(item.reasons()).containsExactly(new Reason(EvidenceSource.REQUEST, "QUIET", "조용해요", 0.95, true,
+					"카페 중 손꼽히게 조용해요"));
 			assertThat(item.scoreItems()).containsExactly(new ScoreItem(EvidenceSource.PREFERENCE, "넓어요", false, 0));
 		}
 
@@ -396,7 +395,7 @@ class AiSearchClientTest {
 		@DisplayName("AI응답_어느깊이든모르는속성과빠진값은_무시하고읽는다")
 		void response_unknownPropertiesAnywhere_ignored() {
 			server.expect(requestTo(URL)).andRespond(withSuccess("""
-					{"items":[{"placeId":1,"extra":1,"reasons":[{"title":"t","tags":[{"source":"REQUEST","label":"l","x":2}],"y":3}],
+					{"items":[{"placeId":1,"extra":1,"reasons":[{"source":"REQUEST","code":"QUIET","label":"l","x":2,"y":3}],
 					  "scoreItems":[{"source":"REQUEST","label":"l","z":[1]}]}],"newTop":{"a":1},
 					 "interpretedBy":{"any":[1]},"rankedBy":3,"models":"text"}""", MediaType.APPLICATION_JSON));
 
@@ -524,7 +523,6 @@ class AiSearchClientTest {
 				"{\"items\":[{\"placeId\":\"비밀표식9c41\"}]}",
 				"{\"items\":[{\"placeId\":1,\"labels\":[null]}]}",
 				"{\"items\":[{\"placeId\":1,\"reasons\":[null]}]}",
-				"{\"items\":[{\"placeId\":1,\"reasons\":[{\"title\":\"비밀표식9c41\",\"tags\":[null]}]}]}",
 				"{\"items\":[{\"placeId\":1,\"scoreItems\":[null]}]}",
 				"{\"items\":[{\"placeId\":1,\"scoreItems\":[{\"source\":\"UNKNOWN\",\"label\":\"비밀표식9c41\"}]}]}",
 				"{\"items\":[],\"fallbacks\":[null]}",

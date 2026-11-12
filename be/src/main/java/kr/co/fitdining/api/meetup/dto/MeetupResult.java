@@ -6,7 +6,6 @@ import kr.co.fitdining.api.meetup.domain.ResultGroup;
 import kr.co.fitdining.api.meetup.recommend.MeetupRanking;
 import kr.co.fitdining.api.meetup.recommend.MeetupRecommendation;
 import kr.co.fitdining.api.place.dto.OpenStatus;
-import kr.co.fitdining.api.place.dto.PlaceCard;
 import kr.co.fitdining.api.place.dto.PlaceSummary;
 
 /**
@@ -27,7 +26,7 @@ public record MeetupResult(long calculationId, Instant calculatedAt, int tasteCo
 	 * @param facilities 단체 이용·예약 중 되는 것만 담는다.
 	 */
 	public record Item(int rank, PlaceSummary place, OpenStatus openStatus, Integer score, ResultGroup group,
-			MeetupRanking.Fit fit, List<PlaceCard.Reason> reasons, String caution, Menu menu, Facilities facilities,
+			MeetupRanking.Fit fit, List<MeetupRecommendation.Reason> reasons, String caution, Menu menu, Facilities facilities,
 			Distance distance) {
 	}
 

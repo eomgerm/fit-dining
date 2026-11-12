@@ -18,7 +18,6 @@ import java.util.Optional;
 import kr.co.fitdining.api.place.dto.OpenStatus;
 import kr.co.fitdining.api.place.dto.PlaceCard.EvidenceSource;
 import kr.co.fitdining.api.place.dto.PlaceCard.Reason;
-import kr.co.fitdining.api.place.dto.PlaceCard.ReasonTag;
 import kr.co.fitdining.api.place.dto.PlaceCard.ScoreItem;
 import kr.co.fitdining.api.place.dto.PlaceCard;
 import kr.co.fitdining.api.place.dto.PlaceDetailResponse.Break;
@@ -70,7 +69,7 @@ class PlaceControllerPassThroughTest {
 			true,
 			-3,
 			List.of(new PlaceCard(PLACE, 150, List.of("하나", "둘", "셋"), "주의", OpenStatus.UNKNOWN,
-					List.of(new Reason("이유", List.of(new ReasonTag(EvidenceSource.PREFERENCE, "취향")), null, null)),
+					List.of(new Reason(EvidenceSource.PREFERENCE, "취향코드", "취향", 1.5, null, "이유")),
 					List.of(new ScoreItem(EvidenceSource.REQUEST, "항목", true, -1)))),
 			"엔진의-커서",
 			new EmptyReason("원인", "제안"),
