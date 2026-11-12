@@ -80,7 +80,8 @@ class SocialDevelopSyncTests extends PostgresTestSupport {
                 .andExpect(status().isFound()).andExpect(header().string("Location", "/"))
                 .andExpect(cookie().exists("fitdining_session"));
         assertEquals(fresh.identity().userId(), accounts.existing("google", subject).identity().userId());
-        assertNull(jdbc.queryForObject("select contact_email from auth_users where id=?", String.class, fresh.identity().userId()));
+        assertEquals("provider@example.com", jdbc.queryForObject("select contact_email from auth_users where id=?", String.class, fresh.identity().userId()));
+        assertNotNull(jdbc.queryForObject("select contact_email_verified_at from auth_users where id=?", java.sql.Timestamp.class, fresh.identity().userId()));
     }
 
     @Test

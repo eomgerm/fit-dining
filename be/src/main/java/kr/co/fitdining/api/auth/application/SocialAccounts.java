@@ -22,6 +22,10 @@ public class SocialAccounts {
         return transactions.existing(provider, subject);
     }
 
+    public Issued existing(String provider, String subject, String providerEmail) {
+        return transactions.existing(provider, subject, providerEmail);
+    }
+
     public Issued signup(String provider, String subject, kr.co.fitdining.api.user.Preferences preferences,
             String email, String tokenHash, boolean marketing) {
         var profile = tasteProfiles.compute(preferences);

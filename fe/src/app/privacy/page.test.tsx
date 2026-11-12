@@ -26,7 +26,7 @@ it("절 제목과 본문, 시행일을 표시한다", () => {
   expect(screen.getByText("이메일 가입")).toBeTruthy();
   expect(
     screen.getByText(
-      "소셜 서비스 이름, 소셜 회원 번호, 이메일(소셜 계정에서 받거나 직접 입력)",
+      "소셜 서비스 이름, 소셜 회원 번호, 이메일(소셜 계정에서 받거나 직접 입력. 연락용 이메일이 없는 기존 회원은 로그인할 때 소셜 계정에서 받은 이메일로 등록)",
     ),
   ).toBeTruthy();
   expect(screen.getByText("마케팅 수신(선택)")).toBeTruthy();

@@ -33,9 +33,111 @@ class SocialApplicationTests extends PostgresTestSupport {
     @Autowired JdbcTemplate jdbc;
     @Autowired MockMvc mvc;
     @Autowired SocialTokens tokens;
+    @MockitoSpyBean java.time.Clock clock;
     @MockitoSpyBean
     AuthUserRepository users;
     @MockitoSpyBean SocialNicknames nicknames;
+
+    @Test
+    void existing_missingContactEmail_backfillsAndPreservesMarketing() {
+        String subject = UUID.randomUUID().toString();
+        String id = accounts.signup("google", subject, null, "old@example.com", null, true).identity().userId();
+        var marketing = users.findById(id).orElseThrow().getMarketingAgreedAt();
+        jdbc.update("update auth_users set contact_email=null, contact_email_verified_at=null where id=?", id);
+        var verifiedAt = java.time.Instant.parse("2026-11-12T03:00:00Z");
+        Mockito.doReturn(verifiedAt).when(clock).instant();
+
+        assertEquals(id, accounts.existing("google", subject, "provider@example.com").identity().userId());
+
+        var user = users.findById(id).orElseThrow();
+        assertEquals("provider@example.com", user.getContactEmail());
+        assertEquals(verifiedAt, user.getContactEmailVerifiedAt());
+        assertEquals(marketing, user.getMarketingAgreedAt());
+    }
+
+    @Test
+    void existing_registeredContactEmail_preservesAddressAndVerificationTime() {
+        String subject = UUID.randomUUID().toString();
+        String id = accounts.signup("google", subject, null, "registered@example.com", null, false).identity().userId();
+        var original = users.findById(id).orElseThrow();
+
+        assertEquals(id, accounts.existing("google", subject, "different@example.com").identity().userId());
+
+        var user = users.findById(id).orElseThrow();
+        assertEquals(original.getContactEmail(), user.getContactEmail());
+        assertEquals(original.getContactEmailVerifiedAt(), user.getContactEmailVerifiedAt());
+        assertNull(user.getMarketingAgreedAt());
+    }
+
+    @Test
+    void existing_withoutProviderEmail_andRepeatedSignup_leaveContactEmpty() {
+        String subject = UUID.randomUUID().toString();
+        String id = accounts.signup("google", subject, null, "old@example.com", null, false).identity().userId();
+        jdbc.update("update auth_users set contact_email=null, contact_email_verified_at=null where id=?", id);
+
+        assertEquals(id, accounts.existing("google", subject, null).identity().userId());
+        assertEquals(id, accounts.signup("google", subject, null, "new@example.com", null, true).identity().userId());
+
+        var user = users.findById(id).orElseThrow();
+        assertNull(user.getContactEmail());
+        assertNull(user.getContactEmailVerifiedAt());
+        assertNull(user.getMarketingAgreedAt());
+        assertNull(accounts.existing("google", UUID.randomUUID().toString(), "new@example.com"));
+    }
+
+    @Test
+    void existing_concurrentContactRegistration_preservesCommittedEmail() throws Exception {
+        existing_waitsForConcurrentUserChange(false);
+    }
+
+    @Test
+    void existing_concurrentWithdrawal_rejectsWithoutBackfill() throws Exception {
+        existing_waitsForConcurrentUserChange(true);
+    }
+
+    private void existing_waitsForConcurrentUserChange(boolean withdrawn) throws Exception {
+        String subject = UUID.randomUUID().toString();
+        String id = accounts.signup("google", subject, null, "old@example.com", null, false).identity().userId();
+        jdbc.update("update auth_users set contact_email=null, contact_email_verified_at=null where id=?", id);
+        var changedAt = java.time.Instant.parse("2026-11-12T02:00:00Z");
+        try (var connection = appSource().getConnection();
+             var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            connection.setAutoCommit(false);
+            try {
+                try (var statement = connection.prepareStatement(withdrawn
+                        ? "update auth_users set deleted_at=? where id=?"
+                        : "update auth_users set contact_email='registered@example.com', contact_email_verified_at=? where id=?")) {
+                    statement.setTimestamp(1, java.sql.Timestamp.from(changedAt));
+                    statement.setString(2, id);
+                    assertEquals(1, statement.executeUpdate());
+                }
+                Mockito.clearInvocations(users);
+                var login = executor.submit(() -> accounts.existing("google", subject, "provider@example.com"));
+                Mockito.verify(users, Mockito.timeout(5000)).lockById(id);
+                Mockito.verify(users, Mockito.never()).findById(id);
+                assertThrows(TimeoutException.class, () -> login.get(200, TimeUnit.MILLISECONDS));
+                connection.commit();
+                if (withdrawn) {
+                    var failure = assertThrows(ExecutionException.class, () -> login.get(10, TimeUnit.SECONDS));
+                    assertInstanceOf(AuthFailure.class, failure.getCause());
+                } else {
+                    assertEquals(id, login.get(10, TimeUnit.SECONDS).identity().userId());
+                }
+            } finally {
+                connection.rollback();
+            }
+        }
+        var user = users.findById(id).orElseThrow();
+        if (withdrawn) {
+            assertEquals(changedAt, user.getDeletedAt());
+            assertNull(user.getContactEmail());
+            assertNull(user.getContactEmailVerifiedAt());
+        } else {
+            assertEquals("registered@example.com", user.getContactEmail());
+            assertEquals(changedAt, user.getContactEmailVerifiedAt());
+            assertNull(user.getDeletedAt());
+        }
+    }
 
     @Test
     void signup_duplicateNickname_retriesAfterRollback() {

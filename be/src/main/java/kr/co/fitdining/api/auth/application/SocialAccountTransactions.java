@@ -28,8 +28,20 @@ public class SocialAccountTransactions {
 
     @Transactional
     public Issued existing(String provider, String subject) {
+        return existing(provider, subject, null);
+    }
+
+    @Transactional
+    public Issued existing(String provider, String subject, String providerEmail) {
         return accounts.findById(new AuthSocialAccount.Key(provider, subject))
-            .map(account -> transactions.login(users.findById(account.getUserId()).orElseThrow())).orElse(null);
+            .map(account -> {
+                AuthUser user = users.lockById(account.getUserId()).orElseThrow();
+                if (user.getDeletedAt() == null && user.getContactEmail() == null && providerEmail != null) {
+                    user.changeContactEmail(providerEmail, clock.instant());
+                    users.save(user);
+                }
+                return transactions.login(user);
+            }).orElse(null);
     }
 
     @Transactional

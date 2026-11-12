@@ -111,7 +111,7 @@ class SocialHttpTests {
     @Test
     void failedSessionCreationRecordsOnlyFailureAfterBoundedCallback() throws Exception {
         when(client.exchange(any(), any(), any(), any(), any())).thenReturn(new kr.co.fitdining.api.auth.infrastructure.SocialProviderClient.Profile("subject", "provider@example.com"));
-        when(accounts.existing(any(), any())).thenReturn(issued());
+        when(accounts.existing(any(), any(), any())).thenReturn(issued());
         doThrow(new org.springframework.dao.DataAccessResourceFailureException("session unavailable"))
             .when(sessions).establish(any(), any(), any());
         mvc.perform(get("/api/auth/oauth/google/callback").param("code", "code").param("state", "state")
@@ -123,10 +123,11 @@ class SocialHttpTests {
     @Test
     void successAuditFollowsSessionCreation() throws Exception {
         when(client.exchange(any(), any(), any(), any(), any())).thenReturn(new kr.co.fitdining.api.auth.infrastructure.SocialProviderClient.Profile("subject", "provider@example.com"));
-        when(accounts.existing(any(), any())).thenReturn(issued());
+        when(accounts.existing(any(), any(), any())).thenReturn(issued());
         mvc.perform(get("/api/auth/oauth/google/callback").param("code", "code").param("state", "state")
             .cookie(new Cookie("fitdining_oauth", tokens.encode("oauth_state", "google", "state", "verifier", "login"))))
             .andExpect(status().isFound()).andExpect(header().string("Location", "/"));
+        verify(accounts).existing("google", "subject", "provider@example.com");
         var order = inOrder(sessions, transactions);
         order.verify(sessions).establish(any(), any(), any());
         order.verify(transactions).audit("id", "LOGIN_SUCCESS");
@@ -137,7 +138,7 @@ class SocialHttpTests {
     void failedSuccessAuditKeepsSocialCallbackAndSessionSuccessful(CapturedOutput output) throws Exception {
         String sensitive = "audit-secret-email@example.com audit-secret-password audit-private-session-id";
         when(client.exchange(any(), any(), any(), any(), any())).thenReturn(new kr.co.fitdining.api.auth.infrastructure.SocialProviderClient.Profile("subject", "provider@example.com"));
-        when(accounts.existing(any(), any())).thenReturn(issued());
+        when(accounts.existing(any(), any(), any())).thenReturn(issued());
         doThrow(new org.springframework.dao.DataAccessResourceFailureException(sensitive))
             .when(transactions).audit("id", "LOGIN_SUCCESS");
         var result = mvc.perform(get("/api/auth/oauth/google/callback").param("code", "code").param("state", "state")
@@ -232,7 +233,7 @@ class SocialHttpTests {
     @DisplayName("콜백_기존 사용자_RT 발급 후 데모 이동")
     void callback_existingIdentity_issuesRefresh() throws Exception {
         when(client.exchange(any(), any(), any(), any(), any())).thenReturn(new kr.co.fitdining.api.auth.infrastructure.SocialProviderClient.Profile("subject", "provider@example.com"));
-        when(accounts.existing(any(), any())).thenReturn(issued());
+        when(accounts.existing(any(), any(), any())).thenReturn(issued());
         mvc.perform(get("/api/auth/oauth/google/callback").param("code", "code").param("state", "state")
             .cookie(new Cookie("fitdining_oauth", tokens.encode("oauth_state", "google", "state", "verifier", "login"))))
             .andExpect(status().isFound()).andExpect(header().string("Location", "/")).andExpect(cookie().doesNotExist("fitdining_rt"));

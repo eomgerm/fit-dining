@@ -83,7 +83,7 @@ public class SocialAuthController {
 
             var profile = client.exchange(providers.get(provider), code, state, payload[2], callback(provider));
             String subject = profile.subject();
-            var issued = accounts.existing(provider, subject);
+            var issued = accounts.existing(provider, subject, profile.email());
             if (issued != null) {
                 sessions.establish(issued.identity(), request, response);
                 LoginSuccessAudit.record(() -> transactions.audit(issued.identity().userId(), "LOGIN_SUCCESS"));
