@@ -1,6 +1,7 @@
 import { request } from "@/shared/api/client";
 
 import type {
+  MeetupAreaCheck,
   MeetupAreasResponse,
   MeetupCreateRequest,
   MeetupCreateResponse,
@@ -22,6 +23,21 @@ export function createMeetup(body: MeetupCreateRequest) {
 export function searchAreas(query: string, signal?: AbortSignal) {
   return request<MeetupAreasResponse>("/v1/meetups/areas", {
     query: { q: query },
+    signal,
+  });
+}
+
+// 지점과 반경 안의 장소 수와 붙일 이름. 로그인이 필요하다(AC-58)
+export function checkArea(
+  point: { lat: number; lng: number; radiusM: number },
+  signal?: AbortSignal,
+) {
+  return request<MeetupAreaCheck>("/v1/meetups/area-check", {
+    query: {
+      lat: String(point.lat),
+      lng: String(point.lng),
+      radiusM: String(point.radiusM),
+    },
     signal,
   });
 }

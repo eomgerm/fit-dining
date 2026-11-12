@@ -4,11 +4,12 @@ import { useEffect, useId, useState } from "react";
 
 import { isApiError } from "@/shared/api/api-error";
 import { cn } from "@/shared/lib/cn";
+import { MapIcon } from "@/shared/ui/icon/icons/map";
 import { PinIcon } from "@/shared/ui/icon/icons/pin";
 import { WarningIcon } from "@/shared/ui/icon/icons/warning";
 
 import { useAreaSearch, type WithSession } from "../api/queries";
-import { areaLabel, type MeetupArea } from "../model/meetup";
+import { areaLabel, areaText, type MeetupArea } from "../model/meetup";
 
 const DEBOUNCE_MS = 250;
 
@@ -22,21 +23,25 @@ function useDebounced(value: string) {
 }
 
 // 모임 지역 칸(모임장 3). 넣은 말로 장소가 있는 역·동을 찾아 고르게 하고, 찾는 곳이 없으면 칸 아래에 알린다
-// (화면 예시 상태 모음 1 "장소가 없는 지역"). 이름이 목록의 한 곳과 꼭 같으면 바로 고른다
+// (화면 예시 상태 모음 1 "장소가 없는 지역"). 이름이 목록의 한 곳과 꼭 같으면 바로 고른다. onPickOnMap이 있으면
+// 칸 아래에 "지도에서 고르기"가 있고, 지도에서 고른 지점은 칸에 "역삼동 근처 · 반경 1km"처럼 보인다(AC-60)
 export function AreaField({
   value,
   onChange,
   withSession,
   onUnauthorized,
+  onPickOnMap,
 }: {
   value: MeetupArea | null;
   onChange: (area: MeetupArea | null) => void;
   withSession: WithSession;
   onUnauthorized: () => void;
+  // 지도를 불러오지 못하면 없다
+  onPickOnMap?: () => void;
 }) {
   const id = useId();
   const listId = `${id}-options`;
-  const [text, setText] = useState(value ? areaLabel(value) : "");
+  const [text, setText] = useState(value ? areaText(value) : "");
   const [open, setOpen] = useState(false);
   const typed = text.trim();
   const query = useDebounced(typed);
@@ -130,21 +135,37 @@ export function AreaField({
           </ul>
         )}
       </div>
-      {noPlaces ? (
-        <p className="flex items-start gap-1.5 text-caption-md text-danger">
-          <WarningIcon size="sm" className="mt-px shrink-0" />
-          {typed} 근처에는 아직 장소가 없어요. 다른 역이나 동을 넣어 주세요.
-        </p>
-      ) : failed ? (
-        <p className="flex items-start gap-1.5 text-caption-md text-danger">
-          <WarningIcon size="sm" className="mt-px shrink-0" />
-          지역을 찾지 못했어요. 잠시 뒤 다시 넣어 주세요.
-        </p>
-      ) : (
-        <p className="text-caption-sm text-ink-subtle">
-          역이나 동 이름을 넣어 주세요
-        </p>
-      )}
+      <div className="flex items-start justify-between gap-2">
+        {noPlaces ? (
+          <p className="flex items-start gap-1.5 text-caption-md text-danger">
+            <WarningIcon size="sm" className="mt-px shrink-0" />
+            {onPickOnMap
+              ? `${typed} 근처에는 아직 장소가 없어요. 다른 역을 넣거나 지도에서 골라 주세요.`
+              : `${typed} 근처에는 아직 장소가 없어요. 다른 역이나 동을 넣어 주세요.`}
+          </p>
+        ) : failed ? (
+          <p className="flex items-start gap-1.5 text-caption-md text-danger">
+            <WarningIcon size="sm" className="mt-px shrink-0" />
+            지역을 찾지 못했어요. 잠시 뒤 다시 넣어 주세요.
+          </p>
+        ) : (
+          <p className="text-caption-sm text-ink-subtle">
+            {onPickOnMap
+              ? "역이나 동 이름을 넣거나 지도에서 골라 주세요"
+              : "역이나 동 이름을 넣어 주세요"}
+          </p>
+        )}
+        {onPickOnMap && (
+          <button
+            type="button"
+            onClick={onPickOnMap}
+            className="inline-flex h-9 shrink-0 items-center gap-1 rounded-full border border-line-strong bg-surface pr-3 pl-2.5 text-label-md whitespace-nowrap text-ink"
+          >
+            <MapIcon size="sm" />
+            지도에서 고르기
+          </button>
+        )}
+      </div>
     </div>
   );
 }

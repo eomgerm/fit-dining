@@ -1,22 +1,35 @@
 import type { CreateForm } from "./create-form";
 import {
   DESCRIPTION_MAX,
+  RADII,
+  type MeetupArea,
   type MeetupInfo,
+  type MeetupRadius,
   type MeetupUpdateRequest,
 } from "./meetup";
 import { isSelectable } from "./meetup-date";
 
 // 모임 정보 수정 화면의 처음 값. 스냅숏의 모임 정보 그대로다
 export function formFromInfo(info: MeetupInfo): CreateForm {
-  const { kind, name } = info.area;
   return {
-    area: kind !== "POINT" && name ? { kind, name } : null,
+    area: areaFromInfo(info.area),
     category: info.category,
     date: info.date,
     time: info.time,
     headcount: info.headcount ?? null,
     description: info.description ?? "",
   };
+}
+
+function areaFromInfo(area: MeetupInfo["area"]): MeetupArea | null {
+  const { kind, name, lat, lng, radiusM } = area;
+  if (kind !== "POINT") return name ? { kind, name } : null;
+  if (lat === undefined || lng === undefined || !isRadius(radiusM)) return null;
+  return { kind, lat, lng, radiusM, ...(name && { name }) };
+}
+
+function isRadius(value: number | undefined): value is MeetupRadius {
+  return RADII.some((radius) => radius === value);
 }
 
 // 날짜나 시각을 바꿨는지. 바꾸지 않았으면 지난 날짜여도 다른 항목을 고칠 수 있다

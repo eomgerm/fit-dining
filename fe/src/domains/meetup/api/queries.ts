@@ -12,6 +12,7 @@ import type {
 } from "../model/meetup";
 import {
   cancelDecision,
+  checkArea,
   closePoll,
   createMeetup,
   createProfile,
@@ -36,6 +37,8 @@ export type WithSession = <T>(send: () => Promise<T>) => Promise<T>;
 export const meetupKeys = {
   all: ["meetups"] as const,
   areas: (query: string) => [...meetupKeys.all, "areas", query] as const,
+  areaCheck: (lat: number, lng: number, radiusM: number) =>
+    [...meetupKeys.all, "area-check", lat, lng, radiusM] as const,
   snapshot: (code: string) => [...meetupKeys.all, code] as const,
   // 결과는 계산마다 바뀌지 않아 스냅숏과 다른 키에 둔다. 스냅숏을 다시 받을 때 함께 다시 받지 않는다
   result: (code: string, calculationId: number) =>
@@ -52,6 +55,24 @@ export function useAreaSearch(query: string, withSession: WithSession) {
     queryKey: meetupKeys.areas(query),
     queryFn: ({ signal }) => withSession(() => searchAreas(query, signal)),
     enabled: query.length > 0,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+}
+
+// 지도의 지점과 반경 안 장소 수. 지점은 소수 넷째 자리(약 10m)로 맞춰 같은 곳을 다시 묻지 않는다
+export function useAreaCheck(
+  point: { lat: number; lng: number; radiusM: number } | null,
+  withSession: WithSession,
+) {
+  const lat = point ? Math.round(point.lat * 1e4) / 1e4 : 0;
+  const lng = point ? Math.round(point.lng * 1e4) / 1e4 : 0;
+  const radiusM = point?.radiusM ?? 0;
+  return useQuery({
+    queryKey: meetupKeys.areaCheck(lat, lng, radiusM),
+    queryFn: ({ signal }) =>
+      withSession(() => checkArea({ lat, lng, radiusM }, signal)),
+    enabled: point !== null,
     staleTime: 5 * 60 * 1000,
     retry: false,
   });

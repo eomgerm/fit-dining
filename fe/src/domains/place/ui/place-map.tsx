@@ -10,66 +10,22 @@ import {
 } from "react";
 
 import { cn } from "@/shared/lib/cn";
+import {
+  ignoreSdkError,
+  loadNaverMaps,
+  naverAuthFailed,
+  onNaverAuthFailure,
+  type NaverLatLng,
+  type NaverMap,
+  type NaverMaps,
+  type NaverMarker,
+} from "@/shared/lib/naver-maps";
 import { loadRuntimeConfig } from "@/shared/lib/runtime-config";
 
 import { DEFAULT_VIEW, type MapView } from "../model/map-view";
 import type { LatLng, MapBounds } from "../model/place-types";
 import { fitPlan, visibleBand } from "../model/visible-area";
 import { readMapView, writeMapView } from "./map-view-storage";
-
-// 네이버 지도 웹 SDK(JavaScript v3)에서 쓰는 부분만 적은 타입
-type NaverLatLng = { lat(): number; lng(): number };
-type NaverMap = {
-  getBounds(): { getSW(): NaverLatLng; getNE(): NaverLatLng };
-  getCenter(): NaverLatLng;
-  getZoom(): number;
-  // offset(px)과 위경도를 서로 바꾼다. offset은 지도 컨테이너가 아니라 끌 때 함께 움직이는 pane 기준이고,
-  // 그 원점은 확대 정도가 바뀔 때만 다시 잡힌다(끌기나 panTo 뒤에는 옮기기 전 화면의 왼쪽 위다)
-  getProjection(): {
-    fromOffsetToCoord(offset: unknown): NaverLatLng;
-    fromCoordToOffset(coord: NaverLatLng): { x: number; y: number };
-  };
-  panTo(coord: NaverLatLng): void;
-  morph(coord: NaverLatLng, zoom: number): void;
-  // 여백(px)과 최대 확대 정도. 부드러운 이동 없이 바로 옮긴다(FitBoundsOptions)
-  fitBounds(
-    bounds: unknown,
-    options: {
-      top: number;
-      right: number;
-      bottom: number;
-      left: number;
-      maxZoom: number;
-    },
-  ): void;
-  setSize(size: unknown): void;
-  destroy(): void;
-};
-type NaverMarker = {
-  setMap(map: NaverMap | null): void;
-  setIcon(icon: unknown): void;
-  setZIndex(zIndex: number): void;
-  setPosition(coord: NaverLatLng): void;
-};
-type NaverMaps = {
-  Map: new (element: HTMLElement, options: object) => NaverMap;
-  LatLng: new (lat: number, lng: number) => NaverLatLng;
-  LatLngBounds: new (sw: NaverLatLng, ne: NaverLatLng) => unknown;
-  Marker: new (options: object) => NaverMarker;
-  Size: new (width: number, height: number) => unknown;
-  Point: new (x: number, y: number) => unknown;
-  Event: {
-    addListener(target: unknown, name: string, listener: () => void): unknown;
-    removeListener(listener: unknown): void;
-  };
-};
-
-declare global {
-  interface Window {
-    naver?: { maps?: NaverMaps };
-    navermap_authFailure?: () => void;
-  }
-}
 
 // 첫 화면의 확대 정도. "내 위치"도 이 정도로 맞춘다(D-104)
 const DEFAULT_ZOOM = DEFAULT_VIEW.zoom;
@@ -86,32 +42,6 @@ const SAME_VIEW_EPSILON = 1e-6;
 const FIT_MARGIN = SELECTED_PIN_SIZE;
 // 결과 맞춤 이동의 확대 정도 상한(fitBounds의 maxZoom). 가까운 몇 곳만 있을 때 과하게 확대하지 않는다
 const FIT_MAX_ZOOM = 17;
-
-let scriptPromise: Promise<NaverMaps> | undefined;
-let authFailed = false;
-const authFailureListeners = new Set<() => void>();
-
-// 스크립트는 페이지 세션에 한 번만 넣는다. 인증 실패 알림은 넣기 전에 걸어 둔다
-function loadNaverMaps(clientId: string) {
-  if (window.naver?.maps) return Promise.resolve(window.naver.maps);
-  scriptPromise ??= new Promise<NaverMaps>((resolve, reject) => {
-    window.navermap_authFailure = () => {
-      authFailed = true;
-      authFailureListeners.forEach((listener) => listener());
-    };
-    const script = document.createElement("script");
-    script.src = `https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${encodeURIComponent(clientId)}`;
-    script.async = true;
-    script.onload = () => {
-      const maps = window.naver?.maps;
-      if (maps) resolve(maps);
-      else reject(new Error("naver.maps를 찾지 못했습니다"));
-    };
-    script.onerror = () => reject(new Error("지도 스크립트를 받지 못했습니다"));
-    document.head.append(script);
-  });
-  return scriptPromise;
-}
 
 // 물방울 핀(와이어프레임 fd-pin-selected). 한 모서리만 작게 둥근 정사각형을 -45도 돌려 그 모서리가 아래를 향한다.
 // 안쪽 내용은 다시 45도 돌려 바로 세운다. 기준점은 아래 끝(중심에서 한 변/√2 아래, 모서리가 둥근 만큼 조금 위)이다
@@ -170,13 +100,6 @@ function sameView(a: MapView, b: MapView) {
     Math.abs(a.lng - b.lng) < SAME_VIEW_EPSILON &&
     Math.abs(a.zoom - b.zoom) < SAME_VIEW_EPSILON
   );
-}
-
-// 정리(cleanup) 중에는 SDK가 던져도 할 일이 없다
-function ignoreSdkError(call: () => void) {
-  try {
-    call();
-  } catch {}
 }
 
 // 핀 안의 표시. 순위 번호, 저장한 장소의 북마크, 없음(위치 하나만 보이는 지도) 중 하나다
@@ -270,7 +193,7 @@ export function PlaceMap({
     const pans = pendingPans.current;
     let cancelled = false;
     const fail = () => setFailed(true);
-    authFailureListeners.add(fail);
+    const stopAuthFailure = onNaverAuthFailure(fail);
 
     if (!kept.current) {
       loadRuntimeConfig()
@@ -280,7 +203,7 @@ export function PlaceMap({
         })
         .then((naver) => {
           if (cancelled || !container) return;
-          if (authFailed) throw new Error("지도 인증에 실패했습니다");
+          if (naverAuthFailed()) throw new Error("지도 인증에 실패했습니다");
           const start: MapView = initialCenter.current
             ? { ...initialCenter.current, zoom: DEFAULT_ZOOM }
             : (remembers.current && readMapView()) || DEFAULT_VIEW;
@@ -299,7 +222,7 @@ export function PlaceMap({
 
     return () => {
       cancelled = true;
-      authFailureListeners.delete(fail);
+      stopAuthFailure();
       // 다른 화면으로 갈 때 Next가 이 화면을 숨겨 두면 지도 DOM이 그대로 남는다. 지도를 없애지 않아
       // 돌아왔을 때 보던 중심과 확대 정도가 그대로이고 지도 생성 횟수도 늘지 않는다(D-102)
       if (container?.isConnected) return;

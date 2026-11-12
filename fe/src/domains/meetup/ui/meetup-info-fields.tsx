@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore, type ReactNode } from "react";
+import { useState, useSyncExternalStore, type ReactNode } from "react";
 
 import { Chip } from "@/shared/ui/button/chip";
 import { TextButton } from "@/shared/ui/button/text-button";
@@ -18,7 +18,7 @@ import {
   type CreateForm,
 } from "../model/create-form";
 import {
-  areaLabel,
+  areaText,
   CATEGORIES,
   CATEGORY_LABELS,
   DESCRIPTION_MAX,
@@ -26,6 +26,8 @@ import {
 } from "../model/meetup";
 import { formatDate, formatTime, selectableRange } from "../model/meetup-date";
 import { AreaField } from "./area-field";
+import { MapPick } from "./map-pick";
+import { useNaverMaps } from "./use-naver-maps";
 
 const subscribeNothing = () => () => {};
 
@@ -73,22 +75,47 @@ export function MeetupInfoFields({
   dateNote?: ReactNode;
 }) {
   const range = today ? selectableRange(today) : undefined;
+  const maps = useNaverMaps();
+  const [picking, setPicking] = useState(false);
+  const point = form.area?.kind === "POINT" ? form.area : undefined;
   return (
     <>
+      {picking && maps.status === "ready" && (
+        <MapPick
+          naver={maps.naver}
+          initial={point}
+          withSession={withSession}
+          onUnauthorized={onUnauthorized}
+          onClose={() => setPicking(false)}
+          onPick={(area) => {
+            onChange({ area });
+            setPicking(false);
+          }}
+        />
+      )}
       {dateOnly ? (
         <div className="flex flex-col gap-1">
           <FieldLabel>지역</FieldLabel>
           <p className="flex h-12 items-center gap-2 rounded-md border border-line bg-surface-sunken px-3.5 text-body-md text-ink-muted">
             <PinIcon size="md" className="shrink-0" />
-            {form.area ? areaLabel(form.area) : ""}
+            {form.area ? areaText(form.area) : ""}
           </p>
         </div>
       ) : (
         <AreaField
+          // 지도에서 고르면 칸의 글을 고른 지점으로 다시 채운다
+          key={
+            point
+              ? `${point.lat},${point.lng},${point.radiusM},${point.name}`
+              : "area"
+          }
           value={form.area}
           onChange={(area) => onChange({ area })}
           withSession={withSession}
           onUnauthorized={onUnauthorized}
+          onPickOnMap={
+            maps.status === "ready" ? () => setPicking(true) : undefined
+          }
         />
       )}
 

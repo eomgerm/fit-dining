@@ -26,6 +26,20 @@ describe("모임 정보 수정 값", () => {
     });
   });
 
+  it("지점 모임은 지점과 반경과 위치 이름을 그대로 채우고, 반경을 모르면 비운다", () => {
+    const point = {
+      kind: "POINT" as const,
+      name: "연동 근처",
+      lat: 33.45,
+      lng: 126.57,
+      radiusM: 1000,
+    };
+    expect(formFromInfo({ ...INFO, area: point }).area).toEqual(point);
+    expect(
+      formFromInfo({ ...INFO, area: { ...point, radiusM: 700 } }).area,
+    ).toBeNull();
+  });
+
   it("날짜를 바꾸지 않았으면 지난 날짜여도 다른 항목을 저장할 수 있다", () => {
     const initial = formFromInfo(INFO);
     expect(canSave({ ...initial, headcount: 5 }, initial, NOON, false)).toBe(

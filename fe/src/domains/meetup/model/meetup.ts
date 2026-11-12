@@ -20,8 +20,22 @@ export type MeetupAction =
   | "VOTE"
   | "LINK_ACCOUNT";
 
-// 역은 "역"을 뺀 이름(선릉), 동은 동 이름(역삼동)이다
-export type MeetupArea = { kind: "STATION" | "DONG"; name: string };
+// 모임 지점의 반경(m, AC-58)
+export type MeetupRadius = 500 | 1000 | 2000 | 5000;
+
+// 역은 "역"을 뺀 이름(선릉), 동은 동 이름(역삼동)이다. 지점은 지도에서 고른 곳과 반경이고 이름은 위치 이름이다
+export type MeetupArea =
+  | { kind: "STATION" | "DONG"; name: string }
+  | {
+      kind: "POINT";
+      name?: string;
+      lat: number;
+      lng: number;
+      radiusM: MeetupRadius;
+    };
+
+// 지점과 반경 안의 장소 수와 붙일 이름("역삼동 근처"). 장소가 없으면 이름이 없다
+export type MeetupAreaCheck = { placeCount: number; name?: string };
 
 export type MeetupQuestions = {
   mood: boolean;
@@ -54,7 +68,14 @@ export type MeetupUpdateRequest = {
 export type MeetupAreasResponse = { items: MeetupArea[] };
 
 export type MeetupInfo = {
-  area: { kind: AreaKind; name?: string };
+  // 지점 모임만 지점과 반경이 있다
+  area: {
+    kind: AreaKind;
+    name?: string;
+    lat?: number;
+    lng?: number;
+    radiusM?: number;
+  };
   category: MeetupCategory;
   date?: string;
   time?: string;
@@ -222,14 +243,35 @@ export const CATEGORIES: MeetupCategory[] = [
   "ANY",
 ];
 
+export const RADII: MeetupRadius[] = [500, 1000, 2000, 5000];
+// 지점의 위치 이름 글자 수(화면 예시 모임장 4)
+export const POINT_NAME_MAX = 20;
+
 export const HEADCOUNT_MIN = 2;
 export const HEADCOUNT_MAX = 8;
 export const DESCRIPTION_MAX = 100;
 
-// 화면에 보이는 지역 이름. 역은 "역"을 붙인다
+// 화면에 보이는 지역 이름. 역은 "역"을 붙이고, 지점은 위치 이름이다(없으면 빈 글)
 export function areaLabel(area: { kind: AreaKind; name?: string }) {
   if (!area.name) return "";
   return area.kind === "STATION" ? `${area.name}역` : area.name;
+}
+
+// 반경 칩과 모임 정보의 반경 글("500m", "1km")
+export function radiusLabel(meters: number) {
+  return meters >= 1000 ? `${meters / 1000}km` : `${meters}m`;
+}
+
+// 모임 정보와 지역 칸의 지역 글. 지점은 반경을 붙인다("역삼동 근처 · 반경 1km")
+export function areaText(area: {
+  kind: AreaKind;
+  name?: string;
+  radiusM?: number;
+}) {
+  const label = areaLabel(area);
+  if (area.kind !== "POINT" || area.radiusM === undefined) return label;
+  const radius = `반경 ${radiusLabel(area.radiusM)}`;
+  return label ? `${label} · ${radius}` : radius;
 }
 
 // 형식이 틀린 코드는 서버에 묻지 않고 없는 링크로 본다(D-2)
