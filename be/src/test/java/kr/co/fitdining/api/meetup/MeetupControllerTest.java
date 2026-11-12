@@ -276,7 +276,7 @@ class MeetupControllerTest {
 
 		private final MeetupSnapshot waiting = new MeetupSnapshot(MeetupPhase.WAITING, false,
 				new MeetupSnapshot.Info(new MeetupSnapshot.Area(AreaKind.STATION, "선릉"), MeetupCategory.RESTAURANT,
-						null, null, null, null, "민재", LocalDate.of(2026, 11, 18)),
+						null, null, null, null, "민재"),
 				new MeetupQuestions(true, true, true, false),
 				new MeetupSnapshot.Me(MeetupRole.VIEWER, null, false, null, null), List.of(MeetupAction.JOIN),
 				List.of(), null, null, null, null, null);
@@ -291,7 +291,7 @@ class MeetupControllerTest {
 					.andExpect(header().string("Cache-Control", "no-store"))
 					.andExpect(jsonPath("$.phase").value("WAITING"))
 					.andExpect(jsonPath("$.info.hostNickname").value("민재"))
-					.andExpect(jsonPath("$.info.expiresOn").value("2026-11-18"))
+					.andExpect(jsonPath("$.info.expiresOn").doesNotExist())
 					.andExpect(jsonPath("$.info.date").doesNotExist())
 					.andExpect(jsonPath("$.info.headcount").doesNotExist())
 					.andExpect(jsonPath("$.me.profileId").doesNotExist())

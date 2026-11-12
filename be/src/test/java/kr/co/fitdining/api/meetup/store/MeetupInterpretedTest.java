@@ -19,7 +19,7 @@ class MeetupInterpretedTest {
 
 	static Meetup meetup(String description) {
 		return new Meetup("code", "host", AreaKind.STATION, "선릉", MeetupCategory.RESTAURANT, null, null, null,
-				description, NOW, NOW);
+				description, NOW);
 	}
 
 	@Test
@@ -39,10 +39,10 @@ class MeetupInterpretedTest {
 		Meetup meetup = meetup("조용한 곳");
 		meetup.interpreted("조용한 곳", PARSED);
 
-		meetup.edit(AreaKind.STATION, "선릉", MeetupCategory.RESTAURANT, null, null, 4, "조용한 곳", NOW, NOW);
+		meetup.edit(AreaKind.STATION, "선릉", MeetupCategory.RESTAURANT, null, null, 4, "조용한 곳", NOW);
 		assertThat(meetup.getParsedConditions()).isEqualTo(PARSED);
 
-		meetup.edit(AreaKind.STATION, "선릉", MeetupCategory.RESTAURANT, null, null, 4, "곱창 먹을 곳", NOW, NOW);
+		meetup.edit(AreaKind.STATION, "선릉", MeetupCategory.RESTAURANT, null, null, 4, "곱창 먹을 곳", NOW);
 		assertThat(meetup.getParsedConditions()).isNull();
 	}
 

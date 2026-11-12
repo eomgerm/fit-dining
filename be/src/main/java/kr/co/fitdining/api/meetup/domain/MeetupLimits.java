@@ -20,8 +20,8 @@ public final class MeetupLimits {
 	/** 모임 날짜는 오늘부터 이 일수 뒤까지 고를 수 있다(AC-1). */
 	public static final int DATE_RANGE_DAYS = 30;
 
-	/** 모임 날짜(없으면 만든 날)에서 이 일수가 지나면 닫는다. 삭제는 그다음 날 0시다(AC-2). */
-	public static final int KEEP_DAYS = 7;
+	/** 모임 쿠키의 수명. 모임은 시간이 지나도 지우지 않으므로 쿠키를 줄 때마다 이만큼 둔다(AC-7, D-36). */
+	public static final Duration COOKIE_MAX_AGE = Duration.ofDays(365);
 
 	public static final int AREA_QUERY_MAX = 20;
 	public static final int AREA_RESULTS_MAX = 10;

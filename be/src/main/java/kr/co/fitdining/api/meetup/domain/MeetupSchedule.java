@@ -5,7 +5,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZonedDateTime;
 
-/** 모임 날짜·시간을 고를 수 있는지와 모임을 지울 시각(AC-1, AC-2, D-23). 날짜는 모두 KST로 판정한다. */
+/** 모임 날짜·시간을 고를 수 있는지와 모임 뒤인지(AC-1, AC-64, D-3). 날짜는 모두 KST로 판정한다. */
 public final class MeetupSchedule {
 
 	private MeetupSchedule() {
@@ -30,20 +30,14 @@ public final class MeetupSchedule {
 	}
 
 	/**
-	 * 모임 날짜 + 8일의 0시(KST), 곧 모임 날짜 + 7일이 끝날 때다. 날짜가 없으면 {@code now}의 날짜를 기준으로 한다.
-	 *
-	 * @param date 모임 날짜. 없을 수 있다.
-	 * @param now 날짜가 없을 때의 기준 시각(만든 시각이나 날짜를 비운 시각)
-	 * @return 모임을 지울 시각
+	 * @param phase 저장한 상태
+	 * @param meetDate 모임 날짜. 없으면 모임 뒤가 없다(D-36).
+	 * @param now 지금
+	 * @return 정한 곳과 모임 날짜가 있고 오늘이 모임 날짜 당일 이후일 때 참
 	 */
-	public static Instant expiresAt(LocalDate date, Instant now) {
-		LocalDate base = date != null ? date : now.atZone(MeetupLimits.SEOUL).toLocalDate();
-		return base.plusDays(MeetupLimits.KEEP_DAYS + 1L).atStartOfDay(MeetupLimits.SEOUL).toInstant();
-	}
-
-	/** @return 모임을 열 수 있는 마지막 날(KST). 지우는 날의 전날이다. */
-	public static LocalDate lastOpenDay(Instant expiresAt) {
-		return expiresAt.atZone(MeetupLimits.SEOUL).toLocalDate().minusDays(1);
+	public static boolean afterMeetup(MeetupPhase phase, LocalDate meetDate, Instant now) {
+		return phase == MeetupPhase.DECIDED && meetDate != null
+				&& !now.atZone(MeetupLimits.SEOUL).toLocalDate().isBefore(meetDate);
 	}
 
 }

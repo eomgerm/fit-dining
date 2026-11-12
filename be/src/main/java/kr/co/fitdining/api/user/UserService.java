@@ -3,6 +3,7 @@ package kr.co.fitdining.api.user;
 import java.time.Clock;
 import kr.co.fitdining.api.auth.repository.AuthUserRepository;
 import kr.co.fitdining.api.auth.ports.AuthUseCases.Identity;
+import kr.co.fitdining.api.meetup.MeetupWithdrawals;
 import kr.co.fitdining.api.searchthread.SearchThreadService;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
@@ -22,6 +23,7 @@ public class UserService {
     private final kr.co.fitdining.api.auth.infrastructure.AccountSessions accountSessions;
     private final kr.co.fitdining.api.auth.application.EmailVerifications verifications;
     private final kr.co.fitdining.api.auth.repository.AuthEmailVerificationRepository emailVerifications;
+    private final MeetupWithdrawals meetups;
     public record Profile(String userId, String nickname, String loginMethod,
             @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.ALWAYS) String contactEmail,
             boolean marketingAgreed) {}
@@ -79,6 +81,8 @@ public class UserService {
             preferences.deleteById(userId);
             // Search history holds copies of the query, taste tags and map area (search-thread D-13)
             searchThreads.deleteAll(userId);
+            // Meetups the user hosts and the user's meetup profiles (meetup spec D-36)
+            meetups.withdraw(userId);
         });
     }
 }

@@ -65,7 +65,7 @@ public class MeetupProfileService {
 	 *
 	 * @param profileId 쿠키가 가리키는 프로필
 	 * @param token 쿠키 값
-	 * @param maxAge 쿠키 수명. 모임을 지울 때까지다.
+	 * @param maxAge 쿠키 수명(D-36)
 	 */
 	public record Joined(long profileId, String token, Duration maxAge) {
 	}
@@ -99,7 +99,7 @@ public class MeetupProfileService {
 		MeetupQuestions visible = questions.questions(meetup);
 		MeetupProfile profile = profiles.save(new MeetupProfile(meetup.getMeetupId(), name, freeColor(joined), userId,
 				MeetupTasteRules.visibleOnly(taste, visible), now));
-		return issue(meetup, profile, now);
+		return issue(profile);
 	}
 
 	/**
@@ -117,7 +117,7 @@ public class MeetupProfileService {
 		if (profile.member() && !profile.ownedBy(userId)) {
 			throw new MeetupForbiddenException();
 		}
-		return issue(meetup, profile, now());
+		return issue(profile);
 	}
 
 	/**
@@ -182,8 +182,7 @@ public class MeetupProfileService {
 	}
 
 	/**
-	 * 모임 쿠키를 지금 삭제 시각에 맞춰 다시 줄 수명(AC-24). 날짜를 고쳐 삭제 시각이 바뀌어도 쿠키가 먼저 사라지지 않게
-	 * 한다.
+	 * 모임 쿠키를 다시 줄 수명(AC-24). 모임을 여는 동안 쿠키가 먼저 사라지지 않게 한다.
 	 *
 	 * @return 쿠키가 이 모임의 프로필을 가리킬 때만 있다.
 	 */
@@ -194,19 +193,13 @@ public class MeetupProfileService {
 		}
 		return meetups.findByCode(code).flatMap(meetup -> sessions.findByTokenHash(MeetupRequesters.hash(cookieToken))
 				.flatMap(session -> profiles.findByProfileIdAndMeetupId(session.getProfileId(), meetup.getMeetupId()))
-				.map(profile -> lifetime(meetup, now())));
+				.map(profile -> MeetupLimits.COOKIE_MAX_AGE));
 	}
 
-	private Joined issue(Meetup meetup, MeetupProfile profile, Instant now) {
+	private Joined issue(MeetupProfile profile) {
 		String token = MeetupRequesters.newToken();
 		sessions.save(new MeetupProfileSession(profile.getProfileId(), MeetupRequesters.hash(token)));
-		return new Joined(profile.getProfileId(), token, lifetime(meetup, now));
-	}
-
-	/** 모임을 지울 때까지다. */
-	private static Duration lifetime(Meetup meetup, Instant now) {
-		Duration maxAge = Duration.between(now, meetup.getExpiresAt());
-		return maxAge.isNegative() ? Duration.ZERO : maxAge;
+		return new Joined(profile.getProfileId(), token, MeetupLimits.COOKIE_MAX_AGE);
 	}
 
 	private Meetup lock(String code) {

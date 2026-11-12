@@ -89,10 +89,9 @@ public record MeetupSnapshot(
 	 * @param headcount 인원. 정하지 않았으면 빠진다.
 	 * @param description 모임 설명. 없으면 빠진다.
 	 * @param hostNickname 모임장 닉네임
-	 * @param expiresOn 모임을 열 수 있는 마지막 날(KST)
 	 */
 	public record Info(Area area, MeetupCategory category, LocalDate date, String time, Integer headcount,
-			String description, String hostNickname, LocalDate expiresOn) {
+			String description, String hostNickname) {
 	}
 
 	/**

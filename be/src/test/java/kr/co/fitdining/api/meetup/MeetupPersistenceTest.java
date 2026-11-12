@@ -142,21 +142,19 @@ class MeetupPersistenceTest extends PostgresTestSupport {
 	class Create {
 
 		@Test
-		@DisplayName("만들기_정상이면_대기상태와삭제시각과정리한설명이저장된다")
+		@DisplayName("만들기_정상이면_대기상태와정리한설명이저장된다")
 		void create_valid_storesMeetup() {
 			MeetupCreateResponse created = create(LocalDate.of(2026, 11, 14), LocalTime.of(19, 0, 42), "  회식 자리 ");
 
 			Map<String, Object> row = jdbc.queryForMap("""
 					select phase, area_kind, area_name, category, meet_date, meet_time, headcount, description,
-					       expires_at, host_user_id from meetups where code = ?""", created.code());
+					       host_user_id from meetups where code = ?""", created.code());
 			assertThat(created.code()).hasSize(22);
 			assertThat(row).containsEntry("phase", "WAITING").containsEntry("area_kind", "STATION")
 					.containsEntry("area_name", "선릉").containsEntry("category", "RESTAURANT")
 					.containsEntry("headcount", 4).containsEntry("description", "회식 자리")
 					.containsEntry("host_user_id", HOST);
 			assertThat(row.get("meet_time").toString()).isEqualTo("19:00:00");
-			assertThat(((java.sql.Timestamp) row.get("expires_at")).toInstant())
-					.isEqualTo(Instant.parse("2026-11-21T15:00:00Z"));
 			assertThat(created.questions().food()).isTrue();
 			assertThat(created.questions().price()).isFalse();
 		}
@@ -246,7 +244,7 @@ class MeetupPersistenceTest extends PostgresTestSupport {
 					MeetupAction.CALCULATE, MeetupAction.JOIN);
 			assertThat(snapshot.info()).isEqualTo(new MeetupSnapshot.Info(
 					new MeetupSnapshot.Area(AreaKind.STATION, "선릉"), MeetupCategory.RESTAURANT,
-					LocalDate.of(2026, 11, 14), "19:00", 4, "회식", "모임장민재", LocalDate.of(2026, 11, 21)));
+					LocalDate.of(2026, 11, 14), "19:00", 4, "회식", "모임장민재"));
 		}
 
 		@Test
@@ -258,7 +256,6 @@ class MeetupPersistenceTest extends PostgresTestSupport {
 			MeetupSnapshot anonymous = service.snapshot(code, null, null);
 			assertThat(anonymous.me()).isEqualTo(new MeetupSnapshot.Me(MeetupRole.VIEWER, null, false, null, null));
 			assertThat(anonymous.allowed()).containsExactly(MeetupAction.JOIN);
-			assertThat(anonymous.info().expiresOn()).isEqualTo(LocalDate.of(2026, 11, 18));
 		}
 
 		@Test

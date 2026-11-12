@@ -163,8 +163,7 @@ class MeetupUpdatePersistenceTest extends PostgresTestSupport {
 				"area", "category", "date", "time", "headcount", "description"));
 
 		assertThat(info(code)).isEqualTo(new MeetupSnapshot.Info(new MeetupSnapshot.Area(AreaKind.DONG, "역삼동"),
-				MeetupCategory.CAFE, LocalDate.of(2026, 11, 20), "18:30", null, "새 모임", "모임장민재",
-				LocalDate.of(2026, 11, 27)));
+				MeetupCategory.CAFE, LocalDate.of(2026, 11, 20), "18:30", null, "새 모임", "모임장민재"));
 	}
 
 	@Test
@@ -175,13 +174,12 @@ class MeetupUpdatePersistenceTest extends PostgresTestSupport {
 		meetupService.update(code, HOST, patch(null, null, null, null, 6, null, "headcount"));
 
 		assertThat(info(code)).isEqualTo(new MeetupSnapshot.Info(new MeetupSnapshot.Area(AreaKind.STATION, "선릉"),
-				MeetupCategory.RESTAURANT, LocalDate.of(2026, 11, 14), "19:00", 6, "회식", "모임장민재",
-				LocalDate.of(2026, 11, 21)));
+				MeetupCategory.RESTAURANT, LocalDate.of(2026, 11, 14), "19:00", 6, "회식", "모임장민재"));
 	}
 
 	@Test
-	@DisplayName("수정_날짜를비우면_시각도비우고비운날부터다시계산한다")
-	void update_clearDate_recountsFromToday() {
+	@DisplayName("수정_날짜를비우면_시각도비운다")
+	void update_clearDate_clearsTime() {
 		String code = meetup();
 		clock.instant = NOON.plus(Duration.ofDays(1));
 
@@ -190,7 +188,6 @@ class MeetupUpdatePersistenceTest extends PostgresTestSupport {
 		MeetupSnapshot.Info info = info(code);
 		assertThat(info.date()).isNull();
 		assertThat(info.time()).isNull();
-		assertThat(info.expiresOn()).isEqualTo(LocalDate.of(2026, 11, 19));
 	}
 
 	@Test
@@ -240,7 +237,7 @@ class MeetupUpdatePersistenceTest extends PostgresTestSupport {
 
 		meetupService.update(code, HOST, patch(null, null, LocalDate.of(2026, 11, 15), LocalTime.of(18, 0), null,
 				null, "date", "time"));
-		assertThat(info(code).expiresOn()).isEqualTo(LocalDate.of(2026, 11, 22));
+		assertThat(info(code).date()).isEqualTo(LocalDate.of(2026, 11, 15));
 
 		assertThat(conflictOf(() -> meetupService.update(code, HOST, patch(null, null, null, null, 5, null,
 				"headcount")))).isEqualTo(Conflict.PHASE);
@@ -287,15 +284,14 @@ class MeetupUpdatePersistenceTest extends PostgresTestSupport {
 	}
 
 	@Test
-	@DisplayName("쿠키수명_날짜를바꾸면_새삭제시각까지이고이모임의쿠키일때만있다")
-	void cookieLifetime_followsNewExpiry() {
+	@DisplayName("쿠키수명_날짜와상관없이1년이고이모임의쿠키일때만있다")
+	void cookieLifetime_oneYear() {
 		String code = meetup();
 		String token = profileService.create(code, null, new ProfileCreateRequest("하린", null)).token();
-		Instant newExpiry = LocalDate.of(2026, 11, 28).atStartOfDay(ZoneId.of("Asia/Seoul")).toInstant();
 
 		meetupService.update(code, HOST, patch(null, null, LocalDate.of(2026, 11, 20), null, null, null, "date"));
 
-		assertThat(profileService.cookieLifetime(code, token)).contains(Duration.between(NOON, newExpiry));
+		assertThat(profileService.cookieLifetime(code, token)).contains(Duration.ofDays(365));
 		assertThat(profileService.cookieLifetime(code, "없는쿠키")).isEmpty();
 		assertThat(profileService.cookieLifetime(meetup(), token)).isEmpty();
 	}

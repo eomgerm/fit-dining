@@ -77,7 +77,7 @@ class MeetupQuestionSourceTest {
 
 	static Meetup meetup(MeetupCategory category, String description, Boolean mentionsFood) {
 		Meetup meetup = new Meetup("code", "host", AreaKind.STATION, "선릉", category, null, null, null, description,
-				NOW, NOW);
+				NOW);
 		if (mentionsFood != null) {
 			meetup.interpreted(description, new MeetupInterpretation(Map.of("version", 3),
 					new MeetupInterpretation.Summary(mentionsFood)));

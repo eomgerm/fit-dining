@@ -187,7 +187,7 @@ class MeetupProfilePersistenceTest extends PostgresTestSupport {
 			byte[] stored = jdbc.queryForObject("select token_hash from meetup_profile_sessions where profile_id = ?",
 					byte[].class, joined.profileId());
 			assertThat(stored).isEqualTo(MeetupRequesters.hash(joined.token())).hasSize(32);
-			assertThat(joined.maxAge()).isEqualTo(Duration.between(NOON, Instant.parse("2026-11-18T15:00:00Z")));
+			assertThat(joined.maxAge()).isEqualTo(Duration.ofDays(365));
 		}
 
 		@Test

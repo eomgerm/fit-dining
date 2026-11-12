@@ -7,7 +7,6 @@ import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -113,8 +112,7 @@ public class MeetupService {
 		MeetupCategory category = request.category() == null ? MeetupCategory.RESTAURANT : request.category();
 		String description = description(request.description());
 		Meetup created = new Meetup(MeetupCodes.generate(), userId, chosen.area().kind(), chosen.area().name(),
-				category, request.date(), time, request.headcount(), description,
-				MeetupSchedule.expiresAt(request.date(), now), now);
+				category, request.date(), time, request.headcount(), description, now);
 		created.placeAt(chosen.point());
 		if (description != null) {
 			interpreter.interpret(description).ifPresent(parsed -> created.interpreted(description, parsed));
@@ -182,12 +180,9 @@ public class MeetupService {
 		if ((request.has("date") || request.has("time")) && !MeetupSchedule.selectable(date, time, now)) {
 			throw new InvalidMeetupException();
 		}
-		Instant expiresAt = Objects.equals(date, meetup.getMeetDate()) ? meetup.getExpiresAt()
-				: MeetupSchedule.expiresAt(date, now);
 		meetup.edit(area.area().kind(), area.area().name(), area.point(), category, date, time,
 				request.has("headcount") ? request.headcount() : meetup.getHeadcount(),
-				request.has("description") ? description(request.description()) : meetup.getDescription(),
-				expiresAt, now);
+				request.has("description") ? description(request.description()) : meetup.getDescription(), now);
 		if (interpreted != null && interpreted.interpretation() != null) {
 			meetup.interpreted(interpreted.description(), interpreted.interpretation());
 		}
@@ -263,21 +258,21 @@ public class MeetupService {
 		boolean outdated = outdated(meetup, joined, success);
 		MeetupRequesters.Requester requester = requesters.resolve(meetup, joined, userId, cookieToken);
 		MeetupQuestions questions = questionSource.questions(meetup);
+		boolean afterMeetup = MeetupSchedule.afterMeetup(meetup.getPhase(), meetup.getMeetDate(), now());
 		MeetupPermissions.Situation situation = new MeetupPermissions.Situation(meetup.getPhase(), requester.role(),
-				requester.hasProfile(), false, latest != null && latest.getState() == CalculationState.RUNNING,
+				requester.hasProfile(), afterMeetup, latest != null && latest.getState() == CalculationState.RUNNING,
 				outdated, meetup.getPollState(), meetup.reopenable(), requester.convertible());
 		MeetupSnapshot.Info info = new MeetupSnapshot.Info(
 				new MeetupSnapshot.Area(meetup.getAreaKind(), meetup.getAreaName(), meetup.getPointLat(),
 						meetup.getPointLng(), meetup.getRadiusM()), meetup.getCategory(),
 				meetup.getMeetDate(), meetup.getMeetTime() == null ? null : meetup.getMeetTime().format(HH_MM),
 				meetup.getHeadcount(), meetup.getDescription(),
-				users.findById(meetup.getHostUserId()).map(AuthUser::getNickname).orElse(null),
-				MeetupSchedule.lastOpenDay(meetup.getExpiresAt()));
+				users.findById(meetup.getHostUserId()).map(AuthUser::getNickname).orElse(null));
 		MeetupSnapshot.Me me = new MeetupSnapshot.Me(requester.role(),
 				requester.hasProfile() ? requester.profile().getProfileId() : null, userId != null,
 				requester.hasProfile() ? reflected(requester.profile(), success) : null,
 				requester.convertible() ? Boolean.TRUE : null);
-		return new MeetupSnapshot(meetup.getPhase(), false, info, questions, me,
+		return new MeetupSnapshot(meetup.getPhase(), afterMeetup, info, questions, me,
 				List.copyOf(MeetupPermissions.allowed(situation)),
 				joined.stream().map(profile -> profileView(meetup, profile, questions, success)).toList(),
 				pendingCount(meetup, joined),

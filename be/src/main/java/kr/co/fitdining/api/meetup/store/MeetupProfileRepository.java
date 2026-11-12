@@ -3,6 +3,8 @@ package kr.co.fitdining.api.meetup.store;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
 
 public interface MeetupProfileRepository extends JpaRepository<MeetupProfile, Long> {
 
@@ -10,5 +12,10 @@ public interface MeetupProfileRepository extends JpaRepository<MeetupProfile, Lo
 	List<MeetupProfile> findByMeetupIdOrderByProfileId(Long meetupId);
 
 	Optional<MeetupProfile> findByProfileIdAndMeetupId(Long profileId, Long meetupId);
+
+	/** 그 회원의 프로필을 모두 지운다. 취향과 표는 프로필 행에 있고 쿠키 세션은 DB가 따라 지운다(D-36). */
+	@Modifying
+	@Query("delete from MeetupProfile p where p.userId = :userId")
+	int deleteOwnedBy(String userId);
 
 }

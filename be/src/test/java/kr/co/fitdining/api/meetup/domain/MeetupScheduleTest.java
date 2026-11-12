@@ -5,11 +5,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-/** 날짜 검증과 삭제 시각을 KST 자정 전후의 고정 시각으로 확인한다(AC-1, AC-2). */
+/** 날짜 검증과 모임 뒤 판정을 KST 자정 전후의 고정 시각으로 확인한다(AC-1, AC-64). */
 class MeetupScheduleTest {
 
 	/** 2026-11-11 23:59:30 KST. UTC로는 아직 11일 14시대다. */
@@ -67,28 +68,29 @@ class MeetupScheduleTest {
 	}
 
 	@Nested
-	@DisplayName("삭제 시각")
-	class Expiry {
+	@DisplayName("모임 뒤")
+	class AfterMeetup {
 
 		@Test
-		@DisplayName("삭제시각_모임날짜가있으면_8일뒤0시KST다")
-		void expiresAt_withDate_eightDaysLaterMidnight() {
-			assertThat(MeetupSchedule.expiresAt(LocalDate.of(2026, 11, 14), BEFORE_MIDNIGHT))
-					.isEqualTo(Instant.parse("2026-11-21T15:00:00Z"));
+		@DisplayName("모임뒤_정한곳이없으면_아니다")
+		void afterMeetup_notDecided_false() {
+			for (MeetupPhase phase : List.of(MeetupPhase.WAITING, MeetupPhase.RESULT, MeetupPhase.VOTING)) {
+				assertThat(MeetupSchedule.afterMeetup(phase, NOV_11, AFTER_MIDNIGHT)).isFalse();
+			}
 		}
 
 		@Test
-		@DisplayName("삭제시각_날짜가없으면_KST기준만든날의8일뒤0시다")
-		void expiresAt_withoutDate_fromKstToday() {
-			assertThat(MeetupSchedule.expiresAt(null, BEFORE_MIDNIGHT)).isEqualTo(Instant.parse("2026-11-18T15:00:00Z"));
-			assertThat(MeetupSchedule.expiresAt(null, AFTER_MIDNIGHT)).isEqualTo(Instant.parse("2026-11-19T15:00:00Z"));
+		@DisplayName("모임뒤_모임날짜당일0시KST부터다")
+		void afterMeetup_fromMeetDateMidnightKst() {
+			assertThat(MeetupSchedule.afterMeetup(MeetupPhase.DECIDED, NOV_12, BEFORE_MIDNIGHT)).isFalse();
+			assertThat(MeetupSchedule.afterMeetup(MeetupPhase.DECIDED, NOV_12, AFTER_MIDNIGHT)).isTrue();
+			assertThat(MeetupSchedule.afterMeetup(MeetupPhase.DECIDED, NOV_11, AFTER_MIDNIGHT)).isTrue();
 		}
 
 		@Test
-		@DisplayName("마지막날_모임날짜의7일뒤다")
-		void lastOpenDay_isSevenDaysAfterDate() {
-			Instant expiresAt = MeetupSchedule.expiresAt(LocalDate.of(2026, 11, 14), BEFORE_MIDNIGHT);
-			assertThat(MeetupSchedule.lastOpenDay(expiresAt)).isEqualTo(LocalDate.of(2026, 11, 21));
+		@DisplayName("모임뒤_날짜가없으면_없다")
+		void afterMeetup_withoutDate_never() {
+			assertThat(MeetupSchedule.afterMeetup(MeetupPhase.DECIDED, null, AFTER_MIDNIGHT)).isFalse();
 		}
 
 	}

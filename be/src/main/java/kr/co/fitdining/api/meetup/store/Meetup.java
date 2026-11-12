@@ -86,10 +86,6 @@ public class Meetup {
 	@Column(columnDefinition = "jsonb")
 	private MeetupInterpretation parsedConditions;
 
-	/** 모임을 지울 시각(D-23) */
-	@Column(nullable = false)
-	private Instant expiresAt;
-
 	/** 모임 정보를 마지막으로 바꾼 시각. 추천이 낡았는지 판단한다(D-9). */
 	@Column(nullable = false)
 	private Instant infoUpdatedAt;
@@ -116,8 +112,7 @@ public class Meetup {
 	private Instant decidedAt;
 
 	public Meetup(String code, String hostUserId, AreaKind areaKind, String areaName, MeetupCategory category,
-			LocalDate meetDate, LocalTime meetTime, Integer headcount, String description, Instant expiresAt,
-			Instant now) {
+			LocalDate meetDate, LocalTime meetTime, Integer headcount, String description, Instant now) {
 		this.code = code;
 		this.hostUserId = hostUserId;
 		this.phase = MeetupPhase.WAITING;
@@ -128,7 +123,6 @@ public class Meetup {
 		this.meetTime = meetTime;
 		this.headcount = headcount;
 		this.description = description;
-		this.expiresAt = expiresAt;
 		this.infoUpdatedAt = now;
 	}
 
@@ -159,8 +153,8 @@ public class Meetup {
 	 * 상관없이 먼저 저장한 해석을 지운다(AC-47).
 	 */
 	public void edit(AreaKind areaKind, String areaName, MeetupCategory category, LocalDate meetDate,
-			LocalTime meetTime, Integer headcount, String description, Instant expiresAt, Instant now) {
-		edit(areaKind, areaName, null, category, meetDate, meetTime, headcount, description, expiresAt, now);
+			LocalTime meetTime, Integer headcount, String description, Instant now) {
+		edit(areaKind, areaName, null, category, meetDate, meetTime, headcount, description, now);
 	}
 
 	/**
@@ -169,8 +163,7 @@ public class Meetup {
 	 * @param point 지점 모임의 지점과 반경. 역·동 모임이면 null이다.
 	 */
 	public void edit(AreaKind areaKind, String areaName, MeetupPoint point, MeetupCategory category,
-			LocalDate meetDate, LocalTime meetTime, Integer headcount, String description, Instant expiresAt,
-			Instant now) {
+			LocalDate meetDate, LocalTime meetTime, Integer headcount, String description, Instant now) {
 		if (!Objects.equals(description, this.description)) {
 			this.parsedConditions = null;
 		}
@@ -186,7 +179,6 @@ public class Meetup {
 		this.meetTime = meetTime;
 		this.headcount = headcount;
 		this.description = description;
-		this.expiresAt = expiresAt;
 		if (changed) {
 			this.infoUpdatedAt = now;
 		}
