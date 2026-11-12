@@ -31,12 +31,14 @@ from fit_ai.match.candidates import (
     Found,
     MapBounds,
     OpenHours,
+    PlaceDetails,
     PlaceFilter,
     RadiusArea,
     RegionArea,
     StationArea,
     StoreError,
     VectorCounts,
+    read_details,
 )
 from fit_ai.match.interpretation.segments import DAYS
 from fit_ai.match.place import Place, PlaceInfo, read_facilities
@@ -53,6 +55,7 @@ WHERE summary_vector IS NOT NULL
   AND profile -> 'embedding' ->> 'prompt' = 'document'
   AND (%(category)s::text IS NULL OR category_group = %(category)s::text)
   AND NOT coalesce(category_group = ANY(%(excluded)s::text[]), false)
+  AND NOT coalesce(food_type = ANY(%(excluded_foods)s::text[]), false)
   AND (
     jsonb_array_length(%(areas)s::jsonb) = 0
     OR EXISTS (
@@ -135,6 +138,23 @@ WHERE summary_vector IS NOT NULL
       )
     )
   )
+  AND (
+    %(closed_day)s::text IS NULL
+    OR NOT EXISTS (
+      SELECT 1
+      FROM jsonb_to_recordset(coalesce(p.hours, '[]'::jsonb))
+        AS h(day text, open time, close time, closed boolean)
+      WHERE h.day = %(closed_day)s::text AND coalesce(h.closed, false)
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM jsonb_to_recordset(coalesce(p.hours, '[]'::jsonb))
+        AS h(day text, open time, close time, closed boolean)
+      WHERE h.day = %(overnight_day)s::text
+        AND NOT coalesce(h.closed, false)
+        AND NOT coalesce(h.close > h.open, false)
+    )
+  )
 ORDER BY summary_vector <=> %(query)s::vector
 LIMIT %(k)s
 """
@@ -148,7 +168,17 @@ JSON(`_hours_json`)으로 받아, 요청한 요일 중 쉬거나 시각이 못 �
 하루라도 있으면 남긴다(`candidates.OpenHours`). 가격과 영업시간을 모르는 장소는 남긴다.
 메뉴는 메뉴마다 찾을 말 목록(JSON)으로 받아, 모든 메뉴에 대해 그중 하나가 메뉴 이름, 업종
 이름, 가게 이름에 들어 있는 장소만 남긴다(`candidates.PlaceFilter.menus`). 견주는 꼴은
-`candidates.menu_key`와 같다."""
+`candidates.menu_key`와 같다. 빼는 음식 종류는 그 종류로 확인된 장소만 빼고 모르면 남긴다.
+모임 요일(`closed_day`)이 있으면 그 요일에 쉰다고 확인된 장소만 빼고, 전날(`overnight_day`)
+밤부터 이어질 수 있는 장소는 남긴다. 영업시간의 세부 규칙은 모임 계산(`meetup.is_open`)이
+후보를 뽑은 뒤 본다."""
+
+DETAILS_SQL = """
+SELECT place_id, name, category, hours, menus, price
+FROM ai_place_search
+WHERE place_id = ANY(%(ids)s::bigint[])
+"""
+"""모임 계산이 후보마다 더 읽는 영업시간, 메뉴판, 가게 이름, 업종 이름"""
 
 PLACES_SQL = """
 SELECT place_id, category_group, station, facilities, food_type, analyzed_review_count,
@@ -223,6 +253,9 @@ class PgPlaceStore:
                 "revision": embedding.REVISION,
                 "category": place_filter.category_group,
                 "excluded": list(place_filter.excluded_categories),
+                "excluded_foods": list(place_filter.excluded_food_types),
+                "closed_day": place_filter.closed_day,
+                "overnight_day": place_filter.overnight_day,
                 "areas": json.dumps([_area_json(a) for a in place_filter.areas]),
                 "facilities": list(place_filter.facilities),
                 "min_price": place_filter.min_price,
@@ -263,6 +296,34 @@ class PgPlaceStore:
                 self._places = tuple(p for p in map(_place, rows) if p is not None)
                 self._places_read_at = now
             return self._places
+
+    def details(self, place_ids: Sequence[int]) -> dict[int, PlaceDetails]:
+        """장소마다 영업시간, 메뉴판, 가게 이름, 업종 이름, 가게 가격을 읽는다.
+
+        Args:
+            place_ids: 장소 id
+
+        Returns:
+            장소 id별 정보. 뷰에 없는 id는 빠진다.
+
+        Raises:
+            StoreError: 저장소를 읽지 못했을 때
+        """
+        if not place_ids:
+            return {}
+        rows = self._fetch(DETAILS_SQL, {"ids": list(place_ids)})
+        return {
+            place_id: read_details(
+                {
+                    "name": name,
+                    "category": category,
+                    "hours": hours,
+                    "menus": menus,
+                    "price": price,
+                }
+            )
+            for place_id, name, category, hours, menus, price in rows
+        }
 
     def vector_counts(self) -> VectorCounts:
         """비교할 수 있는 장소와 검색에서 빠지는 장소를 센다.

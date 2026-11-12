@@ -6,6 +6,7 @@ BE가 분기할 오류는 `HTTPException`이 아니라 `server.common.problem()`
 `HTTPException`은 `HTTP_ERROR`로 바뀌고 detail이 사라진다.
 """
 
+from dataclasses import replace
 from http import HTTPStatus
 
 from fastapi import FastAPI, Request
@@ -14,7 +15,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from server import direct_input, review_extract, search, taste_profile
-from server.common import Dependencies, log, problem
+from server.common import Dependencies, Slots, log, problem
 
 
 def create_app(deps: Dependencies) -> FastAPI:
@@ -27,6 +28,9 @@ def create_app(deps: Dependencies) -> FastAPI:
         FastAPI 앱. `GET /healthz`와 기능별 엔드포인트가 있다.
     """
     app = FastAPI(title="Fit Dining AI", version="0.3.0")
+    if deps.slots is None:
+        # 검색과 모임 계산이 같은 동시 처리 칸을 나눠 쓴다.
+        deps = replace(deps, slots=Slots(deps.max_concurrent))
 
     @app.exception_handler(RequestValidationError)
     async def _invalid_request(_: Request, __: RequestValidationError) -> JSONResponse:

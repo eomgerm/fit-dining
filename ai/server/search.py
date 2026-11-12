@@ -9,8 +9,6 @@ contracts/metrics.md의 폴백 지표다. 요청·응답 모양은 `server/schem
 docs/comparison/api.md에 있다.
 """
 
-import threading
-from collections.abc import Callable
 from dataclasses import asdict
 from typing import Any
 
@@ -42,7 +40,7 @@ from fit_ai.match.search import (
 )
 from fit_ai.match.taste_select import TasteProfile, TasteStore
 from fit_ai.taste.profile import compute_features
-from server.common import Body, Dependencies, log, problem
+from server.common import Body, Dependencies, Slots, log, problem
 from server.schemas import (
     CardBody,
     ConditionsBody,
@@ -85,17 +83,7 @@ def router(deps: Dependencies) -> APIRouter:
         log("not_ready", reason="EMBEDDING_UNAVAILABLE")
     if deps.store is None:
         log("not_ready", reason="PLACES_UNAVAILABLE")
-    slots = threading.BoundedSemaphore(deps.max_concurrent)
-
-    def limited(handle: Callable[[], JSONResponse]) -> JSONResponse:
-        if not slots.acquire(blocking=False):
-            return problem(
-                503, "BUSY", "요청이 많다. 잠시 뒤 다시 시도한다", {"Retry-After": "1"}
-            )
-        try:
-            return handle()
-        finally:
-            slots.release()
+    slots = deps.slots or Slots(deps.max_concurrent)
 
     r = APIRouter()
 
@@ -103,7 +91,7 @@ def router(deps: Dependencies) -> APIRouter:
         "/v1/search", response_model=SearchResponse, response_model_exclude_none=True
     )
     def search_request(body: SearchBody) -> JSONResponse:
-        return limited(lambda: _search(deps, body))
+        return slots.run(lambda: _search(deps, body))
 
     return r
 

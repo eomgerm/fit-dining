@@ -21,6 +21,7 @@ from fit_ai.match.candidates import (
     Found,
     MapBounds,
     OpenHours,
+    PlaceDetails,
     PlaceFilter,
     RadiusArea,
     RegionArea,
@@ -29,6 +30,7 @@ from fit_ai.match.candidates import (
     VectorCounts,
     distance_m,
     menu_key,
+    read_details,
 )
 from fit_ai.match.interpretation.segments import DAYS
 from fit_ai.match.place import Place, PlaceInfo, read_facilities
@@ -100,6 +102,22 @@ class JsonPlaceStore:
         """
         return self._places
 
+    def details(self, place_ids: Sequence[int]) -> dict[int, PlaceDetails]:
+        """장소마다 영업시간, 메뉴판, 가게 이름, 업종 이름, 가게 가격을 읽는다. `PgPlaceStore`와 같다.
+
+        Args:
+            place_ids: 장소 id
+
+        Returns:
+            장소 id별 정보. 파일에 없는 id는 빠진다.
+        """
+        wanted = set(place_ids)
+        return {
+            row["place_id"]: read_details(row)
+            for row in self._rows
+            if row["place_id"] in wanted
+        }
+
     def vector_counts(self) -> VectorCounts:
         """비교할 수 있는 장소와 검색에서 빠지는 장소를 센다.
 
@@ -159,6 +177,9 @@ def _matches(row: dict[str, Any], place_filter: PlaceFilter) -> bool:
     ):
         return False
     if row.get("category_group") in place_filter.excluded_categories:
+        return False
+    # 빼는 음식 종류로 확인된 곳만 뺀다. 음식 종류를 모르면 남긴다.
+    if row.get("food_type") in place_filter.excluded_food_types:
         return False
     if place_filter.areas and not any(_in_area(row, a) for a in place_filter.areas):
         return False

@@ -281,6 +281,36 @@ class TestFind:
             for c in found.candidates
         } == REVIEWS
 
+    def test_excluded_food_types(self, store: JsonPlaceStore) -> None:
+        """저장소_빼는음식종류가있으면_그종류로확인된곳만빼고모르면남긴다"""
+        assert find_ids(store, PlaceFilter(excluded_food_types=("FOOD_WESTERN",))) == [
+            4,
+            2,
+            3,
+        ]
+        assert find_ids(store, PlaceFilter(excluded_food_types=("FOOD_KOREAN",))) == [
+            1,
+            4,
+            2,
+            3,
+        ]
+
+    def test_details(self, store: JsonPlaceStore) -> None:
+        """저장소_장소정보는_영업시간과메뉴판과이름과가격을읽고없는id는뺀다"""
+        details = store.details([1, 3, 99])
+
+        assert set(details) == {1, 3}
+        assert details[1].name == "도치피자 강남"
+        assert details[1].category == "피자"
+        assert details[1].menus == ("[대표] 마르게리따 피자", "크림 파스타")
+        assert [h.day for h in details[1].hours][:2] == ["MON", "TUE"]
+        assert details[1].hours[0].open == "10:00"
+        assert details[1].hours[0].closed is False
+        assert details[3].menus == ()
+        assert details[1].price == 9000
+        assert details[3].price is None
+        assert details[3].hours[0].open is None
+
     def test_places_all_readable(self, store: JsonPlaceStore) -> None:
         """저장소_장소전체는_거르지않고벡터상태와상관없이읽을수있는곳을모두준다"""
         places = store.places()

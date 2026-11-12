@@ -111,6 +111,16 @@ HOURS = {
     ),
 }
 
+# (거르기 조건, 뽑히는 장소). 모임 요일에 쉰다고 확인된 곳만 뺀다.
+CLOSED_DAY_CASES = [
+    # 날짜만 있으면 일요일에 쉬는 2, 4번을 빼고 영업시간을 모르는 3번은 남긴다.
+    (PlaceFilter(closed_day="SUN"), [1, 3]),
+    # 시각이 있으면 토요일 밤부터 이어질 수 있는 2번(18~2시)과 4번(24시간)을 남긴다.
+    (PlaceFilter(closed_day="SUN", overnight_day="SAT"), [1, 4, 2, 3]),
+    # 그 요일에 쉬는 곳이 없으면 빼지 않는다.
+    (PlaceFilter(closed_day="MON"), [1, 4, 2, 3]),
+]
+
 # (거르기 조건, 뽑히는 장소). 안 맞는다고 확인된 곳만 빼고 모르면 남긴다.
 HOURS_PRICE_CASES = [
     # 요일이 없으면 하루라도 그 시각까지 열 수 있으면 남는다.
@@ -329,6 +339,39 @@ def test_food_type_and_review_count(store: PgPlaceStore) -> None:
     } == REVIEWS
 
 
+def test_excluded_food_types(store: PgPlaceStore) -> None:
+    """저장소_빼는음식종류가있으면_그종류로확인된곳만빼고모르면남긴다"""
+    assert find_ids(store, PlaceFilter(excluded_food_types=("FOOD_WESTERN",))) == [
+        4,
+        2,
+        3,
+    ]
+    assert find_ids(store, PlaceFilter(excluded_food_types=("FOOD_KOREAN",))) == [
+        1,
+        4,
+        2,
+        3,
+    ]
+
+
+def test_details(store: PgPlaceStore) -> None:
+    """저장소_장소정보는_영업시간과메뉴판과이름과가격을읽고없는id는뺀다"""
+    details = store.details([1, 3, 99])
+
+    assert set(details) == {1, 3}
+    assert details[1].name == "도치피자 강남"
+    assert details[1].category == "피자"
+    assert details[1].menus == ("[대표] 마르게리따 피자", "크림 파스타")
+    assert [h.day for h in details[1].hours][:2] == ["MON", "TUE"]
+    assert details[1].hours[0].open == "10:00"
+    assert details[1].hours[0].closed is False
+    assert details[3].menus == ()
+    assert details[1].price == 9000
+    assert details[3].price is None
+    assert details[3].hours[0].open is None
+    assert store.details([]) == {}
+
+
 def test_places_all_readable(store: PgPlaceStore) -> None:
     """저장소_장소전체는_거르지않고벡터상태와상관없이읽을수있는곳을모두준다"""
     places = store.places()
@@ -394,6 +437,40 @@ def test_hours_and_price(
 ) -> None:
     """저장소_영업시간이나가격이있으면_안맞는다고확인된곳만빼고모르면남긴다"""
     assert find_ids(store, place_filter) == expected
+
+
+@pytest.mark.parametrize(("place_filter", "expected"), CLOSED_DAY_CASES)
+def test_closed_day(
+    store: PgPlaceStore, place_filter: PlaceFilter, expected: list[int]
+) -> None:
+    """저장소_모임요일이있으면_그요일에쉰다고확인된곳만빼고_전날밤부터이어질수있으면남긴다"""
+    assert find_ids(store, place_filter) == expected
+
+
+def test_closed_day_after_early_close(store: PgPlaceStore, database: str) -> None:
+    """저장소_전날이자정전에닫으면_모임요일에쉬는곳은시각이있어도뺀다"""
+    early = [
+        *(
+            {"day": d, "open": "18:00", "close": "23:00", "closed": False}
+            for d in WEEKDAYS
+        ),
+        SUNDAY_OFF,
+    ]
+    with psycopg.connect(database) as conn:
+        conn.execute(
+            "UPDATE ai_place_search SET hours = %s::jsonb WHERE place_id = 2",
+            (json.dumps(early),),
+        )
+    try:
+        found = find_ids(store, PlaceFilter(closed_day="SUN", overnight_day="SAT"))
+    finally:
+        with psycopg.connect(database) as conn:
+            conn.execute(
+                "UPDATE ai_place_search SET hours = %s::jsonb WHERE place_id = 2",
+                (json.dumps(HOURS[2][0]),),
+            )
+
+    assert found == [1, 4, 3]
 
 
 @pytest.mark.parametrize(("place_filter", "expected"), MENU_CASES)

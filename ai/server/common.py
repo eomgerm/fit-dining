@@ -2,6 +2,8 @@
 
 import json
 import logging
+import threading
+from collections.abc import Callable
 from dataclasses import dataclass
 from http import HTTPStatus
 from typing import Any
@@ -40,6 +42,27 @@ class Dependencies:
     gms_client: httpx.Client | None = None
     max_concurrent: int = 8
     taste_store: TasteStore | None = None
+    slots: "Slots | None" = None
+    """검색과 모임 계산이 함께 쓰는 동시 처리 칸. 없으면 앱이 `max_concurrent`로 만든다."""
+
+
+class Slots:
+    """동시에 처리하는 요청 수 상한. 일반 검색과 모임 계산이 함께 쓴다(AI 컨테이너의 처리
+    상한은 하나다). 칸이 없으면 기다리지 않고 503 `BUSY`를 돌려준다."""
+
+    def __init__(self, size: int) -> None:
+        self._slots = threading.BoundedSemaphore(size)
+
+    def run(self, handle: Callable[[], JSONResponse]) -> JSONResponse:
+        """칸이 있으면 요청을 처리하고, 없으면 503 `BUSY`다."""
+        if not self._slots.acquire(blocking=False):
+            return problem(
+                503, "BUSY", "요청이 많다. 잠시 뒤 다시 시도한다", {"Retry-After": "1"}
+            )
+        try:
+            return handle()
+        finally:
+            self._slots.release()
 
 
 class Body(BaseModel):

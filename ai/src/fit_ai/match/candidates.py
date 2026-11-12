@@ -179,6 +179,14 @@ class PlaceFilter:
             표기)이다. 모든 메뉴에 대해 그중 하나가 메뉴판의 메뉴 이름, 네이버 업종 이름,
             가게 이름 중 하나에 들어 있는 장소만 남긴다. 메뉴판이 없는 장소도 업종 이름과
             가게 이름으로 본다. 비어 있으면 메뉴로 거르지 않는다.
+        excluded_food_types: 빼는 음식 종류(`FOOD_KOREAN` 등). 그 종류로 확인된 장소만
+            빼고, 음식 종류를 모르는 장소는 남긴다. 모임 계산이 못 먹는 음식에 쓴다.
+        closed_day: 모임 요일(`MON`~`SUN`). 그 요일에 쉰다고 확인된 장소만 뺀다. 모임
+            계산이 영업시간의 세부 규칙(`meetup.is_open`) 전에 후보를 줄이려고 쓴다.
+            Postgres 저장소만 거르고 JSON 저장소는 무시한다.
+        overnight_day: 모임 시각이 있을 때의 전날. 이 요일에 쉬지 않고 닫는 시각이
+            여는 시각보다 늦다고 확인되지 않은 장소는 `closed_day`에 쉬어도 남긴다
+            (전날 밤부터 이어지는 영업).
     """
 
     category_group: str | None = None
@@ -189,6 +197,89 @@ class PlaceFilter:
     min_price: int | None = None
     max_price: int | None = None
     menus: tuple[tuple[str, ...], ...] = ()
+    excluded_food_types: tuple[str, ...] = ()
+    closed_day: str | None = None
+    overnight_day: str | None = None
+
+
+@dataclass(frozen=True)
+class DayHours:
+    """요일 하나의 영업시간. 뷰 `hours`의 원소 하나다.
+
+    Attributes:
+        day: 요일(`MON`~`SUN`)
+        open: 여는 시각("HH:MM"). 모르면 None이다.
+        close: 닫는 시각("HH:MM"). 여는 시각과 같거나 이르면 다음 날 닫는다.
+        closed: 그 요일에 쉬는지
+        breaks: 브레이크타임(시작, 끝)("HH:MM")
+    """
+
+    day: str
+    open: str | None
+    close: str | None
+    closed: bool
+    breaks: tuple[tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True)
+class PlaceDetails:
+    """후보를 뽑은 뒤 모임 계산이 더 읽는 장소 정보. 후보 행에는 없어서 따로 읽는다.
+
+    Attributes:
+        hours: 요일별 영업시간. 모르는 요일은 빠진다.
+        menus: 메뉴판의 메뉴 이름. 메뉴판이 없으면 비어 있다.
+        name: 가게 이름. 모르면 None이다.
+        category: 네이버 업종 이름. 모르면 None이다.
+        price: 가게 가격(원). 모르면 None이다.
+    """
+
+    hours: tuple[DayHours, ...] = ()
+    menus: tuple[str, ...] = ()
+    name: str | None = None
+    category: str | None = None
+    price: int | None = None
+
+
+def read_details(row: dict[str, object]) -> PlaceDetails:
+    """뷰 한 행의 `hours`, `menus`, `name`, `category`, `price`를 읽는다. 모양이 틀린 원소는 버린다.
+
+    두 저장소 구현이 함께 쓴다. 영업시간 한 줄이 깨져도 그 요일만 모르는 것으로 보고,
+    메뉴 하나가 깨져도 그 메뉴만 뺀다.
+    """
+    hours = []
+    for item in row.get("hours") or ():
+        if not isinstance(item, dict) or not isinstance(item.get("day"), str):
+            continue
+        open_at, close_at = item.get("open"), item.get("close")
+        breaks = tuple(
+            (b["start"], b["end"])
+            for b in item.get("breaks") or ()
+            if isinstance(b, dict)
+            and isinstance(b.get("start"), str)
+            and isinstance(b.get("end"), str)
+        )
+        hours.append(
+            DayHours(
+                item["day"],
+                open_at if isinstance(open_at, str) else None,
+                close_at if isinstance(close_at, str) else None,
+                item.get("closed") is True,
+                breaks,
+            )
+        )
+    menus = tuple(
+        m["name"]
+        for m in row.get("menus") or ()
+        if isinstance(m, dict) and isinstance(m.get("name"), str)
+    )
+    name, category, price = row.get("name"), row.get("category"), row.get("price")
+    return PlaceDetails(
+        tuple(hours),
+        menus,
+        name if isinstance(name, str) else None,
+        category if isinstance(category, str) else None,
+        price if isinstance(price, int) and not isinstance(price, bool) else None,
+    )
 
 
 _NOT_KEY = re.compile(r"[^0-9a-z가-힣]")
@@ -269,6 +360,20 @@ class PlaceStore(Protocol):
 
         Returns:
             장소. 프로필을 읽지 못한 장소는 뺀다.
+
+        Raises:
+            StoreError: 저장소를 읽지 못했을 때
+        """
+        ...
+
+    def details(self, place_ids: Sequence[int]) -> dict[int, PlaceDetails]:
+        """장소마다 영업시간, 메뉴판, 가게 이름, 업종 이름, 가게 가격을 읽는다. 모임 계산이 쓴다.
+
+        Args:
+            place_ids: 장소 id
+
+        Returns:
+            장소 id별 정보. 저장소에 없는 id는 빠진다.
 
         Raises:
             StoreError: 저장소를 읽지 못했을 때
