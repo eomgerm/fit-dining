@@ -687,6 +687,122 @@ class TestWhere:
         assert result.empty_reason is not None
         assert result.empty_reason.cause == "코엑스는 아직 준비 중인 지역이에요"
 
+    @pytest.mark.parametrize(
+        ("query", "landmark", "suggestion"),
+        [
+            (
+                "서울 코엑스 카페",
+                "코엑스",
+                "강남역, 역삼역, 선릉역 근처에서 찾아 보세요",
+            ),
+            ("대전 엑스포 카페", "엑스포", "유성온천역 근처에서 찾아 보세요"),
+            ("구미 금오산 카페", "금오산", "구미역 근처에서 찾아 보세요"),
+            # 도시를 둘 말하면 두 도시의 대표 역을 표 순서로 보여 준다
+            (
+                "구미나 대전 금오산 카페",
+                "금오산",
+                "유성온천역, 구미역 근처에서 찾아 보세요",
+            ),
+            # 어느 도시인지 알 수 없으면 서비스하는 모든 도시의 대표 역이다
+            (
+                "코엑스 카페",
+                "코엑스",
+                "강남역, 역삼역, 선릉역, 유성온천역, 구미역 근처에서 찾아 보세요",
+            ),
+        ],
+    )
+    def test_unready_guide_by_city_in_query(
+        self, fake_gms: FakeGms, query: str, landmark: str, suggestion: str
+    ) -> None:
+        """준비중_요청문에도시이름이있으면_그도시의대표역만제안하고없으면모든도시의역이다"""
+        fake_gms(
+            answers(station=None, locations=[location(landmark, "AREA", landmark)])
+        )
+
+        result = search(SearchRequest(query), FakeStore())
+
+        assert result.empty_reason is not None
+        assert result.empty_reason.suggestion == suggestion
+
+    @pytest.mark.parametrize(
+        ("query", "landmark", "view", "suggestion"),
+        [
+            # 지도 화면의 중심이 든 도시의 대표 역
+            (
+                "엑스포 카페",
+                "엑스포",
+                MapBounds(36.34, 127.36, 36.37, 127.40),
+                "유성온천역 근처에서 찾아 보세요",
+            ),
+            (
+                "금오산 카페",
+                "금오산",
+                MapBounds(36.10, 128.32, 36.14, 128.36),
+                "구미역 근처에서 찾아 보세요",
+            ),
+            (
+                "코엑스 카페",
+                "코엑스",
+                MapBounds(37.49, 127.02, 37.52, 127.06),
+                "강남역, 역삼역, 선릉역 근처에서 찾아 보세요",
+            ),
+            # 요청문에 도시가 있으면 지도 화면보다 앞선다
+            (
+                "구미 금오산 카페",
+                "금오산",
+                MapBounds(36.34, 127.36, 36.37, 127.40),
+                "구미역 근처에서 찾아 보세요",
+            ),
+            # 서비스하는 도시 밖(부산)이거나 값이 빠져 중심을 알 수 없으면 모든 도시다
+            (
+                "해운대 카페",
+                "해운대",
+                MapBounds(35.15, 129.05, 35.18, 129.09),
+                "강남역, 역삼역, 선릉역, 유성온천역, 구미역 근처에서 찾아 보세요",
+            ),
+            (
+                "엑스포 카페",
+                "엑스포",
+                MapBounds(sw_lat=36.34),
+                "강남역, 역삼역, 선릉역, 유성온천역, 구미역 근처에서 찾아 보세요",
+            ),
+        ],
+    )
+    def test_unready_guide_by_map_view(
+        self,
+        fake_gms: FakeGms,
+        query: str,
+        landmark: str,
+        view: MapBounds,
+        suggestion: str,
+    ) -> None:
+        """준비중_요청문에도시가없으면_지도화면의중심이든도시의대표역을제안한다"""
+        fake_gms(
+            answers(station=None, locations=[location(landmark, "AREA", landmark)])
+        )
+
+        result = search(SearchRequest(query, map_view=view), FakeStore())
+
+        assert result.empty_reason is not None
+        assert result.empty_reason.suggestion == suggestion
+
+    def test_unready_guide_by_map_view_after_search(self, fake_gms: FakeGms) -> None:
+        """준비중_장소를찾아본뒤비어도_지도화면의중심이든도시의역을제안한다"""
+        locations = [location("둔산동", "AREA", "둔산동")]
+        fake_gms(answers(station=None, locations=locations))
+        store = FakeStore(candidates=())
+
+        result = search(
+            SearchRequest(
+                "둔산동 카페", map_view=MapBounds(36.34, 127.36, 36.37, 127.40)
+            ),
+            store,
+        )
+
+        assert result.empty_reason is not None
+        assert result.empty_reason.cause == "둔산동은 아직 준비 중인 지역이에요"
+        assert result.empty_reason.suggestion == "유성온천역 근처에서 찾아 보세요"
+
     def test_landmark_with_station(self, fake_gms: FakeGms) -> None:
         """지역_랜드마크와역을같이말하면_역으로만거른다"""
         locations = [

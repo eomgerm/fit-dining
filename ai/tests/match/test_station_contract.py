@@ -6,10 +6,12 @@
 """
 
 import re
+from itertools import combinations
 from pathlib import Path
 from typing import get_args
 
-from fit_ai.match.conditions import SERVED_STATIONS, STATION_NAMES
+from fit_ai.match.candidates import distance_m
+from fit_ai.match.conditions import CITIES, SERVED_STATIONS, STATION_NAMES
 from fit_ai.place import from_crawl
 from server.schemas import Station as SchemaStation
 
@@ -93,3 +95,25 @@ def test_served_stations_are_known_station_codes() -> None:
     assert SERVED_STATIONS
     assert len(set(SERVED_STATIONS)) == len(SERVED_STATIONS)
     assert set(SERVED_STATIONS) <= set(STATION_NAMES)
+
+
+def test_city_stations_are_inside_city_radius() -> None:
+    """도시표_대표역의좌표는모두그도시의반경안이다"""
+    coordinates: dict[str, list[tuple[float, float]]] = {}
+    for naver_id, code in from_crawl.STATION_CODE_BY_NAVER_ID.items():
+        point = from_crawl.STATION_LOCATION_BY_NAVER_ID[naver_id]
+        coordinates.setdefault(code, []).append(point)
+
+    for city in CITIES:
+        assert city.keywords
+        for code in city.stations:
+            for lat, lng in coordinates[code]:
+                gap = distance_m(city.lat, city.lng, lat, lng)
+                assert gap <= city.radius_m, (city.name, code, round(gap))
+
+
+def test_city_radii_do_not_overlap() -> None:
+    """도시표_도시끼리반경이겹치지않아_지도화면의중심은도시하나만가리킨다"""
+    for a, b in combinations(CITIES, 2):
+        gap = distance_m(a.lat, a.lng, b.lat, b.lng)
+        assert gap > a.radius_m + b.radius_m, (a.name, b.name, round(gap))

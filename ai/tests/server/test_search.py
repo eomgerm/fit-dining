@@ -346,11 +346,25 @@ class TestSearch:
                         (Bundle("창가 자리", 1.0, None, tuple(VECTOR)),),
                     ),
                     bounds=MapBounds(sw_lat=37.49, ne_lng=127.04),
+                    map_view=MapBounds(sw_lat=37.49, ne_lng=127.04),
                 ),
                 store,
                 3.0,
             )
         ]
+
+    def test_map_view_passed_without_map_first(self, searched: FakeSearch) -> None:
+        """검색_지도영역은이지역에서검색이아니어도_안내용지도화면으로넘기고거르기에는쓰지않는다"""
+        view = {"swLat": 36.34, "swLng": 127.36, "neLat": 36.37, "neLng": 127.40}
+        expected = MapBounds(36.34, 127.36, 36.37, 127.40)
+
+        post(client(), mapBounds=view)
+        post(client(), mapBounds=view, mapFirst=True)
+        post(client())
+
+        requests = [call[0] for call in searched.calls]
+        assert [r.map_view for r in requests] == [expected, expected, None]
+        assert [r.bounds for r in requests] == [None, expected, None]
 
     def test_shares_gms_client(self, searched: FakeSearch) -> None:
         """검색_시작때만든GMS클라이언트를_검색에넘긴다"""

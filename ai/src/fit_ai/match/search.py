@@ -32,12 +32,14 @@ from fit_ai.match.candidates import (
     RadiusArea,
     RegionArea,
     StationArea,
+    distance_m,
     menu_key,
     merge_found,
 )
 from fit_ai.match.cards import Card, build_card
 from fit_ai.match.conditions import (
     CATEGORY_NAMES,
+    CITIES,
     CITY_BY_STATION,
     SERVED_STATIONS,
     STATION_NAMES,
@@ -144,6 +146,9 @@ class SearchRequest:
             없거나 "근처"를 말했으면 이 위치에서 반경(`NEARBY_RADIUS_M`) 안으로 거른다.
         rules_only: 참이면 해석 LLM을 부르지 않고 규칙으로만 해석한다. 첫 화면 주변 카드의
             고정 문장("근처 맛집")에 쓴다.
+        map_view: 지금 지도 화면. 거르기에는 쓰지 않는다. 요청문에 도시 이름이 없을 때
+            "준비 중인 지역" 안내가 어느 도시를 찾았는지 알아내는 데만 쓴다(그 도시의
+            대표 역만 제안한다).
     """
 
     query: str
@@ -153,6 +158,7 @@ class SearchRequest:
     previous_bounds: MapBounds | None = None
     location: UserLocation | None = None
     rules_only: bool = False
+    map_view: MapBounds | None = None
 
 
 @dataclass(frozen=True)
@@ -270,7 +276,11 @@ def search(
     where = _where(conditions, interpretation.turn, request)
     if where.unready and not where.areas:
         # 거를 수 있는 지역 없이 랜드마크만 말했으면 어디서 찾을지 몰라 찾지 않는다.
-        reason = empty_reason(conditions, unready=where.unready)
+        reason = empty_reason(
+            conditions,
+            unready=where.unready,
+            stations=_guide_stations(request.query, request.map_view),
+        )
         return SearchResult(interpretation, (), reason, (), SearchTrace(0.0, 0.0, 0))
     # 거를 지역이 하나도 없으면 전국에서 찾는다(docs/comparison/spec.md 4.2).
     nationwide = not where.areas
@@ -304,7 +314,12 @@ def search(
 
     if not found.candidates:
         unready = _unready(store, where, query)
-        reason = empty_reason(conditions, where.areas, unready)
+        reason = empty_reason(
+            conditions,
+            where.areas,
+            unready,
+            _guide_stations(request.query, request.map_view),
+        )
         return SearchResult(
             interpretation, (), reason, found.invalid, trace, where.kept, nationwide
         )
@@ -327,6 +342,7 @@ def empty_reason(
     conditions: Conditions,
     areas: Sequence[Area] = (),
     unready: Sequence[str] = (),
+    stations: Sequence[str] = SERVED_STATIONS,
 ) -> EmptyReason:
     """뽑힌 장소가 없을 때 원인과 제안을 만든다.
 
@@ -335,13 +351,15 @@ def empty_reason(
         areas: 후보를 거른 지역. 비어 있으면 위치로 거르지 않았다(전국 검색).
         unready: 장소 데이터가 없어 결과가 없는 지역의 이름. 있으면 다른 조건보다 앞서
             준비 중인 지역이라고 한다.
+        stations: 준비 중인 지역일 때 제안할 역 코드. 기본은 서비스하는 모든 도시의
+            대표 역이다(`_guide_stations`가 요청한 도시로 좁힌다).
 
     Returns:
         원인과 제안
     """
     if unready:
         names = "·".join(unready)
-        served = ", ".join(STATION_NAMES[code] for code in SERVED_STATIONS)
+        served = ", ".join(STATION_NAMES[code] for code in stations)
         return EmptyReason(
             f"{names}{_topic(names)} 아직 준비 중인 지역이에요",
             f"{served} 근처에서 찾아 보세요",
@@ -395,6 +413,32 @@ def empty_reason(
     return EmptyReason(
         f"{scope} 중 조건에 맞는 곳이 없어요", "다른 역이나 업종으로 다시 찾아 보세요"
     )
+
+
+def _guide_stations(query: str, view: MapBounds | None) -> tuple[str, ...]:
+    """준비 중인 지역 안내가 제안할 역.
+
+    요청문에 도시 이름이 있으면 그 도시들의 대표 역이다. 없으면 지도 화면의 중심이 든
+    도시의 대표 역이다. 둘 다 알 수 없으면(서비스하는 도시 밖이거나 지도 영역의 값이
+    빠졌을 때) 서비스하는 모든 도시의 대표 역이다.
+    """
+    text = _plain(query)
+    named = [c for c in CITIES if any(word in text for word in c.keywords)]
+    center = _center(view)
+    if not named and center is not None:
+        named = [c for c in CITIES if distance_m(*center, c.lat, c.lng) <= c.radius_m]
+    return tuple(code for city in named or CITIES for code in city.stations)
+
+
+def _center(view: MapBounds | None) -> tuple[float, float] | None:
+    """지도 영역의 중심(위도, 경도). 값이 하나라도 빠졌으면 알 수 없다."""
+    if view is None:
+        return None
+    lats = (view.sw_lat, view.ne_lat)
+    lngs = (view.sw_lng, view.ne_lng)
+    if None in lats or None in lngs:
+        return None
+    return sum(lats) / 2, sum(lngs) / 2  # type: ignore[arg-type]
 
 
 def _area_label(area: Area) -> str:

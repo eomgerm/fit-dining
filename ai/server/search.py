@@ -147,6 +147,8 @@ def _search(deps: Dependencies, body: SearchBody) -> JSONResponse:
             else None
         ),
         rules_only=body.rules_only,
+        # 거르기에는 쓰지 않고, "준비 중인 지역" 안내가 어느 도시인지 알아낼 때만 본다.
+        map_view=_bounds(body.map_bounds),
     )
     try:
         result = search(
