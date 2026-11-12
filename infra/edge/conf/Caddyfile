@@ -31,6 +31,9 @@
 		-Server
 		-X-Powered-By
 	}
+	# CSP(S15P31A302-235): 허용 목록형이다. 외부 출처는 지도(oapi.map.naver.com, nrbe·ssl.pstatic.net)와 장소 사진(ldb-phinf, naverbooking-phinf)뿐이다.
+	# ?는 응답에 같은 헤더가 없을 때만 넣는다(/sw.js는 next.config.ts의 자기 CSP를 그대로 둔다). 새 외부 출처를 쓰는 기능을 더하면 이 목록도 고친다
+	header ?Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://oapi.map.naver.com https://nrbe.pstatic.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://ldb-phinf.pstatic.net https://naverbooking-phinf.pstatic.net https://nrbe.pstatic.net https://ssl.pstatic.net; font-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
 	import hsts/{$HSTS_MODE:off}.caddy
 }
 
@@ -125,8 +128,6 @@
 # dev. /?k=<키>로 한 번 접속해 쿠키를 받아야 열린다(설계 5.4절)
 {$DEV_HOST} {
 	import common
-	# CSP(S15P31A302-235): dev에 먼저 적용한다. ?는 응답에 같은 헤더가 없을 때만 넣는다(/sw.js는 next.config.ts의 자기 CSP를 그대로 둔다). 점검표를 통과하면 common으로 옮겨 prod에도 적용한다
-	header ?Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://oapi.map.naver.com https://nrbe.pstatic.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://ldb-phinf.pstatic.net https://naverbooking-phinf.pstatic.net https://nrbe.pstatic.net https://ssl.pstatic.net; font-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
 	@issue {
 		path /
 		query k={$DEV_GATE_KEY}
