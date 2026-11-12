@@ -17,6 +17,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import kr.co.fitdining.api.place.catalog.ConditionalOnCatalogMode;
 import kr.co.fitdining.api.place.dto.PlaceCard.Reason;
@@ -42,7 +44,8 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * AI 검색 API({@code POST /v1/search})를 부른다. 시간 예산, {@code 503 BUSY} 재시도와 그 전의 {@code Retry-After} 대기,
  * circuit breaker, 동시 호출 상한과 permit 대기, 실패 분류는 place-ai-search spec의 "호출 규칙"과 AC-7·8·13·16·28을 따른다.
- * 실패하면 빈 값을 돌려주고 엔진이 fallback 결과를 만든다.
+ * 실패하면 빈 값을 돌려주고 엔진이 fallback 결과를 만든다. 모임 주소도 {@link #post}로 같은 예산, 동시 호출 상한,
+ * circuit breaker를 함께 쓴다(meetup D-13).
  *
  * <p>요청·응답 본문과 예외 메시지에는 검색 문장과 AI 문구가 들어 있어 로그에 남기지 않는다. 실패 종류(예외 클래스, 상태 코드,
  * ProblemDetail {@code code})와 걸린 시간만 남긴다(AC-16, AC-20). 본문은 앱 전역 Jackson 설정(null 생략, 모르는 속성 거부)과
@@ -133,42 +136,66 @@ public class AiSearchClient {
 	 *     값이다.
 	 */
 	public Optional<Response> search(SearchPurpose purpose, PlaceSearchRequest request, String userId) {
+		return Optional.ofNullable(exchange("search", PATH, () -> body(purpose, request, userId), Response.class,
+				AiSearchClient::readable).value());
+	}
+
+	/**
+	 * 다른 AI 주소를 일반 검색과 같은 시간 예산, 동시 호출 상한, circuit breaker로 부른다. 모임 주소가 일반 검색과 한도를
+	 * 함께 쓰게 하려는 것이다(meetup D-13). 로그 규칙도 같다.
+	 *
+	 * @param label 로그에 남길 호출 이름. 본문의 값을 넣지 않는다.
+	 * @param path AI 주소의 경로
+	 * @param body 요청 본문. 이 클래스의 매퍼로 쓰므로 null인 값도 그대로 간다.
+	 * @param type 200 응답을 읽을 타입
+	 * @param readable 읽은 응답을 쓸 수 있는지. 아니면 읽을 수 없는 응답으로 보고 실패한다.
+	 * @return 결과. 200이고 읽을 수 있으면 값이 있고, AI가 4xx로 답했으면 그 상태와 ProblemDetail {@code code}가 있다.
+	 */
+	public <T> Reply<T> post(String label, String path, Object body, Class<T> type, Predicate<T> readable) {
+		return exchange(label, path, () -> MAPPER.writeValueAsBytes(body), type, readable);
+	}
+
+	private <T> Reply<T> exchange(String label, String path, Supplier<byte[]> body, Class<T> type,
+			Predicate<T> readable) {
 		if (baseUrl.isEmpty()) {
-			log.error("AI search skipped: fitdining.ai.base-url is blank");
-			return Optional.empty();
+			log.error("AI {} skipped: fitdining.ai.base-url is blank", label);
+			return Reply.failed();
 		}
 		if (skipWhileOpen()) {
-			return Optional.empty();
+			return Reply.failed();
 		}
 		// time-out은 permit을 기다리기 전부터 잰다. permit 대기, 호출, 재요청 전 대기를 모두 그 안에 넣는다
 		long start = System.nanoTime();
 		long deadline = start + timing.budget().toNanos();
-		if (!acquire(deadline)) {
-			return Optional.empty();
+		if (!acquire(label, deadline)) {
+			return Reply.failed();
 		}
 		try {
 			// permit을 기다리는 동안 circuit breaker가 열렸으면 호출하지 않는다
 			if (skipWhileOpen()) {
-				return Optional.empty();
+				return Reply.failed();
 			}
-			Response response = call(body(purpose, request, userId), deadline);
-			recordSuccess();
-			return Optional.of(response);
+			T value = call(path, body.get(), deadline, type, readable);
+			recordSuccess(label);
+			return new Reply<>(value, 200, null);
 		} catch (Failure failure) {
 			long elapsedMs = Duration.ofNanos(System.nanoTime() - start).toMillis();
 			if (failure.kind.counted) {
-				log.warn("AI search failed: kind={}, reason={}, elapsedMs={}", failure.kind, failure.reason, elapsedMs);
-				recordFailure();
+				log.warn("AI {} failed: kind={}, reason={}, elapsedMs={}", label, failure.kind, failure.reason,
+						elapsedMs);
+				recordFailure(label);
 			} else {
-				log.error("AI search failed: kind={}, reason={}, elapsedMs={}", failure.kind, failure.reason, elapsedMs);
+				log.error("AI {} failed: kind={}, reason={}, elapsedMs={}", label, failure.kind, failure.reason,
+						elapsedMs);
 			}
+			return new Reply<>(null, failure.status, failure.code);
 		} catch (RuntimeException e) {
-			log.error("AI search failed: kind={}, reason={}, elapsedMs={}", Kind.INVALID, e.getClass().getSimpleName(),
-					Duration.ofNanos(System.nanoTime() - start).toMillis());
+			log.error("AI {} failed: kind={}, reason={}, elapsedMs={}", label, Kind.INVALID,
+					e.getClass().getSimpleName(), Duration.ofNanos(System.nanoTime() - start).toMillis());
 		} finally {
 			inFlight.release();
 		}
-		return Optional.empty();
+		return Reply.failed();
 	}
 
 	/** circuit breaker가 열려 있으면 건너뛴 수를 하나 세고 true다. 요청마다 로그를 남기지 않고 닫힐 때 한 번 남긴다(AC-16). */
@@ -186,17 +213,17 @@ public class AiSearchClient {
 	 * 반납하면 바로 받는다. 끝내 받지 못하면 fallback한다. AI가 응답하지 않을 때 BE의 요청 thread가 검색마다 time-out만큼
 	 * 묶이지 않게 하려는 것이다(D-17).
 	 */
-	private boolean acquire(long deadline) {
+	private boolean acquire(String label, long deadline) {
 		long wait = Math.max(0, Math.min(timing.permitWait().toNanos(), remaining(deadline)));
 		try {
 			if (inFlight.tryAcquire(wait, TimeUnit.NANOSECONDS)) {
 				return true;
 			}
-			log.warn("AI search skipped: in-flight limit reached, limit={}, waitedMs={}", MAX_IN_FLIGHT,
+			log.warn("AI {} skipped: in-flight limit reached, limit={}, waitedMs={}", label, MAX_IN_FLIGHT,
 					Duration.ofNanos(wait).toMillis());
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
-			log.error("AI search failed: kind={}, reason={}", Kind.INTERRUPTED, "permit wait");
+			log.error("AI {} failed: kind={}, reason={}", label, Kind.INTERRUPTED, "permit wait");
 		}
 		return false;
 	}
@@ -271,19 +298,20 @@ public class AiSearchClient {
 	}
 
 	/** {@code 503 BUSY}면 {@code Retry-After}만큼 기다린 뒤 남은 time-out 안에서 한 번만 재요청한다. */
-	private Response call(byte[] body, long deadline) {
-		Attempt attempt = attempt(body, deadline);
+	private <T> T call(String path, byte[] body, long deadline, Class<T> type, Predicate<T> readable) {
+		Attempt attempt = attempt(path, body, deadline);
 		if (attempt.busy()) {
 			waitForRetry(attempt.retryAfter(timing.maxRetryAfter()), deadline);
-			attempt = attempt(body, deadline);
+			attempt = attempt(path, body, deadline);
 			if (attempt.busy()) {
 				throw new Failure(Kind.BUSY, "503:BUSY after retry");
 			}
 		}
 		if (attempt.status() == 200) {
-			return parse(attempt.body());
+			return parse(attempt.body(), type, readable);
 		}
-		throw new Failure(attempt.status() >= 500 ? Kind.SERVER_ERROR : Kind.STATUS, attempt.reason());
+		throw new Failure(attempt.status() >= 500 ? Kind.SERVER_ERROR : Kind.STATUS, attempt.reason(),
+				attempt.status(), attempt.code());
 	}
 
 	/**
@@ -312,14 +340,14 @@ public class AiSearchClient {
 	}
 
 	/** 남은 time-out을 한 번만 재서 그 값을 제한 시간으로 호출한다. 두 번 재면 그 사이에 끝나 음수 제한 시간이 될 수 있다. */
-	private Attempt attempt(byte[] body, long deadline) {
+	private Attempt attempt(String path, byte[] body, long deadline) {
 		long left = remaining(deadline);
 		if (left <= 0) {
 			throw new Failure(Kind.TIMEOUT, "budget");
 		}
 		try {
 			return clients.apply(Duration.ofNanos(left)).post()
-					.uri(URI.create(baseUrl + PATH))
+					.uri(URI.create(baseUrl + path))
 					.contentType(MediaType.APPLICATION_JSON)
 					.headers(headers -> {
 						if (!key.isBlank()) {
@@ -344,17 +372,17 @@ public class AiSearchClient {
 		return deadline - System.nanoTime();
 	}
 
-	private static Response parse(byte[] body) {
-		Response response;
+	private static <T> T parse(byte[] body, Class<T> type, Predicate<T> readable) {
+		T value;
 		try {
-			response = MAPPER.readValue(body, Response.class);
+			value = MAPPER.readValue(body, type);
 		} catch (JacksonException e) {
 			throw new Failure(Kind.INVALID, e.getClass().getSimpleName());
 		}
-		if (!readable(response)) {
+		if (value == null || !readable.test(value)) {
 			throw new Failure(Kind.INVALID, "MissingOrNullValue");
 		}
-		return response;
+		return value;
 	}
 
 	/** {@code items}가 있고, 카드와 {@code placeId}, 목록의 원소가 null이 아니다(spec "읽을 수 없는 응답"). */
@@ -369,21 +397,40 @@ public class AiSearchClient {
 		return list == null || list.stream().noneMatch(Objects::isNull);
 	}
 
-	private void recordSuccess() {
+	/** 차단기는 모든 주소가 함께 쓴다. 로그의 이름은 차단기를 닫거나 연 호출의 이름이다. */
+	private void recordSuccess(String label) {
 		if (breaker.getAndSet(CLOSED).failures() >= FAILURE_THRESHOLD) {
-			log.info("AI search circuit closed: skippedWhileOpen={}", skippedWhileOpen.getAndSet(0));
+			log.info("AI {} circuit closed: skippedWhileOpen={}", label, skippedWhileOpen.getAndSet(0));
 		}
 	}
 
 	/** 연속 실패가 임계값 이상이면 이 실패가 끝난 때부터 다시 30초 동안 차단한다. */
-	private void recordFailure() {
+	private void recordFailure(String label) {
 		Instant now = clock.instant();
 		Breaker next = breaker.updateAndGet(state -> {
 			int failures = state.failures() + 1;
 			return new Breaker(failures, failures >= FAILURE_THRESHOLD ? now.plus(OPEN_DURATION) : null);
 		});
 		if (next.openUntil() != null) {
-			log.warn("AI search circuit opened: failures={}", next.failures());
+			log.warn("AI {} circuit opened: failures={}", label, next.failures());
+		}
+	}
+
+	/**
+	 * {@link #post} 한 번의 결과.
+	 *
+	 * @param value 읽은 200 응답. 실패면 null이다.
+	 * @param status HTTP 상태 코드. AI에 닿지 못했으면 0이다.
+	 * @param code AI가 200 밖의 상태로 답한 ProblemDetail {@code code}. 없거나 로그에 남길 수 있는 모양이 아니면 null이다.
+	 */
+	public record Reply<T>(T value, int status, String code) {
+
+		static <T> Reply<T> failed() {
+			return new Reply<>(null, 0, null);
+		}
+
+		public boolean ok() {
+			return value != null;
 		}
 	}
 
@@ -519,11 +566,19 @@ public class AiSearchClient {
 
 		final Kind kind;
 		final String reason;
+		final int status;
+		final String code;
 
 		Failure(Kind kind, String reason) {
+			this(kind, reason, 0, null);
+		}
+
+		Failure(Kind kind, String reason, int status, String code) {
 			super(null, null, false, false);
 			this.kind = kind;
 			this.reason = reason;
+			this.status = status;
+			this.code = code;
 		}
 	}
 

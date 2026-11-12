@@ -53,4 +53,10 @@ class MockMeetupPlaces implements MeetupPlaces {
 				.collect(Collectors.toMap(place -> place.place().id(), Function.identity(), (a, b) -> a));
 	}
 
+	/** 장소 Mock 모드는 메뉴 가격 질문을 보이지 않는다(AC-21). */
+	@Override
+	public boolean pricesKnown() {
+		return false;
+	}
+
 }

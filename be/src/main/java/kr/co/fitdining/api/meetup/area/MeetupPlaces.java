@@ -26,4 +26,7 @@ public interface MeetupPlaces {
 	 */
 	Map<Long, PlaceDetailResponse> details(Collection<Long> ids);
 
+	/** 가게 가격이 채워졌는지. 메뉴 가격 질문을 보일지 정한다(D-17). 설정이 아니라 데이터로 본다. */
+	boolean pricesKnown();
+
 }

@@ -28,7 +28,7 @@ class StubMeetupRecommenderTest {
 
 	private static MeetupRecommender.Input input(MeetupCategory category, String description,
 			MeetupRecommender.Member... members) {
-		return new MeetupRecommender.Input(AreaKind.STATION, "선릉", category, null, null, description,
+		return new MeetupRecommender.Input(1, AreaKind.STATION, "선릉", null, category, null, null, description, null,
 				List.of(members));
 	}
 
@@ -100,8 +100,8 @@ class StubMeetupRecommenderTest {
 	@Test
 	@DisplayName("추천_장소가없는지역이면_원인을준다")
 	void recommend_emptyArea_reason() {
-		MeetupRecommendation recommendation = RECOMMENDER.recommend(new MeetupRecommender.Input(AreaKind.STATION,
-				"없는역", MeetupCategory.ANY, null, null, null, List.of()));
+		MeetupRecommendation recommendation = RECOMMENDER.recommend(new MeetupRecommender.Input(1, AreaKind.STATION,
+				"없는역", null, MeetupCategory.ANY, null, null, null, null, List.of()));
 
 		assertThat(recommendation.places()).isEmpty();
 		assertThat(recommendation.emptyReason()).isNotNull();

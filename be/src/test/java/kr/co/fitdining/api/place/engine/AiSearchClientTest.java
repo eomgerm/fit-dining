@@ -103,6 +103,74 @@ class AiSearchClientTest {
 		return new PlaceSearchRequest(query, null, null, null, null);
 	}
 
+	/** 다른 주소의 응답을 읽는 타입 */
+	record Echo(String value) {
+	}
+
+	@Nested
+	@DisplayName("다른 주소")
+	class OtherPath {
+
+		static final String MEETUP = "http://ai.test/v1/meetup/search";
+
+		@Test
+		@DisplayName("다른주소_본문을그경로로보내고_응답을그타입으로읽는다")
+		void post_sendsBodyToPath_readsType() {
+			server.expect(requestTo(MEETUP)).andExpect(method(HttpMethod.POST))
+					.andExpect(content().json("{\"members\":[{\"key\":\"1\"}]}", JsonCompareMode.STRICT))
+					.andRespond(withSuccess("{\"value\":\"ok\",\"extra\":1}", MediaType.APPLICATION_JSON));
+
+			AiSearchClient.Reply<Echo> reply = client().post("meetup search", "/v1/meetup/search",
+					Map.of("members", java.util.List.of(Map.of("key", "1"))), Echo.class, echo -> echo.value() != null);
+
+			assertThat(reply.ok()).isTrue();
+			assertThat(reply.value()).isEqualTo(new Echo("ok"));
+			assertThat(reply.status()).isEqualTo(200);
+		}
+
+		@Test
+		@DisplayName("다른주소_AI가400과code로답하면_상태와code를돌려주고이름으로로그를남긴다")
+		void post_badRequest_returnsStatusAndCode(CapturedOutput output) {
+			server.expect(requestTo(MEETUP)).andRespond(withStatus(HttpStatus.BAD_REQUEST)
+					.contentType(MediaType.APPLICATION_JSON).body("{\"status\":400,\"code\":\"CONDITIONS_INVALID\"}"));
+
+			AiSearchClient.Reply<Echo> reply = client().post("meetup search", "/v1/meetup/search", Map.of(),
+					Echo.class, echo -> true);
+
+			assertThat(reply.ok()).isFalse();
+			assertThat(reply.status()).isEqualTo(400);
+			assertThat(reply.code()).isEqualTo("CONDITIONS_INVALID");
+			assertThat(output.getAll()).contains("AI meetup search failed: kind=STATUS, reason=400:CONDITIONS_INVALID");
+		}
+
+		@Test
+		@DisplayName("다른주소_실패해도_본문의값은로그에남지않는다")
+		void post_failure_bodyNotLogged(CapturedOutput output) {
+			server.expect(requestTo(MEETUP)).andRespond(withStatus(HttpStatus.INTERNAL_SERVER_ERROR).body(SECRET));
+
+			client().post("meetup search", "/v1/meetup/search",
+					Map.of("members", java.util.List.of(Map.of("key", "1", "wantMenu", SECRET))), Echo.class,
+					echo -> true);
+
+			assertThat(output.getAll()).contains("AI meetup search failed: kind=SERVER_ERROR")
+					.doesNotContain(SECRET);
+		}
+
+		@Test
+		@DisplayName("다른주소_쓸수없는응답이면_실패하고상태가없다")
+		void post_unreadable_fails(CapturedOutput output) {
+			server.expect(requestTo(MEETUP)).andRespond(withSuccess("{\"value\":null}", MediaType.APPLICATION_JSON));
+
+			AiSearchClient.Reply<Echo> reply = client().post("meetup search", "/v1/meetup/search", Map.of(),
+					Echo.class, echo -> echo.value() != null);
+
+			assertThat(reply.ok()).isFalse();
+			assertThat(reply.status()).isZero();
+			assertThat(reply.code()).isNull();
+			assertThat(output.getAll()).contains("kind=INVALID");
+		}
+	}
+
 	@Nested
 	@DisplayName("AI 요청")
 	class Request {
@@ -681,6 +749,19 @@ class AiSearchClientTest {
 			int before = calls;
 			assertThat(client.search(SearchPurpose.SEARCH, request("카페"), null)).isEmpty();
 			assertThat(calls).isEqualTo(before);
+		}
+
+		@Test
+		@DisplayName("차단기_다른주소의실패로열린차단은_검색도막는다")
+		void breaker_openedByOtherPath_skipsSearch() {
+			for (int i = 0; i < 3; i++) {
+				replies.add(status(HttpStatus.INTERNAL_SERVER_ERROR));
+				assertThat(client.post("meetup search", "/v1/meetup/search", Map.of(), Echo.class, echo -> true).ok())
+						.isFalse();
+			}
+
+			skipped();
+			assertThat(calls).isEqualTo(3);
 		}
 
 		@Test

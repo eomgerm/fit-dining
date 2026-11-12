@@ -46,7 +46,11 @@ public final class MeetupLimits {
 	public static final int RESULT_MAX = 20;
 	/** 참여자 취향 점수가 이 값보다 낮으면 덜 맞는 사람이다(D-18). */
 	public static final int MISFIT_SCORE = 50;
+	/** 이웃한 두 곳의 모임 점수 차가 이 값 이내면 붙어 있다고 보고 가장 낮은 참여자 점수로 순서를 정한다(D-18). */
+	public static final int CLOSE_SCORE_GAP = 3;
 	public static final int REASONS_MAX = 2;
+	/** 가게 가격이 채워졌는지의 판단을 기억하는 시간(D-17) */
+	public static final Duration PRICE_CHECK_TTL = Duration.ofMinutes(10);
 
 	/** 투표 후보 수(AC-36) */
 	public static final int POLL_CANDIDATES_MIN = 2;

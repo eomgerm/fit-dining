@@ -22,6 +22,7 @@ import kr.co.fitdining.api.meetup.domain.CalculationState;
 import kr.co.fitdining.api.meetup.domain.DecisionMethod;
 import kr.co.fitdining.api.meetup.domain.MeetupCategory;
 import kr.co.fitdining.api.meetup.domain.MeetupCodes;
+import kr.co.fitdining.api.meetup.domain.MeetupInterpretation;
 import kr.co.fitdining.api.meetup.domain.MeetupLimits;
 import kr.co.fitdining.api.meetup.domain.MeetupPermissions;
 import kr.co.fitdining.api.meetup.domain.MeetupQuestions;
@@ -38,6 +39,7 @@ import kr.co.fitdining.api.meetup.exception.InvalidMeetupException;
 import kr.co.fitdining.api.meetup.exception.MeetupConflictException;
 import kr.co.fitdining.api.meetup.exception.MeetupForbiddenException;
 import kr.co.fitdining.api.meetup.exception.MeetupNotFoundException;
+import kr.co.fitdining.api.meetup.recommend.MeetupInterpreter;
 import kr.co.fitdining.api.meetup.store.Meetup;
 import kr.co.fitdining.api.meetup.store.MeetupCalculation;
 import kr.co.fitdining.api.meetup.store.MeetupCalculationRepository;
@@ -45,7 +47,9 @@ import kr.co.fitdining.api.meetup.store.MeetupProfile;
 import kr.co.fitdining.api.meetup.store.MeetupProfileRepository;
 import kr.co.fitdining.api.meetup.store.MeetupRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * 모임 만들기, 지역 찾기, 정보 수정, 스냅숏. 상태와 역할별 허용 동작은 {@link MeetupPermissions}가 정한다(D-3). 모임 설명과 참여자의
@@ -65,11 +69,14 @@ public class MeetupService {
 	private final MeetupPlaces places;
 	private final MeetupRequesters requesters;
 	private final MeetupQuestionSource questionSource;
+	private final MeetupInterpreter interpreter;
+	private final TransactionTemplate transaction;
 	private final Clock clock;
 
 	public MeetupService(MeetupRepository meetups, MeetupProfileRepository profiles,
 			MeetupCalculationRepository calculations, AuthUserRepository users, MeetupPlaces places,
-			MeetupRequesters requesters, MeetupQuestionSource questionSource, Optional<Clock> clock) {
+			MeetupRequesters requesters, MeetupQuestionSource questionSource, MeetupInterpreter interpreter,
+			PlatformTransactionManager transactions, Optional<Clock> clock) {
 		this.meetups = meetups;
 		this.profiles = profiles;
 		this.calculations = calculations;
@@ -77,11 +84,14 @@ public class MeetupService {
 		this.places = places;
 		this.requesters = requesters;
 		this.questionSource = questionSource;
+		this.interpreter = interpreter;
+		this.transaction = new TransactionTemplate(transactions);
 		this.clock = clock.orElseGet(() -> Clock.system(MeetupLimits.SEOUL));
 	}
 
 	/**
-	 * 모임을 만든다(AC-1, AC-2).
+	 * 모임을 만든다(AC-1, AC-2). 설명이 있으면 저장하기 전에 해석해 함께 저장한다. 해석에 실패해도 모임은 만든다
+	 * (AC-47, AC-48). 해석은 트랜잭션 밖에서 부른다(D-4).
 	 *
 	 * @param userId 로그인한 회원
 	 * @param request 형식 검증을 마친 요청
@@ -89,7 +99,6 @@ public class MeetupService {
 	 * @throws AuthFailure 탈퇴했거나 없는 회원일 때(401)
 	 * @throws InvalidMeetupException 지역을 고를 수 없거나, 날짜·시간을 고를 수 없거나, 설명이 길 때
 	 */
-	@Transactional
 	public MeetupCreateResponse create(String userId, MeetupCreateRequest request) {
 		requireActiveUser(userId);
 		Instant now = now();
@@ -99,27 +108,56 @@ public class MeetupService {
 			throw new InvalidMeetupException();
 		}
 		MeetupCategory category = request.category() == null ? MeetupCategory.RESTAURANT : request.category();
-		Meetup meetup = meetups.save(new Meetup(MeetupCodes.generate(), userId, area.kind(), area.name(), category,
-				request.date(), time, request.headcount(), description(request.description()),
-				MeetupSchedule.expiresAt(request.date(), now), now));
+		String description = description(request.description());
+		Meetup created = new Meetup(MeetupCodes.generate(), userId, area.kind(), area.name(), category,
+				request.date(), time, request.headcount(), description, MeetupSchedule.expiresAt(request.date(), now),
+				now);
+		if (description != null) {
+			interpreter.interpret(description).ifPresent(parsed -> created.interpreted(description, parsed));
+		}
+		Meetup meetup = meetups.save(created);
 		return new MeetupCreateResponse(meetup.getCode(), questionSource.questions(meetup));
 	}
 
 	/**
 	 * 모임 정보를 고친다(AC-2, AC-22). 대기·결과에서는 모든 항목을, 투표 중·정함에서는 날짜·시간만 고친다. 날짜를
-	 * 바꾸거나 비우면 삭제 시각을 다시 계산한다. 이미 남긴 취향은 그대로 둔다.
+	 * 바꾸거나 비우면 삭제 시각을 다시 계산한다. 이미 남긴 취향은 그대로 둔다. 설명이 바뀌면 잠금 밖에서 새 설명을 먼저
+	 * 해석하고, 모임 행을 잡은 트랜잭션에서 설명과 해석을 함께 바꾼다. 해석에 실패하면 저장한 해석을 지운다(AC-47, D-4).
 	 *
 	 * @throws AuthFailure 탈퇴했거나 없는 회원일 때(401)
 	 * @throws MeetupForbiddenException 모임장이 아닐 때
 	 * @throws MeetupConflictException 투표 중·정함에서 날짜·시간 밖의 항목을 고치거나 날짜를 비울 때({@code phase})
 	 * @throws InvalidMeetupException 지역이나 업종을 비우거나, 고를 수 없는 지역·날짜·시간이거나, 설명이 길 때
 	 */
-	@Transactional
 	public void update(String code, String userId, MeetupUpdateRequest request) {
 		requireActiveUser(userId);
 		if (!MeetupCodes.wellFormed(code)) {
 			throw new MeetupNotFoundException();
 		}
+		Interpreted interpreted = interpretChanged(code, userId, request);
+		transaction.executeWithoutResult(status -> edit(code, userId, request, interpreted));
+	}
+
+	/**
+	 * 바뀐 설명을 해석한다. 모임장이 아니거나 설명을 고칠 수 없는 상태라 거절될 요청이면 AI를 부르지 않는다. 잠그지 않고
+	 * 읽으므로 판단은 잠근 뒤 다시 한다.
+	 *
+	 * @return 해석한 설명과 결과. 해석하지 않았으면 null이다.
+	 */
+	private Interpreted interpretChanged(String code, String userId, MeetupUpdateRequest request) {
+		if (!request.has("description")) {
+			return null;
+		}
+		String description = description(request.description());
+		Meetup current = meetups.findByCode(code).orElse(null);
+		if (description == null || current == null || !current.hostedBy(userId) || !current.infoEditable()
+				|| description.equals(current.getDescription())) {
+			return null;
+		}
+		return new Interpreted(description, interpreter.interpret(description).orElse(null));
+	}
+
+	private void edit(String code, String userId, MeetupUpdateRequest request, Interpreted interpreted) {
 		Meetup meetup = meetups.findLockedByCode(code).orElseThrow(MeetupNotFoundException::new);
 		if (!meetup.hostedBy(userId)) {
 			throw new MeetupForbiddenException();
@@ -146,6 +184,13 @@ public class MeetupService {
 				request.has("headcount") ? request.headcount() : meetup.getHeadcount(),
 				request.has("description") ? description(request.description()) : meetup.getDescription(),
 				expiresAt, now);
+		if (interpreted != null && interpreted.interpretation() != null) {
+			meetup.interpreted(interpreted.description(), interpreted.interpretation());
+		}
+	}
+
+	/** 잠금 밖에서 해석한 설명과 그 결과. 해석에 실패했으면 결과가 null이다. */
+	private record Interpreted(String description, MeetupInterpretation interpretation) {
 	}
 
 	/**

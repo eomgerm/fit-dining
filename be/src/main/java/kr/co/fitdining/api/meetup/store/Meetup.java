@@ -16,6 +16,7 @@ import java.util.Objects;
 import kr.co.fitdining.api.meetup.domain.AreaKind;
 import kr.co.fitdining.api.meetup.domain.DecisionMethod;
 import kr.co.fitdining.api.meetup.domain.MeetupCategory;
+import kr.co.fitdining.api.meetup.domain.MeetupInterpretation;
 import kr.co.fitdining.api.meetup.domain.MeetupPhase;
 import kr.co.fitdining.api.meetup.domain.PollState;
 import lombok.AccessLevel;
@@ -25,7 +26,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 /**
- * 모임 한 건({@code meetups}, D-5). 모임장은 회원 id 값으로만 든다. 해석한 조건의 칸은 추천 연동 단계에서 매핑한다.
+ * 모임 한 건({@code meetups}, D-5). 모임장은 회원 id 값으로만 든다.
  */
 @Entity
 @Table(name = "meetups")
@@ -55,6 +56,14 @@ public class Meetup {
 	/** 역·동 이름. 지점이면 붙인 이름이고 없을 수 있다. */
 	private String areaName;
 
+	/** 지점 모임의 지점과 반경(m). 역·동 모임이면 null이다. */
+	private Double pointLat;
+
+	private Double pointLng;
+
+	@Column(name = "radius_m")
+	private Integer radiusM;
+
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false)
 	private MeetupCategory category;
@@ -70,6 +79,11 @@ public class Meetup {
 	/** 모임 설명. 앞뒤 공백을 지운 값이고, 없으면 null이다. */
 	@Column(length = 100)
 	private String description;
+
+	/** AI가 해석한 설명(D-14). 설명이 없거나 아직 해석하지 못했으면 null이다. */
+	@JdbcTypeCode(SqlTypes.JSON)
+	@Column(columnDefinition = "jsonb")
+	private MeetupInterpretation parsedConditions;
 
 	/** 모임을 지울 시각(D-23) */
 	@Column(nullable = false)
@@ -126,9 +140,15 @@ public class Meetup {
 		return phase == MeetupPhase.WAITING || phase == MeetupPhase.RESULT;
 	}
 
-	/** 모임 정보를 바꾼다. 하나라도 바뀌면 추천이 낡았다고 판단하도록 바꾼 시각을 남긴다(D-9). */
+	/**
+	 * 모임 정보를 바꾼다. 하나라도 바뀌면 추천이 낡았다고 판단하도록 바꾼 시각을 남긴다(D-9). 설명이 바뀌면 해석 결과와
+	 * 상관없이 먼저 저장한 해석을 지운다(AC-47).
+	 */
 	public void edit(AreaKind areaKind, String areaName, MeetupCategory category, LocalDate meetDate,
 			LocalTime meetTime, Integer headcount, String description, Instant expiresAt, Instant now) {
+		if (!Objects.equals(description, this.description)) {
+			this.parsedConditions = null;
+		}
 		boolean changed = areaKind != this.areaKind || !Objects.equals(areaName, this.areaName)
 				|| category != this.category || !Objects.equals(meetDate, this.meetDate)
 				|| !Objects.equals(meetTime, this.meetTime) || !Objects.equals(headcount, this.headcount)
@@ -144,6 +164,20 @@ public class Meetup {
 		if (changed) {
 			this.infoUpdatedAt = now;
 		}
+	}
+
+	/**
+	 * 설명을 해석한 결과를 둔다. 해석하는 동안 설명이 바뀌었으면 두지 않는다(D-4). null이면 저장한 해석을 지운다.
+	 *
+	 * @param description 해석한 설명
+	 * @return 두었으면 true
+	 */
+	public boolean interpreted(String description, MeetupInterpretation interpretation) {
+		if (description == null || !description.equals(this.description)) {
+			return false;
+		}
+		this.parsedConditions = interpretation;
+		return true;
 	}
 
 	/** 추천은 대기나 결과 상태에서 투표를 연 적이 없을 때만 받는다(AC-15, D-19). */

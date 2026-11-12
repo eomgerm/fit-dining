@@ -61,13 +61,33 @@ public class JdbcPlaceCatalog implements PlaceCatalog {
 	private static final String NO_KIDS_ZONE = "노키즈존";
 	private static final String VALET = "발렛파킹";
 
-	private static final String PLACE_SQL = """
+	private static final String PLACE_COLUMNS = """
 			SELECT place_id, name, category_group, station, lat, lng, thumbnail_url,
 			       COALESCE(NULLIF(btrim(address), ''), NULLIF(btrim(full_address), ''),
 			                NULLIF(btrim(jibun_address), '')) AS address, directions, description, phone, website,
 			       extra_links, booking_url, facilities, parking_free, parking_note, pet_allowed, pet_note,
 			       corkage_allowed, corkage_note, payment_methods
-			FROM places WHERE place_id = :id""";
+			FROM places""";
+	private static final String PLACE_SQL = PLACE_COLUMNS + " WHERE place_id = :id";
+	private static final String PLACE_DETAILS_BY_IDS_SQL = PLACE_COLUMNS
+			+ " WHERE place_id IN (:ids) ORDER BY place_id";
+	private static final String PHOTOS_BY_IDS_SQL = """
+			SELECT place_id, url FROM place_photos WHERE place_id IN (:ids)
+			ORDER BY place_id, (source = 'menuBoard'), sort_order""";
+	private static final String MENUS_BY_IDS_SQL = """
+			SELECT place_id, category, name, description, price, price_text, labels, representative, photo_urls
+			FROM place_menus WHERE place_id IN (:ids) ORDER BY place_id, sort_order""";
+	private static final String SUBWAYS_BY_IDS_SQL = """
+			SELECT place_id, station, line, exit, walk_minutes FROM place_subways WHERE place_id IN (:ids)
+			ORDER BY place_id, walk_meters NULLS LAST, place_subway_id""";
+	private static final String SEATS_BY_IDS_SQL = """
+			SELECT place_id, name, description FROM place_seats WHERE place_id IN (:ids)
+			ORDER BY place_id, place_seat_id""";
+	private static final String BROADCASTS_BY_IDS_SQL = """
+			SELECT place_id, channel, program, episode, aired_on, menu FROM place_broadcasts WHERE place_id IN (:ids)
+			ORDER BY place_id, place_broadcast_id""";
+	private static final String STORE_PRICES_KNOWN_SQL = """
+			SELECT EXISTS (SELECT 1 FROM ai_place_search WHERE price IS NOT NULL)""";
 	private static final String HOURS_SQL = """
 			SELECT day_of_week, open_time, close_time, closed, breaks, last_orders
 			FROM place_hours WHERE place_id = :id""";
@@ -128,6 +148,44 @@ public class JdbcPlaceCatalog implements PlaceCatalog {
 	public Optional<PlaceDetailResponse> findPlace(long id) {
 		return jdbc.sql(PLACE_SQL).param("id", id).query(JdbcPlaceCatalog::placeRow).optional()
 				.map(row -> detail(id, row));
+	}
+
+	/** 장소 상세의 표마다 한 번씩, 모두 일곱 번 읽는다. */
+	@Override
+	public Map<Long, PlaceDetailResponse> findPlaces(Collection<Long> ids) {
+		Map<Long, PlaceDetailResponse> found = new LinkedHashMap<>();
+		if (ids.isEmpty()) {
+			return found;
+		}
+		List<PlaceRow> rows = jdbc.sql(PLACE_DETAILS_BY_IDS_SQL).param("ids", ids).query(JdbcPlaceCatalog::placeRow)
+				.list();
+		Map<Long, List<Hours>> hours = byPlace(HOURS_BY_IDS_SQL, ids, this::hours);
+		Map<Long, List<String>> photos = byPlace(PHOTOS_BY_IDS_SQL, ids, rs -> rs.getString("url"));
+		Map<Long, List<Menu>> menus = byPlace(MENUS_BY_IDS_SQL, ids, JdbcPlaceCatalog::menu);
+		Map<Long, List<Subway>> subways = byPlace(SUBWAYS_BY_IDS_SQL, ids, JdbcPlaceCatalog::subway);
+		Map<Long, List<Seat>> seats = byPlace(SEATS_BY_IDS_SQL, ids, JdbcPlaceCatalog::seat);
+		Map<Long, List<Broadcast>> broadcasts = byPlace(BROADCASTS_BY_IDS_SQL, ids, JdbcPlaceCatalog::broadcast);
+		for (PlaceRow row : rows) {
+			long id = row.summary().id();
+			found.put(id, detail(row, sevenDays(hours.getOrDefault(id, List.of())), photos.getOrDefault(id, List.of()),
+					menus.getOrDefault(id, List.of()), subways.getOrDefault(id, List.of()),
+					seats.getOrDefault(id, List.of()), broadcasts.getOrDefault(id, List.of())));
+		}
+		return found;
+	}
+
+	@Override
+	public boolean storePricesKnown() {
+		return Boolean.TRUE.equals(jdbc.sql(STORE_PRICES_KNOWN_SQL).query(Boolean.class).single());
+	}
+
+	/** 장소 id로 묶어 읽는다. 장소 안의 순서는 SQL의 순서다. */
+	private <T> Map<Long, List<T>> byPlace(String sql, Collection<Long> ids, ColumnReader<T> reader) {
+		Map<Long, List<T>> grouped = new HashMap<>();
+		jdbc.sql(sql).param("ids", ids)
+				.query((rs, rowNum) -> new Keyed<>(rs.getLong("place_id"), reader.read(rs))).list()
+				.forEach(keyed -> grouped.computeIfAbsent(keyed.placeId(), key -> new ArrayList<>()).add(keyed.value()));
+		return grouped;
 	}
 
 	@Override
@@ -198,21 +256,30 @@ public class JdbcPlaceCatalog implements PlaceCatalog {
 	}
 
 	private PlaceDetailResponse detail(long id, PlaceRow row) {
-		List<Hours> hours = readHours(id);
+		return detail(row, readHours(id),
+				jdbc.sql(PHOTOS_SQL).param("id", id).query((rs, rowNum) -> rs.getString("url")).list(),
+				jdbc.sql(MENUS_SQL).param("id", id).query((rs, rowNum) -> menu(rs)).list(),
+				jdbc.sql(SUBWAYS_SQL).param("id", id).query((rs, rowNum) -> subway(rs)).list(),
+				jdbc.sql(SEATS_SQL).param("id", id).query((rs, rowNum) -> seat(rs)).list(),
+				jdbc.sql(BROADCASTS_SQL).param("id", id).query((rs, rowNum) -> broadcast(rs)).list());
+	}
+
+	private PlaceDetailResponse detail(PlaceRow row, List<Hours> hours, List<String> photos, List<Menu> menus,
+			List<Subway> subways, List<Seat> seats, List<Broadcast> broadcasts) {
 		boolean valet = row.facilities().contains(VALET);
 		return new PlaceDetailResponse(
 				row.summary(),
 				row.address() == null ? "" : row.address(),
 				List.of(),
-				jdbc.sql(PHOTOS_SQL).param("id", id).query((rs, rowNum) -> rs.getString("url")).list(),
+				photos,
 				row.phone(),
 				row.website(),
 				OpenStatusCalculator.openStatus(hours, now()),
 				hours,
 				closedDayNote(hours),
-				jdbc.sql(MENUS_SQL).param("id", id).query((rs, rowNum) -> menu(rs)).list(),
+				menus,
 				row.facilities(),
-				jdbc.sql(SUBWAYS_SQL).param("id", id).query((rs, rowNum) -> subway(rs)).list(),
+				subways,
 				row.directions(),
 				row.parkingFree() == null && row.parkingNote() == null && !valet
 						? null : new Parking(row.parkingFree(), row.parkingNote(), valet),
@@ -221,19 +288,20 @@ public class JdbcPlaceCatalog implements PlaceCatalog {
 				row.corkageAllowed() == null && row.corkageNote() == null
 						? null : new Corkage(row.corkageAllowed(), row.corkageNote()),
 				row.bookingUrl(),
-				jdbc.sql(SEATS_SQL).param("id", id)
-						.query((rs, rowNum) -> new Seat(rs.getString("name"), blankToNull(rs.getString("description"))))
-						.list(),
+				seats,
 				row.description(),
 				row.paymentMethods(),
-				jdbc.sql(BROADCASTS_SQL).param("id", id).query((rs, rowNum) -> broadcast(rs)).list(),
+				broadcasts,
 				row.extraLinks());
 	}
 
 	private List<Hours> readHours(long id) {
+		return sevenDays(jdbc.sql(HOURS_SQL).param("id", id).query((rs, rowNum) -> hours(rs)).list());
+	}
+
+	private static List<Hours> sevenDays(List<Hours> rows) {
 		Map<DayCode, Hours> byDay = new EnumMap<>(DayCode.class);
-		jdbc.sql(HOURS_SQL).param("id", id).query((rs, rowNum) -> hours(rs)).list()
-				.forEach(hours -> byDay.put(hours.dayOfWeek(), hours));
+		rows.forEach(hours -> byDay.put(hours.dayOfWeek(), hours));
 		return sevenDays(byDay);
 	}
 
@@ -343,6 +411,10 @@ public class JdbcPlaceCatalog implements PlaceCatalog {
 				blankToNull(rs.getString("exit")), rs.getObject("walk_minutes", Integer.class));
 	}
 
+	private static Seat seat(ResultSet rs) throws SQLException {
+		return new Seat(rs.getString("name"), blankToNull(rs.getString("description")));
+	}
+
 	private static Broadcast broadcast(ResultSet rs) throws SQLException {
 		LocalDate airedOn = rs.getObject("aired_on", LocalDate.class);
 		return new Broadcast(blankToNull(rs.getString("channel")), blankToNull(rs.getString("program")),
@@ -384,6 +456,16 @@ public class JdbcPlaceCatalog implements PlaceCatalog {
 	}
 
 	private record MenuName(long placeId, String name) {
+	}
+
+	private record Keyed<T>(long placeId, T value) {
+	}
+
+	/** 결과 행 하나에서 값 하나를 읽는다. */
+	@FunctionalInterface
+	private interface ColumnReader<T> {
+
+		T read(ResultSet rs) throws SQLException;
 	}
 
 }

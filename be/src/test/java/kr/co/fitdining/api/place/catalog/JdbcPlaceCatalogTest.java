@@ -8,6 +8,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import kr.co.fitdining.api.place.dto.OpenStatus;
@@ -534,6 +535,50 @@ class JdbcPlaceCatalogTest extends PostgresTestSupport {
 				.containsExactly(first, second, third);
 		assertThat(catalog.loadSearchDocuments()).extracting(document -> document.place().id())
 				.containsExactly(first, second, third);
+	}
+
+	@Test
+	@DisplayName("장소상세묶음_장소마다읽은상세와같고_없는id는빠지며place_id오름차순이다")
+	void findPlaces_sameAsFindPlace() {
+		long first = place("묶음 하나", "RESTAURANT", "SEOLLEUNG");
+		long second = place("묶음 둘", "CAFE", "GANGNAM");
+		long bare = place("빈 가게", "BAR", "YEOKSAM");
+		jdbc.update("""
+				INSERT INTO place_photos (place_id, source, sort_order, url)
+				VALUES (?, 'menuBoard', 0, 'm0'), (?, 'business', 1, 'b1'), (?, 'business', 0, 'b0'),
+				       (?, 'business', 0, 's0')""", first, first, first, second);
+		jdbc.update("""
+				INSERT INTO place_menus (place_id, sort_order, category, name, price, price_text, representative,
+				    labels, photo_urls)
+				VALUES (?, 1, NULL, '소주', 5000, NULL, false, '{}'::text[], '{}'::text[]),
+				       (?, 0, '메인', '곱창전골', 30000, '30,000원', true, '{}'::text[], '{u1}'::text[]),
+				       (?, 0, NULL, '아메리카노', 4500, NULL, true, '{}'::text[], '{}'::text[])""", first, first, second);
+		jdbc.update("""
+				INSERT INTO place_subways (place_id, station, line, exit, walk_minutes, walk_meters)
+				VALUES (?, 'A', '2', '1번', 4, 300), (?, 'C', NULL, NULL, 2, 100), (?, 'B', NULL, NULL, 7, 500)""",
+				first, first, second);
+		jdbc.update("INSERT INTO place_seats (place_id, name, description) VALUES (?, '단체석', '20석')", first);
+		jdbc.update("""
+				INSERT INTO place_broadcasts (place_id, channel, program, episode, aired_on, menu)
+				VALUES (?, 'KBS', '생생정보', '12회', DATE '2024-03-05', '라떼')""", second);
+		hours(first, "WED", "11:00", "22:00", false, "[{\"start\":\"15:00\",\"end\":\"17:00\"}]", "{21:00}");
+		hours(second, "SUN", null, null, true, "[]", "{}");
+
+		Map<Long, PlaceDetailResponse> found = catalog.findPlaces(List.of(second, -1L, first, bare));
+
+		assertThat(found.keySet()).containsExactly(first, second, bare);
+		assertThat(found.get(first)).isEqualTo(catalog.findPlace(first).orElseThrow());
+		assertThat(found.get(second)).isEqualTo(catalog.findPlace(second).orElseThrow());
+		assertThat(found.get(bare)).isEqualTo(catalog.findPlace(bare).orElseThrow());
+		assertThat(catalog.findPlaces(List.of())).isEmpty();
+	}
+
+	@Test
+	@DisplayName("가게가격확인_AI뷰의가격이모두비어있으면_false다")
+	void storePricesKnown_viewPricesEmpty_false() {
+		place("가격 없는 가게", "RESTAURANT", "SEOLLEUNG");
+
+		assertThat(catalog.storePricesKnown()).isFalse();
 	}
 
 }

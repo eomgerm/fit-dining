@@ -1,7 +1,9 @@
 package kr.co.fitdining.api.place.catalog;
 
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import kr.co.fitdining.api.place.dto.PlaceCard;
 import kr.co.fitdining.api.place.dto.PlaceDetailResponse;
@@ -19,6 +21,27 @@ public interface PlaceCatalog {
 	 * @return 장소 상세. 없는 id면 빈 값이다.
 	 */
 	Optional<PlaceDetailResponse> findPlace(long id);
+
+	/**
+	 * 여러 장소의 상세를 한 번에 읽는다. 모임 결과 카드가 쓴다(meetup D-29). 내용은 장소마다 {@link #findPlace}로 읽은 것과
+	 * 같다.
+	 *
+	 * @param ids 장소 id
+	 * @return id별 상세({@code place_id} 오름차순). 없는 id는 빠진다.
+	 */
+	default Map<Long, PlaceDetailResponse> findPlaces(Collection<Long> ids) {
+		Map<Long, PlaceDetailResponse> found = new LinkedHashMap<>();
+		ids.stream().distinct().sorted().forEach(id -> findPlace(id).ifPresent(detail -> found.put(id, detail)));
+		return found;
+	}
+
+	/**
+	 * AI가 읽는 뷰({@code ai_place_search})에 가게 가격이 있는 장소가 하나라도 있는지. 모임의 메뉴 가격 질문을 보일지 정한다
+	 * (meetup D-17).
+	 */
+	default boolean storePricesKnown() {
+		return false;
+	}
 
 	/**
 	 * 카탈로그에 있는 모든 장소의 id. 장소 sitemap이 쓴다.

@@ -5,6 +5,7 @@ import java.time.LocalTime;
 import java.util.List;
 import kr.co.fitdining.api.meetup.domain.AreaKind;
 import kr.co.fitdining.api.meetup.domain.MeetupCategory;
+import kr.co.fitdining.api.meetup.domain.MeetupInterpretation;
 import kr.co.fitdining.api.meetup.domain.Taste;
 
 /**
@@ -22,13 +23,21 @@ public interface MeetupRecommender {
 	/**
 	 * 계산을 시작할 때의 모임과 취향(D-10).
 	 *
+	 * @param meetupId 모임 번호. 계산 중에 다시 해석하면 이 모임에 저장한다(AC-48).
 	 * @param areaName 역은 "역"을 뺀 이름, 동은 동 이름
+	 * @param point 지점 모임의 지점과 반경. 역·동 모임이면 null이다.
 	 * @param category 업종. ANY면 상관없다.
 	 * @param description 모임 설명. 없을 수 있다.
+	 * @param interpretation 저장한 설명 해석. 설명이 없거나 아직 해석하지 못했으면 null이다.
 	 * @param members 계산에 넣은 프로필. 이름은 싣지 않는다(D-5).
 	 */
-	record Input(AreaKind areaKind, String areaName, MeetupCategory category, LocalDate date, LocalTime time,
-			String description, List<Member> members) {
+	record Input(long meetupId, AreaKind areaKind, String areaName, Point point, MeetupCategory category,
+			LocalDate date, LocalTime time, String description, MeetupInterpretation interpretation,
+			List<Member> members) {
+	}
+
+	/** @param radiusM 반경(m) */
+	record Point(double lat, double lng, int radiusM) {
 	}
 
 	/**

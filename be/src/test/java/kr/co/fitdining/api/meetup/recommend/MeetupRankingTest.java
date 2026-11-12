@@ -52,6 +52,53 @@ class MeetupRankingTest {
 	}
 
 	@Test
+	@DisplayName("순위_이웃한두곳이3점이내로붙어있으면_가장낮은참여자점수가높은곳이앞이다")
+	void rank_closeScores_higherLowestFirst() {
+		List<MeetupRanking.Ranked> ranked = MeetupRanking.rank(List.of(
+				place(10, 90, member(1, 95), member(2, 55)),
+				place(11, 88, member(1, 80), member(2, 80)),
+				place(12, 80, member(1, 90), member(2, 90))), TWO);
+
+		// 12는 11과 8점 떨어져 있어 자리를 바꾸지 않는다
+		assertThat(order(ranked)).containsExactly(11L, 10L, 12L);
+	}
+
+	@Test
+	@DisplayName("순위_3점보다떨어져있으면_모임점수순서다")
+	void rank_scoresApart_scoreOrder() {
+		List<MeetupRanking.Ranked> ranked = MeetupRanking.rank(List.of(
+				place(10, 90, member(1, 95), member(2, 55)),
+				place(11, 86, member(1, 80), member(2, 80))), TWO);
+
+		assertThat(order(ranked)).containsExactly(10L, 11L);
+	}
+
+	@Test
+	@DisplayName("순위_참여자점수가하나도없는곳은_붙어있어도자리를바꾸지않는다")
+	void rank_closeScores_noMemberScores_kept() {
+		List<MeetupRanking.Ranked> ranked = MeetupRanking.rank(List.of(
+				place(10, 90, member(1, 60)),
+				place(11, 89, member(1, null))), List.of(1L));
+
+		assertThat(order(ranked)).containsExactly(10L, 11L);
+	}
+
+	@Test
+	@DisplayName("순위_다른곳에는모임점수가있는데없는곳은_묶음과상관없이맨뒤의따로된묶음이다")
+	void rank_unscored_lastSeparateGroup() {
+		List<MeetupRanking.Ranked> ranked = MeetupRanking.rank(List.of(
+				place(10, null, member(1, null)),
+				place(11, 70, member(1, 40)),
+				place(13, null, member(1, 30)),
+				place(12, 80, member(1, 90))), List.of(1L));
+
+		assertThat(order(ranked)).containsExactly(12L, 11L, 10L, 13L);
+		assertThat(ranked).extracting(MeetupRanking.Ranked::group).containsExactly(ResultGroup.ALL_FIT,
+				ResultGroup.SOME_MISFIT, ResultGroup.UNSCORED, ResultGroup.UNSCORED);
+		assertThat(ranked.get(3).fit().kind()).isEqualTo(FitKind.MISFIT);
+	}
+
+	@Test
 	@DisplayName("순위_모임점수가없으면_묶음안에서추천기의순서를지킨다")
 	void rank_noScore_keepsRecommenderOrder() {
 		List<MeetupRanking.Ranked> ranked = MeetupRanking.rank(List.of(
@@ -60,6 +107,7 @@ class MeetupRankingTest {
 				place(12, null, member(1, null))), List.of(1L));
 
 		assertThat(order(ranked)).containsExactly(10L, 12L, 11L);
+		assertThat(ranked).extracting(MeetupRanking.Ranked::group).doesNotContain(ResultGroup.UNSCORED);
 	}
 
 	@Test

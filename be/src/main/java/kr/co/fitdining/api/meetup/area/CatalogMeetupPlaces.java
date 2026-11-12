@@ -1,7 +1,6 @@
 package kr.co.fitdining.api.meetup.area;
 
 import java.util.Collection;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
@@ -29,14 +28,16 @@ class CatalogMeetupPlaces implements MeetupPlaces {
 				names.dongs().stream().map(dong -> new MeetupArea(AreaKind.DONG, dong))).toList();
 	}
 
-	/** 결과를 내는 AI 추천기는 추천 연동 단계에서 붙어, 그때까지는 장소마다 상세를 읽는다. */
+	/** 결과 20곳의 상세를 한 번에 읽는다(D-29). */
 	@Override
 	public Map<Long, PlaceDetailResponse> details(Collection<Long> ids) {
-		Map<Long, PlaceDetailResponse> found = new LinkedHashMap<>();
-		for (Long id : ids) {
-			catalog.findPlace(id).ifPresent(detail -> found.put(id, detail));
-		}
-		return found;
+		return catalog.findPlaces(ids);
+	}
+
+	/** AI가 읽는 뷰에 가게 가격이 있는 장소가 하나라도 있는지(D-17) */
+	@Override
+	public boolean pricesKnown() {
+		return catalog.storePricesKnown();
 	}
 
 }
