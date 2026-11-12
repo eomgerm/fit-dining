@@ -749,16 +749,17 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 			assertThat(list(token, null)).isEqualTo(mapper.readTree("{\"items\":[]}"));
 		}
 
-		@ParameterizedTest
-		// 마지막 둘은 형식은 맞지만 시각이 JS Date 상한(8.64e15)을 넘는 위조 cursor다(long 최댓값, 상한 + 1)
-		@ValueSource(strings = {"not-a-cursor", "YWJj", "MTIzfHRocmVhZC14", "%3D%3D",
-				"OTIyMzM3MjAzNjg1NDc3NTgwN3x0aHJlYWQtMTExMTExMTEtMjIyMi0zMzMzLTQ0NDQtNTU1NTU1NTU1NTU1",
-				"ODY0MDAwMDAwMDAwMDAwMXx0aHJlYWQtMTExMTExMTEtMjIyMi0zMzMzLTQ0NDQtNTU1NTU1NTU1NTU1"})
-		@DisplayName("목록_형식이틀린cursor는_400이다")
-		void list_badCursor_invalid(String cursor) throws Exception {
+		/**
+		 * 시각이 long 최댓값인 위조 cursor. 해석 때 막기 전에는 SQL의 시각 변환이 넘쳐 500이었다(f8aa07f). 그 밖의 cursor 형식은
+		 * {@code ThreadCursorTest}가 본다.
+		 */
+		@Test
+		@DisplayName("목록_시각이범위밖인cursor는_500이아니라400이다")
+		void list_outOfRangeCursor_invalid() throws Exception {
 			String token = signIn(0);
 
-			HttpResponse<String> response = send("GET", BASE + "?cursor=" + cursor, token, null);
+			HttpResponse<String> response = send("GET", BASE + "?cursor="
+					+ "OTIyMzM3MjAzNjg1NDc3NTgwN3x0aHJlYWQtMTExMTExMTEtMjIyMi0zMzMzLTQ0NDQtNTU1NTU1NTU1NTU1", token, null);
 
 			assertThat(response.statusCode()).isEqualTo(400);
 			assertThat(type(response)).isEqualTo(INVALID);
@@ -1027,37 +1028,16 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 
 		private static final String TURN = "entry-11111111-2222-3333-4444-555555555555";
 
-		/** {@code $ID}를 경로의 turn id로 바꾼 본문 */
+		/**
+		 * D-16이 HTTP로 확인한다고 적은 400: 소수 at, 범위 밖 at, 전각 공백만 있는 질문, 문자열의 NUL. {@code $ID}는 경로의
+		 * turn id로 바꾼다. 그 밖의 형식 규칙과 어긴 규칙 이름은 {@code TurnFormatTest}가 본다.
+		 */
 		@ParameterizedTest
 		@ValueSource(strings = {
-				"{",
-				"[]",
-				"null",
-				"{\"id\":\"$ID\",\"kind\":\"new\",\"at\":1,\"request\":{\"query\":\"q\"},\"response\":{\"items\":[],\"totalCount\":0,\"conditions\":{}},\"extra\":1}",
-				"{\"id\":\"entry-11111111-2222-3333-4444-555555555556\",\"kind\":\"new\",\"at\":1,\"request\":{\"query\":\"q\"},\"response\":{\"items\":[],\"totalCount\":0,\"conditions\":{}}}",
-				"{\"id\":\"$ID\",\"kind\":\"other\",\"at\":1,\"request\":{\"query\":\"q\"},\"response\":{\"items\":[],\"totalCount\":0,\"conditions\":{}}}",
-				"{\"id\":\"$ID\",\"kind\":\"new\",\"baseId\":null,\"at\":1,\"request\":{\"query\":\"q\"},\"response\":{\"items\":[],\"totalCount\":0,\"conditions\":{}}}",
 				"{\"id\":\"$ID\",\"kind\":\"new\",\"at\":1.5,\"request\":{\"query\":\"q\"},\"response\":{\"items\":[],\"totalCount\":0,\"conditions\":{}}}",
-				"{\"id\":\"$ID\",\"kind\":\"new\",\"at\":-1,\"request\":{\"query\":\"q\"},\"response\":{\"items\":[],\"totalCount\":0,\"conditions\":{}}}",
 				"{\"id\":\"$ID\",\"kind\":\"new\",\"at\":8640000000000001,\"request\":{\"query\":\"q\"},\"response\":{\"items\":[],\"totalCount\":0,\"conditions\":{}}}",
-				"{\"id\":\"$ID\",\"kind\":\"new\",\"at\":\"1\",\"request\":{\"query\":\"q\"},\"response\":{\"items\":[],\"totalCount\":0,\"conditions\":{}}}",
-				"{\"id\":\"$ID\",\"kind\":\"new\",\"request\":{\"query\":\"q\"},\"response\":{\"items\":[],\"totalCount\":0,\"conditions\":{}}}",
-				"{\"id\":\"$ID\",\"kind\":\"new\",\"at\":1,\"request\":{\"query\":\"\"},\"response\":{\"items\":[],\"totalCount\":0,\"conditions\":{}}}",
-				"{\"id\":\"$ID\",\"kind\":\"new\",\"at\":1,\"request\":{\"query\":\" \\n\\t \"},\"response\":{\"items\":[],\"totalCount\":0,\"conditions\":{}}}",
-				"{\"id\":\"$ID\",\"kind\":\"new\",\"at\":1,\"request\":{\"query\":\"\\u00a0\"},\"response\":{\"items\":[],\"totalCount\":0,\"conditions\":{}}}",
 				"{\"id\":\"$ID\",\"kind\":\"new\",\"at\":1,\"request\":{\"query\":\"\\u3000\\ufeff\"},\"response\":{\"items\":[],\"totalCount\":0,\"conditions\":{}}}",
-				"{\"id\":\"$ID\",\"kind\":\"new\",\"at\":1,\"request\":{\"query\":1},\"response\":{\"items\":[],\"totalCount\":0,\"conditions\":{}}}",
-				"{\"id\":\"$ID\",\"kind\":\"new\",\"at\":1,\"request\":{\"query\":\"q\",\"cursor\":null},\"response\":{\"items\":[],\"totalCount\":0,\"conditions\":{}}}",
-				"{\"id\":\"$ID\",\"kind\":\"new\",\"at\":1,\"request\":[],\"response\":{\"items\":[],\"totalCount\":0,\"conditions\":{}}}",
-				"{\"id\":\"$ID\",\"kind\":\"new\",\"at\":1,\"request\":{\"query\":\"q\"},\"response\":{\"items\":[],\"totalCount\":0,\"conditions\":{},\"nextCursor\":null}}",
-				"{\"id\":\"$ID\",\"kind\":\"new\",\"at\":1,\"request\":{\"query\":\"q\"},\"response\":{\"items\":{},\"totalCount\":0,\"conditions\":{}}}",
-				"{\"id\":\"$ID\",\"kind\":\"new\",\"at\":1,\"request\":{\"query\":\"q\"},\"response\":{\"items\":[],\"totalCount\":-1,\"conditions\":{}}}",
-				"{\"id\":\"$ID\",\"kind\":\"new\",\"at\":1,\"request\":{\"query\":\"q\"},\"response\":{\"items\":[],\"totalCount\":1.5,\"conditions\":{}}}",
-				"{\"id\":\"$ID\",\"kind\":\"new\",\"at\":1,\"request\":{\"query\":\"q\"},\"response\":{\"items\":[],\"totalCount\":0,\"conditions\":null}}",
-				"{\"id\":\"$ID\",\"kind\":\"new\",\"at\":1,\"request\":{\"query\":\"q\\u0000\"},\"response\":{\"items\":[],\"totalCount\":0,\"conditions\":{}}}",
-				"{\"id\":\"$ID\",\"kind\":\"new\",\"at\":1,\"request\":{\"query\":\"q\"},\"response\":{\"items\":[{\"a\\u0000\":1}],\"totalCount\":0,\"conditions\":{}}}",
-				"{\"id\":\"$ID\",\"kind\":\"new\",\"at\":1,\"request\":{\"query\":\"q\"},\"response\":{\"items\":[\"\\ud800\"],\"totalCount\":0,\"conditions\":{}}}",
-				"{\"id\":\"$ID\",\"kind\":\"new\",\"at\":1,\"request\":{\"query\":\"q\"},\"response\":{\"items\":[],\"totalCount\":0,\"conditions\":{\"\\udc00x\":1}}}"
+				"{\"id\":\"$ID\",\"kind\":\"new\",\"at\":1,\"request\":{\"query\":\"q\\u0000\"},\"response\":{\"items\":[],\"totalCount\":0,\"conditions\":{}}}"
 		})
 		@DisplayName("추가_형식규칙을어기면_400이고저장하지않는다")
 		void put_badFormat_invalid(String body) throws Exception {
