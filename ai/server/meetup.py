@@ -30,7 +30,7 @@ from fit_ai.match.meetup_menus import read_menus
 from fit_ai.match.search import EmbeddingError
 from fit_ai.match.taste_select import TasteProfile
 from server.common import Body, Dependencies, Slots, log, problem
-from server.schemas import ConditionsBody, LegacyConditionsBody, ReasonBody
+from server.schemas import ConditionsBody, LegacyConditionsBody
 from server.search import (
     MAX_TASTE_FEATURES,
     MAX_TASTE_FREE_TEXTS,
@@ -215,13 +215,38 @@ class MemberScoreBody(Body):
     missed_menu: str | None = None
 
 
+class MeetupReasonTagBody(Body):
+    """모임 추천 이유의 근거 칩. BE `MeetupRecommendation.ReasonTag`와 같다.
+
+    Attributes:
+        source: 근거 출처(`REQUEST`, `PREFERENCE`)
+        label: 칩 문구
+    """
+
+    source: str
+    label: str
+
+
+class MeetupReasonBody(Body):
+    """모임 추천 이유. BE `MeetupRecommendation.Reason`과 같다. 검색 카드의 추천 이유가 상세 제목 API로
+    바뀌기 전 모양이고, 모임에서 연 상세가 그대로 보인다.
+
+    Attributes:
+        title: 이유 제목
+        tags: 근거 칩
+    """
+
+    title: str
+    tags: list[MeetupReasonTagBody]
+
+
 class MeetupItemBody(Body):
     """결과 장소 하나. 장소 기본 정보와 영업 상태는 BE가 채운다."""
 
     place_id: int
     score: int | None = None
     labels: list[str]
-    reasons: list[ReasonBody]
+    reasons: list[MeetupReasonBody]
     caution: str | None = None
     member_scores: list[MemberScoreBody]
 
@@ -465,7 +490,16 @@ def _item_body(item) -> MeetupItemBody:
         place_id=card.place_id,
         score=item.score,
         labels=card.labels,
-        reasons=card.reasons,
+        reasons=[
+            MeetupReasonBody(
+                title=reason.title,
+                tags=[
+                    MeetupReasonTagBody(source=tag.source.value, label=tag.label)
+                    for tag in reason.tags
+                ],
+            )
+            for reason in item.reasons
+        ],
         caution=card.caution,
         member_scores=[
             MemberScoreBody(

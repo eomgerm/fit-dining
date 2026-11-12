@@ -51,7 +51,6 @@ from server.schemas import (
     MenuBody,
     ModelsBody,
     ReasonBody,
-    ReasonTagBody,
     ScoreItemBody,
     SearchBody,
     SearchResponse,
@@ -402,13 +401,12 @@ def _card_body(card: Card) -> CardBody:
         labels=list(card.labels),
         reasons=[
             ReasonBody(
-                title=reason.title,
-                tags=[
-                    ReasonTagBody(source=t.source.value, label=t.label)
-                    for t in reason.tags
-                ],
-                quote=reason.quote,
-                quote_source=reason.quote_source,
+                source=reason.source.value,
+                code=reason.code,
+                label=reason.label,
+                value=round(reason.value, 3),
+                from_reviews=reason.from_reviews,
+                fallback_title=reason.fallback_title,
             )
             for reason in card.reasons
         ],

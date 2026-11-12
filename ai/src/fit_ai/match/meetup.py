@@ -34,7 +34,13 @@ from fit_ai.match.candidates import (
     StationArea,
     menu_key,
 )
-from fit_ai.match.cards import MATCHED_SCORE, Card, build_card
+from fit_ai.match.cards import (
+    MATCHED_SCORE,
+    Card,
+    MeetupReason,
+    build_card,
+    meetup_reasons,
+)
 from fit_ai.match.conditions import CATEGORY_NAMES, CONDITIONS, SCORE_LABELS, Layer
 from fit_ai.match.interpretation import FOOD_TYPES, Conditions
 from fit_ai.match.interpretation.segments import DAYS, Menu
@@ -172,14 +178,16 @@ class MeetupItem:
     """결과 장소 하나.
 
     Attributes:
-        card: 카드(추천 이유, 라벨). 카드의 점수 대신 `score`를 쓴다.
+        card: 카드(라벨). 카드의 점수 대신 `score`를, 카드의 추천 이유 대신 `reasons`를 쓴다.
         score: 모임 점수(0~100 정수). 점수를 매길 조건이 없으면 None이다.
         member_scores: 참여자 취향 점수. 요청의 참여자 순서다.
+        reasons: 추천 이유. 검색 카드가 상세 추천 이유로 바뀌기 전 모양(제목과 근거 칩)이다.
     """
 
     card: Card
     score: int | None
     member_scores: tuple[MemberScore, ...]
+    reasons: tuple[MeetupReason, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -815,6 +823,7 @@ def _score(
         card,
         score,
         tuple(_member_score(p, place, details, scope, baseline) for p in people),
+        meetup_reasons(shown),
     )
 
 

@@ -18,7 +18,7 @@ from fit_ai.match.candidates import (
     StoreError,
     VectorCounts,
 )
-from fit_ai.match.cards import Card, Reason, ReasonTag, Source
+from fit_ai.match.cards import Card, MeetupReason, MeetupReasonTag, Source
 from fit_ai.match.meetup import (
     Applied,
     MeetupEmpty,
@@ -36,13 +36,14 @@ CARD = Card(
     place_id=10,
     score=99,
     labels=("조용해요", "한식이에요"),
-    reasons=(
-        Reason(
-            '리뷰에서 "조용해요"라는 말이 많아요',
-            (ReasonTag(Source.PREFERENCE, "조용해요"),),
-        ),
-    ),
+    reasons=(),
     score_items=(),
+)
+REASONS = (
+    MeetupReason(
+        '리뷰에서 "조용해요"라는 말이 많아요',
+        (MeetupReasonTag(Source.PREFERENCE, "조용해요"),),
+    ),
 )
 RESULT = MeetupResult(
     items=(
@@ -54,6 +55,7 @@ RESULT = MeetupResult(
                 MemberScore("2", 40, unverified=True, missed_menu="곱창"),
                 MemberScore("3", None),
             ),
+            REASONS,
         ),
     ),
     applied=Applied(

@@ -477,6 +477,24 @@ class TestMerge:
         assert _merge(people, described).moods == {}
 
 
+class TestReasons:
+    """모임 추천 이유"""
+
+    def test_reasons_keep_title_and_chip_shape(self, encoded: list[str]) -> None:
+        """이유_모임결과는_검색카드가바뀌기전모양인제목과근거칩을준다"""
+        result = meetup_search(
+            request(MeetupMember("1", mood="QUIET", like_foods=("FOOD_KOREAN",))),
+            FakeStore(),
+            no_menus,
+        )
+
+        quiet_korean = next(i for i in result.items if i.card.place_id == 1)
+        assert [(r.title, r.tags[0].label) for r in quiet_korean.reasons] == [
+            ('리뷰에서 "조용해요"라는 말이 많아요', "조용해요"),
+            ("한식이에요", "한식이에요"),
+        ]
+
+
 def meetup_feature(code: str):
     from fit_ai.match.interpretation.segments import Feature
 

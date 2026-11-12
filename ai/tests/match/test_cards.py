@@ -4,7 +4,13 @@
 """
 
 from fit_ai.match.candidates import Candidate
-from fit_ai.match.cards import MATCHED_SCORE, MAX_REASONS, Source, build_card
+from fit_ai.match.cards import (
+    MATCHED_SCORE,
+    MeetupReasonTag,
+    Source,
+    build_card,
+    meetup_reasons,
+)
 from fit_ai.match.place import ConditionEvidence, Place, PlaceInfo
 from fit_ai.match.scoring import ItemScore, PlaceScore
 
@@ -88,32 +94,52 @@ class TestScoreItems:
 
 
 class TestReasons:
-    """추천 이유"""
+    """상세 추천 이유로 고른 항목"""
 
-    def test_only_matched(self) -> None:
-        """추천이유_근거가충분한항목만_리뷰와장소정보문구로만든다"""
+    def test_only_matched_with_fallback_title(self) -> None:
+        """추천이유_근거가충분한항목만_대체제목과함께고른다"""
         card = build_card(
             scored(
-                item("QUIET", 0.9),
+                item("QUIET", 0.95),
                 item("PURPOSE_TALK", 0.4),
                 item("PARKING", 1.0, from_reviews=False),
             )
         )
 
-        assert [r.title for r in card.reasons] == [
-            '리뷰에서 "조용해요"라는 말이 많아요',
-            "주차할 수 있어요",
+        assert [
+            (r.code, r.label, r.from_reviews, r.fallback_title) for r in card.reasons
+        ] == [
+            # 장소 정보로 판정한 항목은 근거 항목 문구 그대로다
+            ("PARKING", "주차할 수 있어요", False, "주차할 수 있어요"),
+            ("QUIET", "조용해요", True, "카페 중 손꼽히게 조용해요"),
         ]
-        assert card.reasons[0].tags[0].source is Source.REQUEST
-        assert card.reasons[0].quote is None
+        assert card.reasons[0].source is Source.REQUEST
 
-    def test_capped(self) -> None:
-        """추천이유_충분한항목이많으면_최대개수까지만넣는다"""
-        codes = ["QUIET", "SPACIOUS_SEATING", "COZY", "PURPOSE_TALK"]
+    def test_two_requests_then_two_tastes_by_value(self) -> None:
+        """추천이유_요청과취향이많으면_각각점수순으로2개씩요청먼저고른다"""
+        card = build_card(
+            scored(
+                item("QUIET", 0.8),
+                item("COZY", 0.95),
+                item("PURPOSE_TALK", 0.9),
+                item("PRETTY_SPACE", 0.75, request=False),
+                item("PURPOSE_WORK", 0.99, request=False),
+                item("SPACIOUS_SEATING", 0.85, request=False),
+            )
+        )
 
-        card = build_card(scored(*(item(code, 0.9) for code in codes)))
+        assert [(r.code, r.source) for r in card.reasons] == [
+            ("COZY", Source.REQUEST),
+            ("PURPOSE_TALK", Source.REQUEST),
+            ("PURPOSE_WORK", Source.PREFERENCE),
+            ("SPACIOUS_SEATING", Source.PREFERENCE),
+        ]
 
-        assert len(card.reasons) == MAX_REASONS
+    def test_disliked_taste_excluded(self) -> None:
+        """추천이유_싫어하는취향은_점수가높아도고르지않는다"""
+        card = build_card(scored(item("LIVELY", 0.9, request=False, like=False)))
+
+        assert card.reasons == ()
 
 
 class TestLabels:
@@ -209,7 +235,7 @@ class TestPhraseAndAvoid:
     """코드 없는 조건 문구와 피해 달라는 요청"""
 
     def test_phrase_item(self) -> None:
-        """카드_코드없는조건문구는_문구를항목이름으로쓰고이유제목은맞아요꼴이다"""
+        """카드_코드없는조건문구는_문구를항목이름으로쓰고상세추천이유로는고르지않는다"""
         reading = ItemScore(None, True, True, 1, 0.8, 0, False, "책 읽기 좋은 곳")
 
         card = build_card(scored(reading))
@@ -220,8 +246,16 @@ class TestPhraseAndAvoid:
             "책 읽기 좋은 곳",
             True,
         )
-        assert card.reasons[0].title == "책 읽기 좋은 곳에 맞아요"
-        assert card.reasons[0].tags[0].label == "책 읽기 좋은 곳"
+        assert card.reasons == ()
+
+    def test_phrase_item_meetup_reason(self) -> None:
+        """모임이유_코드없는조건문구는_제목이맞아요꼴이고문구가칩이다"""
+        reading = ItemScore(None, True, True, 1, 0.8, 0, False, "책 읽기 좋은 곳")
+
+        [reason] = meetup_reasons([reading])
+
+        assert reason.title == "책 읽기 좋은 곳에 맞아요"
+        assert reason.tags == (MeetupReasonTag(Source.REQUEST, "책 읽기 좋은 곳"),)
 
     def test_phrase_item_label(self) -> None:
         """카드_맞은코드없는조건문구는_문구그대로태그가된다"""
@@ -244,11 +278,13 @@ class TestPhraseAndAvoid:
             "돈가스는 바삭하고 속은 촉촉하며 고기가 부드러움",
         )
 
-        card = build_card(scored(item("QUIET", 0.8), bundle))
+        card_items = [item("QUIET", 0.8), bundle]
+        card = build_card(scored(*card_items))
 
         assert "돈가스는 바삭하고 속은 촉촉하며 고기가 부드러움" not in card.labels
         assert card.labels[0] == "조용해요"
-        assert [r.tags[0].label for r in card.reasons] == ["조용해요"]
+        assert [r.label for r in card.reasons] == ["조용해요"]
+        assert [r.tags[0].label for r in meetup_reasons(card_items)] == ["조용해요"]
         assert [i.label for i in card.score_items][-1] == bundle.phrase
 
     def test_avoided_request_hidden(self) -> None:
@@ -258,7 +294,7 @@ class TestPhraseAndAvoid:
         )
 
         assert [i.condition_id for i in card.score_items] == ["QUIET"]
-        assert [r.tags[0].label for r in card.reasons] == ["조용해요"]
+        assert [r.label for r in card.reasons] == ["조용해요"]
 
 
 def test_card_without_score() -> None:

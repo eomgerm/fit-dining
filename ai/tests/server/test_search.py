@@ -23,7 +23,7 @@ from fit_ai.match.candidates import (
     StoreError,
     VectorCounts,
 )
-from fit_ai.match.cards import Card, Reason, ReasonTag, ScoreItem, Source
+from fit_ai.match.cards import Card, Reason, ScoreItem, Source
 from fit_ai.match.conditions import Layer
 from fit_ai.match.interpretation import Conditions, Interpretation
 from fit_ai.match.interpretation.segments import (
@@ -171,8 +171,12 @@ CARD = Card(
     labels=("조용해요", "술집"),
     reasons=(
         Reason(
-            '리뷰에서 "조용해요"라는 말이 많아요',
-            (ReasonTag(Source.REQUEST, "조용해요"),),
+            Source.REQUEST,
+            "QUIET",
+            "조용해요",
+            0.9512,
+            True,
+            "술집 중 손꼽히게 조용해요",
         ),
     ),
     score_items=(ScoreItem("QUIET", Source.REQUEST, "조용해요", True, 5),),
@@ -309,8 +313,16 @@ class TestSearch:
             "matched": True,
             "evidenceCount": 5,
         }
-        # 인용이 없으면 null을 보내지 않고 필드를 뺀다.
-        assert "quote" not in card["reasons"][0]
+        assert card["reasons"] == [
+            {
+                "source": "REQUEST",
+                "code": "QUIET",
+                "label": "조용해요",
+                "value": 0.951,
+                "fromReviews": True,
+                "fallbackTitle": "술집 중 손꼽히게 조용해요",
+            }
+        ]
         assert "changeSummary" not in data
         assert "emptyReason" not in data
 

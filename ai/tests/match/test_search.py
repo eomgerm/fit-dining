@@ -1307,7 +1307,8 @@ class TestPersonaConditions:
             "책 읽기 좋은 곳",
             True,
         )
-        assert result.cards[0].reasons[0].title == "책 읽기 좋은 곳에 맞아요"
+        # 코드 없는 조건은 점수에만 들어가고 상세 추천 이유로는 고르지 않는다
+        assert result.cards[0].reasons == ()
 
     def test_facility_phrase_routes_only(
         self, fake_gms: FakeGms, encoder: list[list[str]]

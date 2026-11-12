@@ -3,10 +3,11 @@
 근거 항목과 추천 이유는 ② 점수가 낸 조건 점수로 만든다. 그래서 화면의 항목과 핏 점수가 같은
 근거를 말한다. 카드 모양은 BE의 `PlaceCard`와 맞춘다. BE 정의는
 be/src/main/java/kr/co/fitdining/api/place/dto/PlaceCard.java에 있다. BE로 보내는 JSON
-이름(camelCase)으로 바꾸는 일은 API 쪽에서 한다. LLM을 쓰지 않는다(docs/comparison/spec.md
-4.4).
+이름(camelCase)으로 바꾸는 일은 API 쪽에서 한다. LLM을 쓰지 않는다. 추천 이유의 제목은
+상세를 열 때 따로 쓴다(`fit_ai.match.reasons`, docs/comparison/spec.md 4.4, 4.5).
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -17,9 +18,15 @@ from fit_ai.match.conditions import (
     STATION_NAMES,
 )
 from fit_ai.match.place import Place
+from fit_ai.match.reasons import fallback_title
 from fit_ai.match.scoring import ItemScore, PlaceScore
 
-MAX_REASONS = 3
+MAX_REQUEST_REASONS = 2
+"""상세 추천 이유로 고르는 요청 조건 수"""
+MAX_PREFERENCE_REASONS = 2
+"""상세 추천 이유로 고르는 취향 수"""
+MAX_MEETUP_REASONS = 3
+"""모임 추천 이유 수 상한. 검색 카드의 추천 이유가 상세 제목 API로 바뀌기 전 상한 그대로다."""
 LABEL_COUNT = 2
 
 MATCHED_SCORE = 0.7
@@ -58,12 +65,34 @@ class ScoreItem:
 
 
 @dataclass(frozen=True)
-class ReasonTag:
-    """추천 이유의 근거 칩. 화면에 "요청 · 조용해요"처럼 보인다.
+class Reason:
+    """상세 추천 이유로 고른 항목. 제목은 상세를 열 때 쓰고, 여기에는 대체 제목만 둔다.
 
     Attributes:
         source: 근거 출처
-        label: 칩 문구
+        code: 조건 코드. BE가 근거(리뷰 이유 태그, 장소 페르소나)를 찾는 열쇠다.
+        label: 근거 항목 문구. 상세의 줄 머리글과 같다.
+        value: 항목 점수(0~1)
+        from_reviews: 리뷰로 판정했으면 True, 장소 정보(시설, 음식 종류)로 판정했으면
+            False다. False인 이유는 근거를 모으지 않고 LLM에도 넘기지 않는다.
+        fallback_title: LLM 없이 쓰는 제목. 제목 API가 실패하면 BE가 이것을 쓴다.
+    """
+
+    source: Source
+    code: str
+    label: str
+    value: float
+    from_reviews: bool
+    fallback_title: str
+
+
+@dataclass(frozen=True)
+class MeetupReasonTag:
+    """모임 추천 이유의 근거 칩.
+
+    Attributes:
+        source: 근거 출처
+        label: 칩 문구. 근거 항목 문구와 같다.
     """
 
     source: Source
@@ -71,20 +100,19 @@ class ReasonTag:
 
 
 @dataclass(frozen=True)
-class Reason:
-    """추천 이유 1개.
+class MeetupReason:
+    """모임 결과의 추천 이유. 검색 카드의 추천 이유가 상세 제목 API로 바뀌기 전 모양(제목과 근거 칩)이다.
+
+    모임에서 연 상세는 이 이유를 그대로 보이고 제목 API를 부르지 않는다(모임 D-22). BE
+    `MeetupRecommendation.Reason`과 같다.
 
     Attributes:
         title: 이유 제목
-        tags: 이 이유의 근거 칩
-        quote: 근거가 된 문장 인용. MVP는 넣지 않아 None이다.
-        quote_source: 인용 출처(예: "앱 리뷰"). 인용이 없으면 None이다.
+        tags: 근거 칩. 1개다.
     """
 
     title: str
-    tags: tuple[ReasonTag, ...]
-    quote: str | None = None
-    quote_source: str | None = None
+    tags: tuple[MeetupReasonTag, ...]
 
 
 @dataclass(frozen=True)
@@ -97,7 +125,8 @@ class Card:
         place_id: 장소 id
         score: 핏 점수. 0~100 정수다. 판정할 요청 조각도 취향도 없으면 None이다.
         labels: 카드 태그 2개. 이번 검색에서 맞은 조건이 먼저다.
-        reasons: 추천 이유. 근거가 충분한 조건이 없으면 비어 있다.
+        reasons: 상세 추천 이유로 고른 항목. 요청 최대 2개, 그다음 취향 최대 2개다. 근거가
+            충분한 조건이 없으면 비어 있다.
         score_items: 핏 점수를 이루는 항목. 요청 조각과 좋아하는 취향마다 1개다.
         caution: 주의점. MVP는 넣지 않아 None이다.
     """
@@ -129,7 +158,7 @@ def build_card(scored: PlaceScore) -> Card:
         place_id=place.place_id,
         score=scored.score,
         labels=_labels(place, shown),
-        reasons=_reasons(shown),
+        reasons=_reasons(shown, place.info.category_group),
         score_items=tuple(_score_item(item) for item in shown),
     )
 
@@ -144,26 +173,37 @@ def _score_item(item: ItemScore) -> ScoreItem:
     )
 
 
-def _reasons(items: list[ItemScore]) -> tuple[Reason, ...]:
-    """근거가 충분한 항목마다 이유를 하나씩 만든다. 최대 `MAX_REASONS`개다.
+def _reasons(items: list[ItemScore], category_group: str) -> tuple[Reason, ...]:
+    """근거가 충분한 항목에서 요청 최대 2개, 취향 최대 2개를 항목 점수 순으로 고른다.
 
-    취향 묶음은 태그처럼 이유에도 쓰지 않는다(`_bundle`). 대표 문구가 리뷰 문장이면 "돈가스가 바삭하고 속은
-    촉촉함.에 맞아요"처럼 되고, 그 장소가 아니라 회원이 다른 곳에서 좋아한 점이라서다.
+    점수를 낸 항목에서 고르므로 상세의 이유와 핏 점수가 같은 근거를 말한다. 코드가 없는 항목(코드 없는 조건
+    문구, 취향 묶음)은 쓰지 않는다. 조건 문구는 사용자가 친 말을 "해장하기 좋은 곳에 맞아요"로 되풀이할 뿐이고,
+    묶음의 대표 문구는 그 장소가 아니라 회원이 다른 곳에서 좋아한 리뷰 문장이라서다. 둘 다 상세에서 모을 근거
+    (특징 코드의 리뷰 태그, 코드 문구 벡터)도 없다.
     """
-    reasons = [
+    matched = sorted(
+        (
+            item
+            for item in items
+            if item.code is not None and item.value >= MATCHED_SCORE
+        ),
+        key=lambda item: -item.value,
+    )
+    requested = [item for item in matched if item.request][:MAX_REQUEST_REASONS]
+    tastes = [item for item in matched if not item.request][:MAX_PREFERENCE_REASONS]
+    return tuple(
         Reason(
-            title=_reason_title(item),
-            tags=(
-                ReasonTag(
-                    Source.REQUEST if item.request else Source.PREFERENCE,
-                    _label(item),
-                ),
+            source=Source.REQUEST if item.request else Source.PREFERENCE,
+            code=item.code,
+            label=SCORE_LABELS[item.code],
+            value=item.value,
+            from_reviews=item.from_reviews,
+            fallback_title=fallback_title(
+                item.code, item.value, category_group, item.from_reviews
             ),
         )
-        for item in items
-        if item.value >= MATCHED_SCORE and not _bundle(item)
-    ]
-    return tuple(reasons[:MAX_REASONS])
+        for item in requested + tastes
+    )
 
 
 def _bundle(item: ItemScore) -> bool:
@@ -176,7 +216,35 @@ def _label(item: ItemScore) -> str:
     return SCORE_LABELS[item.code] if item.code is not None else item.phrase or ""
 
 
-def _reason_title(item: ItemScore) -> str:
+def meetup_reasons(items: Sequence[ItemScore]) -> tuple[MeetupReason, ...]:
+    """모임 결과의 추천 이유. 근거가 충분한 좋아하는 항목마다 하나씩, 최대 `MAX_MEETUP_REASONS`개다.
+
+    취향 묶음은 태그처럼 이유에도 쓰지 않는다(`_bundle`). 대표 문구가 리뷰 문장이면 "돈가스가 바삭하고 속은
+    촉촉함.에 맞아요"처럼 되고, 그 장소가 아니라 회원이 다른 곳에서 좋아한 점이라서다.
+
+    Args:
+        items: 점수를 낸 항목. 카드와 같은 순서(요청 조각, 그다음 취향)다.
+
+    Returns:
+        추천 이유
+    """
+    reasons = [
+        MeetupReason(
+            title=_meetup_title(item),
+            tags=(
+                MeetupReasonTag(
+                    Source.REQUEST if item.request else Source.PREFERENCE,
+                    _label(item),
+                ),
+            ),
+        )
+        for item in items
+        if item.like and item.value >= MATCHED_SCORE and not _bundle(item)
+    ]
+    return tuple(reasons[:MAX_MEETUP_REASONS])
+
+
+def _meetup_title(item: ItemScore) -> str:
     if item.code is None:
         # 장소 페르소나로 판정한 코드 없는 조건이다(docs/comparison/spec.md 4.4).
         return f"{item.phrase}에 맞아요"

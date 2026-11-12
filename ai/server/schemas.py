@@ -399,32 +399,24 @@ class ConditionsBody(Body):
         return value
 
 
-class ReasonTagBody(Body):
-    """추천 이유의 근거 칩. BE `ReasonTag`와 같다.
+class ReasonBody(Body):
+    """상세 추천 이유로 고른 항목. BE `Reason`과 같다. 제목은 상세를 열 때 제목 API로 쓴다.
 
     Attributes:
         source: 근거 출처(`REQUEST`, `PREFERENCE`)
-        label: 칩 문구
+        code: 조건 코드
+        label: 근거 항목 문구
+        value: 항목 점수(0~1)
+        from_reviews: 리뷰로 판정했는지. 거짓이면 장소 정보(시설, 음식 종류)로 판정했다.
+        fallback_title: LLM 없이 쓰는 제목. 제목 API가 실패하면 BE가 쓴다.
     """
 
     source: str
+    code: str
     label: str
-
-
-class ReasonBody(Body):
-    """추천 이유. BE `Reason`과 같다.
-
-    Attributes:
-        title: 이유 제목
-        tags: 근거 칩
-        quote: 근거 문장 인용. 없으면 응답에서 빠진다.
-        quote_source: 인용 출처. 없으면 응답에서 빠진다.
-    """
-
-    title: str
-    tags: list[ReasonTagBody]
-    quote: str | None = None
-    quote_source: str | None = None
+    value: float
+    from_reviews: bool
+    fallback_title: str
 
 
 class ScoreItemBody(Body):
@@ -450,7 +442,7 @@ class CardBody(Body):
         place_id: 장소 id
         score: 핏 점수. 0~100 정수다. 판정할 요청 조각도 취향도 없으면 빠진다.
         labels: 장소 특징 2개
-        reasons: 추천 이유
+        reasons: 상세 추천 이유로 고른 항목. 요청 최대 2개, 취향 최대 2개다.
         score_items: 핏 점수를 이루는 항목
         caution: 주의점. MVP는 없어서 응답에서 빠진다.
     """

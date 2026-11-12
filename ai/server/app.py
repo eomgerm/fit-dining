@@ -14,7 +14,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from server import direct_input, meetup, review_extract, search, taste_profile
+from server import direct_input, meetup, reasons, review_extract, search, taste_profile
 from server.common import Dependencies, Slots, log, problem
 
 
@@ -65,4 +65,5 @@ def create_app(deps: Dependencies) -> FastAPI:
     app.include_router(direct_input.router(deps))
     app.include_router(review_extract.router(deps))
     app.include_router(taste_profile.router(deps))
+    app.include_router(reasons.router(deps))
     return app
