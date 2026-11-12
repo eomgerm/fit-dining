@@ -8,14 +8,18 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.ReentrantLock;
 import kr.co.fitdining.api.place.catalog.PlaceSearchDocument;
 import kr.co.fitdining.api.place.exception.PlaceSearchUnavailableException;
 import org.junit.jupiter.api.DisplayName;
@@ -67,6 +71,36 @@ class DocumentKeywordSearchTest extends PlaceKeywordSearchContract {
 			Thread.currentThread().interrupt();
 			throw new IllegalStateException(e);
 		}
+	}
+
+	/** 만든 thread를 순서대로 모아 둔다. 고정 크기 pool은 submit마다 새 thread를 만들므로 i번째 thread가 i번째 작업을 돈다 */
+	private static final class RecordingThreads implements ThreadFactory {
+		final List<Thread> threads = new CopyOnWriteArrayList<>();
+
+		@Override
+		public Thread newThread(Runnable task) {
+			Thread thread = new Thread(task);
+			threads.add(thread);
+			return thread;
+		}
+	}
+
+	/** 그 thread가 스냅샷 읽기 잠금({@code ReentrantLock})을 기다리며 멈출 때까지 기다린다. 5초 안에 멈추지 않으면 실패한다 */
+	private static void awaitWaitingOnLock(Thread thread) throws InterruptedException {
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+		while (!waitingOnLock(thread)) {
+			if (System.nanoTime() > deadline) {
+				throw new AssertionError("잠금을 기다리지 않는다: " + thread.getState());
+			}
+			Thread.sleep(5);
+		}
+	}
+
+	private static boolean waitingOnLock(Thread thread) {
+		Thread.State state = thread.getState();
+		return (state == Thread.State.WAITING || state == Thread.State.BLOCKED)
+				&& Arrays.stream(thread.getStackTrace())
+						.anyMatch(frame -> frame.getClassName().startsWith(ReentrantLock.class.getName()));
 	}
 
 	@Test
@@ -191,13 +225,16 @@ class DocumentKeywordSearchTest extends PlaceKeywordSearchContract {
 			await(gate);
 			throw new IllegalStateException("db down");
 		};
-		ExecutorService executor = Executors.newFixedThreadPool(3);
+		RecordingThreads threads = new RecordingThreads();
+		ExecutorService executor = Executors.newFixedThreadPool(3, threads);
 		try {
 			Future<List<PlaceKeywordHit>> first = executor.submit(() -> search.search("쌀국수", 0, 5));
 			await(entered);
 			Future<List<PlaceKeywordHit>> second = executor.submit(() -> search.search("쌀국수", 0, 5));
 			Future<List<PlaceKeywordHit>> third = executor.submit(() -> search.search("쌀국수", 0, 5));
-			Thread.sleep(200);
+			// 두 요청이 최초 읽기의 잠금 앞에서 기다리는 것을 확인한 뒤 실패시킨다
+			awaitWaitingOnLock(threads.threads.get(1));
+			awaitWaitingOnLock(threads.threads.get(2));
 
 			gate.countDown();
 			for (Future<List<PlaceKeywordHit>> request : List.of(first, second, third)) {
@@ -251,13 +288,14 @@ class DocumentKeywordSearchTest extends PlaceKeywordSearchContract {
 			await(gate);
 			return CATALOG;
 		};
-		ExecutorService executor = Executors.newFixedThreadPool(2);
+		RecordingThreads threads = new RecordingThreads();
+		ExecutorService executor = Executors.newFixedThreadPool(2, threads);
 		try {
 			Future<List<PlaceKeywordHit>> first = executor.submit(() -> search.search("쌀국수", 0, 5));
 			await(entered);
 			Future<List<PlaceKeywordHit>> second = executor.submit(() -> search.search("쌀국수", 0, 5));
 
-			Thread.sleep(200);
+			awaitWaitingOnLock(threads.threads.get(1));
 			assertThat(second.isDone()).isFalse();
 
 			gate.countDown();
