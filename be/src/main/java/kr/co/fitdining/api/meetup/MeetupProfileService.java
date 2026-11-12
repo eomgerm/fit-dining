@@ -139,6 +139,27 @@ public class MeetupProfileService {
 	}
 
 	/**
+	 * 모임 쿠키가 가리키는 비회원 프로필을 로그인한 회원의 프로필로 바꾼다(AC-68, D-25). 어느 상태에서든 받는다.
+	 *
+	 * @throws MeetupConflictException 그 회원에게 이미 이 모임의 프로필이 있을 때({@code already-joined})
+	 * @throws MeetupForbiddenException 모임 쿠키가 비회원 프로필을 가리키지 않을 때
+	 */
+	@Transactional
+	public void linkAccount(String code, String userId, String cookieToken) {
+		requireActiveUser(userId);
+		Meetup meetup = lock(code);
+		List<MeetupProfile> joined = profiles.findByMeetupIdOrderByProfileId(meetup.getMeetupId());
+		if (joined.stream().anyMatch(profile -> profile.ownedBy(userId))) {
+			throw new MeetupConflictException(Conflict.ALREADY_JOINED);
+		}
+		MeetupRequesters.Requester requester = requesters.resolve(meetup, joined, userId, cookieToken);
+		if (!requester.convertible()) {
+			throw new MeetupForbiddenException();
+		}
+		requester.profile().linkAccount(userId, now());
+	}
+
+	/**
 	 * 모임장이 다른 사람의 프로필을 지운다(AC-23). 그 프로필의 취향, 쿠키 세션, 표가 함께 지워진다.
 	 *
 	 * @throws MeetupForbiddenException 모임장이 아닐 때

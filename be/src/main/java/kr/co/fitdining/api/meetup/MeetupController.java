@@ -15,6 +15,7 @@ import kr.co.fitdining.api.meetup.dto.MeetupAreaCheckResponse;
 import kr.co.fitdining.api.meetup.dto.MeetupAreasResponse;
 import kr.co.fitdining.api.meetup.dto.MeetupCreateRequest;
 import kr.co.fitdining.api.meetup.dto.MeetupCreateResponse;
+import kr.co.fitdining.api.meetup.dto.MeetupPreview;
 import kr.co.fitdining.api.meetup.dto.MeetupResult;
 import kr.co.fitdining.api.meetup.dto.MeetupSnapshot;
 import kr.co.fitdining.api.meetup.dto.MeetupUpdateRequest;
@@ -192,6 +193,26 @@ public class MeetupController {
 			HttpServletRequest http) {
 		countAnonymous(identity, code, http);
 		profileService.updateTaste(code, userId(identity), cookie, taste);
+	}
+
+	/**
+	 * 이 브라우저의 비회원 프로필을 로그인한 회원의 프로필로 바꾼다(AC-68). 오류: 401(인증), 404(없는 코드),
+	 * 403(모임 쿠키가 비회원 프로필을 가리키지 않음), 409(`already-joined`).
+	 */
+	@PostMapping("/{code}/profiles/me/account")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void linkAccount(@PathVariable String code, @AuthenticationPrincipal AuthUseCases.Identity identity,
+			@CookieValue(name = COOKIE, required = false) String cookie) {
+		profileService.linkAccount(code, identity.userId(), cookie);
+	}
+
+	/**
+	 * 링크 미리보기에 쓸 모임장 닉네임, 지역, 날짜·시간(AC-66). FE 서버가 부른다. 질문, 취향, 참여자 이름은 싣지 않는다.
+	 * 오류: 없는 코드는 404.
+	 */
+	@GetMapping("/{code}/preview")
+	public MeetupPreview preview(@PathVariable String code) {
+		return meetupService.preview(code);
 	}
 
 	/**

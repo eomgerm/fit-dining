@@ -102,6 +102,15 @@ public class MeetupProfile {
 		return userId != null;
 	}
 
+	/**
+	 * 비회원 프로필을 그 회원의 프로필로 바꾼다(AC-68). 모임 취향은 그대로이고 회원의 취향으로 옮기지 않는다. 다음 계산부터
+	 * 회원의 평소 취향도 들어가므로 취향을 바꾼 것으로 본다(D-35).
+	 */
+	public void linkAccount(String userId, Instant now) {
+		this.userId = userId;
+		this.tasteUpdatedAt = now;
+	}
+
 	/** 표를 던지거나 바꾼다(AC-37). */
 	public void vote(long placeId, Long sessionId) {
 		this.votePlaceId = placeId;

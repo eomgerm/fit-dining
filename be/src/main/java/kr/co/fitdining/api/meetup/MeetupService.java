@@ -35,6 +35,7 @@ import kr.co.fitdining.api.meetup.dto.MeetupAreaCheckResponse;
 import kr.co.fitdining.api.meetup.dto.MeetupAreasResponse;
 import kr.co.fitdining.api.meetup.dto.MeetupCreateRequest;
 import kr.co.fitdining.api.meetup.dto.MeetupCreateResponse;
+import kr.co.fitdining.api.meetup.dto.MeetupPreview;
 import kr.co.fitdining.api.meetup.dto.MeetupSnapshot;
 import kr.co.fitdining.api.meetup.dto.MeetupUpdateRequest;
 import kr.co.fitdining.api.meetup.exception.InvalidMeetupException;
@@ -225,6 +226,19 @@ public class MeetupService {
 		}
 		MeetupPlaces.PlacesAround around = places.around(new MeetupPoint(lat, lng, radiusM));
 		return new MeetupAreaCheckResponse(around.count(), nearName(around));
+	}
+
+	/**
+	 * 링크 미리보기용 모임 정보(AC-66). 질문, 모임 취향, 참여자 이름은 싣지 않는다.
+	 *
+	 * @throws MeetupNotFoundException 없는 코드일 때
+	 */
+	@Transactional(readOnly = true)
+	public MeetupPreview preview(String code) {
+		Meetup meetup = find(code);
+		return new MeetupPreview(users.findById(meetup.getHostUserId()).map(AuthUser::getNickname).orElse(null),
+				new MeetupPreview.Area(meetup.getAreaKind(), meetup.getAreaName()), meetup.getMeetDate(),
+				meetup.getMeetTime() == null ? null : meetup.getMeetTime().format(HH_MM));
 	}
 
 	/**

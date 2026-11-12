@@ -28,11 +28,13 @@ import kr.co.fitdining.api.meetup.domain.MeetupRole;
 import kr.co.fitdining.api.meetup.domain.Mood;
 import kr.co.fitdining.api.meetup.domain.Taste;
 import kr.co.fitdining.api.meetup.dto.MeetupCreateRequest;
+import kr.co.fitdining.api.meetup.dto.MeetupPreview;
 import kr.co.fitdining.api.meetup.dto.MeetupSnapshot;
 import kr.co.fitdining.api.meetup.dto.ProfileCreateRequest;
 import kr.co.fitdining.api.meetup.exception.MeetupConflictException;
 import kr.co.fitdining.api.meetup.exception.MeetupConflictException.Conflict;
 import kr.co.fitdining.api.meetup.exception.MeetupForbiddenException;
+import kr.co.fitdining.api.meetup.exception.MeetupNotFoundException;
 import kr.co.fitdining.api.meetup.exception.MeetupProfileNotFoundException;
 import kr.co.fitdining.api.meetup.exception.TooManyMeetupWritesException;
 import kr.co.fitdining.api.support.PostgresTestSupport;
@@ -346,6 +348,55 @@ class MeetupProfilePersistenceTest extends PostgresTestSupport {
 			assertThat(snapshot.me()).isEqualTo(new MeetupSnapshot.Me(MeetupRole.PARTICIPANT, guest.profileId(), true,
 					false, true));
 			assertThat(snapshot.allowed()).containsExactly(MeetupAction.EDIT_TASTE, MeetupAction.LINK_ACCOUNT);
+		}
+
+		@Test
+		@DisplayName("회원프로필로바꾸기_쿠키의비회원프로필이그회원의프로필이되고_모임취향은그대로다")
+		void linkAccount_guestBecomesMember_tasteKept() {
+			String code = meetup(MeetupCategory.RESTAURANT, null);
+			MeetupProfileService.Joined guest = join(code, null, "하린", FULL_TASTE);
+
+			profileService.linkAccount(code, MEMBER, guest.token());
+
+			MeetupSnapshot snapshot = meetupService.snapshot(code, MEMBER, null);
+			assertThat(snapshot.me().profileId()).isEqualTo(guest.profileId());
+			assertThat(snapshot.me().convertible()).isNull();
+			assertThat(snapshot.allowed()).doesNotContain(MeetupAction.LINK_ACCOUNT);
+			MeetupSnapshot.Profile profile = snapshot.profiles().stream()
+					.filter(item -> item.id() == guest.profileId()).findFirst().orElseThrow();
+			assertThat(profile.member()).isTrue();
+			assertThat(profile.taste()).isEqualTo(FULL_TASTE);
+			assertThat(jdbc.queryForObject("select count(*) from user_preferences where user_id = ?", Integer.class,
+					MEMBER)).isZero();
+		}
+
+		@Test
+		@DisplayName("회원프로필로바꾸기_이미이모임에프로필이있으면409이고_쿠키가비회원프로필이아니면403이다")
+		void linkAccount_rejected() {
+			String code = meetup(MeetupCategory.RESTAURANT, null);
+			MeetupProfileService.Joined guest = join(code, null, "하린", null);
+			MeetupProfileService.Joined member = join(code, MEMBER, "도윤", null);
+
+			assertThat(conflictOf(() -> profileService.linkAccount(code, MEMBER, guest.token())))
+					.isEqualTo(Conflict.ALREADY_JOINED);
+			assertThatThrownBy(() -> profileService.linkAccount(code, HOST, null))
+					.isInstanceOf(MeetupForbiddenException.class);
+			assertThatThrownBy(() -> profileService.linkAccount(code, HOST, member.token()))
+					.isInstanceOf(MeetupForbiddenException.class);
+		}
+
+		@Test
+		@DisplayName("미리보기_모임장닉네임과지역과날짜시간만주고_없는코드는404다")
+		void preview_onlyPublicInfo() {
+			String code = meetup(MeetupCategory.RESTAURANT, null);
+			join(code, null, "하린", FULL_TASTE);
+
+			MeetupPreview preview = meetupService.preview(code);
+
+			assertThat(preview.hostNickname()).isNotBlank();
+			assertThat(preview.area()).isEqualTo(new MeetupPreview.Area(AreaKind.STATION, "선릉"));
+			assertThatThrownBy(() -> meetupService.preview("AAAAAAAAAAAAAAAAAAAAAA"))
+					.isInstanceOf(MeetupNotFoundException.class);
 		}
 
 	}
