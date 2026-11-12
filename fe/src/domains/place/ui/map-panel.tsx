@@ -20,10 +20,10 @@ export function middlePanelTop(area: { top: number; height: number }) {
 const DRAG_THRESHOLD_PX = 30;
 
 // 패널은 늘 지도 영역 높이이고, 상태마다 이만큼 아래로 내려 화면 밑으로 잘린다.
-// 위 safe area 띠만큼 덜 내려 본문 위 끝을 맞춘다. cqh는 바깥 감싸개 높이 기준이다
+// 위 safe area 띠(홈 화면 추가 배너가 떠 있으면 그 높이 포함)만큼 덜 내려 본문 위 끝을 맞춘다. cqh는 바깥 감싸개 높이 기준이다
 const PANEL_Y: Record<PanelState, string> = {
   full: "0px",
-  middle: `calc(${MIDDLE_TOP_PERCENT}cqh - env(safe-area-inset-top))`,
+  middle: `calc(${MIDDLE_TOP_PERCENT}cqh - env(safe-area-inset-top) - var(--install-banner-height))`,
   // 지도 위 버튼(저장한 장소, 내 정보) 아래까지 펼친다
   history: "calc(var(--spacing) * 30)",
 };
