@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
 /**
@@ -125,6 +126,14 @@ class AiSearchClientBudgetTest {
 		long start = System.nanoTime();
 		search.run();
 		return Duration.ofNanos(System.nanoTime() - start).toMillis();
+	}
+
+	/**
+	 * 제한 시간이 없는 JDK HTTP 클라이언트. {@code RestClient.create()}는 classpath의 Apache HttpClient 5를 고르는데, 그
+	 * 클라이언트는 503 POST를 스스로 1초 뒤 다시 보내 서버 호출 수와 걸린 시간이 달라진다.
+	 */
+	static RestClient jdkClient() {
+		return RestClient.builder().requestFactory(new JdkClientHttpRequestFactory()).build();
 	}
 
 	static PlaceSearchRequest request() {
@@ -228,7 +237,7 @@ class AiSearchClientBudgetTest {
 			Thread.sleep(200);
 			respond(exchange, 503, BUSY);
 		};
-		RestClient unbounded = RestClient.create();
+		RestClient unbounded = jdkClient();
 		AtomicInteger attempts = new AtomicInteger();
 		AiSearchClient client = new AiSearchClient(url(), "", "", timing(Duration.ofMillis(100)), Clock.systemUTC(),
 				timeout -> {
@@ -238,6 +247,7 @@ class AiSearchClientBudgetTest {
 
 		assertThat(client.search(SearchPurpose.SEARCH, request(), null)).isEmpty();
 		assertThat(attempts).hasValue(1);
+		assertThat(calls).hasValue(1);
 		assertThat(output.getAll()).contains("kind=BUSY");
 	}
 
@@ -274,17 +284,18 @@ class AiSearchClientBudgetTest {
 	@DisplayName("BUSY_쉰뒤남은예산이최소처리시간보다적으면_다시부르지않는다")
 	void busy_budgetGoneAfterWait_noRetry(CapturedOutput output) {
 		handler = (exchange, call) -> respondBusy(exchange, "1");
-		// 300ms를 기다리라고 하면 600ms를 멈춰 time-out 500ms를 넘긴다. 시도 수는 클라이언트를 만든 수로 센다(기본 클라이언트는
-		// 연결 문제로 POST를 스스로 한 번 더 보낼 수 있어 서버 호출 수가 시도 수와 다를 수 있다).
+		// 첫 BUSY는 바로 와서 쉬기 전 검사(남은 예산 >= 쉴 300ms + 최소 처리 100ms)는 지난다. 300ms를 쉬라고 하면 600ms를 멈춰
+		// time-out 500ms를 넘기므로, 쉰 뒤 다시 잰 검사에서 재요청을 그만둔다(AC-8).
 		AtomicInteger attempts = new AtomicInteger();
 		AiSearchClient client = new AiSearchClient(url(), "", "", TIMING, Clock.systemUTC(), timeout -> {
 			attempts.incrementAndGet();
-			return RestClient.create();
+			return jdkClient();
 		}, duration -> Thread.sleep(duration.plusMillis(300)));
 
 		assertThat(client.search(SearchPurpose.SEARCH, request(), null)).isEmpty();
 		assertThat(attempts).hasValue(1);
-		assertThat(output.getAll()).contains("kind=BUSY");
+		assertThat(calls).hasValue(1);
+		assertThat(output.getAll()).contains("kind=BUSY").contains("retry skipped after wait");
 	}
 
 	@Test
