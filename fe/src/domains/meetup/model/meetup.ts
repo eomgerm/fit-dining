@@ -110,6 +110,14 @@ export type MeetupProfile = {
   reflected: boolean;
 };
 
+// 링크 미리보기용 모임 정보(AC-66). 질문, 취향, 참여자 이름은 없다
+export type MeetupPreview = {
+  hostNickname?: string;
+  area: { kind: AreaKind; name?: string };
+  date?: string;
+  time?: string;
+};
+
 export type MeetupSnapshot = {
   phase: MeetupPhase;
   afterMeetup: boolean;

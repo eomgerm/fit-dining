@@ -33,8 +33,14 @@ const api = vi.hoisted(() => ({
   reopenPoll: vi.fn(),
   decide: vi.fn(),
   cancelDecision: vi.fn(),
+  linkAccount: vi.fn(),
 }));
 vi.mock("@/domains/meetup/api/meetup-api", () => api);
+
+// 회원 프로필로 바꾸기는 로그인을 확인하고 보낸다. 테스트는 로그인한 것으로 둔다
+vi.mock("@/domains/auth/api/authenticated", () => ({
+  authenticated: (send: (session: unknown) => unknown) => send({}),
+}));
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
@@ -931,5 +937,50 @@ describe("투표와 정하기", () => {
     expect(mocks.push).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "수정하기" }));
     expect(mocks.push).toHaveBeenCalledWith(`/m/${CODE}/taste`);
+  });
+});
+
+describe("회원 프로필로 바꾸기", () => {
+  const convertible = () =>
+    snapshot({
+      me: {
+        role: "PARTICIPANT",
+        profileId: 2,
+        signedIn: true,
+        tasteReflected: false,
+        convertible: true,
+      },
+      allowed: ["EDIT_TASTE", "LINK_ACCOUNT"],
+    });
+
+  it("로그인한 회원이 이 브라우저의 비회원 프로필로 들어오면 한 번 묻고, 바꾸면 알린다", async () => {
+    window.localStorage.clear();
+    api.fetchSnapshot.mockResolvedValue(convertible());
+    api.linkAccount.mockResolvedValue(undefined);
+    mount();
+    expect(await screen.findByText("회원 프로필로 바꿀까요?")).toBeTruthy();
+    expect(
+      screen.getByText(/하린님 프로필을 지금 로그인한 계정으로/),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "바꾸기" }));
+    await waitFor(() => expect(api.linkAccount).toHaveBeenCalledWith(CODE));
+    expect(await screen.findByText("회원 프로필로 바꿨어요")).toBeTruthy();
+  });
+
+  it("나중에를 누르면 이 모임에서는 다시 묻지 않는다", async () => {
+    window.localStorage.clear();
+    api.fetchSnapshot.mockResolvedValue(convertible());
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "나중에" }));
+    await waitFor(() =>
+      expect(screen.queryByText("회원 프로필로 바꿀까요?")).toBeNull(),
+    );
+
+    cleanup();
+    mount();
+    expect(await screen.findByText("하린")).toBeTruthy();
+    expect(screen.queryByText("회원 프로필로 바꿀까요?")).toBeNull();
+    expect(api.linkAccount).not.toHaveBeenCalled();
   });
 });

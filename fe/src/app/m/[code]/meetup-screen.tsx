@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { authenticated } from "@/domains/auth/api/authenticated";
 import {
   conflictOf,
   isNotFound,
@@ -17,6 +18,7 @@ import {
   useSelectProfile,
   useStartCalculation,
   useVote,
+  type WithSession,
 } from "@/domains/meetup/api/queries";
 import {
   clearJustJoined,
@@ -28,6 +30,7 @@ import {
   type MeetupSnapshot,
 } from "@/domains/meetup/model/meetup";
 import { DoneView } from "@/domains/meetup/ui/done-view";
+import { LinkAccountDialog } from "@/domains/meetup/ui/link-account-dialog";
 import { meetupTitle } from "@/domains/meetup/ui/meetup-info-card";
 import { MeetupNotFound } from "@/domains/meetup/ui/meetup-not-found";
 import {
@@ -54,6 +57,8 @@ import { TopBar } from "@/shared/ui/layout/top-bar";
 import { useToast } from "@/shared/ui/overlay/toast";
 
 import { rememberLoginReturn } from "../../login-return";
+
+const withSession: WithSession = (send) => authenticated(() => send());
 
 // 결과 카드의 장소 사진, 순위 배지, 핏 점수는 장소 도메인의 부품이다(D-20)
 const RESULT_PARTS: ResultCardParts = {
@@ -138,7 +143,16 @@ export function MeetupScreen({
       />
     );
   }
-  return <MeetupBody code={code} snapshot={data} />;
+  return (
+    <>
+      <MeetupBody code={code} snapshot={data} />
+      <LinkAccountDialog
+        code={code}
+        snapshot={data}
+        withSession={withSession}
+      />
+    </>
+  );
 }
 
 function MeetupBody({

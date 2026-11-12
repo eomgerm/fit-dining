@@ -19,6 +19,7 @@ import {
   decide,
   fetchResult,
   fetchSnapshot,
+  linkAccount,
   openPoll,
   removeProfile,
   reopenPoll,
@@ -122,6 +123,13 @@ function useMeetupWrite<T, R>(code: string, send: (input: T) => Promise<R>) {
     onSettled: () =>
       client.invalidateQueries({ queryKey: meetupKeys.snapshot(code) }),
   });
+}
+
+// 회원 프로필로 바꾸기. 로그인을 확인하고 보낸다(AC-68)
+export function useLinkAccount(code: string, withSession: WithSession) {
+  return useMeetupWrite<void, void>(code, () =>
+    withSession(() => linkAccount(code)),
+  );
 }
 
 export function useCreateProfile(code: string) {

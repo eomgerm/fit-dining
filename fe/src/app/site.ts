@@ -10,6 +10,15 @@ export const siteOpenGraph = {
   locale: "ko_KR",
 } as const;
 
+// 서비스 기본 공유 이미지(opengraph-image.png 파일 규칙의 주소). openGraph를 정하는 페이지는 파일 규칙 이미지가 빠지므로
+// 직접 넣는다. alt는 opengraph-image.alt.txt와 같다
+export const siteImage = {
+  url: "/opengraph-image.png",
+  width: 1200,
+  height: 630,
+  alt: '핏다이닝 로고와 "내 취향에 맞춘 미식 여정" 문구',
+};
+
 // 검색 결과·링크 미리보기 설명과 홈의 noscript 소개가 같은 문구를 쓴다
 export const siteDescription =
   "원하는 조건을 자연스럽게 검색해보세요. 내 취향에 딱 맞는 장소를 추천해드려요.";

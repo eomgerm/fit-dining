@@ -5,6 +5,7 @@ import type {
   MeetupAreasResponse,
   MeetupCreateRequest,
   MeetupCreateResponse,
+  MeetupPreview,
   MeetupSnapshot,
   MeetupUpdateRequest,
   PollOpenRequest,
@@ -45,6 +46,18 @@ export function checkArea(
 // 모임의 지금 상태. 로그인과 프로필 없이도 받는다(AC-3). 모임 쿠키는 브라우저가 싣는다
 export function fetchSnapshot(code: string, signal?: AbortSignal) {
   return request<MeetupSnapshot>(`/v1/meetups/${code}`, { signal });
+}
+
+// 링크 미리보기용 정보. FE 서버가 /m/<코드>의 메타 태그를 만들 때 부른다(AC-66)
+export function fetchPreview(code: string, signal?: AbortSignal) {
+  return request<MeetupPreview>(`/v1/meetups/${code}/preview`, { signal });
+}
+
+// 이 브라우저의 비회원 프로필을 로그인한 회원의 프로필로 바꾼다(AC-68)
+export function linkAccount(code: string) {
+  return request<void>(`/v1/meetups/${code}/profiles/me/account`, {
+    method: "POST",
+  });
 }
 
 // 이름과 취향을 남긴다. 응답이 모임 쿠키를 준다(AC-5, AC-7)
