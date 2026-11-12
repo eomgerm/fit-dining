@@ -11,6 +11,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import kr.co.fitdining.api.meetup.domain.AreaKind;
+import kr.co.fitdining.api.meetup.domain.MeetupPoint;
 import kr.co.fitdining.api.place.dto.PlaceDetailResponse;
 import kr.co.fitdining.api.place.engine.PlaceSearchEngine;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty;
@@ -57,6 +58,18 @@ class MockMeetupPlaces implements MeetupPlaces {
 	@Override
 	public boolean pricesKnown() {
 		return false;
+	}
+
+	@Override
+	public PlacesAround around(MeetupPoint point) {
+		List<PlaceDetailResponse> near = places.values().stream()
+				.filter(place -> MockPlaceAreas.within(point, place)).toList();
+		Map<String, Long> dongs = near.stream().map(place -> MockPlaceAreas.dong(place.address()))
+				.flatMap(Optional::stream).collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
+		String top = dongs.entrySet().stream()
+				.min(Map.Entry.<String, Long>comparingByValue().reversed().thenComparing(Map.Entry.comparingByKey()))
+				.map(Map.Entry::getKey).orElse(null);
+		return new PlacesAround(near.size(), top);
 	}
 
 }

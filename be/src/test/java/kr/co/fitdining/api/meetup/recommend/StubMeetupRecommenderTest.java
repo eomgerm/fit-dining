@@ -7,6 +7,7 @@ import java.util.Optional;
 import kr.co.fitdining.api.meetup.domain.AreaKind;
 import kr.co.fitdining.api.meetup.domain.FoodType;
 import kr.co.fitdining.api.meetup.domain.MeetupCategory;
+import kr.co.fitdining.api.meetup.domain.MeetupPoint;
 import kr.co.fitdining.api.meetup.domain.Mood;
 import kr.co.fitdining.api.meetup.domain.Taste;
 import kr.co.fitdining.api.place.dto.PlaceDetailResponse;
@@ -57,6 +58,24 @@ class StubMeetupRecommenderTest {
 		assertThat(first.applied()).isEqualTo(new MeetupRecommendation.Applied(Mood.QUIET, List.of(FoodType.KOREAN),
 				null, true, null, List.of("곱창", "마라탕")));
 		assertThat(first.emptyReason()).isNull();
+	}
+
+	@Test
+	@DisplayName("추천_지점모임이면_반경안의장소만이다")
+	void recommend_point_withinRadius() {
+		PlaceSummary center = ENGINE.placeIds().stream().map(ENGINE::findPlace).flatMap(Optional::stream)
+				.map(PlaceDetailResponse::place).filter(place -> place.lat() != null && place.lng() != null)
+				.findFirst().orElseThrow();
+		MeetupPoint point = new MeetupPoint(center.lat(), center.lng(), 500);
+
+		MeetupRecommendation recommendation = RECOMMENDER.recommend(new MeetupRecommender.Input(1, AreaKind.POINT,
+				"근처", point, MeetupCategory.ANY, null, null, null, null,
+				List.of(new MeetupRecommender.Member(1, null, Taste.EMPTY))));
+
+		assertThat(recommendation.places()).isNotEmpty().allSatisfy(place -> {
+			PlaceSummary found = ENGINE.findPlace(place.placeId()).orElseThrow().place();
+			assertThat(point.contains(found.lat(), found.lng())).isTrue();
+		});
 	}
 
 	@Test

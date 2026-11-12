@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 import kr.co.fitdining.api.meetup.domain.AreaKind;
+import kr.co.fitdining.api.meetup.domain.MeetupPoint;
 import kr.co.fitdining.api.place.catalog.ConditionalOnCatalogMode;
 import kr.co.fitdining.api.place.catalog.PlaceAreaNames;
 import kr.co.fitdining.api.place.catalog.PlaceCatalog;
@@ -38,6 +39,12 @@ class CatalogMeetupPlaces implements MeetupPlaces {
 	@Override
 	public boolean pricesKnown() {
 		return catalog.storePricesKnown();
+	}
+
+	@Override
+	public PlacesAround around(MeetupPoint point) {
+		PlaceCatalog.Around around = catalog.around(point.lat(), point.lng(), point.radiusM());
+		return new PlacesAround(around.count(), around.topDong());
 	}
 
 }

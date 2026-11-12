@@ -3,6 +3,7 @@ package kr.co.fitdining.api.meetup.area;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import kr.co.fitdining.api.meetup.domain.MeetupPoint;
 import kr.co.fitdining.api.place.dto.PlaceDetailResponse;
 
 /**
@@ -28,5 +29,19 @@ public interface MeetupPlaces {
 
 	/** 가게 가격이 채워졌는지. 메뉴 가격 질문을 보일지 정한다(D-17). 설정이 아니라 데이터로 본다. */
 	boolean pricesKnown();
+
+	/**
+	 * 지점에서 반경 안의 장소 수와 가장 많은 동(AC-58). 경계에 있는 장소도 안이다.
+	 *
+	 * @return 장소 수와 동 이름. 동을 아는 장소가 없으면 동은 null이다.
+	 */
+	PlacesAround around(MeetupPoint point);
+
+	/**
+	 * @param count 반경 안 장소 수
+	 * @param topDong 반경 안 장소에 가장 많은 동. 수가 같으면 이름 순서로 앞이다.
+	 */
+	record PlacesAround(int count, String topDong) {
+	}
 
 }

@@ -40,6 +40,7 @@ import kr.co.fitdining.api.meetup.domain.MeetupPhase;
 import kr.co.fitdining.api.meetup.domain.MeetupQuestions;
 import kr.co.fitdining.api.meetup.domain.MeetupRole;
 import kr.co.fitdining.api.meetup.domain.ResultGroup;
+import kr.co.fitdining.api.meetup.dto.MeetupAreaCheckResponse;
 import kr.co.fitdining.api.meetup.dto.MeetupAreasResponse;
 import kr.co.fitdining.api.meetup.dto.MeetupCreateRequest;
 import kr.co.fitdining.api.meetup.dto.MeetupCreateResponse;
@@ -239,6 +240,32 @@ class MeetupControllerTest {
 		@DisplayName("지역찾기_찾는말이없으면_400이다")
 		void areas_missingQuery_returnsBadRequest() throws Exception {
 			expectProblem(get("/api/v1/meetups/areas").with(SessionTestSupport.session(USER_ID)), 400);
+		}
+
+		@Test
+		@DisplayName("반경확인_지점과반경을받으면_장소수와붙일이름을준다")
+		void areaCheck_returnsCountAndName() throws Exception {
+			when(meetupService.areaCheck(USER_ID, 33.45, 126.57, 500))
+					.thenReturn(new MeetupAreaCheckResponse(2, "연동 근처"));
+
+			mockMvc.perform(get("/api/v1/meetups/area-check").param("lat", "33.45").param("lng", "126.57")
+					.param("radiusM", "500").with(SessionTestSupport.session(USER_ID)))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.placeCount").value(2))
+					.andExpect(jsonPath("$.name").value("연동 근처"));
+		}
+
+		@Test
+		@DisplayName("반경확인_로그인하지않으면401이고_값이없거나숫자가아니면400이다")
+		void areaCheck_anonymousOrMissing_rejected() throws Exception {
+			expectProblem(get("/api/v1/meetups/area-check").param("lat", "33.45").param("lng", "126.57")
+					.param("radiusM", "500"), 401);
+			expectProblem(get("/api/v1/meetups/area-check").param("lat", "33.45").param("lng", "126.57")
+					.with(SessionTestSupport.session(USER_ID)), 400);
+			expectProblem(get("/api/v1/meetups/area-check").param("lat", "북쪽").param("lng", "126.57")
+					.param("radiusM", "500").with(SessionTestSupport.session(USER_ID)), 400);
+			verify(meetupService, never()).areaCheck(anyString(), org.mockito.ArgumentMatchers.anyDouble(),
+					org.mockito.ArgumentMatchers.anyDouble(), org.mockito.ArgumentMatchers.anyInt());
 		}
 
 	}

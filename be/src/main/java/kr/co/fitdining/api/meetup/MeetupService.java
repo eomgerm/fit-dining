@@ -25,11 +25,13 @@ import kr.co.fitdining.api.meetup.domain.MeetupCodes;
 import kr.co.fitdining.api.meetup.domain.MeetupInterpretation;
 import kr.co.fitdining.api.meetup.domain.MeetupLimits;
 import kr.co.fitdining.api.meetup.domain.MeetupPermissions;
+import kr.co.fitdining.api.meetup.domain.MeetupPoint;
 import kr.co.fitdining.api.meetup.domain.MeetupQuestions;
 import kr.co.fitdining.api.meetup.domain.MeetupSchedule;
 import kr.co.fitdining.api.meetup.domain.MeetupTasteRules;
 import kr.co.fitdining.api.meetup.domain.MeetupText;
 import kr.co.fitdining.api.meetup.domain.Taste;
+import kr.co.fitdining.api.meetup.dto.MeetupAreaCheckResponse;
 import kr.co.fitdining.api.meetup.dto.MeetupAreasResponse;
 import kr.co.fitdining.api.meetup.dto.MeetupCreateRequest;
 import kr.co.fitdining.api.meetup.dto.MeetupCreateResponse;
@@ -102,16 +104,17 @@ public class MeetupService {
 	public MeetupCreateResponse create(String userId, MeetupCreateRequest request) {
 		requireActiveUser(userId);
 		Instant now = now();
-		MeetupArea area = selectableArea(request.area());
+		Chosen chosen = selectableArea(request.area());
 		LocalTime time = minutes(request.time());
 		if (!MeetupSchedule.selectable(request.date(), time, now)) {
 			throw new InvalidMeetupException();
 		}
 		MeetupCategory category = request.category() == null ? MeetupCategory.RESTAURANT : request.category();
 		String description = description(request.description());
-		Meetup created = new Meetup(MeetupCodes.generate(), userId, area.kind(), area.name(), category,
-				request.date(), time, request.headcount(), description, MeetupSchedule.expiresAt(request.date(), now),
-				now);
+		Meetup created = new Meetup(MeetupCodes.generate(), userId, chosen.area().kind(), chosen.area().name(),
+				category, request.date(), time, request.headcount(), description,
+				MeetupSchedule.expiresAt(request.date(), now), now);
+		created.placeAt(chosen.point());
 		if (description != null) {
 			interpreter.interpret(description).ifPresent(parsed -> created.interpreted(description, parsed));
 		}
@@ -170,8 +173,8 @@ public class MeetupService {
 		if (request.has("area") && request.area() == null || request.has("category") && request.category() == null) {
 			throw new InvalidMeetupException();
 		}
-		MeetupArea area = request.has("area") ? selectableArea(request.area())
-				: new MeetupArea(meetup.getAreaKind(), meetup.getAreaName());
+		Chosen area = request.has("area") ? selectableArea(request.area())
+				: new Chosen(new MeetupArea(meetup.getAreaKind(), meetup.getAreaName()), meetup.point());
 		MeetupCategory category = request.has("category") ? request.category() : meetup.getCategory();
 		LocalDate date = request.has("date") ? request.date() : meetup.getMeetDate();
 		LocalTime time = request.has("time") ? minutes(request.time()) : date == null ? null : meetup.getMeetTime();
@@ -180,7 +183,7 @@ public class MeetupService {
 		}
 		Instant expiresAt = Objects.equals(date, meetup.getMeetDate()) ? meetup.getExpiresAt()
 				: MeetupSchedule.expiresAt(date, now);
-		meetup.edit(area.kind(), area.name(), category, date, time,
+		meetup.edit(area.area().kind(), area.area().name(), area.point(), category, date, time,
 				request.has("headcount") ? request.headcount() : meetup.getHeadcount(),
 				request.has("description") ? description(request.description()) : meetup.getDescription(),
 				expiresAt, now);
@@ -205,6 +208,23 @@ public class MeetupService {
 		requireActiveUser(userId);
 		return new MeetupAreasResponse(MeetupAreaSearch.find(places.areas(), query).stream()
 				.map(area -> new MeetupAreasResponse.Item(area.kind(), area.name())).toList());
+	}
+
+	/**
+	 * 지점과 반경 안의 장소 수와 붙일 이름(AC-58).
+	 *
+	 * @param userId 로그인한 회원
+	 * @throws AuthFailure 탈퇴했거나 없는 회원일 때(401)
+	 * @throws InvalidMeetupException 위도·경도가 범위 밖이거나 고를 수 없는 반경일 때
+	 */
+	@Transactional(readOnly = true)
+	public MeetupAreaCheckResponse areaCheck(String userId, double lat, double lng, int radiusM) {
+		requireActiveUser(userId);
+		if (!MeetupPoint.valid(lat, lng, radiusM)) {
+			throw new InvalidMeetupException();
+		}
+		MeetupPlaces.PlacesAround around = places.around(new MeetupPoint(lat, lng, radiusM));
+		return new MeetupAreaCheckResponse(around.count(), nearName(around));
 	}
 
 	/**
@@ -233,7 +253,8 @@ public class MeetupService {
 				requester.hasProfile(), false, latest != null && latest.getState() == CalculationState.RUNNING,
 				outdated, meetup.getPollState(), meetup.reopenable(), requester.convertible());
 		MeetupSnapshot.Info info = new MeetupSnapshot.Info(
-				new MeetupSnapshot.Area(meetup.getAreaKind(), meetup.getAreaName()), meetup.getCategory(),
+				new MeetupSnapshot.Area(meetup.getAreaKind(), meetup.getAreaName(), meetup.getPointLat(),
+						meetup.getPointLng(), meetup.getRadiusM()), meetup.getCategory(),
 				meetup.getMeetDate(), meetup.getMeetTime() == null ? null : meetup.getMeetTime().format(HH_MM),
 				meetup.getHeadcount(), meetup.getDescription(),
 				users.findById(meetup.getHostUserId()).map(AuthUser::getNickname).orElse(null),
@@ -319,16 +340,47 @@ public class MeetupService {
 		return meetups.findByCode(code).orElseThrow(MeetupNotFoundException::new);
 	}
 
-	private MeetupArea selectableArea(MeetupCreateRequest.Area requested) {
+	/** 고른 지역. 지점 모임이면 지점과 반경이 있다. */
+	private record Chosen(MeetupArea area, MeetupPoint point) {
+	}
+
+	private Chosen selectableArea(MeetupCreateRequest.Area requested) {
+		if (requested.kind() == AreaKind.POINT) {
+			return selectablePoint(requested);
+		}
 		String name = MeetupText.trimToNull(requested.name());
-		if (requested.kind() == AreaKind.POINT || name == null) {
+		if (name == null) {
 			throw new InvalidMeetupException();
 		}
 		MeetupArea area = new MeetupArea(requested.kind(), name);
 		if (!places.areas().contains(area)) {
 			throw new InvalidMeetupException();
 		}
-		return area;
+		return new Chosen(area, null);
+	}
+
+	/**
+	 * 반경 안에 장소가 있는 지점만 고를 수 있다(역·동과 같은 규칙). 위치 이름을 비우면 반경 안 장소로 붙인 이름을
+	 * 쓴다(AC-58, D-34).
+	 */
+	private Chosen selectablePoint(MeetupCreateRequest.Area requested) {
+		if (!MeetupPoint.valid(requested.lat(), requested.lng(), requested.radiusM())) {
+			throw new InvalidMeetupException();
+		}
+		String name = MeetupText.trimToNull(requested.name());
+		if (name != null && MeetupText.length(name) > MeetupLimits.POINT_NAME_MAX) {
+			throw new InvalidMeetupException();
+		}
+		MeetupPoint point = new MeetupPoint(requested.lat(), requested.lng(), requested.radiusM());
+		MeetupPlaces.PlacesAround around = places.around(point);
+		if (around.count() == 0) {
+			throw new InvalidMeetupException();
+		}
+		return new Chosen(new MeetupArea(AreaKind.POINT, name != null ? name : nearName(around)), point);
+	}
+
+	private static String nearName(MeetupPlaces.PlacesAround around) {
+		return around.count() == 0 || around.topDong() == null ? null : around.topDong() + MeetupLimits.NEAR_SUFFIX;
 	}
 
 	private static LocalTime minutes(LocalTime time) {

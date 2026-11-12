@@ -97,9 +97,16 @@ public record MeetupSnapshot(
 
 	/**
 	 * @param kind 지역 종류
-	 * @param name 역은 "역"을 뺀 이름, 동은 동 이름
+	 * @param name 역은 "역"을 뺀 이름, 동은 동 이름, 지점은 위치 이름(없을 수 있다)
+	 * @param lat 지점의 위도. 지점 모임만 있다. 참여자 화면의 작은 지도에 쓴다(AC-60).
+	 * @param lng 지점의 경도
+	 * @param radiusM 지점의 반경(m)
 	 */
-	public record Area(AreaKind kind, String name) {
+	public record Area(AreaKind kind, String name, Double lat, Double lng, Integer radiusM) {
+
+		public Area(AreaKind kind, String name) {
+			this(kind, name, null, null, null);
+		}
 	}
 
 	/**

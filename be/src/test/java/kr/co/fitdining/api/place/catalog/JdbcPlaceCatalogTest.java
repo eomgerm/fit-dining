@@ -574,6 +574,26 @@ class JdbcPlaceCatalogTest extends PostgresTestSupport {
 	}
 
 	@Test
+	@DisplayName("반경안장소_수와가장많은동을주고_동을모르면없다")
+	void around_countsAndTopDong() {
+		long a = place("연동 하나", "RESTAURANT", "GANGNAM");
+		long b = place("연동 둘", "CAFE", "GANGNAM");
+		long c = place("노형동 하나", "BAR", "GANGNAM");
+		long far = place("먼 곳", "BAR", "GANGNAM");
+		jdbc.update("UPDATE places SET lat = 33.4500, lng = 126.5700, dong = '연동' WHERE place_id = ?", a);
+		jdbc.update("UPDATE places SET lat = 33.4510, lng = 126.5710, dong = ' 연동 ' WHERE place_id = ?", b);
+		jdbc.update("UPDATE places SET lat = 33.4520, lng = 126.5690, dong = '노형동' WHERE place_id = ?", c);
+		jdbc.update("UPDATE places SET lat = 33.5000, lng = 126.5300, dong = '이도동' WHERE place_id = ?", far);
+
+		assertThat(catalog.around(33.4500, 126.5700, 500)).isEqualTo(new PlaceCatalog.Around(3, "연동"));
+		assertThat(catalog.around(33.4500, 126.5700, 5000).count()).isEqualTo(3);
+		assertThat(catalog.around(33.6000, 126.5700, 500)).isEqualTo(new PlaceCatalog.Around(0, null));
+
+		jdbc.update("UPDATE places SET dong = NULL WHERE place_id IN (?, ?, ?)", a, b, c);
+		assertThat(catalog.around(33.4500, 126.5700, 500)).isEqualTo(new PlaceCatalog.Around(3, null));
+	}
+
+	@Test
 	@DisplayName("가게가격확인_AI뷰의가격이모두비어있으면_false다")
 	void storePricesKnown_viewPricesEmpty_false() {
 		place("가격 없는 가게", "RESTAURANT", "SEOLLEUNG");

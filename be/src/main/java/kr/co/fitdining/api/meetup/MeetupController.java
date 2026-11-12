@@ -11,6 +11,7 @@ import kr.co.fitdining.api.auth.ports.AuthUseCases;
 import kr.co.fitdining.api.meetup.domain.MeetupLimits;
 import kr.co.fitdining.api.meetup.domain.MeetupText;
 import kr.co.fitdining.api.meetup.domain.Taste;
+import kr.co.fitdining.api.meetup.dto.MeetupAreaCheckResponse;
 import kr.co.fitdining.api.meetup.dto.MeetupAreasResponse;
 import kr.co.fitdining.api.meetup.dto.MeetupCreateRequest;
 import kr.co.fitdining.api.meetup.dto.MeetupCreateResponse;
@@ -107,6 +108,16 @@ public class MeetupController {
 			throw new InvalidMeetupException();
 		}
 		return meetupService.areas(userId, query);
+	}
+
+	/**
+	 * 지점과 반경 안의 장소 수와 붙일 이름(AC-58). 좌표는 로그에 남기지 않는다. 오류: 401(인증), 400(값이 없거나 숫자가
+	 * 아니거나 범위 밖, 고를 수 없는 반경).
+	 */
+	@GetMapping("/area-check")
+	public MeetupAreaCheckResponse areaCheck(@AuthenticationPrincipal AuthUseCases.Identity identity,
+			@RequestParam double lat, @RequestParam double lng, @RequestParam int radiusM) {
+		return meetupService.areaCheck(identity.userId(), lat, lng, radiusM);
 	}
 
 	/**

@@ -12,6 +12,7 @@ import kr.co.fitdining.api.meetup.area.MeetupPlaces;
 import kr.co.fitdining.api.meetup.domain.CalculationState;
 import kr.co.fitdining.api.meetup.domain.MeetupCodes;
 import kr.co.fitdining.api.meetup.domain.MeetupLimits;
+import kr.co.fitdining.api.meetup.domain.MeetupPoint;
 import kr.co.fitdining.api.meetup.dto.MeetupResult;
 import kr.co.fitdining.api.meetup.exception.MeetupNotFoundException;
 import kr.co.fitdining.api.meetup.exception.MeetupResultNotFoundException;
@@ -74,11 +75,12 @@ public class MeetupResultService {
 		Map<Long, PlaceDetailResponse> details = places.details(
 				ranked.stream().map(item -> item.place().placeId()).toList());
 		LocalDateTime at = openStatusAt(meetup);
+		MeetupPoint point = meetup.point();
 		List<MeetupResult.Item> items = new ArrayList<>();
 		for (MeetupRanking.Ranked item : ranked) {
 			PlaceDetailResponse detail = details.get(item.place().placeId());
 			if (detail != null) {
-				items.add(item(items.size() + 1, item, detail, at));
+				items.add(item(items.size() + 1, item, detail, at, point));
 			}
 		}
 		return new MeetupResult(calculation.getCalcId(), calculation.getFinishedAt(), calculation.getTasteCount(),
@@ -87,12 +89,12 @@ public class MeetupResultService {
 	}
 
 	private static MeetupResult.Item item(int rank, MeetupRanking.Ranked ranked, PlaceDetailResponse detail,
-			LocalDateTime at) {
+			LocalDateTime at, MeetupPoint point) {
 		MeetupRecommendation.Place place = ranked.place();
 		return new MeetupResult.Item(rank, detail.place(), openStatus(detail, at), place.score(), ranked.group(),
 				ranked.fit(), place.reasons() == null ? List.of()
 						: place.reasons().stream().limit(MeetupLimits.REASONS_MAX).toList(),
-				place.caution(), menu(detail), facilities(detail), distance(detail));
+				place.caution(), menu(detail), facilities(detail), distance(detail, point));
 	}
 
 	/** 모임 날짜와 시각이 모두 있으면 그 시각, 아니면 지금(KST)이다(AC-20). */
@@ -129,8 +131,14 @@ public class MeetupResultService {
 		return group == null && reservation == null ? null : new MeetupResult.Facilities(group, reservation);
 	}
 
-	/** 도보 시간이 가장 짧은 역이다. 지점 모임의 직선거리는 지점 단계에서 더한다. */
-	private static MeetupResult.Distance distance(PlaceDetailResponse detail) {
+	/** 역·동 모임은 도보 시간이 가장 짧은 역이고, 지점 모임은 지점에서 직선거리(m)다. 걸리는 시간은 없다(AC-59). */
+	static MeetupResult.Distance distance(PlaceDetailResponse detail, MeetupPoint point) {
+		if (point != null) {
+			Double lat = detail.place().lat();
+			Double lng = detail.place().lng();
+			return lat == null || lng == null ? null
+					: new MeetupResult.Distance(null, null, (int) Math.round(point.metersTo(lat, lng)));
+		}
 		if (detail.subways() == null) {
 			return null;
 		}

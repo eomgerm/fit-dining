@@ -22,6 +22,7 @@ import kr.co.fitdining.api.meetup.domain.AreaKind;
 import kr.co.fitdining.api.meetup.domain.FoodType;
 import kr.co.fitdining.api.meetup.domain.MeetupCategory;
 import kr.co.fitdining.api.meetup.domain.MeetupInterpretation;
+import kr.co.fitdining.api.meetup.domain.MeetupPoint;
 import kr.co.fitdining.api.meetup.domain.Mood;
 import kr.co.fitdining.api.meetup.domain.Taste;
 import kr.co.fitdining.api.place.dto.PlaceCard;
@@ -128,7 +129,7 @@ class AiMeetupRecommenderTest {
 	@DisplayName("요청본문_상관없음이면업종을빼고_지점이면원형반경이며_날짜만있으면시각이없다")
 	void body_anyCategoryPointDateOnly() {
 		MeetupRecommender.Input input = new MeetupRecommender.Input(7, AreaKind.POINT, "역삼동 근처",
-				new MeetupRecommender.Point(37.5, 127.05, 1000), MeetupCategory.ANY, LocalDate.of(2026, 11, 14), null,
+				new MeetupPoint(37.5, 127.05, 1000), MeetupCategory.ANY, LocalDate.of(2026, 11, 14), null,
 				null, null, List.of(new MeetupRecommender.Member(1, null, Taste.EMPTY)));
 
 		Map<String, Object> body = AiMeetupRecommender.body(input, null);

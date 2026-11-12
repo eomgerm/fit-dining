@@ -17,6 +17,7 @@ import kr.co.fitdining.api.meetup.domain.AreaKind;
 import kr.co.fitdining.api.meetup.domain.DecisionMethod;
 import kr.co.fitdining.api.meetup.domain.MeetupCategory;
 import kr.co.fitdining.api.meetup.domain.MeetupInterpretation;
+import kr.co.fitdining.api.meetup.domain.MeetupPoint;
 import kr.co.fitdining.api.meetup.domain.MeetupPhase;
 import kr.co.fitdining.api.meetup.domain.PollState;
 import lombok.AccessLevel;
@@ -135,6 +136,19 @@ public class Meetup {
 		return hostUserId.equals(userId);
 	}
 
+	/** 지점 모임의 지점과 반경. 역·동 모임이면 null이다. JSON 속성이 되지 않도록 getter 이름을 피했다. */
+	public MeetupPoint point() {
+		return pointLat == null || pointLng == null || radiusM == null ? null
+				: new MeetupPoint(pointLat, pointLng, radiusM);
+	}
+
+	/** 만든 모임을 지점 모임으로 둔다. 역·동 모임이면 null을 준다. */
+	public void placeAt(MeetupPoint point) {
+		this.pointLat = point == null ? null : point.lat();
+		this.pointLng = point == null ? null : point.lng();
+		this.radiusM = point == null ? null : point.radiusM();
+	}
+
 	/** 대기·결과에서는 모든 항목을, 투표 중·정함에서는 날짜·시간만 고친다(AC-22, D-19). */
 	public boolean infoEditable() {
 		return phase == MeetupPhase.WAITING || phase == MeetupPhase.RESULT;
@@ -146,15 +160,27 @@ public class Meetup {
 	 */
 	public void edit(AreaKind areaKind, String areaName, MeetupCategory category, LocalDate meetDate,
 			LocalTime meetTime, Integer headcount, String description, Instant expiresAt, Instant now) {
+		edit(areaKind, areaName, null, category, meetDate, meetTime, headcount, description, expiresAt, now);
+	}
+
+	/**
+	 * 지점까지 함께 바꾼다.
+	 *
+	 * @param point 지점 모임의 지점과 반경. 역·동 모임이면 null이다.
+	 */
+	public void edit(AreaKind areaKind, String areaName, MeetupPoint point, MeetupCategory category,
+			LocalDate meetDate, LocalTime meetTime, Integer headcount, String description, Instant expiresAt,
+			Instant now) {
 		if (!Objects.equals(description, this.description)) {
 			this.parsedConditions = null;
 		}
 		boolean changed = areaKind != this.areaKind || !Objects.equals(areaName, this.areaName)
-				|| category != this.category || !Objects.equals(meetDate, this.meetDate)
-				|| !Objects.equals(meetTime, this.meetTime) || !Objects.equals(headcount, this.headcount)
-				|| !Objects.equals(description, this.description);
+				|| !Objects.equals(point, point()) || category != this.category
+				|| !Objects.equals(meetDate, this.meetDate) || !Objects.equals(meetTime, this.meetTime)
+				|| !Objects.equals(headcount, this.headcount) || !Objects.equals(description, this.description);
 		this.areaKind = areaKind;
 		this.areaName = areaName;
+		placeAt(point);
 		this.category = category;
 		this.meetDate = meetDate;
 		this.meetTime = meetTime;

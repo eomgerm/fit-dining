@@ -48,7 +48,7 @@ class StubMeetupRecommender implements MeetupRecommender {
 		Applied applied = applied(input.members());
 		boolean scorable = input.description() != null || !applied.blank();
 		List<Place> found = places.stream()
-				.filter(place -> MockPlaceAreas.contains(area, place))
+				.filter(place -> MockPlaceAreas.contains(area, input.point(), place))
 				.filter(place -> sells(input.category(), place))
 				.map(place -> place(place, input.members(), scorable))
 				.sorted(Comparator.comparing(Place::score, Comparator.nullsLast(Comparator.reverseOrder())))

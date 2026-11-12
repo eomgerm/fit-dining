@@ -2,6 +2,7 @@ package kr.co.fitdining.api.meetup.domain;
 
 import java.time.Duration;
 import java.time.ZoneId;
+import java.util.Set;
 
 /**
  * 모임 기능의 기준값을 한곳에 모은다. 모두 시작값이고 환경 변수로 빼지 않는다(spec Constraints, PRD OQ-29).
@@ -24,6 +25,13 @@ public final class MeetupLimits {
 
 	public static final int AREA_QUERY_MAX = 20;
 	public static final int AREA_RESULTS_MAX = 10;
+
+	/** 모임 지점의 반경(m). DB 제약(V26)과 같다(AC-58). */
+	public static final Set<Integer> RADII = Set.of(500, 1000, 2000, 5000);
+	/** 모임 지점의 위치 이름 글자 수(D-34) */
+	public static final int POINT_NAME_MAX = 20;
+	/** 반경 안 장소에 가장 많은 동 이름 뒤에 붙여 위치 이름을 만든다(AC-58). */
+	public static final String NEAR_SUFFIX = " 근처";
 
 	/** 메뉴 하나 가격 상한(원)의 범위(AC-6). 단위는 화면의 입력 단위일 뿐 서버는 보지 않고, DB는 0보다 큰지만 본다(D-5). */
 	public static final int PRICE_CAP_MIN = 5_000;

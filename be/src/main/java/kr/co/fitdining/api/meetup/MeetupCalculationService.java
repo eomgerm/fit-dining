@@ -148,10 +148,8 @@ public class MeetupCalculationService {
 
 	private static MeetupRecommender.Input input(Meetup meetup, List<MeetupProfile> joined,
 			MeetupQuestions visible) {
-		MeetupRecommender.Point point = meetup.getPointLat() == null || meetup.getPointLng() == null
-				|| meetup.getRadiusM() == null ? null
-						: new MeetupRecommender.Point(meetup.getPointLat(), meetup.getPointLng(), meetup.getRadiusM());
-		return new MeetupRecommender.Input(meetup.getMeetupId(), meetup.getAreaKind(), meetup.getAreaName(), point,
+		return new MeetupRecommender.Input(meetup.getMeetupId(), meetup.getAreaKind(), meetup.getAreaName(),
+				meetup.point(),
 				meetup.getCategory(), meetup.getMeetDate(), meetup.getMeetTime(), meetup.getDescription(),
 				meetup.getParsedConditions(),
 				joined.stream().map(profile -> new MeetupRecommender.Member(profile.getProfileId(),

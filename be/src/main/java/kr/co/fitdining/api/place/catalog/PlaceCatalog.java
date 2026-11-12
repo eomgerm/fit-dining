@@ -44,6 +44,22 @@ public interface PlaceCatalog {
 	}
 
 	/**
+	 * 한 점에서 반경 안의 장소 수와 가장 많은 동. 모임 지점이 쓴다(meetup AC-58). 거리는 하버사인 공식이고 경계도 안이다.
+	 *
+	 * @param lat 위도
+	 * @param lng 경도
+	 * @param radiusM 반경(m)
+	 * @return 장소 수와 동. 동을 아는 장소가 없으면 동은 null이다. 수가 같으면 이름 순서로 앞의 동이다.
+	 */
+	default Around around(double lat, double lng, int radiusM) {
+		return new Around(0, null);
+	}
+
+	/** {@link #around}의 결과 */
+	record Around(int count, String topDong) {
+	}
+
+	/**
 	 * 카탈로그에 있는 모든 장소의 id. 장소 sitemap이 쓴다.
 	 *
 	 * @return 장소 id 목록({@code place_id} 오름차순)

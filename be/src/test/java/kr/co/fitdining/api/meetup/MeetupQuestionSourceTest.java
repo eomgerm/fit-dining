@@ -60,6 +60,11 @@ class MeetupQuestionSourceTest {
 		}
 
 		@Override
+		public PlacesAround around(kr.co.fitdining.api.meetup.domain.MeetupPoint point) {
+			return new PlacesAround(0, null);
+		}
+
+		@Override
 		public boolean pricesKnown() {
 			checks++;
 			return known;

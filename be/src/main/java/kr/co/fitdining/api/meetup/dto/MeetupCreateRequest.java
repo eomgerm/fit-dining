@@ -1,6 +1,7 @@
 package kr.co.fitdining.api.meetup.dto;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -30,12 +31,28 @@ public record MeetupCreateRequest(
 ) {
 
 	/**
-	 * 모임 지역. 역·동은 지역 찾기가 준 종류와 이름 그대로다. 지점({@code POINT})은 모임 지점 단계에서 받는다.
+	 * 모임 지역. 역·동은 지역 찾기가 준 종류와 이름 그대로다. 지점({@code POINT})은 지점과 반경이고, 이름은 위치 이름이다
+	 * (AC-58). 지점 이름을 비우면 반경 안 장소로 붙인 이름을 쓴다.
 	 *
 	 * @param kind 지역 종류
-	 * @param name 역·동 이름
+	 * @param name 역·동 이름, 또는 지점의 위치 이름
+	 * @param lat 지점의 위도. 역·동이면 없다.
+	 * @param lng 지점의 경도
+	 * @param radiusM 지점의 반경(m)
 	 */
-	public record Area(@NotNull AreaKind kind, String name) {
+	public record Area(@NotNull AreaKind kind, String name, Double lat, Double lng, Integer radiusM) {
+
+		public Area(AreaKind kind, String name) {
+			this(kind, name, null, null, null);
+		}
+
+		/** 지점이면 지점과 반경이 모두 있고, 역·동이면 하나도 없다. 값의 범위는 서비스가 본다. */
+		@AssertTrue
+		public boolean isWellShaped() {
+			boolean located = lat != null && lng != null && radiusM != null;
+			boolean unlocated = lat == null && lng == null && radiusM == null;
+			return kind == AreaKind.POINT ? located : unlocated;
+		}
 	}
 
 }

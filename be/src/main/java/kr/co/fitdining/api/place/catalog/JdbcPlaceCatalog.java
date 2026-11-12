@@ -133,6 +133,16 @@ public class JdbcPlaceCatalog implements PlaceCatalog {
 			SELECT DISTINCT station FROM places WHERE station IS NOT NULL ORDER BY station""";
 	private static final String DONGS_SQL = """
 			SELECT DISTINCT btrim(dong) AS dong FROM places WHERE btrim(dong) <> '' ORDER BY dong""";
+	/** 한 점에서 반경 안의 장소. 거리는 AI의 반경 거르기와 같은 하버사인 공식이다. 좌표는 바인딩한다. */
+	private static final String AROUND_SQL = """
+			WITH near AS (
+			  SELECT NULLIF(btrim(dong), '') AS dong FROM places
+			  WHERE 2 * 6371000 * asin(least(1.0, sqrt(
+			    power(sin(radians(lat - :lat) / 2), 2)
+			    + cos(radians(:lat)) * cos(radians(lat)) * power(sin(radians(lng - :lng) / 2), 2)))) <= :radius)
+			SELECT (SELECT count(*) FROM near) AS total,
+			       (SELECT dong FROM near WHERE dong IS NOT NULL GROUP BY dong ORDER BY count(*) DESC, dong LIMIT 1)
+			         AS top_dong""";
 
 	private final JdbcClient jdbc;
 	private final JsonMapper jsonMapper;
@@ -172,6 +182,12 @@ public class JdbcPlaceCatalog implements PlaceCatalog {
 					seats.getOrDefault(id, List.of()), broadcasts.getOrDefault(id, List.of())));
 		}
 		return found;
+	}
+
+	@Override
+	public Around around(double lat, double lng, int radiusM) {
+		return jdbc.sql(AROUND_SQL).param("lat", lat).param("lng", lng).param("radius", radiusM)
+				.query((rs, rowNum) -> new Around(rs.getInt("total"), rs.getString("top_dong"))).single();
 	}
 
 	@Override
