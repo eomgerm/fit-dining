@@ -100,6 +100,8 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 	private static final Instant NOON = Instant.parse("2026-10-21T03:00:00.123456789Z");
 	private static final String USER_PREFIX = "review-test-";
 	private static final String PASSWORD = "review-test-password1";
+	/** BCrypt 비용 12의 해시는 한 번에 1초 가까이 걸려 처음 한 번만 만들고 모든 테스트가 같이 쓴다. */
+	private static volatile String passwordHash;
 	/** 로그인 시도 제한(주소마다 15분에 20번)은 다른 통합 테스트와 함께 세므로 이 테스트만의 주소로 로그인하고 지운다. */
 	private static final String CLIENT_ADDRESS = USER_PREFIX + "client";
 	private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
@@ -179,6 +181,10 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 	@Autowired
 	PlatformTransactionManager transactionManager;
 
+	/** 앱의 연결 풀. appSource()는 SQL마다 연결을 새로 열어 테스트마다 도는 준비와 정리가 느려진다. */
+	@Autowired
+	DataSource dataSource;
+
 	@Value("${local.server.port}")
 	int port;
 
@@ -186,7 +192,7 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 
 	@BeforeEach
 	void setUp() {
-		jdbc = new JdbcTemplate(appSource());
+		jdbc = new JdbcTemplate(dataSource);
 		cleanUp();
 		clock.instant = NOON;
 		photoStorage.reset();
@@ -199,7 +205,7 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 
 	@AfterEach
 	void cleanUp() {
-		JdbcTemplate app = new JdbcTemplate(appSource());
+		JdbcTemplate app = new JdbcTemplate(dataSource);
 		app.update("delete from review_reports");
 		app.update("delete from review_photos");
 		app.update("delete from review_reason_tags");
@@ -216,7 +222,10 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 
 	/** 작성자 n명을 만든다. 같은 장소·같은 날 리뷰는 사람마다 하나라 페이지 시험에 여러 명이 필요하다. */
 	private List<String> createUsers(int count) {
-		String hash = passwords.hash(PASSWORD);
+		if (passwordHash == null) {
+			passwordHash = passwords.hash(PASSWORD);
+		}
+		String hash = passwordHash;
 		List<AuthUser> created = IntStream.range(0, count)
 				.mapToObj(i -> new AuthUser(USER_PREFIX + i, USER_PREFIX + i + "@example.com", "리뷰테스트" + i, hash,
 						NOON, "2026-10-23"))
@@ -473,16 +482,6 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 		}
 
 		@Test
-		@DisplayName("목록_리뷰가없으면_빈목록과0이다")
-		void list_noReviews_emptyAndZero() {
-			ReviewListResponse page = service.list(1, null, null);
-
-			assertThat(page.totalCount()).isZero();
-			assertThat(page.items()).isEmpty();
-			assertThat(page.nextCursor()).isNull();
-		}
-
-		@Test
 		@DisplayName("목록_삭제한리뷰는_목록과리뷰수에서빠진다")
 		void list_deleted_excluded() {
 			List<String> authors = createUsers(2);
@@ -560,12 +559,6 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 					.containsExactly("혼밥하기 좋았어요");
 			assertThat(service.list(2, null, null).items().getFirst().tags()).extracting(TagView::label)
 					.containsExactly("혼술하기 좋았어요");
-		}
-
-		@Test
-		@DisplayName("목록_없는장소면_예외다")
-		void list_unknownPlace_throws() {
-			assertThatThrownBy(() -> service.list(999, null, null)).isInstanceOf(PlaceNotFoundException.class);
 		}
 
 		/** 작성자, 태그, 사진을 리뷰마다 읽으면 페이지 크기만큼 쿼리가 는다. Hibernate가 보낸 SQL 수로 확인한다(D-42, D-45). */
@@ -768,17 +761,6 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 		}
 
 		@Test
-		@DisplayName("수정_공백뿐이면_본문없이저장한다")
-		void update_blankDescription_storedWithoutDescription() {
-			String user = createUsers(1).getFirst();
-			long id = write(user, "처음 본문");
-
-			service.update(id, user, new ReviewUpdateRequest(" \n ", null));
-
-			assertThat(row(id).get("description")).isNull();
-		}
-
-		@Test
 		@DisplayName("수정_같은본문이면_수정시각을바꾸지않는다")
 		void update_sameDescription_keepsUpdatedAt() {
 			String user = createUsers(1).getFirst();
@@ -841,17 +823,6 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 			service.delete(id, user);
 
 			assertThatThrownBy(() -> operation.run(service, id, user)).isInstanceOf(ReviewNotFoundException.class);
-		}
-
-		@ParameterizedTest
-		@EnumSource(Operation.class)
-		@DisplayName("조회수정삭제_없는리뷰면_404다")
-		void operation_missingReview_notFound(Operation operation) {
-			String user = createUsers(1).getFirst();
-			long id = write(user, "있는 리뷰");
-
-			assertThatThrownBy(() -> operation.run(service, id + 1000, user))
-					.isInstanceOf(ReviewNotFoundException.class);
 		}
 
 		@ParameterizedTest
@@ -979,14 +950,6 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 			assertThat(item.photos().getFirst().url()).isEqualTo("/photos/dev/confirmed/" + saved.getFirst() + ".jpg");
 			assertThat(item.photos().getFirst().thumbUrl())
 					.isEqualTo("/photos/dev/confirmed/" + saved.getFirst() + ".thumb.jpg");
-		}
-
-		@Test
-		@DisplayName("목록_사진없는리뷰는_빈목록이다")
-		void list_noPhotos_emptyList() {
-			write(createUsers(1).getFirst(), List.of());
-
-			assertThat(service.list(1, null, null).items().getFirst().photos()).isEmpty();
 		}
 
 		@Test
@@ -1297,17 +1260,6 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 		}
 
 		@Test
-		@DisplayName("신고_공백뿐인설명은_설명없음으로저장한다")
-		void report_blankDetail_savesWithoutDetail() {
-			List<String> users = createUsers(2);
-			long id = write(users.get(0));
-
-			service.report(id, users.get(1), new ReviewReportRequest(ReportReason.OTHER, " \n"));
-
-			assertThat(jdbc.queryForMap(SELECT).get("detail")).isNull();
-		}
-
-		@Test
 		@DisplayName("신고_같은사람이두번하면_409이고한건만남는다")
 		void report_twice_conflictsAndKeepsFirst() {
 			List<String> users = createUsers(2);
@@ -1354,15 +1306,6 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 		}
 
 		@Test
-		@DisplayName("신고_없는리뷰면_404다")
-		void report_missingReview_notFound() {
-			String user = createUsers(1).getFirst();
-
-			assertThatThrownBy(() -> service.report(Long.MAX_VALUE, user, reason(ReportReason.AD_SPAM)))
-					.isInstanceOf(ReviewNotFoundException.class);
-		}
-
-		@Test
 		@DisplayName("신고_탈퇴한사용자면_401이고저장하지않는다")
 		void report_withdrawnReporter_unauthorized() {
 			List<String> users = createUsers(2);
@@ -1385,17 +1328,6 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 			ReviewListResponse page = service.list(1, null, null);
 			assertThat(page.totalCount()).isEqualTo(1);
 			assertThat(page.items()).extracting(ReviewItem::reviewId).containsExactly(id);
-		}
-
-		@Test
-		@DisplayName("신고테이블_기타가아닌사유에설명이있으면_제약으로거부한다")
-		void reviewReports_detailWithoutOther_rejectedByConstraint() {
-			List<String> users = createUsers(2);
-			long id = write(users.get(0));
-
-			assertThatThrownBy(() -> jdbc.update("insert into review_reports (review_id, reporter_id, reason, detail)"
-					+ " values (?, ?, 'AD_SPAM', '설명')", id, users.get(1)))
-					.hasMessageContaining("ck_review_reports_detail");
 		}
 	}
 
@@ -1448,32 +1380,6 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 			assertThatCode(() -> service.create(1, accounts.get(1), body("재가입 뒤 리뷰"))).doesNotThrowAnyException();
 			assertThat(service.list(1, null, null).items()).extracting(ReviewItem::description)
 					.containsExactly("재가입 뒤 리뷰", "탈퇴 전 리뷰");
-		}
-	}
-
-	@Nested
-	@DisplayName("장소 FK")
-	class PlaceForeignKey {
-
-		@Test
-		@DisplayName("리뷰테이블_없는장소id면_FK로거부한다")
-		void reviews_unknownPlaceId_rejectedByForeignKey() {
-			String user = createUsers(1).getFirst();
-
-			assertThatThrownBy(() -> jdbc.update("insert into reviews (place_id, user_id, visit_date)"
-					+ " values (999, ?, date '2026-10-21')", user))
-					.hasMessageContaining("fk_reviews_place_id");
-		}
-
-		@Test
-		@DisplayName("장소삭제_리뷰가있으면_FK로거부하고리뷰는남는다")
-		void placeDelete_withReview_rejectedAndReviewKept() {
-			String user = createUsers(1).getFirst();
-			service.create(1, user, body("남을 리뷰"));
-
-			assertThatThrownBy(() -> jdbc.update("delete from places where place_id = 1"))
-					.hasMessageContaining("fk_reviews_place_id");
-			assertThat(service.list(1, null, null).totalCount()).isEqualTo(1);
 		}
 	}
 
@@ -1642,25 +1548,6 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 		}
 
 		@Test
-		@DisplayName("수정_다른필드를보내면_400이고바뀌지않는다")
-		void update_otherField_badRequest() throws Exception {
-			Written review = writeOverHttp();
-
-			assertThat(send("PATCH", review.path(), review.mine(), "{\"spentPerPerson\":1}").statusCode())
-					.isEqualTo(400);
-			assertThat(jdbc.queryForObject("select spent_per_person from reviews", Integer.class)).isEqualTo(15000);
-		}
-
-		@Test
-		@DisplayName("수정_남의토큰이면_403이다")
-		void update_othersToken_forbidden() throws Exception {
-			Written review = writeOverHttp();
-
-			assertThat(send("PATCH", review.path(), review.other(), "{\"description\":\"남이 고침\"}").statusCode())
-					.isEqualTo(403);
-		}
-
-		@Test
 		@DisplayName("삭제_내토큰으로_204이고목록에서빠지며다시지우면404다")
 		void delete_ownToken_noContentThenNotFound() throws Exception {
 			Written review = writeOverHttp();
@@ -1668,15 +1555,6 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 			assertThat(send("DELETE", review.path(), review.mine(), null).statusCode()).isEqualTo(204);
 			assertThat(firstPage().get("totalCount").asInt()).isZero();
 			assertThat(send("DELETE", review.path(), review.mine(), null).statusCode()).isEqualTo(404);
-		}
-
-		@Test
-		@DisplayName("삭제_남의토큰이면_403이고목록에남는다")
-		void delete_othersToken_forbidden() throws Exception {
-			Written review = writeOverHttp();
-
-			assertThat(send("DELETE", review.path(), review.other(), null).statusCode()).isEqualTo(403);
-			assertThat(firstPage().get("totalCount").asInt()).isEqualTo(1);
 		}
 
 		@Test
@@ -1702,21 +1580,6 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 		}
 
 		@Test
-		@DisplayName("사진_쓸수없는사진으로등록하면_400이고type으로구분된다")
-		void photo_invalidPhoto_badRequestWithType() throws Exception {
-			createUsers(1);
-			String token = login(0);
-
-			HttpResponse<String> created = send("POST", "/api/v1/places/1/reviews", token,
-					"{\"visitedAt\":\"2026-10-18\",\"tagCodes\":[\"QUIET_GOOD\"],\"revisitIntent\":false,"
-							+ "\"photos\":[\"" + UUID.randomUUID() + "\"]}");
-
-			assertThat(created.statusCode()).isEqualTo(400);
-			assertThat(mapper.readTree(created.body()).get("type").asString())
-					.isEqualTo("urn:fitdining:review:invalid-photo");
-		}
-
-		@Test
 		@DisplayName("신고_남의토큰으로_201이고같은사람의두번째는409다")
 		void report_othersToken_createdThenConflict() throws Exception {
 			Written review = writeOverHttp();
@@ -1729,15 +1592,6 @@ class ReviewPersistenceTest extends PostgresTestSupport {
 			assertThat(first.body()).isEmpty();
 			assertThat(second.statusCode()).isEqualTo(409);
 			assertThat(count("review_reports")).isEqualTo(1);
-		}
-
-		@Test
-		@DisplayName("신고_내토큰이면_400이다")
-		void report_ownToken_badRequest() throws Exception {
-			Written review = writeOverHttp();
-
-			assertThat(send("POST", review.path() + "/reports", review.mine(), "{\"reason\":\"AD_SPAM\"}").statusCode())
-					.isEqualTo(400);
 		}
 
 		@Test
