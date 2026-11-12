@@ -99,7 +99,9 @@ class SocialApplicationTests extends PostgresTestSupport {
         String subject = UUID.randomUUID().toString();
         String id = accounts.signup("google", subject, null, "old@example.com", null, false).identity().userId();
         jdbc.update("update auth_users set contact_email=null, contact_email_verified_at=null where id=?", id);
-        var changedAt = java.time.Instant.parse("2026-11-12T02:00:00Z");
+        var changedAt = jdbc.queryForObject("select created_at from auth_users where id=?",
+                java.sql.Timestamp.class, id).toInstant().plusSeconds(60)
+                .truncatedTo(java.time.temporal.ChronoUnit.MICROS);
         try (var connection = appSource().getConnection();
              var executor = Executors.newVirtualThreadPerTaskExecutor()) {
             connection.setAutoCommit(false);
