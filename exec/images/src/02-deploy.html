@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>그림 2. 배포 흐름</title>
+<style>
+  html, body { margin: 0; background: #fff; }
+  body { font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; color: #0f172a; }
+  #frame { width: 1280px; padding: 28px 24px 24px; box-sizing: border-box; background: #fff; }
+  .head { display: flex; align-items: baseline; gap: 14px; margin: 0 0 6px 8px; }
+  .head b { font-size: 26px; }
+  .head span { font-size: 17px; color: #475569; }
+  svg { display: block; width: 100%; height: auto; }
+  svg text { font-family: inherit; }
+  .t  { font-size: 16px; font-weight: 700; fill: #0f172a; }
+  .s  { font-size: 13px; fill: #475569; }
+  .h  { font-size: 14px; font-weight: 700; fill: #64748b; letter-spacing: 1px; }
+  .lab { font-size: 13px; fill: #1e293b; paint-order: stroke; stroke: #fff; stroke-width: 5px; stroke-linejoin: round; }
+  .box   { fill: #fff; stroke: #94a3b8; stroke-width: 1.5; }
+  .blue  { fill: #eff6ff; stroke: #2563eb; stroke-width: 1.6; }
+  .green { fill: #ecfdf5; stroke: #059669; stroke-width: 1.6; }
+  .amber { fill: #fffbeb; stroke: #d97706; stroke-width: 1.8; }
+  .gray  { fill: #f1f5f9; stroke: #94a3b8; stroke-width: 1.4; }
+  .dash  { fill: #f0fdf4; stroke: #059669; stroke-width: 1.6; stroke-dasharray: 6 4; }
+  .dashg { fill: #f1f5f9; stroke: #94a3b8; stroke-width: 1.4; stroke-dasharray: 6 4; }
+  .red   { fill: #fef2f2; stroke: #dc2626; stroke-width: 1.4; }
+  .badge-g { fill: #059669; } .badge-a { fill: #d97706; } .badge-n { fill: #0f172a; }
+  .bt { font-size: 12.5px; font-weight: 700; fill: #fff; }
+  .arr { fill: none; stroke: #475569; stroke-width: 1.8; }
+  .sec { fill: #f8fafc; stroke: #e2e8f0; stroke-width: 1.2; }
+</style>
+</head>
+<body>
+<div id="frame">
+  <div class="head"><b>배포 흐름</b><span>develop은 자동으로 dev, master는 사람이 눌러야 prod. prod는 반대 색을 띄운 뒤 전환한다</span></div>
+  <svg viewBox="0 0 1232 700" role="img" aria-label="develop 병합은 검사, 빌드, dev 배포, 점검 순서로 자동으로 흐른다. master 병합은 같은 단계를 거치되 prod 배포는 사람이 누른다. prod 배포는 사전 점검, 마이그레이션, 반대 색 기동, 엣지 전환, 이전 색 정지 순서다.">
+    <defs>
+      <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#475569"/></marker>
+    </defs>
+
+    <!-- 단계 머리글 -->
+    <text class="h" x="99" y="26" text-anchor="middle">병합</text>
+    <text class="h" x="339" y="26" text-anchor="middle">① verify</text>
+    <text class="h" x="609" y="26" text-anchor="middle">② build</text>
+    <text class="h" x="879" y="26" text-anchor="middle">③ deploy</text>
+    <text class="h" x="1126" y="26" text-anchor="middle">④ smoke</text>
+
+    <!-- dev 줄 -->
+    <rect class="sec" x="0" y="40" width="1232" height="124" rx="12"/>
+    <rect class="box" x="14" y="62" width="170" height="80" rx="10"/>
+    <text class="t" x="99" y="94" text-anchor="middle">develop</text>
+    <text class="s" x="99" y="116" text-anchor="middle">MR 병합(fast-forward)</text>
+
+    <rect class="box" x="224" y="62" width="230" height="80" rx="10"/>
+    <text class="t" x="339" y="88" text-anchor="middle">검사</text>
+    <text class="s" x="339" y="108" text-anchor="middle">린트 · 시크릿 · 마이그레이션</text>
+    <text class="s" x="339" y="127" text-anchor="middle">BE 시험 · FE 검사 (서버 B)</text>
+
+    <rect class="box" x="494" y="62" width="230" height="80" rx="10"/>
+    <text class="t" x="609" y="88" text-anchor="middle">빌드 · 이미지</text>
+    <text class="s" x="609" y="108" text-anchor="middle">jar · FE 번들 → 이미지</text>
+    <text class="s" x="609" y="127" text-anchor="middle">be / fe / ai :SHA (서버 A)</text>
+
+    <rect class="green" x="764" y="62" width="230" height="80" rx="10"/>
+    <text class="t" x="879" y="88" text-anchor="middle">deploy:dev</text>
+    <text class="s" x="879" y="108" text-anchor="middle">dev는 색이 없어 교체</text>
+    <rect class="badge-g" x="843" y="116" width="72" height="22" rx="11"/>
+    <text class="bt" x="879" y="132" text-anchor="middle">자동</text>
+
+    <rect class="box" x="1034" y="62" width="184" height="80" rx="10"/>
+    <text class="t" x="1126" y="94" text-anchor="middle">smoke:dev</text>
+    <text class="s" x="1126" y="116" text-anchor="middle">배포한 서비스 점검</text>
+
+    <path class="arr" d="M184,102 H222" marker-end="url(#a)"/>
+    <path class="arr" d="M454,102 H492" marker-end="url(#a)"/>
+    <path class="arr" d="M724,102 H762" marker-end="url(#a)"/>
+    <path class="arr" d="M994,102 H1032" marker-end="url(#a)"/>
+
+    <!-- prod 줄 -->
+    <rect class="sec" x="0" y="176" width="1232" height="124" rx="12"/>
+    <rect class="box" x="14" y="198" width="170" height="80" rx="10"/>
+    <text class="t" x="99" y="230" text-anchor="middle">master</text>
+    <text class="s" x="99" y="252" text-anchor="middle">develop → master 병합</text>
+
+    <rect class="box" x="224" y="198" width="230" height="80" rx="10"/>
+    <text class="t" x="339" y="230" text-anchor="middle">검사</text>
+    <text class="s" x="339" y="252" text-anchor="middle">위와 같다</text>
+
+    <rect class="box" x="494" y="198" width="230" height="80" rx="10"/>
+    <text class="t" x="609" y="230" text-anchor="middle">빌드 · 이미지</text>
+    <text class="s" x="609" y="252" text-anchor="middle">위와 같다</text>
+
+    <rect class="amber" x="764" y="198" width="230" height="80" rx="10"/>
+    <text class="t" x="879" y="224" text-anchor="middle">deploy:prod</text>
+    <text class="s" x="879" y="244" text-anchor="middle">master 최신 파이프라인에서</text>
+    <rect class="badge-a" x="821" y="252" width="116" height="22" rx="11"/>
+    <text class="bt" x="879" y="268" text-anchor="middle">사람이 누른다</text>
+
+    <rect class="box" x="1034" y="198" width="184" height="80" rx="10"/>
+    <text class="t" x="1126" y="230" text-anchor="middle">smoke:prod</text>
+    <text class="s" x="1126" y="252" text-anchor="middle">배포한 서비스 점검</text>
+
+    <path class="arr" d="M184,238 H222" marker-end="url(#a)"/>
+    <path class="arr" d="M454,238 H492" marker-end="url(#a)"/>
+    <path class="arr" d="M724,238 H762" marker-end="url(#a)"/>
+    <path class="arr" d="M994,238 H1032" marker-end="url(#a)"/>
+
+    <!-- prod 배포 안에서 -->
+    <text class="t" x="8" y="338">deploy:prod 한 번에 일어나는 일</text>
+    <text class="s" x="268" y="338">infra/deploy/deploy.sh</text>
+
+    <!-- 단계 카드 -->
+    <g>
+      <rect class="box" x="14" y="354" width="220" height="112" rx="10"/>
+      <circle cx="40" cy="380" r="13" fill="#0f172a"/><text class="bt" x="40" y="385" text-anchor="middle">1</text>
+      <text class="t" x="62" y="386">사전 점검</text>
+      <text class="s" x="30" y="414">env 파일 · 이미지 · 공유 망</text>
+      <text class="s" x="30" y="434">현재보다 옛 커밋은 거부</text>
+      <text class="s" x="30" y="454">(다운그레이드 가드)</text>
+    </g>
+    <g>
+      <rect class="box" x="263" y="354" width="220" height="112" rx="10"/>
+      <circle cx="289" cy="380" r="13" fill="#0f172a"/><text class="bt" x="289" y="385" text-anchor="middle">2</text>
+      <text class="t" x="311" y="386">마이그레이션</text>
+      <text class="s" x="279" y="414">변경이 있을 때만</text>
+      <text class="s" x="279" y="434">prod는 덤프 먼저, 그 뒤</text>
+      <text class="s" x="279" y="454">fit_migrator 컨테이너가 실행</text>
+    </g>
+    <g>
+      <rect class="box" x="512" y="354" width="220" height="112" rx="10"/>
+      <circle cx="538" cy="380" r="13" fill="#0f172a"/><text class="bt" x="538" y="385" text-anchor="middle">3</text>
+      <text class="t" x="560" y="386">반대 색 기동</text>
+      <text class="s" x="528" y="414">서비스 중인 색의 반대 색을</text>
+      <text class="s" x="528" y="434">띄우고 준비 확인</text>
+      <text class="s" x="528" y="454">BE → FE 순서</text>
+    </g>
+    <g>
+      <rect class="box" x="761" y="354" width="220" height="112" rx="10"/>
+      <circle cx="787" cy="380" r="13" fill="#0f172a"/><text class="bt" x="787" y="385" text-anchor="middle">4</text>
+      <text class="t" x="809" y="386">엣지 전환</text>
+      <text class="s" x="777" y="414">Caddy가 트래픽을</text>
+      <text class="s" x="777" y="434">새 색으로 바꾼다</text>
+      <text class="s" x="777" y="454">전환 뒤 한 번 더 확인</text>
+    </g>
+    <g>
+      <rect class="box" x="1010" y="354" width="208" height="112" rx="10"/>
+      <circle cx="1036" cy="380" r="13" fill="#0f172a"/><text class="bt" x="1036" y="385" text-anchor="middle">5</text>
+      <text class="t" x="1058" y="386">이전 색 정지</text>
+      <text class="s" x="1026" y="414">30초 뒤 정지</text>
+      <text class="s" x="1026" y="434">컨테이너는 남겨 두어</text>
+      <text class="s" x="1026" y="454">롤백이 빠르다</text>
+    </g>
+    <path class="arr" d="M234,410 H261" marker-end="url(#a)"/>
+    <path class="arr" d="M483,410 H510" marker-end="url(#a)"/>
+    <path class="arr" d="M732,410 H759" marker-end="url(#a)"/>
+    <path class="arr" d="M981,410 H1008" marker-end="url(#a)"/>
+
+    <!-- 색 상태 -->
+    <text class="h" x="14" y="496">그때의 색 상태</text>
+    <g>
+      <rect class="blue"  x="14" y="508" width="104" height="50" rx="8"/>
+      <text class="t" x="66" y="530" text-anchor="middle">blue</text><text class="s" x="66" y="549" text-anchor="middle">서비스 중</text>
+      <rect class="dashg" x="130" y="508" width="104" height="50" rx="8"/>
+      <text class="t" x="182" y="530" text-anchor="middle">green</text><text class="s" x="182" y="549" text-anchor="middle">꺼져 있음</text>
+    </g>
+    <g>
+      <rect class="blue"  x="263" y="508" width="104" height="50" rx="8"/>
+      <text class="t" x="315" y="530" text-anchor="middle">blue</text><text class="s" x="315" y="549" text-anchor="middle">서비스 중</text>
+      <rect class="dashg" x="379" y="508" width="104" height="50" rx="8"/>
+      <text class="t" x="431" y="530" text-anchor="middle">green</text><text class="s" x="431" y="549" text-anchor="middle">꺼져 있음</text>
+    </g>
+    <g>
+      <rect class="blue"  x="512" y="508" width="104" height="50" rx="8"/>
+      <text class="t" x="564" y="530" text-anchor="middle">blue</text><text class="s" x="564" y="549" text-anchor="middle">서비스 중</text>
+      <rect class="dash"  x="628" y="508" width="104" height="50" rx="8"/>
+      <text class="t" x="680" y="530" text-anchor="middle">green</text><text class="s" x="680" y="549" text-anchor="middle">기동 · 점검</text>
+    </g>
+    <g>
+      <rect class="gray"  x="761" y="508" width="104" height="50" rx="8"/>
+      <text class="t" x="813" y="530" text-anchor="middle">blue</text><text class="s" x="813" y="549" text-anchor="middle">대기</text>
+      <rect class="green" x="877" y="508" width="104" height="50" rx="8"/>
+      <text class="t" x="929" y="530" text-anchor="middle">green</text><text class="s" x="929" y="549" text-anchor="middle">서비스 중</text>
+    </g>
+    <g>
+      <rect class="dashg" x="1010" y="508" width="100" height="50" rx="8"/>
+      <text class="t" x="1060" y="530" text-anchor="middle">blue</text><text class="s" x="1060" y="549" text-anchor="middle">정지</text>
+      <rect class="green"  x="1118" y="508" width="100" height="50" rx="8"/>
+      <text class="t" x="1168" y="530" text-anchor="middle">green</text><text class="s" x="1168" y="549" text-anchor="middle">서비스 중</text>
+    </g>
+
+    <!-- 실패하면 -->
+    <text class="t" x="8" y="602">실패하면</text>
+    <rect class="red" x="14" y="618" width="288" height="62" rx="10"/>
+    <text class="t" x="28" y="642">1 · 2단계</text>
+    <text class="s" x="28" y="663">서비스를 건드리지 않고 멈춘다</text>
+    <rect class="red" x="318" y="618" width="288" height="62" rx="10"/>
+    <text class="t" x="332" y="642">3단계(새 색이 안 뜸)</text>
+    <text class="s" x="332" y="663">새 색을 지우고 트래픽은 그대로</text>
+    <rect class="red" x="622" y="618" width="288" height="62" rx="10"/>
+    <text class="t" x="636" y="642">4단계(전환 뒤 확인 실패)</text>
+    <text class="s" x="636" y="663">엣지를 이전 색으로 되돌린다</text>
+    <rect class="red" x="926" y="618" width="292" height="62" rx="10"/>
+    <text class="t" x="940" y="642">DB 마이그레이션</text>
+    <text class="s" x="940" y="663">되돌리지 않고 앞으로 고친다</text>
+  </svg>
+</div>
+</body>
+</html>
