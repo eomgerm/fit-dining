@@ -29,7 +29,7 @@ export function ProfilePicker({
     <Screen>
       <TopBar title="모임 장소 정하기" />
       <div className="flex flex-1 flex-col gap-6 px-5 pt-4">
-        <MeetupInfoCard info={snapshot.info} showHost showExpiry={false} />
+        <MeetupInfoCard info={snapshot.info} showHost />
         <section className="flex flex-col gap-4" aria-labelledby="pick-title">
           <div className="flex flex-col gap-1">
             <h2 id="pick-title" className="text-headline-md">

@@ -54,7 +54,6 @@ function snapshot(overrides: Partial<MeetupSnapshot> = {}): MeetupSnapshot {
       area: { kind: "STATION", name: "선릉" },
       category: "RESTAURANT",
       hostNickname: "모임장민재닉네임긴것",
-      expiresOn: "2026-11-21",
     },
     questions: { mood: true, food: true, spicy: true, price: false },
     me: { role: "VIEWER", signedIn: false },

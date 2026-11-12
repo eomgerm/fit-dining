@@ -8,6 +8,7 @@ import {
   parseReviewId,
   reportRequest,
   reviewEditHref,
+  parseVisitedOn,
   reviewWriteHref,
 } from "./review";
 
@@ -58,6 +59,21 @@ describe("parsePlaceId", () => {
 describe("reviewWriteHref", () => {
   it("장소 상세 주소 아래에 둔다", () => {
     expect(reviewWriteHref(7)).toBe("/places/7/review");
+  });
+
+  it("모임에서 열면 모임 날짜를 방문일로 넘긴다", () => {
+    expect(reviewWriteHref(7, "2026-11-14")).toBe(
+      "/places/7/review?visited=2026-11-14",
+    );
+  });
+});
+
+describe("parseVisitedOn", () => {
+  it("날짜 모양만 받는다", () => {
+    expect(parseVisitedOn("2026-11-14")).toBe("2026-11-14");
+    expect(parseVisitedOn("2026-1-4")).toBeUndefined();
+    expect(parseVisitedOn(["2026-11-14"])).toBeUndefined();
+    expect(parseVisitedOn(undefined)).toBeUndefined();
   });
 });
 

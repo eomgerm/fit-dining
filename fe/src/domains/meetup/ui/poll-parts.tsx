@@ -194,7 +194,8 @@ export function PollOpenSheet({
   );
 }
 
-// 결과 화면 맨 위의 정한 곳(AC-45, 상태 모음 3). 모임 날짜 전에는 만날 날짜·시간과 장소를 보이고 방문 평가는 없다
+// 결과 화면 맨 위의 정한 곳(AC-45, 상태 모음 3). 모임 날짜 전에는 만날 날짜·시간과 장소를 보이고 방문 평가는 없다.
+// 모임 뒤에는 회원에게 방문 평가를, 비회원에게 로그인 안내를 보인다(AC-64). 날짜 없는 모임에는 모임 뒤가 없다
 export function DecidedCard({
   decision,
   poll,
@@ -206,6 +207,10 @@ export function DecidedCard({
   canCancel,
   onChange,
   onCancel,
+  afterMeetup = false,
+  signedIn = false,
+  onReview,
+  onSignIn,
 }: {
   decision: MeetupDecision;
   poll?: MeetupPoll;
@@ -217,6 +222,10 @@ export function DecidedCard({
   canCancel: boolean;
   onChange: () => void;
   onCancel: () => void;
+  afterMeetup?: boolean;
+  signedIn?: boolean;
+  onReview?: () => void;
+  onSignIn?: () => void;
 }) {
   const name = item?.place.name ?? "정한 곳";
   const meta = item
@@ -259,9 +268,34 @@ export function DecidedCard({
             {formatWhen(info.date, info.time)}
           </p>
         )}
-        <p className="text-caption-md text-ink-muted">
-          {name}에서 만나요. 모임 당일부터 방문 평가를 남길 수 있어요.
-        </p>
+        {!afterMeetup ? (
+          <p className="text-caption-md text-ink-muted">
+            {info.date
+              ? `${name}에서 만나요. 모임 당일부터 방문 평가를 남길 수 있어요.`
+              : `${name}에서 만나요.`}
+          </p>
+        ) : signedIn && onReview ? (
+          <div className="flex items-center justify-between gap-3 pt-1">
+            <p className="text-caption-md text-ink-muted">
+              다녀왔다면 이곳을 평가해 주세요.
+            </p>
+            <Button size="sm" onClick={onReview}>
+              방문 평가 남기기
+            </Button>
+          </div>
+        ) : (
+          !signedIn &&
+          onSignIn && (
+            <div className="flex items-center justify-between gap-3 pt-1">
+              <p className="text-caption-md text-ink-muted">
+                로그인하면 방문 평가를 남길 수 있어요.
+              </p>
+              <Button variant="outline" size="sm" onClick={onSignIn}>
+                로그인
+              </Button>
+            </div>
+          )
+        )}
       </div>
       {(canChange || canCancel) && (
         <>

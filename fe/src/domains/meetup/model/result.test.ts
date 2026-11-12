@@ -16,7 +16,6 @@ const INFO: MeetupInfo = {
   category: "RESTAURANT",
   date: "2026-11-14",
   time: "19:00",
-  expiresOn: "2026-11-21",
 };
 
 function profile(id: number, name: string): MeetupProfile {

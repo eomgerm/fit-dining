@@ -5,7 +5,13 @@ import { ReviewForm } from "@/domains/review/ui/review-form";
 
 import { useLeave, useSignedIn } from "../review-screen";
 
-export function ReviewWriteScreen({ placeId }: { placeId: number }) {
+export function ReviewWriteScreen({
+  placeId,
+  visitedOn,
+}: {
+  placeId: number;
+  visitedOn?: string;
+}) {
   const { signedIn, goToLogin } = useSignedIn();
   const leave = useLeave();
 
@@ -14,6 +20,7 @@ export function ReviewWriteScreen({ placeId }: { placeId: number }) {
   return (
     <ReviewForm
       placeId={placeId}
+      visitedOn={visitedOn}
       authenticated={authenticated}
       onSuccess={() => leave(placeId)}
       onClose={() => leave(placeId)}

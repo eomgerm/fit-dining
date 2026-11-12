@@ -48,6 +48,7 @@ import {
 import { VoteView } from "@/domains/meetup/ui/vote-view";
 import { WaitingView } from "@/domains/meetup/ui/waiting-view";
 import { FitScore } from "@/domains/place/ui/fit-score";
+import { reviewWriteHref } from "@/domains/review/model/review";
 import { PlacePhoto, RankBadge } from "@/domains/place/ui/place-parts";
 import { isApiError } from "@/shared/api/api-error";
 import { copyLink, shareLink } from "@/shared/lib/share";
@@ -281,6 +282,10 @@ function MeetupBody({
           )
         }
         onShowVote={() => setShowResult(false)}
+        onReview={(placeId) =>
+          router.push(reviewWriteHref(placeId, snapshot.info.date))
+        }
+        onSignIn={() => signIn(meetupHref(code))}
       />
     );
   // 투표 중에는 투표 화면이 먼저다. 결과 화면은 "추천 결과 보기"로 연다

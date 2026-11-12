@@ -39,7 +39,6 @@ function snapshot(overrides: Partial<MeetupSnapshot> = {}): MeetupSnapshot {
       headcount: 4,
       description: "회식",
       hostNickname: "민지",
-      expiresOn: "2026-11-21",
     },
     questions: { mood: true, food: true, spicy: true, price: false },
     me: { role: "HOST", profileId: 1, signedIn: true },
@@ -81,7 +80,7 @@ describe("모임 정보 수정", () => {
     api.updateMeetup.mockResolvedValue(undefined);
     const { onSaved } = mount(snapshot());
 
-    expect(screen.getByText("11월 21일까지 열 수 있어요.")).toBeTruthy();
+    expect(screen.queryByText(/열 수 있어요/)).toBeNull();
     expect(
       screen.getByRole("textbox", { name: /어떤 모임인가요/ }),
     ).toHaveProperty("value", "회식");
@@ -101,14 +100,13 @@ describe("모임 정보 수정", () => {
     });
   });
 
-  it("날짜를 바꾸면 열 수 있는 마지막 날을 다시 보이고 날짜와 시각을 함께 보낸다", async () => {
+  it("날짜를 바꾸면 날짜와 시각을 함께 보낸다", async () => {
     api.updateMeetup.mockResolvedValue(undefined);
     mount(snapshot());
 
     fireEvent.change(screen.getByLabelText("모임 날짜"), {
       target: { value: "2026-11-20" },
     });
-    expect(screen.getByText("11월 27일까지 열 수 있어요.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "저장" }));
 
     await waitFor(() => expect(api.updateMeetup).toHaveBeenCalled());
@@ -118,12 +116,11 @@ describe("모임 정보 수정", () => {
     });
   });
 
-  it("날짜를 지우면 날짜와 시각을 비우고 오늘부터 다시 센다", async () => {
+  it("날짜를 지우면 날짜와 시각을 비운다", async () => {
     api.updateMeetup.mockResolvedValue(undefined);
     mount(snapshot());
 
     fireEvent.click(screen.getByRole("button", { name: "날짜와 시간 지우기" }));
-    expect(screen.getByText("11월 18일까지 열 수 있어요.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "저장" }));
 
     await waitFor(() => expect(api.updateMeetup).toHaveBeenCalled());
@@ -164,9 +161,6 @@ describe("모임 정보 수정", () => {
     expect(
       screen.queryByRole("button", { name: "날짜와 시간 지우기" }),
     ).toBeNull();
-    expect(
-      screen.getByText("날짜를 바꾸면 11월 21일까지 열 수 있어요."),
-    ).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText("모임 시각"), {
       target: { value: "18:00" },

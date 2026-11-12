@@ -121,8 +121,7 @@ export function FriendsSheet({
           })}
         </ul>
         <p className="mt-3 text-caption-sm text-ink-muted">
-          남긴 취향은 모임 링크를 가진 사람만 볼 수 있고, 모임 날로부터 7일 뒤
-          지워져요.
+          남긴 취향은 모임 링크를 가진 사람만 볼 수 있고, 이 모임에만 써요.
         </p>
       </BottomSheet>
       <RemoveProfileDialog

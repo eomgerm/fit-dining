@@ -2,12 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   formatDate,
-  formatExpiresOn,
   formatTime,
   formatWhen,
   isSelectable,
   kstToday,
-  lastOpenDay,
   selectableRange,
 } from "./meetup-date";
 
@@ -34,12 +32,6 @@ describe("모임 날짜 표기", () => {
       "11월 13일 (금) 저녁 7시 30분",
     );
     expect(formatWhen("2026-11-13")).toBe("11월 13일 (금)");
-  });
-
-  it("열 수 있는 마지막 날을 알린다", () => {
-    expect(formatExpiresOn("2026-11-21")).toBe("11월 21일까지 열 수 있어요");
-    expect(lastOpenDay("2026-11-14", BEFORE_MIDNIGHT)).toBe("2026-11-21");
-    expect(lastOpenDay(undefined, AFTER_MIDNIGHT)).toBe("2026-11-19");
   });
 });
 

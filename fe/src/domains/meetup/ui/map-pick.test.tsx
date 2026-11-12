@@ -277,7 +277,6 @@ const POINT_INFO: MeetupInfo = {
     radiusM: 1000,
   },
   category: "RESTAURANT",
-  expiresOn: "2026-11-21",
 };
 
 describe("모임 정보의 지점 줄과 지도 보기", () => {

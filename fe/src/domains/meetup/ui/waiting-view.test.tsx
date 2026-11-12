@@ -14,7 +14,6 @@ function snapshot(overrides: Partial<MeetupSnapshot> = {}): MeetupSnapshot {
       category: "RESTAURANT",
       headcount: 4,
       hostNickname: "민지",
-      expiresOn: "2026-11-21",
     },
     questions: { mood: true, food: true, spicy: true, price: false },
     me: { role: "HOST", profileId: 1, signedIn: true },
@@ -76,7 +75,7 @@ describe("대기 화면", () => {
   it("모임장은 링크 보내기 구역과 남긴 수/인원, 남지 않은 수를 본다", () => {
     const { onCopy, onShare } = mount(snapshot());
     expect(screen.getByRole("heading", { name: "선릉역 모임" })).toBeTruthy();
-    expect(screen.getByText("11월 21일까지 열 수 있어요")).toBeTruthy();
+    expect(screen.queryByText(/열 수 있어요/)).toBeNull();
     expect(
       screen.getByRole("heading", { name: /취향을 남긴 친구 3\/4/ }),
     ).toBeTruthy();

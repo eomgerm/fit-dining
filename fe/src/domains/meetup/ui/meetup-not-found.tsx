@@ -17,11 +17,9 @@ export function MeetupNotFound() {
         >
           <ClockIcon />
         </span>
-        <h2 className="text-title-lg">없거나 끝난 모임이에요</h2>
+        <h2 className="text-title-lg">없거나 지워진 모임이에요</h2>
         <p className="text-body-sm text-ink-muted">
-          모임은 모임 날짜에서 7일 뒤,
-          <br />
-          또는 모임장이 탈퇴하면 사라져요.
+          모임장이 탈퇴하면 모임이 사라져요.
         </p>
       </div>
       <BottomBar>

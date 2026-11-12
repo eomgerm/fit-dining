@@ -1,14 +1,12 @@
 import type { ReactNode } from "react";
 
-import { ClockIcon } from "@/shared/ui/icon/icons/clock";
-
 import {
   areaLabel,
   areaText,
   CATEGORY_LABELS,
   type MeetupInfo,
 } from "../model/meetup";
-import { formatExpiresOn, formatWhen } from "../model/meetup-date";
+import { formatWhen } from "../model/meetup-date";
 import { PointLocation } from "./point-map";
 
 function Tag({ children }: { children: string }) {
@@ -19,19 +17,16 @@ function Tag({ children }: { children: string }) {
   );
 }
 
-// 모임 정보(대기 화면, 프로필 고르기의 정보 칸). 지역, 업종, 날짜·시간, 인원, 설명을 보이고, 대기 화면에서는 열 수 있는
-// 마지막 날도 보인다(AC-29). 지점 모임은 지역을 태그 대신 위치 이름과 반경 줄로 보인다(AC-60). action은 오른쪽 위에
-// 세로 가운데로 두는 버튼 자리다
+// 모임 정보(대기 화면, 프로필 고르기의 정보 칸). 지역, 업종, 날짜·시간, 인원, 설명을 보인다(AC-29). 지점 모임은 지역을
+// 태그 대신 위치 이름과 반경 줄로 보인다(AC-60). action은 오른쪽 위에 세로 가운데로 두는 버튼 자리다
 export function MeetupInfoCard({
   info,
   showHost = false,
-  showExpiry = true,
   action,
 }: {
   info: MeetupInfo;
   // 프로필 고르기처럼 처음 보는 사람에게 "민지님의 모임"을 보인다
   showHost?: boolean;
-  showExpiry?: boolean;
   action?: ReactNode;
 }) {
   const { area } = info;
@@ -65,12 +60,6 @@ export function MeetupInfoCard({
           <p className="text-title-sm text-ink">{info.description}</p>
         )}
         {point && <PointLocation name={areaLabel(area)} {...point} />}
-        {showExpiry && (
-          <p className="flex items-center gap-1 text-caption-md text-ink-muted">
-            <ClockIcon size="sm" className="shrink-0" />
-            {formatExpiresOn(info.expiresOn)}
-          </p>
-        )}
       </div>
       {action}
     </section>

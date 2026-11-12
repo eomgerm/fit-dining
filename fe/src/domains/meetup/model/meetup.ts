@@ -83,7 +83,6 @@ export type MeetupInfo = {
   description?: string;
   hostNickname?: string;
   // 모임을 열 수 있는 마지막 날(KST, "2026-11-21")
-  expiresOn: string;
 };
 
 export type Mood = "QUIET" | "LIVELY" | "ANY";

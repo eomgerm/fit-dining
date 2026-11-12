@@ -10,7 +10,6 @@ const INFO: MeetupInfo = {
   time: "19:00",
   headcount: 4,
   description: "회식",
-  expiresOn: "2026-11-17",
 };
 const NOON = new Date("2026-11-11T03:00:00Z");
 

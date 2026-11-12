@@ -51,6 +51,14 @@ describe("initialDraft", () => {
   it("오늘 이미 쓴 장소면 방문일을 비워 둔다", () => {
     expect(initialDraft(form(["2026-10-21"])).visitedAt).toBeNull();
   });
+
+  it("넘긴 방문일은 고를 수 있을 때만 쓰고, 아니면 원래 기본값이다", () => {
+    expect(initialDraft(form(), "2026-10-14").visitedAt).toBe("2026-10-14");
+    expect(initialDraft(form(), "2026-11-14").visitedAt).toBe("2026-10-21");
+    expect(initialDraft(form(["2026-10-14"]), "2026-10-14").visitedAt).toBe(
+      "2026-10-21",
+    );
+  });
 });
 
 describe("reconcileDraft", () => {

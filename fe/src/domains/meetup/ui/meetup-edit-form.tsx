@@ -21,7 +21,6 @@ import {
   whenChanged,
 } from "../model/edit-form";
 import type { MeetupSnapshot } from "../model/meetup";
-import { formatExpiresOn, lastOpenDay } from "../model/meetup-date";
 import { MeetupInfoFields, useClientNow } from "./meetup-info-fields";
 
 function note(snapshot: MeetupSnapshot, dateOnly: boolean) {
@@ -64,7 +63,6 @@ export function MeetupEditForm({
     today !== null &&
     canSave(form, initial, today, dateOnly) &&
     !save.isPending;
-  const expiry = today && formatExpiresOn(lastOpenDay(form.date, today));
   const message = note(snapshot, dateOnly);
 
   const submit = () => {
@@ -106,9 +104,6 @@ export function MeetupEditForm({
           withSession={withSession}
           onUnauthorized={onUnauthorized}
           dateOnly={dateOnly}
-          dateNote={
-            expiry && (dateOnly ? `날짜를 바꾸면 ${expiry}.` : `${expiry}.`)
-          }
         />
       </div>
       <BottomBar>

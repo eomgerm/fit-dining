@@ -6,6 +6,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -72,7 +73,6 @@ function snapshot(overrides: Partial<MeetupSnapshot> = {}): MeetupSnapshot {
       headcount: 4,
       description: "편하게 얘기하면서 저녁 먹을 곳",
       hostNickname: "민지",
-      expiresOn: "2026-11-21",
     },
     questions: { mood: true, food: true, spicy: true, price: false },
     me: { role: "VIEWER", signedIn: false },
@@ -230,7 +230,7 @@ describe("모임 링크 화면", () => {
       new ApiError("http", "not found", { status: 404 }),
     );
     mount();
-    expect(await screen.findByText("없거나 끝난 모임이에요")).toBeTruthy();
+    expect(await screen.findByText("없거나 지워진 모임이에요")).toBeTruthy();
     expect(api.fetchSnapshot).toHaveBeenCalledTimes(1);
   });
 });
@@ -481,7 +481,7 @@ describe("추천받기와 결과", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "친구들 취향 보기" }),
     );
-    expect(await screen.findByText(/모임 날로부터 7일 뒤/)).toBeTruthy();
+    expect(await screen.findByText(/이 모임에만 써요/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "내 취향 수정" })).toBeTruthy();
   });
 
@@ -937,6 +937,70 @@ describe("투표와 정하기", () => {
     expect(mocks.push).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "수정하기" }));
     expect(mocks.push).toHaveBeenCalledWith(`/m/${CODE}/taste`);
+  });
+
+  it("모임 뒤에는 회원에게 정한 곳의 방문 평가를 보이고 모임 날짜를 방문일로 넘긴다", async () => {
+    api.fetchSnapshot.mockResolvedValue(
+      resultSnapshot({
+        phase: "DECIDED",
+        afterMeetup: true,
+        allowed: [],
+        me: {
+          role: "PARTICIPANT",
+          profileId: 2,
+          signedIn: true,
+          tasteReflected: true,
+        },
+        decision: { placeId: 10, method: "DIRECT" },
+      }),
+    );
+    api.fetchResult.mockResolvedValue(RESULT);
+    mount();
+    const decided = await screen.findByRole("region", { name: "정한 곳" });
+    expect(within(decided).queryByText(/모임 당일부터/)).toBeNull();
+    fireEvent.click(
+      within(decided).getByRole("button", { name: "방문 평가 남기기" }),
+    );
+    expect(mocks.push).toHaveBeenCalledWith(
+      "/places/10/review?visited=2026-11-14",
+    );
+  });
+
+  it("날짜 없는 모임은 정한 곳에 방문 평가 안내가 없다", async () => {
+    const decided = resultSnapshot({
+      phase: "DECIDED",
+      decision: { placeId: 10, method: "DIRECT" },
+    });
+    api.fetchSnapshot.mockResolvedValue({
+      ...decided,
+      info: { ...decided.info, date: undefined, time: undefined },
+    });
+    api.fetchResult.mockResolvedValue(RESULT);
+    mount();
+    expect(await screen.findByText("숯불 마당에서 만나요.")).toBeTruthy();
+    expect(screen.queryByText(/방문 평가/)).toBeNull();
+  });
+
+  it("모임 뒤 비회원에게는 로그인 안내를 보이고 로그인 뒤 이 모임으로 돌아온다", async () => {
+    api.fetchSnapshot.mockResolvedValue(
+      resultSnapshot({
+        phase: "DECIDED",
+        afterMeetup: true,
+        allowed: [],
+        decision: { placeId: 10, method: "DIRECT" },
+      }),
+    );
+    api.fetchResult.mockResolvedValue(RESULT);
+    mount();
+    const decided = await screen.findByRole("region", { name: "정한 곳" });
+    expect(
+      within(decided).getByText("로그인하면 방문 평가를 남길 수 있어요."),
+    ).toBeTruthy();
+    expect(
+      within(decided).queryByRole("button", { name: "방문 평가 남기기" }),
+    ).toBeNull();
+    fireEvent.click(within(decided).getByRole("button", { name: "로그인" }));
+    expect(mocks.push).toHaveBeenCalledWith("/login");
   });
 });
 

@@ -114,14 +114,3 @@ const kstClock = new Intl.DateTimeFormat("ko-KR", {
 export function formatClock(instant: string) {
   return kstClock.format(new Date(instant));
 }
-
-// "11월 21일까지 열 수 있어요"
-export function formatExpiresOn(expiresOn: string) {
-  const { month, day } = parts(expiresOn);
-  return `${month}월 ${day}일까지 열 수 있어요`;
-}
-
-// 고른 날짜로 열 수 있는 마지막 날. 날짜가 없으면 오늘 기준이다(D-23)
-export function lastOpenDay(date: string | undefined, now: Date) {
-  return addDays(date ?? kstToday(now), 7);
-}

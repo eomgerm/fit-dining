@@ -62,7 +62,6 @@ export function MeetupInfoFields({
   withSession,
   onUnauthorized,
   dateOnly = false,
-  dateNote,
 }: {
   form: CreateForm;
   onChange: (patch: Partial<CreateForm>) => void;
@@ -71,8 +70,6 @@ export function MeetupInfoFields({
   withSession: WithSession;
   onUnauthorized: () => void;
   dateOnly?: boolean;
-  // 날짜 아래 안내(고른 날짜로 열 수 있는 마지막 날)
-  dateNote?: ReactNode;
 }) {
   const range = today ? selectableRange(today) : undefined;
   const maps = useNaverMaps();
@@ -183,9 +180,6 @@ export function MeetupInfoFields({
             <WarningIcon size="sm" className="mt-px shrink-0" />
             지난 시각이에요. 다른 시각을 골라 주세요.
           </p>
-        )}
-        {dateNote && (
-          <p className="text-caption-md text-ink-muted">{dateNote}</p>
         )}
       </div>
 

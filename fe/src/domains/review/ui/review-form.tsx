@@ -59,6 +59,8 @@ import { VisitDateSheet } from "./visit-calendar";
 
 type ReviewFormProps = {
   placeId: number;
+  // 모임에서 넘긴 방문일 기본값(meetup AC-64)
+  visitedOn?: string;
   // 요청에 AT를 붙인다. 인증 도메인을 쓰는 app이 넘긴다
   authenticated: WithSession;
   // 화면 이동은 부르는 쪽(app)이 정한다
@@ -70,6 +72,7 @@ type ReviewFormProps = {
 // 방문 평가 2단계 작성(7-01~7-05, D-41). 작성 화면 데이터를 받은 뒤 흐름을 그린다
 export function ReviewForm({
   placeId,
+  visitedOn,
   authenticated,
   onSuccess,
   onClose,
@@ -97,6 +100,7 @@ export function ReviewForm({
       <ReviewWriteFlow
         key={round}
         placeId={placeId}
+        visitedOn={visitedOn}
         form={form.data}
         authenticated={authenticated}
         onSuccess={(reviewId) => {
@@ -148,6 +152,7 @@ type Page = "good" | "bad" | "detail";
 
 type ReviewWriteFlowProps = {
   placeId: number;
+  visitedOn?: string;
   form: ReviewFormResponse;
   authenticated: WithSession;
   onSuccess: (reviewId: number) => void;
@@ -157,13 +162,14 @@ type ReviewWriteFlowProps = {
 
 export function ReviewWriteFlow({
   placeId,
+  visitedOn,
   form,
   authenticated,
   onSuccess,
   onClose,
   onReload,
 }: ReviewWriteFlowProps) {
-  const [initial] = useState(() => initialDraft(form));
+  const [initial] = useState(() => initialDraft(form, visitedOn));
   const [draft, setDraft] = useState(initial);
   // 작성 화면 데이터를 다시 받으면(400·409 뒤, 창 복귀) 고를 수 없게 된 입력을 뺀다
   const [reconciledForm, setReconciledForm] = useState(form);

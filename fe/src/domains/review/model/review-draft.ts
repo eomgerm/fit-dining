@@ -13,10 +13,18 @@ export type ReviewDraft = {
   spentPerPerson: string;
 };
 
-export function initialDraft(form: ReviewFormResponse): ReviewDraft {
+// visitedOn은 모임에서 넘긴 방문일이다. 고를 수 없는 날이면 원래 기본값을 쓴다(meetup AC-64)
+export function initialDraft(
+  form: ReviewFormResponse,
+  visitedOn?: string,
+): ReviewDraft {
   return reconcileDraft(
     {
-      visitedAt: form.visitDate.default,
+      visitedAt:
+        visitedOn !== undefined &&
+        dayState(visitedOn, form.visitDate, form.reviewedDates) === "available"
+          ? visitedOn
+          : form.visitDate.default,
       tagCodes: [],
       revisitIntent: false,
       description: "",

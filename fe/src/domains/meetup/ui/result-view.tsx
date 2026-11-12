@@ -112,6 +112,8 @@ export function ResultView({
   onDecide,
   onCancelDecision,
   onShowVote,
+  onReview,
+  onSignIn,
 }: {
   snapshot: MeetupSnapshot;
   result?: MeetupResult;
@@ -128,6 +130,9 @@ export function ResultView({
   onRemoveProfile: (profile: MeetupProfile) => void;
   // 프로필 없이 보는 사람이 이름을 고르러 간다
   onPickName?: () => void;
+  // 모임 뒤 정한 곳의 방문 평가와 비회원의 로그인(AC-64)
+  onReview?: (placeId: number) => void;
+  onSignIn?: () => void;
   onEditInfo?: () => void;
   // 투표 열기·정하기·바꾸기·취소 요청이 처리 중인지
   pollPending?: boolean;
@@ -277,6 +282,10 @@ export function ResultView({
             }
             onChange={() => setChanging(true)}
             onCancel={() => onCancelDecision?.()}
+            afterMeetup={snapshot.afterMeetup}
+            signedIn={snapshot.me.signedIn}
+            onReview={onReview && (() => onReview(decision.placeId))}
+            onSignIn={onSignIn}
           />
         )}
         {snapshot.phase === "VOTING" && poll && onShowVote && (

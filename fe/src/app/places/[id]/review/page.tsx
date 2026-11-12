@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 
-import { parsePlaceId } from "@/domains/review/model/review";
+import { parsePlaceId, parseVisitedOn } from "@/domains/review/model/review";
 
 import { ReviewWriteScreen } from "./review-write-screen";
 
@@ -10,8 +10,10 @@ export const instant = false;
 // 리뷰 작성 화면(/places/<장소 id>/review). id가 잘못되면 장소 not-found다
 export default async function ReviewWritePage({
   params,
+  searchParams,
 }: PageProps<"/places/[id]/review">) {
   const placeId = parsePlaceId((await params).id);
   if (placeId === null) notFound();
-  return <ReviewWriteScreen placeId={placeId} />;
+  const visitedOn = parseVisitedOn((await searchParams).visited);
+  return <ReviewWriteScreen placeId={placeId} visitedOn={visitedOn} />;
 }

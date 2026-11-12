@@ -160,9 +160,18 @@ export function reportRequest(
 // 홈 탭 미리보기에 보이는 리뷰 수(Figma 6-01)
 export const PREVIEW_SIZE = 3;
 
-// 작성 화면 주소. 장소 상세의 "방문 평가 남기기"가 이 주소로 연결한다(D-31)
-export function reviewWriteHref(placeId: number) {
-  return `/places/${placeId}/review`;
+// 작성 화면 주소. 장소 상세의 "방문 평가 남기기"가 이 주소로 연결한다(D-31). 모임에서 열면 모임 날짜를 방문일
+// 기본값으로 넘긴다(meetup AC-64)
+export function reviewWriteHref(placeId: number, visitedOn?: string) {
+  const base = `/places/${placeId}/review`;
+  return visitedOn ? `${base}?visited=${visitedOn}` : base;
+}
+
+// 주소로 넘긴 방문일. 날짜 모양이 아니면 버린다
+export function parseVisitedOn(value: unknown) {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? value
+    : undefined;
 }
 
 // 수정 화면 주소. 내 리뷰 ⋯ 메뉴의 "수정하기"가 연다(D-44)
