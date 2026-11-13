@@ -1,6 +1,6 @@
 # AI 검색 API 명세
 
-Status: 초안 v0.16 · Jira: S15P31A302-41, S15P31A302-136, S15P31A302-158, S15P31A302-209, S15P31A302-236, S15P31A302-161, S15P31A302-196, S15P31A302-224 · 작성일: 2026-10-23 · 고친 날: 2026-11-13
+Status: 초안 v0.17 · Jira: S15P31A302-41, S15P31A302-136, S15P31A302-158, S15P31A302-209, S15P31A302-236, S15P31A302-161, S15P31A302-196, S15P31A302-224, S15P31A302-242 · 작성일: 2026-10-23 · 고친 날: 2026-11-16
 
 BE는 검색 첫 페이지마다 AI를 한 번 부른다. AI는 요청을 해석하고 DB에서 후보를 뽑아 핏 점수로 정렬한 뒤 카드의 AI 필드를 돌려준다. v0.7부터 정렬에 LLM을 쓰지 않는다. BE는 카드에 장소 정보와 영업 상태를 붙여 FE에 준다. 모임 추천은 모임 설명 해석과 모임 계산 주소 두 개를 따로 쓴다(7장).
 
@@ -57,7 +57,7 @@ JSON 이름은 camelCase다. 요청에 모르는 속성이 있으면 400이고(�
 
 `conditions`에는 해석 결과와, "이 지역에서 검색"으로 고른 지도 영역(`mapBounds`)만 있다. 후속 검색 때도 `userId`(또는 `tasteProfile`)와 지금 화면의 `mapBounds`는 다시 보내야 한다. 버튼으로 고른 지도 영역은 `conditions.mapBounds`로 돌아와 다음 후속 검색이 이어 쓴다. 지역은 지도 영역(`mapFirst`) → 이번 요청에 말한 지역 → 이전 요청의 지역 → 지금 화면(`mapBounds`) 순서로 하나를 쓰고, 어느 것도 없으면 전국에서 찾아 `nationwide: true`로 준다. 사용자 위치(`location`)는 받지 않는다. 보내면 모르는 속성이라 400이다(v0.15, 2026-11-10 결정. v0.10~v0.14는 위치에서 1km 안으로 걸렀고, 지도 영역은 `mapFirst`일 때만 거르기에 썼다). BE의 `preferences`와 `cursor`는 null이라도 넣으면 400이므로 AI 요청용 DTO를 따로 둔다.
 
-v0.6부터 `conditions`에 분류별 조각(`locations`, `menus`, `hours`, `price`, `placeName`, `features`, `avoidCategories`, v0.8의 `avoidFoods`)이 붙는다. 뜻은 [spec.md](spec.md) 4.1절에 있다. null인 조각은 빠지고 빈 목록은 그대로 온다. BE와 FE는 지금처럼 해석하지 않고 돌려보내면 되고, 조각이 없는 v0.5 이전 `conditions`도 그대로 읽는다. 이 문서의 예시는 v0.9 모양이고 빈 목록은 줄였다.
+v0.6부터 `conditions`에 분류별 조각(`locations`, `menus`, `hours`, `price`, `placeName`, `features`, `avoidCategories`, v0.8의 `avoidFoods`)이 붙는다. 뜻은 [spec.md](spec.md) 4.1절에 있다. null인 조각은 빠지고 빈 목록은 그대로 온다. BE와 FE는 지금처럼 해석하지 않고 돌려보내면 되고, 조각이 없는 v0.5 이전 `conditions`도 그대로 읽는다. 이 문서의 예시는 v0.9 모양이고 빈 목록은 줄였다. v0.17부터 `locations`의 `kind`에 `PLACE`(거리·상권·랜드마크)가 있고, 지역에 행정 구역 단계 칸(`sido`, `district`, `dong`)이 붙는다(예: `{"text": "대전 유성구", "kind": "AREA", "value": "대전 유성구", "sido": "대전", "district": "유성구"}`). 이 칸이 없는 이전 `conditions`도 읽는다. 이 칸을 쓰는 검색은 BE 마이그레이션 V36(뷰 `ai_place_search`의 `sido`)이 먼저 적용돼야 한다.
 
 ```json
 "conditions": {"version": 3, "text": "션릉역이나 역삼역 걸어서 5분 3만원 이하 초밥 매운 거 말고", "embeddingText": "3만원 이하 초밥", "categories": [{"code": "RESTAURANT", "want": true}], "flavors": [{"code": "SPICY", "want": false}], "menus": [{"text": "초밥", "value": "초밥", "spellings": ["스시"], "want": true}], "locations": [{"text": "션릉역", "kind": "STATION", "value": "선릉역"}, {"text": "역삼역 걸어서 5분", "kind": "STATION", "value": "역삼역", "walkMinutes": 5}], "price": {"text": "3만원 이하", "maxWon": 30000, "cheap": false}}
