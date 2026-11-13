@@ -7,7 +7,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 
 친구 모임의 장소는 보통 한 사람이 정한다. 그 사람은 혼자 후보를 찾아 단톡방에 올리고, 친구들의 조건은 기억에 의존한다. 모임 추천은 모임장이 만든 링크로 친구들의 조건을 모아 모두에게 잘 맞는 순서로 후보를 보여 주고, 같은 링크 안에서 투표해 정하게 한다(모임 추천 PRD §1).
 
-이 spec은 모임 추천 PRD(FR-16~FR-29, AC-36~AC-89)의 BE·FE와, AI에 더하는 모임 전용 주소 두 개의 계약을 다룬다. AI 쪽 구현은 AI 담당이 그 계약과 수용 기준(AC-50 ~ AC-55, AC-57)으로 한다. Jira S15P31A302-207은 이 문서를 쓰는 일이고, 구현 이슈는 아래 여섯 단계 안에서 끝에서 끝까지 이어지는 조각으로 나눈다. BE·FE 이슈 하나가 BE와 FE를 함께 갖고, AI의 두 주소는 AI 담당 이슈로 따로 둔다(D-1).
+이 spec은 모임 추천 PRD(FR-16~FR-30, AC-36~AC-92)의 BE·FE와, AI에 더하는 모임 전용 주소 두 개의 계약을 다룬다. AI 쪽 구현은 AI 담당이 그 계약과 수용 기준(AC-50 ~ AC-55, AC-57)으로 한다. Jira S15P31A302-207은 이 문서를 쓰는 일이고, 구현 이슈는 아래 여섯 단계 안에서 끝에서 끝까지 이어지는 조각으로 나눈다. BE·FE 이슈 하나가 BE와 FE를 함께 갖고, AI의 두 주소는 AI 담당 이슈로 따로 둔다(D-1).
 
 | 단계 | 내용 | 선행 |
 |---|---|---|
@@ -16,7 +16,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 | ③ 추천 연동 | AI의 모임 전용 주소 두 개, BE의 AI 추천기 | AI 계약 합의 |
 | ④ 모임 지점 | 지도에서 지점과 반경 고르기 | ①. 실제 추천 결과는 ③ 뒤 |
 | ⑤ 탈퇴와 모임 뒤 | 탈퇴 정리, 만료 걷어내기, 모임 뒤 방문 평가 | ② |
-| ⑥ 마무리 | 링크 미리보기, 회원 프로필로 바꾸기, 공개하는 홈 시작 버튼 | 시작 버튼은 ③과 실기기 확인 뒤 |
+| ⑥ 마무리 | 링크 미리보기, 회원 프로필로 바꾸기, 공개하는 홈 시작 버튼, 내 모임 | 시작 버튼은 ③과 실기기 확인 뒤 |
 
 ①과 ②는 장소 Mock 모드의 대신 쓰는 추천기로 끝까지 만든다. DB 모드는 처음부터 AI 추천기를 쓰므로 실제 추천은 ③ 뒤에 되고, 그 전에 DB 모드로 배포되면 계산은 실패로 보인다. 홈 시작 버튼을 붙이기 전이라 사용자에게는 보이지 않는다(D-11, D-12).
 
@@ -133,8 +133,9 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 마무리
 
 - [x] AC-66: `/m/{code}`의 응답 HTML에는 모임장 닉네임, 지역, 날짜·시간, 가입 없이 답할 수 있다는 안내가 든 미리보기 메타 태그와 서비스 기본 이미지가 있다. 질문 개수, 모임 취향, 참여자 이름은 없다. 없는 코드(지운 모임 포함)는 일반 안내다. 모임 화면에는 `noindex`와 no-referrer 메타가 있다. (D-9, D-35; PRD AC-58)
-- [x] AC-67: 홈 지도 왼쪽 위에 시작 버튼이 있고 "이 지역에서 검색" 버튼과 겹치지 않는다. 위치와 모양은 화면 예시(모임장 1)를 따른다. (D-22, D-24; PRD AC-36)
+- [x] AC-67: 홈 지도 왼쪽 위에 시작 버튼이 있고 "이 지역에서 검색" 버튼과 겹치지 않는다. 위치와 모양은 화면 예시(모임장 1)를 따른다. 버튼은 내 모임(`/m`)을 연다. (D-22, D-24, D-37; PRD AC-36, AC-90)
 - [x] AC-68: `POST /api/v1/meetups/{code}/profiles/me/account`는 로그인한 회원의 비회원 프로필을 회원 프로필로 바꾼다. 모임 취향은 회원의 취향으로 옮겨지지 않는다. 그 회원에게 이미 이 모임의 프로필이 있으면 409 `already-joined`다. (D-25, D-35; PRD AC-76)
+- [x] AC-75: `GET /api/v1/meetups/mine`은 로그인한 회원이 만든 모임과 회원 프로필로 참여한 모임을 준다. 비회원 프로필로 참여한 모임과 다른 사람의 모임은 없고, 로그인하지 않았거나 탈퇴했으면 401이다. 진행 중인 모임(대기, 결과, 투표 중)이 앞에 최근에 만든 순서로, 끝난 모임(정함)이 뒤에 최근에 정한 순서로 오고, 최근에 만든 100개까지다. 줄마다 코드, 역할(HOST, PARTICIPANT), 상태, 지역, 업종, 날짜·시각, 인원, 프로필 수, 정한 곳 이름이 있다. 화면(`/m`)은 진행 중과 끝난 모임 묶음으로 보이고, 만든 모임에만 왕관 배지가 있으며, 묶음마다 20개 뒤는 "더 보기"로 연다. 모임이 없으면 소개와 "새로운 모임 만들기"만 보이고, 로그인하지 않았으면 로그인 안내 뒤 이 화면으로 돌아온다. 모임장이 모임 화면에서 뒤로 가면 이 화면이다. (D-37; PRD AC-90 ~ AC-92)
 - [ ] AC-69: 모임 기능을 켜고 끄는 설정이 없다. 모임 API와 화면은 배포되면 동작하고, 환경 변수 계약(`docs/infra/contracts/env.md`)과 FE의 `/config.json`이 바뀌지 않는다. (D-24)
 
 절대 일어나면 안 되는 일
@@ -154,6 +155,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 | 메서드와 경로 | 누가 | 하는 일 | 단계 |
 |---|---|---|---|
 | `POST /meetups` | 회원 | 모임 만들기 | ① |
+| `GET /meetups/mine` | 회원 | 내 모임 | ⑥ |
 | `GET /meetups/areas?q=` | 회원 | 장소 데이터가 있는 역·동 찾기 | ① |
 | `GET /meetups/area-check?lat=&lng=&radiusM=` | 회원 | 반경 안 장소 수와 붙일 이름 | ④ |
 | `GET /meetups/{code}` | 누구나 | 스냅숏 | ① |
@@ -378,6 +380,9 @@ AI에 주소 두 개를 더한다. 기존 `POST /v1/search`는 바꾸지 않는�
 | `be/src/main/java/kr/co/fitdining/api/place/dto/PlaceSummary.java#PlaceSummary` | reuse | 결과 카드의 장소 요약과 지점에서 직선거리 | D-9 |
 | `be/src/main/java/kr/co/fitdining/api/user/UserService.java#withdraw` | modify | 탈퇴 트랜잭션에서 모임 정리를 부른다. 다른 정리의 순서와 동작은 그대로다 | D-36 |
 | `be/src/main/java/kr/co/fitdining/api/meetup/MeetupWithdrawals.java#withdraw` | create | 탈퇴한 회원이 만든 모임과 다른 모임의 그 회원 프로필을 지운다. 탈퇴 트랜잭션 안에서만 부른다 | D-36 |
+| `be/src/main/java/kr/co/fitdining/api/meetup/MeetupListService.java#mine` | create | 내 모임. 만든 모임과 회원 프로필로 참여한 모임을 읽어 진행 중과 끝난 모임 순서로 둔다 | D-37 |
+| `be/src/main/java/kr/co/fitdining/api/auth/infrastructure/SecurityConfiguration.java` | modify | `GET /api/v1/meetups/mine`을 공개 GET(`/api/v1/meetups/*`)보다 먼저 회원 전용으로 둔다 | D-37 |
+| `fe/src/app/m/page.tsx` | create | 내 모임 화면. 홈 시작 버튼이 연다 | D-37 |
 | `be/src/main/java/kr/co/fitdining/api/onboarding/TasteAnalysisService.java#TasteAnalysisService` | reuse | 직접 만든 `ThreadPoolExecutor`로 작업을 돌리는 방식 | D-10 |
 | `be/src/main/resources/db/migration/V35__drop_meetup_expiry.sql` | create | `meetups.expires_at` 칸과 색인을 지운다 | D-36 |
 | `ai/server/schemas.py`, `ai/server/search.py` | modify | 모임 전용 주소 두 개의 요청·응답과 라우트를 더한다. 기존 `/v1/search`는 그대로다 | D-12, D-15 |
@@ -400,12 +405,12 @@ AI에 주소 두 개를 더한다. 기존 `POST /v1/search`는 바꾸지 않는�
 
 - BE 순수 규칙 (example), AC-1, AC-2, AC-4, AC-19, AC-20, AC-22, AC-40, AC-41, AC-49, AC-59, AC-64: 상태·역할별 허용 동작은 PRD §5.1 표를 그대로 표 테스트로 옮긴다. 순위 규칙은 묶음·동점·점수 없는 참여자를, 득표는 동점과 표 없음을, 보일 질문은 업종 넷, 해석 요약의 유무, 가게 가격의 유무와 숨겨진 질문의 답을 빼는 것을, 날짜 검증은 KST의 오늘과 지난 시각을, 모임 뒤 판정은 정한 곳과 모임 날짜 당일 0시(KST) 경계를, 거리는 지점에서 직선거리를 본다. 잡는 것: 표와 어긋난 권한, 하루 어긋난 모임 뒤 판정, 덜 맞는 사람이 앞에 오는 순서.
 - BE AI 추천기 (example, 가짜 HTTP 서버), AC-46 ~ AC-48, AC-56, AC-72: 두 주소의 요청 본문(프로필 번호만 있고 이름이 없는지, 저장한 조건, 상관없음이면 업종이 없는지, 지점 모임의 원형 반경, 날짜만 있을 때), 해석 저장과 다시 쓰기, 해석 실패 뒤 다음 계산 전 다시 해석, `CONDITIONS_INVALID` 뒤 같은 계산 안에서 다시 해석, 숨겨진 질문의 답이 요청에 없는지, 먹고 싶은 메뉴가 적은 글 그대로 실리는지, 예산 초과, 읽을 수 없는 응답, AI의 400이 실패가 되는지, 일반 검색과 한도를 함께 쓰는지를 본다. AI의 규칙 자체는 놓친다(아래 AI). Prior art: `be/src/test/java/kr/co/fitdining/api/place/engine/AiSearchClientTest.java`.
-- BE 영속성 (example, Testcontainers PostgreSQL과 Redis), AC-5, AC-7, AC-9, AC-13, AC-15 ~ AC-18, AC-21, AC-23, AC-36 ~ AC-42, AC-58, AC-61 ~ AC-63, AC-68, AC-73, AC-74: 서비스를 직접 부른다. 같은 이름·8번째 프로필·계산 시작·투표 마감의 동시 요청, 따라 지우기, 대신 쓰는 추천기로 계산부터 결과까지, 멈춘 계산이 실패로 바뀌는지, 지점 확인의 장소 수와 이름, 닫은 뒤 그 모임의 행이 어디에도 없고 그 코드가 404인지, 탈퇴와 그 되돌림, 쓰기 한도(15분 120회), 마감 때 고정한 동점 표 수가 프로필을 지워도 바뀌지 않는지, 표의 세션이 지워지면 비는지, 실패한 계산 행이 하나만 남는지를 본다. Prior art: `be/src/test/java/kr/co/fitdining/api/review/ReviewPersistenceTest.java`, `be/src/test/java/kr/co/fitdining/api/support/RedisTestSupport.java`.
-- BE 컨트롤러 (example, `@WebMvcTest`), AC-1, AC-3, AC-6, AC-8, AC-10, AC-14, AC-22, AC-23, AC-68, AC-37, AC-38, AC-71: 상태 코드와 `type`, 입력 검증(먹고 싶은 메뉴 20자 포함), 익명 투표 응답의 속성(열림, 동점, 마감 뒤), 값 없는 속성 생략, 로그에 이름·취향·설명 표식이 없는지를 본다(기존 표식 문자열 방식). Prior art: `be/src/test/java/kr/co/fitdining/api/review/ReviewControllerTest.java`.
+- BE 영속성 (example, Testcontainers PostgreSQL과 Redis), AC-5, AC-7, AC-9, AC-13, AC-15 ~ AC-18, AC-21, AC-23, AC-36 ~ AC-42, AC-58, AC-61 ~ AC-63, AC-68, AC-73 ~ AC-75: 서비스를 직접 부른다. 같은 이름·8번째 프로필·계산 시작·투표 마감의 동시 요청, 따라 지우기, 대신 쓰는 추천기로 계산부터 결과까지, 멈춘 계산이 실패로 바뀌는지, 지점 확인의 장소 수와 이름, 닫은 뒤 그 모임의 행이 어디에도 없고 그 코드가 404인지, 탈퇴와 그 되돌림, 쓰기 한도(15분 120회), 마감 때 고정한 동점 표 수가 프로필을 지워도 바뀌지 않는지, 표의 세션이 지워지면 비는지, 실패한 계산 행이 하나만 남는지를 본다. Prior art: `be/src/test/java/kr/co/fitdining/api/review/ReviewPersistenceTest.java`, `be/src/test/java/kr/co/fitdining/api/support/RedisTestSupport.java`.
+- BE 컨트롤러 (example, `@WebMvcTest`), AC-75, AC-1, AC-3, AC-6, AC-8, AC-10, AC-14, AC-22, AC-23, AC-68, AC-37, AC-38, AC-71: 상태 코드와 `type`, 입력 검증(먹고 싶은 메뉴 20자 포함), 익명 투표 응답의 속성(열림, 동점, 마감 뒤), 값 없는 속성 생략, 로그에 이름·취향·설명 표식이 없는지를 본다(기존 표식 문자열 방식). Prior art: `be/src/test/java/kr/co/fitdining/api/review/ReviewControllerTest.java`.
 - BE 보안 (example, 세션과 Redis를 띄운 HTTP), AC-9, AC-11, AC-12, AC-14, AC-24, AC-70: 공개 경로 목록, 모임 응답의 `no-store`, 회원 프로필을 가리키는 쿠키를 다른 로그인에서 무시하는 것, 스냅숏이 쿠키를 1년 수명으로 다시 주는 것, 비회원 쓰기의 CSRF 403, 모임 쿠키로는 모임장 동작이 되지 않음을 본다. Prior art: `be/src/test/java/kr/co/fitdining/api/auth/SecurityHttpTests.java`.
 - AI (example, pytest), AC-50 ~ AC-55, AC-57, AC-59: 해석 주소의 조건과 요약, 모임 계산의 규칙을 항목마다 본다. 구조화된 지역과 업종이 설명보다 앞서는지, 원형 반경, 시간 거르기(브레이크타임, 1시간 안에 닫거나 쉬는 곳, 날짜만, 자정 넘김, 모르는 값 남김), 못 먹는 음식, 메뉴 가격 상한(상한 안인 사람의 비율, 110%, 모르는 값은 비교에서 뺌), 선호 음식 하나로 세기, 먹고 싶은 메뉴(계산 한 번에 한 번만 해석, 적은 사람이 없으면 부르지 않음, 실패하거나 늦으면 규칙, 메뉴만 쓰기, 장소를 빼지 않기, `missedMenu`), 매운 음식, 합치는 규칙, 참여자 점수, 설명이 빈 모임에서 업종 이름으로 후보를 뽑는 것, 후보 없음 원인, 점수를 매길 조건이 없을 때 점수를 빼는지, 이전 버전의 `conditions`와 읽지 못하는 `conditions`, 틀린 입력 400이다.
 - FE 순수 로직 (example, Vitest), AC-28, AC-29, AC-34: 날짜 표기("11월 14일 (금) 저녁 7시"), 취향 요약, 남기지 않은 수, 임시 보관, 공유 대체를 본다.
-- FE 화면 (example, jsdom과 Testing Library), AC-25 ~ AC-27, AC-29 ~ AC-33, AC-35, AC-43 ~ AC-45, AC-64, AC-65, AC-67: 스냅숏과 API를 대역으로 두고 `allowed`에 따른 버튼, 홈 시작 버튼, 프로필 유무에 따른 첫 화면, 가격 질문의 칩과 직접 입력, 먹고 싶은 메뉴 칸, 회원 프로필을 고를 때 로그인 안내와 돌아오기, 아바타 배지와 그 이름(모임장, 회원), 정한 곳에서 친구들 취향으로 가기와 수정 전 안내, 모임 정보 "수정"의 자리와 `EDIT_DATE`만 있을 때 날짜·시간만 고치는 화면, 모임 점수가 없을 때의 카드, 원한 메뉴가 없는 덜 맞는 사람 줄과 메뉴 조건 칩, 404에서 없는 링크 화면, `questions`에 따른 질문, 결과 카드의 누르는 영역, 409 안내, 투표 화면의 표 수와 5초 다시 받기(가짜 시계), 모임 뒤 화면을 본다.
+- FE 화면 (example, jsdom과 Testing Library), AC-25 ~ AC-27, AC-29 ~ AC-33, AC-35, AC-43 ~ AC-45, AC-64, AC-65, AC-67, AC-75: 스냅숏과 API를 대역으로 두고 `allowed`에 따른 버튼, 홈 시작 버튼, 프로필 유무에 따른 첫 화면, 가격 질문의 칩과 직접 입력, 먹고 싶은 메뉴 칸, 회원 프로필을 고를 때 로그인 안내와 돌아오기, 아바타 배지와 그 이름(모임장, 회원), 정한 곳에서 친구들 취향으로 가기와 수정 전 안내, 모임 정보 "수정"의 자리와 `EDIT_DATE`만 있을 때 날짜·시간만 고치는 화면, 모임 점수가 없을 때의 카드, 원한 메뉴가 없는 덜 맞는 사람 줄과 메뉴 조건 칩, 404에서 없는 링크 화면, `questions`에 따른 질문, 결과 카드의 누르는 영역, 409 안내, 투표 화면의 표 수와 5초 다시 받기(가짜 시계), 모임 뒤 화면을 본다.
 - 수동 (manual), AC-46, AC-50 ~ AC-54: AI의 두 주소가 배포된 환경에서 모임 하나를 만들기부터 결과까지 돌린다. 화면 예시의 네 명과 모의 계산의 세 모임(취향이 갈리는 4명 포함)으로 덜 맞는 사람 표시를 본다.
 - 수동 (manual), AC-7, AC-60, AC-66, AC-69: 실기기의 메신저 안 브라우저에서 링크 열기, 미리보기, 모임 쿠키 유지, 로그인 복귀를 본다(PRD OQ-31). 카카오톡 안 브라우저의 구글 로그인은 2026-11-10에 기존 서비스로 확인했다. 폭 360px에서 화면 예시와 맞는지 본다. 환경 변수 계약과 `/config.json`에 바뀐 것이 없는지 본다.
 
@@ -416,7 +421,7 @@ AI에 주소 두 개를 더한다. 기존 `POST /v1/search`는 바꾸지 않는�
 - 로그인 복귀를 OAuth state로 바꾸기. (D-22)
 - 매운 메뉴 판정 사전 넓히기. (PRD OQ-37)
 - 음식 종류를 고르면 세부 메뉴 칩을 펼쳐 고르기, 결과 뒤 메뉴로 투표하기. (D-26)
-- 실시간 전송, 알림, 채팅, 일정 조율, 모임 목록과 재사용, 다른 서비스 연동 공유, 길찾기. (PRD §4)
+- 실시간 전송, 알림, 채팅, 일정 조율, 모임 재사용, 비회원이 참여한 모임의 목록, 모임 지우기와 목록에서 숨기기, 다른 서비스 연동 공유, 길찾기. (PRD §4, D-37)
 - 처리방침 문구. (PRD OQ-30)
 - 성공 지표 측정(PRD H3~H5, 설문). 측정만을 위한 칸, 집계, 조회를 두지 않는다. (D-6)
 
