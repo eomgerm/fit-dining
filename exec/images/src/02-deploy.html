@@ -33,7 +33,7 @@
 <body>
 <div id="frame">
   <div class="head"><b>배포 흐름</b><span>develop은 자동으로 dev, master는 사람이 눌러야 prod. prod는 반대 색을 띄운 뒤 전환한다</span></div>
-  <svg viewBox="0 0 1232 700" role="img" aria-label="develop 병합은 검사, 빌드, dev 배포, 점검 순서로 자동으로 흐른다. master 병합은 같은 단계를 거치되 prod 배포는 사람이 누른다. prod 배포는 사전 점검, 마이그레이션, 반대 색 기동, 엣지 전환, 이전 색 정지 순서다.">
+  <svg viewBox="0 0 1232 750" role="img" aria-label="develop 병합은 검사, 빌드, dev 배포, 점검 순서로 자동으로 흐른다. master 병합은 같은 단계를 거치되 prod 배포는 사람이 누른다. prod 배포는 사전 점검, 마이그레이션을 한 번 하고, AI를 교체한 뒤 서비스마다(BE 먼저, 그다음 FE) 반대 색 기동, 엣지 전환, 이전 색 정지를 끝까지 돌린다. BE만 성공하고 FE가 실패하면 BE는 새 버전, FE는 이전 버전으로 남는다.">
     <defs>
       <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#475569"/></marker>
     </defs>
@@ -54,7 +54,7 @@
     <rect class="box" x="224" y="62" width="230" height="80" rx="10"/>
     <text class="t" x="339" y="88" text-anchor="middle">검사</text>
     <text class="s" x="339" y="108" text-anchor="middle">린트 · 시크릿 · 마이그레이션</text>
-    <text class="s" x="339" y="127" text-anchor="middle">BE 시험 · FE 검사 (서버 B)</text>
+    <text class="s" x="339" y="127" text-anchor="middle">BE 시험 (B) · FE 검사 (A)</text>
 
     <rect class="box" x="494" y="62" width="230" height="80" rx="10"/>
     <text class="t" x="609" y="88" text-anchor="middle">빌드 · 이미지</text>
@@ -108,6 +108,7 @@
     <!-- prod 배포 안에서 -->
     <text class="t" x="8" y="338">deploy:prod 한 번에 일어나는 일</text>
     <text class="s" x="268" y="338">infra/deploy/deploy.sh</text>
+    <text class="s" x="430" y="338">1 · 2단계는 한 번, AI 교체 뒤 3 ~ 5단계를 BE → FE 순서로 서비스마다 끝까지 돌린다</text>
 
     <!-- 단계 카드 -->
     <g>
@@ -124,7 +125,7 @@
       <text class="t" x="311" y="386">마이그레이션</text>
       <text class="s" x="279" y="414">변경이 있을 때만</text>
       <text class="s" x="279" y="434">prod는 덤프 먼저, 그 뒤</text>
-      <text class="s" x="279" y="454">fit_migrator 컨테이너가 실행</text>
+      <text class="s" x="279" y="454">fit_migrator 계정으로 실행</text>
     </g>
     <g>
       <rect class="box" x="512" y="354" width="220" height="112" rx="10"/>
@@ -132,7 +133,7 @@
       <text class="t" x="560" y="386">반대 색 기동</text>
       <text class="s" x="528" y="414">서비스 중인 색의 반대 색을</text>
       <text class="s" x="528" y="434">띄우고 준비 확인</text>
-      <text class="s" x="528" y="454">BE → FE 순서</text>
+      <text class="s" x="528" y="454">(서비스마다 3 · 4 · 5단계)</text>
     </g>
     <g>
       <rect class="box" x="761" y="354" width="220" height="112" rx="10"/>
@@ -202,6 +203,9 @@
     <rect class="red" x="926" y="618" width="292" height="62" rx="10"/>
     <text class="t" x="940" y="642">DB 마이그레이션</text>
     <text class="s" x="940" y="663">되돌리지 않고 앞으로 고친다</text>
+    <rect class="red" x="14" y="692" width="1204" height="48" rx="10"/>
+    <text class="t" x="28" y="721">BE 성공 · FE 실패</text>
+    <text class="s" x="190" y="721">BE는 새 버전, FE는 이전 버전으로 남고 BE까지 자동으로 되돌리지 않는다(새 BE가 직전 FE와 호환돼야 한다)</text>
   </svg>
 </div>
 </body>

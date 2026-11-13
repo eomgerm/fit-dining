@@ -30,8 +30,8 @@
 </head>
 <body>
 <div id="frame">
-  <div class="head"><b>서비스 구성</b><span>공개 포트는 Caddy(443) 하나이고, 나머지는 서버 안 망으로만 닿는다</span></div>
-  <svg viewBox="0 0 1232 770" role="img" aria-label="브라우저는 서버 A의 Caddy 443 포트로만 들어오고, Caddy가 FE와 BE와 사진 저장소로 나눠 보낸다. BE는 DB와 Redis와 사진 저장소를 부르고 AI는 DB를 읽기 전용으로 읽는다. OpenSearch는 구축만 되어 있고 앱은 쓰지 않는다. 서버 B는 빌드, 감시, 백업을 맡는다.">
+  <div class="head"><b>서비스 구성</b><span>공개 포트는 Caddy(80 · 443) 하나이고, 나머지는 서버 안 망으로만 닿는다</span></div>
+  <svg viewBox="0 0 1232 770" role="img" aria-label="브라우저는 서버 A의 Caddy(80과 443 포트)로만 들어오고, Caddy가 FE와 BE와 사진 저장소로 나눠 보낸다. BE는 DB와 Redis와 사진 저장소를 부르고 AI는 DB를 읽기 전용으로 읽는다. OpenSearch는 구축만 되어 있고 앱은 쓰지 않는다. 서버 A에는 배포 러너와 FE 검사 러너가 있고, 서버 B는 빌드와 시험, 감시, 백업을 맡는다.">
     <defs>
       <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#475569"/></marker>
       <marker id="r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#dc2626"/></marker>
@@ -123,12 +123,15 @@
     <text class="lab" x="820" y="352">읽기 전용</text>
 
     <!-- 운영 -->
-    <rect class="slate" x="210" y="485" width="300" height="60" rx="10"/>
-    <text class="t" x="360" y="511" text-anchor="middle">관측</text>
-    <text class="s" x="360" y="531" text-anchor="middle">Prometheus · Grafana · Dozzle</text>
-    <rect class="slate" x="540" y="485" width="300" height="60" rx="10"/>
-    <text class="t" x="690" y="511" text-anchor="middle">GitLab Runner(deploy)</text>
-    <text class="s" x="690" y="531" text-anchor="middle">이미지 조립 · 배포</text>
+    <rect class="slate" x="210" y="485" width="250" height="60" rx="10"/>
+    <text class="t" x="335" y="511" text-anchor="middle">관측</text>
+    <text class="s" x="335" y="531" text-anchor="middle">Prometheus · Grafana · Dozzle</text>
+    <rect class="slate" x="480" y="485" width="250" height="60" rx="10"/>
+    <text class="t" x="605" y="511" text-anchor="middle">GitLab Runner(deploy)</text>
+    <text class="s" x="605" y="531" text-anchor="middle">이미지 조립 · 배포</text>
+    <rect class="slate" x="750" y="485" width="250" height="60" rx="10"/>
+    <text class="t" x="875" y="511" text-anchor="middle">GitLab Runner(verify-fe)</text>
+    <text class="s" x="875" y="531" text-anchor="middle">FE 검사(MR 코드, 격리)</text>
 
     <!-- 외부 서비스 -->
     <text class="s" x="1062" y="196">외부 서비스</text>
@@ -149,7 +152,7 @@
     <text class="s" x="246" y="653">EC2 c6g.large · Arm · 2 vCPU · 4GB</text>
     <rect class="slate" x="190" y="672" width="240" height="62" rx="10"/>
     <text class="t" x="310" y="699" text-anchor="middle">GitLab Runner(verify)</text>
-    <text class="s" x="310" y="719" text-anchor="middle">빌드 · 시험</text>
+    <text class="s" x="310" y="719" text-anchor="middle">lint · BE 시험 · 빌드</text>
     <rect class="slate" x="450" y="672" width="280" height="62" rx="10"/>
     <text class="t" x="590" y="699" text-anchor="middle">외부 감시</text>
     <text class="s" x="590" y="719" text-anchor="middle">Prometheus · Alertmanager</text>
