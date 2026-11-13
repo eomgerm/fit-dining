@@ -286,6 +286,22 @@ export function isMeetupCode(code: string) {
   return /^[A-Za-z0-9_-]{22}$/.test(code);
 }
 
+// 내 모임의 한 줄(AC-75). 만든 모임은 HOST, 회원 프로필로 참여한 모임은 PARTICIPANT다
+export type MeetupListItem = {
+  code: string;
+  role: "HOST" | "PARTICIPANT";
+  phase: MeetupPhase;
+  area: MeetupInfo["area"];
+  category: MeetupCategory;
+  date?: string;
+  time?: string;
+  headcount?: number;
+  profileCount: number;
+  decidedPlaceName?: string;
+};
+
+export type MeetupList = { items: MeetupListItem[] };
+
 export function meetupHref(code: string) {
   return `/m/${code}`;
 }

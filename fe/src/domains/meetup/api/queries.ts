@@ -17,6 +17,7 @@ import {
   createMeetup,
   createProfile,
   decide,
+  fetchMyMeetups,
   fetchResult,
   fetchSnapshot,
   linkAccount,
@@ -34,10 +35,11 @@ import {
 // 로그인을 확인하고 요청을 보내는 함수. 모임 도메인은 인증 도메인을 부를 수 없어 app이 만들어 넘긴다
 export type WithSession = <T>(send: () => Promise<T>) => Promise<T>;
 
-// 스냅숏의 키는 ["meetups", 코드]다(D-21). 지역 찾기 키의 "areas"는 22자 코드와 겹치지 않는다
+// 스냅숏의 키는 ["meetups", 코드]다(D-21). 지역 찾기의 "areas"와 내 모임의 "mine"은 22자 코드와 겹치지 않는다
 export const meetupKeys = {
   all: ["meetups"] as const,
   areas: (query: string) => [...meetupKeys.all, "areas", query] as const,
+  mine: () => [...meetupKeys.all, "mine"] as const,
   areaCheck: (lat: number, lng: number, radiusM: number) =>
     [...meetupKeys.all, "area-check", lat, lng, radiusM] as const,
   snapshot: (code: string) => [...meetupKeys.all, code] as const,
@@ -50,6 +52,16 @@ export const meetupKeys = {
 export const CALCULATING_REFETCH_MS = 1000;
 // 투표 중에 스냅숏을 다시 받는 간격(D-21)
 export const VOTING_REFETCH_MS = 5000;
+
+// 내 모임. 로그인하지 않았으면 enabled를 끈다(AC-75)
+export function useMyMeetups(withSession: WithSession, enabled: boolean) {
+  return useQuery({
+    queryKey: meetupKeys.mine(),
+    queryFn: ({ signal }) => withSession(() => fetchMyMeetups(signal)),
+    enabled,
+    retry: false,
+  });
+}
 
 export function useAreaSearch(query: string, withSession: WithSession) {
   return useQuery({

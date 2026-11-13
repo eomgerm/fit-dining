@@ -93,7 +93,7 @@ function JoinBody({
       pending={create.isPending}
       takenName={takenName}
       onBack={() =>
-        host ? router.push("/") : router.replace(meetupHref(code))
+        host ? router.push("/m") : router.replace(meetupHref(code))
       }
       onPickName={pickName}
       onSignIn={(form) => {

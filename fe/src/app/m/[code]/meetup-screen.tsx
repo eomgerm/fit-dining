@@ -255,7 +255,7 @@ function MeetupBody({
         parts={RESULT_PARTS}
         placeHref={(placeId) => `/places/${placeId}?meetup=${code}`}
         calculating={calculation.isPending}
-        onBack={host ? () => router.push("/") : undefined}
+        onBack={host ? () => router.push("/m") : undefined}
         onCalculate={calculate}
         onReload={() => result.refetch()}
         onEditTaste={editTaste}
@@ -299,7 +299,7 @@ function MeetupBody({
         parts={RESULT_PARTS}
         placeHref={(placeId) => `/places/${placeId}?meetup=${code}`}
         pending={pollPending}
-        onBack={host ? () => router.push("/") : undefined}
+        onBack={host ? () => router.push("/m") : undefined}
         onVote={(placeId) =>
           succeeded(
             vote.mutateAsync(placeId),
@@ -356,7 +356,7 @@ function MeetupBody({
         {voteView() || resultView() || (
           <WaitingView
             snapshot={snapshot}
-            onBack={host ? () => router.push("/") : undefined}
+            onBack={host ? () => router.push("/m") : undefined}
             onShare={share}
             onCopy={copy}
             onEditTaste={editTaste}
