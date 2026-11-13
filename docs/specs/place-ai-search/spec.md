@@ -7,7 +7,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 
 이번 반복 전에는 DB 모드(`PLACE_MOCK_ENABLED`가 꺼진 환경)의 추천 검색(`POST /api/v1/places/search`)이 문장에 "근처"가 들어 있으면 카탈로그 전체를 점수 없이 주고, 그 밖의 문장은 모두 503이었다(place-lookup-db#D-13). AI 파트의 검색 API(`POST /v1/search`)가 요청 해석, 후보 추출, 정렬, 카드의 AI 필드를 만들 수 있게 됐지만 BE는 부르지 않았다. 그래서 운영에서는 자연어 검색을 쓸 수 없었고, 홈 카드에도 점수와 라벨이 없었다.
 
-이번 반복(Jira S15P31A302-133)은 BE와 FE를 함께 한다(D-1). DB 모드 엔진의 추천 검색이 AI 검색 API를 부르고, AI가 준 카드에 장소 정보와 영업 상태를 붙여 돌려준다. AI가 실패하면 오류 화면 대신 키워드나 카탈로그로 만든 대체 결과와 `X-Fallback` 헤더를 준다. 검색은 로그인을 선택으로 받아, 회원이면 회원 id를, 비회원이면 기기의 온보딩 답을 AI에 넘긴다. AI가 장소를 읽는 뷰를 BE 마이그레이션으로 만든다(D-15). FE는 검색 요청에 토큰이나 답을 싣고 대체 결과를 알린다(D-16). 그 반복에서 Mock 엔진은 바꾸지 않았다.
+이번 반복(Jira S15P31A302-133)은 BE와 FE를 함께 한다(D-1). DB 모드 엔진의 추천 검색이 AI 검색 API를 부르고, AI가 준 카드에 장소 정보와 영업 상태를 붙여 돌려준다. AI가 실패하면 오류 화면 대신 키워드나 카탈로그로 만든 대체 결과와 `X-Fallback` 헤더를 준다. 검색은 로그인을 선택으로 받아, 회원이면 회원 id를, 비회원이면 기기의 온보딩 답을 AI에 넘긴다. AI가 장소를 읽는 뷰를 BE 마이그레이션으로 만든다(D-15). FE는 검색 요청에 로그인 세션 쿠키·CSRF 헤더와 비회원 답을 싣고 대체 결과를 알린다(D-16). 그 반복에서 Mock 엔진은 바꾸지 않았다.
 
 다음 반복(Jira S15P31A302-168)은 BE가 AI를 기다리는 방식만 고친다. 그전에는 AI가 `503 BUSY`와 `Retry-After: 1`을 줘도 BE가 기다리지 않고 바로 재요청해, AI의 동시 처리 개수가 아직 차 있어 다시 `BUSY`를 받기 쉬웠다. 또 BE에서 AI 응답을 기다리는 검색이 8개면 9번째는 semaphore permit이 곧 반납돼도 바로 키워드 결과를 받았다. 실패 로그에는 상태 코드만 있어 503이 임베딩 실패인지 장소 DB 실패인지 알 수 없었다. 이번에는 `Retry-After`만큼 기다린 뒤 재요청하고(남은 예산이 모자라면 기다리지 않고 대체), permit이 없으면 예산 안에서 반납을 잠깐 기다리며, 실패 로그에 ProblemDetail `code`와 걸린 시간을 남긴다(D-3, D-17).
 
@@ -21,7 +21,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 4. 회원 취향(`user_preferences.features`)은 -129가 가입 때 저장하고 AI가 DB에서 직접 읽는다. 검색 쪽 BE는 회원 id만 넘긴다(D-12).
 5. 검색은 선택적인 세션 인증 주체를 사용한다. Authorization 헤더는 무시하며 모든 검색 POST에는 CSRF 토큰이 필요하다(D-4).
 6. `migrate` 프로필은 웹 서버 없이 뜨고 인증 빈을 만들지 않는다. 지금 `PlaceController`는 이 프로필에서도 만들어진다(D-4).
-7. 이번 반복 전 FE는 검색 요청에 `preferences`와 토큰을 싣지 않았다(`fe/src/domains/place/model/search-request.ts`). 비회원 온보딩 답은 기기에 가입과 같은 모양으로 저장돼 있고, 읽을 때 지금 선택지에 맞지 않으면 지운다(`fe/src/domains/onboarding/model/storage.ts#readAnswers`)(D-4, D-16).
+7. 이번 반복 전 FE는 검색 요청에 `preferences`와 회원 인증 정보를 싣지 않았다(`fe/src/domains/place/model/search-request.ts`). 비회원 온보딩 답은 기기에 가입과 같은 모양으로 저장돼 있고, 읽을 때 지금 선택지에 맞지 않으면 지운다(`fe/src/domains/onboarding/model/storage.ts#readAnswers`)(D-4, D-16).
 8. FE의 API 요청은 기본 10초에 끊기고 요청마다 바꿀 수 있다(`fe/src/shared/api/client.ts`의 `timeoutMs`). 대체 결과가 화면에 닿으려면 BE가 FE보다 먼저 응답해야 한다(D-3).
 9. AI DB 계정은 `ai_place_search`와 `user_preferences`만 읽고(2026-11-10에 페르소나 뷰 `ai_place_personas`(V33)를 더했다, S15P31A302-161), 배포는 마이그레이션 뒤에 그 권한을 다시 맞춘다(`infra/data/grant-ai-read.sh`, `infra/deploy/deploy.sh`). 서버 dev DB에는 아직 이 뷰가 없다(D-15).
 10. FE의 도메인끼리는 서로 import하지 않고 app 계층이 잇는다(`fe/eslint.config.mjs`). place 도메인은 auth와 onboarding을 import하지 않는다(D-16).
@@ -82,19 +82,19 @@ AI 실패와 대체
 
 취향과 인증
 
-- [x] AC-17: `Authorization` 헤더는 빈 값·잘못된 Bearer 값을 포함해 무시한다. 세션 쿠키가 있으면 회원, 없으면 비회원으로 검색하며 이 헤더만으로 401을 반환하거나 AI 호출을 막지 않는다. 상태 변경 요청에는 CSRF 토큰이 필요하다. (D-4)
+- [x] AC-17: `Authorization` 헤더는 빈 값·잘못된 값을 포함해 무시한다. 세션 쿠키가 있으면 회원, 없으면 비회원으로 검색하며 이 헤더만으로 401을 반환하거나 AI 호출을 막지 않는다. 상태 변경 요청에는 CSRF 토큰이 필요하다. (D-4)
 - [x] AC-18: `preferences`는 가입의 `preferences`와 같은 모양(`mood`, `priorities`, `purposes`, `tastes`)과 검증을 따른다. 검증에 맞지 않거나 모르는 속성이 있으면 회원이든 비회원이든 400이다. 예전 모양(문자열 목록)은 Mock 모드에서도 400이다. (D-4)
 - [x] AC-19: `migrate` 프로필이 인증 환경 변수 없이 뜨고 끝난다(인증을 붙인 뒤에도). (D-4)
 
 절대 일어나면 안 되는 일
 
-- [x] AC-20: 세 API의 어떤 요청이든(성공, 대체 ①~⑩, 400, 401, 503) 처리한 뒤 BE 로그 출력에 검색 문장(`query`), `previousConditions`·`conditions`의 값, `mapBounds`의 좌표 값(대략의 위치다), `preferences`의 값, AI 요청·응답 본문(본문 조각을 담을 수 있는 HTTP·JSON 예외 메시지 포함)이 나타나지 않는다. 예외는 AC-16이 남기라는 `interpretedBy`, `rankedBy`, `models` 값뿐이다. (D-11)
-- [x] AC-21: 세 API의 어떤 요청 본문과 헤더 조합이든 AI 요청의 `userId`는 검증된 토큰이나 로그인 세션의 사용자 id이거나 없다. 본문에 `userId`를 넣으면 400이다. (D-11)
+- [x] AC-20: 세 API의 어떤 요청이든(성공, 대체 ①~⑩, 400, 403, 503) 처리한 뒤 BE 로그 출력에 검색 문장(`query`), `previousConditions`·`conditions`의 값, `mapBounds`의 좌표 값(대략의 위치다), `preferences`의 값, AI 요청·응답 본문(본문 조각을 담을 수 있는 HTTP·JSON 예외 메시지 포함)이 나타나지 않는다. 예외는 AC-16이 남기라는 `interpretedBy`, `rankedBy`, `models` 값뿐이다. (D-11)
+- [x] AC-21: 세 API의 어떤 요청 본문과 헤더 조합이든 AI 요청의 `userId`는 로그인 세션의 사용자 id이거나 없다. 본문에 `userId`를 넣으면 400이다. (D-11)
 
 바뀌지 않는 것
 
 - [x] AC-22: Mock 모드의 추천 검색은 세 API 모두 AI를 부르지 않고 `X-Fallback`이 없다. SEARCH는 지금과 같은 결과와 페이지 나눔(`cursor`, `nextCursor`, 잘못된 커서 400)을 주되 `query`의 "근처"로 결과가 달라지지 않는다. NEARBY와 REGION은 AC-33이다. `preferences`는 받기만 하고 결과에 반영하지 않는다. 인증 규칙(AC-17), `preferences` 검증(AC-18), 요청 검증(AC-29, AC-30)은 Mock 모드에도 같다. (D-1, D-4, D-10, D-18)
-- [x] AC-23: 자동완성(`GET /places/suggest`)과 상세(`GET /places/{id}`)는 DB 모드에서도 지금과 같고 AI를 부르지 않으며, `Authorization` 헤더를 보지 않는다(잘못된 토큰이어도 401이 아니다). (D-2, D-4)
+- [x] AC-23: 자동완성(`GET /places/suggest`)과 상세(`GET /places/{id}`)는 DB 모드에서도 지금과 같고 AI를 부르지 않으며, `Authorization` 헤더를 보지 않는다(잘못된 `Authorization` 값이어도 401이 아니다). (D-2, D-4)
 
 AI가 읽는 뷰
 
@@ -103,7 +103,7 @@ AI가 읽는 뷰
 FE 검색 요청
 
 - [x] AC-25: FE의 추천 검색 요청(`POST /api/v1/places/search`, 홈 주변 카드와 다음 페이지 포함)은 15초가 지나야 시간 초과다. 그 밖의 FE API 요청은 기능이 따로 정하지 않으면 기본 10초다(취향 분석은 온보딩이 15초로 정했다). (D-3, D-16)
-- [x] AC-26: FE는 추천 검색 요청(홈 주변 카드, 첫 검색, 후속 검색, 다음 페이지)을 보낼 때마다 로그인 세션을 확인한다(검색 기록 저장과 같은 확인. 확인되지 않았으면 복원을 3초까지 기다린다). 확인된 회원이면 `Authorization: Bearer <그 세션의 AT>`를 싣고 `preferences`는 싣지 않으며, 만료로 401이 오면 토큰을 한 번 갱신해 다시 보낸다. 갱신하고도 실패하거나 보내는 사이 세션이 바뀌면 그 요청은 지금의 검색 실패와 같이 끝난다. 확인된 비회원이면 `Authorization` 없이, 기기에 저장된 온보딩 답이 있고 모든 칩의 `code`가 없거나 BE 규칙(`^[A-Z][A-Z0-9_]{0,63}$`)에 맞으면 그 값을 `preferences`로 싣고, 맞지 않으면 `preferences` 없이 보낸다. 확인하지 못했으면 둘 다 싣지 않는다. 검색 기록에 저장되는 요청(검색 thread의 turn)과 화면 상태의 요청에는 `preferences`가 들어가지 않는다(FE의 검색 요청 타입에 `preferences`가 없다). (D-4, D-16)
+- [x] AC-26: FE는 추천 검색 요청(홈 주변 카드, 첫 검색, 후속 검색, 다음 페이지)을 보낼 때마다 로그인 세션을 확인한다(검색 기록 저장과 같은 확인. 확인되지 않았으면 복원을 3초까지 기다린다). 확인된 회원이면 로그인 세션 쿠키를 보내고 `preferences`는 싣지 않는다. 세션 만료나 보내는 사이 세션 변경으로 실패하면 그 요청은 지금의 검색 실패와 같이 끝난다. 확인된 비회원이면 로그인 세션 없이, 기기에 저장된 온보딩 답이 있고 모든 칩의 `code`가 없거나 BE 규칙(`^[A-Z][A-Z0-9_]{0,63}$`)에 맞으면 그 값을 `preferences`로 싣고, 맞지 않으면 `preferences` 없이 보낸다. 확인하지 못했으면 `preferences`를 싣지 않는다. 모든 검색 POST는 비회원도 CSRF 헤더를 보낸다. 검색 기록에 저장되는 요청(검색 thread의 turn)과 화면 상태의 요청에는 `preferences`가 들어가지 않는다(FE의 검색 요청 타입에 `preferences`가 없다). (D-4, D-16)
 - [x] AC-27: 첫 페이지 응답의 `X-Fallback` 값(쉼표로 나눈 원소)에 `AI_UNAVAILABLE`이 있고 응답 `items`가 하나 이상이면, 그 결과를 보여 줄 때 카드 목록 위(홈 주변 카드와 검색 결과 모두)에 안내 한 줄 "지금은 AI 추천을 쓸 수 없어 가게 이름·메뉴로 찾았어요"가 보인다. 응답 `items`가 없으면 안내 없이 지금 화면 그대로다. 헤더가 없거나 `AI_UNAVAILABLE`이 없으면 안내가 없다. 대체 여부는 응답 본문(검색 기록에 저장되는 첫 페이지) 밖에 두어, 검색 기록에서 연 결과에는 안내가 없다. 홈 주변 카드가 대체 결과였으면 홈 주변 카드를 다시 마운트할 때(첫 화면으로 돌아올 때) 새로 받고, 창 포커스나 네트워크 재연결로는 다시 받지 않는다. 대체가 아닌 홈 결과와 모든 검색 결과는 지금처럼 페이지가 열린 동안 다시 받지 않는다. (D-6, D-16)
 
 AI를 기다리는 검색 수
@@ -128,7 +128,7 @@ AI를 기다리는 검색 수
 
 ### `POST /api/v1/places/search`
 
-요청 헤더 `Authorization: Bearer <AT>`는 선택이다(D-4). 본문(`PlaceSearchRequest`)은 `preferences`의 모양만 바뀐다. FE가 무엇을 싣는지는 [FE 검색 요청](#fe-검색-요청)에 있다.
+로그인 세션 쿠키는 선택이고 POST 요청에는 CSRF 헤더가 필수다(D-4). 본문(`PlaceSearchRequest`)은 `preferences`의 모양만 바뀐다. FE가 무엇을 싣는지는 [FE 검색 요청](#fe-검색-요청)에 있다.
 
 ```
 PlaceSearchRequest {
@@ -154,11 +154,11 @@ Preferences {
 | AI 성공 | 200 | AC-5 | AI `fallbacks`가 있으면 그 값(AC-6) |
 | AI 실패(AC-7) | 200 | [대체 결과](#대체-결과) | `AI_UNAVAILABLE` 하나만. 대체로 끝난 응답에는 AI `fallbacks`를 싣지 않는다 |
 | 본문 형식·검증 오류 | 400 | ProblemDetail(장소 API의 기존 400) | 없음 |
-| 헤더가 있는데 인증 실패 | 401 | ProblemDetail(리뷰 API와 같은 모양), 만료면 `type` `urn:fitdining:auth:access-token-expired` | 없음 |
+| CSRF 헤더 누락·불일치(회원·비회원 공통) | 403 | ProblemDetail(Security 공통 CSRF 오류) | 없음 |
 | DB 모드에서 `cursor`가 null이 아님 | 400 | ProblemDetail(장소 API의 기존 400) | 없음 |
 | 카탈로그 DB 오류 | 503 | ProblemDetail(장소 API의 기존 503) | 없음 |
 
-판단 순서는 인증(401) → 본문 형식·검증(400) → `cursor`(400) → 검색이다. 인증은 Security 필터가 컨트롤러보다 먼저 하므로 본문이 틀리고 토큰도 무효면 401이다(S15P31A302-191 이후, D-4 Default). 로그인 세션으로 보낸 POST에 CSRF 토큰이 없으면 Security 설정이 403을 준다(`Authorization` 헤더가 있으면 CSRF를 보지 않는다). 응답 본문의 JSON 모양이 바뀌지 않는 것이 의무이고, 헤더 값을 나르는 내부 타입은 재량이다.
+판단 순서는 CSRF 검사(403) → 본문 형식·검증(400) → `cursor`(400) → 검색이다. 검색 3개 POST 경로는 Security 설정에서 비회원도 허용하고, 만료 필터는 세션을 무효화한 뒤 요청을 계속하므로 만료 세션은 비회원으로 검색한다. `Authorization` 헤더는 무시하며 인증 때문에 401을 반환하지 않는다. 로그인 세션 유무와 관계없이 CSRF 헤더가 없거나 올바르지 않으면 본문 검증 전에 403이다. 응답 본문의 JSON 모양이 바뀌지 않는 것이 의무이고, 헤더 값을 나르는 내부 타입은 재량이다.
 
 이 API의 목적은 SEARCH(새 검색, 후속 검색)다. 요청 모양과 검증은 이번 반복에도 바뀌지 않는다(D-18).
 
@@ -201,7 +201,7 @@ MapBounds { swLat, swLng, neLat, neLng: number }   // 네 값 모두 필수, 유
 | `mapBounds` | SEARCH는 요청에 있고 네 값 중 하나라도 있을 때. NEARBY·REGION은 항상 | SEARCH는 요청 값에서 빈 값을 뺀 것. NEARBY·REGION은 검증한 네 값 |
 | `rulesOnly` | NEARBY만 | `true` (AI가 LLM 없이 규칙으로 해석, D-8) |
 | `mapFirst` | REGION만 | `true` (AI가 이전 조건의 지역을 지우고 지도 영역에서 찾음) |
-| `userId` | 인증 주체(유효한 토큰이나 로그인 세션)가 있을 때 | 그 주체의 사용자 id |
+| `userId` | 인증 주체(유효한 로그인 세션)가 있을 때 | 그 주체의 사용자 id |
 | `tasteProfile` | 인증 주체가 없고 요청에 `preferences`가 있을 때 | 검증과 정리를 거친 `preferences` 그대로(`mood`, `priorities`, `purposes`, `tastes[{polarity, label, code}]`). null인 `mood`·`code`는 빠지고 목록은 비어 있어도 `[]` |
 
 ### AI 응답
@@ -247,7 +247,7 @@ AC-9 ~ AC-12가 규칙이다(D-6). 목적은 API가 정한다(D-18). 요약하�
 
 ### 취향과 인증
 
-- 로그인은 선택이다. `Authorization` 헤더가 있으면 반드시 유효해야 하고(AC-17), 헤더가 없으면 로그인 세션의 주체를 쓰며, 세션도 없으면 비회원이다(S15P31A302-191 이후). 토큰 확인은 DB를 보지 않아 탈퇴한 회원의 토큰도 회원으로 지나간다(D-4 Default, 감수).
+- 로그인은 선택이다. `Authorization` 헤더는 무시하고 유효한 로그인 세션의 주체를 쓰며, 세션이 없으면 비회원이다. 변경 요청에는 비회원도 CSRF 헤더가 필요하다. 탈퇴 시 계정 세션은 무효화된다.
 - 회원: AI에 `userId`만 보낸다. 취향은 AI가 DB에서 읽는다(D-12).
 - `preferences`가 있으면 회원이든 비회원이든 가입과 같은 검증과 정리(중복 제거, `label` 앞뒤 공백 제거)를 한다. 회원의 답변은 검증만 하고 쓰지 않는다. 비회원의 답변은 AI 요청의 `tasteProfile`로 그대로 넘긴다(AC-3). 칩의 문장 벡터(`vector`)는 붙이지 않는다(D-4 Default).
 
@@ -274,11 +274,11 @@ AC-9 ~ AC-12가 규칙이다(D-6). 목적은 API가 정한다(D-18). 요약하�
 
 AC-25 ~ AC-27이 규칙이다(D-16). 요약하면 다음과 같다.
 
-| 세션 | `Authorization` | `preferences` |
+| 세션 | 인증·CSRF | `preferences` |
 |---|---|---|
-| 확인된 회원 | 그 세션의 AT(만료면 한 번 갱신해 다시 보냄) | 없음 |
-| 확인된 비회원 | 없음 | 기기에 저장된 온보딩 답(없으면 없음) |
-| 확인 못 함 | 없음 | 없음 |
+| 확인된 회원 | 로그인 세션 쿠키 + CSRF 헤더 | 없음 |
+| 확인된 비회원 | CSRF 헤더 | 기기에 저장된 온보딩 답(없으면 없음) |
+| 확인 못 함 | 브라우저 쿠키 + CSRF 헤더(회원 여부는 서버가 판정) | 없음 |
 
 `preferences`는 보낼 때만 붙이고, 화면 상태와 검색 기록에 남기는 요청에는 넣지 않는다. 세션과 온보딩 답은 app 계층이 place 도메인에 넘긴다(넘기는 타입의 모양은 재량). 대체 안내 문구와 다시 받는 범위는 AC-27이다.
 
@@ -306,10 +306,10 @@ AC-25 ~ AC-27이 규칙이다(D-16). 요약하면 다음과 같다.
 | `be/src/main/resources/application.yml#fitdining` | reuse | `fitdining.ai.base-url`, `modal-key`, `modal-secret`을 온보딩과 함께 쓴다. 검색 전용 주소 키나 켜고 끄는 스위치를 더하지 않는다 | D-3 |
 | `be/src/main/java/kr/co/fitdining/api/user/Preferences.java#Preferences` | reuse | 비회원 답변의 모양, 검증, 정리 규칙. 가입이 쓰는 것과 같은 타입을 그대로 쓴다 | D-4 |
 | `be/src/main/java/kr/co/fitdining/api/place/dto/PlaceSearchRequest.java#PlaceSearchRequest` | modify | `preferences`의 타입만 `Preferences`로 바꾸고(검증 포함) 나머지 필드는 그대로 둔다. -201: 필드와 검증은 그대로 두고, `mapBounds` 주석에 "지도 영역은 검색 대상 지역이지만 대략의 위치로 서버에 간다(로그에 남기지 않는다)"를 적는다. FE가 언제 싣는지는 place-search가 정하므로 BE 주석에 적지 않는다(지금 주석의 "'이 지역에서 검색'이나 위치 실패 때만 보낸다"는 지운다) | D-4, D-18 |
-| `be/src/main/java/kr/co/fitdining/api/place/PlaceController.java#PlaceController` | modify | 추천 검색에 선택 로그인(`Authorization`)과 `X-Fallback` 헤더를 더한다. 인증 빈이 없는 `migrate` 프로필에서도 기동이 깨지지 않게 한다(리뷰 API처럼 웹 앱에서만 만들기). 자동완성과 상세는 그대로 둔다. -201: `/places/nearby`와 `/places/search/region`을 더하고, `/places/search`·자동완성·상세·id 목록은 그대로 둔다 | D-4, D-7, D-18 |
-| `be/src/main/java/kr/co/fitdining/api/place/exception/PlaceExceptionHandler.java#PlaceExceptionHandler` | modify | `AuthFailure`를 401 ProblemDetail로(만료면 `type` 유지) 바꾼다. 리뷰 API의 처리(`ReviewExceptionHandler#handleAuthFailure`)와 같은 모양. 기존 400·404·503 처리는 그대로 둔다 | D-4 |
+| `be/src/main/java/kr/co/fitdining/api/place/PlaceController.java#PlaceController` | modify | 추천 검색에 선택 로그인(세션 쿠키)과 `X-Fallback` 헤더를 더한다. 인증 빈이 없는 `migrate` 프로필에서도 기동이 깨지지 않게 한다(리뷰 API처럼 웹 앱에서만 만들기). 자동완성과 상세는 그대로 둔다. -201: `/places/nearby`와 `/places/search/region`을 더하고, `/places/search`·자동완성·상세·id 목록은 그대로 둔다 | D-4, D-7, D-18 |
+| `be/src/main/java/kr/co/fitdining/api/place/exception/PlaceExceptionHandler.java#PlaceExceptionHandler` | modify | `AuthFailure`의 상태 코드와 선택적 `type`을 그대로 반영한 ProblemDetail로 바꾼다. 리뷰 API의 처리(`ReviewExceptionHandler#handleAuthFailure`)와 같은 모양. 기존 400·404·503 처리는 그대로 둔다 | D-4 |
 | `be/src/main/java/kr/co/fitdining/api/place/engine/PlaceSearchEngine.java#PlaceSearchEngine` | modify | 엔진에 회원 id를 넘기고 대체 사유를 돌려받을 수 있게 검색 시그니처를 바꿀 수 있다. -201: 검색이 목적(NEARBY, SEARCH, REGION)을 받는다. 목적을 나르는 타입과 시그니처의 모양은 재량이다 | D-4, D-7, D-18 |
-| `be/src/main/java/kr/co/fitdining/api/auth/ports/AuthUseCases.java#authenticate` | reuse | 토큰 확인과 만료 판정은 이 인증 모듈을 거친다. 리뷰 목록(`ReviewController#list`)의 선택 로그인과 같은 방식이다 | D-4, D-11 |
+| `be/src/main/java/kr/co/fitdining/api/auth/infrastructure/SecurityConfiguration.java#securityFilterChain` | reuse | 로그인 세션 확인과 CSRF 검사는 이 Security 필터를 거친다. 리뷰 목록(`ReviewController#list`)의 선택 로그인과 같은 방식이다 | D-4, D-11 |
 | `be/src/main/java/kr/co/fitdining/api/place/catalog/PlaceCatalog.java#PlaceCatalog` | modify | id 목록으로 카드용 장소 정보를 한 번에 읽는 기능을 더한다(Postgres 구현 `JdbcPlaceCatalog` 포함). -201: 지도 영역 안(경계 포함) 장소를 `place_id` 오름차순으로 n곳 읽는 기능을 더한다. 영역과 개수는 DB 조회에서 거르고, 좌표는 SQL 문자열에 넣지 않고 바인딩해 DB 오류 로그에 좌표가 남지 않게 한다(AC-20). `nearbyCandidates()`를 포함한 기존 기능은 그대로 둔다 | D-5, D-6, D-11 |
 | `be/src/main/java/kr/co/fitdining/api/place/catalog/OpenStatusCalculator.java#OpenStatusCalculator` | reuse | AI 카드와 대체 카드의 `openStatus` 계산 | D-5 |
 | `be/src/main/java/kr/co/fitdining/api/place/keyword/PlaceKeywordSearch.java#PlaceKeywordSearch` | reuse | SEARCH의 대체 결과를 얻는다. 매칭 규칙은 place-lookup-db spec 그대로다 | D-6 |
@@ -319,7 +319,7 @@ AC-25 ~ AC-27이 규칙이다(D-16). 요약하면 다음과 같다.
 | `fe/src/domains/place/api/place-api.ts#searchPlaces` | modify | 검색 요청에 헤더·`preferences`·15초를 싣고 `X-Fallback`을 읽는다. 자동완성과 상세는 그대로 둔다 | D-16 |
 | `fe/src/domains/place/api/place-queries.ts#placeQueries` | modify | 검색과 홈 주변 카드 쿼리가 세션에 맞는 요청을 보내고, 홈 대체 결과를 다시 받게 한다. 쿼리 키와 검색 결과의 캐시 규칙은 그대로 둔다 | D-16 |
 | `fe/src/domains/place/model/place-types.ts#PlaceSearchRequest` | modify | 옛 모양 `preferences?: string[]`을 없앤다. 화면 상태와 검색 기록의 요청이 이 타입이라 `preferences`가 들어가지 않는다. 다른 필드는 그대로 둔다 | D-16 |
-| `fe/src/app/search-thread-auth.ts#threadAuth` | reuse | 세션 확인(`current`, `resolve`)과 토큰 갱신을 거친 전송(`send`). 검색 기록 저장과 같은 것을 쓴다 | D-16 |
+| `fe/src/app/search-thread-auth.ts#threadAuth` | reuse | 세션 확인(`current`, `resolve`)과 세션 쿠키와 CSRF 헤더를 사용하는 전송(`send`). 검색 기록 저장과 같은 것을 쓴다 | D-16 |
 | `fe/src/domains/onboarding/model/storage.ts#readAnswers` | reuse | 비회원 온보딩 답 읽기와 검증 | D-4, D-16 |
 
 ## Seams & test plan
@@ -329,15 +329,15 @@ AC-25 ~ AC-27이 규칙이다(D-16). 요약하면 다음과 같다.
 - AI 클라이언트 (example, `MockRestServiceServer`), AC-2, AC-6(값 파싱), AC-7 ①②④~⑦, AC-8, AC-13, AC-16, AC-20: 요청 본문의 속성 집합(모르는 속성 없음, `userId` 규칙, 빈 `previousConditions` 생략, `previousConditions` 안쪽 null 유지), Modal 헤더(공백뿐인 값 제외), 응답 변환(어느 깊이든 모르는 속성 무시, 빠진 목록은 빈 목록), 읽을 수 없는 응답의 종류(모르는 enum 값 포함), `BUSY` 판정과 한 번 재시도, `Retry-After` 읽기(정수 초, 상한, 없거나 읽을 수 없는 값)와 대기 전 남은 예산 판정과 대기 중 interrupt(대기는 주입한 함수로 기록만 한다), 200 외 상태 분류와 로그의 `code`(대문자 상수만, 그 밖의 값은 상태 코드만), 걸린 시간, 차단이 풀릴 때 건너뛴 수, 공백뿐인 주소(①), 이름 풀이 실패·연결 끊김(②), 형식이 잘못된 주소와 그 밖의 예외(⑦), 목록 안 null 원소(⑦), 실패 종류와 로그 수준, 차단기(3번·30초·⑥⑦ 미집계·성공 시 해제·실패한 시험 호출 뒤 재차단·차단 중 끝난 실패의 끝 시각 연장·차단 중 끝난 성공의 해제·차단 시작/해제 로그, 시각은 주입한 `Clock`), 실패 로그에 본문 표식이 없음을 잡는다. 실제 네트워크와 Modal 프록시는 놓친다. Prior art: `be/src/test/java/kr/co/fitdining/api/onboarding/AiTasteAnalyzerTests.java`.
 - AI 클라이언트 시간 예산과 동시성 상한 (example, JDK 내장 `com.sun.net.httpserver.HttpServer`로 늦게 응답), AC-7 ③⑩, AC-8, AC-28: `MockRestServiceServer`는 요청 팩토리를 바꿔 실제 타임아웃이 돌지 않으므로 실제 HTTP 서버로 확인한다. 예산 값은 짧게 주입한다. 헤더 뒤 본문이 늦는 응답을 포함한 시간 초과, `BUSY` 뒤 재시도가 예산을 넘지 않음, `Retry-After`만큼 실제로 기다린 뒤 재요청함, 대기 뒤 남은 예산이 모자라면 재요청하지 않음, 시간 초과 로그에 본문 표식이 없음, 상한만큼 기다리는 중에 온 검색이 permit 대기 시간만 기다리고 AI를 부르지 않고 대체되며 차단기를 바꾸지 않음, 기다리는 동안 permit이 반납되면 AI를 부름, permit 대기가 예산 안에서 끝남, 실패한 검색도 permit을 반납함을 잡는다. Prior art: `AiTasteAnalyzerTests#configuredProfileTimeout_throwsTimeout`.
 - DB 모드 엔진 (example, 가짜 AI 클라이언트 + 가짜 카탈로그·키워드 검색), AC-1, AC-4, AC-5, AC-7 ⑧⑨, AC-9 ~ AC-12, AC-15, AC-16(⑧⑨ 로그, 성공 시 `models` 로그), AC-20(엔진 로그), AC-21, AC-23: 요청마다 AI 호출("근처 맛집" 포함), `cursor`(빈 문자열 포함)면 AI를 부르지 않고 400 예외, 순서 유지, `conditions`·`nearby`·`changeSummary`·`emptyReason` 옮기기와 빠진 값의 기본값, 중복 id 제거, 없는 id 제외와 WARN 로그, 전부 없을 때 대체와 헤더 값, 키워드 대체의 순서(20곳 → id 읽기)와 카탈로그에 없는 히트 제외, 대체 카드 모양과 `emptyReason` 문구, DB 예외와 키워드 검색의 503 예외를 삼키지 않음, AI 클라이언트의 예상 못 한 예외는 대체로 바꿈, 넘겨받은 회원 id만 `userId`가 됨, 자동완성·상세는 AI를 부르지 않음을 잡는다. HTTP 직렬화는 놓친다. Prior art: `be/src/test/java/kr/co/fitdining/api/place/engine/CatalogPlaceSearchEngineTest.java`, `be/src/test/java/kr/co/fitdining/api/place/keyword/FakePlaceCatalog.java`.
-- 컨트롤러 (example, `@WebMvcTest` + 가짜 엔진·`AuthUseCases`, `OutputCaptureExtension`), AC-3, AC-4, AC-6(헤더), AC-7(헤더), AC-15, AC-17, AC-18, AC-20, AC-21, AC-22: `X-Fallback` 헤더, 401과 만료 `type`, `Bearer` 아닌 헤더와 빈 헤더, 토큰 없는 비회원 처리, 판단 순서(401 → 본문 400 → `cursor` 400), `cursor: null`은 커서 없음, `preferences` 검증 400(회원 포함)과 옛 모양 400(Mock 포함), 본문 `userId` 400, DB 오류 503, 로그에 표식이 없음, Mock 모드 페이지 나눔·잘못된 커서 400·헤더 없음, 자동완성·상세가 잘못된 `Authorization`을 무시함을 잡는다. DB 모드의 `cursor` 400(AC-4)은 실제 DB 모드 엔진과 가짜 AI 클라이언트를 붙인 컨트롤러 예시(`PlaceControllerMockDisabledTest` 방식)로 HTTP 수준에서도 확인한다. Prior art: `be/src/test/java/kr/co/fitdining/api/place/PlaceControllerTest.java`, `be/src/test/java/kr/co/fitdining/api/place/PlaceControllerMockDisabledTest.java`, `be/src/test/java/kr/co/fitdining/api/review/ReviewControllerTest.java`.
+- 컨트롤러 (example, `@WebMvcTest` + 가짜 엔진·`AuthUseCases`, `OutputCaptureExtension`), AC-3, AC-4, AC-6(헤더), AC-7(헤더), AC-15, AC-17, AC-18, AC-20, AC-21, AC-22: `X-Fallback` 헤더, 세션 기반 회원·비회원 처리, `Authorization` 헤더 무시, CSRF 누락·불일치의 403, CSRF 통과 후 본문·`cursor` 검증 400, `cursor: null`은 커서 없음, `preferences` 검증 400(회원 포함)과 옛 모양 400(Mock 포함), 본문 `userId` 400, DB 오류 503, 로그에 표식이 없음, Mock 모드 페이지 나눔·잘못된 커서 400·헤더 없음, 자동완성·상세가 잘못된 `Authorization`을 무시함을 잡는다. DB 모드의 `cursor` 400(AC-4)은 실제 DB 모드 엔진과 가짜 AI 클라이언트를 붙인 컨트롤러 예시(`PlaceControllerMockDisabledTest` 방식)로 HTTP 수준에서도 확인한다. Prior art: `be/src/test/java/kr/co/fitdining/api/place/PlaceControllerTest.java`, `be/src/test/java/kr/co/fitdining/api/place/PlaceControllerMockDisabledTest.java`, `be/src/test/java/kr/co/fitdining/api/review/ReviewControllerTest.java`.
 - 기동 (example, Spring Boot 기동, Postgres 테스트 컨테이너), AC-14, AC-19: 주소가 빈 값이거나 닿지 않는 주소로 웹 앱이 뜨고 readiness가 UP인지, `migrate` 프로필이 인증 환경 없이 뜨고 끝나는지를 잡는다. Prior art: `be/src/test/java/kr/co/fitdining/api/auth/AuthServiceTests.java#migrate_withoutAuthEnvironment_startsAndCloses`(이미 DB 모드 전체 컨텍스트를 띄워 AC-19를 지킨다), readiness는 `ManagementEndpointsTest`.
 - 카탈로그 id 읽기 (example, Postgres 통합), AC-5의 장소 요약·영업 상태: 여러 id를 한 번에 읽기, 없는 id 누락, 결과 모양을 잡는다. Prior art: `be/src/test/java/kr/co/fitdining/api/place/catalog/JdbcPlaceCatalogTest.java`.
 - AI 뷰 (example, Postgres 테스트 컨테이너에 전체 마이그레이션), AC-24: 뷰의 컬럼 이름, `profile`·`facilities`의 값(표의 이름 → 코드, 없는 시설은 키 없음), 프로필 없는 장소 제외를 잡는다. AI 코드가 실제로 읽는지는 놓친다(수동). Prior art: `be/src/test/java/kr/co/fitdining/api/place/catalog/JdbcPlaceCatalogTest.java`.
-- FE 검색 API (example, Vitest + 가짜 `fetch`), AC-25, AC-26(헤더와 본문), AC-27(헤더 읽기): 검색만 15초이고 자동완성·상세는 10초, 넘긴 토큰과 `preferences`가 실림, `X-Fallback` 값 읽기를 잡는다. Prior art: `fe/src/domains/place/api/place-api.test.ts`, `fe/src/shared/api/client.test.ts`.
-- FE 검색 세션 연결 (example, Vitest + 가짜 세션·저장소), AC-26: 회원·비회원·확인 못 함에 따라 싣는 값, 만료 뒤 한 번 갱신, 화면 상태와 검색 기록의 요청에 `preferences`가 없음을 잡는다. Prior art: `fe/src/app/search-thread-storage.test.ts`, `fe/src/app/use-bookmark-access.test.tsx`.
+- FE 검색 API (example, Vitest + 가짜 `fetch`), AC-25, AC-26(헤더와 본문), AC-27(헤더 읽기): 검색만 15초이고 자동완성·상세는 10초, 로그인 세션 쿠키·CSRF 헤더와 `preferences`가 실림, `X-Fallback` 값 읽기를 잡는다. Prior art: `fe/src/domains/place/api/place-api.test.ts`, `fe/src/shared/api/client.test.ts`.
+- FE 검색 세션 연결 (example, Vitest + 가짜 세션·저장소), AC-26: 회원·비회원·확인 못 함에 따라 싣는 값, 세션 만료 시 재시도 없이 실패 처리, 화면 상태와 검색 기록의 요청에 `preferences`가 없음을 잡는다. Prior art: `fe/src/app/search-thread-storage.test.ts`, `fe/src/app/use-bookmark-access.test.tsx`.
 - FE 결과 화면 (example, Testing Library), AC-27: 대체 결과의 안내 문구(홈 주변 카드와 검색 결과), 카드가 없을 때 안내 없음, 홈 대체 결과의 다시 받기를 잡는다. Prior art: `fe/src/domains/place/ui/search-screen.test.tsx`.
 - 목적별 API 컨트롤러 (example, `@WebMvcTest` + 가짜 엔진, Mock 엔진, 실제 DB 모드 엔진과 가짜 AI 클라이언트), AC-29, AC-30, AC-31(본문·헤더·판단 순서·DB 모드 `cursor` 400), AC-22, AC-33(HTTP 수준 한 예), AC-20(새 API의 로그): `mapBounds` 없음·null·네 값 중 하나 없음·null·`1e400`·위도/경도 범위 밖·경계값(-90, 90, -180, 180) 통과·`swLat == neLat`·`swLng > neLng`, 모르는 속성(nearby의 `query`, region의 `previousConditions`, `userId`), region `query` 검증과 배열 `conditions`, 본문 400 → `cursor` 400 순서, 400일 때 AI를 부르지 않음, `/places/search`는 범위 밖·뒤집힌 bounds도 받음, 200·400·401·503 응답 뒤 로그에 `query`·`conditions`·`preferences` 표식과 `mapBounds` 고유 좌표(예: 37.4987654321)가 없음을 잡는다. 401 → 400 순서는 Security 설정이 있어야 해서 아래 인증 이음매에서 잡는다. Prior art: `be/src/test/java/kr/co/fitdining/api/place/PlaceControllerTest.java`, `be/src/test/java/kr/co/fitdining/api/place/PlaceControllerMockDisabledTest.java`.
-- 목적별 API 인증 (example, `@WebMvcTest` + `SecurityConfiguration` + 실제 DB 모드 엔진 + `MockRestServiceServer`), AC-3, AC-21, AC-31: 두 새 경로가 헤더도 세션도 없는 비회원에게 200이고, 세션 주체(CSRF 토큰과 함께)와 Bearer가 AI 요청의 `userId`가 되며 그때 `tasteProfile`이 없고, 비회원이 두 새 경로에 실은 `preferences`가 AI 요청의 `tasteProfile`까지 이어지며, 잘못된 Bearer는 401, 만료 Bearer는 만료 `type`, 본문이 틀리고 Bearer도 무효면 401, 세션만 있고 CSRF 토큰이 없으면 403임을 잡는다. 같은 구성에서 새 경로의 `preferences` 검증 400과 옛 모양 400, 카탈로그 DB 오류 503도 잡는다. Prior art: `be/src/test/java/kr/co/fitdining/api/place/engine/SessionSearchHttpTests.java`.
+- 목적별 API 인증 (example, `@WebMvcTest` + `SecurityConfiguration` + 실제 DB 모드 엔진 + `MockRestServiceServer`), AC-3, AC-21, AC-31: 두 새 경로가 세션 없는 비회원도 CSRF 헤더를 보내면 200이고, 세션 주체(CSRF 헤더와 함께)가 AI 요청의 `userId`가 되며 그때 `tasteProfile`이 없고, 비회원이 두 새 경로에 실은 `preferences`가 AI 요청의 `tasteProfile`까지 이어지며, `Authorization` 헤더는 무시하며 세션 유무와 관계없이 CSRF 헤더가 없으면 403, CSRF 검사를 통과한 잘못된 본문은 400임을 잡는다. 같은 구성에서 새 경로의 `preferences` 검증 400과 옛 모양 400, 카탈로그 DB 오류 503도 잡는다. Prior art: `be/src/test/java/kr/co/fitdining/api/place/engine/SessionSearchHttpTests.java`.
 - AI 클라이언트 목적별 본문 (example, `MockRestServiceServer`), AC-2, AC-36: 목적마다 본문 속성 집합(NEARBY의 상수 `query`·`rulesOnly`·네 값 `mapBounds`, REGION의 `conditions` → `previousConditions`·빈 `conditions` 생략·`mapFirst`, SEARCH에 두 플래그 없음), 세 목적 모두의 `userId`·`tasteProfile` 규칙, NEARBY 실패로 시작한 차단이 SEARCH·REGION도 막음(같은 차단기), permit 상한이 목적과 상관없이 하나임(늦게 응답하는 HTTP 서버를 쓰는 시간 예산 이음매 방식), 실패 로그에 `mapBounds` 고유 좌표와 `conditions` 표식이 없음을 잡는다. Prior art: `be/src/test/java/kr/co/fitdining/api/place/engine/AiSearchClientTest.java`.
 - DB 모드 엔진 목적별 (example, 가짜 AI 클라이언트 + 가짜 카탈로그·키워드 검색), AC-1, AC-9 ~ AC-12, AC-32, AC-34, AC-35: 목적이 AI 클라이언트까지 전달됨, "근처 맛집" SEARCH도 키워드 대체, SEARCH 대체가 `mapBounds` 유무·값과 무관함, NEARBY·REGION 대체의 개수·순서·`nearby`·`conditions: {}`·지역 문구, 영역 대체가 카탈로그 전체 읽기를 쓰지 않음, NEARBY AI 결과의 카탈로그 확인 뒤 10곳 자르기(앞쪽 id가 카탈로그에 없을 때 포함)와 `totalCount`, SEARCH·REGION은 자르지 않음, NEARBY·REGION의 AI 카드 id가 전부 카탈로그에 없으면 영역 대체(⑧), AI 결과를 영역으로 다시 거르지 않음, 영역 조회의 DB 예외를 대체로 삼키지 않음, 엔진 로그에 좌표 표식이 없음을 잡는다. Prior art: `be/src/test/java/kr/co/fitdining/api/place/engine/CatalogPlaceSearchEngineTest.java`.
 - Mock 엔진 목적별 (example, 고정 시계와 `mock/places.json`), AC-22, AC-33, AC-34, AC-35: NEARBY 10곳·`nearby: true`·`totalCount`, 강남 밖 영역의 빈 결과와 `emptyReason`, REGION 페이지가 같은 영역으로 이어지고 영역 밖 장소가 없음, 경계 포함, 빈 `cursor`, REGION의 `conditions` 되돌림(있음, 없음, null)과 `changeSummary` 없음·잘못된 커서 400·넘어간 빈 페이지·`totalCount`, `X-Mock-Scenario: empty`의 세 목적과 커서가 있을 때 헤더 무시, `preferences`가 결과를 바꾸지 않음, SEARCH에서 "근처"가 결과를 바꾸지 않음을 잡는다. Prior art: `be/src/test/java/kr/co/fitdining/api/place/engine/MockPlaceSearchEngineTest.java`.

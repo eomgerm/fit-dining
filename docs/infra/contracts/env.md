@@ -51,16 +51,16 @@
 | `S3_ACCESS_KEY` | app, local | O | 환경 전용 키 |
 | `S3_SECRET_KEY` | app, local | O | 비밀 |
 | `S3_PATH_STYLE` | app | O | `true`. Garage는 path-style을 쓴다 |
-| `JWT_SECRET` | app | O | 비밀. 소셜 쿠키 서명 키이며 이메일 인증번호 HMAC에도 사용한다. AT·RT 인증 토큰은 발급하지 않는다 |
+| `JWT_SECRET` | app | O | 비밀. `AuthConfiguration.tokenCodec` → `NimbusTokenCodec` → `SocialTokens`가 소셜 로그인 state·가입 쿠키(10분)를 서명하며 이메일 인증번호 HMAC에도 사용한다. 로그인 세션 서명 키가 아니다 |
 | `AUTH_FRONTEND_ORIGIN` | app | O | 인증 API(`/api/auth/**`)의 POST가 우리 화면에서 온 것인지 가르는 기준 출처(CSRF 방어). 브라우저가 붙이는 `Origin` 헤더와 정확히 같아야 하므로 경로와 끝 `/` 없이 `https://호스트`만 쓴다. prod는 `https://<PROD_HOST>`, dev는 `https://<DEV_HOST>`이고 둘 다 443이라 포트를 붙이지 않는다. 환경마다 달라 기본값이 없고, 값이 형식에 맞지 않으면 BE가 기동을 거부한다(BE 계약 #8). 로컬 개발은 이 계약 밖이고 `be/.env`에서 `http://localhost:3000`을 쓴다 |
-| `AUTH_COOKIE_SECURE` | app | O | RT 쿠키의 `Secure` 속성 여부(`true` 또는 `false`). dev와 prod 서버는 Caddy 뒤 HTTPS라 둘 다 `true`다. 로컬(`http://localhost`)만 `false`다. 기본값이 없고 `true`·`false`가 아닌 값은 BE가 기동을 거부한다(BE 계약 #8, 쿠키는 #21) |
+| `AUTH_COOKIE_SECURE` | app, local | O | 로그인 세션(`fitdining_session`)·CSRF(`XSRF-TOKEN`) 쿠키의 `Secure` 속성 여부(`true` 또는 `false`). dev와 prod 서버는 Caddy 뒤 HTTPS라 둘 다 `true`다. 로컬(`http://localhost`)만 `false`다. 기본값이 없고 `true`·`false`가 아닌 값은 BE가 기동을 거부한다(BE 계약 #8, 쿠키는 #21) |
 | `SPRING_MAIL_HOST` | app | X | 이메일 가입 인증번호를 보내는 SMTP 호스트. Gmail은 `smtp.gmail.com`. **prod는 필수**이고 없으면 BE가 기동을 거부한다. dev·local은 키를 넣지 않으면 메일을 보내지 않고 인증번호를 BE 로그에 남긴다(로그 발송기). 값을 넣으면 아래 `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD`, `AUTH_MAIL_FROM`도 모두 있어야 하고, 하나라도 비었거나 `REPLACE_ME`면 BE가 기동을 거부한다 |
 | `SPRING_MAIL_PORT` | app | X | SMTP 포트. 기본 `587`(STARTTLS 필수) |
 | `SPRING_MAIL_USERNAME` | app | X | SMTP 로그인 계정. Gmail은 발송용 팀 공용 계정 주소 |
 | `SPRING_MAIL_PASSWORD` | app | X | SMTP 비밀번호. Gmail은 2단계 인증을 켠 계정의 앱 비밀번호. 비밀 |
 | `AUTH_MAIL_FROM` | app | X | 인증 메일의 보내는 주소. 보내는 사람 표시 이름은 `핏다이닝`이다. Gmail은 `SPRING_MAIL_USERNAME`과 같은 주소를 쓴다 |
 | `AUTH_SIMPLE_ENABLED` | app | X | 인증 간소 모드 스위치. 기본 `false`, local·dev에서만 허용하며 prod는 `true`이면 기동을 거부한다 |
-| `AUTH_DEV_KEY` | app | X | 개발 토큰 발급 키. 비밀. 간소 모드 dev 서버에서 32자 이상 필수이며 local은 선택이고 길이 제한이 없다. prod는 값이 있으면 기동을 거부한다 |
+| `AUTH_DEV_KEY` | app | X | 개발 세션 로그인 키. 비밀. 간소 모드 dev 서버에서 32자 이상 필수이며 local은 선택이고 길이 제한이 없다. prod는 값이 있으면 기동을 거부한다 |
 | `AUTH_DEMO_EMAIL` | app | X | 데모 계정 이메일. 간소 모드에서는 비어 있으면 `dev@fitdining.local`이다. 간소 모드가 아니면 `AUTH_DEMO_PASSWORD`, `AUTH_DEMO_NICKNAME`과 셋 다 함께 줄 때만 쓴다(아래 규칙). 쓰지 않을 때는 키를 넣지 않는다(빈 값으로 두지 않는다) |
 | `AUTH_DEMO_PASSWORD` | app | X | 데모 계정 비밀번호. 비밀. 간소 모드 dev 서버에서 필수이며 local 기본값은 `fitdining-dev1`이다. 가입 비밀번호 규칙을 지켜야 한다(영문과 숫자를 포함해 8자 이상, UTF-8 72바이트 이하). 간소 모드가 아니면 `AUTH_DEMO_EMAIL`, `AUTH_DEMO_NICKNAME`과 함께 줄 때만 쓴다(아래 규칙) |
 | `AUTH_DEMO_NICKNAME` | app | X | 데모 계정 닉네임. 간소 모드에서는 비어 있으면 `개발자`다. 2~15자(가입 규칙). 간소 모드가 아니면 위 두 값과 셋 다 함께 줄 때만 쓴다 |
@@ -173,15 +173,15 @@ FE는 `APP_ENV`, `POSTHOG_KEY`, `POSTHOG_HOST`, `PUSH_PUBLIC_KEY`, `NAVER_MAP_CL
 
 위 키 표의 `AUTH_SIMPLE_ENABLED`로 켠다.
 local은 APP_ENV가 없고 dev/prod/migrate 프로필도 없는 경우다. local에서만 Origin 검사를 생략하고 JWT_SECRET이 비면 고정 개발 서명 키를 쓴다.
-dev 서버는 실제 JWT_SECRET과 Origin 검사를 유지한다. 개발 토큰 키와 데모 비밀번호 조건은 위 키 표를 따른다.
+dev 서버는 실제 JWT_SECRET과 Origin 검사를 유지한다. 개발 세션 로그인 키와 데모 비밀번호 조건은 위 키 표를 따른다.
 
 이메일·소셜 요청 제한과 시도 기록을 생략하고 BCrypt cost 4를 사용한다. 모르는 계정의 dummy hash를 만들거나 비교하지 않는다.
-AT는 12시간, 세션은 30일이다. 사용한 RT는 만료 전까지 같은 family로 재발급할 수 있고 재사용 보안 이벤트를 남기지 않는다. logout으로 폐기한 RT는 거부한다.
+세션의 절대 수명은 30일, 유휴 수명은 12시간이다. 로그아웃은 현재 세션을 무효화한다.
 데모 기본 계정은 `dev@fitdining.local`, 닉네임 `개발자`다. AUTH_DEMO_EMAIL/PASSWORD/NICKNAME으로 덮어쓴다.
 
 `POST /api/auth/dev/token`은 간소 모드에서만 등록된다. 선택 본문 `{"email":"existing@example.com"}`이 없으면 데모 계정을 쓴다.
 AUTH_DEV_KEY를 X-Dev-Key 헤더에 전달한다(local에서 키 미설정 시 생략 가능). 이 경로는 Origin 검사에서 제외된다.
-성공 시 일반 TokenResponse와 기존 정책의 RT 쿠키를 반환하며 키 오류는 403, 없는 계정은 404다.
-발급한 AT를 `Authorization: Bearer <AT>`로 `/api/auth/me`와 보호 API에 사용한다.
+성공 시 `userId`, `nickname`, `sessionExpiresAt`와 로그인 세션 쿠키를 반환하며 키 오류는 403, 없는 계정은 404다.
+보호 API는 로그인 세션 쿠키를 보낸다. 변경 요청에는 `XSRF-TOKEN` 쿠키 값의 `X-XSRF-TOKEN` 헤더도 필요하다. 먼저 `GET /api/auth/csrf`로 쿠키를 받는다. 개발 로그인 경로만 CSRF 검사 예외다.
 
-prod 동작 확인 시 dev에서 AUTH_SIMPLE_ENABLED=false로 재시작하여 21번째 시도 429, RT 재사용 시 family 폐기, 30분 AT 수명과 Origin 검사를 확인한다.
+prod 동작 확인 시 dev에서 AUTH_SIMPLE_ENABLED=false로 재시작하여 21번째 시도 429, 세션 절대 수명 24시간·유휴 수명 2시간, Origin 및 CSRF 검사를 확인한다.

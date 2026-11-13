@@ -372,14 +372,14 @@ Caddy 컨테이너(`caddy:2.x`, 구현 시 최신 2.x를 핀)가 A의 80·443만
 - `/manifest.webmanifest`와 `/icons/*`는 게이트에서 제외한다. 브라우저가 쿠키 없이 가져오기 때문이다.
 - 로그에서는 쿼리의 `k`를 지운다(`log`의 `filter` 인코더에서 `request>uri query { delete k }`). `Cookie`·`Authorization` 헤더는 Caddy가 기본으로 가린다(Caddy 문서의 `log_credentials`). 키가 쿼리와 쿠키 어느 쪽으로도 로그에 남지 않음을 확인했다 (확인: `test-edge.sh`).
 - 게이트를 통과한 요청은 `fit_dev` 쿠키를 지운 뒤 프록시한다(`handle` 안의 `request_header`). 키가 앱 컨테이너 로그에 남지 않게 하려는 것이고 다른 쿠키는 그대로 전달된다 (확인: `test-edge.sh`). `curl --aws-sigv4`처럼 Cookie를 서명 대상에 넣는 클라이언트는 서명이 어긋난다. 브라우저의 presigned URL 요청은 Cookie를 서명하지 않을 것으로 본다 (미확인, 7.4절 스파이크).
-- 목적은 스캐너 차단용 최소 방어다. 헤더 방식은 브라우저의 페이지 탐색에 붙일 수 없고, basic auth는 JWT를 담는 `Authorization` 헤더와 충돌해 쓰지 않는다. 만료가 없는 세션 쿠키면 모바일에서 앱을 닫을 때마다 사라진다.
+- 목적은 스캐너 차단용 최소 방어다. 헤더 방식은 브라우저의 페이지 탐색에 붙일 수 없다. 현재 앱 인증은 Redis 로그인 세션 쿠키와 변경 요청의 CSRF 헤더를 사용하며, dev 게이트는 앱 로그인과 별도의 쿠키로 유지한다. 만료가 없는 세션 쿠키면 모바일에서 앱을 닫을 때마다 사라진다.
 - iOS 홈 화면 PWA는 Safari와 쿠키를 공유하지 않을 수 있다. 그 경우 PWA 안에서 다시 `?k=`로 들어와야 한다 (미확인).
 
 **쿠키 분리**
 
 - prod와 dev는 호스트가 달라 쿠키가 호스트 단위로 격리된다. 쿠키에 `Domain` 속성을 주면 상위 도메인으로 공유되므로 BE와 FE는 쿠키에 `Domain`을 쓰지 않는다(BE #21, 12.5절 #9).
 - 서비스 워커와 localStorage도 호스트(출처)별로 분리된다.
-- prod 인증 쿠키는 HttpOnly로 둔다.
+- prod 로그인 세션 쿠키(`fitdining_session`)는 HttpOnly·Secure·SameSite=Lax로 둔다. CSRF 쿠키(`XSRF-TOKEN`)는 JS가 읽어 `X-XSRF-TOKEN` 헤더에 보내므로 HttpOnly가 아니며 Secure·SameSite=Lax다.
 
 ### 5.5 전환·연결·검증
 
@@ -891,7 +891,7 @@ BE·AI·프런트 팀과 M1 전에 합의한다. 합의되면 `docs/infra/contra
 | 18 | 속도 제한 | Modal을 부르는 API(검색, 요청 해석 등)에 사용자별·IP별 분당·일일 상한(Redis)과 질의 길이 상한을 건다. 초과는 429, 전역 일일 예산 소진은 키워드 폴백 | 비용 남용 방어, 11.2절 |
 | 19 | 배치 | 배치는 한 번에 하나만 돈다(ShedLock 등). Blue/Green 겹침 구간에 두 색에서 동시에 돌지 않게 한다. dev는 `BATCH_ENABLED=false`가 기본이다 | Modal 비용 이중 발생 방지, 10.7절 |
 | 20 | Dockerfile | CI가 만든 jar를 `COPY`만 한다(멀티스테이지 빌드 금지). 베이스 이미지는 핀한다 | A의 CPU 크레딧 절약, 6.3절 |
-| 21 | 쿠키 | 쿠키에 `Domain` 속성을 주지 않는다(호스트 전용). 인증 쿠키는 HttpOnly·Secure다 | prod와 dev가 호스트로 나뉘어 쿠키가 격리된다(5.4절) |
+| 21 | 쿠키 | 쿠키에 `Domain` 속성을 주지 않는다(호스트 전용). 로그인 세션 쿠키는 HttpOnly·Secure이며, 변경 요청은 JS가 읽는 XSRF-TOKEN 쿠키와 X-XSRF-TOKEN 헤더가 필요하다 | prod와 dev가 호스트로 나뉘어 쿠키가 격리된다(5.4절) |
 
 ### 12.2 AI (FastAPI, Modal)
 
@@ -936,8 +936,8 @@ AI 팀과 M1 전에 합의한다. AI API(FastAPI)는 A의 컨테이너(`ai-prod`
 | 6 | 헬스 | `GET /fe-healthz`는 200과 상태만 반환한다(내부 정보 없음). 의존성(BE 등) 상태를 보지 않는다 | idle 색 스모크와 컨테이너 healthcheck. BE 장애 때 FE가 재시작 폭풍에 빠지지 않게 한다 |
 | 7 | 이미지 | 이미지 최적화 기본 로더를 쓰지 않는다(`images.unoptimized: true` 또는 커스텀 로더). 사진은 Garage URL을 쓴다 | B(Arm) 번들을 A(x86)에서 돌리는데 `sharp`가 플랫폼 전용이다(6.8절) |
 | 8 | dev 게이트 | dev는 `/?k=`로 첫 접속해 쿠키를 받는다(2주 유지). manifest와 아이콘은 게이트 밖이다 | 5.4절 |
-| 9 | 쿠키 | 쿠키에 `Domain` 속성을 주지 않는다(호스트 전용). 인증 쿠키는 HttpOnly·Secure다 | prod와 dev가 호스트로 나뉘어 쿠키가 격리된다. localStorage와 서비스 워커도 출처별로 분리된다 |
-| 10 | SSE | 브라우저 `EventSource`는 `Authorization` 헤더를 붙일 수 없다. fetch 기반 스트림 등으로 구현하고 `Last-Event-ID` 재연결을 직접 처리한다 | BE #15, 배포 전환 시 연결이 끊긴다 |
+| 9 | 쿠키 | 쿠키에 `Domain` 속성을 주지 않는다(호스트 전용). 로그인 세션 쿠키는 HttpOnly·Secure이며, 변경 요청은 JS가 읽는 XSRF-TOKEN 쿠키와 X-XSRF-TOKEN 헤더가 필요하다 | prod와 dev가 호스트로 나뉘어 쿠키가 격리된다. localStorage와 서비스 워커도 출처별로 분리된다 |
+| 10 | SSE | SSE 인증도 로그인 세션 쿠키를 사용한다. 재연결 시 `Last-Event-ID`를 전달하고 만료된 세션은 다시 로그인한다 | BE #15, 배포 전환 시 연결이 끊긴다 |
 | 11 | 푸시 | 방식(FCM 웹 푸시 또는 VAPID)은 프런트·BE 팀이 정하고 키는 서버 env에 둔다 | 11.3절, 16절 |
 | 12 | 공유 | 장소 공유는 외부 지도(네이버) 링크를 Web Share API(`navigator.share`)로 보내고, 미지원 환경은 클립보드 복사로 대체한다. Fit Dining URL 자체를 공유해야 하면 FE가 OG 메타를 렌더링한다. 장소 ID 확보는 16절 #19 | SSR이라 별도 공유 페이지가 필요 없다 |
 | 13 | 런타임 | 로그는 JSON 한 줄을 stdout으로 내고 토큰·개인정보를 마스킹한다. SIGTERM을 받으면 진행 중 요청을 끝내고 내려간다. 쓰기는 `.next/cache`뿐이며 운영이 tmpfs로 준다 | 4.1절, 6.8절. 읽기 전용 루트 |

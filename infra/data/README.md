@@ -8,7 +8,7 @@ BE는 환경마다 `fitdining:session:<APP_ENV>` 네임스페이스의 Spring Se
 
 용량은 2026-11-10에 dev에서 실측했다. 로그인 세션 1개가 키 4개(세션 본체, 만료 표시, 만료 목록, 사용자 인덱스)를 쓰고 합계 1,912 B(약 1.9 KiB)였다. 처음 추정(세션당 약 4 KiB)의 절반이다. 세션이 없을 때 Redis의 기본 사용량은 약 1.0 MiB(dev는 세션 1개로 1.4 MiB)이고 상한은 96 MiB(`maxmemory 96mb`)다. 80% 지점(약 77 MiB)까지 실측 기준으로 약 4만 세션, 4 KiB로 잡아도 약 1.9만 세션이 들어간다. 표본이 세션 1개뿐이라 세션이 많이 쌓였을 때의 평균은 아직 모른다. 같은 사용자의 세션이 여럿이면 사용자 인덱스를 나눠 쓰므로 세션당 값은 줄어드는 쪽으로 보인다. 호출 예산 카운터 같은 다른 Redis 용도와 allocator 단편화는 이 계산에 넣지 않았다. `noeviction`이므로 한도 도달 시 세션 저장이 실패한다. 사용률 알림은 없고, 컨테이너가 사라지는 것만 `FitRedisProdDown`과 `FitRedisDevDown`이 알린다(떠 있지만 응답하지 않는 경우는 잡지 못한다). 다시 재려면 서버에서 `INFO memory`, `INFO keyspace`, `MEMORY USAGE <세션 키>`를 본다(세션 키는 `fitdining:session:<환경>:` 아래에 있다).
 
-BE readiness는 DB와 Redis를 모두 확인한다. Redis 장애 시 새 배포 전환을 막는다. 이번 단계에서는 로그인 세션을 생성하지 않는다.
+BE readiness는 DB와 Redis를 모두 확인한다. Redis 장애 시 새 배포 전환을 막는다. 로그인·가입 성공 시 Redis에 로그인 세션을 생성한다. 전체 로그아웃은 [RB-08](../../docs/infra/runbooks/RB-08.md)의 환경별 세션 네임스페이스 삭제 절차를 따른다.
 
 통합 테스트는 JVM당 Redis 7.4.9-alpine 컨테이너 하나를 공유한다. CI `be:test`는 기존 `verify-heavy-be` 직렬화 설정을 유지한다. Redis 추가에 따른 전체 테스트 시간·메모리 실측은 Docker를 사용하는 검증 단계에서 확인해야 한다.
 
