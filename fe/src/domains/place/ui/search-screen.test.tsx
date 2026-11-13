@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import {
   focusManager,
+  notifyManager,
   onlineManager,
   type QueryClient,
   QueryClientProvider,
@@ -27,6 +28,7 @@ import { createSearchStore, type SearchStore } from "../model/search-store";
 import { SearchScreen } from "./search-screen";
 import { SEARCH_SLOW_MS, SEARCH_STEP_MS } from "./search-steps";
 import { BOUNDS, stubNaverMaps } from "./testing/naver-maps-stub";
+import { resetThreadSession } from "./thread-storage";
 
 // 인증은 북마크 테스트(place-detail-bookmark, saved-places)가 본다. 여기서는 비로그인이다
 const guest: BookmarkAccess = {
@@ -292,6 +294,8 @@ async function releaseAndSettle(release: () => Promise<Response>) {
 
 beforeEach(() => {
   stores.current = createSearchStore();
+  // 기기 기록의 thread 상태(thread-storage의 모듈 변수)를 앞 test에서 이어받지 않는다
+  resetThreadSession();
   stubApi();
   config.value = undefined;
   // 브라우저처럼 observe하면 지금 크기를 한 번 알린다. 크기 적용을 기다리는 테스트는 따로 바꿔 끼운다
@@ -340,6 +344,24 @@ afterEach(() => {
   delete window.navermap_authFailure;
   push.mockReset();
 });
+
+// use-suggest.ts의 DEBOUNCE_MS. 자동완성은 입력이 멈추고 이만큼 지난 뒤 요청한다(AC-15는 use-suggest.test.tsx가 본다)
+const SUGGEST_DEBOUNCE_MS = 300;
+
+// 검색창에 입력하고 자동완성 debounce를 기다리지 않고 시계만 앞으로 돌린다.
+// react-query는 화면 알림을 0ms setTimeout으로 예약한다. 가짜 시계에 남은 예약은 실제 시계로 돌아온 뒤 돌지 않으므로,
+// 가짜 시계 동안만 알림을 microtask로 예약한다. gc·stale timer(5분 이상)는 가짜 시계에 남아도 test 안에서는 돌 일이 없다
+async function typeSuggest(bar: HTMLElement, value: string) {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  notifyManager.setScheduler(queueMicrotask);
+  try {
+    fireEvent.change(bar, { target: { value } });
+    await act(() => vi.advanceTimersByTimeAsync(SUGGEST_DEBOUNCE_MS));
+  } finally {
+    vi.useRealTimers();
+    notifyManager.setScheduler((callback) => setTimeout(callback, 0));
+  }
+}
 
 // 화면을 열 때 보는 위치 권한과 기기 위치. permission이 없으면 Permissions API가 없는 브라우저다
 function stubLocation({
@@ -1938,7 +1960,7 @@ describe("SearchScreen", () => {
         const suggestions = async () => {
           const bar = screen.getByRole("textbox", { name: "장소 검색" });
           fireEvent.focus(bar);
-          fireEvent.change(bar, { target: { value: "장소" } });
+          await typeSuggest(bar, "장소");
           const list = await screen.findByRole("list", { name: "검색 추천" });
           // 입력한 단어가 강조되어 이름이 여러 요소로 나뉜다
           await waitFor(() => expect(list.textContent).toContain("장소 1"));
@@ -3464,7 +3486,7 @@ describe("SearchScreen", () => {
       const bar = screen.getByRole("textbox", { name: "장소 검색" });
 
       fireEvent.focus(bar);
-      fireEvent.change(bar, { target: { value: "역삼 쌀국수" } });
+      await typeSuggest(bar, "역삼 쌀국수");
       const list = await screen.findByRole("list", { name: "검색 추천" });
 
       // 이름에서는 두 단어가 각각, 메뉴 이름에서는 쌀국수가 강조된다
@@ -3497,7 +3519,7 @@ describe("SearchScreen", () => {
       const bar = screen.getByRole("textbox", { name: "장소 검색" });
 
       fireEvent.focus(bar);
-      fireEvent.change(bar, { target: { value: "장소" } });
+      await typeSuggest(bar, "장소");
       const list = await screen.findByRole("list", { name: "검색 추천" });
 
       expect(
@@ -3829,10 +3851,9 @@ describe("SearchScreen", () => {
       failRequests((url) => url.startsWith("/api/v1/places/suggest"));
       renderScreen();
 
-      fireEvent.focus(screen.getByRole("textbox", { name: "장소 검색" }));
-      fireEvent.change(screen.getByRole("textbox", { name: "장소 검색" }), {
-        target: { value: "역삼 쌀국수" },
-      });
+      const bar = screen.getByRole("textbox", { name: "장소 검색" });
+      fireEvent.focus(bar);
+      await typeSuggest(bar, "역삼 쌀국수");
 
       const list = await screen.findByRole("list", { name: "검색 추천" });
       expect(
