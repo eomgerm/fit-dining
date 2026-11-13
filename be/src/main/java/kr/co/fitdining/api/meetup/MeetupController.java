@@ -15,6 +15,7 @@ import kr.co.fitdining.api.meetup.dto.MeetupAreaCheckResponse;
 import kr.co.fitdining.api.meetup.dto.MeetupAreasResponse;
 import kr.co.fitdining.api.meetup.dto.MeetupCreateRequest;
 import kr.co.fitdining.api.meetup.dto.MeetupCreateResponse;
+import kr.co.fitdining.api.meetup.dto.MeetupListResponse;
 import kr.co.fitdining.api.meetup.dto.MeetupPreview;
 import kr.co.fitdining.api.meetup.dto.MeetupResult;
 import kr.co.fitdining.api.meetup.dto.MeetupSnapshot;
@@ -64,6 +65,7 @@ public class MeetupController {
 	private final MeetupCalculationService calculationService;
 	private final MeetupResultService resultService;
 	private final MeetupPollService pollService;
+	private final MeetupListService listService;
 	private final MeetupWriteLimiter writeLimiter;
 	private final Validator validator;
 	private final JsonMapper jsonMapper;
@@ -71,13 +73,15 @@ public class MeetupController {
 
 	public MeetupController(MeetupService meetupService, MeetupProfileService profileService,
 			MeetupCalculationService calculationService, MeetupResultService resultService,
-			MeetupPollService pollService, MeetupWriteLimiter writeLimiter, Validator validator, JsonMapper jsonMapper,
+			MeetupPollService pollService, MeetupListService listService, MeetupWriteLimiter writeLimiter,
+			Validator validator, JsonMapper jsonMapper,
 			@Value("${auth.cookie-secure}") boolean secureCookie) {
 		this.meetupService = meetupService;
 		this.profileService = profileService;
 		this.calculationService = calculationService;
 		this.resultService = resultService;
 		this.pollService = pollService;
+		this.listService = listService;
 		this.writeLimiter = writeLimiter;
 		this.validator = validator;
 		this.jsonMapper = jsonMapper;
@@ -97,6 +101,12 @@ public class MeetupController {
 		String userId = identity.userId();
 		validate(request);
 		return meetupService.create(userId, request);
+	}
+
+	/** 로그인한 회원이 만든 모임과 회원 프로필로 참여한 모임(AC-75). 오류: 401(인증, 탈퇴한 회원). */
+	@GetMapping("/mine")
+	public MeetupListResponse mine(@AuthenticationPrincipal AuthUseCases.Identity identity) {
+		return listService.mine(identity.userId());
 	}
 
 	/** 장소가 있는 역·동을 찾는다. 오류: 401(인증), 400(찾는 말이 없거나 20자 초과). */

@@ -24,6 +24,9 @@ public final class MeetupLimits {
 	public static final Duration COOKIE_MAX_AGE = Duration.ofDays(365);
 
 	public static final int AREA_QUERY_MAX = 20;
+
+	/** 내 모임에 읽는 최근 모임 수(AC-75, D-37) */
+	public static final int MY_MEETUPS_MAX = 100;
 	public static final int AREA_RESULTS_MAX = 10;
 
 	/** 모임 지점의 반경(m). DB 제약(V26)과 같다(AC-58). */

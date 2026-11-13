@@ -43,6 +43,7 @@ import kr.co.fitdining.api.meetup.domain.ResultGroup;
 import kr.co.fitdining.api.meetup.dto.MeetupAreaCheckResponse;
 import kr.co.fitdining.api.meetup.dto.MeetupAreasResponse;
 import kr.co.fitdining.api.meetup.dto.MeetupCreateRequest;
+import kr.co.fitdining.api.meetup.dto.MeetupListResponse;
 import kr.co.fitdining.api.meetup.dto.MeetupCreateResponse;
 import kr.co.fitdining.api.meetup.dto.MeetupResult;
 import kr.co.fitdining.api.meetup.dto.MeetupSnapshot;
@@ -107,6 +108,9 @@ class MeetupControllerTest {
 
 	@MockitoBean
 	MeetupPollService pollService;
+
+	@MockitoBean
+	MeetupListService listService;
 
 	@MockitoBean
 	MeetupWriteLimiter writeLimiter;
@@ -203,6 +207,35 @@ class MeetupControllerTest {
 		void create_serviceRejects_returnsBadRequest() throws Exception {
 			when(meetupService.create(anyString(), any())).thenThrow(new InvalidMeetupException());
 			expectProblem(create(valid(",\"date\":\"2020-01-01\"")), 400);
+		}
+
+	}
+
+	@Nested
+	@DisplayName("내 모임")
+	class Mine {
+
+		@Test
+		@DisplayName("내모임_로그인했으면_목록을받고값없는속성은빠진다")
+		void mine_session_returnsItems() throws Exception {
+			when(listService.mine(USER_ID)).thenReturn(new MeetupListResponse(List.of(new MeetupListResponse.Item(
+					CODE, MeetupRole.HOST, MeetupPhase.WAITING, new MeetupSnapshot.Area(AreaKind.STATION, "선릉"),
+					MeetupCategory.RESTAURANT, null, null, 4, 3, null))));
+
+			mockMvc.perform(get("/api/v1/meetups/mine").with(SessionTestSupport.session(USER_ID)))
+					.andExpect(status().isOk())
+					.andExpect(header().string("Cache-Control", "no-store"))
+					.andExpect(jsonPath("$.items[0].code").value(CODE))
+					.andExpect(jsonPath("$.items[0].role").value("HOST"))
+					.andExpect(jsonPath("$.items[0].profileCount").value(3))
+					.andExpect(jsonPath("$.items[0].date").doesNotExist())
+					.andExpect(jsonPath("$.items[0].decidedPlaceName").doesNotExist());
+		}
+
+		@Test
+		@DisplayName("내모임_로그인하지않으면_401이다")
+		void mine_anonymous_returnsUnauthorized() throws Exception {
+			expectProblem(get("/api/v1/meetups/mine"), 401);
 		}
 
 	}
