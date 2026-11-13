@@ -12,9 +12,10 @@ import {
 import { meetupHref } from "@/domains/meetup/model/meetup";
 import { MeetupEditForm } from "@/domains/meetup/ui/meetup-edit-form";
 import { MeetupNotFound } from "@/domains/meetup/ui/meetup-not-found";
+import { useLeave } from "@/shared/lib/use-leave";
 
 import { rememberLoginReturn } from "../../../login-return";
-import { MeetupLoadingScreen, useLeave } from "../meetup-loading-screen";
+import { MeetupLoadingScreen } from "../meetup-loading-screen";
 
 const withSession: WithSession = (send) => authenticated(() => send());
 
@@ -42,14 +43,13 @@ export function EditScreen({ code }: { code: string }) {
       />
     );
   }
-  const back = () => router.replace(meetupHref(code));
   return (
     <MeetupEditForm
       code={code}
       snapshot={data}
       withSession={withSession}
-      onBack={back}
-      onSaved={back}
+      onBack={leave}
+      onSaved={leave}
       onUnauthorized={() => {
         rememberLoginReturn(`${meetupHref(code)}/edit`);
         router.push("/login");

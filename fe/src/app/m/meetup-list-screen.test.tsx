@@ -42,6 +42,17 @@ vi.mock("../login-return", () => ({
   rememberLoginReturn: mocks.rememberLoginReturn,
 }));
 
+// 바로 앞 기록을 path로 둔다
+function previousEntry(path: string) {
+  vi.stubGlobal("navigation", {
+    currentEntry: { index: 1 },
+    entries: () => [
+      { url: `${location.origin}${path}` },
+      { url: location.href },
+    ],
+  });
+}
+
 const item = (patch: Partial<MeetupListItem>): MeetupListItem => ({
   code: "AbCdEfGhIjKlMnOpQrStUv",
   role: "HOST",
@@ -67,6 +78,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("내 모임", () => {
@@ -156,5 +168,22 @@ describe("내 모임", () => {
     fireEvent.click(await screen.findByRole("button", { name: "로그인" }));
     expect(mocks.rememberLoginReturn).toHaveBeenCalledWith("/m");
     expect(mocks.replace).toHaveBeenCalledWith("/login");
+  });
+
+  it("홈에서 왔으면 뒤로가 홈으로 돌아간다", async () => {
+    previousEntry("/");
+    mocks.fetchMyMeetups.mockResolvedValue({ items: [] });
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "뒤로" }));
+    expect(mocks.back).toHaveBeenCalled();
+  });
+
+  it("모임 화면에서 왔어도 뒤로는 그 모임이 아니라 홈으로 간다", async () => {
+    previousEntry("/m/AbCdEfGhIjKlMnOpQrStUv");
+    mocks.fetchMyMeetups.mockResolvedValue({ items: [] });
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "뒤로" }));
+    expect(mocks.replace).toHaveBeenCalledWith("/");
+    expect(mocks.back).not.toHaveBeenCalled();
   });
 });

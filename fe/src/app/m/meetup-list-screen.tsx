@@ -8,6 +8,7 @@ import { authenticated } from "@/domains/auth/api/authenticated";
 import { useMyMeetups, type WithSession } from "@/domains/meetup/api/queries";
 import { MeetupListView } from "@/domains/meetup/ui/meetup-list-view";
 import { isApiError } from "@/shared/api/api-error";
+import { useLeave } from "@/shared/lib/use-leave";
 
 import { rememberLoginReturn } from "../login-return";
 import { MeetupLoginPrompt } from "./meetup-login-prompt";
@@ -34,10 +35,7 @@ export function MeetupListScreen() {
     };
   }, []);
 
-  const leave = useCallback(() => {
-    if (window.history.length > 1) router.back();
-    else router.replace("/");
-  }, [router]);
+  const leave = useLeave("/");
 
   const signIn = useCallback(() => {
     rememberLoginReturn("/m");

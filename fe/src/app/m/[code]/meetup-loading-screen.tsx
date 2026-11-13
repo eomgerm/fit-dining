@@ -1,8 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useCallback } from "react";
-
 import { LoadFailed } from "@/domains/place/ui/load-failed";
 import { ApiError } from "@/shared/api/api-error";
 import { IconButton } from "@/shared/ui/button/icon-button";
@@ -58,13 +55,4 @@ export function MeetupLoadingScreen({
       )}
     </Screen>
   );
-}
-
-// 앱 안에서 온 화면이면 그 화면으로 돌아가고, 링크로 바로 열었으면 fallback으로 간다
-export function useLeave(fallback: string) {
-  const router = useRouter();
-  return useCallback(() => {
-    if (window.history.length > 1) router.back();
-    else router.replace(fallback);
-  }, [router, fallback]);
 }

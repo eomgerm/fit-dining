@@ -8,6 +8,7 @@ import { authenticated } from "@/domains/auth/api/authenticated";
 import type { WithSession } from "@/domains/meetup/api/queries";
 import { meetupHref } from "@/domains/meetup/model/meetup";
 import { MeetupCreateForm } from "@/domains/meetup/ui/meetup-create-form";
+import { useLeave } from "@/shared/lib/use-leave";
 
 import { rememberLoginReturn } from "../../login-return";
 import { MeetupLoginPrompt } from "../meetup-login-prompt";
@@ -31,10 +32,9 @@ export function MeetupNewScreen() {
     };
   }, []);
 
-  const leave = useCallback(() => {
-    if (window.history.length > 1) router.back();
-    else router.replace("/");
-  }, [router]);
+  const leave = useLeave("/m");
+  // 내 모임도 로그인해야 열리므로 로그인을 그만두면 홈으로 간다
+  const cancel = useLeave("/");
 
   const signIn = useCallback(() => {
     rememberLoginReturn("/m/new");
@@ -51,7 +51,7 @@ export function MeetupNewScreen() {
         onCreated={(code) => router.replace(`${meetupHref(code)}/join`)}
         onUnauthorized={showLoginPrompt}
       />
-      <MeetupLoginPrompt open={signedOut} onCancel={leave} onSignIn={signIn} />
+      <MeetupLoginPrompt open={signedOut} onCancel={cancel} onSignIn={signIn} />
     </>
   );
 }

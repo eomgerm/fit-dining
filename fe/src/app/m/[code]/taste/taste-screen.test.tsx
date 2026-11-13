@@ -31,6 +31,17 @@ vi.mock("next/navigation", () => ({
 
 const CODE = "AbCdEfGhIjKlMnOpQrStUv";
 
+// 바로 앞 기록을 path로 둔다
+function previousEntry(path: string) {
+  vi.stubGlobal("navigation", {
+    currentEntry: { index: 1 },
+    entries: () => [
+      { url: `${location.origin}${path}` },
+      { url: location.href },
+    ],
+  });
+}
+
 function mount() {
   render(
     <QueryClientProvider
@@ -49,6 +60,7 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("내 취향 수정 화면", () => {
@@ -66,7 +78,6 @@ describe("내 취향 수정 화면", () => {
   });
 
   it("링크로 바로 열어 받지 못하면 뒤로가 모임 링크로 간다", async () => {
-    vi.spyOn(History.prototype, "length", "get").mockReturnValue(1);
     api.fetchSnapshot.mockRejectedValue(
       new ApiError("http", "server", { status: 500 }),
     );
@@ -76,8 +87,8 @@ describe("내 취향 수정 화면", () => {
     expect(mocks.replace).toHaveBeenCalledWith(`/m/${CODE}`);
   });
 
-  it("앱 안에서 왔으면 받는 중에도 뒤로가 이전 화면으로 간다", async () => {
-    vi.spyOn(History.prototype, "length", "get").mockReturnValue(3);
+  it("모임 화면에서 왔으면 받는 중에도 뒤로가 모임 화면으로 돌아간다", async () => {
+    previousEntry(`/m/${CODE}`);
     api.fetchSnapshot.mockReturnValue(new Promise(() => {}));
     mount();
     fireEvent.click(await screen.findByRole("button", { name: "뒤로" }));

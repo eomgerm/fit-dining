@@ -53,6 +53,7 @@ import { reviewWriteHref } from "@/domains/review/model/review";
 import { PlacePhoto, RankBadge } from "@/domains/place/ui/place-parts";
 import { isApiError } from "@/shared/api/api-error";
 import { copyLink, shareLink } from "@/shared/lib/share";
+import { useLeave } from "@/shared/lib/use-leave";
 import { useToast } from "@/shared/ui/overlay/toast";
 
 import { rememberLoginReturn } from "../../login-return";
@@ -141,6 +142,7 @@ function MeetupBody({
   const reopenPoll = useReopenPoll(code);
   const decide = useDecide(code);
   const cancelDecision = useCancelDecision(code);
+  const leaveToList = useLeave("/m");
   const pollPending =
     openPoll.isPending ||
     closePoll.isPending ||
@@ -213,7 +215,7 @@ function MeetupBody({
   const host = snapshot.me.role === "HOST";
   // 내 모임 목록에 이 모임이 있는 사람(모임장, 회원 프로필로 참여한 회원)은 뒤로 가면 그 목록이다(D-37)
   const backToList =
-    host || myProfile(snapshot)?.member ? () => router.push("/m") : undefined;
+    host || myProfile(snapshot)?.member ? leaveToList : undefined;
   const resultState = viewState(snapshot, host, result.data, result.isError);
   const resultView = (onPickName?: () => void) =>
     resultState && (

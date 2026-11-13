@@ -26,10 +26,11 @@ import { FullView } from "@/domains/meetup/ui/full-view";
 import { JoinFormView } from "@/domains/meetup/ui/join-form";
 import { MeetupNotFound } from "@/domains/meetup/ui/meetup-not-found";
 import { isApiError } from "@/shared/api/api-error";
+import { useLeave } from "@/shared/lib/use-leave";
 import { useToast } from "@/shared/ui/overlay/toast";
 
 import { rememberLoginReturn } from "../../../login-return";
-import { MeetupLoadingScreen, useLeave } from "../meetup-loading-screen";
+import { MeetupLoadingScreen } from "../meetup-loading-screen";
 
 // 질문지(/m/{code}/join). 이미 프로필이 있으면 모임 링크로 돌려보낸다
 export function JoinScreen({ code }: { code: string }) {
@@ -66,6 +67,8 @@ function JoinBody({
   const toast = useToast();
   const create = useCreateProfile(code);
   const host = snapshot.me.role === "HOST";
+  const leaveToList = useLeave("/m");
+  const leave = useLeave(meetupHref(code));
   const [full, setFull] = useState(false);
   const [takenName, setTakenName] = useState<string>();
   // 로그인하러 갔다 돌아오면 쓰던 답을 채운다(AC-28). 모임장은 닉네임을 이름에 넣어 둔다
@@ -94,9 +97,7 @@ function JoinBody({
       signedIn={snapshot.me.signedIn}
       pending={create.isPending}
       takenName={takenName}
-      onBack={() =>
-        host ? router.push("/m") : router.replace(meetupHref(code))
-      }
+      onBack={host ? leaveToList : leave}
       onPickName={pickName}
       onSignIn={(form) => {
         saveDraft(code, form);

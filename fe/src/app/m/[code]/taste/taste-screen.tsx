@@ -13,8 +13,9 @@ import { meetupHref, myProfile } from "@/domains/meetup/model/meetup";
 import { JoinFormView } from "@/domains/meetup/ui/join-form";
 import { MeetupNotFound } from "@/domains/meetup/ui/meetup-not-found";
 import { useToast } from "@/shared/ui/overlay/toast";
+import { useLeave } from "@/shared/lib/use-leave";
 
-import { MeetupLoadingScreen, useLeave } from "../meetup-loading-screen";
+import { MeetupLoadingScreen } from "../meetup-loading-screen";
 
 // 내 취향 수정(/m/{code}/taste). 남긴 답을 채운 질문지다. 프로필이 없으면 모임 링크로 돌려보낸다
 export function TasteScreen({ code }: { code: string }) {

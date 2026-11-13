@@ -38,6 +38,17 @@ vi.mock("../../../login-return", () => ({
 
 const CODE = "AbCdEfGhIjKlMnOpQrStUv";
 
+// 바로 앞 기록을 path로 둔다
+function previousEntry(path: string) {
+  vi.stubGlobal("navigation", {
+    currentEntry: { index: 1 },
+    entries: () => [
+      { url: `${location.origin}${path}` },
+      { url: location.href },
+    ],
+  });
+}
+
 function mount() {
   render(
     <QueryClientProvider
@@ -56,6 +67,7 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("모임 정보 수정 화면", () => {
@@ -72,8 +84,8 @@ describe("모임 정보 수정 화면", () => {
     );
   });
 
-  it("앱 안에서 왔으면 받지 못했을 때 뒤로가 이전 화면으로 간다", async () => {
-    vi.spyOn(History.prototype, "length", "get").mockReturnValue(3);
+  it("모임 화면에서 왔으면 받지 못했을 때 뒤로가 모임 화면으로 돌아간다", async () => {
+    previousEntry(`/m/${CODE}`);
     api.fetchSnapshot.mockRejectedValue(
       new ApiError("http", "server", { status: 500 }),
     );

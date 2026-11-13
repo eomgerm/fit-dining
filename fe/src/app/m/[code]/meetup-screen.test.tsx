@@ -49,13 +49,14 @@ vi.mock("@/domains/auth/api/authenticated", () => ({
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   replace: vi.fn(),
+  back: vi.fn(),
   rememberLoginReturn: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
     push: mocks.push,
     replace: mocks.replace,
-    back: vi.fn(),
+    back: mocks.back,
   }),
 }));
 vi.mock("../../login-return", () => ({
@@ -63,6 +64,17 @@ vi.mock("../../login-return", () => ({
 }));
 
 const CODE = "AbCdEfGhIjKlMnOpQrStUv";
+
+// 바로 앞 기록을 path로 둔다
+function previousEntry(path: string) {
+  vi.stubGlobal("navigation", {
+    currentEntry: { index: 1 },
+    entries: () => [
+      { url: `${location.origin}${path}` },
+      { url: location.href },
+    ],
+  });
+}
 
 function snapshot(overrides: Partial<MeetupSnapshot> = {}): MeetupSnapshot {
   return {
@@ -1062,7 +1074,10 @@ describe("뒤로와 불러오기 실패", () => {
     reflected: false,
   };
 
-  afterEach(() => clearJustJoined(CODE));
+  afterEach(() => {
+    clearJustJoined(CODE);
+    vi.unstubAllGlobals();
+  });
 
   it("모임장은 뒤로 가면 내 모임이다", async () => {
     api.fetchSnapshot.mockResolvedValue(
@@ -1073,7 +1088,22 @@ describe("뒤로와 불러오기 실패", () => {
     );
     mount();
     fireEvent.click(await screen.findByRole("button", { name: "뒤로" }));
-    expect(mocks.push).toHaveBeenCalledWith("/m");
+    expect(mocks.replace).toHaveBeenCalledWith("/m");
+  });
+
+  it("내 모임에서 열었으면 뒤로가 내 모임으로 돌아가 기록을 쌓지 않는다", async () => {
+    previousEntry("/m");
+    api.fetchSnapshot.mockResolvedValue(
+      snapshot({
+        me: { role: "HOST", profileId: 1, signedIn: true },
+        allowed: [],
+      }),
+    );
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "뒤로" }));
+    expect(mocks.back).toHaveBeenCalled();
+    expect(mocks.push).not.toHaveBeenCalled();
+    expect(mocks.replace).not.toHaveBeenCalled();
   });
 
   it("회원 프로필로 참여한 회원도 뒤로 가면 내 모임이다", async () => {
@@ -1086,7 +1116,7 @@ describe("뒤로와 불러오기 실패", () => {
     );
     mount();
     fireEvent.click(await screen.findByRole("button", { name: "뒤로" }));
-    expect(mocks.push).toHaveBeenCalledWith("/m");
+    expect(mocks.replace).toHaveBeenCalledWith("/m");
   });
 
   it("방금 취향을 남긴 회원 참여자도 뒤로 가면 내 모임이다", async () => {
@@ -1101,7 +1131,7 @@ describe("뒤로와 불러오기 실패", () => {
     mount();
     expect(await screen.findByText("취향을 남겼어요")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "뒤로" }));
-    expect(mocks.push).toHaveBeenCalledWith("/m");
+    expect(mocks.replace).toHaveBeenCalledWith("/m");
   });
 
   it("비회원 참여자에게는 내 모임이 없어 뒤로도 없다", async () => {

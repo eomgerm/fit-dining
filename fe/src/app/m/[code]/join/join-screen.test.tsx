@@ -203,7 +203,6 @@ describe("질문지를 열지 못할 때", () => {
   });
 
   it("모임을 받지 못하면 실패 안내와 다시 시도, 모임 링크로 가는 뒤로를 보인다", async () => {
-    vi.spyOn(History.prototype, "length", "get").mockReturnValue(1);
     api.fetchSnapshot.mockRejectedValue(
       new ApiError("http", "server", { status: 500 }),
     );
