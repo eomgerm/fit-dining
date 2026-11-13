@@ -38,7 +38,7 @@ SYSTEM_PROMPT = """너는 모임 참여자들이 적은 "먹고 싶은 메뉴" �
 JSON만 답한다. 모양:
 {"items": [{"index": 0, "menus": [{"value": "곱창", "spellings": ["소곱창"]}]}]}"""
 
-_SPLIT = re.compile(r"[,，/·&+]|\s+(?:이나|또는|아니면|랑|하고)\s+|\s+")
+_SPLIT = re.compile(r"[,，/·&+]|\s+(?:(?:이나|또는|아니면|랑|하고)\s+)?")
 
 
 @dataclass(frozen=True)

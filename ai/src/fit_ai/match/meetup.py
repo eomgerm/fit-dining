@@ -340,7 +340,7 @@ def meetup_search(
 
     base = PlaceFilter(category_group=request.category, areas=(request.area,))
     full = _full_filter(base, conditions, request.when, avoid)
-    query = _encode(_query_text(conditions, request.category))
+    [query] = _encode([_query_text(conditions, request.category)])
     found, invalid, details = _fetch(store, full, query, request.when)
     if not found:
         empty = _empty_reason(store, query, base, full, request, conditions, avoid)

@@ -147,9 +147,11 @@ def encoded(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     """요청문 인코딩을 가짜로 바꾸고 인코딩한 문장을 남긴다."""
     texts: list[str] = []
 
-    def encode(text: str) -> list[float]:
-        texts.append(text)
-        return [1.0, 0.0]
+    def encode(batch: list[str]) -> list[list[float]]:
+        # search._encode와 같은 모양이다. 문장 하나를 그대로 넘기면 여기서 걸린다
+        assert isinstance(batch, list)
+        texts.extend(batch)
+        return [[1.0, 0.0] for _ in batch]
 
     monkeypatch.setattr(meetup, "_encode", encode)
     return texts
