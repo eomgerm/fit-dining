@@ -763,7 +763,11 @@ describe("PlaceDetailScreen", () => {
     renderDetail(undefined, queryClient);
 
     expect(screen.getByRole("heading", { name: "카페 온담" })).toBeTruthy();
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    // 다시 받는다면 화면을 열며 구독할 때(render의 act 안) 시작한다. 그 뒤 effect를 한 번 더 비워도 받는 중이 아니다
+    await act(async () => {});
+    expect(
+      queryClient.getQueryState(placeQueries.detail(1).queryKey)?.fetchStatus,
+    ).toBe("idle");
     expect(fetchMock).not.toHaveBeenCalledWith(
       "/api/v1/places/1",
       expect.anything(),

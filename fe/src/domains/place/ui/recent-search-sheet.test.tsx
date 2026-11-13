@@ -92,7 +92,7 @@ function stubServer(respond: (call: Call) => Promise<Response> | Response) {
 }
 
 it("받는 동안 시트가 닫히면, 닫히는 중에 응답이 와도 그 thread로 바꾸지 않는다", async () => {
-  let release: (value: unknown) => void = () => {};
+  let release: ((value: unknown) => void) | undefined;
   vi.stubGlobal(
     "fetch",
     vi.fn<typeof fetch>(async (input) => {
@@ -121,8 +121,10 @@ it("받는 동안 시트가 닫히면, 닫히는 중에 응답이 와도 그 thr
   await screen.findByRole("list", { name: "최근 검색 목록" });
   fireEvent.click(rows()[0]);
   await screen.findByText("불러오는 중");
+  // thread 요청이 서버에 닿아 응답을 기다리는 중에 닫는다
+  await waitFor(() => expect(release).toBeDefined());
   close();
-  await act(async () => release(undefined));
+  await act(async () => release?.(undefined));
 
   expect(onOpenThread).not.toHaveBeenCalled();
 });

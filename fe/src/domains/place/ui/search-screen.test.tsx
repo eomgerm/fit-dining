@@ -3546,6 +3546,13 @@ describe("SearchScreen", () => {
       });
 
       it("새 검색과 후속 조건은 한 thread로 남아, 재로드 뒤 고르면 네트워크 없이 마지막 결과와 요청 기록이 보이고 이어서 검색한다", async () => {
+        // 검색 시각과 목록을 보는 시각이 자정을 사이에 두면 "오늘"이 아니다. Date만 정오로 고정하고 timer는 그대로 둔다
+        vi.useFakeTimers({
+          toFake: ["Date"],
+          now: new Date("2026-11-12T12:00:00+09:00"),
+        });
+        // store는 만들 때의 Date.now를 시계로 쓰므로 고정한 뒤에 다시 만든다
+        stores.current = createSearchStore();
         renderScreen();
         await newSearch("역삼 카페");
         await followUp("더 조용하게");
@@ -3656,7 +3663,7 @@ describe("SearchScreen", () => {
             "아직 검색한 요청이 없어요. 원하는 분위기나 목적을 말해 보세요.",
           ),
         ).toBeTruthy();
-        vi.restoreAllMocks();
+        // setItem spy는 최상위 afterEach의 vi.restoreAllMocks()가 실패해도 되돌린다
       });
     });
   });

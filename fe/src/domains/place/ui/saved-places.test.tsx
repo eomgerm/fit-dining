@@ -199,9 +199,13 @@ beforeEach(() => {
   }));
 });
 
+// jsdom에는 scrollIntoView가 없다. 바꿔 끼운 test가 있어도 다음 test는 원래 값으로 시작한다
+const originalScrollIntoView = Element.prototype.scrollIntoView;
+
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  Element.prototype.scrollIntoView = originalScrollIntoView;
 });
 
 // app의 useBookmarkAccess 대역
