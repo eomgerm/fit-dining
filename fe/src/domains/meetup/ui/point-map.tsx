@@ -132,11 +132,14 @@ function PointMap({
         title="모임 위치"
       />
       <div className="relative min-h-0 flex-1">
-        <div
-          ref={containerRef}
-          data-testid="point-map"
-          className="absolute inset-0 bg-surface-sunken"
-        />
+        {/* 지도 SDK가 지도 상자를 position: relative로 바꾸므로 자리는 감싸개가 정한다(D-34) */}
+        <div className="absolute inset-0">
+          <div
+            ref={containerRef}
+            data-testid="point-map"
+            className="size-full bg-surface-sunken"
+          />
+        </div>
         {failed && (
           <p className="absolute inset-x-4 top-3 rounded-md bg-surface/90 px-3 py-2 text-center text-caption-md text-balance text-ink-muted">
             지도를 불러오지 못했어요. 잠시 뒤 다시 시도해 주세요.

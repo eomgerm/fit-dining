@@ -62,10 +62,12 @@ function stubMaps() {
   const naver = {
     Map: class {
       constructor(
-        _: unknown,
+        element: HTMLElement,
         readonly options: object,
       ) {
         if (broken.create) throw new Error("인증 실패");
+        // 진짜 SDK처럼 지도 상자의 position을 relative로 바꾼다
+        element.style.position = "relative";
         maps.push(this);
       }
       getCenter = () => latLng(center.lat, center.lng);
@@ -333,5 +335,27 @@ describe("모임 정보의 지점 줄과 지도 보기", () => {
     fireEvent.click(screen.getByRole("button", { name: "뒤로" }));
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.getByRole("button", { name: "지도 보기" })).toBeTruthy();
+  });
+});
+
+describe("지도 상자의 크기", () => {
+  it("SDK가 지도 상자를 relative로 바꿔도 감싸개가 자리와 크기를 정한다", async () => {
+    stubMaps();
+    mountForm();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "지도에서 고르기" }),
+    );
+    const pick = await screen.findByTestId("map-pick-map");
+    await waitFor(() => expect(pick.style.position).toBe("relative"));
+    expect(pick.className).toContain("size-full");
+    expect(pick.parentElement?.className).toBe("absolute inset-0");
+    cleanup();
+
+    render(<MeetupInfoCard info={POINT_INFO} />);
+    fireEvent.click(screen.getByRole("button", { name: "지도 보기" }));
+    const view = await screen.findByTestId("point-map");
+    await waitFor(() => expect(view.style.position).toBe("relative"));
+    expect(view.className).toContain("size-full");
+    expect(view.parentElement?.className).toBe("absolute inset-0");
   });
 });
