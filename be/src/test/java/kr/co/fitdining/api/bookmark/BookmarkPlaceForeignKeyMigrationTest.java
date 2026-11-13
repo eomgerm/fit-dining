@@ -56,7 +56,8 @@ class BookmarkPlaceForeignKeyMigrationTest extends PostgresTestSupport {
 				OVERRIDING SYSTEM VALUE VALUES (7, 'n7', '장소7', 'CAFE', 'YEOKSAM', 37.5, 127.03)""");
 		jdbc.update("INSERT INTO bookmarks (user_id, place_id, created_at) VALUES ('u1', 7, now()), ('u1', 999, now())");
 
-		flyway(null).migrate();
+		// V14만 확인한다. 최신 버전까지 올리면 뒤의 migration이 위 시드 행과 부딪혀 이 test가 깨질 수 있다
+		flyway("14").migrate();
 
 		assertThat(jdbc.queryForObject("SELECT count(*) FROM bookmarks", Integer.class)).isZero();
 		assertThatThrownBy(() -> jdbc.update(
@@ -68,11 +69,7 @@ class BookmarkPlaceForeignKeyMigrationTest extends PostgresTestSupport {
 	}
 
 	private Flyway flyway(String target) {
-		var config = Flyway.configure().dataSource(url(), POSTGRES.getUsername(), POSTGRES.getPassword());
-		if (target != null) {
-			config.target(target);
-		}
-		return config.load();
+		return Flyway.configure().dataSource(url(), POSTGRES.getUsername(), POSTGRES.getPassword()).target(target).load();
 	}
 
 	private static String url() {
