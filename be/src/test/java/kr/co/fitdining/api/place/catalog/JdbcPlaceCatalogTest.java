@@ -49,6 +49,9 @@ class JdbcPlaceCatalogTest extends PostgresTestSupport {
 	@BeforeEach
 	void setUp() {
 		// 자식 테이블은 ON DELETE CASCADE다. 다른 테스트의 행이 남아 있어도 이 테스트는 자기 행만 본다.
+		// 전제: reviews의 장소 FK(V13 fk_reviews_place_id)에는 ON DELETE CASCADE가 없다(북마크 V14는 CASCADE).
+		// 다른 class가 리뷰 행을 남기면 이 DELETE가 FK 위반으로 27개 test가 모두 실패하므로, 리뷰 test는 자기 행을 지워야 한다.
+		// test class는 차례로 돌므로(병렬 실행 없음) 다른 class의 장소를 도중에 지우지 않는다.
 		jdbc.update("DELETE FROM places");
 		catalog = new JdbcPlaceCatalog(JdbcClient.create(appSource()), JsonMapper.builder().build(),
 				Optional.of(CLOCK));
