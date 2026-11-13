@@ -132,7 +132,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 
 마무리
 
-- [x] AC-66: `/m/{code}`의 응답 HTML에는 모임장 닉네임, 지역, 날짜·시간, 가입 없이 답할 수 있다는 안내가 든 미리보기 메타 태그와 서비스 기본 이미지가 있다. 질문 개수, 모임 취향, 참여자 이름은 없다. 없는 코드(지운 모임 포함)는 일반 안내다. 모임 화면에는 `noindex`와 no-referrer 메타가 있다. (D-9, D-35; PRD AC-58)
+- [x] AC-66: `/m/{code}`의 응답 HTML에는 모임장 닉네임, 지역, 날짜·시간, 가입 없이 답할 수 있다는 안내가 든 미리보기 메타 태그와 서비스 기본 이미지가 있다. 질문 개수, 모임 취향, 참여자 이름은 없다. 없는 코드(지운 모임 포함)는 일반 안내다. 모임 화면에는 `noindex`와 no-referrer 메타가 있다. 카카오톡 스크래퍼(`kakaotalk-scrap`)처럼 HTML만 읽는 미리보기 봇이 받는 HTML에서는 이 태그가 `<head>` 안에 있다. (D-9, D-35, D-38; PRD AC-58)
 - [x] AC-67: 홈 지도 왼쪽 위에 시작 버튼이 있고 "이 지역에서 검색" 버튼과 겹치지 않는다. 위치와 모양은 화면 예시(모임장 1)를 따른다. 버튼은 내 모임(`/m`)을 연다. (D-22, D-24, D-37; PRD AC-36, AC-90)
 - [x] AC-68: `POST /api/v1/meetups/{code}/profiles/me/account`는 로그인한 회원의 비회원 프로필을 회원 프로필로 바꾼다. 모임 취향은 회원의 취향으로 옮겨지지 않는다. 그 회원에게 이미 이 모임의 프로필이 있으면 409 `already-joined`다. (D-25, D-35; PRD AC-76)
 - [x] AC-75: `GET /api/v1/meetups/mine`은 로그인한 회원이 만든 모임과 회원 프로필로 참여한 모임을 준다. 비회원 프로필로 참여한 모임과 다른 사람의 모임은 없고, 로그인하지 않았거나 탈퇴했으면 401이다. 진행 중인 모임(대기, 결과, 투표 중)이 앞에 최근에 만든 순서로, 끝난 모임(정함)이 뒤에 최근에 정한 순서로 오고, 최근에 만든 100개까지다. 줄마다 코드, 역할(HOST, PARTICIPANT), 상태, 지역, 업종, 날짜·시각, 인원, 프로필 수, 정한 곳 이름이 있다. 화면(`/m`)은 진행 중과 끝난 모임 묶음으로 보이고, 만든 모임에만 왕관 배지가 있으며, 묶음마다 20개 뒤는 "더 보기"로 연다. 모임이 없으면 소개와 "새로운 모임 만들기"만 보이고, 로그인하지 않았으면 로그인 안내 뒤 이 화면으로 돌아온다. 모임장이 모임 화면에서 뒤로 가면 이 화면이다. (D-37; PRD AC-90 ~ AC-92)
@@ -383,6 +383,7 @@ AI에 주소 두 개를 더한다. 기존 `POST /v1/search`는 바꾸지 않는�
 | `be/src/main/java/kr/co/fitdining/api/meetup/MeetupListService.java#mine` | create | 내 모임. 만든 모임과 회원 프로필로 참여한 모임을 읽어 진행 중과 끝난 모임 순서로 둔다 | D-37 |
 | `be/src/main/java/kr/co/fitdining/api/auth/infrastructure/SecurityConfiguration.java` | modify | `GET /api/v1/meetups/mine`을 공개 GET(`/api/v1/meetups/*`)보다 먼저 회원 전용으로 둔다 | D-37 |
 | `fe/src/app/m/page.tsx` | create | 내 모임 화면. 홈 시작 버튼이 연다 | D-37 |
+| `fe/next.config.ts` | modify | 메타데이터를 `<head>`에 받는 봇 목록에 카카오톡 스크래퍼를 더한다 | D-38 |
 | `be/src/main/java/kr/co/fitdining/api/onboarding/TasteAnalysisService.java#TasteAnalysisService` | reuse | 직접 만든 `ThreadPoolExecutor`로 작업을 돌리는 방식 | D-10 |
 | `be/src/main/resources/db/migration/V35__drop_meetup_expiry.sql` | create | `meetups.expires_at` 칸과 색인을 지운다 | D-36 |
 | `ai/server/schemas.py`, `ai/server/search.py` | modify | 모임 전용 주소 두 개의 요청·응답과 라우트를 더한다. 기존 `/v1/search`는 그대로다 | D-12, D-15 |
@@ -409,7 +410,7 @@ AI에 주소 두 개를 더한다. 기존 `POST /v1/search`는 바꾸지 않는�
 - BE 컨트롤러 (example, `@WebMvcTest`), AC-75, AC-1, AC-3, AC-6, AC-8, AC-10, AC-14, AC-22, AC-23, AC-68, AC-37, AC-38, AC-71: 상태 코드와 `type`, 입력 검증(먹고 싶은 메뉴 20자 포함), 익명 투표 응답의 속성(열림, 동점, 마감 뒤), 값 없는 속성 생략, 로그에 이름·취향·설명 표식이 없는지를 본다(기존 표식 문자열 방식). Prior art: `be/src/test/java/kr/co/fitdining/api/review/ReviewControllerTest.java`.
 - BE 보안 (example, 세션과 Redis를 띄운 HTTP), AC-9, AC-11, AC-12, AC-14, AC-24, AC-70: 공개 경로 목록, 모임 응답의 `no-store`, 회원 프로필을 가리키는 쿠키를 다른 로그인에서 무시하는 것, 스냅숏이 쿠키를 1년 수명으로 다시 주는 것, 비회원 쓰기의 CSRF 403, 모임 쿠키로는 모임장 동작이 되지 않음을 본다. Prior art: `be/src/test/java/kr/co/fitdining/api/auth/SecurityHttpTests.java`.
 - AI (example, pytest), AC-50 ~ AC-55, AC-57, AC-59: 해석 주소의 조건과 요약, 모임 계산의 규칙을 항목마다 본다. 구조화된 지역과 업종이 설명보다 앞서는지, 원형 반경, 시간 거르기(브레이크타임, 1시간 안에 닫거나 쉬는 곳, 날짜만, 자정 넘김, 모르는 값 남김), 못 먹는 음식, 메뉴 가격 상한(상한 안인 사람의 비율, 110%, 모르는 값은 비교에서 뺌), 선호 음식 하나로 세기, 먹고 싶은 메뉴(계산 한 번에 한 번만 해석, 적은 사람이 없으면 부르지 않음, 실패하거나 늦으면 규칙, 메뉴만 쓰기, 장소를 빼지 않기, `missedMenu`), 매운 음식, 합치는 규칙, 참여자 점수, 설명이 빈 모임에서 업종 이름으로 후보를 뽑는 것, 후보 없음 원인, 점수를 매길 조건이 없을 때 점수를 빼는지, 이전 버전의 `conditions`와 읽지 못하는 `conditions`, 틀린 입력 400이다.
-- FE 순수 로직 (example, Vitest), AC-28, AC-29, AC-34: 날짜 표기("11월 14일 (금) 저녁 7시"), 취향 요약, 남기지 않은 수, 임시 보관, 공유 대체를 본다.
+- FE 순수 로직 (example, Vitest), AC-28, AC-29, AC-34, AC-66: 날짜 표기("11월 14일 (금) 저녁 7시"), 취향 요약, 남기지 않은 수, 임시 보관, 공유 대체, 카카오톡 스크래퍼가 메타데이터를 `<head>`에 받는 봇인지를 본다.
 - FE 화면 (example, jsdom과 Testing Library), AC-25 ~ AC-27, AC-29 ~ AC-33, AC-35, AC-43 ~ AC-45, AC-64, AC-65, AC-67, AC-75: 스냅숏과 API를 대역으로 두고 `allowed`에 따른 버튼, 홈 시작 버튼, 프로필 유무에 따른 첫 화면, 가격 질문의 칩과 직접 입력, 먹고 싶은 메뉴 칸, 회원 프로필을 고를 때 로그인 안내와 돌아오기, 아바타 배지와 그 이름(모임장, 회원), 정한 곳에서 친구들 취향으로 가기와 수정 전 안내, 모임 정보 "수정"의 자리와 `EDIT_DATE`만 있을 때 날짜·시간만 고치는 화면, 모임 점수가 없을 때의 카드, 원한 메뉴가 없는 덜 맞는 사람 줄과 메뉴 조건 칩, 404에서 없는 링크 화면, `questions`에 따른 질문, 결과 카드의 누르는 영역, 409 안내, 투표 화면의 표 수와 5초 다시 받기(가짜 시계), 모임 뒤 화면을 본다.
 - 수동 (manual), AC-46, AC-50 ~ AC-54: AI의 두 주소가 배포된 환경에서 모임 하나를 만들기부터 결과까지 돌린다. 화면 예시의 네 명과 모의 계산의 세 모임(취향이 갈리는 4명 포함)으로 덜 맞는 사람 표시를 본다.
 - 수동 (manual), AC-7, AC-60, AC-66, AC-69: 실기기의 메신저 안 브라우저에서 링크 열기, 미리보기, 모임 쿠키 유지, 로그인 복귀를 본다(PRD OQ-31). 카카오톡 안 브라우저의 구글 로그인은 2026-11-10에 기존 서비스로 확인했다. 폭 360px에서 화면 예시와 맞는지 본다. 환경 변수 계약과 `/config.json`에 바뀐 것이 없는지 본다.
