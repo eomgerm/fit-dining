@@ -5,7 +5,7 @@ GitLab 소스를 clone한 뒤 **빌드하고 배포**하는 방법을 정리했�
 | 항목 | 내용 |
 |---|---|
 | 저장소 | `https://lab.ssafy.com/s15-final/S15P31A302` |
-| 기준 | `develop` `0bb4c5f9` (2026-11-12) |
+| 기준 | `develop` `9f538b84` (2026-11-13 확인) |
 | 서비스 | prod `https://fitdining.co.kr` · dev `https://dev.fitdining.co.kr`(접근 키 필요) |
 | 구성 | BE Spring Boot 4.1.1(Java 21) · FE Next.js 16.4.2(Node 22) · AI FastAPI(Python 3.12) · DB PostgreSQL 16 |
 | 종료 | 2026-11-18 ([RB-10](../docs/infra/runbooks/RB-10.md)) |
@@ -40,10 +40,11 @@ GitLab 소스를 clone한 뒤 **빌드하고 배포**하는 방법을 정리했�
 | IDE | IntelliJ IDEA | 2026.1.4 |
 | 감시 | Prometheus / Grafana / Alertmanager | 3.15.0 / 12.4.12 / 0.34.1 |
 | 컨테이너 | Docker Engine / Compose | 29.9.2 / 5.6.1 (서버 A, B 같음) |
+| CI 러너 | GitLab Runner | 18.11.4 (GitLab 서버 CE 18.11.5와 같은 마이너 버전) |
 | 서버 A | EC2 t3.xlarge | Ubuntu 24.04.4 LTS · x86_64 · 4 vCPU · 16GB |
 | 서버 B | EC2 c6g.large | Ubuntu 24.04.5 LTS · aarch64(Arm) · 2 vCPU · 4GB |
 
-출처: [Dockerfile.be](../infra/app/Dockerfile.be) · [Dockerfile.fe](../infra/app/Dockerfile.fe) · [Dockerfile.ai](../infra/app/Dockerfile.ai) · [compose.data.yml](../infra/data/compose.data.yml) · [compose.edge.yml](../infra/edge/compose.edge.yml) · [compose.obs.yml](../infra/obs/compose.obs.yml) · [build.gradle](../be/build.gradle) · [package.json](../fe/package.json) · [설계 1.2절](../docs/infra/design.md). 서버 OS와 Docker 버전은 2026-11-12에 서버에서 직접 확인했다.
+출처: [Dockerfile.be](../infra/app/Dockerfile.be) · [Dockerfile.fe](../infra/app/Dockerfile.fe) · [Dockerfile.ai](../infra/app/Dockerfile.ai) · [compose.data.yml](../infra/data/compose.data.yml) · [compose.edge.yml](../infra/edge/compose.edge.yml) · [compose.obs.yml](../infra/obs/compose.obs.yml) · [runner.sh](../infra/host/runner.sh) · [build.gradle](../be/build.gradle) · [package.json](../fe/package.json) · [설계 1.2절](../docs/infra/design.md). 서버 OS와 Docker 버전은 2026-11-12에 서버에서 직접 확인했다.
 
 ### 1.2 주요 설정값
 
@@ -59,8 +60,9 @@ GitLab 소스를 clone한 뒤 **빌드하고 배포**하는 방법을 정리했�
 | OpenSearch(앱 미사용) | 2g | 힙 768m / 단일 노드 |
 | Caddy | 150m | HTTP/1.1 + 2 / zstd, gzip / 본문 상한 API 2MB, 사진 10MB |
 | 호스트 | — | 시간대 `Asia/Seoul` / 스왑 4GB / 방화벽 22(제한)·80·443만 |
+| CI 러너 | B `fit-verify` job 2GB · A `fit-verify-fe` job 4GB(스왑 없음) | `fit-verify`: CPU 2 · 동시 3 / `fit-verify-fe`: CPU 2 · `cpu-shares` 512 · `docker.sock`·privileged·호스트 볼륨 없음 · `limit 1` / `fit-deploy`(A): `limit 1` |
 
-출처: [compose.app.yml](../infra/app/compose.app.yml) · [compose.data.yml](../infra/data/compose.data.yml) · [compose.edge.yml](../infra/edge/compose.edge.yml) · [Caddyfile](../infra/edge/conf/Caddyfile) · [application.yml](../be/src/main/resources/application.yml) · [설계 3절](../docs/infra/design.md)
+출처: [compose.app.yml](../infra/app/compose.app.yml) · [compose.data.yml](../infra/data/compose.data.yml) · [compose.edge.yml](../infra/edge/compose.edge.yml) · [Caddyfile](../infra/edge/conf/Caddyfile) · [application.yml](../be/src/main/resources/application.yml) · [host README](../infra/host/README.md) · [설계 3절](../docs/infra/design.md)
 
 ---
 
@@ -128,7 +130,7 @@ cd fe && corepack enable && pnpm install && cp .env.example .env.local && pnpm d
 | `JWT_SECRET` | 아무 Base64 32바이트 이상. 예: `openssl rand -base64 32` |
 | `S3_BUCKET` `S3_ACCESS_KEY` `S3_SECRET_KEY` | `infra/local/.env`의 같은 이름 값(비워 두면 사진 업로드만 503) |
 
-> **마이그레이션 성공 확인:** 로그 끝에 `Successfully applied 29 migrations ... now at version v30`이 나온다. 실패해도 Gradle은 `BUILD SUCCESSFUL`로 끝나므로 `Application run failed`가 없는지 로그를 본다(`APP_ENV=dev`가 없으면 BE가 기동을 거부한다).
+> **마이그레이션 성공 확인:** 로그 끝에 `Successfully applied 34 migrations ... now at version v35`이 나온다. 실패해도 Gradle은 `BUILD SUCCESSFUL`로 끝나므로 `Application run failed`가 없는지 로그를 본다(`APP_ENV=dev`가 없으면 BE가 기동을 거부한다).
 
 - AI(선택): `cd ai && uv sync && cp .env.example .env && uv run --env-file .env uvicorn server.main:app` (Modal 임베딩 설정이 없으면 `/healthz`가 503이다. 정상이다)
 - BE 시험: `cd be && sh ./gradlew test` (Docker 필요)
@@ -173,7 +175,7 @@ bash infra/ci/build-images.sh <SHA>
 4. `/etc/fit/*.env`를 만든다(2.2절). 값은 [envset.py](../infra/host/envset.py)로 넣는다
 5. 데이터: `sudo docker compose -p fit-data -f ~/fit-repo/infra/data/compose.data.yml --env-file /etc/fit/data.env up -d --wait` → `sudo bash ~/fit-repo/infra/data/init-data.sh`
 6. 엣지·관측: `sudo bash ~/fit-repo/infra/deploy/fit-up.sh`
-7. 러너 등록: `sudo bash ~/host/runner.sh install` → `register`
+7. 러너 등록: 서버마다 `sudo bash ~/host/runner.sh install` → `register`. A는 `fit-deploy`가 기본이고 FE 검사 러너는 `register fit-verify-fe`로 더한다(선택). B는 `fit-verify`다
 8. 앱 배포: GitLab에서 `build:images` → `deploy:dev`, `master`의 `deploy:prod`
 
 ### 3.4 배포 시 특이사항
@@ -186,7 +188,7 @@ bash infra/ci/build-images.sh <SHA>
 | 포트 | 공개는 Caddy 80/443뿐이다. DB는 SSH 터널로만 닿는다(`127.0.0.1:5432`) |
 | FE → BE | `BE_INTERNAL_URL`은 prod `http://caddy:8081`, dev `http://caddy:8082`. 활성 색은 엣지 상태 파일 한 곳에서 고른다 |
 | Redis | `--notify-keyspace-events Egx`가 필요하다(세션). 내려가면 BE readiness가 DOWN이라 새 색으로 전환되지 않는다 |
-| CI 러너 | 무거운 빌드는 Arm 서버 B, A의 러너는 이미지 `COPY`와 배포만 한다. 이미지는 amd64와 arm64 둘 다 있어야 한다 |
+| CI 러너 | 러너는 3개다. B의 `fit-verify`가 lint·BE 시험·번들 검사 같은 무거운 빌드를 하고(Arm), A의 `fit-deploy`는 이미지 `COPY`·배포·스모크만 한다. A의 `fit-verify-fe`는 FE 검사(`fe:check`) 전용이고 MR 코드가 운영 서버에서 도는 유일한 러너라서 `docker.sock` 없이 메모리·CPU를 제한한다. 이미지는 amd64와 arm64 둘 다 있어야 한다 |
 | AI API | `ai-<환경>.env`가 있는 환경에만 배포한다. 실패해도 BE·FE 배포는 계속한다(키워드 검색으로 대체) |
 | OpenSearch | 데이터 스택 compose에 있어 컨테이너는 뜨지만 **BE·AI·FE 코드는 연결하지 않는다.** 키워드 검색은 BE 메모리 매처, AI 검색은 Postgres(pgvector)가 한다. `OPENSEARCH_*` env 키가 있어도 쓰이지 않는다 |
 | 인증서 | Let's Encrypt(안 되면 ZeroSSL), 80 포트 상시 개방. `caddy_data` 볼륨은 지우지 않는다 |
@@ -220,7 +222,7 @@ JDBC URL: `jdbc:postgresql://<호스트>:<포트>/<DB>` — 서버 BE는 `jdbc:p
 | `fit_migrator` | DDL, DB 소유자 | `fit_prod` `fit_dev` | `FIT_MIGRATOR_PASSWORD` |
 | `fit_prod_app` | DML만 | `fit_prod` | `FIT_PROD_APP_PASSWORD` |
 | `fit_dev_app` | DML만, 쿼리 30초 | `fit_dev` | `FIT_DEV_APP_PASSWORD` |
-| `fit_prod_ai` | 읽기 전용(뷰 1 + 테이블 1), 연결 6 | `fit_prod` | `FIT_PROD_AI_PASSWORD` |
+| `fit_prod_ai` | 읽기 전용(뷰 2 + 테이블 1), 연결 6 | `fit_prod` | `FIT_PROD_AI_PASSWORD` |
 | `fit_dev_ai` | 위와 같음 | `fit_dev` | `FIT_DEV_AI_PASSWORD` |
 | `fit_monitor` | 통계만 읽기 | `postgres` | `FIT_MONITOR_PASSWORD` |
 
@@ -266,7 +268,7 @@ docker exec -it fit-local-postgres-1 psql -U postgres -d fit_dev
 - 회원·리뷰 테이블에는 개인정보가 있으니 결과를 밖에 붙여 넣지 않는다.
 
 ```sql
-\dt                                  -- 테이블 목록(33개: 앱 32개 + Flyway 기록 1개)
+\dt                                  -- 테이블 목록(34개: 앱 33개 + Flyway 기록 1개)
 \d places                            -- 테이블 구조
 select count(*) from places;         -- 행 수
 select version, description from flyway_schema_history order by installed_rank desc limit 3;   -- 적용된 마이그레이션
@@ -278,7 +280,7 @@ select version, description from flyway_schema_history order by installed_rank d
 |---|---|---|
 | BE | [application.yml](../be/src/main/resources/application.yml) | 포트, DB·Redis 접속, 풀, 세션, JPA, 메일, 관리 포트 |
 | BE | [application-migrate.yml](../be/src/main/resources/application-migrate.yml) | 마이그레이션 프로필 |
-| BE | [db/migration/](../be/src/main/resources/db/migration) | 스키마 `V1`~`V30` |
+| BE | [db/migration/](../be/src/main/resources/db/migration) | 스키마 `V1`~`V35` |
 | BE | [be/.env.example](../be/.env.example) · [build.gradle](../be/build.gradle) · [gradle-wrapper.properties](../be/gradle/wrapper/gradle-wrapper.properties) | 로컬 환경변수, 의존성, Gradle 버전 |
 | FE | [fe/.env.example](../fe/.env.example) · [package.json](../fe/package.json) · [next.config.ts](../fe/next.config.ts) | 로컬 환경변수, 의존성, Next 설정 |
 | AI | [ai/.env.example](../ai/.env.example) · [pyproject.toml](../ai/pyproject.toml) · [uv.lock](../ai/uv.lock) | 환경변수, 의존성 |
@@ -295,7 +297,7 @@ select version, description from flyway_schema_history order by installed_rank d
 
 ## 부록 A. ERD
 
-테이블 **32개**, FK **31개**(마이그레이션 `V30` 적용 후). `V28`, `V29`는 없는 번호다.
+테이블 **33개**, FK **32개**(마이그레이션 `V35` 적용 후). `V28`, `V29`는 없는 번호다.
 
 ![ERD 한눈에](images/erd-0-overview.png)
 
@@ -307,7 +309,7 @@ select version, description from flyway_schema_history order by installed_rank d
 
 ![장소 ERD](images/erd-2-place.png)
 
-### A.3 리뷰 (6)
+### A.3 리뷰 (7)
 
 ![리뷰 ERD](images/erd-3-review.png)
 
@@ -328,9 +330,9 @@ select version, description from flyway_schema_history order by installed_rank d
 | `meetup_calculations.profile_ids` | `meetup_profiles.profile_id` |
 | `auth_security_events.user_id` | `auth_users.id` |
 
-- **뷰:** `ai_place_search` 1개(AI 읽기용, 장소·프로필·지하철·영업시간·메뉴를 묶는다). 머티리얼라이즈드 뷰는 없다.
+- **뷰:** 2개, 모두 AI 읽기용이다. `ai_place_search`는 장소·프로필·지하철·영업시간·메뉴를 묶고, `ai_place_personas`(V33)는 만족한 손님 페르소나의 벡터를 낸다. 머티리얼라이즈드 뷰는 없다.
 - **그림 소스:** [images/src/](images/src)의 HTML을 브라우저로 찍은 것이다.
-- **검증:** 로컬 DB에 `V30`까지 실제로 적용해서 테이블 32개, FK 31개, 컬럼 수를 대조했다(서버 DB와는 대조하지 않았다).
+- **검증:** 로컬 DB에 `V30`까지 실제로 적용해서 테이블 32개, FK 31개, 컬럼 수를 대조했다(서버 DB와는 대조하지 않았다). 그 뒤 `V31`~`V35`는 마이그레이션 파일을 읽어 그림에 반영했다(`review_extractions` 테이블 1개와 FK 1개, 뷰 1개, `meetups.expires_at` 컬럼 삭제. `V32` `V34`는 데이터만 바꾼다). 이 다섯 개는 로컬 DB에 적용해 대조하지 않았다.
 
 ---
 
@@ -367,3 +369,4 @@ select version, description from flyway_schema_history order by installed_rank d
 
 - **문서 내용:** 버전 18개와 설정값 24개를 출처 파일과 대조했다(불일치 0). 링크와 이미지 경로가 모두 존재한다.
 - **서버에서만 실행하는 3.3절 명령:** 로컬에서 실행하지 않고, 스크립트의 인자와 하위 명령이 문서와 맞는지만 소스와 대조했다(`deploy.sh`, `rollback.sh`, `edgectl.sh`, `bootstrap.sh`, `runner.sh`).
+- **2026-11-13 갱신**(`develop` `9f538b84`): 기준 커밋을 `0bb4c5f9`에서 올렸다. 그 사이 바뀐 것은 마이그레이션 `V31`~`V35`(부록 A 반영), CI 러너 설명(FE 검사 러너 `fit-verify-fe`, 러너 버전 행), AI 읽기 객체(`ai_place_personas`)다. JVM·Spring Boot·Node·Next.js·React·Python·Caddy·pgvector·Redis·Garage·OpenSearch·Gradle·pnpm·uv·Prometheus·Grafana·Alertmanager·GitLab Runner의 버전은 출처 파일(Dockerfile, compose, `build.gradle`, `package.json`, `runner.sh`)과 다시 대조했고 불일치는 없었다. IntelliJ와 서버 OS·Docker 버전은 저장소에 없어 다시 확인하지 않았다. 3.1절 마이그레이션 로그(`34 migrations ... v35`)는 마이그레이션 파일 개수(34개)에서 적은 것이고 새 clone에서 다시 실행하지는 않았다.
