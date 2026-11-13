@@ -116,6 +116,16 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 		userService.withdraw(userId, new AuthUseCases.Identity(userId, null, 0));
 	}
 
+	/**
+	 * 탈퇴한 n번 사용자의 session을 Redis에 다시 만든다. 탈퇴는 그 회원의 session을 지우므로(AccountSessions) 그대로 보내면
+	 * Security 입구에서 401이 나고 controller의 탈퇴 확인까지 가지 않는다. 탈퇴와 엇갈려 남은 session과 같다.
+	 */
+	private String sessionAfterWithdrawal(int n) {
+		String userId = USER_PREFIX + n;
+		return kr.co.fitdining.api.support.SessionTestSupport.persist(sessionRepository,
+				new AuthUseCases.Identity(userId, "기록테스트" + n, Instant.now().getEpochSecond() + 3600));
+	}
+
 	private static String threadId() {
 		return "thread-" + UUID.randomUUID();
 	}
@@ -957,12 +967,14 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 		@ValueSource(strings = {"list", "badCursor", "storedThread", "missingThread", "badThreadId", "brokenBody",
 				"followUp", "delete", "deleteBadId", "deleteAll"})
 		@DisplayName("인증_탈퇴한사용자는_목록_틀린cursor_있는thread_없는thread_틀린id_깨진본문_정상추가_지우기모두401이다")
-		void anyApi_withdrawnUser_unauthorizedFirst(String request) throws Exception {
-			String token = signIn(0);
+		void anyApi_withdrawnUser_unauthorizedFirst(String request, CapturedOutput output) throws Exception {
+			String before = signIn(0);
 			String thread = threadId();
 			String id = turnId();
-			put(token, thread, id, newTurn(id, AT, "카페"));
+			put(before, thread, id, newTurn(id, AT, "카페"));
 			withdraw(0);
+			// 살아 있는 session으로 보내 controller의 탈퇴 확인(AC-2)이 400·404·409보다 먼저인지 본다
+			String token = sessionAfterWithdrawal(0);
 			String next = turnId();
 
 			HttpResponse<String> response = switch (request) {
@@ -979,6 +991,8 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 			};
 
 			assertThat(response.statusCode()).isEqualTo(401);
+			// Security 입구가 아니라 controller의 탈퇴 확인이 낸 401이다
+			assertThat(output.getAll()).contains("Rejected search thread request: reason=AuthFailure, status=401");
 			// 탈퇴 때 지워졌고, 그 뒤 요청은 아무것도 쓰지 않는다(D-13)
 			assertThat(count("search_thread_turns")).isZero();
 		}
