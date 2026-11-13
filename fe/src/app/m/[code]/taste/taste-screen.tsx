@@ -12,9 +12,9 @@ import { formFromTaste, toTaste } from "@/domains/meetup/model/join-form";
 import { meetupHref, myProfile } from "@/domains/meetup/model/meetup";
 import { JoinFormView } from "@/domains/meetup/ui/join-form";
 import { MeetupNotFound } from "@/domains/meetup/ui/meetup-not-found";
-import { Screen } from "@/shared/ui/layout/screen";
-import { TopBar } from "@/shared/ui/layout/top-bar";
 import { useToast } from "@/shared/ui/overlay/toast";
+
+import { MeetupLoadingScreen, useLeave } from "../meetup-loading-screen";
 
 // 내 취향 수정(/m/{code}/taste). 남긴 답을 채운 질문지다. 프로필이 없으면 모임 링크로 돌려보낸다
 export function TasteScreen({ code }: { code: string }) {
@@ -25,6 +25,7 @@ export function TasteScreen({ code }: { code: string }) {
   const data = snapshot.data;
   const me = data && myProfile(data);
   const missing = !!data && !me;
+  const leave = useLeave(meetupHref(code));
 
   useEffect(() => {
     if (missing) router.replace(meetupHref(code));
@@ -33,15 +34,13 @@ export function TasteScreen({ code }: { code: string }) {
   if (isNotFound(snapshot.error)) return <MeetupNotFound />;
   if (!data || !me) {
     return (
-      <Screen>
-        <TopBar title="내 취향 수정" />
-      </Screen>
+      <MeetupLoadingScreen
+        title="내 취향 수정"
+        snapshot={snapshot}
+        onBack={leave}
+      />
     );
   }
-  const leave = () => {
-    if (window.history.length > 1) router.back();
-    else router.replace(meetupHref(code));
-  };
   return (
     <JoinFormView
       mode="edit"

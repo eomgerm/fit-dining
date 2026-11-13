@@ -1,5 +1,9 @@
 // @vitest-environment jsdom
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  onlineManager,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import {
   cleanup,
   fireEvent,
@@ -175,5 +179,48 @@ describe("질문지 화면", () => {
     await waitFor(() =>
       expect(mocks.replace).toHaveBeenCalledWith(`/m/${CODE}`),
     );
+  });
+});
+
+describe("질문지를 열지 못할 때", () => {
+  function mountWithoutRetryDelay() {
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retryDelay: 0 } } })
+        }
+      >
+        <ToastProvider>
+          <JoinScreen code={CODE} />
+        </ToastProvider>
+      </QueryClientProvider>,
+    );
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    onlineManager.setOnline(true);
+  });
+
+  it("모임을 받지 못하면 실패 안내와 다시 시도, 모임 링크로 가는 뒤로를 보인다", async () => {
+    vi.spyOn(History.prototype, "length", "get").mockReturnValue(1);
+    api.fetchSnapshot.mockRejectedValue(
+      new ApiError("http", "server", { status: 500 }),
+    );
+    mountWithoutRetryDelay();
+    expect(await screen.findByText("모임을 불러오지 못했어요")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "다시 시도" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "뒤로" }));
+    expect(mocks.replace).toHaveBeenCalledWith(`/m/${CODE}`);
+  });
+
+  it("연결이 끊겨 요청이 멈추면 연결 안내를 보인다", async () => {
+    onlineManager.setOnline(false);
+    api.fetchSnapshot.mockResolvedValue(snapshot());
+    mountWithoutRetryDelay();
+    expect(
+      await screen.findByText("인터넷에 연결되어 있지 않아요"),
+    ).toBeTruthy();
+    expect(api.fetchSnapshot).not.toHaveBeenCalled();
   });
 });

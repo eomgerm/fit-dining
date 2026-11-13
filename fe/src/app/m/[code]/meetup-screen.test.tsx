@@ -1048,3 +1048,28 @@ describe("회원 프로필로 바꾸기", () => {
     expect(api.linkAccount).not.toHaveBeenCalled();
   });
 });
+
+describe("불러오기 실패", () => {
+  it("모임을 받지 못하면 실패 안내와 다시 시도를 보이고, 다시 시도하면 다시 받는다", async () => {
+    api.fetchSnapshot.mockRejectedValue(
+      new ApiError("http", "server", { status: 500 }),
+    );
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retryDelay: 0 } } })
+        }
+      >
+        <ToastProvider>
+          <MeetupScreen code={CODE} />
+        </ToastProvider>
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText("모임을 불러오지 못했어요")).toBeTruthy();
+    const before = api.fetchSnapshot.mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "다시 시도" }));
+    await waitFor(() =>
+      expect(api.fetchSnapshot.mock.calls.length).toBeGreaterThan(before),
+    );
+  });
+});

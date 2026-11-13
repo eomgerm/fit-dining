@@ -26,17 +26,17 @@ import { FullView } from "@/domains/meetup/ui/full-view";
 import { JoinFormView } from "@/domains/meetup/ui/join-form";
 import { MeetupNotFound } from "@/domains/meetup/ui/meetup-not-found";
 import { isApiError } from "@/shared/api/api-error";
-import { Screen } from "@/shared/ui/layout/screen";
-import { TopBar } from "@/shared/ui/layout/top-bar";
 import { useToast } from "@/shared/ui/overlay/toast";
 
 import { rememberLoginReturn } from "../../../login-return";
+import { MeetupLoadingScreen, useLeave } from "../meetup-loading-screen";
 
 // 질문지(/m/{code}/join). 이미 프로필이 있으면 모임 링크로 돌려보낸다
 export function JoinScreen({ code }: { code: string }) {
   const router = useRouter();
   const snapshot = useMeetupSnapshot(code);
   const joined = !!snapshot.data?.me.profileId;
+  const leave = useLeave(meetupHref(code));
 
   useEffect(() => {
     if (joined) router.replace(meetupHref(code));
@@ -45,9 +45,11 @@ export function JoinScreen({ code }: { code: string }) {
   if (isNotFound(snapshot.error)) return <MeetupNotFound />;
   if (!snapshot.data || joined) {
     return (
-      <Screen>
-        <TopBar title="처음 참여하기" />
-      </Screen>
+      <MeetupLoadingScreen
+        title="처음 참여하기"
+        snapshot={snapshot}
+        onBack={leave}
+      />
     );
   }
   return <JoinBody code={code} snapshot={snapshot.data} />;

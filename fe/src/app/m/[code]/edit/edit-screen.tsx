@@ -12,10 +12,9 @@ import {
 import { meetupHref } from "@/domains/meetup/model/meetup";
 import { MeetupEditForm } from "@/domains/meetup/ui/meetup-edit-form";
 import { MeetupNotFound } from "@/domains/meetup/ui/meetup-not-found";
-import { Screen } from "@/shared/ui/layout/screen";
-import { TopBar } from "@/shared/ui/layout/top-bar";
 
 import { rememberLoginReturn } from "../../../login-return";
+import { MeetupLoadingScreen, useLeave } from "../meetup-loading-screen";
 
 const withSession: WithSession = (send) => authenticated(() => send());
 
@@ -27,6 +26,7 @@ export function EditScreen({ code }: { code: string }) {
   const editable =
     !!data &&
     (data.allowed.includes("EDIT_INFO") || data.allowed.includes("EDIT_DATE"));
+  const leave = useLeave(meetupHref(code));
 
   useEffect(() => {
     if (data && !editable) router.replace(meetupHref(code));
@@ -35,9 +35,11 @@ export function EditScreen({ code }: { code: string }) {
   if (isNotFound(snapshot.error)) return <MeetupNotFound />;
   if (!data || !editable) {
     return (
-      <Screen>
-        <TopBar title="모임 정보 수정" />
-      </Screen>
+      <MeetupLoadingScreen
+        title="모임 정보 수정"
+        snapshot={snapshot}
+        onBack={leave}
+      />
     );
   }
   const back = () => router.replace(meetupHref(code));

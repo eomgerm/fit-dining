@@ -52,12 +52,10 @@ import { reviewWriteHref } from "@/domains/review/model/review";
 import { PlacePhoto, RankBadge } from "@/domains/place/ui/place-parts";
 import { isApiError } from "@/shared/api/api-error";
 import { copyLink, shareLink } from "@/shared/lib/share";
-import { Button } from "@/shared/ui/button/button";
-import { Screen } from "@/shared/ui/layout/screen";
-import { TopBar } from "@/shared/ui/layout/top-bar";
 import { useToast } from "@/shared/ui/overlay/toast";
 
 import { rememberLoginReturn } from "../../login-return";
+import { MeetupLoadingScreen } from "./meetup-loading-screen";
 
 const withSession: WithSession = (send) => authenticated(() => send());
 
@@ -86,34 +84,6 @@ function pollFailure(error: unknown, fallback: string) {
   }
 }
 
-function LoadingScreen({
-  failed,
-  onRetry,
-}: {
-  failed: boolean;
-  onRetry: () => void;
-}) {
-  return (
-    <Screen>
-      <TopBar title="모임 장소 정하기" />
-      {failed ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-4 px-8 pb-20 text-center">
-          <p className="text-body-sm text-ink-muted">
-            모임을 불러오지 못했어요.
-          </p>
-          <Button variant="outline" size="md" onClick={onRetry}>
-            다시 시도
-          </Button>
-        </div>
-      ) : (
-        <div className="px-5 pt-3" aria-busy="true">
-          <div className="h-32 animate-pulse rounded-lg bg-surface-sunken motion-reduce:animate-none" />
-        </div>
-      )}
-    </Screen>
-  );
-}
-
 // 모임 링크(/m/{code}). 스냅숏으로 화면을 정한다(AC-26). 프로필이 없으면 프로필 고르기, 모임장에게 프로필이 없으면
 // 질문지, 프로필이 있으면 대기 화면이나 결과 화면이다. 계산 중이면 누구에게나 찾는 중을 보인다(AC-31).
 // view="profiles"(/m/{code}/profiles)는 프로필 고르기를 바로 연다
@@ -137,12 +107,7 @@ export function MeetupScreen({
 
   if (isNotFound(snapshot.error)) return <MeetupNotFound />;
   if (!data || hostWithoutProfile || joinedProfiles) {
-    return (
-      <LoadingScreen
-        failed={snapshot.isError}
-        onRetry={() => snapshot.refetch()}
-      />
-    );
+    return <MeetupLoadingScreen title="모임 장소 정하기" snapshot={snapshot} />;
   }
   return (
     <>
