@@ -31,6 +31,96 @@ class SessionAuthenticationFlowTests extends PostgresTestSupport {
     @Autowired SocialTokens socialTokens;
     @MockitoBean SocialProviderClient provider;
     @org.springframework.test.context.bean.override.mockito.MockitoSpyBean java.time.Clock clock;
+    @org.springframework.test.context.bean.override.mockito.MockitoSpyBean
+    org.springframework.session.data.redis.RedisIndexedSessionRepository sessions;
+
+    @Test void unreachableRedisReturnsProblemButAnonymousRequestsDoNotReadSessions() throws Exception {
+        var configuration = new org.springframework.data.redis.connection.RedisStandaloneConfiguration("127.0.0.1", 1);
+        var options = org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration.builder()
+                .commandTimeout(java.time.Duration.ofMillis(200)).shutdownTimeout(java.time.Duration.ZERO).build();
+        var connection = new org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory(configuration, options);
+        connection.afterPropertiesSet();
+        connection.start();
+        try {
+            var template = new org.springframework.data.redis.core.RedisTemplate<String, Object>();
+            template.setConnectionFactory(connection);
+            template.afterPropertiesSet();
+            var unreachable = new org.springframework.session.data.redis.RedisIndexedSessionRepository(template);
+            doAnswer(call -> unreachable.findById(call.getArgument(0))).when(sessions).findById(anyString());
+            String encoded = java.util.Base64.getEncoder().encodeToString("unreachable-session".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            var result = request("GET", "/api/auth/me", null, "fitdining_session=" + encoded, null);
+            assertEquals(503, result.statusCode(), result.body());
+            assertTrue(result.headers().firstValue("content-type").orElseThrow().startsWith("application/problem+json"));
+            var problem = mapper.readTree(result.body());
+            assertEquals(503, problem.get("status").asInt());
+            assertEquals("Service Unavailable", problem.get("title").asString());
+            assertEquals("/api/auth/me", problem.get("instance").asString());
+            assertTrue(problem.get("detail").asString().contains("로그인 정보"));
+            clearInvocations(sessions);
+            assertEquals(200, request("GET", "/api/v1/places/ids", null, null, null).statusCode());
+            assertEquals(200, request("GET", "/healthz", null, null, null).statusCode());
+            assertEquals(200, request("GET", "/api/v1/version", null, null, null).statusCode());
+            verifyNoInteractions(sessions);
+        } finally {
+            doCallRealMethod().when(sessions).findById(anyString());
+            connection.destroy();
+        }
+    }
+
+    @Test void failedSessionSaveReplacesBufferedSuccessWithProblem() throws Exception {
+        var account = signup(newName());
+        String session = cookie(account, "fitdining_session");
+        try {
+            doThrow(new org.springframework.data.redis.RedisConnectionFailureException("test failure"))
+                    .when(sessions).save(any());
+            var result = request("GET", "/api/auth/me", null, session, null);
+            assertEquals(503, result.statusCode(), result.body());
+            assertEquals(503, mapper.readTree(result.body()).get("status").asInt());
+            assertFalse(result.body().contains("nickname"));
+        } finally { doCallRealMethod().when(sessions).save(any()); }
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void failedWithdrawalRevocationStillCommitsAndLeavesOtherSession(boolean failDelete) throws Exception {
+        String name = newName();
+        var first = signup(name);
+        String userId = mapper.readTree(first.body()).get("userId").asString();
+        var second = request("POST", "/api/auth/login",
+                "{\"email\":\"" + name + "@example.com\",\"password\":\"password123\"}", null, null);
+        String other = cookie(second, "fitdining_session");
+        var csrf = request("GET", "/api/auth/csrf", null, cookie(first, "fitdining_session"), null);
+        String csrfCookie = cookie(csrf, "XSRF-TOKEN");
+        var logger = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(
+                kr.co.fitdining.api.auth.infrastructure.AccountSessions.class);
+        var logs = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
+        logs.start(); logger.addAppender(logs);
+        try {
+            if (failDelete) {
+                doThrow(new org.springframework.data.redis.RedisConnectionFailureException("sensitive-session-id"))
+                        .when(sessions).deleteById(anyString());
+            } else {
+                doThrow(new org.springframework.data.redis.RedisConnectionFailureException("sensitive-session-id"))
+                        .when(sessions).findByIndexNameAndIndexValue(anyString(), eq(userId));
+            }
+            var result = request("DELETE", "/api/v1/users/" + userId, null,
+                    cookie(first, "fitdining_session") + "; " + csrfCookie, csrfCookie.substring("XSRF-TOKEN=".length()));
+            assertEquals(204, result.statusCode(), result.body());
+            assertEquals(1, new JdbcTemplate(appSource()).queryForObject(
+                    "select count(*) from auth_users where id=? and deleted_at is not null", Integer.class, userId));
+            assertTrue(logs.list.stream().anyMatch(event -> event.getLevel() == ch.qos.logback.classic.Level.WARN
+                    && event.getFormattedMessage().contains(userId) && event.getThrowableProxy() == null));
+            assertTrue(logs.list.stream().noneMatch(event -> event.getFormattedMessage().contains("sensitive-session-id")));
+        } finally {
+            doCallRealMethod().when(sessions).findByIndexNameAndIndexValue(anyString(), eq(userId));
+            doCallRealMethod().when(sessions).deleteById(anyString());
+            logger.detachAppender(logs); logs.stop();
+        }
+        assertEquals(401, request("GET", "/api/auth/me", null, other, null).statusCode());
+        assertEquals(404, request("GET", "/api/v1/users/" + userId, null, other, null).statusCode());
+        // This authenticated endpoint only consumes the restored principal; no account lookup occurs.
+        assertEquals(204, request("GET", "/api/auth/csrf", null, other, null).statusCode());
+    }
     // The shared database retains rate-limit counters from other HTTP suites.
     final String address = "198.18." + java.util.concurrent.ThreadLocalRandom.current().nextInt(256)
             + "." + java.util.concurrent.ThreadLocalRandom.current().nextInt(1, 255);

@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.http.ResponseEntity;
 
 @RestController @ConditionalOnWebApplication @RequiredArgsConstructor
+@lombok.extern.slf4j.Slf4j
 @RequestMapping("/api/v1/users/{userId}")
 public class UserController {
     private final UserService service;
@@ -48,7 +49,11 @@ public class UserController {
             @AuthenticationPrincipal Identity identity, jakarta.servlet.http.HttpServletRequest request) {
         service.withdraw(userId, identity);
         var session = request.getSession(false);
-        if (session != null) session.invalidate();
+        try {
+            if (session != null) session.invalidate();
+        } catch (org.springframework.dao.DataAccessException failure) {
+            log.warn("Current session revocation failed after account withdrawal: userId={}", userId);
+        }
         org.springframework.security.core.context.SecurityContextHolder.clearContext();
         return ResponseEntity.noContent().build();
     }

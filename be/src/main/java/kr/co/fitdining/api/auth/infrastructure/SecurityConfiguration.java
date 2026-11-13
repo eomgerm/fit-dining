@@ -39,7 +39,7 @@ public class SecurityConfiguration {
         if (detail != null) problem.setDetail(detail);
         writeProblem(mapper, problem, request, response);
     }
-    private static void writeProblem(JsonMapper mapper, org.springframework.http.ProblemDetail problem,
+    static void writeProblem(JsonMapper mapper, org.springframework.http.ProblemDetail problem,
             HttpServletRequest request, HttpServletResponse response) throws java.io.IOException {
         problem.setInstance(java.net.URI.create(request.getRequestURI()));
         response.setStatus(problem.getStatus());

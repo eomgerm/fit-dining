@@ -18,6 +18,17 @@ import tools.jackson.databind.json.JsonMapper;
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 public class SessionConfiguration {
+    static final String SESSION_COOKIE_NAME = "fitdining_session";
+
+    @Bean
+    org.springframework.boot.web.servlet.FilterRegistrationBean<SessionUnavailableFilter> sessionUnavailableFilter(
+            JsonMapper mapper, org.springframework.core.env.Environment environment) {
+        var registration = new org.springframework.boot.web.servlet.FilterRegistrationBean<>(new SessionUnavailableFilter(mapper));
+        registration.setOrder(environment.getProperty("spring.session.servlet.filter-order", Integer.class,
+                org.springframework.session.web.http.SessionRepositoryFilter.DEFAULT_ORDER) - 1);
+        return registration;
+    }
+
     @Bean
     ConfigureRedisAction configureRedisAction() { return ConfigureRedisAction.NO_OP; }
 
@@ -29,7 +40,7 @@ public class SessionConfiguration {
     @Bean
     DefaultCookieSerializer cookieSerializer(@Value("${auth.cookie-secure}") boolean secure) {
         var cookie = new DefaultCookieSerializer();
-        cookie.setCookieName("fitdining_session");
+        cookie.setCookieName(SESSION_COOKIE_NAME);
         cookie.setUseHttpOnlyCookie(true);
         cookie.setUseSecureCookie(secure);
         cookie.setSameSite("Lax");
