@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -14,6 +15,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
 import kr.co.fitdining.api.support.PostgresTestSupport;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -165,12 +167,20 @@ class PlaceCatalogSchemaTest extends PostgresTestSupport {
 
 	private static JdbcTemplate catalog;
 	private static JdbcTemplate app;
+	/** 이 class가 넣은 장소. 컨테이너를 모든 test class가 함께 쓰므로 test마다 이 행만 지운다(자식 행은 CASCADE) */
+	private static final List<Long> placeIds = new ArrayList<>();
 
 	@BeforeAll
 	static void migrateSchema() throws Exception {
 		migrate();
 		catalog = new JdbcTemplate(superuserSource());
 		app = new JdbcTemplate(appSource());
+	}
+
+	@AfterEach
+	void deleteOwnPlaces() {
+		placeIds.forEach(id -> app.update("DELETE FROM places WHERE place_id = ?", id));
+		placeIds.clear();
 	}
 
 	@Nested
@@ -349,8 +359,9 @@ class PlaceCatalogSchemaTest extends PostgresTestSupport {
 				rs.next();
 				Timestamp now = rs.getTimestamp(1);
 				rs = sql.executeQuery("INSERT INTO places (naver_place_id, name, category_group, station, lat, lng) VALUES ('"
-						+ naverId() + "', '이름', 'CAFE', 'GANGNAM', 37.5, 127.0) RETURNING created_at, updated_at");
+						+ naverId() + "', '이름', 'CAFE', 'GANGNAM', 37.5, 127.0) RETURNING place_id, created_at, updated_at");
 				rs.next();
+				placeIds.add(rs.getLong("place_id"));
 				assertThat(rs.getTimestamp("created_at")).isEqualTo(now);
 				assertThat(rs.getTimestamp("updated_at")).isEqualTo(now);
 				connection.commit();
@@ -602,7 +613,9 @@ class PlaceCatalogSchemaTest extends PostgresTestSupport {
 	}
 
 	private static long insertPlace(String naverId, double lat, double lng) {
-		return app.queryForObject(insertPlaceSql() + " RETURNING place_id", Long.class, naverId, lat, lng);
+		long placeId = app.queryForObject(insertPlaceSql() + " RETURNING place_id", Long.class, naverId, lat, lng);
+		placeIds.add(placeId);
+		return placeId;
 	}
 
 	private static String minimalChildInsert(String child) {
