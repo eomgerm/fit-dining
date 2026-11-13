@@ -19,6 +19,7 @@ import type {
 import { searchStore } from "@/domains/place/model/search-store";
 import type { ThreadTurn } from "@/domains/place/model/search-threads";
 import { SearchScreen } from "@/domains/place/ui/search-screen";
+import { SEARCH_SLOW_MS } from "@/domains/place/ui/search-steps";
 import { resetThreadSession } from "@/domains/place/ui/thread-storage";
 import { stubNaverMaps } from "@/domains/place/ui/testing/naver-maps-stub";
 import { useStoredCard } from "@/domains/place/ui/use-stored-card";
@@ -360,6 +361,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // fake timer를 쓰던 test가 중간에 실패해도 다음 test는 실제 시계로 돈다
+  vi.useRealTimers();
   cleanup();
   vi.unstubAllGlobals();
   push.mockReset();
@@ -412,20 +415,24 @@ describe("회원 검색 기록 저장", () => {
     const gate = deferred();
     server.gate.search = gate.promise;
     fireEvent.click(screen.getByRole("button", { name: "새 검색" }));
+    // '검색 취소'는 SEARCH_SLOW_MS(3초)가 지나야 보인다. 시계만 앞으로 돌린다
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     await newSearch("취소할 검색");
-    // '검색 취소'는 3초가 지나야 보인다
-    fireEvent.click(
-      await screen.findByRole(
-        "button",
-        { name: "검색 취소" },
-        { timeout: 6000 },
-      ),
-    );
+    await act(() => vi.advanceTimersByTimeAsync(SEARCH_SLOW_MS));
+    vi.useRealTimers();
+    fireEvent.click(screen.getByRole("button", { name: "검색 취소" }));
     gate.release();
     await firstScreen();
+    // 취소한 검색의 응답을 다 처리한 뒤에 본다. 뒤에 보낸 검색이 저장될 때까지 기다리면, 그보다 먼저 온 취소한
+    // 검색의 응답도 처리가 끝났다
+    await newSearch("다음 검색");
+    await waitFor(() => expect(server.puts).toHaveLength(2));
 
-    expect(server.puts).toHaveLength(1);
-  }, 10_000);
+    expect(server.puts.map(({ body }) => body.request.query)).toEqual([
+      "역삼 카페",
+      "다음 검색",
+    ]);
+  });
 
   it("회원도 요청 기록과 '결과 보기'의 과거 결과가 그대로 동작한다", async () => {
     renderApp();
