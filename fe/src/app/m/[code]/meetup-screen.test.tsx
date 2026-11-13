@@ -10,7 +10,10 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { markJustJoined } from "@/domains/meetup/model/just-joined";
+import {
+  clearJustJoined,
+  markJustJoined,
+} from "@/domains/meetup/model/just-joined";
 import type { MeetupSnapshot } from "@/domains/meetup/model/meetup";
 import type { MeetupResult } from "@/domains/meetup/model/result";
 import { ApiError } from "@/shared/api/api-error";
@@ -1049,7 +1052,70 @@ describe("회원 프로필로 바꾸기", () => {
   });
 });
 
-describe("불러오기 실패", () => {
+describe("뒤로와 불러오기 실패", () => {
+  const member = {
+    id: 3,
+    name: "도윤",
+    color: 1,
+    member: true,
+    host: false,
+    reflected: false,
+  };
+
+  afterEach(() => clearJustJoined(CODE));
+
+  it("모임장은 뒤로 가면 내 모임이다", async () => {
+    api.fetchSnapshot.mockResolvedValue(
+      snapshot({
+        me: { role: "HOST", profileId: 1, signedIn: true },
+        allowed: [],
+      }),
+    );
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "뒤로" }));
+    expect(mocks.push).toHaveBeenCalledWith("/m");
+  });
+
+  it("회원 프로필로 참여한 회원도 뒤로 가면 내 모임이다", async () => {
+    api.fetchSnapshot.mockResolvedValue(
+      snapshot({
+        me: { role: "PARTICIPANT", profileId: 3, signedIn: true },
+        allowed: [],
+        profiles: [...snapshot().profiles, member],
+      }),
+    );
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "뒤로" }));
+    expect(mocks.push).toHaveBeenCalledWith("/m");
+  });
+
+  it("방금 취향을 남긴 회원 참여자도 뒤로 가면 내 모임이다", async () => {
+    markJustJoined(CODE);
+    api.fetchSnapshot.mockResolvedValue(
+      snapshot({
+        me: { role: "PARTICIPANT", profileId: 3, signedIn: true },
+        allowed: [],
+        profiles: [...snapshot().profiles, member],
+      }),
+    );
+    mount();
+    expect(await screen.findByText("취향을 남겼어요")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "뒤로" }));
+    expect(mocks.push).toHaveBeenCalledWith("/m");
+  });
+
+  it("비회원 참여자에게는 내 모임이 없어 뒤로도 없다", async () => {
+    api.fetchSnapshot.mockResolvedValue(
+      snapshot({
+        me: { role: "PARTICIPANT", profileId: 2, signedIn: false },
+        allowed: [],
+      }),
+    );
+    mount();
+    expect(await screen.findByText("하린")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "뒤로" })).toBeNull();
+  });
+
   it("모임을 받지 못하면 실패 안내와 다시 시도를 보이고, 다시 시도하면 다시 받는다", async () => {
     api.fetchSnapshot.mockRejectedValue(
       new ApiError("http", "server", { status: 500 }),

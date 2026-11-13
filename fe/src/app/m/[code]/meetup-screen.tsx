@@ -26,6 +26,7 @@ import {
 } from "@/domains/meetup/model/just-joined";
 import {
   meetupHref,
+  myProfile,
   type MeetupProfile,
   type MeetupSnapshot,
 } from "@/domains/meetup/model/meetup";
@@ -210,6 +211,9 @@ function MeetupBody({
         ),
     });
   const host = snapshot.me.role === "HOST";
+  // 내 모임 목록에 이 모임이 있는 사람(모임장, 회원 프로필로 참여한 회원)은 뒤로 가면 그 목록이다(D-37)
+  const backToList =
+    host || myProfile(snapshot)?.member ? () => router.push("/m") : undefined;
   const resultState = viewState(snapshot, host, result.data, result.isError);
   const resultView = (onPickName?: () => void) =>
     resultState && (
@@ -220,7 +224,7 @@ function MeetupBody({
         parts={RESULT_PARTS}
         placeHref={(placeId) => `/places/${placeId}?meetup=${code}`}
         calculating={calculation.isPending}
-        onBack={host ? () => router.push("/m") : undefined}
+        onBack={backToList}
         onCalculate={calculate}
         onReload={() => result.refetch()}
         onEditTaste={editTaste}
@@ -264,7 +268,7 @@ function MeetupBody({
         parts={RESULT_PARTS}
         placeHref={(placeId) => `/places/${placeId}?meetup=${code}`}
         pending={pollPending}
-        onBack={host ? () => router.push("/m") : undefined}
+        onBack={backToList}
         onVote={(placeId) =>
           succeeded(
             vote.mutateAsync(placeId),
@@ -307,6 +311,7 @@ function MeetupBody({
       return (
         <DoneView
           snapshot={snapshot}
+          onBack={backToList}
           onEditTaste={editTaste}
           onSignIn={() => signIn(meetupHref(code))}
           onContinue={() => {
@@ -321,7 +326,7 @@ function MeetupBody({
         {voteView() || resultView() || (
           <WaitingView
             snapshot={snapshot}
-            onBack={host ? () => router.push("/m") : undefined}
+            onBack={backToList}
             onShare={share}
             onCopy={copy}
             onEditTaste={editTaste}

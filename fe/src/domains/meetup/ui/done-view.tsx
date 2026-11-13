@@ -1,7 +1,9 @@
 "use client";
 
 import { Button } from "@/shared/ui/button/button";
+import { IconButton } from "@/shared/ui/button/icon-button";
 import { CheckIcon } from "@/shared/ui/icon/icons/check";
+import { ChevronLeftIcon } from "@/shared/ui/icon/icons/chevron-left";
 import { BottomBar } from "@/shared/ui/layout/bottom-bar";
 import { Screen } from "@/shared/ui/layout/screen";
 import { TopBar } from "@/shared/ui/layout/top-bar";
@@ -12,11 +14,13 @@ import { tasteRows } from "../model/taste";
 // 취향을 남긴 뒤(참여자 5). 내 취향을 보이고, 비회원에게는 로그인하면 할 수 있는 것을 알린다. 아래 버튼은 결과 전이면 대기 화면, 결과가 있으면 결과 화면을 연다(D-28)
 export function DoneView({
   snapshot,
+  onBack,
   onEditTaste,
   onSignIn,
   onContinue,
 }: {
   snapshot: MeetupSnapshot;
+  onBack?: () => void;
   onEditTaste: () => void;
   onSignIn: () => void;
   onContinue: () => void;
@@ -26,7 +30,16 @@ export function DoneView({
   const hasResult = snapshot.resultCalculationId !== undefined;
   return (
     <Screen>
-      <TopBar title="모임 장소 정하기" />
+      <TopBar
+        start={
+          onBack && (
+            <IconButton label="뒤로" onClick={onBack}>
+              <ChevronLeftIcon className="text-icon" />
+            </IconButton>
+          )
+        }
+        title="모임 장소 정하기"
+      />
       <div className="flex flex-col gap-6 px-5 pt-6 pb-4">
         <div className="flex flex-col items-center gap-3 text-center">
           <span
