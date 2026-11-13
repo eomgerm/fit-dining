@@ -1,6 +1,6 @@
 # AI 검색 API 명세
 
-Status: 초안 v0.14 · Jira: S15P31A302-41, S15P31A302-136, S15P31A302-158, S15P31A302-209, S15P31A302-236, S15P31A302-161 · 작성일: 2026-10-23 · 고친 날: 2026-11-12
+Status: 초안 v0.15 · Jira: S15P31A302-41, S15P31A302-136, S15P31A302-158, S15P31A302-209, S15P31A302-236, S15P31A302-161, S15P31A302-196 · 작성일: 2026-10-23 · 고친 날: 2026-11-13
 
 BE는 검색 첫 페이지마다 AI를 한 번 부른다. AI는 요청을 해석하고 DB에서 후보를 뽑아 핏 점수로 정렬한 뒤 카드의 AI 필드를 돌려준다. v0.7부터 정렬에 LLM을 쓰지 않는다. BE는 카드에 장소 정보와 영업 상태를 붙여 FE에 준다. 모임 추천은 모임 설명 해석과 모임 계산 주소 두 개를 따로 쓴다(6장).
 
@@ -22,7 +22,7 @@ JSON 이름은 camelCase다. 요청에 모르는 속성이 있으면 400이고(�
 ```json
 {
   "query": "역삼역 조용하게 대화하기 좋은 식당",
-  "location": {"lat": 37.5006, "lng": 127.0364},
+  "mapBounds": {"swLat": 37.4940, "swLng": 127.0220, "neLat": 37.5020, "neLng": 127.0330},
   "userId": "0b6f3c1e-8a4d-4c2b-9f7e-2d5a1c9e4b10"
 }
 ```
@@ -31,9 +31,8 @@ JSON 이름은 camelCase다. 요청에 모르는 속성이 있으면 400이고(�
 | --- | --- | --- | --- |
 | `query` | O | 요청문. 1~200자, 공백만은 안 된다 | `query` |
 | `previousConditions` | | 후속 검색이면 직전 응답의 `conditions`. 읽지 못하면 새 검색으로 본다 | `previousConditions` |
-| `mapBounds` | | 지도 영역(숫자). FE가 요청마다 지금 화면을 보낸다. `mapFirst`가 `true`일 때만 거르기에 쓴다(v0.11). 아니면 거르기에는 쓰지 않고, 결과가 없을 때 "준비 중인 지역" 안내가 제안할 도시를 고르는 데만 쓴다(중심이 든 도시, 2026-11-12). 빠진 값은 제한하지 않는다 | `mapBounds` |
+| `mapBounds` | | 지도 영역(숫자). FE가 요청마다 지금 화면을 보낸다. 요청문에도 이전 요청에도 지역이 없거나 "근처"를 말했으면 이 영역으로 거른다(v0.15). 결과가 없을 때 "준비 중인 지역" 안내가 제안할 도시를 고르는 데도 쓴다(중심이 든 도시, 2026-11-12). 빠진 값은 제한하지 않는다 | `mapBounds` |
 | `mapFirst` | | "이 지역에서 검색"으로 보낸 요청이면 `true`(참/거짓만, 빼면 `false`). `true`면 요청문과 이전 요청의 지역을 보지 않고 `mapBounds`로만 거르고, 그 영역을 응답 `conditions.mapBounds`에 남긴다. `true`인데 `mapBounds`가 없거나 `{}`이면 400이다(v0.11) | 새로 추가 |
-| `location` | | 사용자 위치 `{lat, lng}`(위도 -90~90, 경도 -180~180의 숫자). FE가 기기 위치를 얻었으면 요청마다 보낸다. 요청문에도 이전 요청에도 지역이 없거나 "근처"를 말했으면 이 위치에서 1km 안으로 거른다. AI는 응답 `conditions`와 로그에 남기지 않는다(v0.10) | 새로 추가(S15P31A302-196에서 넘김) |
 | `rulesOnly` | | `true`면 해석 LLM을 부르지 않고 낱말 규칙으로만 해석한다(참/거짓만, 빼면 `false`). 첫 화면 주변 카드의 "근처 맛집"처럼 FE가 정한 고정 문장에만 쓴다. 규칙 해석은 자유 문장에 약하다. 폴백이 아니라서 `fallbacks`에 담지 않고 `interpretedBy`만 `RULE`이다(v0.11) | 새로 추가 |
 | `userId` | | 회원 id(1~64자). BE가 로그인으로 확인한 id만 보낸다. 있으면 AI가 회원 취향(`user_preferences`)을 직접 읽고 `tasteProfile`은 읽지 않는다. 취향이 저장돼 있지 않으면 취향 없이 정렬한다 | 로그인 사용자 |
 | `tasteProfile` | | 비회원 취향. 기기가 저장한 온보딩 답을 BE가 그대로 넘긴다(아래 예). 없으면 취향 없이 정렬한다. 모양이 틀리면 취향 없이 정렬하고 `TASTE_INVALID`를 담는다 | 없음(5장) |
@@ -56,7 +55,7 @@ JSON 이름은 camelCase다. 요청에 모르는 속성이 있으면 400이고(�
 - `vector`는 직접 입력 해석 API가 코드 없는 좋아함 칩에 준 벡터다(길이 1024). 기기가 칩과 함께 저장했다가 보낸다. 회원 행처럼 그 칩의 벡터만 쓰고 다른 칩에 붙은 벡터는 버린다. 벡터가 있는 칩은 취향 묶음 재료가 된다(taste-profile spec 4단계). 벡터가 없는 칩은 보관만 하고 정렬에 쓰지 않는다.
 - 모양이 틀린 경우: 모르는 필드(`features` 포함), 목록에 없는 값, 칩 20개 초과, 문구 1~100자 밖, 벡터 길이가 1024가 아님
 
-`conditions`에는 해석 결과와, "이 지역에서 검색"으로 고른 지도 영역(`mapBounds`)만 있다. 후속 검색 때도 `userId`(또는 `tasteProfile`)와 `location`은 다시 보내야 한다. 후속 검색에 함께 온 `mapBounds`는 `mapFirst`가 아니면 쓰지 않는다. 버튼으로 고른 지도 영역은 `conditions.mapBounds`로 돌아와 다음 후속 검색이 이어 쓴다. 지역은 지도 영역(`mapFirst`) → 이번 요청에 말한 지역 → 이전 요청의 지역 → `location` 1km 안 순서로 하나를 쓰고, 어느 것도 없으면 전국에서 찾아 `nationwide: true`로 준다(v0.10). `mapFirst`가 아닐 때 온 지도 영역은 이 순서에 들어가지 않는다. 위치가 없을 때도 화면이 아니라 전국에서 찾는다(v0.11, 2026-11-10 결정). BE의 `preferences`와 `cursor`는 null이라도 넣으면 400이므로 AI 요청용 DTO를 따로 둔다.
+`conditions`에는 해석 결과와, "이 지역에서 검색"으로 고른 지도 영역(`mapBounds`)만 있다. 후속 검색 때도 `userId`(또는 `tasteProfile`)와 지금 화면의 `mapBounds`는 다시 보내야 한다. 버튼으로 고른 지도 영역은 `conditions.mapBounds`로 돌아와 다음 후속 검색이 이어 쓴다. 지역은 지도 영역(`mapFirst`) → 이번 요청에 말한 지역 → 이전 요청의 지역 → 지금 화면(`mapBounds`) 순서로 하나를 쓰고, 어느 것도 없으면 전국에서 찾아 `nationwide: true`로 준다. 사용자 위치(`location`)는 받지 않는다. 보내면 모르는 속성이라 400이다(v0.15, 2026-11-10 결정. v0.10~v0.14는 위치에서 1km 안으로 걸렀고, 지도 영역은 `mapFirst`일 때만 거르기에 썼다). BE의 `preferences`와 `cursor`는 null이라도 넣으면 400이므로 AI 요청용 DTO를 따로 둔다.
 
 v0.6부터 `conditions`에 분류별 조각(`locations`, `menus`, `hours`, `price`, `placeName`, `features`, `avoidCategories`, v0.8의 `avoidFoods`)이 붙는다. 뜻은 [spec.md](spec.md) 4.1절에 있다. null인 조각은 빠지고 빈 목록은 그대로 온다. BE와 FE는 지금처럼 해석하지 않고 돌려보내면 되고, 조각이 없는 v0.5 이전 `conditions`도 그대로 읽는다. 이 문서의 예시는 v0.9 모양이고 빈 목록은 줄였다.
 
@@ -99,7 +98,7 @@ BE Mock 장소(`samples/place/mock.json`)와 실제 인코더·GMS로 받은 응
 | 필드 | 내용 | BE `PlaceSearchResponse`로 |
 | --- | --- | --- |
 | `conditions` | 해석한 조건. BE와 FE는 해석하지 않는다 | 그대로. FE가 후속 검색 때 돌려보낸다 |
-| `nationwide` | 전국에서 찾았는지. 지도 영역, 말한 지역, 이전 요청의 지역, `location`이 모두 없을 때 `true`다. FE는 "위치를 확인할 수 없어 전체 지역 결과를 보여 드려요"를 띄운다(v0.10. 전에는 `nearby`가 와서 FE가 기기 위치로 걸렀다) | `nearby` 대신 넘긴다 |
+| `nationwide` | 전국에서 찾았는지. 말한 지역, 이전 요청의 지역, `mapBounds`가 모두 없을 때 `true`다. FE가 `mapBounds`를 요청마다 보내면 `false`다(v0.15). `true`면 FE는 전체 지역 결과라고 알린다(v0.10. 전에는 `nearby`가 와서 FE가 기기 위치로 걸렀다) | `nearby` 대신 넘긴다 |
 | `changeSummary` | 후속 검색에서 바뀐 점. 새 검색이면 빠진다 | 그대로 |
 | `items` | 카드. `score` 내림차순(점수가 없으면 유사도 순서), 20개까지(v0.10. 전에는 근처 검색이 100개였다) | `placeId`로 `PlaceSummary`와 `openStatus`를 붙인다 |
 | `emptyReason` | 결과가 없을 때 `{cause, suggestion}` | 그대로 |
@@ -183,10 +182,10 @@ BE는 검색마다 `modal_llm_calls_total`과 `modal_embedding_calls_total`을 �
 
 #### 근처 검색
 
-역 없이 근처를 찾으면 `location`에서 1km 안으로 거른다. 점수와 결과 수는 일반 검색과 같다. `location`이 없으면 "근처"를 말하지 않은 것으로 보고 전국에서 찾는다(`nationwide: true`). 따질 조건도 취향도 없으면 `score`가 빠지고 `reasons`와 `scoreItems`도 비며 유사도 순서다(`rankedBy`가 `SIMILARITY`). 폴백이 아니라서 `fallbacks`는 비어 있다.
+역 없이 근처를 찾으면 `mapBounds`(지금 화면)로 거른다. 점수와 결과 수는 일반 검색과 같다. 버튼으로 고른 영역이 아니라 `conditions.mapBounds`에 남기지 않는다. `mapBounds`가 없으면 "근처"를 말하지 않은 것으로 보고 전국에서 찾는다(`nationwide: true`). 따질 조건도 취향도 없으면 `score`가 빠지고 `reasons`와 `scoreItems`도 비며 유사도 순서다(`rankedBy`가 `SIMILARITY`). 폴백이 아니라서 `fallbacks`는 비어 있다.
 
 ```json
-{"query": "근처 카페", "location": {"lat": 37.5006, "lng": 127.0364}}
+{"query": "근처 카페", "mapBounds": {"swLat": 37.4940, "swLng": 127.0220, "neLat": 37.5020, "neLng": 127.0330}}
 ```
 
 ```json
@@ -206,7 +205,7 @@ BE는 검색마다 `modal_llm_calls_total`과 `modal_embedding_calls_total`을 �
 해석 LLM을 부르지 않는다. "근처 맛집"은 규칙 해석과 LLM 해석의 조건이 같다(2026-11-10, 서울 300곳에서 10번씩 돌려 결과 20곳의 순서까지 같았다). AI 처리 시간은 중앙값 2.15초에서 0.07초가 됐다(로컬 인코더로 잼. 줄어든 것은 GMS 호출이다). `models.llm`이 빠지지만 폴백이 아니라서 `fallbacks`는 비어 있다. 아래 응답은 `items`를 줄였다.
 
 ```json
-{"query": "근처 맛집", "location": {"lat": 37.5006, "lng": 127.0364}, "rulesOnly": true}
+{"query": "근처 맛집", "mapBounds": {"swLat": 37.4940, "swLng": 127.0220, "neLat": 37.5020, "neLng": 127.0330}, "rulesOnly": true}
 ```
 
 ```json
