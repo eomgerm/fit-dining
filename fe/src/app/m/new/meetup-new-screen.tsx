@@ -21,7 +21,11 @@ export function MeetupNewScreen() {
 
   useEffect(() => {
     let active = true;
-    restore().catch(() => active && setSignedOut(true));
+    // 숨겨 둔 화면이 로그인 뒤 다시 보일 때도 이 효과가 다시 돌아 안내를 닫는다
+    restore().then(
+      () => active && setSignedOut(false),
+      () => active && setSignedOut(true),
+    );
     return () => {
       active = false;
     };
