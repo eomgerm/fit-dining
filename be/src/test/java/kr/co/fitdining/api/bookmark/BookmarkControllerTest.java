@@ -27,7 +27,6 @@ import kr.co.fitdining.api.place.dto.PlaceSummary.CategoryGroup;
 import kr.co.fitdining.api.place.dto.PlaceSummary.Station;
 import kr.co.fitdining.api.place.exception.PlaceNotFoundException;
 import kr.co.fitdining.api.place.exception.PlaceSearchUnavailableException;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -51,7 +50,6 @@ import tools.jackson.databind.json.JsonMapper;
 @WebMvcTest(controllers = BookmarkController.class)
 class BookmarkControllerTest {
 
-	private static final String TOKEN = "valid-access-token";
 	private static final String USER_ID = "user-1";
 	private static final String BASE = "/api/v1/me/bookmarks";
 
@@ -66,10 +64,6 @@ class BookmarkControllerTest {
 
 	@MockitoBean
 	AuthUseCases auth;
-
-	@BeforeEach
-	void setUp() {
-	}
 
 	/** 네 API. 장소 id가 필요한 API는 3번 장소다. */
 	enum Endpoint {
@@ -120,8 +114,8 @@ class BookmarkControllerTest {
 
 		@ParameterizedTest(name = "{0}")
 		@MethodSource("kr.co.fitdining.api.bookmark.BookmarkControllerTest#endpoints")
-		@DisplayName("인증_Bearer가아닌헤더나무효토큰이면_401이다")
-		void anyEndpoint_invalidToken_returnsUnauthorized(Endpoint endpoint) throws Exception {
+		@DisplayName("인증_남은Authorization헤더는_인증되지않아401이다")
+		void anyEndpoint_leftoverAuthorizationHeader_returnsUnauthorized(Endpoint endpoint) throws Exception {
 			mockMvc.perform(endpoint.request().with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).header("Authorization", "Basic abc"))
 					.andExpect(status().isUnauthorized());
 			mockMvc.perform(endpoint.request().with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).header("Authorization", "Bearer invalid"))
@@ -170,8 +164,6 @@ class BookmarkControllerTest {
 		@DisplayName("placeIdEndpoints_invalidPlaceId_authenticationComesFirst")
         void placeIdEndpoints_invalidPlaceId_authenticationComesFirst(Endpoint endpoint, String placeId) throws Exception {
             mockMvc.perform(endpoint.request(placeId).with(kr.co.fitdining.api.support.SessionTestSupport.csrf())).andExpect(status().isUnauthorized());
-            mockMvc.perform(endpoint.request(placeId).with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).header("Authorization", "Bearer expired"))
-                .andExpect(status().isUnauthorized());
             mockMvc.perform(endpoint.request(placeId).with(kr.co.fitdining.api.support.SessionTestSupport.csrf()).with(kr.co.fitdining.api.support.SessionTestSupport.session(USER_ID)))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON));

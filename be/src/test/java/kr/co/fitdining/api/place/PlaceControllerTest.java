@@ -2,9 +2,6 @@ package kr.co.fitdining.api.place;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
-import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.ArgumentMatchers.any;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.nullValue;
@@ -14,7 +11,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import kr.co.fitdining.api.auth.domain.AuthFailure;
 import kr.co.fitdining.api.auth.ports.AuthUseCases;
 import com.jayway.jsonpath.JsonPath;
 import java.nio.charset.StandardCharsets;
@@ -499,8 +495,8 @@ class PlaceControllerTest {
 
 		@ParameterizedTest(name = "{0}")
 		@ValueSource(strings = {"suggest", "detail"})
-		@DisplayName("suggestAndDetail_invalidAuthorization_returnsUnauthorized")
-        void suggestAndDetail_invalidAuthorization_returnsUnauthorized(String endpoint) throws Exception {
+		@DisplayName("자동완성과상세_Authorization헤더가무엇이든_무시하고200이다")
+        void suggestAndDetail_anyAuthorizationHeader_ignoredAndOk(String endpoint) throws Exception {
             mockMvc.perform(request(endpoint)).andExpect(status().isOk());
             for (String header : List.of("Bearer bad", "Basic x", "")) {
                 mockMvc.perform(request(endpoint).header("Authorization", header))
@@ -527,8 +523,8 @@ class PlaceControllerTest {
 		}
 
 		@Test
-		@DisplayName("search_invalidBodyAndToken_unauthorizedFirst")
-        void search_invalidBodyAndToken_unauthorizedFirst() throws Exception {
+		@DisplayName("추천검색_본문이틀리면_남은Bearer헤더와상관없이400이다")
+        void search_invalidBodyWithBearerHeader_badRequest() throws Exception {
             mockMvc.perform(search("{\"query\":\"\"}").header("Authorization", "Bearer bad"))
                 .andExpect(status().isBadRequest());
         }
@@ -794,10 +790,6 @@ class PlaceControllerTest {
 		private static void assertRequired(JsonNode node, Set<String> required) {
 			assertThat(node.propertyNames()).containsAll(required);
 		}
-	}
-
-	static AuthUseCases.Identity identity(String userId) {
-		return new AuthUseCases.Identity(userId, "닉네임", 0);
 	}
 
 	private static MockHttpServletRequestBuilder search(String body) {
