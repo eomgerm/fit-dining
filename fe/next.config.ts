@@ -1,6 +1,12 @@
 import type { NextConfig } from "next";
+import { HTML_LIMITED_BOT_UA_RE } from "next/dist/shared/lib/router/utils/html-bots";
 
 const nextConfig: NextConfig = {
+  // 이 봇들은 메타데이터를 <head>에 받는다. 값을 정하면 Next 기본 목록을 대신하므로 기본 목록에 카카오톡 스크래퍼를 더한다(meetup D-38)
+  htmlLimitedBots: new RegExp(
+    `${HTML_LIMITED_BOT_UA_RE.source}|kakaotalk-scrap`,
+    "i",
+  ),
   // 필요한 의존성과 server.js만 컨테이너에 담는다(design.md 12.5 #1).
   output: "standalone",
   // Arm 빌드를 x86에서도 쓰도록 네이티브 이미지 최적화를 끈다(design.md 12.5 #7).
