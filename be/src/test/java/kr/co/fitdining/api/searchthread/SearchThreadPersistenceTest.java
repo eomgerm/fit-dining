@@ -917,13 +917,16 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 			String thread = threadId();
 			String id = turnId();
 			put(token, thread, id, newTurn(id, AT, "카페"));
-			HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + BASE))
-					.header("Cookie", token).header("Origin", "https://evil.example")
-					.DELETE().build();
+			// CSRF cookie와 header는 맞게 넣고 Origin만 틀리게 한다
+			HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create("http://localhost:" + port + BASE))
+					.header("Origin", "https://evil.example");
+			kr.co.fitdining.api.support.SessionTestSupport.csrf(builder, client, port, token);
 
-			HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+			HttpResponse<String> response = client.send(builder.DELETE().build(), HttpResponse.BodyHandlers.ofString());
 
 			assertThat(response.statusCode()).isEqualTo(403);
+			// CSRF 검사가 낸 403이 아니다(CSRF 403은 detail이 "CSRF 토큰이 없거나 올바르지 않습니다."다)
+			assertThat(response.body()).doesNotContain("CSRF");
 			assertThat(count("search_threads")).isEqualTo(1);
 		}
 
