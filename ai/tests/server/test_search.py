@@ -41,7 +41,6 @@ from fit_ai.match.search import (
     SearchRequest,
     SearchResult,
     SearchTrace,
-    UserLocation,
 )
 from fit_ai.match.taste_select import Bundle, FreeText, TasteFeature, TasteProfile
 from server import search as server_search
@@ -346,25 +345,12 @@ class TestSearch:
                         (Bundle("창가 자리", 1.0, None, tuple(VECTOR)),),
                     ),
                     bounds=MapBounds(sw_lat=37.49, ne_lng=127.04),
-                    map_view=MapBounds(sw_lat=37.49, ne_lng=127.04),
+                    map_first=True,
                 ),
                 store,
                 3.0,
             )
         ]
-
-    def test_map_view_passed_without_map_first(self, searched: FakeSearch) -> None:
-        """검색_지도영역은이지역에서검색이아니어도_안내용지도화면으로넘기고거르기에는쓰지않는다"""
-        view = {"swLat": 36.34, "swLng": 127.36, "neLat": 36.37, "neLng": 127.40}
-        expected = MapBounds(36.34, 127.36, 36.37, 127.40)
-
-        post(client(), mapBounds=view)
-        post(client(), mapBounds=view, mapFirst=True)
-        post(client())
-
-        requests = [call[0] for call in searched.calls]
-        assert [r.map_view for r in requests] == [expected, expected, None]
-        assert [r.bounds for r in requests] == [None, expected, None]
 
     def test_shares_gms_client(self, searched: FakeSearch) -> None:
         """검색_시작때만든GMS클라이언트를_검색에넘긴다"""
@@ -400,23 +386,29 @@ class TestSearch:
         assert response.status_code == 400
         assert searched.calls == []
 
-    def test_map_bounds_without_map_first_not_used(
+    def test_map_bounds_without_map_first(
         self, searched: FakeSearch, caplog: pytest.LogCaptureFixture
     ) -> None:
-        """검색_이지역에서검색이아니면_함께온지도영역을거르기에쓰지않고왔는지만남긴다"""
+        """검색_이지역에서검색이아니어도_지도영역을검색에넘기고로그에는왔는지만남긴다"""
         caplog.set_level(logging.INFO, logger="server")
 
         post(client(), mapBounds={"swLat": 37.4912, "neLng": 127.04})
         post(client(), mapBounds={"swLat": 37.4912}, mapFirst=False)
+        post(client(), mapBounds={})
 
-        assert [call[0].bounds for call in searched.calls] == [None, None]
+        assert [(call[0].bounds, call[0].map_first) for call in searched.calls] == [
+            (MapBounds(sw_lat=37.4912, ne_lng=127.04), False),
+            (MapBounds(sw_lat=37.4912), False),
+            (None, False),
+        ]
         assert "37.4912" not in caplog.text
         events = [
             json.loads(r.getMessage()) for r in caplog.records if r.name == "server"
         ]
-        assert [(e["has_map_bounds"], e["in_map_bounds"]) for e in events] == [
+        assert [(e["has_map_bounds"], e["map_first"]) for e in events] == [
             (True, False),
             (True, False),
+            (False, False),
         ]
 
     def test_rules_only_passed(self, searched: FakeSearch) -> None:
@@ -447,27 +439,6 @@ class TestSearch:
         ]
         assert events[-1]["rules_only"] is True
         assert events[-1]["interpret_llm_error"] is None
-
-    def test_user_location_passed(self, searched: FakeSearch) -> None:
-        """검색_사용자위치가오면_위도경도를검색요청에넘긴다"""
-        post(client(), location={"lat": 36.3551, "lng": 127.2986})
-
-        assert searched.calls[0][0].location == UserLocation(36.3551, 127.2986)
-
-    def test_user_location_not_kept(
-        self, searched: FakeSearch, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """검색_사용자위치는_응답조건과로그에남기지않고왔는지만남긴다"""
-        caplog.set_level(logging.INFO, logger="server")
-
-        data = post(client(), location={"lat": 36.3551, "lng": 127.2986})
-
-        assert "36.3551" not in json.dumps(data)
-        assert "36.3551" not in caplog.text
-        events = [
-            json.loads(r.getMessage()) for r in caplog.records if r.name == "server"
-        ]
-        assert events[-1]["has_location"] is True
 
     def test_map_bounds_only_is_rejected(self, searched: FakeSearch) -> None:
         """검색_이지역에서검색표시는mapFirst이므로_mapBoundsOnly는모르는속성으로거부한다"""
@@ -635,7 +606,7 @@ class TestSearch:
             )
         )
 
-        data = post(client(), location={"lat": 36.3551, "lng": 127.2986})
+        data = post(client(), mapBounds={"swLat": 37.49, "neLng": 127.04})
 
         assert data["nationwide"] is False
         assert data["rankedBy"] == "SCORE"
@@ -815,12 +786,8 @@ class TestErrors:
             {"query": QUERY_TEXT, "tasteProfile": "QUIET"},
             {"query": QUERY_TEXT, "mapBounds": {"swLat": "37.4"}},
             {"query": QUERY_TEXT, "mapBounds": {"swLat": True}},
-            # 사용자 위치는 위도·경도가 모두 있어야 하고 범위 안의 숫자여야 한다.
-            {"query": QUERY_TEXT, "location": {"lat": 36.35}},
-            {"query": QUERY_TEXT, "location": {"lat": "36.35", "lng": 127.29}},
-            {"query": QUERY_TEXT, "location": {"lat": 91, "lng": 127.29}},
-            {"query": QUERY_TEXT, "location": {"lat": 36.35, "lng": 181}},
-            {"query": QUERY_TEXT, "location": {"lat": 36.35, "lng": 127.29, "acc": 5}},
+            # 사용자 위치는 받지 않는다. 지도 영역만 쓴다(2026-11-10).
+            {"query": QUERY_TEXT, "location": {"lat": 36.35, "lng": 127.29}},
             # 버튼 표시와 규칙만 쓰기는 참/거짓만 받는다.
             {"query": QUERY_TEXT, "mapBounds": {"swLat": 37.4}, "mapFirst": "true"},
             {"query": QUERY_TEXT, "mapBounds": {"swLat": 37.4}, "mapFirst": 1},

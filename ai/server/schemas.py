@@ -160,18 +160,6 @@ class MapBoundsBody(Body):
     ne_lng: Coordinate = None
 
 
-class UserLocationBody(Body):
-    """사용자 위치(기기 위치). FE가 기기에서 얻은 위도·경도다.
-
-    Attributes:
-        lat: 위도
-        lng: 경도
-    """
-
-    lat: float = Field(strict=True, allow_inf_nan=False, ge=-90, le=90)
-    lng: float = Field(strict=True, allow_inf_nan=False, ge=-180, le=180)
-
-
 class SearchBody(Body):
     """검색 요청. BE가 검색 요청(첫 페이지)을 받으면 그대로 넘긴다.
 
@@ -179,13 +167,10 @@ class SearchBody(Body):
         query: 사용자가 이번에 입력한 요청문
         previous_conditions: 후속 조건이면 FE가 돌려보낸 기준 요청의 `conditions`.
             BE는 해석하지 않고 그대로 넘긴다. 읽지 못하면 새 검색으로 본다.
-        map_bounds: 지도 영역. FE가 요청마다 지금 화면을 보낸다. `map_first`가 참일 때만
-            쓰고, 거짓이면 거르기에 쓰지 않는다.
+        map_bounds: 지도 영역. FE가 요청마다 지금 화면을 보낸다. 이번 요청에도 이전 요청에도
+            지역이 없거나 "근처"를 말했으면 이 영역으로 거른다. 사용자 위치는 받지 않는다.
         map_first: "이 지역에서 검색"으로 보낸 요청인지. 참이면 요청문과 이전 요청의 지역을
             보지 않고 지도 영역으로만 거른다. 참인데 지도 영역이 없거나 비었으면 400이다.
-        location: 사용자 위치(`UserLocationBody`). FE가 기기 위치를 얻었으면 요청마다 온다.
-            이번 요청에도 이전 요청에도 지역이 없거나 "근처"를 말했으면 이 위치에서 1km
-            안으로 거른다. 응답 조건과 로그에 남기지 않는다.
         rules_only: 참이면 해석 LLM을 부르지 않고 규칙으로만 해석한다. 첫 화면 주변 카드처럼
             FE가 정한 고정 문장에만 쓴다. 폴백이 아니라 `fallbacks`에 담지 않는다.
         user_id: 회원 id. BE가 로그인으로 확인한 id다. 있으면 취향 저장소에서 그 회원의
@@ -199,7 +184,6 @@ class SearchBody(Body):
     previous_conditions: dict[str, Any] | None = None
     map_bounds: MapBoundsBody | None = None
     map_first: bool = Field(default=False, strict=True)
-    location: UserLocationBody | None = None
     rules_only: bool = Field(default=False, strict=True)
     user_id: str | None = Field(
         default=None, min_length=1, max_length=MAX_USER_ID_LENGTH
@@ -506,9 +490,8 @@ class SearchResponse(Body):
 
     Attributes:
         conditions: 해석한 조건. 검색 응답의 `conditions`로 FE에 그대로 준다.
-        nationwide: 전국에서 찾았는지. 지도 영역, 말한 지역, 이전 요청의 지역, 사용자
-            위치가 모두 없을 때 참이다. FE는 위치를 확인할 수 없어 전체 지역 결과를 보여
-            준다고 알린다.
+        nationwide: 전국에서 찾았는지. 말한 지역, 이전 요청의 지역, 지도 영역이 모두 없을
+            때 참이다. FE가 지도 영역을 요청마다 보내므로 보통은 거짓이다.
         change_summary: 후속 조건에서 바뀐 점. 새 검색이면 빠진다.
         items: 카드 목록. 핏 점수 내림차순이다. 결과가 없으면 비어 있다.
         empty_reason: 결과가 없을 때의 원인과 제안. 결과가 있으면 빠진다.

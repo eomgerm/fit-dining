@@ -35,7 +35,6 @@ from fit_ai.match.search import (
     EmbeddingError,
     SearchRequest,
     SearchResult,
-    UserLocation,
     search,
 )
 from fit_ai.match.taste_select import TasteProfile, TasteStore
@@ -138,17 +137,10 @@ def _search(deps: Dependencies, body: SearchBody) -> JSONResponse:
         body.query,
         previous,
         taste,
-        # 지도 영역은 요청마다 오지만 "이 지역에서 검색"(mapFirst)일 때만 거르기에 쓴다.
-        bounds=_bounds(body.map_bounds) if body.map_first else None,
+        bounds=_bounds(body.map_bounds),
+        map_first=body.map_first,
         previous_bounds=previous_bounds,
-        location=(
-            UserLocation(body.location.lat, body.location.lng)
-            if body.location
-            else None
-        ),
         rules_only=body.rules_only,
-        # 거르기에는 쓰지 않고, "준비 중인 지역" 안내가 어느 도시인지 알아낼 때만 본다.
-        map_view=_bounds(body.map_bounds),
     )
     try:
         result = search(
@@ -198,11 +190,9 @@ def _search(deps: Dependencies, body: SearchBody) -> JSONResponse:
         station=conditions.station,
         nationwide=result.nationwide,
         # 지도 영역은 좌표 없이 왔는지만 남긴다.
-        has_map_bounds=_bounds(body.map_bounds) is not None,
-        in_map_bounds=request.bounds is not None,
+        has_map_bounds=request.bounds is not None,
+        map_first=request.map_first,
         previous_map_bounds=previous_bounds is not None,
-        # 사용자 위치는 좌표를 남기지 않고 왔는지만 남긴다.
-        has_location=request.location is not None,
         candidates=trace.candidates,
         items=len(result.cards),
         ranked_by=ranked_by,

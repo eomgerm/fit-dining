@@ -4,7 +4,7 @@
 ③ 카드 만들기 순서다. 뽑힌 장소가 없으면 점수를 내지 않고 결과 없음 이유를 만든다.
 LLM은 요청 해석에만 쓰고, 순서는 핏 점수로 정한다(docs/comparison/spec.md 3장). 후보를 거를
 지역은 "이 지역에서 검색"이면 지도 영역만 쓰고, 그 밖에는 이번 요청에 말한 지역, 이전 요청의
-지역, 사용자 위치에서 1km 안 순서로 정한다. 어느 것도 없으면 전국에서 찾는다. 이번 요청에 말한
+지역, 지도 영역 순서로 정한다. 어느 것도 없으면 전국에서 찾는다. 이번 요청에 말한
 지역은 해석이 낸 이번 요청의 조건(`Interpretation.turn`)에서 꺼낸다.
 영업시간과 가격은 안 맞는다고 확인된 곳만 거르고, 메뉴는 그 메뉴를 판다고 확인된 곳만
 남긴다(docs/comparison/spec.md 4.2).
@@ -29,7 +29,6 @@ from fit_ai.match.candidates import (
     OpenHours,
     PlaceFilter,
     PlaceStore,
-    RadiusArea,
     RegionArea,
     StationArea,
     distance_m,
@@ -117,19 +116,6 @@ class EmbeddingError(Exception):
 
 
 @dataclass(frozen=True)
-class UserLocation:
-    """사용자 위치(기기 위치). 조건과 로그에 남기지 않는다.
-
-    Attributes:
-        lat: 위도
-        lng: 경도
-    """
-
-    lat: float
-    lng: float
-
-
-@dataclass(frozen=True)
 class SearchRequest:
     """검색 요청 하나.
 
@@ -137,28 +123,25 @@ class SearchRequest:
         query: 사용자가 이번에 입력한 요청문
         previous: 후속 조건이면 기준 요청의 조건. 새 검색이면 None이다.
         taste: 사용자 취향 프로필. 취향이 없거나 읽지 못했으면 None이다.
-        bounds: "이 지역에서 검색"으로 고른 지도 영역. 오면 요청문에 든 지역과 이전 요청의
-            지역을 보지 않고 이 영역으로만 거른다. 버튼이 아닌 요청에 함께 온 지도 영역은
-            API가 넘기지 않는다(`mapFirst`, docs/comparison/api.md).
+        bounds: 사용자가 보고 있는 지도 영역. FE가 요청마다 보낸다. 이번 요청에도 이전
+            요청에도 지역이 없거나 "근처"를 말했으면 이 영역으로 거른다. 요청문에 도시
+            이름이 없을 때 "준비 중인 지역" 안내가 어느 도시를 찾았는지 알아내는 데도 쓴다
+            (그 도시의 대표 역만 제안한다).
+        map_first: "이 지역에서 검색"인지. 참이면 요청문에 든 지역과 이전 요청의 지역을 보지
+            않고 지도 영역(`bounds`)으로만 거른다.
         previous_bounds: 이전 요청이 "이 지역에서 검색"으로 고른 지도 영역. 이번 요청에
             지역을 말하지 않았으면 이전 요청의 지역으로 쓴다.
-        location: 사용자 위치. FE가 얻었으면 온다. 이번 요청에도 이전 요청에도 지역이
-            없거나 "근처"를 말했으면 이 위치에서 반경(`NEARBY_RADIUS_M`) 안으로 거른다.
         rules_only: 참이면 해석 LLM을 부르지 않고 규칙으로만 해석한다. 첫 화면 주변 카드의
             고정 문장("근처 맛집")에 쓴다.
-        map_view: 지금 지도 화면. 거르기에는 쓰지 않는다. 요청문에 도시 이름이 없을 때
-            "준비 중인 지역" 안내가 어느 도시를 찾았는지 알아내는 데만 쓴다(그 도시의
-            대표 역만 제안한다).
     """
 
     query: str
     previous: Conditions | None = None
     taste: TasteProfile | None = None
     bounds: MapBounds | None = None
+    map_first: bool = False
     previous_bounds: MapBounds | None = None
-    location: UserLocation | None = None
     rules_only: bool = False
-    map_view: MapBounds | None = None
 
 
 @dataclass(frozen=True)
@@ -224,9 +207,9 @@ class SearchResult:
         bounds: 다음 후속 요청이 이전 요청의 지역으로 쓸 지도 영역
             (`SearchRequest.previous_bounds`). "이 지역에서 검색"으로 고른 영역으로 걸렀을
             때만 있다.
-        nationwide: 전국에서 찾았는지. 지도 영역, 말한 지역, 이전 요청의 지역, 사용자 위치가
-            모두 없어 거를 지역이 하나도 없을 때 참이다. FE는 위치를 확인할 수 없어 전체
-            지역 결과를 보여 준다고 알린다.
+        nationwide: 전국에서 찾았는지. 말한 지역, 이전 요청의 지역, 지도 영역이 모두 없어
+            거를 지역이 하나도 없을 때 참이다. FE가 지도 영역을 요청마다 보내므로 보통은
+            거짓이다.
     """
 
     interpretation: Interpretation
@@ -266,8 +249,8 @@ def search(
         client,
         rules_only=request.rules_only,
     )
-    if request.bounds is not None:
-        # 지도 영역은 "이 지역에서 검색"에만 오고 오면 지도 영역으로만 거른다. 지도 영역이 이긴
+    if request.map_first and request.bounds is not None:
+        # "이 지역에서 검색"이면 지도 영역으로만 거른다. 지도 영역이 이긴
         # 요청문 속 지역은 조건에서 뺀다. 남기면 다음 후속 요청이 그 지역으로 돌아간다.
         interpretation = replace(
             interpretation, conditions=replace(interpretation.conditions, locations=())
@@ -279,7 +262,7 @@ def search(
         reason = empty_reason(
             conditions,
             unready=where.unready,
-            stations=_guide_stations(request.query, request.map_view),
+            stations=_guide_stations(request.query, request.bounds),
         )
         return SearchResult(interpretation, (), reason, (), SearchTrace(0.0, 0.0, 0))
     # 거를 지역이 하나도 없으면 전국에서 찾는다(docs/comparison/spec.md 4.2).
@@ -318,7 +301,7 @@ def search(
             conditions,
             where.areas,
             unready,
-            _guide_stations(request.query, request.map_view),
+            _guide_stations(request.query, request.bounds),
         )
         return SearchResult(
             interpretation, (), reason, found.invalid, trace, where.kept, nationwide
@@ -442,7 +425,7 @@ def _center(view: MapBounds | None) -> tuple[float, float] | None:
 
 
 def _area_label(area: Area) -> str:
-    """결과 없음 문구에 쓰는 지역 이름("강남역 11번 출구", "역삼역 도보 5분", "내 주변")."""
+    """결과 없음 문구에 쓰는 지역 이름("강남역 11번 출구", "역삼역 도보 5분")."""
     match area:
         case StationArea():
             exit_text = f" {area.exit}번 출구" if area.exit else ""
@@ -452,8 +435,6 @@ def _area_label(area: Area) -> str:
             return area.name
         case MapBounds():
             return "이 지역"
-        case RadiusArea():
-            return "내 주변"
 
 
 def _topic(word: str) -> str:
@@ -479,61 +460,57 @@ def _where(
 ) -> _Where:
     """후보를 거를 곳을 정한다.
 
-    지도 영역은 "이 지역에서 검색"에만 오므로 오면 지도 영역만 쓴다. 그 밖에는 이번 요청에
-    말한 지역, 이전 요청의 지역, 사용자 위치에서 반경 안 순서로 앞선다. 어느 것도 없으면
-    거를 곳이 없다(전국에서 찾는다. 2026-11-09 결정, docs/comparison/spec.md 4.2).
+    "이 지역에서 검색"(`map_first`)이면 지도 영역만 쓴다. 그 밖에는 이번 요청에 말한 지역,
+    이전 요청의 지역, 지도 영역 순서로 앞선다. 어느 것도 없으면 거를 곳이 없다(전국에서
+    찾는다. 2026-11-10 결정, docs/comparison/spec.md 4.2). 사용자 위치는 받지 않는다.
     이전 요청이 "이 지역에서 검색"이었으면 그 지도 영역이 이전 요청의 지역이다. 그 요청은
     조건에서 지역을 빼므로 이전 요청의 지역은 지도 영역과 말한 지역 중 하나만 있다. 그래서
     "강남역 카페"를 찾고 지도를 옮겨 "이 지역에서 검색"을 누르면 지도 영역으로 찾고, 이어서
     "조용한 곳으로"라고 하면 같은 지도 영역에서, "선릉역으로"라고 하면 선릉역에서 찾는다.
     이번 요청에 말한 지역은 해석이 낸 이번 요청의 조건(`turn`, `Interpretation.turn`)에서
-    바로 꺼낸다. 어딘지 알 수 없는 곳("회사 근처")과 위치가 없을 때의 "근처"는 말하지 않은
-    것으로 본다.
+    바로 꺼낸다. 어딘지 알 수 없는 곳("회사 근처")과 지도 영역이 없을 때의 "근처"는 말하지
+    않은 것으로 본다.
 
     Args:
         conditions: 이전 조건과 합친 조건
         turn: 이번 요청의 조건(`Interpretation.turn`). None이면 `conditions`와 같다(새 검색).
-        request: 검색 요청. 지도 영역, 이전 요청의 지도 영역, 사용자 위치를 꺼낸다.
+        request: 검색 요청. 지도 영역과 이전 요청의 지도 영역을 꺼낸다.
     """
-    if request.bounds is not None:
-        return _Where((request.bounds,), kept=request.bounds)
-    here = (
-        RadiusArea(request.location.lat, request.location.lng)
-        if request.location is not None
-        else None
-    )
-    said = _known((turn or conditions).locations, here)
+    bounds = request.bounds
+    if request.map_first and bounds is not None:
+        return _Where((bounds,), kept=bounds)
+    said = _known((turn or conditions).locations, bounds)
     if said:
-        return _areas(said, here)
+        return _areas(said, bounds)
     if request.previous_bounds is not None:
         return _Where((request.previous_bounds,), kept=request.previous_bounds)
-    previous = _known(conditions.locations, here)
+    previous = _known(conditions.locations, bounds)
     if previous:
-        return _areas(previous, here)
-    if here is not None:
-        return _Where((here,))
+        return _areas(previous, bounds)
+    if bounds is not None:
+        return _Where((bounds,))
     return _Where()
 
 
-def _known(locations: Sequence[Location], here: RadiusArea | None) -> list[Location]:
-    """어딘지 아는 지역 조각. 어딘지 알 수 없는 곳("회사 근처")을 빼고, 사용자 위치가
+def _known(locations: Sequence[Location], bounds: MapBounds | None) -> list[Location]:
+    """어딘지 아는 지역 조각. 어딘지 알 수 없는 곳("회사 근처")을 빼고, 지도 영역이
     없으면 "근처"도 뺀다."""
     return [
         loc
         for loc in locations
         if loc.kind is not LocationKind.UNKNOWN
-        and (loc.kind is not LocationKind.HERE or here is not None)
+        and (loc.kind is not LocationKind.HERE or bounds is not None)
     ]
 
 
-def _areas(locations: Sequence[Location], here: RadiusArea | None) -> _Where:
+def _areas(locations: Sequence[Location], bounds: MapBounds | None) -> _Where:
     """지역 조각을 거르기 지역으로 바꾼다.
 
     역은 역 지역, 동·구·시·군·읍·면은 행정 구역이다. 서비스 역 이름을 동네로 낸 것("강남",
     "서면")은 시·군·읍·면·동·구로 끝나도 역으로 본다. 역 이름이 곧 시 이름인 시("구미")는
     "역" 없이 말하고 도보 거리·출구 조건이 없으면 시 전체도 더한다(`CITY_BY_STATION`).
     그 밖의 동네·랜드마크는 장소 데이터에 없어 거르지 못하는 지역으로 둔다(2026-11-02
-    결정). 근처("여기")는 사용자 위치에서 반경 안이다. 위치가 없으면 넣지 않는다.
+    결정). 근처("여기")는 지도 영역이다. 지도 영역이 없으면 넣지 않는다.
     """
     areas: list[Area] = []
     unready: list[str] = []
@@ -562,8 +539,8 @@ def _areas(locations: Sequence[Location], here: RadiusArea | None) -> _Where:
             areas.append(RegionArea(name, code))
         elif loc.kind is LocationKind.AREA:
             unready.append(loc.value or loc.text)
-        elif loc.kind is LocationKind.HERE and here is not None:
-            areas.append(here)
+        elif loc.kind is LocationKind.HERE and bounds is not None:
+            areas.append(bounds)
     return _Where(tuple(dict.fromkeys(areas)), tuple(dict.fromkeys(unready)))
 
 
@@ -572,8 +549,7 @@ def _unready(
 ) -> tuple[str, ...]:
     """결과가 없을 때 지역 탓인지 본다.
 
-    거른 역·동·사용자 위치 반경이 모두 장소가 하나도 없는 곳이면 그 이름(랜드마크 포함)을
-    낸다. 사용자 위치 반경은 "내 주변"이다(서비스 지역 밖에 있을 때). 지도 영역으로
+    거른 역·동이 모두 장소가 하나도 없는 곳이면 그 이름(랜드마크 포함)을 낸다. 지도 영역으로
     걸렀거나 장소가 있는 지역이 하나라도 있으면 다른 조건 탓이라 빈 튜플이다. 결과가 없을
     때만 지역마다 한 곳씩 더 찾아본다.
 
@@ -582,19 +558,14 @@ def _unready(
     """
     if any(isinstance(area, MapBounds) for area in where.areas):
         return ()
-    named = [
-        a for a in where.areas if isinstance(a, StationArea | RegionArea | RadiusArea)
-    ]
+    named = [a for a in where.areas if isinstance(a, StationArea | RegionArea)]
     if not named or any(_has_places(store, area, query) for area in named):
         return ()
-    names = (_area_label(a) if isinstance(a, RadiusArea) else a.name for a in named)
-    return (*where.unready, *names)
+    return (*where.unready, *(area.name for area in named))
 
 
 def _has_places(
-    store: PlaceStore,
-    area: StationArea | RegionArea | RadiusArea,
-    query: Sequence[float],
+    store: PlaceStore, area: StationArea | RegionArea, query: Sequence[float]
 ) -> bool:
     """지역에 검색할 수 있는 장소가 하나라도 있는지. 도보 거리와 출구는 보지 않는다."""
     if isinstance(area, StationArea):
