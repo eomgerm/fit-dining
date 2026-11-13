@@ -27,6 +27,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -523,6 +524,7 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 
 	@Nested
 	@DisplayName("동시성")
+	@Timeout(30)
 	class Concurrency {
 
 		private List<HttpResponse<String>> all(List<HttpRequest> requests) {
@@ -671,6 +673,7 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 		}
 
 		@Test
+		@Timeout(30)
 		@DisplayName("상한_새thread를동시에여럿만들어도_500없이상한만큼남는다")
 		void put_concurrentNewThreads_endsAtLimit() throws Exception {
 			String token = signIn(0);
@@ -1116,6 +1119,7 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 		}
 
 		@Test
+		@Timeout(30)
 		@DisplayName("추가_400과409와동시첫생성때_앱로그에본문이없다")
 		void put_rejected_noBodyInLogs(CapturedOutput output) throws Exception {
 			String token = signIn(0);
@@ -1136,6 +1140,8 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 			}).toList();
 			futures.forEach(CompletableFuture::join);
 
+			// 양성 대조: 거절 로그가 실제로 잡혔다(NUL이 든 본문은 rule=string으로 거절된다)
+			assertThat(output.getAll()).contains("Rejected search thread request: reason=invalid, rule=string");
 			assertThat(output.getAll()).doesNotContain(secret);
 		}
 	}
