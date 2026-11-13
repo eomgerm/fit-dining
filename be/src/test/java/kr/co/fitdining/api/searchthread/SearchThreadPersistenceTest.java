@@ -5,12 +5,14 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -941,13 +943,14 @@ class SearchThreadPersistenceTest extends PostgresTestSupport {
 	@DisplayName("인증")
 	class Authentication {
 
-		/** 토큰이 없거나(none) 서명이 틀린(forged) 요청 */
+		/** session cookie가 없거나(none) 서버에 없는 session id를 담은(forged) 요청 */
 		@ParameterizedTest
 		@CsvSource({"list, none", "list, forged", "thread, none", "thread, forged", "turn, none", "turn, forged",
 				"delete, none", "delete, forged", "deleteAll, none", "deleteAll, forged"})
-		@DisplayName("인증_토큰이없거나틀리면_다섯API모두401이다")
-		void anyApi_noOrBadToken_unauthorized(String api, String token) throws Exception {
-			String bearer = token.equals("none") ? null : token;
+		@DisplayName("인증_session이없거나서버에없는session이면_다섯API모두401이다")
+		void anyApi_noOrUnknownSession_unauthorized(String api, String token) throws Exception {
+			String bearer = token.equals("none") ? null : "fitdining_session=" + Base64.getEncoder()
+					.encodeToString(UUID.randomUUID().toString().getBytes(StandardCharsets.UTF_8));
 			String thread = threadId();
 			String id = turnId();
 
