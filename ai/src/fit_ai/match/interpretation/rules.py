@@ -454,8 +454,9 @@ def _rule_locations(query: str) -> tuple[Location, ...]:
     for i, match in enumerate(stations):
         text = match.group()
         if text.endswith("동"):
+            # 역 이름과 같은 동("역삼동")만 찾으므로 동이다.
             locations.append(
-                Location(text, LocationKind.AREA, text, walk_minutes=minutes)
+                Location(text, LocationKind.AREA, text, walk_minutes=minutes, dong=text)
             )
             continue
         name = STATION_NAMES[STATION_CODES[text.removesuffix("역")]]

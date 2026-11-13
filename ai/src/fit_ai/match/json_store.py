@@ -220,22 +220,11 @@ def _in_area(row: dict[str, Any], area: Area) -> bool:
     """장소가 지역 하나에 드는지. FIND_SQL의 `area` 조건과 같다."""
     match area:
         case StationArea():
-            collected = (
-                area.walk_minutes is None
-                and area.exit is None
-                and area.code is not None
-                and row.get("station") == area.code
+            return _in_levels(row, area.sido, area.district, None) and _near_station(
+                row, area
             )
-            return collected or any(_near(subway, area) for subway in _subways(row))
         case RegionArea():
-            dong = row.get("dong")
-            if area.name in (dong, row.get("district")):
-                return True
-            return (
-                dong is None
-                and area.code is not None
-                and row.get("station") == area.code
-            )
+            return _in_levels(row, area.sido, area.district, area.dong)
         case MapBounds():
             return _inside(row.get("lat"), row.get("lng"), area)
         case RadiusArea():
@@ -243,6 +232,16 @@ def _in_area(row: dict[str, Any], area: Area) -> bool:
             if not (_is_number(lat) and _is_number(lng)):
                 return False
             return distance_m(area.lat, area.lng, lat, lng) <= area.radius_m
+
+
+def _in_levels(
+    row: dict[str, Any], sido: str | None, district: str | None, dong: str | None
+) -> bool:
+    """채운 행정 구역 단계가 모두 장소의 같은 단계와 같은지. FIND_SQL과 같다."""
+    return all(
+        level is None or row.get(column) == level
+        for column, level in (("sido", sido), ("district", district), ("dong", dong))
+    )
 
 
 def _subways(row: dict[str, Any]) -> list[dict[str, Any]]:
@@ -253,19 +252,30 @@ def _subways(row: dict[str, Any]) -> list[dict[str, Any]]:
     return [subway for subway in subways if isinstance(subway, dict)]
 
 
-def _near(subway: dict[str, Any], area: StationArea) -> bool:
-    """가까운 역 하나가 역 지역의 이름, 도보 거리, 출구에 맞는지.
+def _near_station(row: dict[str, Any], area: StationArea) -> bool:
+    """장소가 역 지역에 드는지. FIND_SQL의 `STATION` 조건과 같다.
 
-    도보 거리를 모르는 역은 도보 거리 조건에 맞지 않는 것으로 본다(SQL의 NULL 비교).
+    출구를 말했으면 가까운 역 목록에 그 역의 그 출구가 있어야 한다. 걷는 거리는 목록에 그
+    역의 도보 분이 있으면 그중 가장 짧은 값으로, 없으면 역 좌표에서 잰 직선거리로 견준다.
     """
-    if subway.get("station") != area.name:
+    listed = [
+        subway
+        for subway in _subways(row)
+        if isinstance(subway.get("station"), str)
+        and subway["station"].removesuffix("역") == area.station
+    ]
+    if area.exit is not None and not any(s.get("exit") == area.exit for s in listed):
         return False
-    walk = subway.get("walk_minutes")
-    if area.walk_minutes is not None and not (
-        _is_number(walk) and walk <= area.walk_minutes
-    ):
+    minutes = [s["walk_minutes"] for s in listed if _is_number(s.get("walk_minutes"))]
+    if minutes:
+        return min(minutes) <= area.walk_limit_minutes
+    lat, lng = row.get("lat"), row.get("lng")
+    if not (_is_number(lat) and _is_number(lng)):
         return False
-    return area.exit is None or subway.get("exit") == area.exit
+    return any(
+        distance_m(p_lat, p_lng, lat, lng) <= area.straight_limit_m
+        for p_lat, p_lng in area.points
+    )
 
 
 def _sells(row: dict[str, Any], words: Sequence[str]) -> bool:

@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from fit_ai.match.place import Place
+from fit_ai.place import from_crawl
 
 CANDIDATE_K = 100
 """점수를 매길 후보 수. 거른 장소를 유사도 순서로 이만큼 뽑아 모두 점수를 매긴다. 조건은
@@ -71,43 +72,122 @@ class MapBounds:
     ne_lng: float | None = None
 
 
+STATION_WALK_M = 800
+"""역 이름만 말했을 때("강남역 맛집") 역에서 걸어서 이만큼(m) 안을 역 근처로 본다. 걸어서
+약 13분이다. 운영 장소에서 역 좌표로부터 직선 500m 안은 강남역 777곳·현충원역 10곳, 800m
+안은 1,419곳·35곳, 1km 안은 1,802곳·69곳이었다(2026-11-13)."""
+
+WALK_M_PER_MINUTE = 63
+"""도보 1분에 걷는 거리(m). 운영 장소의 네이버 가까운 역 8,863행에서 도보 거리를 도보 분으로
+나눈 값의 중간값이다(2026-11-13). "걸어서 5분"은 315m다."""
+
+WALK_DETOUR = 1.05
+"""걸은 거리가 직선거리의 몇 배인지. 운영 장소의 네이버 도보 거리와 역 좌표에서 잰 직선거리
+7,850쌍의 중간값이다(2026-11-13, 가운데 절반이 0.89~1.19배). 네이버 도보 거리가 없는
+장소의 도보 거리를 직선거리로 어림할 때 쓴다."""
+
+
+def _station_points() -> dict[str, tuple[tuple[float, float], ...]]:
+    """서비스 역 코드마다 역 좌표(위도, 경도). 노선마다 좌표가 달라 여럿일 수 있다(강남역
+    2호선과 신분당선). 장소 적재가 쓰는 네이버 역 좌표 표를 그대로 쓴다."""
+    points: dict[str, list[tuple[float, float]]] = {}
+    for naver_id, code in from_crawl.STATION_CODE_BY_NAVER_ID.items():
+        points.setdefault(code, []).append(
+            from_crawl.STATION_LOCATION_BY_NAVER_ID[naver_id]
+        )
+    return {code: tuple(pts) for code, pts in points.items()}
+
+
+STATION_POINTS = _station_points()
+"""서비스 역 코드마다 역 좌표. 서비스 역이 아닌 역(신사역 등)은 좌표가 없다."""
+
+
 @dataclass(frozen=True)
 class StationArea:
-    """역 지역.
+    """역 지역. 그 역까지 걷는 거리가 한도(`walk_limit_m`) 안인 곳이 든다.
 
-    도보 거리와 출구가 없으면 수집 역이 같거나 가까운 역 목록에 그 역이 있으면 든다.
-    가까운 역 목록만 보면 강남에서 수집했지만 가장 가까운 역이 신논현역인 곳이 "강남역"
-    검색에서 빠지기 때문이다(2026-11-02 결정). 도보 거리나 출구가 있으면 가까운 역
-    목록으로만 본다.
+    걷는 거리는 장소의 가까운 역 목록(네이버)에 그 역이 있으면 그 도보 분으로 잰다. 없으면
+    역 좌표에서 잰 직선거리에 `WALK_DETOUR`를 곱해 어림한다. 네이버는 대개 가장 가까운 역
+    하나만 알려 줘서(운영 장소 6,346곳 중 5,502곳), 역에서 직선 700m 안인 장소의 25%는 목록에
+    그 역이 없었다(2026-11-13). 그래서 목록만으로는 역 근처를 다 찾지 못한다. 좌표가 없는 역
+    (서비스 역이 아닌 역)은 목록으로만 찾는다. 출구는 목록에만 있어서 출구를 말하면 목록에 그
+    역의 그 출구가 있는 곳만 든다.
+
+    장소의 역 칸(`places.station`)은 보지 않는다. 그 칸은 서울에서는 수집 기준 역이고, 대전과
+    구미에서는 네이버가 역을 알려 주지 않은 곳에 3km 안의 역을 채운 값이라 역 근처를 뜻하지
+    않는다. 전에는 역 칸이 같아도 들게 했는데, 현충원역 178곳 중 169곳이 목록에 그 역이 없는
+    먼 곳(가운데 값 2.5km)이었다(2026-11-13에 바꿈. 처음은 2026-11-02 결정).
 
     Attributes:
-        name: 역 이름("강남역"). 가까운 역 목록(`place_subways.station`)과 같은 표기다.
-        code: 서비스 역 코드(`GANGNAM`). 수집 역과 견준다. 서비스 역이 아니면 None이다.
-        walk_minutes: 그 역까지 도보 몇 분 이하인 곳. 없으면 None이다.
+        name: 역 이름("강남역"). 가까운 역 목록은 같은 역을 "강남"과 "강남역"으로 섞어 써서
+            끝의 "역"을 떼고 견준다(`station`).
+        code: 서비스 역 코드(`GANGNAM`). 역 좌표(`STATION_POINTS`)를 찾는다. 서비스 역이
+            아니면 None이다.
+        walk_minutes: 그 역까지 도보 몇 분 이하인 곳. 없으면 `STATION_WALK_M`이다.
         exit: 가장 가까운 출구가 이 출구인 곳. 없으면 None이다.
+        sido: 역 앞에 붙여 말한 시·도("부산 서면역"의 부산). 있으면 그 시·도의 장소만 든다.
+            따로 지역 조각으로 두면 "그중 하나"로 합쳐져 시·도 전체가 나온다.
+        district: 역 앞에 붙여 말한 시·군·구. 있으면 그 시·군·구의 장소만 든다.
     """
 
     name: str
     code: str | None = None
     walk_minutes: int | None = None
     exit: str | None = None
+    sido: str | None = None
+    district: str | None = None
+
+    @property
+    def station(self) -> str:
+        """끝의 "역"을 뗀 역 이름("강남"). 가까운 역 목록과 이 꼴로 견준다."""
+        return self.name.removesuffix("역")
+
+    @property
+    def points(self) -> tuple[tuple[float, float], ...]:
+        """역 좌표. 서비스 역이 아니면 비어 있다."""
+        return STATION_POINTS.get(self.code, ()) if self.code else ()
+
+    @property
+    def walk_limit_m(self) -> float:
+        """걷는 거리 한도(m). 도보 분을 말했으면 그 분만큼 걷는 거리다."""
+        if self.walk_minutes is not None:
+            return self.walk_minutes * WALK_M_PER_MINUTE
+        return STATION_WALK_M
+
+    @property
+    def walk_limit_minutes(self) -> float:
+        """네이버 도보 분으로 견줄 한도(분)"""
+        return self.walk_limit_m / WALK_M_PER_MINUTE
+
+    @property
+    def straight_limit_m(self) -> float:
+        """역 좌표에서 잰 직선거리로 견줄 한도(m)"""
+        return self.walk_limit_m / WALK_DETOUR
 
 
 @dataclass(frozen=True)
 class RegionArea:
-    """동·구·시·군·읍·면. 장소의 동(`places.dong`)이나 구(`places.district`)가 이 이름이면 든다.
-    구가 없는 시·군은 그 이름이 `district`에, 동이 없는 읍·면은 그 이름이 `dong`에 든다.
-
-    동 정보가 없는 장소는 이름이 같은 서비스 역("역삼동"이면 역삼역)의 장소로 본다.
-    1차와 같은 동작이다.
+    """행정 구역. 채운 단계가 모두 장소의 같은 단계와 같은 곳이 든다("대전 유성구"는 시·도가
+    대전이고 구가 유성구인 곳). 위 단계를 채우면 같은 이름의 다른 도시 구·동이 섞이지 않는다
+    (대구 서구와 대전 서구, 구미 송정동과 부산 송정동).
 
     Attributes:
-        name: 동·구·시·군·읍·면 이름("역삼동", "강남구", "구미시"). 동은 법정동 이름이다.
-        code: 이름이 같은 서비스 역 코드. 없으면 None이다.
+        sido: 시·도. 장소 주소의 첫 낱말(`sido`)과 견준다("대전", "경북").
+        district: 시·군·구. 장소의 `district`와 견준다. 구가 없는 시·군은 그 이름이
+            `district`에 있다("구미시").
+        dong: 읍·면·동. 장소의 `dong`과 견준다. 동이 없는 읍·면은 그 이름이 `dong`에 있다.
     """
 
-    name: str
-    code: str | None = None
+    sido: str | None = None
+    district: str | None = None
+    dong: str | None = None
+
+    @property
+    def name(self) -> str:
+        """안내 문구에 쓰는 이름("대전 유성구")"""
+        return " ".join(
+            level for level in (self.sido, self.district, self.dong) if level
+        )
 
 
 @dataclass(frozen=True)

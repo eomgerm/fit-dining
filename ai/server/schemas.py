@@ -216,13 +216,17 @@ Clock = Annotated[str, Field(pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")]
 
 
 class LocationBody(Body):
-    """지역 조각. 속성은 `segments.Location`과 같다."""
+    """지역 조각. 속성은 `segments.Location`과 같다. 행정 구역 칸(`sido`, `district`,
+    `dong`)이 없는 이전 조건도 읽는다."""
 
     text: Segment
     kind: LocationKind
     value: Segment | None = None
     walk_minutes: int | None = Field(default=None, ge=1, le=MAX_WALK_MINUTES)
     exit: Segment | None = None
+    sido: Segment | None = None
+    district: Segment | None = None
+    dong: Segment | None = None
 
 
 class MenuBody(Body):

@@ -1,9 +1,45 @@
-"""후보 합치기와 페르소나 항목의 순위 비율을 확인한다. 저장소 구현은 test_pg_store.py에 있다."""
+"""후보 합치기, 페르소나 항목의 순위 비율, 역 지역의 거리 한도를 확인한다. 저장소 구현은
+test_pg_store.py에 있다."""
 
 import pytest
 
-from fit_ai.match.candidates import Candidate, Found, merge_found, persona_rank
+from fit_ai.match.candidates import (
+    STATION_WALK_M,
+    WALK_DETOUR,
+    WALK_M_PER_MINUTE,
+    Candidate,
+    Found,
+    StationArea,
+    merge_found,
+    persona_rank,
+)
 from fit_ai.match.place import Place, PlaceInfo
+
+
+class TestStationArea:
+    """역 지역의 이름과 거리 한도"""
+
+    def test_default_limit(self) -> None:
+        """역지역_도보분이없으면_기본거리를도보분과직선거리로바꾼다"""
+        area = StationArea("강남역", "GANGNAM")
+
+        assert area.walk_limit_m == STATION_WALK_M
+        assert area.walk_limit_minutes == STATION_WALK_M / WALK_M_PER_MINUTE
+        assert area.straight_limit_m == STATION_WALK_M / WALK_DETOUR
+
+    def test_walk_minutes_limit(self) -> None:
+        """역지역_도보분을말하면_그분만큼걷는거리가한도다"""
+        area = StationArea("강남역", "GANGNAM", walk_minutes=5)
+
+        assert area.walk_limit_m == 5 * WALK_M_PER_MINUTE
+        assert area.walk_limit_minutes == 5
+
+    def test_station_name_and_points(self) -> None:
+        """역지역_끝의역을뗀이름으로견주고_서비스역만좌표가있다"""
+        assert StationArea("강남역", "GANGNAM").station == "강남"
+        # 강남역은 2호선과 신분당선 좌표가 따로 있다.
+        assert len(StationArea("강남역", "GANGNAM").points) == 2
+        assert StationArea("신사역").points == ()
 
 
 def candidate(place_id: int, similarity: float) -> Candidate:

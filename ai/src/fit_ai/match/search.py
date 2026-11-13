@@ -11,7 +11,6 @@ LLM은 요청 해석에만 쓰고, 순서는 핏 점수로 정한다(docs/compar
 HTTP 요청·응답 모양과 폴백 코드로 바꾸는 일은 API(`server/search.py`)가 한다.
 """
 
-import re
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
@@ -101,11 +100,6 @@ BROAD_MENUS = frozenset(
 "선릉역 디저트 카페" 32곳 중 메뉴 이름에 "디저트"가 든 곳은 0곳이었다(2026-11-03). 넓은 말과
 메뉴를 잇는 사전은 보류했다. 그때까지 업종과 요청문 유사도로만 찾는다. 음식 종류는 메뉴가
 아니지만 LLM이 메뉴로 낼 때를 막으려고 넣는다."""
-
-_REGION = re.compile(r"[가-힣]+?(\d*)([동구시군읍면])")
-"""동·구·시·군·읍·면 이름. "역삼1동"처럼 숫자가 붙은 행정동도 받는다. 구가 없는 시(구미시)와
-읍·면(선산읍)은 장소의 `district`·`dong`과 맞춘다. 장소가 없는 이름은 거른 뒤 비면 준비 중인
-지역으로 안내한다. 그 밖의 동네·랜드마크(가로수길, 코엑스)는 장소 데이터에 없어 거르지 못한다."""
 
 _STATION_CODES = {name: code for code, name in STATION_NAMES.items()}
 """서비스 역 이름("강남역")으로 역 코드를 찾는 표"""
@@ -428,9 +422,11 @@ def _area_label(area: Area) -> str:
     """결과 없음 문구에 쓰는 지역 이름("강남역 11번 출구", "역삼역 도보 5분")."""
     match area:
         case StationArea():
+            # 역 앞에 붙여 말한 상위 지역도 쓴다("부산 서면역").
+            levels = "".join(f"{lv} " for lv in (area.sido, area.district) if lv)
             exit_text = f" {area.exit}번 출구" if area.exit else ""
             walk_text = f" 도보 {area.walk_minutes}분" if area.walk_minutes else ""
-            return f"{area.name}{exit_text}{walk_text}"
+            return f"{levels}{area.name}{exit_text}{walk_text}"
         case RegionArea():
             return area.name
         case MapBounds():
@@ -506,24 +502,35 @@ def _known(locations: Sequence[Location], bounds: MapBounds | None) -> list[Loca
 def _areas(locations: Sequence[Location], bounds: MapBounds | None) -> _Where:
     """지역 조각을 거르기 지역으로 바꾼다.
 
-    역은 역 지역, 동·구·시·군·읍·면은 행정 구역이다. 서비스 역 이름을 동네로 낸 것("강남",
-    "서면")은 시·군·읍·면·동·구로 끝나도 역으로 본다. 역 이름이 곧 시 이름인 시("구미")는
-    "역" 없이 말하고 도보 거리·출구 조건이 없으면 시 전체도 더한다(`CITY_BY_STATION`).
-    그 밖의 동네·랜드마크는 장소 데이터에 없어 거르지 못하는 지역으로 둔다(2026-11-02
-    결정). 근처("여기")는 지도 영역이다. 지도 영역이 없으면 넣지 않는다.
+    역은 역 지역이다. 행정 구역(AREA)과 거리·상권·랜드마크(PLACE) 중 이름이 서비스 역 이름인
+    것("강남", "서면")도 역으로 본다. 앞에
+    붙여 말한 상위 지역("부산 서면")은 그 역을 좁히는 데 쓴다. 해석이 "서면"을 지역으로 내고
+    시·도 칸에 부산을 넣어도 부산 전체가 아니라 부산의 서면역이 되게 하려고 행정 구역보다 먼저
+    본다(LLM이 다섯 번 중 두 번 그렇게 냈다, 2026-11-13). 역 이름이 곧 시 이름인 시("구미")를
+    "역" 없이 말했고 도보 거리·출구 조건이 없으면 시 전체도 더한다(`CITY_BY_STATION`).
+    그다음 행정 구역은 칸(`Location.sido`, `district`, `dong`) 그대로 행정 구역이다. 어느
+    단계인지는 해석이 정한다. 이름 끝 글자로 짐작하면 "대구"를 구로 보고, 붙여 쓴 "대전
+    유성구"를 동 하나로 봤다(2026-11-13에 바꿈). 거리·상권·랜드마크와 칸이 없는 이전 조건의
+    지역은 장소 데이터에 없어 거르지 못하는 지역으로 둔다(2026-11-02 결정). 앞에 붙인 상위
+    지역("서울 홍대"의 서울)만으로 거르면 서울 전체가 나와서 쓰지 않는다. 근처("여기")는
+    지도 영역이다. 지도 영역이 없으면 넣지 않는다.
     """
     areas: list[Area] = []
     unready: list[str] = []
     for loc in locations:
         name = _plain(loc.value or loc.text)
         station = name.removesuffix("역") + "역"
-        region = _REGION.fullmatch(name)
         if loc.kind is LocationKind.STATION or (
-            loc.kind is LocationKind.AREA and station in _STATION_CODES
+            loc.kind in (LocationKind.AREA, LocationKind.PLACE)
+            and station in _STATION_CODES
         ):
             code = station_code(loc) or _STATION_CODES.get(station)
             name = STATION_NAMES[code] if code else station
-            areas.append(StationArea(name, code, loc.walk_minutes, loc.exit))
+            areas.append(
+                StationArea(
+                    name, code, loc.walk_minutes, loc.exit, loc.sido, loc.district
+                )
+            )
             city = CITY_BY_STATION.get(code or "")
             if (
                 city
@@ -531,13 +538,10 @@ def _areas(locations: Sequence[Location], bounds: MapBounds | None) -> _Where:
                 and not (loc.walk_minutes or loc.exit)
             ):
                 # "구미"라고만 하면 역 근처가 아니라 시 전체를 뜻한다. 역에서 재는 조건이 없을 때만 더한다.
-                areas.append(RegionArea(city))
-        elif loc.kind is LocationKind.AREA and region:
-            # 행정동("역삼1동")은 장소 데이터의 법정동("역삼동")으로 찾는다.
-            name = name[: region.start(1)] + region.group(2)
-            code = _STATION_CODES.get(name.removesuffix("동") + "역")
-            areas.append(RegionArea(name, code))
-        elif loc.kind is LocationKind.AREA:
+                areas.append(RegionArea(*city))
+        elif loc.is_region:
+            areas.append(RegionArea(loc.sido, loc.district, loc.dong))
+        elif loc.kind in (LocationKind.AREA, LocationKind.PLACE):
             unready.append(loc.value or loc.text)
         elif loc.kind is LocationKind.HERE and bounds is not None:
             areas.append(bounds)

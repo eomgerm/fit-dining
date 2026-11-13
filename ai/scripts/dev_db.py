@@ -57,6 +57,7 @@ CREATE TABLE place (
   station text NOT NULL,
   dong text,
   district text,
+  sido text,
   lat double precision,
   lng double precision,
   facilities jsonb NOT NULL DEFAULT '{}',
@@ -112,7 +113,7 @@ SELECT p.id AS place_id, p.category_group, p.station, p.lat, p.lng, p.facilities
                   'representative', m.representative) ORDER BY m.sort_order)
          FROM place_menu m WHERE m.place_id = p.id), '[]') AS menus,
        p.pet_allowed, p.parking_free, p.corkage_allowed, pp.price,
-       pp.analyzed_review_count, p.category
+       pp.analyzed_review_count, p.category, p.sido
 FROM place p JOIN place_profile pp ON pp.place_id = p.id;
 CREATE VIEW ai_place_personas AS
 SELECT NULL::bigint AS place_id, NULL::text AS category_group, NULL::vector(1024) AS vector
@@ -286,6 +287,7 @@ def _row(place: dict, summary: str, vector: list[float]) -> dict:
         "food_type": None,
         "dong": None,
         "district": _district(detail["address"]),
+        "sido": _sido(detail["address"]),
         "subways": [
             {
                 "station": subway["station"],
@@ -339,10 +341,16 @@ def _district(address: str | None) -> str | None:
     return next((part for part in (address or "").split() if part.endswith("구")), None)
 
 
+def _sido(address: str | None) -> str | None:
+    """주소("서울 강남구 선릉로68길 7")의 시·도(첫 낱말). BE 뷰의 `sido`와 같다."""
+    parts = (address or "").split()
+    return parts[0] if parts else None
+
+
 def _insert(conn: psycopg.Connection, row: dict) -> None:
     conn.execute(
         "INSERT INTO place VALUES "
-        "(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+        "(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
         (
             row["place_id"],
             row["name"],
@@ -352,6 +360,7 @@ def _insert(conn: psycopg.Connection, row: dict) -> None:
             row["station"],
             row["dong"],
             row["district"],
+            row["sido"],
             row["lat"],
             row["lng"],
             json.dumps(row["facilities"]),

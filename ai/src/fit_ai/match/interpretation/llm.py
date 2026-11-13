@@ -9,7 +9,12 @@ import json
 import re
 from dataclasses import asdict, replace
 
-from fit_ai.match.conditions import CATEGORY_NAMES, STATION_NAMES
+from fit_ai.match.conditions import (
+    CATEGORY_NAMES,
+    SIDO_NAMES,
+    STATION_NAMES,
+    standard_sido,
+)
 from fit_ai.match.interpretation.codes import (
     FACILITY_CODES,
     FEATURE_CODES,
@@ -96,16 +101,27 @@ SYSTEM_PROMPT = f"""\
   - 커피, 음료, 디저트 메뉴(케이크, 빙수)는 CAFE다.
   - 업종 이름을 뺄 때만 want false다("카페 말고"는 CAFE false). "양식 말고"는 음식 종류를 \
 빼는 말이라 RESTAURANT를 빼지 않는다.
-- locations: 지역 [{{"text", "kind", "value", "walk_minutes", "exit"}}]. 여럿이면("○○역이나 \
-△△역") 모두 넣는다. 없으면 빈 목록이다.
+- locations: 지역 [{{"text", "kind", "value", "walk_minutes", "exit", "sido", "district", \
+"dong"}}]. 여럿이면("○○역이나 △△역") 모두 넣는다. 없으면 빈 목록이다.
   - kind는 이름의 종류로 정한다. STATION은 지하철역이다. "강남", "합정"처럼 "역"을 빼고 \
 역 이름만 쓰면 동네 이름과 같아도 STATION이다. 철자가 틀려도 역 이름이면 STATION이고, \
-가장 적게 고쳐서 되는 역 이름으로 고친다. value는 "○○역"이다. AREA는 동, 구, 거리, 상권, \
-랜드마크다(성수동, 송파구, 경리단길, 롯데월드타워). value는 표준 이름이다. HERE는 이름 \
-없이 "근처", "주변", "여기"만 말해 지금 보는 곳을 뜻할 때다. UNKNOWN은 "회사 앞", \
-"집 근처"처럼 어딘지 알 수 없는 곳이다. HERE와 UNKNOWN의 value는 null이다.
+가장 적게 고쳐서 되는 역 이름으로 고친다. value는 "○○역"이다. AREA는 행정 구역인 시·도, \
+시·군·구, 동·읍·면이다(대전, 송파구, 성수동). PLACE는 거리, 상권, 랜드마크, 학교다(경리단길, \
+홍대, 롯데월드타워). AREA와 PLACE의 value는 표준 이름이다. HERE는 이름 없이 "근처", "주변", \
+"여기"만 말해 지금 보는 곳을 뜻할 때다. \
+UNKNOWN은 "회사 앞", "집 근처"처럼 어딘지 알 수 없는 곳이다. HERE와 UNKNOWN의 value는 null이다.
   - 이름 뒤에 "근처", "주변", "쪽", "앞"이 붙어도 kind는 이름을 따른다. "삼성역 근처"는 \
-STATION, "성수동 근처"는 AREA다.
+STATION, "성수동 근처"는 AREA, "코엑스 근처"는 PLACE다.
+  - AREA는 sido, district, dong에 단계별 표준 이름을 넣는다. sido는 시·도로 \
+{", ".join(SIDO_NAMES)} 중 하나다(광주와 전남은 "전남광주"). district는 구, 구가 없으면 \
+시·군이다("유성구", "구미시"). dong은 주소에 쓰는 동·읍·면이다("봉명동", "산동읍"). 줄여 \
+말해도 표준 이름으로 쓴다("대전" → sido "대전", "유성" → district "유성구", "역삼1동" → dong \
+"역삼동"). 사용자가 말한 단계만 넣고 말하지 않은 위 단계는 짐작해 넣지 않는다("송정동"은 \
+dong만). 여러 단계를 이어 말하면 조각 하나에 모두 넣는다("대구 수성구"는 조각 하나). \
+STATION과 PLACE 앞에 시·도나 시·군·구를 붙여 말해도 따로 조각을 만들지 않고 그 조각의 \
+sido, district에 넣는다. "역"을 뺀 역 이름도 그대로 STATION이다("부산 서면역", "서울 \
+합정"은 STATION 하나에 sido, "부산 광안리"는 PLACE 하나에 sido). STATION과 PLACE의 dong, \
+HERE와 UNKNOWN의 세 칸은 null이다.
   - walk_minutes는 "걸어서 5분", "도보 10분"의 분, exit는 "3번 출구"의 "3"이다. 없으면 null이다.
 - features: 장소 특징 [{{"text", "value", "code", "kind"}}]. 요청에 있는 특징을 빠짐없이 넣는다.
   - code는 아래 특징 코드표에서 고른다. 표현이 달라도 코드표 문구와 뜻이 같으면 그 코드다. \
@@ -194,7 +210,8 @@ features [{{"text": "줄 안 서는", "value": "웨이팅 없이 바로 들어�
 menus [{{"text": "돈가스", "value": "돈가스", "spellings": ["돈까스", "돈카츠"], "want": true}}], \
 embedding_text "웨이팅 없이 바로 들어가는 돈가스집"
 - "성수동 근처 북적이는 데 말고 대화하기 좋은 카페" → categories [{{"code": "CAFE", \
-"want": true}}], locations [{{"text": "성수동 근처", "kind": "AREA", "value": "성수동"}}], \
+"want": true}}], locations [{{"text": "성수동 근처", "kind": "AREA", "value": "성수동", \
+"sido": null, "district": null, "dong": "성수동"}}], \
 features [{{"text": "북적이는 데 말고", "value": "조용한 곳", "code": "QUIET"}}, \
 {{"text": "대화하기 좋은", "value": "대화하기 좋은 곳", "code": "PURPOSE_TALK"}}], \
 embedding_text "조용하고 대화하기 좋은 카페"
@@ -214,6 +231,14 @@ price {{"text": "저렴한", "cheap": true}}, embedding_text "저렴한 횟집"
 - "회사 앞 8명 송년회 예약되는 곳" → locations [{{"text": "회사 앞", "kind": "UNKNOWN"}}], \
 features [{{"text": "송년회", "value": "단체 모임 하기 좋은 곳", "code": "PURPOSE_GROUP"}}], \
 facilities ["RESERVATION"], party_size 8, embedding_text "8명이 송년회 하기 좋은 곳"
+- "인천 연수구 송도동 브런치 카페" → categories [{{"code": "CAFE", "want": true}}], \
+locations [{{"text": "인천 연수구 송도동", "kind": "AREA", "value": "인천 연수구 송도동", \
+"sido": "인천", "district": "연수구", "dong": "송도동"}}], menus [{{"text": "브런치", \
+"value": "브런치", "spellings": [], "want": true}}], embedding_text "브런치 카페"
+- "서울 합정 와인바" → categories [{{"code": "BAR", "want": true}}], \
+locations [{{"text": "서울 합정", "kind": "STATION", "value": "합정역", "sido": "서울", \
+"district": null, "dong": null}}], menus [{{"text": "와인", "value": "와인", "spellings": [], \
+"want": true}}], embedding_text "와인바"
 - "투썸 신논현 3번 출구" → categories [{{"code": "CAFE", "want": true}}], \
 locations [{{"text": "신논현 3번 출구", "kind": "STATION", "value": "신논현역", \
 "exit": "3"}}], place_name {{"text": "투썸", "value": "투썸플레이스"}}, \
@@ -226,7 +251,8 @@ flavors [{{"code": "SPICY", "want": false}}], menus [{{"text": "떡볶이", "val
 "spellings": [], "want": true}}], embedding_text "순한 떡볶이"
 - 이전 조건이 "을지로 조용한 술집"일 때 "술집 말고 빙수 맛집으로" → \
 categories [{{"code": "CAFE", "want": true}}, {{"code": "BAR", "want": false}}], \
-locations [{{"text": "을지로", "kind": "AREA", "value": "을지로"}}], \
+locations [{{"text": "을지로", "kind": "PLACE", "value": "을지로", "sido": null, \
+"district": null, "dong": null}}], \
 features [{{"text": "조용한", "value": "조용한 곳", "code": "QUIET"}}], \
 menus [{{"text": "빙수", "value": "빙수", "spellings": [], "want": true}}], \
 embedding_text "조용한 빙수 카페", location_said false, changed ["categories", "menus"], \
@@ -422,6 +448,11 @@ def _location(data: dict) -> Location | None:
         value = None
     minutes = _won(data.get("walk_minutes"))
     exit_ = data.get("exit")
+    # 행정 구역 칸은 행정 구역(AREA)과, 앞에 붙인 상위 지역("부산 서면역")을 담는 역·장소에만
+    # 둔다. 동은 행정 구역에만 둔다. 시·도는 주소 첫 낱말 꼴로 맞춘다("대전광역시" → "대전").
+    area = kind is LocationKind.AREA
+    levels = area or kind in (LocationKind.STATION, LocationKind.PLACE)
+    sido = _segment(data.get("sido")) if levels else None
     return Location(
         text,
         kind,
@@ -431,6 +462,9 @@ def _location(data: dict) -> Location | None:
         exit=_segment(str(exit_))
         if isinstance(exit_, str | int) and not isinstance(exit_, bool)
         else None,
+        sido=standard_sido(sido) if sido else None,
+        district=_segment(data.get("district")) if levels else None,
+        dong=_segment(data.get("dong")) if area else None,
     )
 
 

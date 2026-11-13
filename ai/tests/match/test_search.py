@@ -178,7 +178,7 @@ def areas_of(store: FakeStore) -> tuple:
 
 GANGNAM = StationArea("강남역", "GANGNAM")
 GUMI = StationArea("구미역", "GUMI")
-GUMI_CITY = RegionArea("구미시")
+GUMI_CITY = RegionArea("경북", "구미시")
 BOUNDS = MapBounds(sw_lat=37.49, ne_lng=127.04)
 PREVIOUS = Conditions.from_codes(
     "강남역 조용한 카페", "조용한 카페", ("QUIET",), "CAFE", "GANGNAM"
@@ -618,25 +618,64 @@ class TestWhere:
         )
 
     @pytest.mark.parametrize(
+        ("levels", "expected"),
+        [
+            ({"dong": "역삼동"}, RegionArea(dong="역삼동")),
+            ({"district": "강남구"}, RegionArea(district="강남구")),
+            ({"district": "구미시"}, RegionArea(district="구미시")),
+            ({"dong": "선산읍"}, RegionArea(dong="선산읍")),
+            # 이름이 '구'로 끝나도 해석이 시·도라고 하면 시·도다
+            ({"sido": "대구"}, RegionArea(sido="대구")),
+            # 위 단계를 같이 말하면 모두 채운다
+            ({"sido": "대전", "district": "유성구"}, RegionArea("대전", "유성구")),
+            # 시·도는 주소 첫 낱말 꼴로 맞춘다
+            ({"sido": "대전광역시"}, RegionArea(sido="대전")),
+            ({"sido": "광주", "district": "광산구"}, RegionArea("전남광주", "광산구")),
+        ],
+    )
+    def test_region(
+        self, fake_gms: FakeGms, levels: dict[str, str], expected: object
+    ) -> None:
+        """지역_행정구역칸이있으면_이름끝글자와상관없이그칸으로거른다"""
+        value = " ".join(levels.values())
+        locations = [location(value, "AREA", value, **levels)]
+        fake_gms(answers(station=None, locations=locations))
+        store = FakeStore()
+
+        search(SearchRequest(f"{value} 조용한 카페"), store)
+
+        assert areas_of(store) == (expected,)
+
+    @pytest.mark.parametrize(
+        "loc",
+        [
+            location("부산 서면역", "STATION", "서면역", sido="부산"),
+            # 역 이름을 지역이나 상권으로 내고 시·도 칸을 채워도 시·도 전체가 아니라 그 안의 역이다
+            location("부산 서면", "AREA", "서면", sido="부산"),
+            location("부산 서면", "PLACE", "서면", sido="부산"),
+        ],
+    )
+    def test_station_with_upper_levels(self, fake_gms: FakeGms, loc: dict) -> None:
+        """지역_역앞에상위지역을붙여말하면_그상위지역안의역으로거른다"""
+        fake_gms(answers(station=None, locations=[loc]))
+        store = FakeStore()
+
+        search(SearchRequest(f"{loc['text']} 카페"), store)
+
+        assert areas_of(store) == (StationArea("서면역", "SEOMYEON", sido="부산"),)
+
+    @pytest.mark.parametrize(
         ("value", "expected"),
         [
-            ("역삼동", RegionArea("역삼동", "YEOKSAM")),
-            ("역삼1동", RegionArea("역삼동", "YEOKSAM")),
-            ("대치동", RegionArea("대치동")),
-            ("강남구", RegionArea("강남구")),
-            ("구미시", RegionArea("구미시")),
-            ("칠곡군", RegionArea("칠곡군")),
-            ("선산읍", RegionArea("선산읍")),
-            ("도개면", RegionArea("도개면")),
             ("강남", GANGNAM),
-            # 시·군·읍·면으로 끝나도 서비스 역 이름이면 역이 먼저다
             ("서면", StationArea("서면역", "SEOMYEON")),
         ],
     )
-    def test_region(self, fake_gms: FakeGms, value: str, expected: object) -> None:
-        """지역_동구시군읍면이면_행정구역으로거르고서비스역이름이면_역으로거른다"""
-        locations = [location(value, "AREA", value)]
-        fake_gms(answers(station=None, locations=locations))
+    def test_area_named_like_station(
+        self, fake_gms: FakeGms, value: str, expected: object
+    ) -> None:
+        """지역_행정구역칸이없는서비스역이름이면_역으로거른다"""
+        fake_gms(answers(station=None, locations=[location(value, "AREA", value)]))
         store = FakeStore()
 
         search(SearchRequest(f"{value} 조용한 카페"), store)
@@ -663,16 +702,19 @@ class TestWhere:
                 (StationArea("구미역", "GUMI", None, "1"),),
             ),
             # 시라고 하면 시만 본다
-            ([location("구미시", "AREA", "구미시")], (GUMI_CITY,)),
+            (
+                [location("구미시", "AREA", "구미시", district="구미시")],
+                (RegionArea(district="구미시"),),
+            ),
             # 시와 이름이 같은 역이 아닌 역은 그대로다
             ([location("강남", "AREA", "강남")], (GANGNAM,)),
-            # 구미와 구미시를 같이 말해도 지역은 하나씩이다
+            # 같은 행정 구역을 두 번 말해도 지역은 하나다
             (
                 [
-                    location("구미", "AREA", "구미"),
-                    location("구미시", "AREA", "구미시"),
+                    location("구미시", "AREA", "구미시", district="구미시"),
+                    location("구미시 전체", "AREA", "구미시", district="구미시"),
                 ],
-                (GUMI, GUMI_CITY),
+                (RegionArea(district="구미시"),),
             ),
         ],
     )
@@ -801,7 +843,7 @@ class TestWhere:
 
     def test_unready_guide_by_map_bounds_after_search(self, fake_gms: FakeGms) -> None:
         """준비중_장소를찾아본뒤비어도_지도화면의중심이든도시의역을제안한다"""
-        locations = [location("둔산동", "AREA", "둔산동")]
+        locations = [location("둔산동", "AREA", "둔산동", dong="둔산동")]
         fake_gms(answers(station=None, locations=locations))
         store = FakeStore(candidates=())
 
@@ -815,6 +857,20 @@ class TestWhere:
         assert result.empty_reason is not None
         assert result.empty_reason.cause == "둔산동은 아직 준비 중인 지역이에요"
         assert result.empty_reason.suggestion == "유성온천역 근처에서 찾아 보세요"
+
+    def test_place_with_upper_level_not_region(
+        self, fake_gms: FakeGms, encoder: list
+    ) -> None:
+        """지역_랜드마크앞에상위지역을붙여말해도_그상위지역전체로찾지않고준비중이라고한다"""
+        locations = [location("서울 홍대", "PLACE", "홍대", sido="서울")]
+        fake_gms(answers(station=None, locations=locations))
+        store = FakeStore()
+
+        result = search(SearchRequest("서울 홍대 맛집"), store)
+
+        assert store.calls == []
+        assert result.empty_reason is not None
+        assert result.empty_reason.cause == "홍대는 아직 준비 중인 지역이에요"
 
     def test_landmark_with_station(self, fake_gms: FakeGms) -> None:
         """지역_랜드마크와역을같이말하면_역으로만거른다"""
@@ -851,18 +907,18 @@ class TestWhere:
 
     def test_city_without_places(self, fake_gms: FakeGms) -> None:
         """지역_장소가하나도없는시면_준비중인지역이라고한다"""
-        locations = [location("서울시", "AREA", "서울시")]
+        locations = [location("서울시", "AREA", "서울시", sido="서울시")]
         fake_gms(answers(station=None, locations=locations))
         store = FakeStore(candidates=())
 
         result = search(SearchRequest("서울시 조용한 카페"), store)
 
         assert [(f.areas, f.category_group, k) for f, _, k in store.calls] == [
-            ((RegionArea("서울시"),), "CAFE", 100),
-            ((RegionArea("서울시"),), None, 1),
+            ((RegionArea(sido="서울"),), "CAFE", 100),
+            ((RegionArea(sido="서울"),), None, 1),
         ]
         assert result.empty_reason is not None
-        assert result.empty_reason.cause == "서울시는 아직 준비 중인 지역이에요"
+        assert result.empty_reason.cause == "서울은 아직 준비 중인 지역이에요"
 
 
 class TestScoring:
@@ -1189,7 +1245,7 @@ class TestEmptyReason:
         """결과없음_동이나구로걸렀으면_그이름을쓴다"""
         conditions = Conditions.from_codes("t", "t", (), "BAR")
 
-        reason = empty_reason(conditions, (RegionArea("역삼동", "YEOKSAM"),))
+        reason = empty_reason(conditions, (RegionArea(dong="역삼동"),))
 
         assert reason.cause == "역삼동 술집 중 조건에 맞는 곳이 없어요"
 

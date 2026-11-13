@@ -14,6 +14,7 @@ from fit_ai.match.candidates import (
     Found,
     PlaceFilter,
     RadiusArea,
+    RegionArea,
     StationArea,
     StoreError,
     VectorCounts,
@@ -160,6 +161,15 @@ class TestInterpret:
 
 class TestSearch:
     """계산 주소"""
+
+    def test_dong_area_mapped(self, calculated: FakeMeetup) -> None:
+        """계산_동지역이면_동만채운행정구역으로거른다"""
+        body = {**SEARCH, "area": {"kind": "DONG", "name": "역삼동"}}
+
+        response = client().post("/v1/meetup/search", json=body)
+
+        assert response.status_code == 200
+        assert calculated.requests[0].area == RegionArea(dong="역삼동")
 
     def test_request_mapped(self, calculated: FakeMeetup) -> None:
         """계산_요청을모임계산요청으로바꾼다"""

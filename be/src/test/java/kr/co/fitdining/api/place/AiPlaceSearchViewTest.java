@@ -17,7 +17,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 /**
  * AI가 읽는 뷰 {@code ai_place_search}의 모양(place-ai-search spec "AI가 읽는 뷰", AC-24)을 앱 계정으로 확인한다. 검색 2차
- * 컬럼(V17~V19)도 본다.
+ * 컬럼(V17~V19)과 시·도(V36)도 본다.
  */
 class AiPlaceSearchViewTest extends PostgresTestSupport {
 
@@ -71,7 +71,25 @@ class AiPlaceSearchViewTest extends PostgresTestSupport {
 				WHERE table_name = 'ai_place_search' ORDER BY ordinal_position""", String.class))
 				.containsExactly("place_id", "category_group", "station", "lat", "lng", "facilities", "profile",
 						"summary_vector", "name", "food_type", "dong", "district", "subways", "hours", "menus",
-						"pet_allowed", "parking_free", "corkage_allowed", "price", "analyzed_review_count", "category");
+						"pet_allowed", "parking_free", "corkage_allowed", "price", "analyzed_review_count", "category",
+						"sido");
+	}
+
+	@Test
+	@DisplayName("AI뷰_시도는_지번주소의첫낱말이고지번주소가없으면도로명주소의첫낱말이다")
+	void view_sido_firstWordOfJibunThenRoadAddress() {
+		long jibun = insertPlace();
+		long road = insertPlace();
+		long none = insertPlace();
+		List.of(jibun, road, none).forEach(this::insertProfile);
+		jdbc.update("UPDATE places SET jibun_address = '대전 유성구 봉명동 615-1', address = '대전 유성구 대학로 56' "
+				+ "WHERE place_id = ?", jibun);
+		jdbc.update("UPDATE places SET address = '전남광주 광산구 수완로11번길 37' WHERE place_id = ?", road);
+
+		assertThat(List.of(jibun, road, none).stream()
+				.map(id -> jdbc.queryForObject("SELECT sido FROM ai_place_search WHERE place_id = ?", String.class, id))
+				.toList())
+				.containsExactly("대전", "전남광주", null);
 	}
 
 	@Test

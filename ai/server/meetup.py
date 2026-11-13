@@ -410,15 +410,14 @@ def _read_conditions(data: dict[str, Any]) -> Conditions:
 def _area(
     body: NamedAreaBody | CircleAreaBody,
 ) -> StationArea | RegionArea | RadiusArea:
-    """지역을 거르기 지역으로 바꾼다. 역은 지금 검색의 역 지역, 동은 행정 구역이다."""
+    """지역을 거르기 지역으로 바꾼다. 역은 지금 검색의 역 지역, 동은 동만 채운 행정 구역이다.
+    모임의 동은 장소가 있는 동 목록(BE `areaNames`)에서 고른 동 이름이다."""
     if isinstance(body, CircleAreaBody):
         return RadiusArea(body.lat, body.lng, body.radius_m)
     if body.kind == "STATION":
         name = body.name.removesuffix("역") + "역"
         return StationArea(name, _STATION_CODES.get(name))
-    return RegionArea(
-        body.name, _STATION_CODES.get(body.name.removesuffix("동") + "역")
-    )
+    return RegionArea(dong=body.name)
 
 
 def _when(body: WhenBody | None) -> MeetupWhen | None:

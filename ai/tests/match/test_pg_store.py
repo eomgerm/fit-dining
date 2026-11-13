@@ -75,6 +75,9 @@ AREAS = {
     ),
 }
 
+# 장소별 시·도(주소 첫 낱말). 비교할 수 있는 1~4번에만 둔다.
+SIDO = {1: "서울", 2: "서울", 3: "서울", 4: "서울"}
+
 # 장소별 (영업시간, 가게 가격). test_json_store.py와 같다. 1번은 매일 22시까지, 2번은
 # 일요일에 쉬고 다른 날은 새벽 2시까지, 3번은 월요일 시각만 모르고, 4번은 일요일에 쉬고
 # 다른 날은 24시간 연다. 3번은 가격도 모른다.
@@ -183,20 +186,37 @@ SOUTH_4 = distance_m(37.50, 127.02, 37.49, 127.02)
 
 # (거르기 조건, 뽑히는 장소). 유사도 순서는 1, 4, 2, 3번이다.
 AREA_CASES = [
-    # 도보 거리가 없는 역은 수집 역이 같거나 가까운 역 목록에 있으면 든다.
+    # 역은 걸어서 800m 안. 장소의 역 칸은 보지 않는다. 2번은 역 칸이 강남역이지만 강남역까지
+    # 1.4km라 빠진다.
     (
         PlaceFilter(category_group="CAFE", areas=(StationArea("강남역", "GANGNAM"),)),
-        [1, 2],
+        [1],
     ),
+    # 가까운 역 목록에 도보 분이 있으면 그 값으로 본다. 4번은 좌표로는 2km지만 도보 9분이다.
     (PlaceFilter(areas=(StationArea("역삼역", "YEOKSAM"),)), [4, 3]),
+    # 목록에 없어도 역 좌표에서 어림한 도보 거리가 800m 안이면 든다(1번은 637m). 좌표가 없는
+    # 역(코드 없음)은 목록으로만 찾는다.
+    (PlaceFilter(areas=(StationArea("신논현역", "SINNONHYEON"),)), [1, 2]),
     (PlaceFilter(areas=(StationArea("신논현역"),)), [2]),
-    # 도보 거리나 출구가 있으면 가까운 역 목록만 보고, 도보 분을 모르면 뺀다.
+    # 도보 분을 말하면 그만큼 걷는 거리 안이다. 4번은 강남역 도보 분을 몰라 좌표로 1.1km다.
     (PlaceFilter(areas=(StationArea("강남역", "GANGNAM", walk_minutes=5),)), [1]),
     (PlaceFilter(areas=(StationArea("역삼역", "YEOKSAM", walk_minutes=8),)), [3]),
-    (PlaceFilter(areas=(StationArea("강남역", "GANGNAM", exit="10"),)), [4]),
-    # 동이 없으면 이름이 같은 서비스 역의 장소로 본다.
-    (PlaceFilter(areas=(RegionArea("역삼동", "YEOKSAM"),)), [1, 3]),
-    (PlaceFilter(areas=(RegionArea("서초구"),)), [4]),
+    # 출구는 목록에 그 역의 그 출구가 있어야 하고 걷는 거리 한도도 지킨다. 4번은 10번 출구지만
+    # 1.1km라 빠진다.
+    (PlaceFilter(areas=(StationArea("강남역", "GANGNAM", exit="11"),)), [1]),
+    (PlaceFilter(areas=(StationArea("강남역", "GANGNAM", exit="10"),)), []),
+    # 행정 구역은 채운 단계가 모두 같은 곳이다. 동을 모르는 3번은 역삼역 근처여도 역삼동에 들지 않는다.
+    (PlaceFilter(areas=(RegionArea(dong="역삼동"),)), [1]),
+    (PlaceFilter(areas=(RegionArea(district="서초구"),)), [4]),
+    (PlaceFilter(areas=(RegionArea(sido="서울"),)), [1, 4, 2, 3]),
+    (PlaceFilter(areas=(RegionArea(sido="서울", district="강남구"),)), [1, 2, 3]),
+    (PlaceFilter(areas=(RegionArea(district="강남구", dong="역삼동"),)), [1]),
+    # 역 앞에 붙여 말한 상위 지역도 맞아야 한다("서울 강남역"은 들고 "부산 강남역"은 없다).
+    (PlaceFilter(areas=(StationArea("강남역", "GANGNAM", sido="서울"),)), [1]),
+    (PlaceFilter(areas=(StationArea("강남역", "GANGNAM", sido="부산"),)), []),
+    # 위 단계가 다르면 같은 이름의 구라도 들지 않는다(대전 강남구는 없다).
+    (PlaceFilter(areas=(RegionArea(sido="대전"),)), []),
+    (PlaceFilter(areas=(RegionArea(sido="대전", district="강남구"),)), []),
     # 지역이 여럿이면 그중 하나에 들면 된다.
     (
         PlaceFilter(
@@ -269,7 +289,7 @@ def database(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
             CREATE TABLE ai_place_search (
               place_id bigint, category_group text, station text,
               name text, category text, menus jsonb,
-              dong text, district text, subways jsonb, hours jsonb, price integer,
+              sido text, dong text, district text, subways jsonb, hours jsonb, price integer,
               food_type text, analyzed_review_count integer,
               lat double precision, lng double precision, facilities jsonb,
               profile jsonb, summary_vector vector(2)
@@ -282,7 +302,7 @@ def database(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
             name, naver_category, menus = MENUS.get(place_id, (None, None, []))
             conn.execute(
                 "INSERT INTO ai_place_search "
-                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::vector)",
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::vector)",
                 (
                     place_id,
                     category,
@@ -290,6 +310,7 @@ def database(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
                     name,
                     naver_category,
                     json.dumps(menu_items(menus), ensure_ascii=False),
+                    SIDO.get(place_id),
                     dong,
                     district,
                     json.dumps(subways, ensure_ascii=False),
@@ -439,16 +460,42 @@ def test_areas(
 
 
 def test_areas_without_subways(store: PgPlaceStore, database: str) -> None:
-    """저장소_가까운역목록이없으면_수집역으로만거른다"""
+    """저장소_가까운역목록이없으면_역좌표에서잰거리로거른다"""
     with psycopg.connect(database) as conn:
-        conn.execute("UPDATE ai_place_search SET subways = NULL WHERE place_id = 4")
+        conn.execute("UPDATE ai_place_search SET subways = NULL WHERE place_id = 1")
     try:
-        found = find_ids(store, PlaceFilter(areas=(StationArea("역삼역", "YEOKSAM"),)))
+        # 1번은 강남역에서 어림한 도보 거리가 745m라 들고, 4번은 1.1km라 빠진다.
+        with_points = find_ids(
+            store, PlaceFilter(areas=(StationArea("강남역", "GANGNAM"),))
+        )
+        # 역 좌표가 없으면 목록이 없는 장소는 들 수 없다.
+        without_points = find_ids(store, PlaceFilter(areas=(StationArea("강남역"),)))
     finally:
         with psycopg.connect(database) as conn:
             conn.execute(
-                "UPDATE ai_place_search SET subways = %s::jsonb WHERE place_id = 4",
-                (json.dumps(AREAS[4][2], ensure_ascii=False),),
+                "UPDATE ai_place_search SET subways = %s::jsonb WHERE place_id = 1",
+                (json.dumps(AREAS[1][2], ensure_ascii=False),),
+            )
+
+    assert (with_points, without_points) == ([1], [])
+
+
+def test_station_name_without_suffix(store: PgPlaceStore, database: str) -> None:
+    """저장소_가까운역목록이역을빼고써도_같은역으로견준다"""
+    bare = [{"station": "역삼", "exit": "3", "walk_minutes": 6}]
+    with psycopg.connect(database) as conn:
+        conn.execute(
+            "UPDATE ai_place_search SET subways = %s::jsonb WHERE place_id = 3",
+            (json.dumps(bare, ensure_ascii=False),),
+        )
+    try:
+        # 코드가 없어 좌표로는 찾지 못하므로 목록으로만 든다.
+        found = find_ids(store, PlaceFilter(areas=(StationArea("역삼역", exit="3"),)))
+    finally:
+        with psycopg.connect(database) as conn:
+            conn.execute(
+                "UPDATE ai_place_search SET subways = %s::jsonb WHERE place_id = 3",
+                (json.dumps(AREAS[3][2], ensure_ascii=False),),
             )
 
     assert found == [3]

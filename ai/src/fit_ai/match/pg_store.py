@@ -4,8 +4,9 @@
 장소는 거르기와 유사도 계산(pgvector `<=>`, 코사인 거리)을 SQL 한 번으로 한다. 장소가
 300곳 남짓이라 인덱스 없이 전부 계산해도 빠르고 결과가 정확하다. 장소 뷰는 BE
 마이그레이션 V12(`ai_place_search`)가 `places`와 `place_profiles`로 만들고 V17~V19가 검색
-2차 컬럼을 뒤에 더한다. AI는 그 컬럼 중 `place_id`, `category_group`, `station`, `name`,
-`category`(네이버 업종 이름), `dong`, `district`, `subways`(`place_subways`를 모은
+2차 컬럼을, V36이 시·도(`sido`, 주소 첫 낱말)를 뒤에 더한다. AI는 그 컬럼 중 `place_id`,
+`category_group`, `station`, `name`, `category`(네이버 업종 이름), `sido`, `dong`, `district`,
+`subways`(`place_subways`를 모은
 `[{station, exit, walk_minutes}]`), `hours`(`place_hours`를 모은 `[{day, open, close, closed,
 breaks}]`), `menus`(`place_menus`를 모은 `[{name, category, price, representative}]`),
 `price`(가게 가격), `lat`, `lng`, `facilities`, `food_type`, `analyzed_review_count`,
@@ -17,6 +18,7 @@ breaks}]`), `menus`(`place_menus`를 모은 `[{name, category, price, representa
 """
 
 import json
+import math
 import threading
 import time
 from collections.abc import Collection, Sequence
@@ -27,6 +29,7 @@ from psycopg_pool import ConnectionPool, PoolTimeout
 
 from fit_ai import embedding
 from fit_ai.match.candidates import (
+    EARTH_RADIUS_M,
     REFERENCE_PLACES,
     Area,
     Candidate,
@@ -65,22 +68,50 @@ _FIND_WHERE = """WHERE summary_vector IS NOT NULL
     OR EXISTS (
       SELECT 1
       FROM jsonb_to_recordset(%(areas)s::jsonb) AS area(
-        kind text, name text, code text, walk_minutes int, exit text,
+        kind text, sido text, district text, dong text, exit text,
+        station text, listed_as jsonb, walk_limit_minutes float8, straight_limit_m float8,
+        points jsonb, south float8, north float8, west float8, east float8,
         sw_lat float8, sw_lng float8, ne_lat float8, ne_lng float8,
         lat float8, lng float8, radius_m float8)
       WHERE CASE area.kind
         WHEN 'STATION' THEN
-          (area.walk_minutes IS NULL AND area.exit IS NULL AND p.station = area.code)
-          OR EXISTS (
-            SELECT 1
-            FROM jsonb_to_recordset(coalesce(p.subways, '[]'::jsonb))
-              AS near(station text, exit text, walk_minutes int)
-            WHERE near.station = area.name
-              AND (area.walk_minutes IS NULL OR near.walk_minutes <= area.walk_minutes)
-              AND (area.exit IS NULL OR near.exit = area.exit))
+          (area.sido IS NULL OR p.sido = area.sido)
+          AND (area.district IS NULL OR p.district = area.district)
+          AND CASE
+            WHEN p.subways @> (area.listed_as -> 0) OR p.subways @> (area.listed_as -> 1) THEN (
+              SELECT (area.exit IS NULL OR bool_or(near.exit = area.exit))
+                AND coalesce(
+                  min(near.walk_minutes) <= area.walk_limit_minutes,
+                  p.lat BETWEEN area.south AND area.north
+                    AND p.lng BETWEEN area.west AND area.east
+                    AND EXISTS (
+                      SELECT 1
+                      FROM jsonb_to_recordset(area.points) AS pt(lat float8, lng float8)
+                      WHERE 2 * 6371000 * asin(least(1.0, sqrt(
+                        power(sin(radians(p.lat - pt.lat) / 2), 2)
+                        + cos(radians(pt.lat)) * cos(radians(p.lat))
+                          * power(sin(radians(p.lng - pt.lng) / 2), 2)
+                      ))) <= area.straight_limit_m))
+              FROM jsonb_to_recordset(p.subways)
+                AS near(station text, exit text, walk_minutes int)
+              WHERE near.station IN (area.station, area.station || '역'))
+            ELSE
+              area.exit IS NULL
+              AND p.lat BETWEEN area.south AND area.north
+              AND p.lng BETWEEN area.west AND area.east
+              AND EXISTS (
+                SELECT 1
+                FROM jsonb_to_recordset(area.points) AS pt(lat float8, lng float8)
+                WHERE 2 * 6371000 * asin(least(1.0, sqrt(
+                  power(sin(radians(p.lat - pt.lat) / 2), 2)
+                  + cos(radians(pt.lat)) * cos(radians(p.lat))
+                    * power(sin(radians(p.lng - pt.lng) / 2), 2)
+                ))) <= area.straight_limit_m)
+          END
         WHEN 'REGION' THEN
-          p.dong = area.name OR p.district = area.name
-          OR (p.dong IS NULL AND p.station = area.code)
+          (area.sido IS NULL OR p.sido = area.sido)
+          AND (area.district IS NULL OR p.district = area.district)
+          AND (area.dong IS NULL OR p.dong = area.dong)
         WHEN 'BOUNDS' THEN
           (area.sw_lat IS NULL OR p.lat >= area.sw_lat)
           AND (area.sw_lng IS NULL OR p.lng >= area.sw_lng)
@@ -173,8 +204,12 @@ LIMIT %(k)s
 """거르기와 유사도 상위 k곳을 한 번에 뽑는다. 요약 벡터는 가져오지 않는다.
 
 지역은 JSON 목록(`_area_json`)으로 받아 그중 하나에 들면 남긴다. 지역 종류마다 드는 규칙은
-`candidates.StationArea`, `RegionArea`, `MapBounds`, `RadiusArea`에 있다. 반경은
-`candidates.distance_m`과 같은 식(하버사인 공식)으로 잰다. 종류를 모르는 지역에는 아무 장소도
+`candidates.StationArea`, `RegionArea`, `MapBounds`, `RadiusArea`에 있다. 반경과 역 좌표에서의
+거리는 `candidates.distance_m`과 같은 식(하버사인 공식)으로 잰다. 역은 가까운 역 목록에 그 역의
+도보 분이 있으면 그 값으로 보고, 없을 때만 역 좌표에서 잰 거리로 본다(`coalesce`). 목록은 같은
+역을 "강남"과 "강남역"으로 섞어 써서 두 꼴을 다 본다. 장소마다 목록을 펼치고 거리를 재면 운영
+장소 11,712곳에서 역 하나에 1.25초가 걸려서(2026-11-13), 목록에 그 역이 있는지는 jsonb 포함
+(`@>`)으로 먼저 보고 거리는 원을 감싸는 위도·경도 범위(`_box`) 안 장소만 잰다. 종류를 모르는 지역에는 아무 장소도
 들지 않는다. 목록이 비면 위치로 거르지 않는다. 영업시간은
 JSON(`_hours_json`)으로 받아, 요청한 요일 중 쉬거나 시각이 못 미친다고 확인되지 않은 날이
 하루라도 있으면 남긴다(`candidates.OpenHours`). 가격과 영업시간을 모르는 장소는 남긴다.
@@ -586,13 +621,28 @@ def _area_json(area: Area) -> dict[str, Any]:
         case StationArea():
             return {
                 "kind": "STATION",
-                "name": area.name,
-                "code": area.code,
-                "walk_minutes": area.walk_minutes,
+                "sido": area.sido,
+                "district": area.district,
+                "station": area.station,
+                # 가까운 역 목록에 그 역이 있는지 jsonb 포함(@>)으로 본다. 목록은 같은 역을
+                # "강남"과 "강남역"으로 섞어 써서 두 꼴을 다 본다.
+                "listed_as": [
+                    [{"station": area.station}],
+                    [{"station": f"{area.station}역"}],
+                ],
                 "exit": area.exit,
+                "walk_limit_minutes": area.walk_limit_minutes,
+                "straight_limit_m": area.straight_limit_m,
+                "points": [{"lat": lat, "lng": lng} for lat, lng in area.points],
+                **_box(area.points, area.straight_limit_m),
             }
         case RegionArea():
-            return {"kind": "REGION", "name": area.name, "code": area.code}
+            return {
+                "kind": "REGION",
+                "sido": area.sido,
+                "district": area.district,
+                "dong": area.dong,
+            }
         case MapBounds():
             return {
                 "kind": "BOUNDS",
@@ -608,6 +658,32 @@ def _area_json(area: Area) -> dict[str, Any]:
                 "lng": area.lng,
                 "radius_m": area.radius_m,
             }
+
+
+def _box(points: Sequence[tuple[float, float]], radius_m: float) -> dict[str, float]:
+    """역 좌표마다 반경 원을 모두 감싸는 위도·경도 범위. 반경 거리를 장소마다 계산하기 전에
+    이 범위 밖 장소를 싸게 걸러 낸다. 원보다 넓기만 하고 좁지 않아 결과는 같다. 경도 폭은 구
+    위에서 원이 가장 넓게 퍼지는 폭(asin(sin r / cos 위도))이다. 좌표가 없으면 빈 사전이라
+    SQL에서 NULL이 되어 좌표로는 아무 장소도 들지 않는다."""
+    if not points:
+        return {}
+    angle = radius_m / EARTH_RADIUS_M
+    d_lat = math.degrees(angle)
+    souths, norths, wests, easts = [], [], [], []
+    for lat, lng in points:
+        d_lng = math.degrees(
+            math.asin(min(1.0, math.sin(angle) / math.cos(math.radians(lat))))
+        )
+        souths.append(lat - d_lat)
+        norths.append(lat + d_lat)
+        wests.append(lng - d_lng)
+        easts.append(lng + d_lng)
+    return {
+        "south": min(souths),
+        "north": max(norths),
+        "west": min(wests),
+        "east": max(easts),
+    }
 
 
 def _hours_json(hours: OpenHours | None) -> str | None:

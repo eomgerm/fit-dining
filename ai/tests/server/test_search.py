@@ -537,6 +537,32 @@ class TestSearch:
         }
         assert searched.calls[1][0].previous == conditions
 
+    def test_region_levels_round_trip(self, searched: FakeSearch) -> None:
+        """검색_지역의행정구역칸은_조건에담아돌려주고이전조건에서다시읽는다"""
+        region = Location(
+            "대전 유성구",
+            LocationKind.AREA,
+            "대전 유성구",
+            sido="대전",
+            district="유성구",
+        )
+        conditions = replace(CONDITIONS, locations=(region,))
+        searched.outcome = make_result(conditions=conditions)
+
+        data = post(client())
+        post(client(), previousConditions=data["conditions"])
+
+        assert data["conditions"]["locations"] == [
+            {
+                "text": "대전 유성구",
+                "kind": "AREA",
+                "value": "대전 유성구",
+                "sido": "대전",
+                "district": "유성구",
+            }
+        ]
+        assert searched.calls[1][0].previous == conditions
+
     def test_previous_v1_read(self, searched: FakeSearch) -> None:
         """검색_이전조건이1차모양이면_역을지역으로바꿔읽는다"""
         post(client(), previousConditions=CONDITIONS_BODY)

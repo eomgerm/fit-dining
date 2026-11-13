@@ -400,6 +400,48 @@ class TestSegments:
 
         assert (conditions.station, conditions.nearby) == (station, nearby)
 
+    def test_region_levels(self, fake_gms: FakeGms) -> None:
+        """LLM해석_행정구역칸은지역역장소에두고역과장소의동은버리며_시도는주소첫낱말꼴로맞춘다"""
+        fake_gms(
+            lambda messages: empty_answer(
+                locations=[
+                    {
+                        "text": "대전 유성구",
+                        "kind": "AREA",
+                        "value": "대전 유성구",
+                        "sido": "대전광역시",
+                        "district": "유성구",
+                        "dong": None,
+                    },
+                    {
+                        "text": "부산 서면역",
+                        "kind": "STATION",
+                        "value": "서면역",
+                        "sido": "부산광역시",
+                        "dong": "부전동",
+                    },
+                    {
+                        "text": "서울 홍대",
+                        "kind": "PLACE",
+                        "value": "홍대",
+                        "sido": "서울특별시",
+                        "dong": "서교동",
+                    },
+                    {"text": "근처", "kind": "HERE", "sido": "서울"},
+                ]
+            )
+        )
+
+        query = "대전 유성구나 부산 서면역이나 서울 홍대 근처 카페"
+        conditions = interpret(query).conditions
+
+        assert [(loc.sido, loc.district, loc.dong) for loc in conditions.locations] == [
+            ("대전", "유성구", None),
+            ("부산", None, None),
+            ("서울", None, None),
+            (None, None, None),
+        ]
+
     def test_walk_and_exit(self, fake_gms: FakeGms) -> None:
         """LLM해석_도보거리와출구가있으면_지역조각에두고말이안되는값은버린다"""
         fake_gms(
@@ -1059,7 +1101,7 @@ class TestRuleSegments:
             ("근처 카페", (Location("근처", LocationKind.HERE),), None, True),
             (
                 "역삼동 카페",
-                (Location("역삼동", LocationKind.AREA, "역삼동"),),
+                (Location("역삼동", LocationKind.AREA, "역삼동", dong="역삼동"),),
                 "YEOKSAM",
                 False,
             ),

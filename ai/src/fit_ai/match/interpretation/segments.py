@@ -37,7 +37,11 @@ class LocationKind(StrEnum):
     STATION = "STATION"
     """역. 서비스 역이면 `Conditions.station`이 그 역 코드다."""
     AREA = "AREA"
-    """동네, 거리, 랜드마크(역삼동, 가로수길, 코엑스)"""
+    """행정 구역(대전, 송파구, 역삼동). 단계마다 칸(`Location.sido` 등)을 채운다."""
+    PLACE = "PLACE"
+    """거리, 상권, 랜드마크(가로수길, 홍대, 코엑스). 장소 데이터에 위치가 없어 아직 거르지
+    못한다. 행정 구역과 종류를 나눈 까닭은 앞에 붙인 상위 지역("서울 홍대"의 서울)을 칸에
+    넣어도 행정 구역으로 보지 않게 하려는 것이다(2026-11-13). 전에는 AREA에 같이 들었다."""
     HERE = "HERE"
     """여기, 이 근처처럼 지금 보는 곳"""
     UNKNOWN = "UNKNOWN"
@@ -49,12 +53,22 @@ class Location:
     """지역 조각. 요청에 지역이 여럿이면("강남역이나 역삼역") 조각도 여럿이고 그중 하나에
     들면 된다.
 
+    행정 구역(AREA)이면 단계마다 칸(`sido`, `district`, `dong`)을 채운다. 거르기는 채운 칸을
+    장소의 같은 단계와 모두 견준다. 이름 하나만으로는 어디가 시이고 어디가 구·동인지 알 수
+    없고("대구"는 구가 아니라 시), 같은 이름의 구·동이 여러 도시에 있어서다("송정동"은 구미와
+    부산에 있다). 사용자가 말한 단계만 채운다("송정동"은 동만). 역(STATION)과 거리·상권·
+    랜드마크(PLACE)는 앞에 붙여 말한 상위 지역("부산 서면역"의 부산)만 `sido`, `district`에
+    담는다.
+
     Attributes:
         text: 사용자가 쓴 말("션릉역 근처")
         kind: 종류
-        value: 표준 이름("선릉역", "역삼동", "코엑스"). 여기나 알 수 없는 곳이면 None이다.
+        value: 표준 이름("선릉역", "대전 유성구", "코엑스"). 여기나 알 수 없는 곳이면 None이다.
         walk_minutes: 걸어서 몇 분 안("걸어서 5분"). 없으면 None이다.
         exit: 역 출구 번호("11번 출구"면 "11"). 없으면 None이다.
+        sido: 시·도. 주소 첫 낱말 꼴이다("대전", "경북", `conditions.SIDO_NAMES`).
+        district: 시·군·구. 구, 구가 없으면 시·군이다("유성구", "구미시").
+        dong: 읍·면·동. 주소에 쓰는 동·읍·면 이름이다("봉명동", "산동읍").
     """
 
     text: str
@@ -62,6 +76,16 @@ class Location:
     value: str | None = None
     walk_minutes: int | None = None
     exit: str | None = None
+    sido: str | None = None
+    district: str | None = None
+    dong: str | None = None
+
+    @property
+    def is_region(self) -> bool:
+        """행정 구역이고 칸이 하나라도 있는지"""
+        return self.kind is LocationKind.AREA and any(
+            (self.sido, self.district, self.dong)
+        )
 
 
 @dataclass(frozen=True)
