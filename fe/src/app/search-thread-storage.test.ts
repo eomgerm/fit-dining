@@ -410,33 +410,9 @@ describe("회원", () => {
     expect(puts).toEqual([]);
   });
 
-  it("세션 만료 401이면 다른 계정으로 재시도하지 않는다", async () => {
+  // session 인증(a05ed87) 뒤로는 401에 만료와 그 밖의 구분이 없고, 401에서 checkSession으로 갱신하지 않는다
+  it("401이면 다시 보내지 않고, 이 탭의 세션과 이전 회원 화면 상태를 비우며 그 뒤 turn은 보내지 않는다", async () => {
     responder = () => problem(401);
-    auth.checkSession.mockImplementation(async () => {
-      setSession(session("u2"));
-      return auth.session!;
-    });
-    const { begin, save } = await load();
-
-    save(begin(), "thread-1", turn("entry-1"));
-    await flush();
-
-    expect(puts.map(({ token }) => token)).toEqual(["test-csrf"]);
-  });
-
-  it("세션 만료 401이면 재시도하지 않고 이전 회원 화면 상태를 비운다", async () => {
-    let first = true;
-    responder = () => {
-      if (first) {
-        first = false;
-        return problem(401);
-      }
-      return new Response(null, { status: 204 });
-    };
-    auth.checkSession.mockImplementation(async () => {
-      setSession(session("u1", "s1"));
-      return auth.session!;
-    });
     const { begin, save } = await load();
     const { clearOnSessionChange } = await import("./search-thread-auth");
     const queryClient = { clear: vi.fn() };
@@ -444,22 +420,17 @@ describe("회원", () => {
 
     save(begin(), "thread-1", turn("entry-1"));
     await flush();
-
-    expect(puts.map(({ token }) => token)).toEqual(["test-csrf"]);
-    expect(queryClient.clear).toHaveBeenCalledTimes(1);
-  });
-
-  it("만료가 아닌 401이면 이 탭의 세션만 지우고 그 뒤 turn은 보내지 않는다", async () => {
-    responder = () => problem(401);
-    const { begin, save } = await load();
-
-    save(begin(), "thread-1", turn("entry-1"));
-    await flush();
+    // 서버가 받아 주더라도 같은 turn을 다시 보내지 않는다
+    responder = () => new Response(null, { status: 204 });
     save(begin(), "thread-1", turn("entry-2", "followUp", "entry-1"));
     await vi.advanceTimersByTimeAsync(60_000);
 
+    expect(puts.map(({ token, turn: id }) => [token, id])).toEqual([
+      ["test-csrf", "entry-1"],
+    ]);
     expect(auth.clearSession).toHaveBeenCalledTimes(1);
-    expect(puts.map(({ turn: id }) => id)).toEqual(["entry-1"]);
+    expect(queryClient.clear).toHaveBeenCalledTimes(1);
+    expect(auth.checkSession).not.toHaveBeenCalled();
   });
 
   it("세션이 바뀌면 다시 보내려던 대기분을 버린다", async () => {

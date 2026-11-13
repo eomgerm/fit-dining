@@ -666,6 +666,8 @@ describe("비로그인과 세션 종료", () => {
     expect(
       within(dialog).getByText("저장한 장소는 로그인해야 볼 수 있어요."),
     ).toBeTruthy();
+    // 북마크 기능 전에는 '준비 중이에요'를 띄웠다(AC-28)
+    expect(screen.queryByText("준비 중이에요")).toBeNull();
     fireEvent.click(within(dialog).getByRole("button", { name: "로그인" }));
 
     expect(harness.login).toHaveBeenCalledWith("/?view=saved");

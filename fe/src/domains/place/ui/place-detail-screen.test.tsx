@@ -718,16 +718,6 @@ describe("PlaceDetailScreen", () => {
     expect(await screen.findByText("준비 중이에요")).toBeTruthy();
   });
 
-  it("비로그인이면 '저장'은 로그인 안내를 띄운다", async () => {
-    renderDetail();
-    await screen.findByRole("heading", { name: "카페 온담" });
-
-    fireEvent.click(screen.getByRole("button", { name: "저장" }));
-
-    expect(await screen.findByText("로그인이 필요해요")).toBeTruthy();
-    expect(screen.queryByText("준비 중이에요")).toBeNull();
-  });
-
   it("정보 탭의 '주소 복사'는 주소를 클립보드에 넣고 알린다", async () => {
     const writeText = vi.fn(async () => {});
     vi.stubGlobal("navigator", { clipboard: { writeText } });

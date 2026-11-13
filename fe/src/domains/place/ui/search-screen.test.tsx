@@ -900,34 +900,29 @@ describe("SearchScreen", () => {
         expect(saved[0].turns[3].request).toEqual(searchBodies[0]);
       });
 
-      it.each([
-        ["저장된 conditions", { a: 1 }, { a: 1 }],
-        ["conditions가 null이면 응답 conditions", null, { menu: "파스타" }],
-      ])(
-        "새 모양 region 기록을 다시 검색하면 %s로 region API를 부른다 (AC-57)",
-        async (_, conditions, sent) => {
-          await openStoredThread(
-            storedTurns({
-              query: "강남역 파스타",
-              conditions,
-              mapBounds: BOUNDS,
-            }),
-          );
-
-          const past = await openPastOf(1);
-          fireEvent.click(
-            within(past).getByRole("button", { name: "이 조건으로 다시 검색" }),
-          );
-          await waitFor(() => expect(searchBodies).toHaveLength(1));
-
-          expect(searchUrls).toEqual([REGION_URL]);
-          expect(searchBodies[0]).toEqual({
+      // conditions가 null이면 응답 conditions를 쓰는 규칙은 search-request.test.ts의 runnableRequest test가 본다
+      it("새 모양 region 기록을 다시 검색하면 저장된 conditions로 region API를 부른다 (AC-57)", async () => {
+        await openStoredThread(
+          storedTurns({
             query: "강남역 파스타",
-            conditions: sent,
+            conditions: { a: 1 },
             mapBounds: BOUNDS,
-          });
-        },
-      );
+          }),
+        );
+
+        const past = await openPastOf(1);
+        fireEvent.click(
+          within(past).getByRole("button", { name: "이 조건으로 다시 검색" }),
+        );
+        await waitFor(() => expect(searchBodies).toHaveLength(1));
+
+        expect(searchUrls).toEqual([REGION_URL]);
+        expect(searchBodies[0]).toEqual({
+          query: "강남역 파스타",
+          conditions: { a: 1 },
+          mapBounds: BOUNDS,
+        });
+      });
 
       it("new 기록을 다시 검색하면 저장된 본문 그대로 /places/search로 간다 (AC-39, AC-57)", async () => {
         await openStoredThread(storedTurns({ query: "x", mapBounds: BOUNDS }));
@@ -3465,7 +3460,7 @@ describe("SearchScreen", () => {
       ).toBeNull();
     });
 
-    it("자동완성은 입력한 단어마다 이름과 일치한 메뉴 이름에서 강조한다", async () => {
+    it("자동완성은 '이 조건으로 추천받기'를 맨 위에 두고, 입력한 단어마다 이름과 일치한 메뉴 이름에서 강조하며, 후보가 보이는 동안 막을 깔고 막을 누르면 닫히고, 입력을 지울 수 있다", async () => {
       const original = globalThis.fetch;
       vi.stubGlobal(
         "fetch",
@@ -3477,6 +3472,7 @@ describe("SearchScreen", () => {
                   place: { ...card(1).place, name: "하노이 쌀국수 역삼점" },
                   matchedMenu: "양지 쌀국수",
                 },
+                { type: "PLACE", place: card(2).place },
                 { type: "ACTION", label: "이 조건으로 추천받기" },
               ])
             : original(input, init),
@@ -3489,48 +3485,21 @@ describe("SearchScreen", () => {
       await typeSuggest(bar, "역삼 쌀국수");
       const list = await screen.findByRole("list", { name: "검색 추천" });
 
-      // 이름에서는 두 단어가 각각, 메뉴 이름에서는 쌀국수가 강조된다
-      expect(
-        Array.from(list.querySelectorAll("mark")).map(
-          (mark) => mark.textContent,
-        ),
-      ).toEqual(["쌀국수", "역삼", "쌀국수"]);
-    });
-
-    it("자동완성은 '이 조건으로 추천받기'를 맨 위에 두고, 후보가 보이는 동안 막을 깔며 막을 누르면 닫히고, 입력을 지울 수 있다", async () => {
-      const original = globalThis.fetch;
-      const suggestion = (id: number) => ({
-        type: "PLACE",
-        place: card(id).place,
-      });
-      vi.stubGlobal(
-        "fetch",
-        vi.fn<typeof fetch>(async (input, init) =>
-          String(input).startsWith("/api/v1/places/suggest")
-            ? Response.json([
-                suggestion(1),
-                suggestion(2),
-                { type: "ACTION", label: "이 조건으로 추천받기" },
-              ])
-            : original(input, init),
-        ),
-      );
-      renderScreen();
-      const bar = screen.getByRole("textbox", { name: "장소 검색" });
-
-      fireEvent.focus(bar);
-      await typeSuggest(bar, "장소");
-      const list = await screen.findByRole("list", { name: "검색 추천" });
-
       expect(
         within(list)
           .getAllByRole("button")
           .map((row) => row.textContent),
       ).toEqual([
         "이 조건으로 추천받기",
-        expect.stringContaining("장소 1"),
+        expect.stringContaining("하노이 쌀국수 역삼점"),
         expect.stringContaining("장소 2"),
       ]);
+      // 이름에서는 두 단어가 각각, 메뉴 이름에서는 쌀국수가 강조된다. 일치하지 않는 이름에는 강조가 없다
+      expect(
+        Array.from(list.querySelectorAll("mark")).map(
+          (mark) => mark.textContent,
+        ),
+      ).toEqual(["쌀국수", "역삼", "쌀국수"]);
       expect(screen.getByTestId("search-scrim")).toBeTruthy();
       expect(screen.queryByRole("button", { name: "최근 검색" })).toBeNull();
 
@@ -3538,7 +3507,7 @@ describe("SearchScreen", () => {
       fireEvent.blur(bar);
       expect(screen.queryByRole("list", { name: "검색 추천" })).toBeNull();
       expect(screen.queryByTestId("search-scrim")).toBeNull();
-      expect(bar).toHaveProperty("value", "장소");
+      expect(bar).toHaveProperty("value", "역삼 쌀국수");
 
       fireEvent.click(screen.getByRole("button", { name: "입력 지우기" }));
       expect(bar).toHaveProperty("value", "");
@@ -3550,17 +3519,7 @@ describe("SearchScreen", () => {
       fireEvent.click(screen.getByRole("button", { name: "내 정보" }));
       expect(push).toHaveBeenCalledWith("/my");
     });
-    // 저장한 장소 버튼의 동작은 북마크 기능이 대체했다(saved-places.test.tsx)
-    it("'저장한 장소' 버튼은 첫 화면과 결과 화면에 있고 '준비 중이에요'를 띄우지 않는다", async () => {
-      renderScreen();
-      fireEvent.click(screen.getByRole("button", { name: "저장한 장소" }));
-      expect(await screen.findByText("로그인이 필요해요")).toBeTruthy();
-      expect(screen.queryByText("준비 중이에요")).toBeNull();
-      fireEvent.click(screen.getByRole("button", { name: "취소" }));
-
-      await newSearch("역삼 카페");
-      expect(screen.getByRole("button", { name: "저장한 장소" })).toBeTruthy();
-    });
+    // '저장한 장소' 버튼(첫 화면과 결과 화면, 비로그인 안내)은 saved-places.test.tsx가 본다
 
     describe("최근 검색", () => {
       async function openRecent() {

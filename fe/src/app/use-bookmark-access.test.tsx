@@ -208,45 +208,13 @@ describe("누른 계정의 세션에서만 보내기", () => {
     expect(request).not.toHaveBeenCalled();
   });
 
-  it("세션이 만료되면 다른 계정으로 다시 보내지 않는다", async () => {
+  // session 인증(a05ed87) 뒤로는 401에서 checkSession으로 갱신해 다시 보내지 않는다
+  it("세션이 만료된 401이면, 다시 보내면 성공할 요청이어도 다시 보내지 않는다", async () => {
     auth.session = {
       userId: "a",
       nickname: "demo",
       sessionExpiresAt: 2000000000,
     };
-    auth.checkSession.mockImplementation(async () => {
-      auth.session = {
-        userId: "b",
-        nickname: "demo",
-        sessionExpiresAt: 2000000000,
-      };
-      return auth.session;
-    });
-    const { result } = renderAccess();
-    const request = vi.fn(async () => {
-      throw expired();
-    });
-
-    await expect(result.current.send("a", request)).rejects.toMatchObject({
-      status: 401,
-    });
-    expect(request).toHaveBeenCalledTimes(1);
-  });
-
-  it("같은 계정이어도 만료된 요청을 다시 보내지 않는다", async () => {
-    auth.session = {
-      userId: "a",
-      nickname: "demo",
-      sessionExpiresAt: 2000000000,
-    };
-    auth.checkSession.mockImplementation(async () => {
-      auth.session = {
-        userId: "a",
-        nickname: "demo",
-        sessionExpiresAt: 2000000000,
-      };
-      return auth.session;
-    });
     const { result } = renderAccess();
     const request = vi
       .fn<() => Promise<string>>()
@@ -256,5 +224,7 @@ describe("누른 계정의 세션에서만 보내기", () => {
     await expect(result.current.send("a", request)).rejects.toMatchObject({
       status: 401,
     });
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(auth.checkSession).not.toHaveBeenCalled();
   });
 });
