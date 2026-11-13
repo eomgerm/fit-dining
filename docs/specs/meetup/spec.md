@@ -135,7 +135,7 @@ Decisions: [decisions.md](decisions.md) · Glossary and ADRs: none
 - [x] AC-66: `/m/{code}`의 응답 HTML에는 모임장 닉네임, 지역, 날짜·시간, 가입 없이 답할 수 있다는 안내가 든 미리보기 메타 태그와 서비스 기본 이미지가 있다. 질문 개수, 모임 취향, 참여자 이름은 없다. 없는 코드(지운 모임 포함)는 일반 안내다. 모임 화면에는 `noindex`와 no-referrer 메타가 있다. 카카오톡 스크래퍼(`kakaotalk-scrap`)처럼 HTML만 읽는 미리보기 봇이 받는 HTML에서는 이 태그가 `<head>` 안에 있다. (D-9, D-35, D-38; PRD AC-58)
 - [x] AC-67: 홈 지도 왼쪽 위에 시작 버튼이 있고 "이 지역에서 검색" 버튼과 겹치지 않는다. 위치와 모양은 화면 예시(모임장 1)를 따른다. 버튼은 내 모임(`/m`)을 연다. (D-22, D-24, D-37; PRD AC-36, AC-90)
 - [x] AC-68: `POST /api/v1/meetups/{code}/profiles/me/account`는 로그인한 회원의 비회원 프로필을 회원 프로필로 바꾼다. 모임 취향은 회원의 취향으로 옮겨지지 않는다. 그 회원에게 이미 이 모임의 프로필이 있으면 409 `already-joined`다. (D-25, D-35; PRD AC-76)
-- [x] AC-75: `GET /api/v1/meetups/mine`은 로그인한 회원이 만든 모임과 회원 프로필로 참여한 모임을 준다. 비회원 프로필로 참여한 모임과 다른 사람의 모임은 없고, 로그인하지 않았거나 탈퇴했으면 401이다. 진행 중인 모임(대기, 결과, 투표 중)이 앞에 최근에 만든 순서로, 끝난 모임(정함)이 뒤에 최근에 정한 순서로 오고, 최근에 만든 100개까지다. 줄마다 코드, 역할(HOST, PARTICIPANT), 상태, 지역, 업종, 날짜·시각, 인원, 프로필 수, 정한 곳 이름이 있다. 화면(`/m`)은 진행 중과 끝난 모임 묶음으로 보이고, 만든 모임에만 왕관 배지가 있으며, 묶음마다 20개 뒤는 "더 보기"로 연다. 모임이 없으면 소개와 "새로운 모임 만들기"만 보이고, 로그인하지 않았으면 로그인 안내 뒤 이 화면으로 돌아온다. 모임장과 회원 프로필로 참여한 회원이 모임 화면에서 뒤로 가면 이 화면이고, 비회원과 프로필이 없는 사람에게는 뒤로가 없다. (D-37; PRD AC-90 ~ AC-92)
+- [x] AC-75: `GET /api/v1/meetups/mine`은 로그인한 회원이 만든 모임과 회원 프로필로 참여한 모임을 준다. 비회원 프로필로 참여한 모임과 다른 사람의 모임은 없고, 로그인하지 않았거나 탈퇴했으면 401이다. 진행 중인 모임(대기, 결과, 투표 중)이 앞에 최근에 만든 순서로, 끝난 모임(정함)이 뒤에 최근에 정한 순서로 오고, 최근에 만든 100개까지다. 줄마다 코드, 역할(HOST, PARTICIPANT), 상태, 지역, 업종, 날짜·시각, 인원, 프로필 수, 정한 곳 이름이 있다. 화면(`/m`)은 진행 중과 끝난 모임 묶음으로 보이고, 만든 모임에만 왕관 배지가 있으며, 묶음마다 20개 뒤는 "더 보기"로 연다. 모임이 없으면 소개와 "새로운 모임 만들기"만 보이고, 로그인하지 않았으면 로그인 안내 뒤 이 화면으로 돌아온다. 모임장과 회원 프로필로 참여한 회원이 모임 화면에서 뒤로 가면 이 화면이고, 비회원과 프로필이 없는 사람에게는 뒤로가 없다. 이 화면에서 뒤로 가면 모임 화면을 거쳐 왔어도 홈이다. (D-37; PRD AC-90 ~ AC-92)
 - [ ] AC-69: 모임 기능을 켜고 끄는 설정이 없다. 모임 API와 화면은 배포되면 동작하고, 환경 변수 계약(`docs/infra/contracts/env.md`)과 FE의 `/config.json`이 바뀌지 않는다. (D-24)
 
 절대 일어나면 안 되는 일
@@ -383,6 +383,7 @@ AI에 주소 두 개를 더한다. 기존 `POST /v1/search`는 바꾸지 않는�
 | `be/src/main/java/kr/co/fitdining/api/meetup/MeetupListService.java#mine` | create | 내 모임. 만든 모임과 회원 프로필로 참여한 모임을 읽어 진행 중과 끝난 모임 순서로 둔다 | D-37 |
 | `be/src/main/java/kr/co/fitdining/api/auth/infrastructure/SecurityConfiguration.java` | modify | `GET /api/v1/meetups/mine`을 공개 GET(`/api/v1/meetups/*`)보다 먼저 회원 전용으로 둔다 | D-37 |
 | `fe/src/app/m/page.tsx` | create | 내 모임 화면. 홈 시작 버튼이 연다 | D-37 |
+| `fe/src/shared/lib/use-leave.ts#useLeave` | create | 상위 화면으로 나가는 뒤로. 바로 앞 기록이 상위 화면이면 돌아가고, 아니면 지금 기록을 상위 화면으로 바꾼다 | D-37 |
 | `fe/next.config.ts` | modify | 메타데이터를 `<head>`에 받는 봇 목록에 카카오톡 스크래퍼를 더한다 | D-38 |
 | `be/src/main/java/kr/co/fitdining/api/onboarding/TasteAnalysisService.java#TasteAnalysisService` | reuse | 직접 만든 `ThreadPoolExecutor`로 작업을 돌리는 방식 | D-10 |
 | `be/src/main/resources/db/migration/V35__drop_meetup_expiry.sql` | create | `meetups.expires_at` 칸과 색인을 지운다 | D-36 |
@@ -400,7 +401,7 @@ AI에 주소 두 개를 더한다. 기존 `POST /v1/search`는 바꾸지 않는�
 | `fe/src/domains/review/model/review-draft.ts#initialDraft` | modify | 주소로 넘긴 방문일이 고를 수 있는 날이면 기본값으로 쓰고, 아니면 원래 기본값이다 | D-36 |
 | `fe/src/shared/ui/button/chip.tsx#Chip` | reuse | 업종과 질문지의 선택 칩 | D-20 |
 
-새로 만드는 공용 코드는 `fe/src/shared/ui`의 스위치, 이니셜 아바타(8색, 모임장 왕관·회원 배지. 왕관 아이콘은 아이콘 모음 `fe/src/shared/ui/icon/icons`에 없어 새로 그린다), 인원 스테퍼(정하지 않음 포함), 앞으로의 날짜·시간 선택, 투표 막대와 `fe/src/shared/lib`의 공유(기기 공유 창, 안 되면 링크 복사), 네이버 지도 로더다(PRD §7.4).
+새로 만드는 공용 코드는 `fe/src/shared/ui`의 스위치, 이니셜 아바타(8색, 모임장 왕관·회원 배지. 왕관 아이콘은 아이콘 모음 `fe/src/shared/ui/icon/icons`에 없어 새로 그린다), 인원 스테퍼(정하지 않음 포함), 앞으로의 날짜·시간 선택, 투표 막대와 `fe/src/shared/lib`의 공유(기기 공유 창, 안 되면 링크 복사), 네이버 지도 로더, 상위 화면으로 나가는 뒤로다(PRD §7.4).
 
 ## Seams & test plan
 
