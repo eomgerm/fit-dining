@@ -67,7 +67,8 @@ type AvatarProps = {
   className?: string;
 };
 
-// 이름의 첫 글자를 색 원에 담은 아바타. 이름은 옆 글자가 읽으므로 원은 화면 낭독기에서 숨기고 배지만 읽게 한다
+// 이름의 첫 글자를 색 원에 담은 아바타. 이름은 옆 글자가 읽으므로 원은 화면 낭독기에서 숨기고 배지만 읽게 한다.
+// 감싼 상자는 h-fit이라 늘어나는 줄 안에서도 원 크기에 머물러 배지가 원에 붙는다
 export function Avatar({
   name,
   color,
@@ -77,7 +78,7 @@ export function Avatar({
 }: AvatarProps) {
   const initial = Array.from(name.trim())[0] ?? "";
   return (
-    <span className={cn("relative inline-flex shrink-0", className)}>
+    <span className={cn("relative inline-flex h-fit shrink-0", className)}>
       <span
         aria-hidden="true"
         className={cn(
