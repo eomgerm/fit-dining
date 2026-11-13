@@ -24,9 +24,9 @@ Jira: S15P31A302-114 "사용자별 장소 북마크 추가". 2026-10-28 grill(`-
 
 ## D-4 API 경로와 인증
 - Status: settled
-- Decision: `GET /api/v1/me/bookmarks`(내 목록, 항목 모양은 D-13), `GET /api/v1/me/bookmarks/{placeId}`(`{bookmarked: boolean}`), `PUT`·`DELETE /api/v1/me/bookmarks/{placeId}`(204). 사용자는 토큰에서만 얻는다. 이 경로는 인증 인터셉터 범위 밖이라 리뷰처럼 컨트롤러가 `AuthUseCases.authenticate`를 직접 부르고, 모든 API에서 탈퇴하지 않은 사용자인지 확인한다. 북마크 예외 처리기는 `AuthFailure`의 상태 코드와 토큰 만료 `type`을 그대로 둔다. `/api/v1/me`는 새 경로다(기존 인증의 내 정보는 `/api/auth/me`).
-- Rejected: `/api/v1/users/{userId}/bookmarks` → 인증 인터셉터는 `UserController`나 지정 경로만 인증하므로(`AuthWebConfiguration`) 새 컨트롤러는 이득이 없고, 경로 userId와 토큰 비교만 늘어난다. `/api/v1/places/{placeId}/bookmark` + `/api/v1/me/bookmarks` → 개인 컬렉션 하나가 두 경로 계열로 나뉜다. 북마크 컨트롤러를 `api.place` 패키지 아래 두기 → 장소 예외 처리기(`basePackageClasses`)가 함께 걸린다.
-- Reuse: `be/src/main/java/kr/co/fitdining/api/auth/ports/AuthUseCases.java#authenticate` (reuse) — 리뷰 컨트롤러처럼 Bearer 토큰에서 사용자 확인
+- Decision: `GET /api/v1/me/bookmarks`(내 목록, 항목 모양은 D-13), `GET /api/v1/me/bookmarks/{placeId}`(`{bookmarked: boolean}`), `PUT`·`DELETE /api/v1/me/bookmarks/{placeId}`(204). 사용자는 Spring Security가 확인한 로그인 세션의 인증 주체(`AuthUseCases.Identity`)에서만 얻는다. 세션이 없으면 Security 필터가 401을 내므로 인증이 `placeId` 검사(400)보다 먼저다. 모든 API에서 탈퇴하지 않은 사용자인지 서비스가 확인한다. 북마크 예외 처리기는 `AuthFailure`의 상태 코드와 `type`을 그대로 둔다. `/api/v1/me`는 새 경로다(기존 인증의 내 정보는 `/api/auth/me`).
+- Rejected: 컨트롤러가 `AuthUseCases.authenticate`로 `Authorization: Bearer` 토큰을 직접 확인(첫 구현) → 인증 모듈이 Bearer·JWT를 걷어내고 세션 인증으로 바꿨다(a05ed87). `/api/v1/users/{userId}/bookmarks` → 인증 인터셉터는 `UserController`나 지정 경로만 인증하므로(`AuthWebConfiguration`) 새 컨트롤러는 이득이 없고, 경로 userId와 토큰 비교만 늘어난다. `/api/v1/places/{placeId}/bookmark` + `/api/v1/me/bookmarks` → 개인 컬렉션 하나가 두 경로 계열로 나뉜다. 북마크 컨트롤러를 `api.place` 패키지 아래 두기 → 장소 예외 처리기(`basePackageClasses`)가 함께 걸린다.
+- Reuse: `be/src/main/java/kr/co/fitdining/api/auth/ports/AuthUseCases.java#Identity` (reuse) — 세션 인증 주체에서 사용자 id를 얻는다
 
 ## D-5 장소 상세의 저장 버튼
 - Status: settled
