@@ -39,7 +39,7 @@
   <tr>
     <td><img src="docs/demos/natural-language-search.gif" alt="장소 검색어를 입력하고 디저트 조건을 추가해 추천 결과를 갱신하는 화면" width="270" /></td>
     <td><img src="docs/demos/place-detail.gif" alt="장소 사진과 핏 점수가 보이는 상세 화면에서 스크롤해 AI 추천 이유 세 개를 보고 근거 리뷰 하나를 펼치는 화면" width="270" /></td>
-    <td><img src="docs/demos/meetup-recommendation.gif" alt="친구 세 명의 취향이 모인 모임에서 장소 추천을 실행하고 반영된 취향을 확인하는 화면" width="270" /></td>
+    <td><img src="docs/demos/meetup-recommendation.gif" alt="홈에서 모임을 만들고 취향을 남긴 뒤, 친구들과 갈 장소를 추천받는 화면" width="270" /></td>
   </tr>
 </table>
 
