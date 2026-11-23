@@ -1,7 +1,7 @@
 # 협업 규칙 (커밋 + 브랜치 + 이슈)
 
 커밋 메시지, 브랜치 이름, Jira 이슈 작성 규칙 문서입니다.
-두 규칙은 Git hook(lefthook)으로 **자동 검사**됩니다. 규칙을 어기면 커밋이 막히고 고치는 방법이 출력됩니다.
+브랜치 이름과 커밋 메시지는 아래 팀 관례를 따릅니다.
 
 ## 0. 최초 1회 설정
 
@@ -29,19 +29,6 @@ npm install
 - 이모지와 scope(`fe`, `be` 같은 파트)는 쓰지 않습니다.
 - **type은 반드시 소문자**로 씁니다 (`docs:` O, `Docs:` X)
 - 설명은 한글/영문 모두 가능, **1~60자**
-
-### 자동 완성: `type: 설명` 만 쓰면 됩니다
-
-Jira 키는 브랜치 이름에 이미 들어있어서 커밋할 때 자동으로 앞에 붙습니다. `-m` 으로 커밋하든 에디터로 커밋하든 똑같습니다.
-
-```bash
-# S15P31A302-123/feat/login-page 브랜치에서
-git commit -m "feat: 로그인 페이지 UI 구현"
-# -> "[S15P31A302-123] feat: 로그인 페이지 UI 구현" 으로 자동 완성
-```
-
-- Jira 키를 직접 써도 됩니다. 이미 키로 시작하면 건드리지 않습니다 (`--amend` 해도 중복으로 붙지 않음).
-- `master`/`develop`처럼 Jira 키가 없는 보호 브랜치에서는 키가 붙지 않으므로 직접 적어야 합니다.
 
 ### type 목록
 
@@ -87,26 +74,16 @@ S15P31A302-4/chore/jenkins-pipeline
 - **커밋타입**(필수): 커밋 메시지와 완전히 동일한 목록 → 위 type 목록 참고. 임의의 단어는 허용되지 않습니다.
 - 설명은 소문자 영문/숫자/한글/하이픈만 씁니다.
 - 작업 전에 Jira 이슈를 먼저 만들고, 그 키로 브랜치를 만듭니다.
-- `main`, `master`, `develop`, `dev`, `dev-be`, `dev-fe`, `dev-ai`, `release/*` 는 검사에서 제외됩니다.
+- 통합 및 릴리스 브랜치에는 이 네이밍 형식을 적용하지 않습니다.
 
 ### 옛 규칙으로 만든 브랜치
 
 이 규칙 전에 만들어 원격에 올린 브랜치(`fe/feat/login-page-S15P31A302-123`)는 이름을 바꾸지 않고 계속 써도 됩니다. MR도 그대로 둡니다.
 
-- 그 브랜치에서 새로 하는 커밋은 새 형식이 됩니다. `feat: 설명` 만 쓰면 브랜치 끝의 Jira 키가 앞에 붙습니다.
-- 이미 만든 옛 형식 커밋(`:sparkles: feat(fe): ... (S15P31A302-123)`)은 그대로 두고, `--amend` 로 고쳐도 통과합니다.
-- 아직 원격에 올리지 않은 옛 이름 브랜치는 커밋할 때 막힙니다. `git branch -m <새이름>` 으로 바꿉니다. 이미 만든 커밋은 그대로 둬도 되고, 그중 옛 형식 커밋을 `--amend` 할 때만 `git commit --amend -m "feat: 설명"` 처럼 메시지를 새로 씁니다.
-- 옛 브랜치가 모두 병합되면 이 예외는 `scripts/git-rules.cjs` 에서 지웁니다.
-
 ## 3. 자동 검사 구조
-
-실행 순서: `prepare-commit-msg` → (에디터) → `commit-msg`
 
 | 훅 | 실행 명령 | 역할 |
 |---|---|---|
-| `prepare-commit-msg` | `git-rules.cjs branch` | 브랜치 이름 검사 (에디터가 열리기 전에 막음) |
-| `commit-msg` | `git-rules.cjs complete` | 브랜치의 Jira 키를 메시지 앞에 채움 |
-| `commit-msg` | `git-rules.cjs verify` | 커밋 메시지 형식 최종 검사 |
 | `pre-commit` | `infra/ci/pre-commit-secrets.sh` | 스테이징한 변경에서 시크릿(토큰, 비밀번호) 검사 |
 | `pre-merge-commit` | `infra/ci/no-merge-commit.sh` | 병합 커밋(3-way merge) 차단 |
 
@@ -119,8 +96,6 @@ S15P31A302-4/chore/jenkins-pipeline
 ```bash
 LEFTHOOK=0 git commit -m "..."
 ```
-
-`git commit --no-verify` 는 `commit-msg` 만 건너뛰고 브랜치 이름 검사(`prepare-commit-msg`)는 그대로 실행됩니다.
 
 ## 4. 병합 커밋 금지
 

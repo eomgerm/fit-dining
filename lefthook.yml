@@ -3,26 +3,6 @@
 #
 # 검사 로직은 scripts/git-rules.cjs 한 파일에 모여 있다.
 
-# 브랜치 이름 검사를 prepare-commit-msg에 둔 이유:
-#  - pre-commit 은 스테이징된 파일이 없으면 lefthook 이 건너뛰는데, 브랜치 이름은 항상 검사해야 한다.
-#  - commit-msg 보다 앞서 에디터가 열리기 전에 실행되므로, 메시지를 다 쓰고 나서 막히는 일이 없다.
-prepare-commit-msg:
-  commands:
-    branch-name:
-      run: node scripts/git-rules.cjs branch
-
-# 자동 완성(Jira 키)을 prepare-commit-msg 가 아닌 여기서 하는 이유:
-# prepare-commit-msg 는 에디터가 열리기 전에 실행되어, `-m` 없이 에디터로 쓴 메시지는 아직 비어 있다.
-commit-msg:
-  piped: true # 앞 커맨드가 실패하면 뒤는 실행하지 않는다
-  commands:
-    complete:
-      priority: 1
-      run: node scripts/git-rules.cjs complete {1}
-    verify:
-      priority: 2
-      run: node scripts/git-rules.cjs verify {1}
-
 # 병합 커밋(3-way merge)을 만들지 못하게 막는다(설계 10.8절). fast-forward로 끝나는 `git merge --ff-only`는 병합 커밋이 없어 통과한다.
 # CI의 lint:history가 MR 안의 병합 커밋을 다시 막는다.
 pre-merge-commit:
