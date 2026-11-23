@@ -36,12 +36,12 @@
     <th scope="col">친구들 취향으로 모임 장소 추천받기</th>
   </tr>
   <tr>
-    <td><img src="docs/demos/natural-language-search.gif" alt="검색어 입력, 추천 결과 확인, 가격 조건 추가와 결과 갱신" width="360" /></td>
-    <td><img src="docs/demos/meetup-recommendation.gif" alt="모임 설정, 친구 취향 입력, 참여 확인과 모임 장소 추천 결과" width="360" /></td>
+    <td><img src="docs/demos/natural-language-search.gif" alt="장소 검색어를 입력하고 디저트 조건을 추가해 추천 결과를 갱신하는 화면" width="360" /></td>
+    <td><img src="docs/demos/meetup-recommendation.gif" alt="친구 세 명의 취향이 모인 모임에서 장소 추천을 실행하고 반영된 취향을 확인하는 화면" width="360" /></td>
   </tr>
 </table>
 
-기능별 화면 캡처를 사용 순서대로 엮었습니다.
+Fit Dining 화면에 예시 장소와 모임 데이터를 넣어 브라우저에서 녹화했습니다.
 
 <a name="technical-cases"></a>
 
